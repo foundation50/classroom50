@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/ghutil"
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/classroomcfg"
+	"github.com/foundation50/gh-student/internal/githubapi"
 	"github.com/foundation50/gh-student/internal/ui"
 )
 
@@ -990,4 +992,129 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg_Bare(t *testing.T) {
 	if createBody["auto_init"] != false {
 		t.Errorf("create body = %v, want auto_init:false for a bare repo", createBody)
 	}
+}
+
+// Issue #413: the destination org refuses the create because it doesn't let its
+// members create repositories, but both creation paths fell through to a bare
+// `POST %s: %w` wrap — so a student saw GitHub's raw text with no remedy.
+func TestOrgRepoCreationDenied(t *testing.T) {
+	const orgDenied = "You need admin access to the organization before adding a repository to it."
+
+	// go-gh populates HTTPError.Message only from a JSON body, so the stub must
+	// set Content-Type and write the status before the body.
+	forbid := func(message string, headers map[string]string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			for name, value := range headers {
+				w.Header().Set(name, value)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = fmt.Fprintf(w, `{"message":%q}`, message)
+		}
+	}
+
+	serve := func(t *testing.T, path string, handler http.HandlerFunc) githubapi.Client {
+		t.Helper()
+		mux := http.NewServeMux()
+		mux.HandleFunc(path, handler)
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		return newTestRESTClient(t, server)
+	}
+
+	tmpl := assignments.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "main"}
+
+	templated := func(client githubapi.Client) error {
+		var out bytes.Buffer
+		_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl)
+		return err
+	}
+	templateless := func(client githubapi.Client, autoInit bool) error {
+		var out bytes.Buffer
+		_, _, _, _, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", autoInit)
+		return err
+	}
+
+	// The remedy wording IS this change's deliverable (#413 is a wording defect),
+	// so assert every load-bearing clause: the hedge, both member-privilege
+	// controls, and the enterprise-pin caveat.
+	assertRemedy := func(t *testing.T, err error) {
+		t.Helper()
+		if err == nil {
+			t.Fatal("err = nil, want the member-privileges remedy")
+		}
+		msg := err.Error()
+		for _, want := range []string{
+			"o",
+			"often because",
+			"Member privileges",
+			`"Private" is checked`,
+			`leave "Public" unchecked`,
+			"re-run organization setup",
+			"enterprise",
+		} {
+			if !strings.Contains(msg, want) {
+				t.Errorf("err = %q, want it to contain %q", msg, want)
+			}
+		}
+	}
+
+	t.Run("403 on generate names the org's member privileges", func(t *testing.T) {
+		assertRemedy(t, templated(serve(t, "/repos/cs50/hello-template/generate", forbid(orgDenied, nil))))
+	})
+
+	t.Run("403 in the Errors[] items also matches", func(t *testing.T) {
+		client := serve(t, "/repos/cs50/hello-template/generate", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = fmt.Fprintf(w, `{"message":"Repository creation failed","errors":[{"message":%q}]}`, orgDenied)
+		})
+		assertRemedy(t, templated(client))
+	})
+
+	for _, tc := range []struct {
+		name     string
+		autoInit bool
+	}{
+		{"auto_init (template-less shim)", true},
+		{"bare (empty_repo)", false},
+	} {
+		t.Run("403 on POST orgs/{org}/repos: "+tc.name, func(t *testing.T) {
+			assertRemedy(t, templateless(serve(t, "/orgs/o/repos", forbid(orgDenied, nil)), tc.autoInit))
+		})
+	}
+
+	// A throttled 403 must stay a rate limit; rendering it as "your org blocks
+	// repo creation" is the exact mislabeling this change exists to remove.
+	for _, tc := range []struct {
+		name    string
+		headers map[string]string
+	}{
+		{"x-ratelimit-remaining: 0", map[string]string{"X-RateLimit-Remaining": "0"}},
+		{"Retry-After", map[string]string{"Retry-After": "60"}},
+	} {
+		t.Run("a rate-limited 403 is not the org-denied message ("+tc.name+")", func(t *testing.T) {
+			for _, err := range []error{
+				templated(serve(t, "/repos/cs50/hello-template/generate", forbid(orgDenied, tc.headers))),
+				templateless(serve(t, "/orgs/o/repos", forbid(orgDenied, tc.headers)), true),
+			} {
+				if err == nil {
+					t.Fatal("err = nil, want the raw failure")
+				}
+				if strings.Contains(err.Error(), "Member privileges") {
+					t.Errorf("err = %q, want a throttle to stay unclassified", err)
+				}
+			}
+		})
+	}
+
+	t.Run("an unrelated 403 stays unclassified", func(t *testing.T) {
+		err := templated(serve(t, "/repos/cs50/hello-template/generate", forbid("Resource protected by organization SAML enforcement.", nil)))
+		if err == nil {
+			t.Fatal("err = nil, want the raw failure")
+		}
+		if strings.Contains(err.Error(), "Member privileges") {
+			t.Errorf("err = %q, want an unrelated 403 to stay unclassified", err)
+		}
+	})
 }

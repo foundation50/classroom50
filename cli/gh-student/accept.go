@@ -16,6 +16,7 @@ import (
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/classroom50-cli-shared/ghui"
+	"github.com/foundation50/classroom50-cli-shared/ghutil"
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/classroomcfg"
 	"github.com/foundation50/gh-student/internal/githubapi"
@@ -681,6 +682,46 @@ func is422AlreadyExists(httpErr *githubapi.HTTPError) bool {
 	return false
 }
 
+// The one 403 message GitHub was observed to return when the destination org
+// refuses the create (issue #413). Mirrors the web app's
+// isOrgRepoCreationDenied; add a variant only alongside a cited GitHub response
+// showing the same cause, since the plausible alternatives (enterprise or
+// ruleset blocks) are ones this remedy cannot fix.
+const orgRepoCreationDeniedSignature = "admin access to the organization"
+
+// is403OrgRepoCreationDenied matches the destination-org repo-creation refusal
+// in the message or any Errors[] item. Message matching only: every caller must
+// exclude a throttle with ghutil.IsRateLimited first, since a rate limit also
+// surfaces as 403.
+func is403OrgRepoCreationDenied(httpErr *githubapi.HTTPError) bool {
+	if strings.Contains(strings.ToLower(httpErr.Message), orgRepoCreationDeniedSignature) {
+		return true
+	}
+	for _, item := range httpErr.Errors {
+		if strings.Contains(strings.ToLower(item.Message), orgRepoCreationDeniedSignature) {
+			return true
+		}
+	}
+	return false
+}
+
+// orgRepoCreationDeniedError is the shared remedy for that refusal, kept in one
+// place so both creation paths word it identically. Hedged (`often because`)
+// because the cause is inferred from GitHub's message text alone — a pending
+// invitation or an enterprise policy produce the same string — and it names
+// "Private" while leaving "Public" unchecked, since public student repos would
+// expose coursework. The enterprise caveat matters: re-running organization
+// setup can silently no-op on an enterprise-pinned org.
+func orgRepoCreationDeniedError(org string, cause error) error {
+	return fmt.Errorf("cannot create your assignment repository in `%s`. This is often because the "+
+		"organization doesn't let its members create private repositories. Ask your "+
+		"teacher to check, under the org's Settings → Member privileges → Repository "+
+		"creation, that members may create repositories and \"Private\" is checked "+
+		"(leave \"Public\" unchecked), or to re-run organization setup — then run accept "+
+		"again. If an enterprise policy pins that setting, only an enterprise owner "+
+		"can change it: %w", org, cause)
+}
+
 // reportAccepted writes the success header + clone instructions on stdout
 // (machine-stable, scriptable). The per-step spinners already rendered
 // human-channel progress, so this doesn't duplicate the headline onto stderr.
@@ -788,6 +829,14 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 			case http.StatusNotFound:
 				return "", "", "", false, fmt.Errorf("template `%s/%s` is not accessible to you — ask your teacher to make it public or grant your account access",
 					tmpl.Owner, tmpl.Repo)
+			case http.StatusForbidden:
+				// The refusal is about the destination org, not the template, so
+				// it is classified here rather than blamed on `tmpl`. A throttle
+				// also surfaces as 403, and rendering that as "your org blocks
+				// repo creation" is the mislabeling #413 reports.
+				if !ghutil.IsRateLimited(err) && is403OrgRepoCreationDenied(httpErr) {
+					return "", "", "", false, orgRepoCreationDeniedError(org, err)
+				}
 			}
 		}
 		return "", "", "", false, fmt.Errorf("POST %s: %w", createPath, err)
@@ -858,12 +907,24 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 
 	var created GeneratedRepo
 	if err := client.Post(createPath, bytes.NewReader(createBody), &created); err != nil {
-		if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok && httpErr.StatusCode == http.StatusUnprocessableEntity && is422AlreadyExists(httpErr) {
-			getPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
-			if getErr := client.Get(getPath, &created); getErr != nil {
-				return "", "", "", false, fmt.Errorf("POST %s returned 422 and follow-up GET %s failed: %w", createPath, getPath, getErr)
+		if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok {
+			switch httpErr.StatusCode {
+			case http.StatusUnprocessableEntity:
+				if is422AlreadyExists(httpErr) {
+					getPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
+					if getErr := client.Get(getPath, &created); getErr != nil {
+						return "", "", "", false, fmt.Errorf("POST %s returned 422 and follow-up GET %s failed: %w", createPath, getPath, getErr)
+					}
+					return created.HTMLURL, created.FullName, defaultBranchOrMain(created.DefaultBranch), true, nil
+				}
+			case http.StatusForbidden:
+				// Serves both the template-less shim path and empty_repo, which
+				// previously wrapped this 403 raw. Guarded against a throttle for
+				// the same reason as the templated path.
+				if !ghutil.IsRateLimited(err) && is403OrgRepoCreationDenied(httpErr) {
+					return "", "", "", false, orgRepoCreationDeniedError(org, err)
+				}
 			}
-			return created.HTMLURL, created.FullName, defaultBranchOrMain(created.DefaultBranch), true, nil
 		}
 		return "", "", "", false, fmt.Errorf("POST %s: %w", createPath, err)
 	}
