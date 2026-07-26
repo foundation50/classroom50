@@ -123,10 +123,12 @@ describe("parseGitHubId", () => {
     )
   })
 
-  // The parsed number drops the padding, so it no longer equals the string
-  // memberIdSet/rosterClaimSet compare on.
-  it("accepts a zero-padded id, dropping the padding", () => {
-    expect(parseGitHubId("0583231")).toBe(583231)
+  // A padded id parses but never equals the raw string the id-keyed joins compare
+  // (String(member.id) is unpadded), so it would invite the right account while
+  // reading as unenrolled. Rejecting routes it to the malformed-id repair path.
+  it("rejects a zero-padded id, which the identity joins could never match", () => {
+    expect(parseGitHubId("0583231")).toBeNull()
+    expect(parseGitHubId("007")).toBeNull()
   })
 })
 

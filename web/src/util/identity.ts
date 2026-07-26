@@ -33,14 +33,21 @@ export function isSameGitHubUser(
 }
 
 // Parse a roster row's github_id into a positive numeric id, else null. Accepts
-// only a plain digit string: `Number()` alone would coerce a malformed cell like
-// "1e3" or "0x10" into a valid-LOOKING id (1000, 16) that callers then send as
-// `invitee_id`, inviting a stranger into the org.
+// only a canonical digit string: `Number()` alone would coerce a malformed cell
+// like "1e3" or "0x10" into a valid-LOOKING id (1000, 16) that callers then send
+// as `invitee_id`, inviting a stranger into the org.
+//
+// A leading zero is rejected too, even though it parses. `String(member.id)` is
+// never padded, and the id-keyed joins (memberIdSet, rosterClaimSet, and the
+// membership/"Mark enrolled" comparisons) match the RAW cell — so "0583231"
+// would invite the right account while reading as unenrolled forever. Rejecting
+// routes it to the malformed-id message and the backfill, which rewrites the
+// cell canonically from the login.
 export function parseGitHubId(githubId: string): number | null {
   const trimmed = githubId.trim()
-  if (!/^\d+$/.test(trimmed)) return null
+  if (!/^[1-9]\d*$/.test(trimmed)) return null
   const id = Number(trimmed)
-  return Number.isSafeInteger(id) && id > 0 ? id : null
+  return Number.isSafeInteger(id) ? id : null
 }
 
 // A github_id that is present but rejected by parseGitHubId. Distinguished from

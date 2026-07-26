@@ -78,23 +78,28 @@ func TestParseRoster_GitHubIDShapeMatchesWeb(t *testing.T) {
 
 // A signed cell resolves to the same account and is rewritten canonically, so the
 // two readers converge rather than diverge: Go normalizes "+42" to "42", which the
-// web reader then accepts.
-func TestParseRoster_SignedGitHubIDNormalizes(t *testing.T) {
-	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
-		"alice,A,A,,s,+42,student\n")
-	rows, err := ParseRoster(in)
-	if err != nil {
-		t.Fatalf("ParseRoster: %v", err)
-	}
-	if rows[0].GitHubID != 42 {
-		t.Errorf("GitHubID = %d, want 42", rows[0].GitHubID)
-	}
-	encoded, err := EncodeRoster(rows)
-	if err != nil {
-		t.Fatalf("EncodeRoster: %v", err)
-	}
-	if !strings.Contains(string(encoded), ",42,") {
-		t.Errorf("want a canonical 42 on rewrite, got:\n%s", encoded)
+// web reader then accepts. Same for a zero-padded cell, which the web deliberately
+// rejects (its id joins compare the raw string) and a CLI rewrite repairs.
+func TestParseRoster_NonCanonicalGitHubIDNormalizes(t *testing.T) {
+	for _, tc := range []struct{ cell, want string }{
+		{"+42", ",42,"},
+		{"0000583231", ",583231,"},
+	} {
+		t.Run(tc.cell, func(t *testing.T) {
+			in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+				"alice,A,A,,s," + tc.cell + ",student\n")
+			rows, err := ParseRoster(in)
+			if err != nil {
+				t.Fatalf("ParseRoster: %v", err)
+			}
+			encoded, err := EncodeRoster(rows)
+			if err != nil {
+				t.Fatalf("EncodeRoster: %v", err)
+			}
+			if !strings.Contains(string(encoded), tc.want) {
+				t.Errorf("want a canonical %s on rewrite, got:\n%s", tc.want, encoded)
+			}
+		})
 	}
 }
 
