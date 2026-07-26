@@ -11,6 +11,7 @@ import {
   rtlFlip,
 } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
+import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
 import type { AcceptShareSummary } from "./acceptShareSummary"
 
 // The "How students accept" content, moved out of the page into a modal so the
@@ -71,6 +72,13 @@ export function AcceptLinkModal({
           classroom={classroom}
           classroomName={classroomName}
         />
+
+        {/* Sharing the link is the last moment before students hit the
+            accept-time 403, and an org that refuses member repo creation breaks
+            every accept regardless of how ready the roster is — so this sits
+            beside the roster notice rather than replacing it. No margin: the
+            wrapper's `gap-4` owns the spacing. */}
+        <OrgRepoCreationNotice org={org} className="" />
 
         {hasSecret ? (
           <p className="text-sm text-base-content/70">

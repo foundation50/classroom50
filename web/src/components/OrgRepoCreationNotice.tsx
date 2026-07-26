@@ -1,7 +1,7 @@
 import { AlertTriangle, Settings } from "lucide-react"
 import { Trans, useTranslation } from "react-i18next"
 
-import { EmphasisLtr, RouterButton } from "@/components/ui"
+import { Alert, EmphasisLtr, RouterButton } from "@/components/ui"
 import useOrgRepoCreationWarning from "@/hooks/useOrgRepoCreationWarning"
 import { memberPrivilegesUrl } from "@/orgPolicy/desiredState"
 
@@ -35,9 +35,9 @@ export const OrgRepoCreationNotice = ({
   if (!org || !warning.show) return null
 
   return (
-    <div
-      role="alert"
-      className={`alert alert-warning alert-soft flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between ${className}`}
+    <Alert
+      tone="warning"
+      className={`flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between ${className}`}
     >
       <div className="flex items-start gap-2">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -73,7 +73,7 @@ export const OrgRepoCreationNotice = ({
         <Settings className="size-4" aria-hidden="true" />
         {t("components.notices.orgRepoCreation.action")}
       </RouterButton>
-    </div>
+    </Alert>
   )
 }
 
