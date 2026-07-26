@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  isMalformedGitHubId,
   isSameGitHubUser,
   memberIdSet,
   memberIdentitySets,
@@ -78,10 +79,6 @@ describe("isSameGitHubUser", () => {
     ).toBe(false)
   })
 
-  // The id and login checks are OR'd, so a login hit wins even when the ids
-  // positively disagree. Deliberately permissive: every caller uses the result to
-  // refuse or skip a destructive action, so an over-match only declines it while a
-  // missed match carries it out.
   it("matches on login even when the github_id positively conflicts", () => {
     expect(
       isSameGitHubUser(
@@ -107,9 +104,6 @@ describe("parseGitHubId", () => {
     expect(parseGitHubId("Infinity")).toBeNull()
   })
 
-  // These all coerce to a valid-looking number via Number(), so they must be
-  // rejected on shape: a malformed cell that silently became 1000 or 16 would be
-  // sent as an `invitee_id` and invite a stranger into the org.
   it("rejects numeric-ish forms that are not plain positive integers", () => {
     expect(parseGitHubId("12.5")).toBeNull()
     expect(parseGitHubId("1e3")).toBeNull()
@@ -123,6 +117,28 @@ describe("parseGitHubId", () => {
   // wrong account rather than fail loudly.
   it("rejects an id too large to represent exactly", () => {
     expect(parseGitHubId("9007199254740993")).toBeNull()
+    expect(parseGitHubId("9".repeat(400))).toBeNull()
+    expect(parseGitHubId(String(Number.MAX_SAFE_INTEGER))).toBe(
+      Number.MAX_SAFE_INTEGER,
+    )
+  })
+
+  // The parsed number drops the padding, so it no longer equals the string
+  // memberIdSet/rosterClaimSet compare on.
+  it("accepts a zero-padded id, dropping the padding", () => {
+    expect(parseGitHubId("0583231")).toBe(583231)
+  })
+})
+
+describe("isMalformedGitHubId", () => {
+  it("separates a corrupted cell from an absent one", () => {
+    expect(isMalformedGitHubId("1e3")).toBe(true)
+    expect(isMalformedGitHubId("0x10")).toBe(true)
+    expect(isMalformedGitHubId("octocat")).toBe(true)
+    expect(isMalformedGitHubId("")).toBe(false)
+    expect(isMalformedGitHubId("   ")).toBe(false)
+    expect(isMalformedGitHubId(undefined)).toBe(false)
+    expect(isMalformedGitHubId("583231")).toBe(false)
   })
 })
 

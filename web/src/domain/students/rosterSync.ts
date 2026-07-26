@@ -12,6 +12,7 @@ import {
   getConfigRepoBranch,
 } from "@/github-core/configRepoReads"
 import { rosterClaimSet } from "@/util/identity"
+import { parseGitHubId } from "@/util/students"
 import { prefixCommit } from "@/util/commit"
 import {
   normalizeStudentRow,
@@ -121,8 +122,9 @@ export async function syncRosterFromTeam(
     // common "teacher wrote a bare username, invited, the student joined" flow).
     // Only usable when a login maps to exactly one member — a duplicate login
     // (shouldn't happen on one team, but be safe) is left un-backfilled rather
-    // than guess. An existing non-empty id is NEVER overwritten (a renamed login
-    // must not silently repoint an id onto a different account).
+    // than guess. A VALID existing id is never overwritten (a renamed login must
+    // not silently repoint an id onto a different account); a malformed one is,
+    // since it addresses no account and repointing it can't hijack one.
     const loginCounts = new Map<string, number>()
     for (const m of members) {
       const k = m.login.toLowerCase()
@@ -150,9 +152,11 @@ export async function syncRosterFromTeam(
         (loginKey && pendingRoleKeys.has(loginKey)) ||
         (emailKey ? pendingRoleKeys.has(emailKey) : false)
       const role = teamRole ?? (fullyRead && !hasPendingRole ? "" : s.role)
-      // Backfill only a blank id (see the idByLogin block above).
+      // Backfill a blank OR malformed id (see the idByLogin block above).
       const backfilledId =
-        !s.github_id.trim() && loginKey ? idByLogin.get(loginKey) : undefined
+        parseGitHubId(s.github_id) === null && loginKey
+          ? idByLogin.get(loginKey)
+          : undefined
 
       let next = s
       if (role !== s.role) {
