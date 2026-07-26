@@ -131,11 +131,11 @@ export function parseStudentsCsv(csv: string): StudentCsvRow[] {
   return rows
 }
 
-// True when EVERY short data row is short by exactly one column, i.e., only the
-// trailing field was dropped. Re-parses without `header` to read raw row widths
-// (the header-keyed `data` hides which physical column is missing), so a row
-// dropping a middle cell — which Papa would silently left-shift — is NOT treated
-// as benign. A row that's short by 2+ (or a header we couldn't count) is fatal.
+// True when EVERY short data row is short by exactly one column. Re-parses
+// without `header` to read raw row widths (the header-keyed `data` hides how
+// many physical columns are missing). Width can't tell a dropped trailing cell
+// from a dropped middle one, so both are excused and a middle drop left-shifts
+// silently. A row short by 2+ (or a header we couldn't count) is fatal.
 function tooFewFieldsAreTrailingOnly(
   csv: string,
   headerWidth: number,

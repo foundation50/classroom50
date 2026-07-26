@@ -11,9 +11,7 @@ import {
 } from "./rosterCsv"
 
 // Characterization tests for the roster.csv parse/serialize layer that every
-// roster import, sync, and write goes through. The short-row tolerance rule and
-// the formula guarding are the subtle parts — they are pinned explicitly so a
-// future parser change can't silently corrupt or drop a teacher's roster.
+// roster import, sync, and write goes through.
 
 const HEADER = STUDENT_CSV_FIELDS.join(",")
 
@@ -147,8 +145,8 @@ describe("parseRosterCsv", () => {
     expect(rows[1]).toMatchObject({ username: "", github_id: "583231" })
   })
 
-  // The deliberate tolerance: short by exactly one column is the benign
-  // "trailing role/github_id omitted" case, so a sync must not abort on it.
+  // Deliberate: the benign "trailing role/github_id omitted" case, so a sync
+  // must not abort on it.
   it("tolerates a row short by exactly one column (dropped trailing field)", () => {
     const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231\n`
     const { rows, problems } = parseRosterCsv(csv)
@@ -156,9 +154,20 @@ describe("parseRosterCsv", () => {
     expect(rows[0]).toMatchObject({ github_id: "583231", role: "" })
   })
 
-  // Short by 2+ can't be a single dropped trailing field, and Papa maps
-  // positionally, so tolerating it would silently shift values into the wrong
-  // columns and corrupt the identity/email join. It must be reported.
+  // The cost of that tolerance: width can't tell a middle drop from a trailing
+  // one, so this corruption is accepted rather than detectable.
+  it("silently left-shifts a row short by one because a middle cell was dropped", () => {
+    const csv = `${HEADER}\nocto,Grace,Hopper,Section A,583231,student\n`
+    const { rows, problems } = parseRosterCsv(csv)
+    expect(problems).toEqual([])
+    expect(rows[0]).toMatchObject({
+      email: "Section A",
+      section: "583231",
+      github_id: "student",
+      role: "",
+    })
+  })
+
   it("reports a row short by two or more columns rather than dropping it silently", () => {
     const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A\n`
     const { rows, problems } = parseRosterCsv(csv)
