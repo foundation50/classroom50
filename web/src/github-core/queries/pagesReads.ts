@@ -6,7 +6,7 @@ import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubAPIError } from "../errors"
 import { classroomPagesSegment } from "@/util/secret"
 import { log } from "./shared"
-import { withLocalizedMessage } from "@/types/localizedMessage"
+import { localizedError, withLocalizedMessage } from "@/types/localizedMessage"
 
 export async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
@@ -86,15 +86,14 @@ export function extractAssignments(json: AssignmentsJson): Assignment[] {
   if (Array.isArray(json)) return json
 
   if (json.version !== undefined && json.version !== 1) {
-    throw new Error(
-      `This classroom uses assignments.json v${json.version}, but this client only supports v1. Please update classroom50.`,
-    )
+    throw localizedError({
+      key: "pagesErrors.manifestVersionUnsupported",
+      params: { version: String(json.version) },
+    })
   }
 
   if (!Array.isArray(json.assignments)) {
-    throw new Error(
-      "assignments.json has an invalid v1 shape. Ask your teacher to check classroom50 configuration.",
-    )
+    throw localizedError({ key: "pagesErrors.manifestInvalidShape" })
   }
 
   return json.assignments

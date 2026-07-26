@@ -22,7 +22,8 @@ import {
 // Not on the @/domain/assignments barrel (the wrapper is internal scaffolding),
 // so reach the module directly rather than widening the public surface.
 import { withAcceptStep } from "./assignments/accessPrimitives"
-import { localizedError } from "@/types/localizedMessage"
+import { extractAssignments } from "@/github-core/queries"
+import { localizedError, localizedMessageOf } from "@/types/localizedMessage"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Assignment } from "@/types/classroom"
@@ -1903,10 +1904,19 @@ describe("assertAssignmentModeCoherent", () => {
     ).not.toThrow()
   })
 
-  it("rejects a group-shaped size with a non-group mode", () => {
-    expect(() => assertAssignmentModeCoherent("hw", "individual", 2)).toThrow(
-      /max_group_size 2 but mode "individual"/,
-    )
+  // Thrown OUTSIDE withAcceptStep, so the error alert is the only place a
+  // student sees it — it must name its message or the page falls back to the
+  // generic "something went wrong" with no reason and no remedy.
+  it("rejects a group-shaped size with a non-group mode, naming the remedy", () => {
+    expect(() => assertAssignmentModeCoherent("hw", "individual", 2)).toThrow()
+    try {
+      assertAssignmentModeCoherent("hw", "individual", 2)
+    } catch (err) {
+      expect(localizedMessageOf(err)).toEqual({
+        key: "accept.errors.incoherentMode",
+        params: { slug: "hw", maxGroupSize: 2, mode: "individual" },
+      })
+    }
   })
 })
 
@@ -2025,6 +2035,8 @@ describe("addFounderCollaborator — grant + read-back verification", () => {
 
   it("throws when the read-back still reports admin after a push grant", async () => {
     const { client } = makeClient({ permission: "admin", role_name: "admin" })
+    // Thrown inside a step, so without its own descriptor the checklist would
+    // relabel it "safe to retry" — wrong for a grant only a teacher can fix.
     await expect(
       addFounderCollaborator({
         client,
@@ -2033,7 +2045,12 @@ describe("addFounderCollaborator — grant + read-back verification", () => {
         username,
         permission: "push",
       }),
-    ).rejects.toThrow(/"push"/)
+    ).rejects.toMatchObject({
+      localized: {
+        key: "accept.errors.founderAccessMismatch",
+        params: { username, permission: "push", effective: "admin" },
+      },
+    })
   })
 
   it("throws when the read-back is maintain for a push grant (the guard's boundary)", async () => {
@@ -2049,7 +2066,12 @@ describe("addFounderCollaborator — grant + read-back verification", () => {
         username,
         permission: "push",
       }),
-    ).rejects.toThrow(/"push"/)
+    ).rejects.toMatchObject({
+      localized: {
+        key: "accept.errors.founderAccessMismatch",
+        params: { permission: "push", role: "maintain" },
+      },
+    })
   })
 
   it("resolves for an org owner whose read-back stays admin after a push grant", async () => {
@@ -2569,5 +2591,41 @@ describe("resolveAutograderWorkflow Pages failures", () => {
     await expect(resolve()).rejects.toMatchObject({
       localized: { key: "pagesErrors.deployInFlight" },
     })
+  })
+})
+
+// These throw inside a step, so before they named their message the unexpected
+// branch relabeled them "safe to retry" — actively wrong, since neither a
+// version mismatch nor a malformed manifest resolves by retrying.
+describe("extractAssignments manifest guards", () => {
+  it("names the unsupported-version remedy", () => {
+    try {
+      extractAssignments({ version: 2, assignments: [] } as never)
+      expect.unreachable("expected a throw")
+    } catch (err) {
+      expect(localizedMessageOf(err)).toEqual({
+        key: "pagesErrors.manifestVersionUnsupported",
+        params: { version: "2" },
+      })
+    }
+  })
+
+  it("names the invalid-shape remedy", () => {
+    try {
+      extractAssignments({ version: 1, assignments: "nope" } as never)
+      expect.unreachable("expected a throw")
+    } catch (err) {
+      expect(localizedMessageOf(err)).toEqual({
+        key: "pagesErrors.manifestInvalidShape",
+      })
+    }
+  })
+
+  it("passes a bare v1 array and a valid v1 object through", () => {
+    const entry = { slug: "hw1" } as never
+    expect(extractAssignments([entry] as never)).toEqual([entry])
+    expect(
+      extractAssignments({ version: 1, assignments: [entry] } as never),
+    ).toEqual([entry])
   })
 })

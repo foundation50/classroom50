@@ -1623,7 +1623,9 @@
     "classroomNotPublished": "This classroom isn't published yet — it may not exist, or the publish workflow may not have run. Ask your teacher to publish it, then try again.",
     "classroomFetchFailed": "Couldn't load this classroom's published files (HTTP {{status}}). Ask your teacher to confirm the classroom is published, then try again.",
     "assignmentNotInManifest": "Assignment \"{{assignmentSlug}}\" isn't in this classroom's published assignments. Check the link, or ask your teacher to publish the assignment.",
-    "autograderMalformed": "Autograder \"{{autograderName}}\" may be malformed YAML. Ask your teacher to check the file in the config repo."
+    "autograderMalformed": "Autograder \"{{autograderName}}\" may be malformed YAML. Ask your teacher to check the file in the config repo.",
+    "manifestVersionUnsupported": "This classroom publishes its assignments in a newer format (v{{version}}) than this version of Classroom 50 understands. Reload the page; if that doesn't help, ask your teacher to update Classroom 50.",
+    "manifestInvalidShape": "This classroom's published assignment list is malformed. Ask your teacher to check the Classroom 50 configuration."
   },
   "accept": {
     "githubUser": "GitHub user",
@@ -1701,7 +1703,9 @@
       "unexpected": "{{label}} failed unexpectedly. This is safe to retry."
     },
     "errors": {
-      "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template — the entry is invalid; ask your teacher to re-run assignment setup."
+      "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template — the entry is invalid; ask your teacher to re-run assignment setup.",
+      "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\" — its published metadata is inconsistent. Ask your teacher to re-run assignment setup.",
+      "founderAccessMismatch": "Your repository {{owner}}/{{repo}} was created, but GitHub reports your access as \"{{effective}}\" (role \"{{role}}\") instead of \"{{permission}}\". A repository's creator holds admin access, and organization policy can block stepping that down. Ask your teacher to set {{username}}'s access to \"{{permission}}\"."
     },
     "progress": {
       "error": "Setup failed — review the steps",
