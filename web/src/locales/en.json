@@ -1620,11 +1620,11 @@
     "notPublished": "{{label}} is not published yet. Ask your teacher to confirm the file exists in the config repo and that the publish workflow has been run.",
     "fetchFailed": "Couldn't load {{label}} (HTTP {{status}}). Ask your teacher to confirm the classroom is published, then try again.",
     "deployInFlight": "The classroom's published files may still be deploying. Wait a minute, then try again.",
-    "classroomNotPublished": "This classroom isn't published yet — it may not exist, or the publish workflow may not have run. Ask your teacher to publish it, then try again.",
+    "classroomNotPublished": "This classroom isn't published yet. It may not exist, or the publish workflow may not have run. Ask your teacher to publish it, then try again.",
     "classroomFetchFailed": "Couldn't load this classroom's published files (HTTP {{status}}). Ask your teacher to confirm the classroom is published, then try again.",
     "assignmentNotInManifest": "Assignment \"{{assignmentSlug}}\" isn't in this classroom's published assignments. Check the link, or ask your teacher to publish the assignment.",
     "autograderMalformed": "Autograder \"{{autograderName}}\" may be malformed YAML. Ask your teacher to check the file in the config repo.",
-    "manifestVersionUnsupported": "This classroom publishes its assignments in a newer format (v{{version}}) than this version of Classroom 50 understands. Reload the page; if that doesn't help, ask your teacher to update Classroom 50.",
+    "manifestVersionUnsupported": "This classroom uses a newer assignment format (v{{version}}) than this copy of Classroom 50 supports. Reload the page, or ask your teacher to update Classroom 50.",
     "manifestInvalidShape": "This classroom's published assignment list is malformed. Ask your teacher to check the Classroom 50 configuration."
   },
   "accept": {
@@ -1655,7 +1655,7 @@
       "outOfOrg": "Couldn't copy the template {{owner}}/{{repo}} (HTTP {{status}}).{{detail}} This is often because the {{owner}} organization restricts third-party apps — ask your teacher to approve the Classroom 50 app for {{owner}} (or make the template public), then accept again.",
       "inOrg": "Couldn't copy the private template {{owner}}/{{repo}} (HTTP {{status}}).{{detail}} Ask your teacher to re-run assignment setup, then accept again.",
       "orgRepoCreationDeniedStep": "{{org}} wouldn't let your repository be created (HTTP {{status}}).",
-      "orgRepoCreationDenied": "Couldn't create your repository in {{org}} (HTTP {{status}}).{{detail}} This is often because {{org}} doesn't let its members create private repositories. Ask your teacher to check, under {{org}}'s Settings → Member privileges → Repository creation, that members may create repositories and \"Private\" is checked (leave \"Public\" unchecked), or to re-run organization setup in Classroom 50 — then accept again. If an enterprise policy pins that setting, only an enterprise owner can change it."
+      "orgRepoCreationDenied": "Couldn't create your repository in {{org}} (HTTP {{status}}).{{detail}} {{org}} may not allow members to create private repositories. Ask your teacher to allow private (not public) repository creation in {{org}}'s member privileges, or to re-run organization setup, then accept again. An enterprise policy can override this setting."
     },
     "notFound": {
       "badge": "Assignment unavailable",
@@ -1685,7 +1685,7 @@
       "repoIncomplete": "Found incomplete setup: {{org}}/{{repo}}",
       "access": "Granted you access to your repository",
       "setup": "Autograding configured",
-      "setupSkippedEmptyRepo": "No setup needed — this assignment uses an empty repository"
+      "setupSkippedEmptyRepo": "No setup needed: this assignment uses an empty repository"
     },
     "stepActions": {
       "account": "Couldn't read your GitHub account. Sign out and sign back in, then accept again.",
@@ -1694,7 +1694,7 @@
       "autograder": "Couldn't resolve the autograder for \"{{assignmentSlug}}\". Ask your teacher to confirm it's published, then accept again.",
       "repo": "Couldn't create {{org}}/{{repo}}. Confirm you're a member of {{org}} and ask your teacher to verify the assignment's template repository is configured correctly, then accept again.",
       "access": "Your repository {{org}}/{{repo}} was created, but adding you ({{username}}) as a collaborator failed. This usually means your GitHub username changed or you left {{org}}. Confirm you're a member of {{org}}, then use \"Re-run setup\".",
-      "setup": "Your repository {{org}}/{{repo}} exists, but writing the setup files to branch \"{{branch}}\" failed. The repository may still be initializing — wait a minute and use \"Re-run setup\"."
+      "setup": "Your repository {{org}}/{{repo}} exists, but writing the setup files to branch \"{{branch}}\" failed. It may still be initializing. Wait a minute, then use \"Re-run setup\"."
     },
     "stepErrors": {
       "rateLimited": "{{label}} hit GitHub's rate limit. Wait a minute, then try accepting again.",
@@ -1703,9 +1703,9 @@
       "unexpected": "{{label}} failed unexpectedly. This is safe to retry."
     },
     "errors": {
-      "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template — the entry is invalid; ask your teacher to re-run assignment setup.",
-      "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\" — its published metadata is inconsistent. Ask your teacher to re-run assignment setup.",
-      "founderAccessMismatch": "Your repository {{owner}}/{{repo}} was created, but GitHub reports your access as \"{{effective}}\" (role \"{{role}}\") instead of \"{{permission}}\". A repository's creator holds admin access, and organization policy can block stepping that down. Ask your teacher to set {{username}}'s access to \"{{permission}}\"."
+      "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template, which isn't valid. Ask your teacher to re-run assignment setup.",
+      "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup.",
+      "founderAccessMismatch": "Your repository {{owner}}/{{repo}} was created, but GitHub reports your access as \"{{effective}}\" (role \"{{role}}\") instead of \"{{permission}}\". Ask your teacher to set {{username}}'s access to \"{{permission}}\"."
     },
     "progress": {
       "error": "Setup failed — review the steps",
@@ -2160,8 +2160,8 @@
         "addStudents": "Add students"
       },
       "orgRepoCreation": {
-        "master": "<org>{{org}}</org> doesn't let its members create repositories, so accepting an assignment will fail for every student. Re-run organization setup, or under <memberPrivileges>Member privileges → Repository creation</memberPrivileges> allow members to create repositories and check \"Private\" (leave \"Public\" unchecked). If an enterprise policy pins that setting, only an enterprise owner can change it.",
-        "private": "<org>{{org}}</org> doesn't let its members create private repositories, so accepting an assignment will fail for every student. Re-run organization setup, or under <memberPrivileges>Member privileges → Repository creation</memberPrivileges> check \"Private\" (leave \"Public\" unchecked). If an enterprise policy pins that setting, only an enterprise owner can change it.",
+        "master": "<org>{{org}}</org> doesn't allow members to create repositories, so no student can accept an assignment. Re-run organization setup, or allow private (not public) repository creation under <memberPrivileges>Member privileges</memberPrivileges>. An enterprise policy can override this setting.",
+        "private": "<org>{{org}}</org> doesn't allow members to create private repositories, so no student can accept an assignment. Re-run organization setup, or allow private (not public) repository creation under <memberPrivileges>Member privileges</memberPrivileges>. An enterprise policy can override this setting.",
         "action": "Organization settings"
       }
     },

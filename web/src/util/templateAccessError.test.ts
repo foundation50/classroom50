@@ -245,10 +245,10 @@ describe("orgRepoCreationDeniedError", () => {
     )
 
     // R2: the cause is inferred from message text, so the copy must not assert it.
-    expect(rendered).toContain("often because")
-    // R3: name Private, and keep Public locked down.
-    expect(rendered).toContain('"Private" is checked')
-    expect(rendered).toContain('leave "Public" unchecked')
+    expect(rendered).toContain("may not allow")
+    // R3: ask for private creation only, so the remedy can't widen the org into
+    // allowing public student repos.
+    expect(rendered).toContain("private (not public)")
     // R4: the remedy can itself no-op on an enterprise-pinned org.
     expect(rendered).toContain("enterprise")
     // R1: the remedy #413 reports as useless must be gone.

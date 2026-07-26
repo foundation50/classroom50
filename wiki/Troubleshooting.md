@@ -117,14 +117,14 @@ Only applies to assignments with a template. Check, in order:
 
 A 403 when a student's repository is created. Despite the wording, the student
 does **not** need admin access, and this is usually **not** a problem with the
-template or the assignment — it's the classroom organization refusing to let its
+template or the assignment. The classroom organization is refusing to let its
 members create repositories, so re-running *assignment* setup can't fix it.
 
 Fix it in the org, under Settings → Member privileges → Repository creation:
 
 1. Tick **Repository creation** so members may create repositories.
-2. Tick **Private**, and leave **Public** unchecked — students' coursework and
-   any reference solutions should not be publicly visible.
+2. Tick **Private**, and leave **Public** unchecked: students' coursework and any
+   reference solutions should not be publicly visible.
 3. Have the student accept again.
 
 Re-running **organization setup** in Classroom 50 (Organization settings →

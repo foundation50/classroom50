@@ -18,9 +18,9 @@ import {
 } from "@tanstack/react-router"
 
 // Real i18n (English is bundled at init) rather than a key-returning stub: the
-// copy IS this unit's deliverable — the remedy has to name both controls and
-// disclose the enterprise pin — and <Trans> renders nothing under a stubbed
-// useTranslation.
+// copy IS this unit's deliverable (the remedy has to scope to private creation
+// and disclose the enterprise override), and <Trans> renders nothing under a
+// stubbed useTranslation.
 import "@/i18n"
 import { OrgRepoCreationNotice } from "./OrgRepoCreationNotice"
 
@@ -69,8 +69,8 @@ const orgResponse = (over: Record<string, unknown> = {}) => ({
 
 // Distinguishing fragments of the two remedies. The master switch and the
 // private checkbox are different controls, so the copy must not be shared.
-const MASTER = /doesn't let its members create repositories/
-const PRIVATE = /doesn't let its members create private repositories/
+const MASTER = /doesn't allow members to create repositories/
+const PRIVATE = /doesn't allow members to create private repositories/
 const ACTION = "Organization settings"
 
 describe("OrgRepoCreationNotice", () => {
@@ -89,10 +89,10 @@ describe("OrgRepoCreationNotice", () => {
     expect(alert.textContent).toMatch(MASTER)
     expect(alert.textContent).not.toMatch(PRIVATE)
 
-    // Load-bearing clauses, not styling: name Private, keep Public locked down,
-    // and disclose that the remedy can be pinned out of reach.
-    expect(alert.textContent).toContain('check "Private"')
-    expect(alert.textContent).toContain('leave "Public" unchecked')
+    // Load-bearing clauses, not styling: ask for private creation only (public
+    // student repos would expose coursework), and disclose that the remedy can
+    // be overridden out of reach.
+    expect(alert.textContent).toContain("private (not public)")
     expect(alert.textContent).toContain("enterprise")
     expect(alert.textContent).toContain("acme")
   })
@@ -105,7 +105,7 @@ describe("OrgRepoCreationNotice", () => {
 
     const alert = await screen.findByRole("alert")
     expect(alert.textContent).toMatch(PRIVATE)
-    expect(alert.textContent).toContain('check "Private"')
+    expect(alert.textContent).toContain("private (not public)")
     expect(alert.textContent).toContain("enterprise")
   })
 

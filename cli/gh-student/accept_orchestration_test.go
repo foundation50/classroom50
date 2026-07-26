@@ -1036,8 +1036,8 @@ func TestOrgRepoCreationDenied(t *testing.T) {
 	}
 
 	// The remedy wording IS this change's deliverable (#413 is a wording defect),
-	// so assert every load-bearing clause: the hedge, both member-privilege
-	// controls, and the enterprise-pin caveat.
+	// so assert every load-bearing clause: the hedge, private-only creation, and
+	// the enterprise override.
 	assertRemedy := func(t *testing.T, err error) {
 		t.Helper()
 		if err == nil {
@@ -1046,10 +1046,9 @@ func TestOrgRepoCreationDenied(t *testing.T) {
 		msg := err.Error()
 		for _, want := range []string{
 			"o",
-			"often because",
-			"Member privileges",
-			`"Private" is checked`,
-			`leave "Public" unchecked`,
+			"may not allow",
+			"member privileges",
+			"private (not public)",
 			"re-run organization setup",
 			"enterprise",
 		} {
@@ -1101,7 +1100,7 @@ func TestOrgRepoCreationDenied(t *testing.T) {
 				if err == nil {
 					t.Fatal("err = nil, want the raw failure")
 				}
-				if strings.Contains(err.Error(), "Member privileges") {
+				if strings.Contains(err.Error(), "member privileges") {
 					t.Errorf("err = %q, want a throttle to stay unclassified", err)
 				}
 			}
@@ -1113,7 +1112,7 @@ func TestOrgRepoCreationDenied(t *testing.T) {
 		if err == nil {
 			t.Fatal("err = nil, want the raw failure")
 		}
-		if strings.Contains(err.Error(), "Member privileges") {
+		if strings.Contains(err.Error(), "member privileges") {
 			t.Errorf("err = %q, want an unrelated 403 to stay unclassified", err)
 		}
 	})

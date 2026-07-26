@@ -12,7 +12,7 @@ import { memberPrivilegesUrl } from "@/orgPolicy/desiredState"
 // The primary action is the in-app organization-setup re-run, not the GitHub
 // toggle: hand-fixing one checkbox leaves the rest of the audited lockdown
 // unapplied. The manual link stays as the secondary path, and the copy keeps the
-// enterprise-pin caveat because the re-run can silently no-op.
+// enterprise-override caveat because the re-run can silently no-op.
 //
 // This is the assignment-scoped view of the same signal OrgPreflightNotice shows
 // owners on ClassesPage — keep the two copies in step.
