@@ -2,6 +2,7 @@ import type { GitHubClient } from "@/github-core/client"
 import type { AssignmentMode } from "@/types/classroom"
 import type { GitHubRepo } from "@/github-core/types"
 import { getRepoPermissionForUser } from "@/github-core/queries"
+import { localizedError } from "@/types/localizedMessage"
 
 // Grant the founder their repo role and verify it took: a repo creator holds
 // admin, so an individual self-downgrade GitHub silently ignores looks like
@@ -40,9 +41,17 @@ export async function addFounderCollaborator(params: {
       isOwner,
     )
   ) {
-    throw new Error(
-      `Expected ${username} to have "${permission}" access on ${owner}/${repo}, but GitHub reports "${effective.permission}" (role "${effective.role_name}") — a repo creator holds admin and a self-downgrade may be blocked by org policy. Ask your teacher to set your access to "${permission}".`,
-    )
+    throw localizedError({
+      key: "accept.errors.founderAccessMismatch",
+      params: {
+        username,
+        permission,
+        owner,
+        repo,
+        effective: effective.permission ?? "none",
+        role: effective.role_name ?? "unknown",
+      },
+    })
   }
 }
 
@@ -83,9 +92,10 @@ export function assertAssignmentModeCoherent(
   maxGroupSize: number | undefined,
 ): void {
   if ((maxGroupSize ?? 0) > 0 && mode !== "group") {
-    throw new Error(
-      `Assignment "${slug}" has max_group_size ${maxGroupSize} but mode "${mode}" (want "group") — its published metadata is inconsistent. Ask your teacher to re-run assignment setup.`,
-    )
+    throw localizedError({
+      key: "accept.errors.incoherentMode",
+      params: { slug, maxGroupSize: maxGroupSize ?? 0, mode },
+    })
   }
 }
 

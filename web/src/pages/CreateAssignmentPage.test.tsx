@@ -58,12 +58,29 @@ vi.mock("@/components/RequireRole", () => ({
 vi.mock("@/components/EmptyRosterNotice", () => ({
   EmptyRosterNotice: () => null,
 }))
+// The notice's own copy/placement is covered in OrgRepoCreationNotice.test.tsx;
+// here it stands in for "did the page mount it", so stub it to its i18n key.
+vi.mock("@/components/OrgRepoCreationNotice", async () => {
+  const { default: useWarning } =
+    await import("@/hooks/useOrgRepoCreationWarning")
+  return {
+    OrgRepoCreationNotice: () => {
+      const warning = useWarning(undefined)
+      if (!warning.show) return null
+      return <div>{`components.notices.orgRepoCreation.${warning.field}`}</div>
+    },
+  }
+})
 
 vi.mock("@/hooks/useDocumentTitle", () => ({
   useDocumentTitle: () => undefined,
 }))
 vi.mock("@/hooks/useGetClassAssignments", () => ({
   default: () => ({ data: { assignments: [] } }),
+}))
+const orgRepoCreationWarning = vi.fn()
+vi.mock("@/hooks/useOrgRepoCreationWarning", () => ({
+  default: () => orgRepoCreationWarning(),
 }))
 vi.mock("@/hooks/useEmptyRosterWarning", () => ({
   default: () => ({ show: false, hasRosterRows: true }),
@@ -122,6 +139,7 @@ const succeedWith = (result: unknown) =>
   act(() => lastMutateOptions?.onSuccess?.(result, { slug: "hw1" }))
 
 beforeEach(() => {
+  orgRepoCreationWarning.mockReturnValue({ show: false })
   mutateAsync.mockClear()
   lastMutateOptions = null
   navigateMock.mockClear()
@@ -217,5 +235,23 @@ describe("CreateAssignmentPage templateGrantWarning surfacing", () => {
     succeedWith({ newCommitSha: "sha" })
     expect(screen.queryByText(WARNING)).toBeNull()
     expect(navigateMock).toHaveBeenCalled()
+  })
+})
+
+describe("CreateAssignmentPage org repo-creation warning", () => {
+  it("renders the notice when the org blocks repo creation", () => {
+    orgRepoCreationWarning.mockReturnValue({ show: true, field: "private" })
+    render(<CreateAssignmentPage />)
+    expect(
+      screen.queryByText("components.notices.orgRepoCreation.private"),
+    ).not.toBeNull()
+  })
+
+  it("renders nothing when the hook is silent", () => {
+    orgRepoCreationWarning.mockReturnValue({ show: false })
+    render(<CreateAssignmentPage />)
+    expect(
+      screen.queryByText("components.notices.orgRepoCreation.private"),
+    ).toBeNull()
   })
 })

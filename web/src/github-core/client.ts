@@ -2,6 +2,7 @@ import {
   GitHubAPIError,
   githubNonJsonResponseError,
   readGitHubRateLimitHeaders,
+  githubValidationReasons,
 } from "./errors"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_CLIENT } from "@/lib/logScopes"
@@ -142,13 +143,17 @@ export function createGitHubClient(args: {
           ? body.message
           : `GitHub API request failed with ${res.status}`
 
-      // Trace the failure with non-sensitive fields only (never the body): the
-      // status, the endpoint, and GitHub's request id for support correlation.
+      // Non-sensitive fields only — never the whole body, which can carry IP
+      // allow lists or SAML detail. A 422 also gets its validation reasons (see
+      // githubValidationReasons for why those are worth the extra field).
       log.debug("api error", {
         method,
         path,
         status: res.status,
         requestId: res.headers.get("x-github-request-id"),
+        ...(res.status === 422
+          ? { validation: githubValidationReasons(body) }
+          : {}),
       })
 
       throw new GitHubAPIError({

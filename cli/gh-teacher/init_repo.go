@@ -36,6 +36,12 @@ func applyOrgMemberDefaults(client githubapi.Client, out, errOut io.Writer, org,
 	settings := orgpolicy.MemberDefaultSettings(plan)
 	combined := make(map[string]any, len(settings))
 	for _, s := range settings {
+		// Verify-only fields are derived by GitHub, not writable: on Team/Free
+		// sending a granular repo-creation boolean 422s the whole request. They
+		// are still verified on the read-back below.
+		if s.VerifyOnly {
+			continue
+		}
 		combined[s.Field] = s.Value
 	}
 	body, err := json.Marshal(combined)
@@ -169,6 +175,9 @@ func applyOrgMemberDefaultsPerField(client githubapi.Client, out, errOut io.Writ
 	settings := orgpolicy.MemberDefaultSettings(plan)
 	var applied []string
 	for i, s := range settings {
+		if s.VerifyOnly {
+			continue
+		}
 		body, encErr := json.Marshal(map[string]any{s.Field: s.Value})
 		if encErr != nil {
 			return false, nil, fmt.Errorf("encode body: %w", encErr)
@@ -215,8 +224,13 @@ func applyOrgMemberDefaultsPerField(client githubapi.Client, out, errOut io.Writ
 // lockdown half-applied, naming the policies that landed and those at failedIdx
 // onward that weren't attempted, so a teacher can reconcile or re-run.
 func reportPartialMemberDefaults(errOut io.Writer, org string, settings []orgpolicy.MemberDefaultSetting, applied []string, failedIdx int, settingsURL string) {
+	// Verify-only fields are never attempted by design (GitHub derives them), so
+	// listing them would tell a teacher to go set values the API rejects.
 	notAttempted := make([]string, 0, len(settings)-failedIdx)
 	for _, s := range settings[failedIdx:] {
+		if s.VerifyOnly {
+			continue
+		}
 		notAttempted = append(notAttempted, s.Desc)
 	}
 	appliedList := "none"

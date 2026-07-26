@@ -192,6 +192,37 @@ export function isDefinitiveGitHubStatus(status: number): boolean {
   return status === 401 || status === 403 || status === 404
 }
 
+// A 422 body's validation reasons, as a short human string. GitHub's `errors`
+// is either an array of `{ resource, field, code, message }` objects or (on the
+// org endpoint) a bare string, so both shapes are handled. Returns undefined
+// when the body carries none, so the log line stays clean.
+//
+// Deliberately narrow: only the `message`/`field`/`code` triples, never the
+// whole body — a body can name an IP allow list or SAML enforcement.
+export function githubValidationReasons(body: unknown): string | undefined {
+  if (typeof body !== "object" || body === null) return undefined
+  const errors = (body as { errors?: unknown }).errors
+  if (typeof errors === "string") return errors || undefined
+  if (!Array.isArray(errors)) return undefined
+
+  const str = (value: unknown) => (typeof value === "string" ? value : "")
+  const reasons = errors
+    .map((item) => {
+      if (typeof item === "string") return item
+      if (typeof item !== "object" || item === null) return ""
+      const { field, code, message } = item as Record<string, unknown>
+      // `code` is GitHub's machine reason (e.g. "already_exists"), used when the
+      // item carries no prose.
+      const detail = str(message) || str(code)
+      if (!detail) return ""
+      const fieldText = str(field)
+      return fieldText ? `${fieldText}: ${detail}` : detail
+    })
+    .filter(Boolean)
+
+  return reasons.length > 0 ? reasons.join("; ") : undefined
+}
+
 export function readGitHubRateLimitHeaders(res: Response): GitHubRateLimit {
   const numberHeader = (name: string) => {
     const value = res.headers.get(name)

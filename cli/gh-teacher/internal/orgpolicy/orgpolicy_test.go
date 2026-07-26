@@ -7,11 +7,12 @@ import (
 
 func TestMemberDefaultSettings_PlanFilter(t *testing.T) {
 	enterpriseOnlyFields := map[string]bool{
-		"members_can_create_public_repositories":   true,
 		"members_can_create_internal_repositories": true,
 		"members_can_view_dependency_insights":     true,
 		"members_can_invite_outside_collaborators": true,
 	}
+	// Not enterprise-only: sent on every plan, with a plan-dependent value.
+	const planDependentField = "members_can_create_public_repositories"
 
 	// Enterprise gets the full canonical set, including the
 	// enterprise-only fields.
@@ -29,6 +30,17 @@ func TestMemberDefaultSettings_PlanFilter(t *testing.T) {
 			t.Errorf("enterprise plan should include enterprise-only field %s", f)
 		}
 	}
+	// Enterprise keeps the private-only lockdown.
+	for _, s := range ent {
+		if s.Field == planDependentField {
+			if s.Value != false {
+				t.Errorf("%s on enterprise = %v, want false (private-only)", s.Field, s.Value)
+			}
+			if !s.Critical {
+				t.Errorf("%s on enterprise should stay critical", s.Field)
+			}
+		}
+	}
 
 	// Team/Free/unknown plans must exclude the enterprise-only fields
 	// (Team doesn't expose those toggles).
@@ -37,10 +49,38 @@ func TestMemberDefaultSettings_PlanFilter(t *testing.T) {
 		if len(got) != len(full)-len(enterpriseOnlyFields) {
 			t.Errorf("plan %q should drop %d enterprise-only settings; got %d of %d", plan, len(enterpriseOnlyFields), len(got), len(full))
 		}
+		var sawPlanDependent bool
 		for _, s := range got {
 			if enterpriseOnlyFields[s.Field] {
 				t.Errorf("plan %q must not include enterprise-only field %s", plan, s.Field)
 			}
+			if s.Field != planDependentField {
+				continue
+			}
+			sawPlanDependent = true
+			// Team/Free couple public+private into one all-or-none choice, and
+			// the student flow requires private creation — so public must be
+			// enabled AND sent. Omitting it makes GitHub recompute the
+			// deprecated members_allowed_repository_creation_type as "private"
+			// and reject the whole PATCH with 422 "Private-only repository
+			// creation policy is not allowed for this organization."
+			if s.Value != true {
+				t.Errorf("%s on plan %q = %v, want true (coupled to private)", s.Field, plan, s.Value)
+			}
+			// The master switch owns the critical repo-creation verdict.
+			if s.Critical {
+				t.Errorf("%s on plan %q should be non-critical", s.Field, plan)
+			}
+		}
+		if !sawPlanDependent {
+			t.Errorf("plan %q must still send %s", plan, planDependentField)
+		}
+	}
+
+	// Overriding must not mutate the canonical list shared with enterprise.
+	for _, s := range MemberDefaultSettings("enterprise") {
+		if s.Field == planDependentField && s.Value != false {
+			t.Errorf("%s leaked the non-enterprise override into the canonical list", s.Field)
 		}
 	}
 }

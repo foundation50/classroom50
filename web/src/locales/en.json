@@ -1615,6 +1615,18 @@
       "cancelFailed": "Couldn't cancel the invitation for {{who}}: {{error}}"
     }
   },
+  "pagesErrors": {
+    "autograderLabel": "Autograder \"{{autograderName}}\"",
+    "notPublished": "{{label}} is not published yet. Ask your teacher to confirm the file exists in the config repo and that the publish workflow has been run.",
+    "fetchFailed": "Couldn't load {{label}} (HTTP {{status}}). Ask your teacher to confirm the classroom is published, then try again.",
+    "deployInFlight": "The classroom's published files may still be deploying. Wait a minute, then try again.",
+    "classroomNotPublished": "This classroom isn't published yet. It may not exist, or the publish workflow may not have run. Ask your teacher to publish it, then try again.",
+    "classroomFetchFailed": "Couldn't load this classroom's published files (HTTP {{status}}). Ask your teacher to confirm the classroom is published, then try again.",
+    "assignmentNotInManifest": "Assignment \"{{assignmentSlug}}\" isn't in this classroom's published assignments. Check the link, or ask your teacher to publish the assignment.",
+    "autograderMalformed": "Autograder \"{{autograderName}}\" may be malformed YAML. Ask your teacher to check the file in the config repo.",
+    "manifestVersionUnsupported": "This classroom uses a newer assignment format (v{{version}}) than this copy of Classroom 50 supports. Reload the page, or ask your teacher to update Classroom 50.",
+    "manifestInvalidShape": "This classroom's published assignment list is malformed. Ask your teacher to check the Classroom 50 configuration."
+  },
   "accept": {
     "githubUser": "GitHub user",
     "avatarAlt": "{{name}}'s GitHub avatar",
@@ -1641,7 +1653,9 @@
     "templateErrors": {
       "githubSaid": " GitHub said: \"{{message}}\".",
       "outOfOrg": "Couldn't copy the template {{owner}}/{{repo}} (HTTP {{status}}).{{detail}} This is often because the {{owner}} organization restricts third-party apps — ask your teacher to approve the Classroom 50 app for {{owner}} (or make the template public), then accept again.",
-      "inOrg": "Couldn't copy the private template {{owner}}/{{repo}} (HTTP {{status}}).{{detail}} Ask your teacher to re-run assignment setup, then accept again."
+      "inOrg": "Couldn't copy the private template {{owner}}/{{repo}} (HTTP {{status}}).{{detail}} Ask your teacher to re-run assignment setup, then accept again.",
+      "orgRepoCreationDeniedStep": "{{org}} wouldn't let your repository be created (HTTP {{status}}).",
+      "orgRepoCreationDenied": "{{org}} may not allow members to create private repositories, so your repository couldn't be created (HTTP {{status}}). Ask your teacher to enable it, then accept again."
     },
     "notFound": {
       "badge": "Assignment unavailable",
@@ -1659,6 +1673,39 @@
       "repo": "Creating your repository",
       "access": "Granting you access",
       "setup": "Setting up autograding"
+    },
+    "stepDone": {
+      "account": "Checked your GitHub account",
+      "membership": "Confirmed your classroom membership",
+      "assignment": "Found assignment {{assignmentSlug}}",
+      "autograder": "Resolved the autograder",
+      "autograderDisabled": "Autograding is disabled for this assignment",
+      "repo": "Created {{org}}/{{repo}}",
+      "repoExists": "Repository already exists: {{org}}/{{repo}}",
+      "repoIncomplete": "Found incomplete setup: {{org}}/{{repo}}",
+      "access": "Granted you access to your repository",
+      "setup": "Autograding configured",
+      "setupSkippedEmptyRepo": "No setup needed: this assignment uses an empty repository"
+    },
+    "stepActions": {
+      "account": "Couldn't read your GitHub account. Sign out and sign back in, then accept again.",
+      "membership": "Couldn't confirm your membership. If your organization uses single sign-on (SSO), authorize it for this org (or open this link from your LMS), then accept again. Otherwise ask your teacher to confirm your invitation.",
+      "assignment": "Couldn't load assignment \"{{assignmentSlug}}\" for {{org}}/{{classroom}}. Check the link, or ask your teacher to confirm the assignment is published.",
+      "autograder": "Couldn't resolve the autograder for \"{{assignmentSlug}}\". Ask your teacher to confirm it's published, then accept again.",
+      "repo": "Couldn't create {{org}}/{{repo}}. Confirm you're a member of {{org}} and ask your teacher to verify the assignment's template repository is configured correctly, then accept again.",
+      "access": "Your repository {{org}}/{{repo}} was created, but adding you ({{username}}) as a collaborator failed. This usually means your GitHub username changed or you left {{org}}. Confirm you're a member of {{org}}, then use \"Re-run setup\".",
+      "setup": "Your repository {{org}}/{{repo}} exists, but writing the setup files to branch \"{{branch}}\" failed. It may still be initializing. Wait a minute, then use \"Re-run setup\"."
+    },
+    "stepErrors": {
+      "rateLimited": "{{label}} hit GitHub's rate limit. Wait a minute, then try accepting again.",
+      "unauthorized": "{{label}} failed because your GitHub session expired (HTTP 401). Sign out and sign back in, then accept again.",
+      "generic": "{{label}} failed (HTTP {{status}}). {{actions}}",
+      "unexpected": "{{label}} failed unexpectedly. This is safe to retry."
+    },
+    "errors": {
+      "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template, which isn't valid. Ask your teacher to re-run assignment setup.",
+      "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup.",
+      "founderAccessMismatch": "Your repository {{owner}}/{{repo}} was created, but GitHub reports your access as \"{{effective}}\" (role \"{{role}}\") instead of \"{{permission}}\". Ask your teacher to set {{username}}'s access to \"{{permission}}\"."
     },
     "progress": {
       "error": "Setup failed — review the steps",
@@ -2111,6 +2158,11 @@
         "empty": "This classroom has no students yet. An assignment's accept link only works for students who are members of the <org>{{org}}</org> organization, so add and enroll students before sharing it.",
         "manageRoster": "Manage roster",
         "addStudents": "Add students"
+      },
+      "orgRepoCreation": {
+        "master": "<org>{{org}}</org> doesn't allow members to create repositories, so no student can accept an assignment. Re-run organization setup, or allow private (not public) repository creation under <memberPrivileges>Member privileges</memberPrivileges>. An enterprise policy can override this setting.",
+        "private": "<org>{{org}}</org> doesn't allow members to create private repositories, so no student can accept an assignment. Re-run organization setup, or allow private (not public) repository creation under <memberPrivileges>Member privileges</memberPrivileges>. An enterprise policy can override this setting.",
+        "action": "Organization settings"
       }
     },
     "confirmModal": {

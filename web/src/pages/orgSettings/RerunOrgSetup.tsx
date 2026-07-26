@@ -107,6 +107,12 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
         queryKey: githubKeys.orgActionsMode(org),
       })
       void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      // Setup applies the member-default lockdown, so refresh the shared org
+      // query the teacher pre-flight warnings read (the `["orgs"]` key above is
+      // a different, non-github-prefixed list).
+      void queryClient.invalidateQueries({
+        queryKey: githubKeys.orgDetails(org),
+      })
     },
   })
 

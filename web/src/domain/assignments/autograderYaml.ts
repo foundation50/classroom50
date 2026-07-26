@@ -1,6 +1,7 @@
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { classroomPagesSegment } from "@/util/secret"
 import { fetchTextWithFriendlyErrors } from "../queries/assignments"
+import { localizedError } from "@/types/localizedMessage"
 
 export function createClassroom50Yaml(params: {
   classroom: string
@@ -139,13 +140,14 @@ export async function resolveAutograderWorkflow(params: {
 
   const workflow = await fetchTextWithFriendlyErrors(
     pagesAutograderUrl({ org, classroom, name: autograderName, secret }),
-    `autograder ${autograderName}`,
+    { key: "pagesErrors.autograderLabel", params: { autograderName } },
   )
 
   if (!workflow.includes("jobs:")) {
-    throw new Error(
-      `Autograder ${autograderName} may be malformed YAML. Ask your teacher to check the file in the config repo.`,
-    )
+    throw localizedError({
+      key: "pagesErrors.autograderMalformed",
+      params: { autograderName },
+    })
   }
 
   return workflow

@@ -8,6 +8,7 @@ import {
 import type { Assignment } from "@/types/classroom"
 import { decodeBase64Utf8 } from "@/util/github"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { localizedError, type LocalizedMessage } from "@/types/localizedMessage"
 
 export type GetAssignmentsFileInput = {
   org: string
@@ -41,28 +42,29 @@ export async function getAssignmentsFile(
   return JSON.parse(json) as AssignmentsFile
 }
 
+// `label` names what failed for the reader (e.g. the autograder). It is a
+// descriptor, not English, so the message renders in the student's language; the
+// thrown errors carry the diagnostic form in `Error.message` for logs.
 export async function fetchTextWithFriendlyErrors(
   url: string,
-  label: string,
+  label: LocalizedMessage,
 ): Promise<string> {
   const response = await fetch(url)
+  const named = (key: string, params?: Record<string, string | number>) =>
+    localizedError({ key, params: { ...params, label } })
 
   if (response.status === 404) {
-    throw new Error(
-      `${label} is not published yet. Ask your teacher to confirm the file exists in the config repo and that publish-pages.yaml has been run.`,
-    )
+    throw named("pagesErrors.notPublished")
   }
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch ${label}: ${response.status}`)
+    throw named("pagesErrors.fetchFailed", { status: response.status })
   }
 
   const text = await response.text()
 
   if (!text.trim()) {
-    throw new Error(
-      "Pages deployment may still be in flight. Retry in a minute.",
-    )
+    throw localizedError({ key: "pagesErrors.deployInFlight" })
   }
 
   return text
@@ -82,7 +84,10 @@ export async function fetchAssignmentFromPages(
   const assignment = assignments.find((entry) => entry.slug === assignmentSlug)
 
   if (!assignment) {
-    throw new Error(`Assignment ${assignmentSlug} was not found.`)
+    throw localizedError({
+      key: "pagesErrors.assignmentNotInManifest",
+      params: { assignmentSlug },
+    })
   }
 
   return assignment

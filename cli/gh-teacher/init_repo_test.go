@@ -343,12 +343,21 @@ func TestApplyOrgMemberDefaults_HappyPath(t *testing.T) {
 	if gotBody["default_repository_permission"] != "none" {
 		t.Errorf("default_repository_permission = %v, want none", gotBody["default_repository_permission"])
 	}
-	if gotBody["members_can_create_private_repositories"] != true {
-		t.Errorf("members_can_create_private_repositories = %v, want true", gotBody["members_can_create_private_repositories"])
+	// On Team the granular repo-creation booleans are DERIVED from the master
+	// switch, and sending one is rejected: 422 "Private-only repository creation
+	// policy is not allowed for this organization." So they must be absent from
+	// the body (they are still verified on the read-back).
+	for _, f := range []string{
+		"members_can_create_private_repositories",
+		"members_can_create_public_repositories",
+	} {
+		if _, ok := gotBody[f]; ok {
+			t.Errorf("Team-plan PATCH must not send derived field %s (GitHub 422s it)", f)
+		}
 	}
-	// The master repo-creation switch must be sent true: on Team the granular
-	// private boolean is slaved to it, so omitting it leaves BOTH options OFF,
-	// breaking gh student accept.
+	// The master repo-creation switch must be sent true: GitHub resolves it to
+	// members_allowed_repository_creation_type="all", which turns BOTH granular
+	// booleans on. Omitting it leaves both OFF, breaking gh student accept.
 	if gotBody["members_can_create_repositories"] != true {
 		t.Errorf("members_can_create_repositories = %v, want true (master switch; without it Team leaves both repo-creation options off)", gotBody["members_can_create_repositories"])
 	}
@@ -368,10 +377,8 @@ func TestApplyOrgMemberDefaults_HappyPath(t *testing.T) {
 		}
 	}
 	// Enterprise-only fields must be OMITTED on a Team plan (Team doesn't
-	// expose them). members_can_create_public_repositories=false is
-	// enterpriseOnly because "private repos only" is Enterprise-Cloud-only.
+	// expose them).
 	for _, f := range []string{
-		"members_can_create_public_repositories",
 		"members_can_create_internal_repositories",
 		"members_can_view_dependency_insights",
 		"members_can_invite_outside_collaborators",
@@ -380,6 +387,7 @@ func TestApplyOrgMemberDefaults_HappyPath(t *testing.T) {
 			t.Errorf("enterprise-only field %s must NOT be in the Team-plan PATCH body", f)
 		}
 	}
+
 	// Pages creation is ENFORCED true so the config repo's public Pages
 	// site can publish — a regression to false would break the
 	// unauthenticated assignments.json fetch.

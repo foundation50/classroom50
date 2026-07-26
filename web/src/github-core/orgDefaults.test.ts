@@ -129,14 +129,65 @@ describe("repairOrgDefaults", () => {
     expect(result.unenforced).toHaveLength(0)
     // One combined PATCH, no per-field.
     expect(patchBodies).toHaveLength(1)
-    expect(Object.keys(patchBodies[0]).length).toBe(11)
+    // 12 in scope, minus the 2 derived repo-creation booleans.
+    expect(Object.keys(patchBodies[0]).length).toBe(10)
   })
 
-  it("sends only 11 fields on a team plan", async () => {
+  // Regression (the 422 that broke "Fix it"): on Team/Free the granular
+  // repo-creation booleans are DERIVED from the master switch, and any PATCH
+  // carrying one is rejected with "Private-only repository creation policy is not
+  // allowed for this organization." Sending the master switch alone makes GitHub
+  // resolve the legacy field to "all", turning both booleans on.
+  it("sends only the master switch for repo creation on a team plan", async () => {
     const { client, patchBodies } = makeClient({ readback: enforced("team") })
     await repairOrgDefaults(client, "acme", "team")
-    expect(Object.keys(patchBodies[0])).not.toContain(
+    expect(patchBodies[0].members_can_create_repositories).toBe(true)
+    for (const derived of [
+      "members_can_create_private_repositories",
       "members_can_create_public_repositories",
+      "members_can_create_internal_repositories",
+    ]) {
+      expect(Object.keys(patchBodies[0])).not.toContain(derived)
+    }
+  })
+
+  // Enterprise Cloud DOES accept the granular booleans, and the private-only
+  // lockdown is the whole point there, so they must still be written.
+  it("writes the granular booleans on an enterprise plan", async () => {
+    const { client, patchBodies } = makeClient({
+      readback: enforced("enterprise"),
+    })
+    await repairOrgDefaults(client, "acme", "enterprise")
+    expect(patchBodies[0].members_can_create_public_repositories).toBe(false)
+    expect(patchBodies[0].members_can_create_private_repositories).toBe(true)
+  })
+
+  // The grouped sub-PATCH must not reintroduce the 422 it exists to recover from.
+  it("sends only the master switch in the team fallback", async () => {
+    const { client, patchBodies } = makeClient({
+      combinedPatch: () => Promise.reject(httpError(422)),
+      readback: enforced("team"),
+    })
+    await repairOrgDefaults(client, "acme", "team")
+    const grouped = patchBodies
+      .slice(1)
+      .find((b) => "members_can_create_repositories" in b)
+    expect(grouped).toBeDefined()
+    expect(Object.keys(grouped!)).toEqual(["members_can_create_repositories"])
+  })
+
+  // A field never attempted must not be recorded as API-rejected, or the
+  // enterprise-pinned signal (unenforced despite an accepted write) is lost.
+  it("attributes a still-drifted derived field to the enterprise-pinned signal", async () => {
+    const live = enforced("team")
+    live.members_can_create_private_repositories = false
+    const { client } = makeClient({
+      combinedPatch: () => Promise.reject(httpError(422)),
+      readback: live,
+    })
+    const result = await repairOrgDefaults(client, "acme", "team")
+    expect(result.enterprisePinned.map((s) => s.field)).toContain(
+      "members_can_create_private_repositories",
     )
   })
 
