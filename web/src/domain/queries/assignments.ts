@@ -8,6 +8,11 @@ import {
 import type { Assignment } from "@/types/classroom"
 import { decodeBase64Utf8 } from "@/util/github"
 import { CONFIG_REPO } from "@/util/configRepo"
+import {
+  localizedError,
+  withLocalizedMessage,
+  type LocalizedMessage,
+} from "@/types/localizedMessage"
 
 export type GetAssignmentsFileInput = {
   org: string
@@ -44,24 +49,38 @@ export async function getAssignmentsFile(
 export async function fetchTextWithFriendlyErrors(
   url: string,
   label: string,
+  // Names `label` for a descriptor-aware renderer (the accept page). Optional so
+  // the English `label` stays the fallback for any other consumer.
+  labelMessage?: LocalizedMessage,
 ): Promise<string> {
   const response = await fetch(url)
+  const named = (key: string, params?: Record<string, string | number>) => ({
+    key,
+    params: { ...params, label: labelMessage ?? label },
+  })
 
   if (response.status === 404) {
-    throw new Error(
-      `${label} is not published yet. Ask your teacher to confirm the file exists in the config repo and that publish-pages.yaml has been run.`,
+    throw withLocalizedMessage(
+      new Error(
+        `${label} is not published yet. Ask your teacher to confirm the file exists in the config repo and that publish-pages.yaml has been run.`,
+      ),
+      named("pagesErrors.notPublished"),
     )
   }
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch ${label}: ${response.status}`)
+    throw withLocalizedMessage(
+      new Error(`Failed to fetch ${label}: ${response.status}`),
+      named("pagesErrors.fetchFailed", { status: response.status }),
+    )
   }
 
   const text = await response.text()
 
   if (!text.trim()) {
-    throw new Error(
-      "Pages deployment may still be in flight. Retry in a minute.",
+    throw withLocalizedMessage(
+      new Error("Pages deployment may still be in flight. Retry in a minute."),
+      { key: "pagesErrors.deployInFlight" },
     )
   }
 
@@ -82,7 +101,10 @@ export async function fetchAssignmentFromPages(
   const assignment = assignments.find((entry) => entry.slug === assignmentSlug)
 
   if (!assignment) {
-    throw new Error(`Assignment ${assignmentSlug} was not found.`)
+    throw localizedError({
+      key: "pagesErrors.assignmentNotInManifest",
+      params: { assignmentSlug },
+    })
   }
 
   return assignment

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 
@@ -19,6 +19,10 @@ import {
   TEMPLATE_READ_STAFF_ROLES,
   verifyTemplateAccess,
 } from "./assignments"
+// Not on the @/domain/assignments barrel (the wrapper is internal scaffolding),
+// so reach the module directly rather than widening the public surface.
+import { withAcceptStep } from "./assignments/accessPrimitives"
+import { localizedError } from "@/types/localizedMessage"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Assignment } from "@/types/classroom"
@@ -2456,5 +2460,114 @@ describe("createAssignmentRepo destination-org refusal (#413)", () => {
       bare: true,
     })
     expect(templateless.kind).toBe("already-accepted")
+  })
+})
+
+// The Pages-backed accept steps (assignment, autograder) read GitHub Pages via
+// plain fetch, so every failure there is a non-GitHubAPIError. Their advice is
+// actionable and NOT retryable — an unpublished or malformed autograder never
+// resolves by trying again — so withAcceptStep must relay the error's own
+// descriptor rather than collapsing it to the step-level "safe to retry" line.
+describe("withAcceptStep on a non-GitHubAPIError", () => {
+  const label = { key: "accept.steps.autograder" }
+  const actions = { key: "accept.stepActions.autograder" }
+
+  it("relays a descriptor the thrown error already names", async () => {
+    const updates: unknown[] = []
+    const named = {
+      key: "pagesErrors.autograderMalformed",
+      params: { autograderName: "checks" },
+    }
+
+    await expect(
+      withAcceptStep(
+        {
+          id: "autograder",
+          label,
+          actions,
+          onStepUpdate: (u) => updates.push(u),
+        },
+        () => Promise.reject(localizedError(named)),
+      ),
+    ).rejects.toMatchObject({ localized: named })
+
+    expect(updates.at(-1)).toMatchObject({
+      id: "autograder",
+      status: "error",
+      error: named,
+    })
+  })
+
+  it("falls back to the step-level message for an unnamed throw", async () => {
+    const updates: unknown[] = []
+
+    await expect(
+      withAcceptStep(
+        {
+          id: "autograder",
+          label,
+          actions,
+          onStepUpdate: (u) => updates.push(u),
+        },
+        () => Promise.reject(new TypeError("Failed to fetch")),
+      ),
+    ).rejects.toBeInstanceOf(TypeError)
+
+    expect(updates.at(-1)).toMatchObject({
+      status: "error",
+      error: { key: "accept.stepErrors.unexpected", params: { label } },
+    })
+  })
+})
+
+// The Pages readers are the source of those descriptors, so assert them here
+// rather than only through the step wrapper.
+describe("resolveAutograderWorkflow Pages failures", () => {
+  const originalFetch = globalThis.fetch
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  const stubFetch = (init: { status: number; body?: string }) => {
+    globalThis.fetch = (() =>
+      Promise.resolve({
+        status: init.status,
+        ok: init.status >= 200 && init.status < 300,
+        text: () => Promise.resolve(init.body ?? ""),
+      })) as unknown as typeof fetch
+  }
+
+  const resolve = () =>
+    resolveAutograderWorkflow({
+      org: "cs50",
+      classroom: "cs101",
+      autograder: "checks",
+      branch: "main",
+      configBranch: "main",
+    })
+
+  it("names the not-published remedy on a 404", async () => {
+    stubFetch({ status: 404 })
+    await expect(resolve()).rejects.toMatchObject({
+      localized: { key: "pagesErrors.notPublished" },
+    })
+  })
+
+  it("names the malformed-YAML remedy when the workflow has no jobs", async () => {
+    stubFetch({ status: 200, body: "name: not a workflow\n" })
+    await expect(resolve()).rejects.toMatchObject({
+      localized: {
+        key: "pagesErrors.autograderMalformed",
+        params: { autograderName: "checks" },
+      },
+    })
+  })
+
+  it("names the deploy-in-flight remedy for an empty body", async () => {
+    stubFetch({ status: 200, body: "   " })
+    await expect(resolve()).rejects.toMatchObject({
+      localized: { key: "pagesErrors.deployInFlight" },
+    })
   })
 })

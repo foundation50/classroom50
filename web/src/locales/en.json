@@ -1615,6 +1615,16 @@
       "cancelFailed": "Couldn't cancel the invitation for {{who}}: {{error}}"
     }
   },
+  "pagesErrors": {
+    "autograderLabel": "Autograder \"{{autograderName}}\"",
+    "notPublished": "{{label}} is not published yet. Ask your teacher to confirm the file exists in the config repo and that the publish workflow has been run.",
+    "fetchFailed": "Couldn't load {{label}} (HTTP {{status}}). Ask your teacher to confirm the classroom is published, then try again.",
+    "deployInFlight": "The classroom's published files may still be deploying. Wait a minute, then try again.",
+    "classroomNotPublished": "This classroom isn't published yet — it may not exist, or the publish workflow may not have run. Ask your teacher to publish it, then try again.",
+    "classroomFetchFailed": "Couldn't load this classroom's published files (HTTP {{status}}). Ask your teacher to confirm the classroom is published, then try again.",
+    "assignmentNotInManifest": "Assignment \"{{assignmentSlug}}\" isn't in this classroom's published assignments. Check the link, or ask your teacher to publish the assignment.",
+    "autograderMalformed": "Autograder \"{{autograderName}}\" may be malformed YAML. Ask your teacher to check the file in the config repo."
+  },
   "accept": {
     "githubUser": "GitHub user",
     "avatarAlt": "{{name}}'s GitHub avatar",

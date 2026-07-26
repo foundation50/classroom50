@@ -6,6 +6,7 @@ import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubAPIError } from "../errors"
 import { classroomPagesSegment } from "@/util/secret"
 import { log } from "./shared"
+import { withLocalizedMessage } from "@/types/localizedMessage"
 
 export async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
@@ -13,13 +14,22 @@ export async function fetchJson<T>(url: string): Promise<T> {
   })
 
   if (response.status === 404) {
-    throw new Error(
-      "The classroom may not exist yet, or publish-pages.yaml may not have run.",
+    throw withLocalizedMessage(
+      new Error(
+        "The classroom may not exist yet, or publish-pages.yaml may not have run.",
+      ),
+      { key: "pagesErrors.classroomNotPublished" },
     )
   }
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch ${url}: ${response.status}`)
+    throw withLocalizedMessage(
+      new Error(`Failed to fetch ${url}: ${response.status}`),
+      {
+        key: "pagesErrors.classroomFetchFailed",
+        params: { status: response.status },
+      },
+    )
   }
 
   return response.json() as Promise<T>

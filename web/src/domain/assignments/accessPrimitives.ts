@@ -9,6 +9,7 @@ import { githubOrgOAuthPolicyUrl } from "@/auth/constants"
 import { TemplateAccessError } from "@/util/templateAccessError"
 import {
   describeLocalizedMessage,
+  localizedMessageOf,
   type LocalizedMessage,
 } from "@/types/localizedMessage"
 import { prefixCommit } from "@/util/commit"
@@ -123,14 +124,19 @@ export async function withAcceptStep<T>(
       )
     }
     // Unexpected non-GitHub error (network/parse/etc.): surface it so the
-    // checklist row leaves "running" instead of spinning forever. GitHub never
-    // saw this request, so there is no status or remedy to name — the row shows
-    // the step's own label with an error icon.
+    // checklist row leaves "running" instead of spinning forever. A thrown error
+    // that already names its own message keeps it — the Pages readers do, and an
+    // unpublished assignment or malformed autograder is actionable advice a
+    // generic "safe to retry" line would throw away. Rethrown unwrapped so the
+    // outage classifier still sees the original error, not a wrapper.
     log.error(`accept step "${id}" failed (unexpected)`, { err })
     onStepUpdate?.({
       id,
       status: "error",
-      error: { key: "accept.stepErrors.unexpected", params: { label } },
+      error: localizedMessageOf(err) ?? {
+        key: "accept.stepErrors.unexpected",
+        params: { label },
+      },
     })
     throw err
   }
