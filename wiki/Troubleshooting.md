@@ -113,6 +113,33 @@ Only applies to assignments with a template. Check, in order:
 3. **The `<assignment>` argument matches the registered slug** (case is
    normalized; spelling must be exact).
 
+## "You need admin access to the organization before adding a repository to it."
+
+A 403 when a student's repository is created. Despite the wording, the student
+does **not** need admin access, and this is usually **not** a problem with the
+template or the assignment — it's the classroom organization refusing to let its
+members create repositories, so re-running *assignment* setup can't fix it.
+
+Fix it in the org, under Settings → Member privileges → Repository creation:
+
+1. Tick **Repository creation** so members may create repositories.
+2. Tick **Private**, and leave **Public** unchecked — students' coursework and
+   any reference solutions should not be publicly visible.
+3. Have the student accept again.
+
+Re-running **organization setup** in Classroom 50 (Organization settings →
+Re-run setup) applies this along with the rest of the audited lockdown, so it's
+the better fix if the org has drifted in other ways too.
+
+If an enterprise policy pins repository creation at the enterprise level, the
+org-level toggle is ignored and only an enterprise owner can change it. In that
+case the re-run reports success but the setting stays off.
+
+Other causes produce the same message, so if repository creation is already
+enabled, check that the student's org invitation was accepted (a pending invitee
+can't create a repository) and that they're a member rather than an outside
+collaborator.
+
 ## "Could not find `.classroom50.yaml`" on `gh student submit`
 
 `submit` reads that file at the repo root. If it's missing, you're likely running
