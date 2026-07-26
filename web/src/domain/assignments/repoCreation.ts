@@ -5,8 +5,11 @@ import { DEFAULT_BRANCH } from "@/util/configRepo"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
   inOrgTemplateError,
+  isOrgRepoCreationDenied,
+  orgRepoCreationDeniedError,
   outOfOrgTemplateError,
 } from "@/util/templateAccessError"
+import { log } from "./accessPrimitives"
 import { withGitConflictRetry } from "../classrooms"
 import { createAssignment } from "./createEdit"
 
@@ -81,8 +84,28 @@ export async function createAssignmentRepo(params: {
       if (err.isRateLimited) {
         throw err
       }
+      // The destination org refusing the create is independent of where the
+      // template lives, so it is classified before the in-org/out-of-org split —
+      // which would otherwise blame the template for a destination problem
+      // (issue #413). `owner` is the destination org, not templateOwner.
+      if (isOrgRepoCreationDenied(err)) {
+        throw orgRepoCreationDeniedError(owner, err.status, err.message)
+      }
       if (err.isForbidden || err.isNotFound) {
         const inOrg = templateOwner.toLowerCase() === owner.toLowerCase()
+        // The only signal that GitHub reworded the destination-org refusal: the
+        // match stops firing, students silently get the template message again,
+        // and the tests can't catch it (they assert our own fixture).
+        log.warn(
+          "accept: template-copy refused, classified by template location",
+          {
+            org: owner,
+            templateOwner,
+            inOrg,
+            status: err.status,
+            githubMessage: err.message,
+          },
+        )
         throw inOrg
           ? inOrgTemplateError(
               templateOwner,
@@ -172,6 +195,21 @@ async function createEmptyAssignmentRepo(params: {
         kind: "already-accepted",
         repo: existing,
       }
+    }
+
+    // Template-less and empty_repo assignments hit this path, where the same
+    // destination-org refusal used to rethrow raw and degrade to the generic
+    // step text.
+    if (err instanceof GitHubAPIError && isOrgRepoCreationDenied(err)) {
+      throw orgRepoCreationDeniedError(owner, err.status, err.message)
+    }
+
+    if (err instanceof GitHubAPIError && err.isForbidden) {
+      log.warn("accept: repo create refused, no classification matched", {
+        org: owner,
+        status: err.status,
+        githubMessage: err.message,
+      })
     }
 
     throw err

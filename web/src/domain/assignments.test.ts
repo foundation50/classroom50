@@ -2266,3 +2266,195 @@ describe("createAssignmentRepo (bare / empty_repo)", () => {
     expect(getCreateBody()).toMatchObject({ auto_init: true })
   })
 })
+
+// Issue #413: GitHub refuses the create because the *destination* org doesn't let
+// its members create repositories, but the old code classified every 403/404 by
+// where the template lived — so the student got the in-org template message and
+// its "ask your teacher to re-run assignment setup" remedy, which cannot fix it.
+describe("createAssignmentRepo destination-org refusal (#413)", () => {
+  const ORG_DENIED =
+    "You need admin access to the organization before adding a repository to it."
+
+  const forbidden = (
+    path: string,
+    message: string,
+    over: Partial<{ remaining: number | null; status: number }> = {},
+  ) =>
+    new GitHubAPIError({
+      status: over.status ?? 403,
+      url: path,
+      message,
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: over.remaining ?? null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  // Rejects the create call, resolves the confirming GET (the 422 path needs it).
+  const clientRejecting = (createPath: string, err: unknown): GitHubClient =>
+    ({
+      request: <T>(path: string) => {
+        if (path === createPath) return Promise.reject(err) as Promise<T>
+        return Promise.resolve({
+          name: "hw1-alice",
+          default_branch: "main",
+        } as T)
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    }) as GitHubClient
+
+  const generatePath = "/repos/tpl/starter/generate"
+  const orgReposPath = "/orgs/cs50/repos"
+
+  const acceptTemplated = (templateOwner: string, err: unknown) =>
+    createAssignmentRepo({
+      client: clientRejecting(`/repos/${templateOwner}/starter/generate`, err),
+      templateOwner,
+      templateRepo: "starter",
+      owner: "cs50",
+      name: "hw1-alice",
+      fallbackBranch: "main",
+    })
+
+  const acceptTemplateless = (err: unknown, bare: boolean) =>
+    createAssignmentRepo({
+      client: clientRejecting(orgReposPath, err),
+      owner: "cs50",
+      name: "hw1-alice",
+      fallbackBranch: "main",
+      bare,
+    })
+
+  // The whole point of the fix: the destination classification wins regardless of
+  // where the template lives, because the refusal is about the destination org.
+  it.each([
+    ["an in-org template", "cs50"],
+    ["an out-of-org template", "tpl"],
+  ])("names the destination org for %s", async (_label, templateOwner) => {
+    await expect(
+      acceptTemplated(
+        templateOwner,
+        forbidden(`/repos/${templateOwner}/starter/generate`, ORG_DENIED),
+      ),
+    ).rejects.toMatchObject({
+      name: "TemplateAccessError",
+      localized: {
+        key: "accept.templateErrors.orgRepoCreationDenied",
+        params: { org: "cs50", status: 403 },
+      },
+    })
+  })
+
+  it.each([
+    ["auto_init", false],
+    ["bare", true],
+  ])(
+    "classifies the refusal on the template-less %s path",
+    async (_l, bare) => {
+      await expect(
+        acceptTemplateless(forbidden(orgReposPath, ORG_DENIED), bare),
+      ).rejects.toMatchObject({
+        name: "TemplateAccessError",
+        localized: { key: "accept.templateErrors.orgRepoCreationDenied" },
+      })
+    },
+  )
+
+  it("still yields the in-org template message for a plain 403", async () => {
+    await expect(
+      acceptTemplated(
+        "cs50",
+        forbidden(generatePath, "Must have admin rights"),
+      ),
+    ).rejects.toMatchObject({
+      localized: { key: "accept.templateErrors.inOrg" },
+    })
+  })
+
+  it("still yields the out-of-org template message for a 404", async () => {
+    await expect(
+      acceptTemplated(
+        "tpl",
+        forbidden(generatePath, "Not Found", { status: 404 }),
+      ),
+    ).rejects.toMatchObject({
+      localized: { key: "accept.templateErrors.outOfOrg" },
+    })
+  })
+
+  // A throttled 403 must keep surfacing as a rate limit ("wait a minute"), not as
+  // "your org blocks repo creation" — the exact mislabeling this change removes.
+  it("rethrows a rate-limited 403 raw on both paths", async () => {
+    await expect(
+      acceptTemplated(
+        "cs50",
+        forbidden(generatePath, ORG_DENIED, { remaining: 0 }),
+      ),
+    ).rejects.toMatchObject({ name: "GitHubAPIError", status: 403 })
+
+    await expect(
+      acceptTemplateless(
+        forbidden(orgReposPath, ORG_DENIED, { remaining: 0 }),
+        false,
+      ),
+    ).rejects.toMatchObject({ name: "GitHubAPIError", status: 403 })
+  })
+
+  it("still returns already-accepted on a 422 for both paths", async () => {
+    const templated = await createAssignmentRepo({
+      client: clientRejecting(
+        generatePath,
+        new GitHubAPIError({
+          status: 422,
+          url: generatePath,
+          message: "Unprocessable",
+          body: null,
+          rateLimit: {
+            limit: null,
+            remaining: null,
+            used: null,
+            reset: null,
+            resource: null,
+            retryAfter: null,
+          },
+        }),
+      ),
+      templateOwner: "tpl",
+      templateRepo: "starter",
+      owner: "cs50",
+      name: "hw1-alice",
+      fallbackBranch: "main",
+    })
+    expect(templated.kind).toBe("already-accepted")
+
+    const templateless = await createAssignmentRepo({
+      client: clientRejecting(
+        orgReposPath,
+        new GitHubAPIError({
+          status: 422,
+          url: orgReposPath,
+          message: "Unprocessable",
+          body: null,
+          rateLimit: {
+            limit: null,
+            remaining: null,
+            used: null,
+            reset: null,
+            resource: null,
+            retryAfter: null,
+          },
+        }),
+      ),
+      owner: "cs50",
+      name: "hw1-alice",
+      fallbackBranch: "main",
+      bare: true,
+    })
+    expect(templateless.kind).toBe("already-accepted")
+  })
+})

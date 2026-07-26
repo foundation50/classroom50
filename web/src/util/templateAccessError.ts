@@ -1,13 +1,16 @@
+import { GitHubAPIError } from "@/github-core/errors"
 import {
   describeLocalizedMessage,
   type LocalizedMessage,
 } from "@/types/localizedMessage"
 
 // An accept-time failure that needs teacher action (not a retry the student can
-// do). `localized` names the full remedy the accept page renders; `localizedStep`
-// is a one-sentence form for the progress checklist row, which sits beside six
-// other rows and can't absorb a paragraph. `Error.message` stays populated with a
-// diagnostic (never-rendered) form so logs and githubHealthStore keep working.
+// do). Covers a template that can't be copied and a destination org that refuses
+// the create — the class name predates the second case. `localized` names the
+// full remedy the accept page renders; `localizedStep` is a one-sentence form for
+// the progress checklist row, which sits beside six other rows and can't absorb a
+// paragraph. `Error.message` stays populated with a diagnostic (never-rendered)
+// form so logs and githubHealthStore keep working.
 export class TemplateAccessError extends Error {
   localized: LocalizedMessage
   localizedStep: LocalizedMessage
@@ -67,4 +70,43 @@ export function inOrgTemplateError(
       detail: githubSaid(githubMessage),
     },
   })
+}
+
+// The one 403 message GitHub was observed to return when the *destination* org
+// refuses the create (issue #413). Matched as a substring, case-insensitively.
+const ORG_REPO_CREATION_DENIED_SIGNATURE = "admin access to the organization"
+
+// A 403 that is the destination org refusing to let a member create the repo.
+//
+// There is no structured signal for this refusal — unlike the SSO gate and the
+// scope gap, which are header-derived — so the message text is the only
+// discriminator available. Deliberately matches the single observed string: a
+// speculative variant like "repository creation is disabled" most plausibly
+// denotes an enterprise or ruleset block, which this error's remedy cannot fix,
+// so matching it would be confidently wrong.
+//
+// The three exclusions matter as much as the match: each is also a 403 with its
+// own, different remedy, and `isSsoRequired`/`isScopeGap` are header-derived and
+// therefore definitive. Without them, an SSO-gated 403 that happened to carry
+// this phrase would send a teacher to widen member privileges while the real gate
+// stayed in place.
+export function isOrgRepoCreationDenied(err: GitHubAPIError): boolean {
+  if (!err.isForbidden) return false
+  if (err.isRateLimited || err.isSsoRequired || err.isScopeGap) return false
+  return err.message.toLowerCase().includes(ORG_REPO_CREATION_DENIED_SIGNATURE)
+}
+
+// Destination-org refusal: the org doesn't let its members create repositories.
+// `org` is the classroom org the repo was being created in — never the template
+// owner, which is the misattribution #413 reports.
+export function orgRepoCreationDeniedError(
+  org: string,
+  status: number,
+  githubMessage?: string,
+): TemplateAccessError {
+  const params = { org, status, detail: githubSaid(githubMessage) }
+  return new TemplateAccessError(
+    { key: "accept.templateErrors.orgRepoCreationDenied", params },
+    { key: "accept.templateErrors.orgRepoCreationDeniedStep", params },
+  )
 }
