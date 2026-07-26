@@ -1655,7 +1655,7 @@
       "outOfOrg": "Couldn't copy the template {{owner}}/{{repo}} (HTTP {{status}}).{{detail}} This is often because the {{owner}} organization restricts third-party apps — ask your teacher to approve the Classroom 50 app for {{owner}} (or make the template public), then accept again.",
       "inOrg": "Couldn't copy the private template {{owner}}/{{repo}} (HTTP {{status}}).{{detail}} Ask your teacher to re-run assignment setup, then accept again.",
       "orgRepoCreationDeniedStep": "{{org}} wouldn't let your repository be created (HTTP {{status}}).",
-      "orgRepoCreationDenied": "Couldn't create your repository in {{org}} (HTTP {{status}}).{{detail}} {{org}} may not allow members to create private repositories. Ask your teacher to allow private (not public) repository creation in {{org}}'s member privileges, or to re-run organization setup, then accept again. An enterprise policy can override this setting."
+      "orgRepoCreationDenied": "{{org}} may not allow members to create private repositories, so your repository couldn't be created (HTTP {{status}}). Ask your teacher to enable it, then accept again."
     },
     "notFound": {
       "badge": "Assignment unavailable",

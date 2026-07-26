@@ -1035,30 +1035,34 @@ func TestOrgRepoCreationDenied(t *testing.T) {
 		return err
 	}
 
-	// The remedy wording IS this change's deliverable (#413 is a wording defect),
-	// so assert every load-bearing clause: the hedge, private-only creation, and
-	// the enterprise override.
+	// The wording IS this change's deliverable (#413 is a wording defect), so
+	// assert every load-bearing clause: the org name, the hedge, the cause, and
+	// the one action the student can take. Deliberately NOT the fix instructions:
+	// a student can't change an org setting, so those live in the wiki and the
+	// teacher-facing web notice.
 	assertRemedy := func(t *testing.T, err error) {
 		t.Helper()
 		if err == nil {
-			t.Fatal("err = nil, want the member-privileges remedy")
+			t.Fatal("err = nil, want the org repo-creation message")
 		}
 		msg := err.Error()
 		for _, want := range []string{
-			"o",
+			"`o`",
 			"may not allow",
-			"member privileges",
-			"private (not public)",
-			"re-run organization setup",
-			"enterprise",
+			"private repositories",
+			"Ask your teacher",
 		} {
 			if !strings.Contains(msg, want) {
 				t.Errorf("err = %q, want it to contain %q", msg, want)
 			}
 		}
+		// The remedy #413 reports as useless must never appear.
+		if strings.Contains(msg, "assignment setup") {
+			t.Errorf("err = %q, must not blame assignment setup", msg)
+		}
 	}
 
-	t.Run("403 on generate names the org's member privileges", func(t *testing.T) {
+	t.Run("403 on generate names the org and the likely cause", func(t *testing.T) {
 		assertRemedy(t, templated(serve(t, "/repos/cs50/hello-template/generate", forbid(orgDenied, nil))))
 	})
 
@@ -1100,7 +1104,7 @@ func TestOrgRepoCreationDenied(t *testing.T) {
 				if err == nil {
 					t.Fatal("err = nil, want the raw failure")
 				}
-				if strings.Contains(err.Error(), "member privileges") {
+				if strings.Contains(err.Error(), "may not allow") {
 					t.Errorf("err = %q, want a throttle to stay unclassified", err)
 				}
 			}
@@ -1112,7 +1116,7 @@ func TestOrgRepoCreationDenied(t *testing.T) {
 		if err == nil {
 			t.Fatal("err = nil, want the raw failure")
 		}
-		if strings.Contains(err.Error(), "member privileges") {
+		if strings.Contains(err.Error(), "may not allow") {
 			t.Errorf("err = %q, want an unrelated 403 to stay unclassified", err)
 		}
 	})

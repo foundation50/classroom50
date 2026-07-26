@@ -708,16 +708,18 @@ func is403OrgRepoCreationDenied(httpErr *githubapi.HTTPError) bool {
 // orgRepoCreationDeniedError is the shared remedy for that refusal, kept in one
 // place so both creation paths word it identically. Hedged ("may not allow")
 // because the cause is inferred from GitHub's message text alone: a pending
-// invitation or an enterprise policy produce the same string. Names private (not
-// public) creation, since public student repos would expose coursework, and
-// mentions the enterprise override because re-running org setup can silently
-// no-op. Kept in step with the web copy at accept.templateErrors.*.
+// invitation or an enterprise policy produce the same string. Deliberately a
+// diagnosis rather than a how-to, since the student running accept can't change
+// an org setting; the full remedy lives in the wiki's Troubleshooting page and
+// the teacher-facing web notice. Kept in step with the web copy at
+// accept.templateErrors.orgRepoCreationDenied, except that the wrapped cause
+// still trails GitHub's raw text: that is the Go convention here (and keeps the
+// error chain), and a terminal reader expects the API detail after the colon,
+// whereas the web alert suppresses it to avoid contradicting the diagnosis.
 func orgRepoCreationDeniedError(org string, cause error) error {
-	return fmt.Errorf("cannot create your assignment repository in `%s`. The organization may not "+
-		"allow members to create private repositories. Ask your teacher to allow private "+
-		"(not public) repository creation in the organization's member privileges, or to "+
-		"re-run organization setup, then run accept again. An enterprise policy can "+
-		"override this setting: %w", org, cause)
+	return fmt.Errorf("`%s` may not allow members to create private repositories, so your "+
+		"assignment repository couldn't be created. Ask your teacher to enable it, "+
+		"then run accept again: %w", org, cause)
 }
 
 // reportAccepted writes the success header + clone instructions on stdout

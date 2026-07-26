@@ -96,9 +96,21 @@ export function isOrgRepoCreationDenied(err: GitHubAPIError): boolean {
   return err.message.toLowerCase().includes(ORG_REPO_CREATION_DENIED_SIGNATURE)
 }
 
-// Destination-org refusal: the org doesn't let its members create repositories.
-// `org` is the classroom org the repo was being created in — never the template
-// owner, which is the misattribution #413 reports.
+// The destination-org refusal (#413). `org` is the classroom org the repo was
+// being created in, never the template owner, which is the misattribution the
+// issue reports.
+//
+// `localized` is deliberately a diagnosis, not a how-to: a student can't change
+// an org setting, so the remedy's detail (private-not-public, the enterprise
+// override, the settings path) lives where a teacher can act on it, in
+// OrgRepoCreationNotice and the Troubleshooting wiki. Short student copy also
+// means a teacher reading a screenshot gets the cause immediately.
+//
+// GitHub's own words are the one thing NOT relayed to the student here (unlike
+// the two template errors): "You need admin access to the organization" reads as
+// "you, the student, lack admin", contradicting the diagnosis above. It still
+// reaches `Error.message` through `describeLocalizedMessage`, so logs and the
+// activity trail keep it for triage.
 export function orgRepoCreationDeniedError(
   org: string,
   status: number,

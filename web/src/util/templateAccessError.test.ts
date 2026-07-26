@@ -225,20 +225,26 @@ describe("orgRepoCreationDeniedError", () => {
     )
   })
 
-  it("nests GitHub's own words, and omits the clause when absent", () => {
-    expect(
-      orgRepoCreationDeniedError("cs50", 403, "You need admin access").localized
-        .params?.detail,
-    ).toEqual({
-      key: "accept.templateErrors.githubSaid",
-      params: { message: "You need admin access" },
-    })
-    expect(
-      orgRepoCreationDeniedError("cs50", 403).localized.params?.detail,
-    ).toBe("")
+  // GitHub's words are the one thing NOT relayed to the student on this path:
+  // "You need admin access to the organization" reads as "you lack admin",
+  // contradicting the diagnosis. They still reach Error.message for triage.
+  it("keeps GitHub's words out of the rendered copy but in the diagnostic message", () => {
+    const err = orgRepoCreationDeniedError(
+      "cs50",
+      403,
+      "You need admin access to the organization before adding a repository to it.",
+    )
+
+    expect(resolveLocalizedMessage(t, err.localized)).not.toContain(
+      "admin access",
+    )
+    expect(resolveLocalizedMessage(t, err.localizedStep)).not.toContain(
+      "admin access",
+    )
+    expect(err.message).toContain("admin access to the organization")
   })
 
-  it("resolves to copy that hedges, names both controls, and drops the wrong remedy", () => {
+  it("resolves to short copy that hedges, names the org, and drops the wrong remedy", () => {
     const rendered = resolveLocalizedMessage(
       t,
       orgRepoCreationDeniedError("cs50", 403).localized,
@@ -246,13 +252,18 @@ describe("orgRepoCreationDeniedError", () => {
 
     // R2: the cause is inferred from message text, so the copy must not assert it.
     expect(rendered).toContain("may not allow")
-    // R3: ask for private creation only, so the remedy can't widen the org into
-    // allowing public student repos.
-    expect(rendered).toContain("private (not public)")
-    // R4: the remedy can itself no-op on an enterprise-pinned org.
-    expect(rendered).toContain("enterprise")
+    expect(rendered).toContain("cs50")
     // R1: the remedy #413 reports as useless must be gone.
     expect(rendered).not.toContain("re-run assignment setup")
-    expect(rendered).toContain("cs50")
+
+    // A student can't change an org setting, so the student-facing copy stays a
+    // diagnosis: no settings path, no private/public checkbox guidance, no
+    // enterprise caveat. Those live in OrgRepoCreationNotice (which a teacher
+    // sees) and the Troubleshooting wiki. Kept short so a teacher reading a
+    // screenshot gets the cause at a glance.
+    expect(rendered).not.toContain("Member privileges")
+    expect(rendered).not.toContain("private (not public)")
+    expect(rendered).not.toContain("enterprise")
+    expect(rendered.length).toBeLessThan(240)
   })
 })
