@@ -573,6 +573,15 @@ describe("rowsNeedingBackfill", () => {
     expect(needing).toEqual([])
   })
 
+  // A corrupted id addresses no account, so sync may repoint it from the login —
+  // the row would otherwise be stuck un-invitable with no repair path.
+  it("flags a row whose github_id is present but malformed", () => {
+    const needing = rowsNeedingBackfill([member(583231, "ada")], {}, [
+      csvRow({ github_id: "1e3", username: "ada", role: "student" }),
+    ])
+    expect(needing.map((s) => s.username)).toEqual(["ada"])
+  })
+
   it("does not flag a CSV row for someone on no team (needs-attention, not backfill)", () => {
     const needing = rowsNeedingBackfill([], {}, [csvRow({ username: "ghost" })])
     expect(needing).toEqual([])

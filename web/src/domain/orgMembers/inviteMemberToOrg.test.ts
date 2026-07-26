@@ -74,4 +74,20 @@ describe("inviteMemberToOrg", () => {
     ).rejects.toThrow(/no GitHub id/i)
     expect(createOrgInvitationMock).not.toHaveBeenCalled()
   })
+
+  // "1e3" once coerced to invitee_id 1000 — an unrelated account. The message
+  // must name the bad cell, since "no GitHub id on file" would send the teacher
+  // to re-add a student whose row is present but corrupt.
+  it("names the offending cell for a malformed github_id", async () => {
+    createOrgInvitationMock.mockReset()
+    getUserByIdMock.mockReset()
+
+    await expect(
+      inviteMemberToOrg(client, {
+        org: "acme",
+        row: row({ github_id: "1e3" }),
+      }),
+    ).rejects.toThrow(/"1e3" isn't a valid GitHub id/)
+    expect(createOrgInvitationMock).not.toHaveBeenCalled()
+  })
 })

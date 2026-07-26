@@ -55,6 +55,92 @@ func TestParseRoster_HeaderOnly(t *testing.T) {
 	}
 }
 
+func TestParseRoster_GitHubIDShapeMatchesWeb(t *testing.T) {
+	// Both readers trim, then require digits only, so a whitespace-padded cell is
+	// valid on both sides. Pinned because ParseInt alone would reject it.
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,A,A,,s, 42 ,student\n" +
+		"bob,B,B,,s,9007199254740991,student\n")
+	rows, err := ParseRoster(in)
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2", len(rows))
+	}
+	if rows[0].GitHubID != 42 {
+		t.Errorf("padded github_id = %d, want 42", rows[0].GitHubID)
+	}
+	if rows[1].GitHubID != maxSafeGitHubID {
+		t.Errorf("largest safe github_id = %d, want %d", rows[1].GitHubID, int64(maxSafeGitHubID))
+	}
+}
+
+// A signed cell resolves to the same account and is rewritten canonically, so the
+// two readers converge rather than diverge: Go normalizes "+42" to "42", which the
+// web reader then accepts.
+func TestParseRoster_SignedGitHubIDNormalizes(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,A,A,,s,+42,student\n")
+	rows, err := ParseRoster(in)
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	if rows[0].GitHubID != 42 {
+		t.Errorf("GitHubID = %d, want 42", rows[0].GitHubID)
+	}
+	encoded, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	if !strings.Contains(string(encoded), ",42,") {
+		t.Errorf("want a canonical 42 on rewrite, got:\n%s", encoded)
+	}
+}
+
+// A cell the web reader won't use as an id must not fail the roster: it reads as
+// unresolved (GitHubID 0) so the CLI re-resolves it, and the original value is
+// preserved on rewrite rather than silently cleared. "0" in particular is what
+// this type has always used to MEAN unresolved, so older rosters carry it.
+func TestParseRoster_UnusableGitHubIDIsUnresolvedNotFatal(t *testing.T) {
+	for _, cell := range []string{"0", "-5", "9007199254740993", " "} {
+		t.Run(cell, func(t *testing.T) {
+			in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+				"alice,A,A,,s," + cell + ",student\n")
+			rows, err := ParseRoster(in)
+			if err != nil {
+				t.Fatalf("ParseRoster(%q) = error %v, want a tolerated row", cell, err)
+			}
+			if len(rows) != 1 {
+				t.Fatalf("got %d rows, want 1", len(rows))
+			}
+			if rows[0].GitHubID != 0 {
+				t.Errorf("GitHubID = %d, want 0 (unresolved)", rows[0].GitHubID)
+			}
+			if rows[0].Username != "alice" {
+				t.Errorf("Username = %q, want alice (the row must stay addressable)", rows[0].Username)
+			}
+			encoded, err := EncodeRoster(rows)
+			if err != nil {
+				t.Fatalf("EncodeRoster: %v", err)
+			}
+			// A whitespace-only cell carries no value worth keeping; anything else
+			// must survive the rewrite.
+			want := cell
+			if strings.TrimSpace(cell) == "" {
+				want = ""
+			}
+			round, err := ParseRoster(encoded)
+			if err != nil {
+				t.Fatalf("re-parse: %v", err)
+			}
+			if got := round[0].githubIDRaw; got != want {
+				t.Errorf("github_id after rewrite = %q, want %q (encoded: %s)", got, want, encoded)
+			}
+		})
+	}
+}
+
 func TestParseRoster_RejectsBadInputs(t *testing.T) {
 	cases := []struct {
 		name        string

@@ -1,7 +1,7 @@
 import type { Student } from "@/types/classroom"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
-import { rosterClaimSet } from "@/util/identity"
+import { parseGitHubId, rosterClaimSet } from "@/util/identity"
 import {
   type ClassroomRole,
   ROLE_RANK,
@@ -490,7 +490,7 @@ export function rowsNeedingBackfill(
       (login ? roleByLogin.get(login) : undefined)
     // Not on any team -> nothing for sync to backfill (a needs-attention row).
     if (!teamRole) return false
-    // On a team but the id is blank, or the recorded role is stale.
-    return !id || s.role !== teamRole
+    // On a team but the id is blank or unusable, or the recorded role is stale.
+    return parseGitHubId(id ?? "") === null || s.role !== teamRole
   })
 }

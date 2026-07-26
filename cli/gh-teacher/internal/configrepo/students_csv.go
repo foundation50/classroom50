@@ -47,13 +47,17 @@ func isCanonicalColumn(name string) bool {
 // push the file past the contents API's 1 MB ceiling.
 const maxFieldBytes = 320
 
+// maxSafeGitHubID is JavaScript's Number.MAX_SAFE_INTEGER: beyond it the web
+// app can't represent an id exactly, so it would address the wrong account.
+const maxSafeGitHubID = 1<<53 - 1
+
 // utf8BOM is what Excel prepends to "CSV UTF-8" exports. encoding/csv doesn't
 // strip it, so without trimming the first header field becomes "\ufeffusername"
 // and the header check fails on two identical-looking slices.
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
 // RosterRow is one student in the roster. GitHubID == 0 means unresolved (a
-// 5-column import row before GET /users/{username}).
+// 5-column import row before GET /users/{username}, or a cell we couldn't use).
 type RosterRow struct {
 	Username  string
 	FirstName string
@@ -61,6 +65,9 @@ type RosterRow struct {
 	Email     string
 	Section   string
 	GitHubID  int64
+	// githubIDRaw holds a github_id cell that read as unresolved, so a rewrite
+	// preserves the teacher's value instead of silently clearing it.
+	githubIDRaw string
 	// Role is best-effort recorded metadata: "teacher" (or the legacy
 	// "instructor"), "ta", "student", or "" (unknown / a pre-role file).
 	// Refreshed from team membership on sync; never consulted for enrollment
@@ -282,10 +289,15 @@ func recordToRow(record []string, canonicalLen int, extraColumns []string, line 
 	if row.Username == "" {
 		return RosterRow{}, fmt.Errorf("line %d: username column is empty", line)
 	}
-	if record[5] != "" {
-		id, err := strconv.ParseInt(record[5], 10, 64)
+	if trimmed := strings.TrimSpace(record[5]); trimmed != "" {
+		id, err := parseGitHubID(trimmed)
 		if err != nil {
 			return RosterRow{}, fmt.Errorf("line %d: invalid github_id %q: %w", line, record[5], err)
+		}
+		// id == 0 means readable but unusable: leave GitHubID unresolved and keep
+		// the cell so a rewrite doesn't discard what the teacher typed.
+		if id == 0 {
+			row.githubIDRaw = record[5]
 		}
 		row.GitHubID = id
 	}
@@ -333,11 +345,12 @@ func EncodeRoster(rows []RosterRow) ([]byte, error) {
 			}
 			continue
 		}
-		githubID := ""
+		githubID := row.githubIDRaw
 		if row.GitHubID != 0 {
 			githubID = strconv.FormatInt(row.GitHubID, 10)
 		}
-		// Defang formula-trigger cells; github_id is numeric so never matches.
+		// Defang formula-trigger cells; a resolved github_id is numeric so never
+		// matches, and a preserved raw one must round-trip byte-exact.
 		record := []string{
 			defangCSVCell(row.Username),
 			defangCSVCell(row.FirstName),
@@ -504,6 +517,26 @@ func checkFieldLengths(line int, record []string) error {
 		return fmt.Errorf("line %d: %s exceeds maximum length of %d bytes", line, col, maxFieldBytes)
 	}
 	return nil
+}
+
+// parseGitHubID reads a github_id cell. It returns (0, nil) for a value that is
+// readable but not a usable id — the "unresolved" case, so a stricter reading
+// than before can't fail a roster an older release wrote (notably "0", which
+// this type has always used to mean unresolved). A hard error is reserved for a
+// cell strconv itself rejects, which was fatal before this change too.
+//
+// The usable set mirrors the web app's parseGitHubId (web/src/util/identity.ts):
+// digits only after trimming, positive, and <= 2^53-1, past which the web side
+// can no longer represent an id exactly.
+func parseGitHubID(s string) (int64, error) {
+	id, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	if id <= 0 || id > maxSafeGitHubID {
+		return 0, nil
+	}
+	return id, nil
 }
 
 // isFormulaTrigger reports whether `b` would be parsed as a formula prefix by

@@ -1,7 +1,11 @@
 import type { Student } from "@/types/classroom"
-import { isSameGitHubUser, parseGitHubId } from "@/util/identity"
+import {
+  isMalformedGitHubId,
+  isSameGitHubUser,
+  parseGitHubId,
+} from "@/util/identity"
 
-export { isSameGitHubUser, parseGitHubId }
+export { isMalformedGitHubId, isSameGitHubUser, parseGitHubId }
 
 export const capitalize = (s: string) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1) : ""

@@ -2,7 +2,7 @@ import type { GitHubClient } from "@/github-core/client"
 import { createOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { getUserById } from "@/github-core/queries"
-import { parseGitHubId } from "@/util/students"
+import { isMalformedGitHubId, parseGitHubId } from "@/util/students"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import { logger } from "@/lib/logger"
 
@@ -24,8 +24,11 @@ export async function inviteMemberToOrg(
   const { org, row } = input
   const inviteeId = parseGitHubId(row.github_id)
   if (inviteeId === null) {
+    const who = row.username || row.email
     throw new Error(
-      `Can't invite ${row.username || row.email}: no GitHub id on file.`,
+      isMalformedGitHubId(row.github_id)
+        ? `Can't invite ${who}: "${row.github_id.trim()}" isn't a valid GitHub id. Fix the github_id cell in roster.csv.`
+        : `Can't invite ${who}: no GitHub id on file.`,
     )
   }
 

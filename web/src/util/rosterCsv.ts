@@ -131,11 +131,11 @@ export function parseStudentsCsv(csv: string): StudentCsvRow[] {
   return rows
 }
 
-// True when EVERY short data row is short by exactly one column, i.e., only the
-// trailing field was dropped. Re-parses without `header` to read raw row widths
-// (the header-keyed `data` hides which physical column is missing), so a row
-// dropping a middle cell — which Papa would silently left-shift — is NOT treated
-// as benign. A row that's short by 2+ (or a header we couldn't count) is fatal.
+// True when EVERY short data row is short by exactly one column. Re-parses
+// without `header` to read raw row widths (the header-keyed `data` hides how
+// many physical columns are missing). Width can't tell a dropped trailing cell
+// from a dropped middle one, so both are excused and a middle drop left-shifts
+// silently. A row short by 2+ (or a header we couldn't count) is fatal.
 function tooFewFieldsAreTrailingOnly(
   csv: string,
   headerWidth: number,
@@ -156,15 +156,18 @@ function tooFewFieldsAreTrailingOnly(
 // Which student fields to defang. Applied to name/section free text AND email —
 // email is a member-controlled GitHub profile field written verbatim by
 // syncRosterFromTeam/bulk import, so a formula-leading verified email (e.g.
-// `=1+1@evil.com`) would otherwise reach roster.csv and execute on open. NOT
-// applied to github_id/tokens/hashes/timestamps, which must round-trip
-// byte-exact.
+// `=1+1@evil.com`) would otherwise reach roster.csv and execute on open.
 //
 // NOTE: this writes the leading quote into the STORED value, so any consumer of
 // roster.csv (this app's parse layer, the gh-teacher CLI) must tolerate it on
-// these fields. The Go writer defangs the same set; keep them in lockstep.
-// Email matching keys on the normalized (trim+lowercase) email, so guarding the
-// cell doesn't affect match-by-email.
+// these fields. Email matching keys on the normalized (trim+lowercase) email, so
+// guarding the cell doesn't affect match-by-email.
+//
+// github_id must stay out: it has to round-trip byte-exact for the identity join,
+// and the Go reader parses that column as a number, so a defang quote there would
+// fail the whole roster rather than one cell. Nothing writes an attacker-chosen
+// value into it — every writer uses String(<GitHub id>), and an uploaded roster's
+// github_id is ignored on import (parseRosterImportFile).
 const FORMULA_GUARDED_FIELDS = [
   "first_name",
   "last_name",
