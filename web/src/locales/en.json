@@ -1254,11 +1254,11 @@
       "applying": "Updating…",
       "toggleLabel": "Pause autograding for all student repositories",
       "toggleHint": "Turning this on stops student pushes from being graded (no Actions minutes). The classroom50 config repo keeps working. Turn off to resume.",
-      "pausedNotice": "Paused — student pushes aren't graded. Re-running org setup won't resume until you turn this off.",
+      "pausedNotice": "Paused — student pushes aren't graded and feedback pull requests won't open. Re-running org setup won't resume until you turn this off.",
       "disabledNotice": "Actions are off for the whole org, so nothing runs. Re-run org setup or enable Actions on GitHub.",
       "unknownNotice": "Couldn't read this org's Actions permissions — you may lack owner rights, or an enterprise policy controls them.",
       "confirmTitle": "Pause autograding for the whole organization?",
-      "confirmBody": "Student submissions won't be graded until you resume. The classroom50 config repo keeps working. Reversible any time.",
+      "confirmBody": "Student submissions won't be graded until you resume, and feedback pull requests won't open. The classroom50 config repo keeps working. Reversible any time.",
       "confirmButton": "Pause autograding",
       "toggleFailed": "Couldn't update Actions permissions: {{message}}"
     },
