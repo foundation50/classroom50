@@ -33,17 +33,74 @@ type MemberDefaultSetting struct {
 	//   - members_can_create_internal_repositories (internal is Enterprise).
 	//   - members_can_view_dependency_insights (no Team control).
 	//   - members_can_invite_outside_collaborators (Team: owners only).
-	//   - members_can_create_public_repositories=false ("private only"): on
-	//     Team/Free GitHub couples public+private into one "all or none"
-	//     choice, and the student flow REQUIRES private creation, so forcing
-	//     public off is impossible there. Enterprise-Cloud-only.
+	// members_can_create_public_repositories is NOT enterprise-only: it must be
+	// audited on every plan, only with a different value. See nonEnterpriseOverrides.
 	enterpriseOnly bool
+	// Writable is false for a field whose desired value is real and verifiable
+	// but that must NOT be sent in the PATCH, because GitHub derives it. Only
+	// Team/Free's granular repo-creation booleans qualify — see
+	// nonEnterpriseOverrides. Zero value (false) would mean "skip", so callers
+	// must read this through IsWritable.
+	writable *bool
+}
+
+// IsWritable reports whether the setting may be sent in PATCH /orgs/{org}.
+// Defaults to true; only nonEnterpriseOverrides marks a field verify-only.
+func (s MemberDefaultSetting) IsWritable() bool {
+	return s.writable == nil || *s.writable
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+// nonEnterpriseOverrides holds settings whose desired VALUE and writability
+// depend on the plan, rather than being skipped off-enterprise. Only repo
+// creation qualifies.
+//
+// Team/Free expose "Repository creation" as a single all-or-none choice: the
+// granular public/private booleans are slaved to the master switch, so the
+// private-only lockdown Enterprise Cloud allows is unreachable. Since
+// `student accept` needs private creation, the desired end state there is BOTH
+// booleans true.
+//
+// Getting there is the subtle part, verified against the live API: any PATCH
+// carrying the granular members_can_create_private_repositories is rejected from
+// the all-off state with 422 "Private-only repository creation policy is not
+// allowed for this organization." — including one that also sets
+// members_can_create_public_repositories=true in the same request. The only
+// accepted write is the master switch alone, which GitHub resolves to
+// members_allowed_repository_creation_type="all" and thereby sets both booleans
+// true. So both granular fields are verify-only here: still audited, never sent.
+// Mirrors the web's NON_ENTERPRISE_OVERRIDES.
+var nonEnterpriseOverrides = map[string]struct {
+	Value     any
+	Desc      string
+	ManualFix string
+	Critical  bool
+	Writable  bool
+}{
+	"members_can_create_private_repositories": {
+		Value:     true,
+		Desc:      "private repo creation enabled",
+		ManualFix: `under "Repository creation", allow members to create repositories — on this plan "Private" is enabled together with "Public"`,
+		Critical:  false,
+		Writable:  false,
+	},
+	"members_can_create_public_repositories": {
+		Value:     true,
+		Desc:      "public repo creation enabled (Team/Free couples it to private)",
+		ManualFix: `under "Repository creation", allow members to create repositories — on this plan "Public" cannot be unchecked while "Private" is checked`,
+		// An enabling field, like private-repo creation: the master switch
+		// already carries the critical verdict for repo creation being off.
+		Critical: false,
+		Writable: false,
+	},
 }
 
 // MemberDefaultSettings returns the member policies to apply for the given
-// plan, dropping enterprise-only settings on non-enterprise plans. Pass the
-// plan slug from preflight; an empty/unknown plan is treated as non-enterprise
-// (conservative — only include Enterprise-only fields when sure).
+// plan, dropping enterprise-only settings and applying nonEnterpriseOverrides on
+// non-enterprise plans. Pass the plan slug from preflight; an empty/unknown plan
+// is treated as non-enterprise (conservative — only include Enterprise-only
+// fields when sure).
 func MemberDefaultSettings(plan string) []MemberDefaultSetting {
 	all := allMemberDefaultSettings()
 	if plan == "enterprise" {
@@ -53,6 +110,13 @@ func MemberDefaultSettings(plan string) []MemberDefaultSetting {
 	for _, s := range all {
 		if s.enterpriseOnly {
 			continue
+		}
+		if o, ok := nonEnterpriseOverrides[s.Field]; ok {
+			s.Value = o.Value
+			s.Desc = o.Desc
+			s.ManualFix = o.ManualFix
+			s.Critical = o.Critical
+			s.writable = boolPtr(o.Writable)
 		}
 		filtered = append(filtered, s)
 	}
@@ -110,12 +174,15 @@ func allMemberDefaultSettings() []MemberDefaultSetting {
 			ManualFix: `under "Repository creation", check "Private" — without it, gh student accept can't create student repos`,
 		},
 		{
-			Field:          "members_can_create_public_repositories",
-			Value:          false,
-			Desc:           "public repo creation disabled",
-			ManualFix:      `under "Repository creation", restrict members to private repositories only (GitHub Enterprise Cloud only)`,
-			Critical:       true,
-			enterpriseOnly: true,
+			// Enterprise Cloud only: narrows repo creation to private-only. On
+			// Team/Free GitHub couples public+private into one all-or-none
+			// choice, so this flips to true there (nonEnterpriseOverrides) and
+			// must still be SENT — omitting it 422s the whole PATCH.
+			Field:     "members_can_create_public_repositories",
+			Value:     false,
+			Desc:      "public repo creation disabled",
+			ManualFix: `under "Repository creation", restrict members to private repositories only (GitHub Enterprise Cloud only)`,
+			Critical:  true,
 		},
 		{
 			Field:          "members_can_create_internal_repositories",

@@ -15,12 +15,19 @@ export type MemberDefaultSetting = {
   manualFix: string
   critical: boolean
   enterpriseOnly: boolean
+  // False for a field whose desired value is real and verifiable but that must
+  // NOT be sent in the PATCH, because GitHub derives it. Only Team/Free's
+  // granular repo-creation booleans qualify: see NON_ENTERPRISE_OVERRIDES.
+  // Undefined means writable.
+  writable?: boolean
 }
 
 // The 15 member-default fields, in the CLI's order. Criticality and
 // enterprise-only flags mirror the CLI: critical marks lockdown fields whose
 // absence re-opens the org-wide repo-admin danger; enterprise-only fields have
-// no member-privileges toggle on Team/Free, so init skips them there.
+// no member-privileges toggle on Team/Free, so init skips them there. A field
+// whose desired VALUE (rather than applicability) differs off-enterprise is
+// handled by NON_ENTERPRISE_OVERRIDES instead.
 const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
   {
     field: "default_repository_permission",
@@ -52,13 +59,16 @@ const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
     enterpriseOnly: false,
   },
   {
+    // Enterprise Cloud only: narrows repo creation to private-only. On Team/Free
+    // that choice doesn't exist and the desired value flips to `true`, and the
+    // field becomes verify-only — see NON_ENTERPRISE_OVERRIDES.
     field: "members_can_create_public_repositories",
     value: false,
     desc: "public repo creation disabled",
     manualFix:
       'under "Repository creation", restrict members to private repositories only (GitHub Enterprise Cloud only)',
     critical: true,
-    enterpriseOnly: true,
+    enterpriseOnly: false,
   },
   {
     field: "members_can_create_internal_repositories",
@@ -157,16 +167,59 @@ const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
   },
 ]
 
-// memberDefaultSettings returns the in-scope settings for a plan. Only
-// "enterprise" gets all 15; every other plan (team/free/unknown) is treated as
-// non-enterprise and the 4 enterprise-only fields are filtered out, leaving 11.
+// Settings whose DESIRED VALUE (and writability) depend on the plan, rather than
+// being skipped off-enterprise. Only repo creation qualifies.
+//
+// Team/Free expose "Repository creation" as a single all-or-none choice: the
+// granular public/private booleans are slaved to the master switch, so the
+// private-only lockdown Enterprise Cloud allows is unreachable. Since
+// `student accept` needs private creation, the desired end state on Team/Free is
+// BOTH booleans true.
+//
+// Getting there is the subtle part, verified against the live API: any PATCH that
+// carries the granular `members_can_create_private_repositories` is rejected from
+// the all-off state with 422 "Private-only repository creation policy is not
+// allowed for this organization." — including one that also sets
+// `members_can_create_public_repositories: true` in the same request. The only
+// accepted write is the master switch alone, which GitHub resolves to
+// `members_allowed_repository_creation_type: "all"` and thereby sets both
+// booleans true. So both granular fields are `writable: false` here: still
+// audited (the values are real and drift is worth reporting), never sent.
+const NON_ENTERPRISE_OVERRIDES: Readonly<
+  Record<string, Partial<MemberDefaultSetting>>
+> = {
+  members_can_create_private_repositories: {
+    // Derived from the master switch on this plan, so verify but never write.
+    writable: false,
+  },
+  members_can_create_public_repositories: {
+    value: true,
+    desc: "public repo creation enabled (Team/Free couples it to private)",
+    manualFix:
+      'under "Repository creation", allow members to create repositories — on this plan "Public" cannot be unchecked while "Private" is checked',
+    // An enabling field, like private-repo creation: the master switch already
+    // carries the critical verdict for repo creation being off.
+    critical: false,
+    writable: false,
+  },
+}
+
+// memberDefaultSettings returns the in-scope settings for a plan. "enterprise"
+// gets all 15 verbatim; every other plan (team/free/unknown) is treated as
+// non-enterprise, which drops the 3 enterprise-only fields and applies
+// NON_ENTERPRISE_OVERRIDES, leaving 12.
 export function memberDefaultSettings(
   plan: string | undefined,
 ): MemberDefaultSetting[] {
   if (plan === "enterprise") {
     return [...ALL_MEMBER_DEFAULT_SETTINGS]
   }
-  return ALL_MEMBER_DEFAULT_SETTINGS.filter((s) => !s.enterpriseOnly)
+  return ALL_MEMBER_DEFAULT_SETTINGS.filter((s) => !s.enterpriseOnly).map(
+    (s) => {
+      const override = NON_ENTERPRISE_OVERRIDES[s.field]
+      return override ? { ...s, ...override } : s
+    },
+  )
 }
 
 export type DefaultVerdict = {

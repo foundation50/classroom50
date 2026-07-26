@@ -2,6 +2,7 @@ import {
   GitHubAPIError,
   githubNonJsonResponseError,
   readGitHubRateLimitHeaders,
+  githubValidationReasons,
 } from "./errors"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_CLIENT } from "@/lib/logScopes"
@@ -142,13 +143,21 @@ export function createGitHubClient(args: {
           ? body.message
           : `GitHub API request failed with ${res.status}`
 
-      // Trace the failure with non-sensitive fields only (never the body): the
-      // status, the endpoint, and GitHub's request id for support correlation.
+      // Trace the failure with non-sensitive fields only: the status, the
+      // endpoint, GitHub's request id for support correlation, and — for a 422
+      // — the validation reasons. Never the whole body (it can carry IP allow
+      // lists or SAML detail); `githubValidationReasons` extracts only the
+      // `errors[].message`/`.field`/`.code` triples, which is the difference
+      // between "PATCH /orgs 422" and "Private-only repository creation policy
+      // is not allowed for this organization."
       log.debug("api error", {
         method,
         path,
         status: res.status,
         requestId: res.headers.get("x-github-request-id"),
+        ...(res.status === 422
+          ? { validation: githubValidationReasons(body) }
+          : {}),
       })
 
       throw new GitHubAPIError({

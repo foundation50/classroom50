@@ -386,11 +386,19 @@ export type OrgDefaultsRepairResult = {
   message: string
 }
 
+// The PATCH body for a set of settings. Skips verify-only fields (`writable:
+// false`): on Team/Free the granular repo-creation booleans are derived from the
+// master switch, and sending one makes GitHub reject the whole request with 422
+// "Private-only repository creation policy is not allowed for this organization."
+// They are still classified on the read-back, just never written.
 function orgDefaultsBody(
   settings: MemberDefaultSetting[],
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {}
-  for (const s of settings) body[s.field] = s.value
+  for (const s of settings) {
+    if (s.writable === false) continue
+    body[s.field] = s.value
+  }
   return body
 }
 
@@ -555,10 +563,23 @@ async function repairOrgDefaultsPerField(
 
   try {
     if (repoCreation.length > 0) {
-      const accepted = await patchBody(orgDefaultsBody(repoCreation))
-      if (!accepted) for (const s of repoCreation) rejected.add(s.field)
+      const body = orgDefaultsBody(repoCreation)
+      // On Team/Free only the master switch is writable, so the group can reduce
+      // to one field; if every member is verify-only there is nothing to send.
+      if (Object.keys(body).length > 0) {
+        const accepted = await patchBody(body)
+        // Only writable fields can be "rejected" — a verify-only field was never
+        // attempted, so marking it rejected would suppress the enterprise-pinned
+        // signal that the read-back is supposed to produce.
+        if (!accepted) {
+          for (const s of repoCreation) {
+            if (s.writable !== false) rejected.add(s.field)
+          }
+        }
+      }
     }
     for (const s of rest) {
+      if (s.writable === false) continue
       const accepted = await patchBody({ [s.field]: s.value })
       if (!accepted) rejected.add(s.field)
     }
