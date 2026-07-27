@@ -133,6 +133,7 @@ describe("UploadRoster detected-kind override", () => {
       needsInvite: [{ username: "ada" }],
       enroll: [],
       roleChanges: [],
+      metadataUpdate: [],
       allAlreadyMembers: false,
     })
     renderModal(
@@ -156,7 +157,7 @@ describe("UploadRoster detected-kind override", () => {
     // "ada@x.edu" is not a valid GitHub username, so the roster parse yields no
     // rows -> the no-valid-usernames warning, proving the branch swapped and
     // the email state was cleared.
-    expect(screen.getByText("students.usernamesFound:0")).toBeTruthy()
+    expect(screen.getByText("students.noValidUsernames")).toBeTruthy()
   })
 })
 
@@ -195,6 +196,7 @@ describe("UploadRoster canProcess gating", () => {
       needsInvite: [],
       enroll: [],
       roleChanges: [],
+      metadataUpdate: [],
       allAlreadyMembers: true,
     })
     renderModal(
@@ -212,5 +214,71 @@ describe("UploadRoster canProcess gating", () => {
       return b
     })
     expect(button.disabled).toBe(true)
+
+    // The full CSV preview is still shown (not collapsed) so the teacher can
+    // confirm the file was read correctly even though there's nothing to apply.
+    expect(screen.getByText("ada")).toBeTruthy()
+    // ...and the summary reports everyone is already up to date.
+    expect(screen.getByText(/summary_skip/)).toBeTruthy()
+    // No details toggle when the table is force-shown for the no-changes case.
+    expect(
+      screen.queryByRole("button", { name: /summaryViewDetails/ }),
+    ).toBeNull()
+  })
+
+  it("enables the button for a metadata-only upload only after confirmation", async () => {
+    const user = userEvent.setup()
+    resolveRosterUploadPreflight.mockResolvedValue({
+      noAction: [],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [
+        {
+          kind: "metadata_update",
+          username: "ada",
+          role: "student",
+          changedFields: ["email"],
+          changes: [{ field: "email", from: "old@x.edu", to: "ada@x.edu" }],
+        },
+      ],
+      allAlreadyMembers: true,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(
+      user,
+      file("roster.csv", "username,email\nada,ada@x.edu\n"),
+    )
+
+    // The primary button reads "Update ..." and starts disabled (unconfirmed).
+    const button = await waitFor(() => {
+      const b = screen
+        .getByRole("button", { name: /updateMetadata/ })
+        .closest("button") as HTMLButtonElement
+      return b
+    })
+    expect(button.disabled).toBe(true)
+
+    // Checking the metadata confirmation enables it.
+    const checkbox = screen
+      .getByText(/preflightConfirmMetadata/)
+      .closest("label")!
+      .querySelector("input[type=checkbox]") as HTMLInputElement
+    await user.click(checkbox)
+    await waitFor(() => expect(button.disabled).toBe(false))
+
+    // The CSV metadata must reach the preflight, or metadata_update can never
+    // be detected. Guards against a dropped field in the preflightRows mapping.
+    expect(resolveRosterUploadPreflight).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({
+        rows: [
+          expect.objectContaining({ username: "ada", email: "ada@x.edu" }),
+        ],
+      }),
+    )
   })
 })

@@ -17,6 +17,7 @@ import {
   inviteRosterStudents,
   syncRosterFromTeam,
   writeClassroomRoles,
+  updateClassroomMetadata,
   migrateRosterFile,
   resolveTeamIdForRoleRead,
   updateStudent,
@@ -991,6 +992,110 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
       role: "admin",
       team_ids: [5000],
     })
+  })
+})
+
+describe("updateClassroomMetadata — merge changed non-empty metadata into existing rows", () => {
+  const aliceRow = "alice,Alice,A,alice@x.edu,Period 1,42,student\n"
+  const bobRow = "bob,Bob,B,bob@x.edu,Period 1,43,student\n"
+
+  it("rewrites only the changed row's changed field and preserves identity/role", async () => {
+    const { client, committed } = makeClient({
+      startingCsv: HEADER + aliceRow + bobRow,
+    })
+
+    const result = await updateClassroomMetadata(client, {
+      org: "acme",
+      classroom: "cs101",
+      updates: [
+        { username: "alice", github_id: "42", email: "alicia@x.edu" },
+        { username: "bob", github_id: "43", email: "bob@x.edu" }, // unchanged
+      ],
+    })
+
+    expect(result.changed).toBe(1)
+    const rows = rowsFromCsv(committed.content!)
+    const alice = rows.find((r) => r.github_id === "42")
+    const bob = rows.find((r) => r.github_id === "43")
+    expect(alice?.email).toBe("alicia@x.edu")
+    expect(alice?.role).toBe("student")
+    expect(alice?.username).toBe("alice")
+    expect(bob?.email).toBe("bob@x.edu")
+  })
+
+  it("never clears a stored value from a blank update field", async () => {
+    const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
+
+    const result = await updateClassroomMetadata(client, {
+      org: "acme",
+      classroom: "cs101",
+      updates: [{ username: "alice", github_id: "42", email: "", section: "" }],
+    })
+
+    expect(result.changed).toBe(0)
+    expect(committed.content).toBeNull()
+  })
+
+  it("does not commit when no effective change is present", async () => {
+    const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
+
+    const result = await updateClassroomMetadata(client, {
+      org: "acme",
+      classroom: "cs101",
+      updates: [{ username: "alice", github_id: "42", first_name: "Alice" }],
+    })
+
+    expect(result.changed).toBe(0)
+    expect(committed.content).toBeNull()
+  })
+
+  it("matches by lowercased login when github_id is absent", async () => {
+    const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
+
+    const result = await updateClassroomMetadata(client, {
+      org: "acme",
+      classroom: "cs101",
+      updates: [{ username: "ALICE", section: "Lab 9" }],
+    })
+
+    expect(result.changed).toBe(1)
+    const alice = rowsFromCsv(committed.content!).find(
+      (r) => r.github_id === "42",
+    )
+    expect(alice?.section).toBe("Lab 9")
+  })
+
+  it("applies the formula-injection guard through the merge path", async () => {
+    const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
+
+    await updateClassroomMetadata(client, {
+      org: "acme",
+      classroom: "cs101",
+      updates: [{ username: "alice", github_id: "42", email: "=cmd|x@x.edu" }],
+    })
+
+    // Written value is guarded (leading apostrophe) on disk...
+    expect(committed.content).toContain("'=cmd|x@x.edu")
+    // ...and round-trips back to the raw value on parse (undefanged).
+    const alice = parseRosterCsv(committed.content!).rows.find(
+      (r) => r.github_id === "42",
+    )
+    expect(alice?.email).toBe("=cmd|x@x.edu")
+  })
+
+  it("throws RosterCsvMalformedError and does not commit on an unparseable roster", async () => {
+    // A data row with too many columns is a structural problem parseRosterCsv flags.
+    const malformed = HEADER + "alice,Alice,A,alice@x.edu,P1,42,student,EXTRA\n"
+    const { client, committed } = makeClient({ startingCsv: malformed })
+
+    await expect(
+      updateClassroomMetadata(client, {
+        org: "acme",
+        classroom: "cs101",
+        updates: [{ username: "alice", github_id: "42", email: "new@x.edu" }],
+      }),
+    ).rejects.toBeInstanceOf(RosterCsvMalformedError)
+    expect(committed.content).toBeNull()
   })
 })
 

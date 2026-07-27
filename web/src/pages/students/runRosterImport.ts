@@ -4,6 +4,7 @@ import {
   inviteRosterStudents,
   NoNewStudentsError,
   RosterCsvMalformedError,
+  updateClassroomMetadata,
   writeClassroomRoles,
   type BulkImportResult,
   type ImportRosterRow,
@@ -41,6 +42,8 @@ export type RosterImportMessages = {
   importFailed: string
   roleWritebackMalformed: string
   roleWritebackFailed: string
+  metadataWritebackMalformed: string
+  metadataWritebackFailed: string
 }
 
 // The full roster-import outcome. On a hard enroll failure (nothing written) the
@@ -207,6 +210,47 @@ export async function runRosterImport(
         inviteError = messages.roleWritebackFailed
       }
       log.warn("roster role writeback failed", { err, record: true })
+    }
+  }
+
+  // 3.5) Persist changed name/email/section back to roster.csv for members the
+  //    preflight flagged with a metadata delta (metadata_update, plus role_change
+  //    / enroll rows that also carry one — all surfaced and confirmed in the
+  //    preview before we get here). Only rows with a genuine delta are folded in,
+  //    so a pure team move never enters this write. Runs AFTER the role writeback
+  //    commits so this RMW sees the role change; best-effort — a failure converges
+  //    on the next sync and never blocks invites or team moves.
+  const metadataOutcomes = [
+    ...(plan?.metadataUpdate ?? []),
+    ...(plan?.roleChanges ?? []).filter((c) => c.changedFields.length > 0),
+    ...(plan?.enroll ?? []).filter((e) => e.changedFields.length > 0),
+  ]
+  const rowByLogin = new Map(rows.map((r) => [r.username.toLowerCase(), r]))
+  const metadataUpdates = metadataOutcomes
+    .map((o) => rowByLogin.get(o.username.toLowerCase()))
+    .filter((r): r is ImportRosterRow => Boolean(r))
+    .map((r) => ({
+      username: r.username,
+      github_id: idByLogin.get(r.username.toLowerCase()) || undefined,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      email: r.email,
+      section: r.section,
+    }))
+  if (metadataUpdates.length > 0) {
+    try {
+      await updateClassroomMetadata(client, {
+        org,
+        classroom,
+        updates: metadataUpdates,
+      })
+    } catch (err) {
+      if (err instanceof RosterCsvMalformedError) {
+        inviteError = inviteError ?? messages.metadataWritebackMalformed
+      } else {
+        inviteError = inviteError ?? messages.metadataWritebackFailed
+      }
+      log.warn("roster metadata writeback failed", { err, record: true })
     }
   }
 

@@ -4,13 +4,23 @@ import {
   isTeacherRole,
   type ClassroomRole,
 } from "@/util/teamRoster"
+import {
+  mergeStudentMetadata,
+  type MetadataField,
+  type StudentMetadata,
+} from "@/util/rosterMetadataMerge"
 
 // Preflight classification for a CSV roster upload. Pure: given the uploaded
 // rows (each resolved to a username + intended role) and the classroom's CURRENT
 // GitHub membership, it decides what processing each row implies — WITHOUT any
 // GitHub calls — so the upload dialog can show, before committing anything:
 //
-//  - no_action:   already on the team matching the CSV role (a true no-op).
+//  - no_action:   already on the team matching the CSV role AND the CSV carries
+//                 no new metadata (a true no-op).
+//  - metadata_update: already on the team matching the CSV role, but the CSV
+//                 supplies a non-empty first_name/last_name/email/section that
+//                 differs from the stored roster.csv row -> merge it in (no team
+//                 change; non-destructive, but confirmed before writing).
 //  - needs_invite: not yet an org member -> a fresh org invite (their acceptance
 //                 activates the CSV role's team).
 //  - enroll:      an active org member on NONE of this classroom's teams -> an
@@ -38,18 +48,48 @@ export type CurrentMembership = {
 }
 
 // The uploaded row reduced to what the classifier needs: an identity + intended
-// role. `username` is the normalized login; `github_id` (when the enroll pass
-// resolved it) anchors membership lookup across a rename.
-export type PreflightRow = {
+// role, plus the optional CSV metadata used to detect a metadata_update against
+// the stored roster. `username` is the normalized login; `github_id` (when the
+// enroll pass resolved it) anchors membership lookup across a rename. NOTE: at
+// preflight time github_id is typically absent (it's resolved later, in the
+// enroll pass), so the stored-roster metadata join is effectively login-only.
+export type PreflightRow = StudentMetadata & {
   username: string
   github_id?: string
   role: PreflightRole
 }
 
+// The stored roster.csv metadata for a member, returned by the storedByIdentity
+// lookup so the classifier can diff the CSV against what's already recorded.
+export type StoredRosterRow = StudentMetadata
+
+// A single metadata field's change: the stored value and the CSV value that
+// replaces it, so the confirmation UI can show a `from -> to` delta (R9).
+export type MetadataChange = { field: MetadataField; from: string; to: string }
+
 export type PreflightOutcome =
   | { kind: "no_action"; username: string; role: PreflightRole }
+  | {
+      kind: "metadata_update"
+      username: string
+      role: PreflightRole
+      // The metadata fields whose stored value the CSV changes (non-empty).
+      changedFields: MetadataField[]
+      // Per changed field, the stored value and the CSV value that replaces it.
+      changes: MetadataChange[]
+    }
   | { kind: "needs_invite"; username: string; role: PreflightRole }
-  | { kind: "enroll"; username: string; role: PreflightRole }
+  | {
+      kind: "enroll"
+      username: string
+      role: PreflightRole
+      // Metadata the CSV also changes for this member. An enroll (active member
+      // on no classroom team) is team-added on process; if the CSV also corrects
+      // their name/email/section, that delta travels here so it's shown in the
+      // preview and written alongside the team-add. Empty when there's no delta.
+      changedFields: MetadataField[]
+      changes: MetadataChange[]
+    }
   | {
       kind: "role_change"
       username: string
@@ -61,11 +101,19 @@ export type PreflightOutcome =
       // drops every non-target team, so a member on both the teacher and TA
       // teams moved to student leaves neither staff team behind.
       currentRoles: ClassroomRole[]
+      // Metadata the CSV also changes for this member. A role_change is NOT in the
+      // metadataUpdate bucket, so these travel with the move: the confirmation UI
+      // shows them under the role-change block and the writeback applies ONLY
+      // these (never a blind fold of every role-changed row). Empty when the CSV
+      // supplies no metadata delta.
+      changedFields: MetadataField[]
+      changes: MetadataChange[]
     }
 
 export type PreflightResult = {
   outcomes: PreflightOutcome[]
   noAction: Extract<PreflightOutcome, { kind: "no_action" }>[]
+  metadataUpdate: Extract<PreflightOutcome, { kind: "metadata_update" }>[]
   needsInvite: Extract<PreflightOutcome, { kind: "needs_invite" }>[]
   enroll: Extract<PreflightOutcome, { kind: "enroll" }>[]
   roleChanges: Extract<PreflightOutcome, { kind: "role_change" }>[]
@@ -81,12 +129,35 @@ function primaryOf(roles: ClassroomRole[]): ClassroomRole | undefined {
   return roles.length === 0 ? undefined : sortRolesByRank(roles)[0]
 }
 
+// Diff a row's CSV metadata against its stored roster row (when known) into the
+// per-field `from -> to` changes both the metadata_update and role_change
+// outcomes carry. Empty when there's no stored row or no non-empty delta.
+function computeMetadataChanges(
+  row: PreflightRow,
+  stored: StoredRosterRow | undefined,
+): { changedFields: MetadataField[]; changes: MetadataChange[] } {
+  if (!stored) return { changedFields: [], changes: [] }
+  const { next, changedFields } = mergeStudentMetadata(stored, row)
+  return {
+    changedFields,
+    changes: changedFields.map((field) => ({
+      field,
+      from: (stored[field] ?? "").trim(),
+      to: next[field],
+    })),
+  }
+}
+
 // Classify each uploaded row against current membership. `lookup` resolves a
 // row to its live standing (by github_id, then lowercased login); a row with no
-// match is treated as a non-member (invite).
+// match is treated as a non-member (invite). `storedByIdentity` (optional)
+// resolves a row to its current roster.csv metadata so an already-enrolled
+// member whose CSV supplies changed metadata is classified metadata_update
+// rather than no_action; omitting it preserves the pre-metadata behavior.
 export function classifyRosterUpload(
   rows: PreflightRow[],
   lookup: (row: PreflightRow) => CurrentMembership | undefined,
+  storedByIdentity?: (row: PreflightRow) => StoredRosterRow | undefined,
 ): PreflightResult {
   const outcomes: PreflightOutcome[] = []
 
@@ -102,39 +173,79 @@ export function classifyRosterUpload(
       continue
     }
 
-    // Already on the team matching the CSV role -> a true no-op. (A person who
-    // holds several roles and whose set INCLUDES the CSV role needs no change:
-    // they're already on that team.)
+    // Already on the team matching the CSV role. (A person who holds several
+    // roles and whose set INCLUDES the CSV role is already on that team.) The
+    // only remaining change is a metadata update: if the CSV supplies a
+    // non-empty first/last/email/section differing from the stored roster row,
+    // classify metadata_update; otherwise it's a true no-op. A row with no
+    // stored match (brand-new to roster.csv, e.g. a login rename the login-only
+    // join can't resolve) stays no_action — the add path owns new rows.
     if (current.roles.includes(row.role)) {
-      outcomes.push({ kind: "no_action", username, role: row.role })
+      const { changedFields, changes } = computeMetadataChanges(
+        row,
+        storedByIdentity?.(row),
+      )
+      if (changedFields.length > 0) {
+        outcomes.push({
+          kind: "metadata_update",
+          username,
+          role: row.role,
+          changedFields,
+          changes,
+        })
+      } else {
+        outcomes.push({ kind: "no_action", username, role: row.role })
+      }
       continue
     }
 
     const currentRole = primaryOf(current.roles)
     // Active member on NONE of this classroom's teams: enrolling them onto the
     // CSV role's team is additive (no team to leave), so it's a safe action that
-    // needs no destructive-move confirmation.
+    // needs no destructive-move confirmation. Carry any metadata delta so the
+    // team-add also corrects the member's stored details (shown in the preview).
     if (!currentRole) {
-      outcomes.push({ kind: "enroll", username, role: row.role })
+      const { changedFields, changes } = computeMetadataChanges(
+        row,
+        storedByIdentity?.(row),
+      )
+      outcomes.push({
+        kind: "enroll",
+        username,
+        role: row.role,
+        changedFields,
+        changes,
+      })
       continue
     }
 
     // Active member whose current role differs from the CSV role -> a move that
     // requires confirmation (student<->ta<->teacher, up or down). Carry the
     // full current role set so the move drops every non-target team, not just
-    // the primary one.
+    // the primary one, plus any metadata delta so the move also updates (and
+    // shows) the member's changed details rather than folding them in blindly.
+    const { changedFields, changes } = computeMetadataChanges(
+      row,
+      storedByIdentity?.(row),
+    )
     outcomes.push({
       kind: "role_change",
       username,
       role: row.role,
       currentRole,
       currentRoles: [...current.roles],
+      changedFields,
+      changes,
     })
   }
 
   const noAction = outcomes.filter(
     (o): o is Extract<PreflightOutcome, { kind: "no_action" }> =>
       o.kind === "no_action",
+  )
+  const metadataUpdate = outcomes.filter(
+    (o): o is Extract<PreflightOutcome, { kind: "metadata_update" }> =>
+      o.kind === "metadata_update",
   )
   const needsInvite = outcomes.filter(
     (o): o is Extract<PreflightOutcome, { kind: "needs_invite" }> =>
@@ -152,6 +263,7 @@ export function classifyRosterUpload(
   return {
     outcomes,
     noAction,
+    metadataUpdate,
     needsInvite,
     enroll,
     roleChanges,
