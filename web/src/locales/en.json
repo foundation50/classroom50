@@ -492,7 +492,6 @@
     "preflightMetadataConfirmTitle": "Confirm student detail updates",
     "preflightMetadataReviewHint_one": "{{count}} student's details will be updated. Review the highlighted cells below (hover for details) before confirming.",
     "preflightMetadataReviewHint_other": "{{count}} students' details will be updated. Review the highlighted cells below (hover for details) before confirming.",
-    "preflightMetadataDetail": "{{field}}: {{from}} → {{to}}",
     "preflightMetadataEmpty": "(empty)",
     "preflightConfirmMetadata_one": "I confirm updating the details of {{count}} student as listed above.",
     "preflightConfirmMetadata_other": "I confirm updating the details of {{count}} students as listed above.",
