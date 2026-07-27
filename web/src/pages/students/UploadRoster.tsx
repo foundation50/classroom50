@@ -349,7 +349,9 @@ const UploadRoster = ({
     (!!preflight && !hasActionableWork)
   const canProcess =
     uploadKind === "email-list"
-      ? emails.length > 0 && (!emailHasTeacher || emailOwnerConfirmed)
+      ? emails.length > 0 &&
+        invalidEmails.length === 0 &&
+        (!emailHasTeacher || emailOwnerConfirmed)
       : rows.length > 0 &&
         !preflighting &&
         !preflightError &&

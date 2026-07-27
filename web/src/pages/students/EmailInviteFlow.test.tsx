@@ -36,13 +36,15 @@ const baseProps = {
   onSend: noop,
 }
 
-describe("EmailInvitePreview invalid-email feedback", () => {
-  it("shows no invalid notice when every line is a valid email", () => {
+describe("EmailInvitePreview invalid-email handling", () => {
+  it("shows the normal preview (table + send) when every line is valid", () => {
     render(<EmailInvitePreview {...baseProps} />)
-    expect(screen.queryByText(/emailInviteInvalidNotice/)).toBeNull()
+    expect(screen.queryByText(/emailInviteInvalidBlocked/)).toBeNull()
+    expect(screen.getByText("ada@x.edu")).toBeTruthy()
+    expect(screen.getByRole("button", { name: /sendInviteCount/ })).toBeTruthy()
   })
 
-  it("lists each invalid line with its line number and value", () => {
+  it("blocks the whole preview when any line is invalid: no table, no send", () => {
     render(
       <EmailInvitePreview
         {...baseProps}
@@ -52,25 +54,30 @@ describe("EmailInvitePreview invalid-email feedback", () => {
         ]}
       />,
     )
-    // The header names how many lines are invalid...
-    expect(screen.getByText(/emailInviteInvalidNotice:count=2/)).toBeTruthy()
-    // ...and each bad line is called out with its number + raw value.
+    // A concise blocked warning names the count and lists each bad line.
+    expect(screen.getByText(/emailInviteInvalidBlocked:count=2/)).toBeTruthy()
     expect(
       screen.getByText(/emailInviteInvalidRow:line=2,value=not-an-email/),
     ).toBeTruthy()
     expect(
       screen.getByText(/emailInviteInvalidRow:line=4,value=octocat/),
     ).toBeTruthy()
+    // No valid-email table and no send button — only Cancel.
+    expect(screen.queryByText("ada@x.edu")).toBeNull()
+    expect(screen.queryByRole("button", { name: /sendInviteCount/ })).toBeNull()
+    expect(screen.getByRole("button", { name: /common.cancel/ })).toBeTruthy()
   })
 
-  it("still shows the valid emails alongside the invalid notice", () => {
+  it("blocks even a single invalid line among otherwise-valid emails", () => {
     render(
       <EmailInvitePreview
         {...baseProps}
+        emails={["ada@x.edu", "bob@x.edu"]}
         invalidEmails={[{ line: 3, value: "bad" }]}
       />,
     )
-    expect(screen.getByText("ada@x.edu")).toBeTruthy()
-    expect(screen.getByText(/emailInviteInvalidNotice/)).toBeTruthy()
+    expect(screen.getByText(/emailInviteInvalidBlocked:count=1/)).toBeTruthy()
+    expect(screen.queryByText("ada@x.edu")).toBeNull()
+    expect(screen.queryByRole("button", { name: /sendInviteCount/ })).toBeNull()
   })
 })

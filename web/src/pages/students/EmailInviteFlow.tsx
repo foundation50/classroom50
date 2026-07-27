@@ -69,20 +69,19 @@ export const EmailInvitePreview = ({
   onSend: () => void
 }) => {
   const { t } = useTranslation()
-  return (
-    <>
-      <Alert tone="info" className="mb-2">
-        <span>{t("students.emailsFound", { count: emails.length })}</span>
-      </Alert>
-      <Alert tone="info" className="mb-4">
-        <span>{t("students.emailInviteNoRosterNotice")}</span>
-      </Alert>
 
-      {invalidEmails.length > 0 ? (
+  // If ANY non-empty line is not a valid email, we don't trust the file: block
+  // the whole preview (no table, no send) and ask the teacher to fix it and
+  // re-upload — or switch the detected format. A mis-detected roster CSV, for
+  // example, has every data row fail here, and we must not send partial/garbled
+  // invites from it.
+  if (invalidEmails.length > 0) {
+    return (
+      <>
         <Alert tone="warning" className="mb-4">
           <div className="flex flex-col gap-1">
             <span className="font-medium">
-              {t("students.emailInviteInvalidNotice", {
+              {t("students.emailInviteInvalidBlocked", {
                 count: invalidEmails.length,
               })}
             </span>
@@ -98,7 +97,23 @@ export const EmailInvitePreview = ({
             </ul>
           </div>
         </Alert>
-      ) : null}
+        <div className="modal-action">
+          <Button variant="ghost" onClick={onCancel}>
+            {t("common.cancel")}
+          </Button>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <Alert tone="info" className="mb-2">
+        <span>{t("students.emailsFound", { count: emails.length })}</span>
+      </Alert>
+      <Alert tone="info" className="mb-4">
+        <span>{t("students.emailInviteNoRosterNotice")}</span>
+      </Alert>
 
       {emails.length > 0 ? (
         <>
