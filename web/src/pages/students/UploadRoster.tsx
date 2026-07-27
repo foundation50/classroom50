@@ -122,10 +122,8 @@ const UploadRoster = ({
     {},
   )
   // The role-independent GitHub membership + stored-roster read, fetched ONCE
-  // per uploaded file, tagged with the usersKey it was fetched for. The actual
-  // classification (`preflight`) is derived from this synchronously, so changing
-  // a role reclassifies instantly without a network round-trip or a loading
-  // state. Null until the read resolves.
+  // per uploaded file and tagged with the usersKey it was fetched for. Null
+  // until the read resolves.
   const [preflightContext, setPreflightContext] = useState<
     (RosterUploadContext & { usersKey: string }) | null
   >(null)
@@ -204,13 +202,10 @@ const UploadRoster = ({
   }
 
   // Fetch the role-independent membership + stored-roster context ONCE per
-  // uploaded file (keyed on the set of usernames, not their assigned roles).
-  // Changing a role reclassifies synchronously below — no refetch, no skeleton.
-  // A stale-response guard drops a slow read superseded by a new file. The
-  // context is tagged with the usersKey it was fetched for, so the derived
-  // classification below only trusts it when it matches the CURRENT rows — the
-  // fetch effect runs post-commit, so without this a new-file render could
-  // briefly classify the new rows against the previous file's context.
+  // uploaded file (keyed on usernames, not roles). A stale-response guard drops
+  // a slow read superseded by a new file. Tagged with its usersKey so the
+  // derived classification below can reject a context left over from a prior
+  // file (this effect runs post-commit, after the new rows are already set).
   const preflightToken = useRef(0)
   const usersKey = rows
     .map((r) => r.username.toLowerCase())
@@ -244,12 +239,11 @@ const UploadRoster = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, usersKey, org, classroom])
 
-  // The classification itself is pure and role-dependent: derive it
-  // synchronously from the fetched context + the current per-row roles, so a
-  // role edit updates the preview instantly with no loading state. Only trust a
+  // Derive the classification synchronously from the fetched context + current
+  // roles, so a role edit re-previews with no loading state. Only trust a
   // context fetched for the CURRENT usernames — a stale context from a just-
-  // replaced file must not classify the new rows (the fetch effect that nulls it
-  // runs after this render).
+  // replaced file must not classify the new rows (the fetch effect that nulls
+  // it runs after this render).
   const preflight = useMemo<PreflightResult | null>(() => {
     if (!preflightContext || preflightContext.usersKey !== usersKey) return null
     const preflightRows = rows.map((r) => ({
@@ -270,7 +264,7 @@ const UploadRoster = ({
 
   // A role edit changes the plan (a team move / owner grant may appear or
   // vanish), so any prior confirmation is stale — clear the checkboxes when the
-  // assigned roles change. Cheap and synchronous; no refetch.
+  // assigned roles change.
   const rolesKey = rows
     .map(
       (r) =>
