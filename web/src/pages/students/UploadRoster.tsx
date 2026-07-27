@@ -4,16 +4,18 @@ import { Upload } from "lucide-react"
 
 import {
   bulkInviteByEmail,
-  resolveRosterUploadPreflight,
+  resolveRosterUploadContext,
 } from "@/domain/students"
 import type {
   BulkImportResult,
   BulkInviteByEmailResult,
   ImportRosterRow,
+  RosterUploadContext,
 } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
 import { Alert, Button, Modal } from "@/components/ui"
 import {
+  classifyRosterUpload,
   hasTeacherPromotion,
   type PreflightResult,
 } from "@/util/rosterUploadPreflight"
@@ -23,7 +25,10 @@ import {
   classifyUploadFile,
   type UploadKind,
 } from "@/pages/students/uploadClassify"
-import { parseEmailInviteFile } from "@/pages/students/emailInvite"
+import {
+  parseEmailInviteFile,
+  type InvalidEmailLine,
+} from "@/pages/students/emailInvite"
 import {
   DetectedFormatSelect,
   EmailInvitePreview,
@@ -98,6 +103,10 @@ const UploadRoster = ({
   // per-address role, the org-owner confirmation, and the send result. Kept
   // separate from the roster rows so the two flows don't entangle.
   const [emails, setEmails] = useState<string[]>([])
+  // Non-empty lines in an email-list upload that aren't valid addresses, with
+  // their file line numbers, so the preview can flag exactly which rows to fix
+  // (empty lines are skipped silently). Valid emails still import.
+  const [invalidEmails, setInvalidEmails] = useState<InvalidEmailLine[]>([])
   const [emailRoles, setEmailRoles] = useState<Record<string, ClassroomRole>>(
     {},
   )
@@ -112,9 +121,12 @@ const UploadRoster = ({
   const [rolesByUser, setRolesByUser] = useState<Record<string, ClassroomRole>>(
     {},
   )
-  // Preflight against current GitHub membership (read-only). Null until the
-  // preview's classification resolves.
-  const [preflight, setPreflight] = useState<PreflightResult | null>(null)
+  // The role-independent GitHub membership + stored-roster read, fetched ONCE
+  // per uploaded file. The actual classification (`preflight`) is derived from
+  // this synchronously, so changing a role reclassifies instantly without a
+  // network round-trip or a loading state. Null until the read resolves.
+  const [preflightContext, setPreflightContext] =
+    useState<RosterUploadContext | null>(null)
   const [preflighting, setPreflighting] = useState(false)
   const [preflightError, setPreflightError] = useState<string | null>(null)
   // The teacher's explicit confirmation of the role-change (team-move) rows.
@@ -153,6 +165,7 @@ const UploadRoster = ({
     setRows([])
     setHeaderIssue(null)
     setEmails([])
+    setInvalidEmails([])
     setEmailRoles({})
     setEmailOwnerConfirmed(false)
     setEmailResult(null)
@@ -162,7 +175,7 @@ const UploadRoster = ({
     setInviteError(null)
     setError(null)
     setRolesByUser({})
-    setPreflight(null)
+    setPreflightContext(null)
     setPreflighting(false)
     setPreflightError(null)
     setRoleChangesConfirmed(false)
@@ -188,17 +201,14 @@ const UploadRoster = ({
     onOpenChange?.(false)
   }
 
-  // Preflight the parsed rows against current GitHub membership whenever we're
-  // in the preview and the rows or their assigned roles change. Read-only. A
-  // stale-response guard (token) drops a slow classification superseded by a
-  // newer role edit. Clearing the confirm checkbox on every re-run forces the
-  // teacher to re-confirm after they change a role.
+  // Fetch the role-independent membership + stored-roster context ONCE per
+  // uploaded file (keyed on the set of usernames, not their assigned roles).
+  // Changing a role reclassifies synchronously below — no refetch, no skeleton.
+  // A stale-response guard drops a slow read superseded by a new file.
   const preflightToken = useRef(0)
-  const rolesKey = rows
-    .map(
-      (r) =>
-        `${r.username.toLowerCase()}:${rolesByUser[r.username.toLowerCase()] ?? "student"}`,
-    )
+  const usersKey = rows
+    .map((r) => r.username.toLowerCase())
+    .sort()
     .join("|")
   useEffect(() => {
     if (phase !== "preview" || rows.length === 0) return
@@ -206,10 +216,32 @@ const UploadRoster = ({
     /* eslint-disable react-hooks/set-state-in-effect */
     setPreflighting(true)
     setPreflightError(null)
-    setRoleChangesConfirmed(false)
-    setMetadataConfirmed(false)
-    setPreflight(null)
+    setPreflightContext(null)
     /* eslint-enable react-hooks/set-state-in-effect */
+    void resolveRosterUploadContext(client, { org, classroom })
+      .then((context) => {
+        if (preflightToken.current !== token) return
+        setPreflightContext(context)
+      })
+      .catch((err) => {
+        if (preflightToken.current !== token) return
+        log.warn("roster upload preflight failed", { err, record: true })
+        setPreflightContext(null)
+        setPreflightError(
+          err instanceof Error ? err.message : t("students.somethingWentWrong"),
+        )
+      })
+      .finally(() => {
+        if (preflightToken.current === token) setPreflighting(false)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, usersKey, org, classroom])
+
+  // The classification itself is pure and role-dependent: derive it
+  // synchronously from the fetched context + the current per-row roles, so a
+  // role edit updates the preview instantly with no loading state.
+  const preflight = useMemo<PreflightResult | null>(() => {
+    if (!preflightContext) return null
     const preflightRows = rows.map((r) => ({
       username: r.username,
       first_name: r.first_name,
@@ -219,28 +251,26 @@ const UploadRoster = ({
       role:
         rolesByUser[r.username.toLowerCase()] ?? ("student" as ClassroomRole),
     }))
-    void resolveRosterUploadPreflight(client, {
-      org,
-      classroom,
-      rows: preflightRows,
-    })
-      .then((result) => {
-        if (preflightToken.current !== token) return
-        setPreflight(result)
-      })
-      .catch((err) => {
-        if (preflightToken.current !== token) return
-        log.warn("roster upload preflight failed", { err, record: true })
-        setPreflight(null)
-        setPreflightError(
-          err instanceof Error ? err.message : t("students.somethingWentWrong"),
-        )
-      })
-      .finally(() => {
-        if (preflightToken.current === token) setPreflighting(false)
-      })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, rolesKey, org, classroom])
+    return classifyRosterUpload(
+      preflightRows,
+      preflightContext.lookup,
+      preflightContext.storedByIdentity,
+    )
+  }, [preflightContext, rows, rolesByUser])
+
+  // A role edit changes the plan (a team move / owner grant may appear or
+  // vanish), so any prior confirmation is stale — clear the checkboxes when the
+  // assigned roles change. Cheap and synchronous; no refetch.
+  const rolesKey = rows
+    .map(
+      (r) =>
+        `${r.username.toLowerCase()}:${rolesByUser[r.username.toLowerCase()] ?? "student"}`,
+    )
+    .join("|")
+  useEffect(() => {
+    setRoleChangesConfirmed(false)
+    setMetadataConfirmed(false)
+  }, [rolesKey])
 
   const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
   // Per-username metadata changes to highlight in the preview table (from
@@ -343,10 +373,11 @@ const UploadRoster = ({
     setUploadKind(kind)
     if (kind === "email-list") {
       const parsed = parseEmailInviteFile(text)
-      setEmails(parsed.map((r) => r.email))
+      setEmails(parsed.valid.map((r) => r.email))
+      setInvalidEmails(parsed.invalid)
       setEmailRoles(
         Object.fromEntries(
-          parsed.map((r) => [r.email.toLowerCase(), "student"]),
+          parsed.valid.map((r) => [r.email.toLowerCase(), "student"]),
         ),
       )
       setEmailOwnerConfirmed(false)
@@ -367,6 +398,7 @@ const UploadRoster = ({
         ),
       )
       setEmails([])
+      setInvalidEmails([])
     }
   }
 
@@ -582,6 +614,7 @@ const UploadRoster = ({
             {uploadKind === "email-list" ? (
               <EmailInvitePreview
                 emails={emails}
+                invalidEmails={invalidEmails}
                 emailRoles={emailRoles}
                 emailOwnerConfirmed={emailOwnerConfirmed}
                 emailHasTeacher={emailHasTeacher}

@@ -30,6 +30,7 @@ import { memberIdentitySets } from "@/util/identity"
 import {
   classifyRosterUpload,
   membershipLookup,
+  type CurrentMembership,
   type PreflightResult,
   type PreflightRow,
   type ResolvedMembership,
@@ -160,25 +161,31 @@ export type ResolveRosterUploadPreflightInput = {
   rows: PreflightRow[]
 }
 
-// Preflight a CSV roster upload: read the classroom's CURRENT GitHub membership
-// (all active org members + the three per-classroom team memberships) once, then
-// classify each uploaded row (pure, via classifyRosterUpload) into no-action /
-// invite / enroll / role-change. Read-only — sends NOTHING to GitHub — so the
-// upload dialog can preview the plan and gate role changes behind confirmation.
-//
-// The team reads 404-tolerate (an uncreated staff team reads as empty), and the
-// org-member read pages to completion; a hard failure of either propagates so
-// the caller surfaces "couldn't preview, try again" rather than a wrong plan.
-export async function resolveRosterUploadPreflight(
+// The role-independent inputs to the preflight classification: the live
+// membership lookup and the stored-roster metadata lookup. Reading these hits
+// GitHub (org + team lists + roster.csv), but the result does NOT depend on the
+// rows' assigned roles — so the caller can resolve this ONCE per uploaded file
+// and re-run the pure classifyRosterUpload synchronously on every role edit,
+// rather than re-fetching (and flashing a loading state) on each keystroke.
+export type RosterUploadContext = {
+  lookup: (row: PreflightRow) => CurrentMembership
+  storedByIdentity: (row: PreflightRow) => StoredRosterRow | undefined
+}
+
+// Read the classroom's CURRENT GitHub membership + stored roster.csv metadata
+// into the role-independent classification context. Read-only. The team reads
+// 404-tolerate (an uncreated staff team reads as empty) and the org-member read
+// pages to completion; a hard failure of either propagates so the caller
+// surfaces "couldn't preview, try again" rather than a wrong plan.
+export async function resolveRosterUploadContext(
   client: GitHubClient,
-  input: ResolveRosterUploadPreflightInput,
-): Promise<PreflightResult> {
-  const { org, classroom, rows } = input
+  input: { org: string; classroom: string },
+): Promise<RosterUploadContext> {
+  const { org, classroom } = input
   const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
 
   // The stored-roster read is independent of the team/org-membership reads, so
-  // run it in the same wave rather than as a serial second stage — the preflight
-  // re-runs on every per-row role edit, so shaving a round-trip matters.
+  // run it in the same wave rather than as a serial second stage.
   const [
     [orgMembers, studentMembers, teacherMembers, htaMembers, taMembers],
     storedByIdentity,
@@ -218,11 +225,28 @@ export async function resolveRosterUploadPreflight(
     },
   }
 
-  return classifyRosterUpload(
-    rows,
-    membershipLookup(resolved),
-    storedByIdentity,
+  return { lookup: membershipLookup(resolved), storedByIdentity }
+}
+
+// Preflight a CSV roster upload: read the classroom's CURRENT GitHub membership
+// (all active org members + the three per-classroom team memberships) once, then
+// classify each uploaded row (pure, via classifyRosterUpload) into no-action /
+// invite / enroll / role-change. Read-only — sends NOTHING to GitHub — so the
+// upload dialog can preview the plan and gate role changes behind confirmation.
+//
+// The team reads 404-tolerate (an uncreated staff team reads as empty), and the
+// org-member read pages to completion; a hard failure of either propagates so
+// the caller surfaces "couldn't preview, try again" rather than a wrong plan.
+export async function resolveRosterUploadPreflight(
+  client: GitHubClient,
+  input: ResolveRosterUploadPreflightInput,
+): Promise<PreflightResult> {
+  const { org, classroom, rows } = input
+  const { lookup, storedByIdentity } = await resolveRosterUploadContext(
+    client,
+    { org, classroom },
   )
+  return classifyRosterUpload(rows, lookup, storedByIdentity)
 }
 
 // Read the current roster.csv and build a stored-metadata lookup keyed by

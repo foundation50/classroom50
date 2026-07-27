@@ -4,6 +4,7 @@ import { Alert, Button, Select } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type { ClassroomRole } from "@/util/teamRoster"
 import type { BulkInviteByEmailResult } from "@/domain/students"
+import type { InvalidEmailLine } from "@/pages/students/emailInvite"
 import type { UploadKind } from "@/pages/students/uploadClassify"
 
 // The "Detected format" header + override picker, rendered once above the
@@ -46,6 +47,7 @@ export const DetectedFormatSelect = ({
 // the emails/roles/confirmation state and the send handler.
 export const EmailInvitePreview = ({
   emails,
+  invalidEmails,
   emailRoles,
   emailOwnerConfirmed,
   emailHasTeacher,
@@ -56,6 +58,7 @@ export const EmailInvitePreview = ({
   onSend,
 }: {
   emails: string[]
+  invalidEmails: InvalidEmailLine[]
   emailRoles: Record<string, ClassroomRole>
   emailOwnerConfirmed: boolean
   emailHasTeacher: boolean
@@ -74,6 +77,28 @@ export const EmailInvitePreview = ({
       <Alert tone="info" className="mb-4">
         <span>{t("students.emailInviteNoRosterNotice")}</span>
       </Alert>
+
+      {invalidEmails.length > 0 ? (
+        <Alert tone="warning" className="mb-4">
+          <div className="flex flex-col gap-1">
+            <span className="font-medium">
+              {t("students.emailInviteInvalidNotice", {
+                count: invalidEmails.length,
+              })}
+            </span>
+            <ul className="ms-4 list-disc text-sm">
+              {invalidEmails.map((row) => (
+                <li key={`${row.line}-${row.value}`}>
+                  {t("students.emailInviteInvalidRow", {
+                    line: row.line,
+                    value: row.value,
+                  })}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Alert>
+      ) : null}
 
       {emails.length > 0 ? (
         <>
