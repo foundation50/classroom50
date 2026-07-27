@@ -1256,11 +1256,11 @@
       "applying": "Updating…",
       "toggleLabel": "Pause autograding for all student repositories",
       "toggleHint": "Turning this on stops student pushes from being graded (no Actions minutes). The classroom50 config repo keeps working. Turn off to resume.",
-      "pausedNotice": "Paused — student pushes aren't graded and feedback pull requests won't open. Re-running org setup won't resume until you turn this off.",
+      "pausedNotice": "Paused — student pushes aren't graded, so submissions get no autograde or feedback-pr status checks. New feedback pull requests still open when students accept, and existing ones keep showing the latest pushes. Re-running org setup won't resume until you turn this off.",
       "disabledNotice": "Actions are off for the whole org, so nothing runs. Re-run org setup or enable Actions on GitHub.",
       "unknownNotice": "Couldn't read this org's Actions permissions — you may lack owner rights, or an enterprise policy controls them.",
       "confirmTitle": "Pause autograding for the whole organization?",
-      "confirmBody": "Student submissions won't be graded until you resume, and feedback pull requests won't open. The classroom50 config repo keeps working. Reversible any time.",
+      "confirmBody": "Student submissions won't be graded until you resume. New feedback pull requests still open when students accept, and existing ones keep showing the latest pushes — but submissions get no autograde or feedback-pr status checks while paused. The classroom50 config repo keeps working. Reversible any time.",
       "confirmButton": "Pause autograding",
       "toggleFailed": "Couldn't update Actions permissions: {{message}}"
     },
@@ -1691,7 +1691,7 @@
       "setupSkippedEmptyRepo": "No setup needed: this assignment uses an empty repository",
       "feedback": "Feedback pull request ready",
       "feedbackSkipped": "No feedback pull request for this assignment",
-      "feedbackDeferred": "Couldn't open the feedback pull request now: accept again to retry, or it opens on your first submission if autograding is enabled"
+      "feedbackDeferred": "Couldn't open the feedback pull request now: accept again to retry (or it opens on your first submission if autograding is enabled)"
     },
     "stepActions": {
       "account": "Couldn't read your GitHub account. Sign out and sign back in, then accept again.",
@@ -1916,7 +1916,7 @@
     "reviewModal": {
       "errorTitle": "Couldn't check for a feedback PR",
       "emptyTitle": "No feedback pull request yet",
-      "emptyBody": "No Feedback PR has been opened for <repo>{{repo}}</repo> yet. It's created by the assignment's autograde workflow after a graded submission — if the student hasn't submitted (or the assignment has the Feedback PR disabled), there's nothing to review yet.",
+      "emptyBody": "No Feedback PR has been opened for <repo>{{repo}}</repo> yet. It's opened when the student accepts the assignment — so if there's nothing to review, the student may not have accepted yet, the assignment may have the Feedback PR disabled, or opening it was deferred (it retries on re-accept, or on the first graded submission).",
       "openRepoPrs": "Open repo PRs"
     },
     "rowRegrade": {
