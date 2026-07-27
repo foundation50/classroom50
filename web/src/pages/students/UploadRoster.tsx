@@ -38,6 +38,7 @@ import {
 import { runRosterImport, type ImportProgress } from "./runRosterImport"
 import type { InviteOutcome, RoleChangeOutcome } from "./runRosterImport"
 import { PreflightRecap } from "./PreflightRecap"
+import { PreflightSummary } from "./PreflightSummary"
 import { RosterPreviewTable } from "./RosterPreviewTable"
 import { ImportResultSection, RosterImportResult } from "./RosterImportResult"
 
@@ -117,6 +118,10 @@ const UploadRoster = ({
   // The teacher's explicit confirmation of the metadata-update rows (independent
   // of the role-change confirmation, so either or both can be pending).
   const [metadataConfirmed, setMetadataConfirmed] = useState(false)
+  // Whether the detailed per-row preview table is expanded. Collapsed by default
+  // so the summary reads cleanly; auto-opened when a confirmation is required so
+  // the highlighted changes are visible.
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [progress, setProgress] = useState<ImportProgress>({
     processed: 0,
     total: 0,
@@ -158,6 +163,7 @@ const UploadRoster = ({
     setPreflightError(null)
     setRoleChangesConfirmed(false)
     setMetadataConfirmed(false)
+    setDetailsOpen(false)
     setRoleChangeOutcome(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -277,6 +283,16 @@ const UploadRoster = ({
       (preflight?.metadataUpdate?.length ?? 0) >
     0
   const needsMetadataConfirm = (preflight?.metadataUpdate?.length ?? 0) > 0
+  // Show the detailed table when the teacher opened it, when a confirmation is
+  // pending (so the highlighted role/detail changes are visible to confirm), or
+  // when the preflight found NO actionable changes — so the teacher still sees
+  // the whole parsed CSV and can confirm it was read correctly, rather than an
+  // empty summary with a collapsed table.
+  const showDetails =
+    detailsOpen ||
+    needsRoleConfirm ||
+    needsMetadataConfirm ||
+    (!!preflight && !hasActionableWork)
   const canProcess =
     uploadKind === "email-list"
       ? emails.length > 0 && (!emailHasTeacher || emailOwnerConfirmed)
@@ -570,17 +586,6 @@ const UploadRoster = ({
 
         {phase === "preview" && uploadKind !== "email-list" && (
           <div>
-            <Alert tone="info" className="mb-4">
-              <div className="flex flex-col gap-1">
-                <span>
-                  {t("students.usernamesFound", { count: rows.length })}
-                </span>
-                <span className="text-sm opacity-80">
-                  {t("students.importMergeNotice")}
-                </span>
-              </div>
-            </Alert>
-
             {/* Preflight against current GitHub membership: what processing will
                 do to each row. Resolving/failed states gate the primary button. */}
             {preflighting ? (
@@ -595,18 +600,41 @@ const UploadRoster = ({
                 </span>
               </Alert>
             ) : preflight ? (
-              <PreflightRecap
-                preflight={preflight}
-                roleChanges={roleChanges}
-                teacherEnrolls={teacherEnrolls}
-                needsRoleConfirm={needsRoleConfirm}
-                confirmGrantsOwner={confirmGrantsOwner}
-                roleChangesConfirmed={roleChangesConfirmed}
-                onRoleChangesConfirmedChange={setRoleChangesConfirmed}
-                needsMetadataConfirm={needsMetadataConfirm}
-                metadataConfirmed={metadataConfirmed}
-                onMetadataConfirmedChange={setMetadataConfirmed}
-              />
+              <>
+                {/* At-a-glance summary of add / update / skip, with an invite
+                    note when memberships will be created, and a details toggle. */}
+                {preflight.needsInvite.length > 0 ? (
+                  <Alert tone="warning" className="mb-4">
+                    <span>
+                      {t("students.uploadInviteNotice", {
+                        count: preflight.needsInvite.length,
+                      })}
+                    </span>
+                  </Alert>
+                ) : null}
+                <PreflightSummary
+                  preflight={preflight}
+                  detailsOpen={detailsOpen}
+                  onToggleDetails={() => setDetailsOpen((v) => !v)}
+                  canToggle={
+                    hasActionableWork &&
+                    !needsRoleConfirm &&
+                    !needsMetadataConfirm
+                  }
+                />
+                <PreflightRecap
+                  roleChanges={roleChanges}
+                  teacherEnrolls={teacherEnrolls}
+                  needsRoleConfirm={needsRoleConfirm}
+                  confirmGrantsOwner={confirmGrantsOwner}
+                  roleChangesConfirmed={roleChangesConfirmed}
+                  onRoleChangesConfirmedChange={setRoleChangesConfirmed}
+                  needsMetadataConfirm={needsMetadataConfirm}
+                  metadataUpdateCount={preflight.metadataUpdate?.length ?? 0}
+                  metadataConfirmed={metadataConfirmed}
+                  onMetadataConfirmedChange={setMetadataConfirmed}
+                />
+              </>
             ) : null}
 
             {/* Teacher-owner notice even before preflight resolves, whenever
@@ -618,14 +646,19 @@ const UploadRoster = ({
             ) : null}
 
             {rows.length > 0 ? (
-              <RosterPreviewTable
-                rows={rows}
-                rolesByUser={rolesByUser}
-                changes={rowChanges}
-                onRoleChange={(key, role) =>
-                  setRolesByUser((prev) => ({ ...prev, [key]: role }))
-                }
-              />
+              // Before the preflight resolves, show the table so the teacher can
+              // review/assign roles; after it resolves, show it only when
+              // expanded or a confirmation needs the highlighted changes visible.
+              !preflight || showDetails ? (
+                <RosterPreviewTable
+                  rows={rows}
+                  rolesByUser={rolesByUser}
+                  changes={rowChanges}
+                  onRoleChange={(key, role) =>
+                    setRolesByUser((prev) => ({ ...prev, [key]: role }))
+                  }
+                />
+              ) : null
             ) : (
               <Alert tone="warning">
                 {headerIssue?.kind === "missing-username-header" ? (

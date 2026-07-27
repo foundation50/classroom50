@@ -157,7 +157,7 @@ describe("UploadRoster detected-kind override", () => {
     // "ada@x.edu" is not a valid GitHub username, so the roster parse yields no
     // rows -> the no-valid-usernames warning, proving the branch swapped and
     // the email state was cleared.
-    expect(screen.getByText("students.usernamesFound:0")).toBeTruthy()
+    expect(screen.getByText("students.noValidUsernames")).toBeTruthy()
   })
 })
 
@@ -214,6 +214,16 @@ describe("UploadRoster canProcess gating", () => {
       return b
     })
     expect(button.disabled).toBe(true)
+
+    // The full CSV preview is still shown (not collapsed) so the teacher can
+    // confirm the file was read correctly even though there's nothing to apply.
+    expect(screen.getByText("ada")).toBeTruthy()
+    // ...and the summary reports everyone is already up to date.
+    expect(screen.getByText(/summary_skip/)).toBeTruthy()
+    // No details toggle when the table is force-shown for the no-changes case.
+    expect(
+      screen.queryByRole("button", { name: /summaryViewDetails/ }),
+    ).toBeNull()
   })
 
   it("enables the button for a metadata-only upload only after confirmation", async () => {

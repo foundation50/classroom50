@@ -1,44 +1,14 @@
 import { useTranslation } from "react-i18next"
-import { Alert, Badge } from "@/components/ui"
+import { Alert } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type { PreflightResult } from "@/util/rosterUploadPreflight"
 
-// A small summary tile for a preflight bucket (count + label). Zero-count
-// buckets dim so the teacher's eye goes to what actually changes.
-const PreflightBucket = ({
-  tone,
-  title,
-  count,
-}: {
-  tone: "neutral" | "info" | "warning" | "error"
-  title: string
-  count: number
-}) => {
-  const toneClass =
-    count === 0
-      ? "border-base-300 opacity-50"
-      : tone === "error"
-        ? "border-error/40 bg-error/5"
-        : tone === "warning"
-          ? "border-warning/40 bg-warning/5"
-          : tone === "info"
-            ? "border-info/40 bg-info/5"
-            : "border-base-300"
-  return (
-    <div
-      className={`flex items-center justify-between gap-2 rounded-box border px-4 py-2.5 ${toneClass}`}
-    >
-      <span className="text-sm">{title}</span>
-      <Badge>{count}</Badge>
-    </div>
-  )
-}
-
-// The resolved-preflight recap: the all-members / invite banner, the four
-// action-bucket tiles, and the role-change/teacher-enroll confirmation box
-// that gates the primary button. Rendered only once the preflight resolves.
+// The confirmation gate for a resolved preflight: the destructive/owner-granting
+// role-move box and the non-destructive detail-update box. The at-a-glance
+// counts live in PreflightSummary and the per-row detail in the preview table;
+// this component is now only the checkboxes that gate the primary button, shown
+// only when a confirmation is actually required.
 export const PreflightRecap = ({
-  preflight,
   roleChanges,
   teacherEnrolls,
   needsRoleConfirm,
@@ -46,10 +16,10 @@ export const PreflightRecap = ({
   roleChangesConfirmed,
   onRoleChangesConfirmedChange,
   needsMetadataConfirm,
+  metadataUpdateCount,
   metadataConfirmed,
   onMetadataConfirmedChange,
 }: {
-  preflight: PreflightResult
   roleChanges: PreflightResult["roleChanges"]
   teacherEnrolls: PreflightResult["enroll"]
   needsRoleConfirm: boolean
@@ -57,61 +27,20 @@ export const PreflightRecap = ({
   roleChangesConfirmed: boolean
   onRoleChangesConfirmedChange: (checked: boolean) => void
   needsMetadataConfirm: boolean
+  metadataUpdateCount: number
   metadataConfirmed: boolean
   onMetadataConfirmedChange: (checked: boolean) => void
 }) => {
   const { t } = useTranslation()
+  if (!needsRoleConfirm && !needsMetadataConfirm) return null
   return (
     <div className="mb-4 flex flex-col gap-2">
-      {preflight.allAlreadyMembers ? (
-        <Alert tone="info">
-          <span>{t("students.preflightAllMembersNote")}</span>
-        </Alert>
-      ) : preflight.needsInvite.length > 0 ? (
-        <Alert tone="warning">
-          <span>
-            {t("students.uploadInviteNotice", {
-              count: preflight.needsInvite.length,
-            })}
-          </span>
-        </Alert>
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <PreflightBucket
-          tone="neutral"
-          title={t("students.preflightNoActionTitle")}
-          count={preflight.noAction.length}
-        />
-        <PreflightBucket
-          tone="warning"
-          title={t("students.preflightInviteTitle")}
-          count={preflight.needsInvite.length}
-        />
-        <PreflightBucket
-          tone="info"
-          title={t("students.preflightEnrollTitle")}
-          count={preflight.enroll.length}
-        />
-        <PreflightBucket
-          tone="error"
-          title={t("students.preflightRoleChangeTitle")}
-          count={preflight.roleChanges.length}
-        />
-        <PreflightBucket
-          tone="warning"
-          title={t("students.preflightMetadataTitle")}
-          count={preflight.metadataUpdate?.length ?? 0}
-        />
-      </div>
-
       {/* Team moves and org-owner grants need explicit confirmation: a role
           change is a destructive team move, and a teacher target (role
-          change OR enroll) grants org OWNER. List each and gate the primary
-          button on the checkbox. Metadata deltas for these rows are shown
-          inline in the preview table (highlighted cells), not re-listed here. */}
+          change OR enroll) grants org OWNER. Metadata deltas for these rows are
+          shown inline in the preview table (highlighted cells), not re-listed. */}
       {needsRoleConfirm ? (
-        <div className="mt-1 flex flex-col gap-2 rounded-box border border-error/30 bg-error/5 p-4">
+        <div className="flex flex-col gap-2 rounded-box border border-error/30 bg-error/5 p-4">
           <h4 className="text-sm font-semibold">
             {t("students.preflightConfirmTitle")}
           </h4>
@@ -170,18 +99,18 @@ export const PreflightRecap = ({
         </div>
       ) : null}
 
-      {/* Metadata updates are non-destructive (info tone, not error): they only
-          change stored name/email/section, never team membership. The changed
-          values are highlighted in place in the preview table below (hover for
-          the stored -> CSV detail); this block just gates the write. */}
+      {/* Metadata updates are non-destructive: they only change stored name/
+          email/section. The changed values are highlighted in place in the
+          preview table (hover for the stored -> CSV detail); this box gates the
+          write. */}
       {needsMetadataConfirm ? (
-        <div className="mt-1 flex flex-col gap-2 rounded-box border border-warning/40 bg-warning/10 p-4">
+        <div className="flex flex-col gap-2 rounded-box border border-warning/40 bg-warning/10 p-4">
           <h4 className="text-sm font-semibold">
             {t("students.preflightMetadataConfirmTitle")}
           </h4>
           <p className="text-sm opacity-70">
             {t("students.preflightMetadataReviewHint", {
-              count: preflight.metadataUpdate.length,
+              count: metadataUpdateCount,
             })}
           </p>
           <label className="flex items-start gap-2 text-sm">
@@ -195,7 +124,7 @@ export const PreflightRecap = ({
             />
             <span>
               {t("students.preflightConfirmMetadata", {
-                count: preflight.metadataUpdate.length,
+                count: metadataUpdateCount,
               })}
             </span>
           </label>
