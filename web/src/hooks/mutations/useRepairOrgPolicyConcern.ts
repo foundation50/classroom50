@@ -28,6 +28,12 @@ export function useRepairOrgPolicyConcern(
       void queryClient.invalidateQueries({
         queryKey: githubKeys.orgAuditPrefix(org),
       })
+      // A repair can flip member privileges, which the teacher pre-flight
+      // warnings read off the shared org query (10-minute staleTime). Without
+      // this they keep warning about a setting that was just fixed.
+      void queryClient.invalidateQueries({
+        queryKey: githubKeys.orgDetails(org),
+      })
     },
   })
 }

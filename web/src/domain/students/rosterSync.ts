@@ -12,6 +12,7 @@ import {
   getConfigRepoBranch,
 } from "@/github-core/configRepoReads"
 import { rosterClaimSet } from "@/util/identity"
+import { parseGitHubId, resolveGitHubId } from "@/util/students"
 import { prefixCommit } from "@/util/commit"
 import {
   normalizeStudentRow,
@@ -121,8 +122,9 @@ export async function syncRosterFromTeam(
     // common "teacher wrote a bare username, invited, the student joined" flow).
     // Only usable when a login maps to exactly one member — a duplicate login
     // (shouldn't happen on one team, but be safe) is left un-backfilled rather
-    // than guess. An existing non-empty id is NEVER overwritten (a renamed login
-    // must not silently repoint an id onto a different account).
+    // than guess. A VALID existing id is never overwritten (a renamed login must
+    // not silently repoint an id onto a different account); a cell that addresses
+    // no account is, since repointing it can't hijack one.
     const loginCounts = new Map<string, number>()
     for (const m of members) {
       const k = m.login.toLowerCase()
@@ -150,9 +152,16 @@ export async function syncRosterFromTeam(
         (loginKey && pendingRoleKeys.has(loginKey)) ||
         (emailKey ? pendingRoleKeys.has(emailKey) : false)
       const role = teamRole ?? (fullyRead && !hasPendingRole ? "" : s.role)
-      // Backfill only a blank id (see the idByLogin block above).
-      const backfilledId =
-        !s.github_id.trim() && loginKey ? idByLogin.get(loginKey) : undefined
+      // Canonicalize a cell that already addresses an account (a zero-padded
+      // one) from its OWN digits; only a cell addressing no account falls back
+      // to the login, where a recycled login could otherwise repoint the row
+      // onto a different person.
+      const canonicalId = parseGitHubId(s.github_id)
+      const resolvedId = resolveGitHubId(s.github_id)
+      let backfilledId: string | undefined
+      if (canonicalId !== null) backfilledId = undefined
+      else if (resolvedId !== null) backfilledId = String(resolvedId)
+      else if (loginKey) backfilledId = idByLogin.get(loginKey)
 
       let next = s
       if (role !== s.role) {

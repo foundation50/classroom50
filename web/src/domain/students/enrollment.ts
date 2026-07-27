@@ -29,6 +29,7 @@ import {
   type StudentCsvRow,
 } from "@/util/rosterCsv"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { resolveGitHubId } from "@/util/students"
 import {
   log,
   rosterWriteTree,
@@ -267,8 +268,8 @@ export async function enrollStudentInClassroom(
   // membership too (else a separate team-add leaves the student team-pending
   // until they accept a second invite). ensureOrgMembership swallows the benign
   // already-member/already-pending 422.
-  const inviteeId = Number(result.student.github_id)
-  if (Number.isFinite(inviteeId) && inviteeId > 0) {
+  const inviteeId = resolveGitHubId(result.student.github_id)
+  if (inviteeId !== null) {
     try {
       const teamId = (await teamPromise).id
       await ensureOrgMembership(client, {

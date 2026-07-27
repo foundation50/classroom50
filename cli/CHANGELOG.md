@@ -17,6 +17,22 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.16.1](https://github.com/foundation50/classroom50/compare/cli-v1.16.0...cli-v1.16.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* close the roster.csv formula-guard, padded-id, and i18n gaps ([#417](https://github.com/foundation50/classroom50/issues/417)) ([3aa8e22](https://github.com/foundation50/classroom50/commit/3aa8e22996cdab1fd2e1dd4256f432af45ba897c))
+* name the real cause when an org blocks student repo creation ([#418](https://github.com/foundation50/classroom50/issues/418)) ([789b65c](https://github.com/foundation50/classroom50/commit/789b65c4ebdb65539d6f69d7389aaf75bbe4db5c))
+* reject a malformed github_id in both the web app and the CLI ([#411](https://github.com/foundation50/classroom50/issues/411)) ([f2576d8](https://github.com/foundation50/classroom50/commit/f2576d89b9c1da97f845238b6f929ab76b434f5e))
+
+## [1.16.0](https://github.com/foundation50/classroom50/compare/cli-v1.15.0...cli-v1.16.0) (2026-07-25)
+
+
+### Miscellaneous Chores
+
+* **cli:** Synchronize classroom50 versions
+
 ## [1.15.0](https://github.com/foundation50/classroom50/compare/cli-v1.14.0...cli-v1.15.0) (2026-07-24)
 
 

@@ -39,6 +39,9 @@ type Routes = {
   // The org budgets list response (or an error to simulate no billing
   // visibility). Defaults to a single $0 hard-stop Actions budget (enforced).
   budgets?: unknown | GitHubAPIError
+  // Simulates the autograding kill switch: org Actions restricted to the
+  // allow-listed config repo. Defaults to the standard "all"/"all" policy.
+  autogradingPaused?: boolean
 }
 
 // A fully-enforced fake org: every check returns its desired value, both
@@ -80,8 +83,17 @@ function makeClient(overrides: Routes = {}): GitHubClient {
           },
         )
       }
+      if (path.includes("/actions/permissions/repositories"))
+        return ok({
+          total_count: 1,
+          repositories: [{ id: 1, name: "classroom50" }],
+        })
       if (path.endsWith("/actions/permissions"))
-        return ok({ enabled_repositories: "all", allowed_actions: "all" })
+        return ok(
+          overrides.autogradingPaused
+            ? { enabled_repositories: "selected", allowed_actions: "all" }
+            : { enabled_repositories: "all", allowed_actions: "all" },
+        )
       if (path.endsWith("/actions/permissions/workflow"))
         return ok({
           default_workflow_permissions: "write",
@@ -125,9 +137,21 @@ describe("buildOrgAuditReport", () => {
     expect(report.unenforcedDefaults).toHaveLength(0)
     expect(report.manualUnreadable).toHaveLength(4)
     // The full member-default list is surfaced so teachers see every permission
-    // we set, all enforced here (11 on a team plan).
-    expect(report.defaultVerdicts).toHaveLength(11)
+    // we set, all enforced here (12 on a team plan).
+    expect(report.defaultVerdicts).toHaveLength(12)
     expect(report.defaultVerdicts.every((v) => v.enforced)).toBe(true)
+  })
+
+  it("verdict stays ok while autograding is deliberately paused", async () => {
+    const report = await buildOrgAuditReport(
+      makeClient({ autogradingPaused: true }),
+      "acme",
+      "team",
+    )
+    expect(report.verdict).toBe("ok")
+    expect(
+      report.concerns.find((c) => c.id === "orgActions")?.verdict.state,
+    ).toBe("paused")
   })
 
   it("fails the verdict when the Actions budget is missing", async () => {

@@ -12,6 +12,7 @@ import {
 import { GitHubAPIError } from "./errors"
 import type { GitHubClient } from "./client"
 import { memberDefaultSettings } from "@/orgPolicy/desiredState"
+import { CONFIG_REPO } from "@/util/configRepo"
 
 // Standalone read-only checks: each returns a verdict (enforced / unenforced /
 // unreadable) and never throws. A path-routing fake client serves the GET
@@ -102,22 +103,72 @@ describe("checkOrgDefaults", () => {
 })
 
 describe("checkOrgActions", () => {
-  it("enforced only when all repos + all actions", async () => {
-    const enforced = makeClient({
-      "/actions/permissions": {
-        enabled_repositories: "all",
-        allowed_actions: "all",
-      },
-    })
-    expect((await checkOrgActions(enforced, "acme")).state).toBe("enforced")
+  // makeClient matches route fragments in insertion order, so the allow-list
+  // path must be listed before the permissions path it's a prefix of.
+  function actionsClient(
+    perms: Record<string, unknown>,
+    selected?: Record<string, unknown> | Error,
+  ): GitHubClient {
+    const routes: Record<string, unknown> = {}
+    if (selected !== undefined)
+      routes["/actions/permissions/repositories"] = selected
+    routes["/actions/permissions"] = perms
+    return makeClient(routes)
+  }
 
-    const drifted = makeClient({
-      "/actions/permissions": {
-        enabled_repositories: "selected",
-        allowed_actions: "all",
-      },
+  it("enforced when all repos + all actions", async () => {
+    const client = actionsClient({
+      enabled_repositories: "all",
+      allowed_actions: "all",
     })
-    expect((await checkOrgActions(drifted, "acme")).state).toBe("unenforced")
+    expect((await checkOrgActions(client, "acme")).state).toBe("enforced")
+  })
+
+  it("paused, not drifted, when Actions are restricted to the config repo", async () => {
+    const client = actionsClient(
+      { enabled_repositories: "selected", allowed_actions: "all" },
+      { total_count: 1, repositories: [{ id: 1, name: CONFIG_REPO }] },
+    )
+    const verdict = await checkOrgActions(client, "acme")
+    expect(verdict.state).toBe("paused")
+    expect(verdict.detail?.key).toBe(
+      "orgSettings.audit.detail.orgActionsPaused",
+    )
+  })
+
+  it("unenforced when the selection is a teacher allow-list without the config repo", async () => {
+    const client = actionsClient(
+      { enabled_repositories: "selected", allowed_actions: "all" },
+      { total_count: 1, repositories: [{ id: 2, name: "some-other-repo" }] },
+    )
+    expect((await checkOrgActions(client, "acme")).state).toBe("unenforced")
+  })
+
+  it("paused even when allowed_actions differs, matching how the pause is written", async () => {
+    // setOrgActionsMode deliberately leaves allowed_actions alone when pausing,
+    // so a teacher on local_only is still paused — and reporting drift here
+    // would offer a "Fix it" the write path refuses to honor.
+    const client = actionsClient(
+      { enabled_repositories: "selected", allowed_actions: "local_only" },
+      { total_count: 1, repositories: [{ id: 1, name: CONFIG_REPO }] },
+    )
+    expect((await checkOrgActions(client, "acme")).state).toBe("paused")
+  })
+
+  it("unenforced when the allow-list read fails", async () => {
+    const client = actionsClient(
+      { enabled_repositories: "selected", allowed_actions: "all" },
+      forbidden(),
+    )
+    expect((await checkOrgActions(client, "acme")).state).toBe("unenforced")
+  })
+
+  it("unenforced when Actions are off org-wide", async () => {
+    const client = actionsClient({
+      enabled_repositories: "none",
+      allowed_actions: "all",
+    })
+    expect((await checkOrgActions(client, "acme")).state).toBe("unenforced")
   })
 })
 

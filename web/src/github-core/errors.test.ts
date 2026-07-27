@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   GitHubAPIError,
+  githubValidationReasons,
   isDefinitiveGitHubStatus,
   parseSsoAuthorizationUrl,
   retryTransientGitHubError,
@@ -319,5 +320,58 @@ describe("tolerateGitHubError", () => {
       ),
     ).rejects.toThrow("HTTP 500")
     expect(ran).toBe(false)
+  })
+})
+
+// A 422's `errors` payload is the difference between "PATCH /orgs 422" and
+// "Private-only repository creation policy is not allowed for this
+// organization." The client logs this (and only this) so the next validation
+// failure is diagnosable from the console.
+describe("githubValidationReasons", () => {
+  it("reads the bare-string shape the org endpoint returns", () => {
+    expect(
+      githubValidationReasons({
+        message: "Validation Failed",
+        errors:
+          "Private-only repository creation policy is not allowed for this organization.",
+      }),
+    ).toBe(
+      "Private-only repository creation policy is not allowed for this organization.",
+    )
+  })
+
+  it("reads the array-of-objects shape, prefixing the field", () => {
+    expect(
+      githubValidationReasons({
+        errors: [
+          {
+            resource: "Org",
+            field: "members_can_create_repositories",
+            code: "invalid",
+            message: "is invalid",
+          },
+          { resource: "Org", code: "custom", message: "second reason" },
+        ],
+      }),
+    ).toBe("members_can_create_repositories: is invalid; second reason")
+  })
+
+  it("falls back to the code when no message is present", () => {
+    expect(
+      githubValidationReasons({
+        errors: [{ field: "name", code: "already_exists" }],
+      }),
+    ).toBe("name: already_exists")
+  })
+
+  it("returns undefined when there is nothing to report", () => {
+    expect(
+      githubValidationReasons({ message: "Validation Failed" }),
+    ).toBeUndefined()
+    expect(githubValidationReasons({ errors: [] })).toBeUndefined()
+    expect(githubValidationReasons({ errors: "" })).toBeUndefined()
+    expect(githubValidationReasons({ errors: [{}] })).toBeUndefined()
+    expect(githubValidationReasons(null)).toBeUndefined()
+    expect(githubValidationReasons("nope")).toBeUndefined()
   })
 })

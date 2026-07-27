@@ -16,7 +16,11 @@ import {
 } from "@/domain/students"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
-import { nameFromParts, parseGitHubId } from "@/util/students"
+import {
+  isMalformedGitHubId,
+  nameFromParts,
+  resolveGitHubId,
+} from "@/util/students"
 import { rosterRowInitials } from "@/util/memberRow"
 import {
   githubOrgRoleForRole,
@@ -312,11 +316,17 @@ const RosterMemberModal = ({
 
   const handleResend = async () => {
     if (resending) return
-    const inviteeId = parseGitHubId(row.github_id)
+    const inviteeId = resolveGitHubId(row.github_id)
     if (inviteeId === null || !row.username) {
+      const username = row.username || row.email
       onError(
         row.key,
-        t("students.resendMissingId", { username: row.username || row.email }),
+        isMalformedGitHubId(row.github_id)
+          ? t("students.resendMalformedId", {
+              username,
+              githubId: row.github_id.trim(),
+            })
+          : t("students.resendMissingId", { username }),
       )
       return
     }

@@ -221,6 +221,24 @@ export function snapshotIsStale(
   return pushMs > collectMs
 }
 
+// Newer of two ISO "last collected" timestamps. Lets the freshness view prefer a
+// just-finished tracked run over the lagging status=completed query, which can
+// still report the prior run while GitHub's Actions list catches up. Null-safe;
+// unparseable inputs are discarded rather than winning the comparison.
+export function latestCollectedAt(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): string | null {
+  const aMs = a ? new Date(a).getTime() : NaN
+  const bMs = b ? new Date(b).getTime() : NaN
+  const aOk = Number.isFinite(aMs)
+  const bOk = Number.isFinite(bMs)
+  if (!aOk && !bOk) return null
+  if (!aOk) return b ?? null
+  if (!bOk) return a ?? null
+  return aMs >= bMs ? (a ?? null) : (b ?? null)
+}
+
 // the assignment sets no threshold — then every row is "ungraded" (as is an
 // ungraded/zero-max row).
 export type PassState = "passing" | "failing" | "ungraded"

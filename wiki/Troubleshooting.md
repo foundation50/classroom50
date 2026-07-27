@@ -19,6 +19,43 @@ GH_DEBUG=api gh teacher invite <org> <username>
 
 Commands with informational output also accept `--quiet` / `-q`.
 
+## My organization doesn't appear
+
+GitHub only reports organizations you've granted Classroom 50 access to. A
+GitHub Education account doesn't change this — an organization you own can stay
+invisible until that grant exists. Work through these in order:
+
+1. **Grant the organization.** Open
+   [Classroom 50's OAuth settings](https://github.com/settings/connections/applications/Ov23liDFFyDtm0pO5NN5)
+   and select **Grant** next to the organization. Classroom 50 also links this
+   from the "Not seeing your organization?" notice on its home page.
+2. **Have an owner approve it.** If the organization restricts third-party
+   applications, the same page offers **Request access** instead of **Grant**;
+   an owner then approves it under
+   `https://github.com/organizations/<org>/settings/oauth_application_policy`.
+3. **Authorize SAML SSO.** On that same page, use **Configure SSO** to authorize
+   the organization.
+4. **Accept the invitation.** An unaccepted invitation shows under pending
+   invitations, not in the organization list. Check
+   [your organizations](https://github.com/settings/organizations).
+5. **Sign out and back in.** A token issued before the membership existed
+   authenticates fine but can't see the organization.
+
+Then return to Classroom 50 and use **Refresh list** — the organization list is
+cached for ten minutes.
+
+To check independently from a terminal:
+
+```sh
+gh auth refresh -s read:org,admin:org
+gh api user/memberships/orgs --paginate \
+  --jq '.[] | [.organization.login, .state, .role] | @tsv'
+```
+
+The organization should be listed `active` (and `admin` if you're setting it
+up). The CLI token and the web app's token are separate, so a passing check here
+still leaves the browser grant to do.
+
 ## "Missing scope" / 403 on `gh teacher invite`
 
 Org invitations need the `admin:org` scope, which a plain `gh auth login`
@@ -75,6 +112,33 @@ Only applies to assignments with a template. Check, in order:
 2. **The repo is flagged as a template** in Settings → Template repository.
 3. **The `<assignment>` argument matches the registered slug** (case is
    normalized; spelling must be exact).
+
+## "You need admin access to the organization before adding a repository to it."
+
+A 403 when a student's repository is created. Despite the wording, the student
+does **not** need admin access, and this is usually **not** a problem with the
+template or the assignment. The classroom organization is refusing to let its
+members create repositories, so re-running *assignment* setup can't fix it.
+
+Fix it in the org, under Settings → Member privileges → Repository creation:
+
+1. Tick **Repository creation** so members may create repositories.
+2. Tick **Private**, and leave **Public** unchecked: students' coursework and any
+   reference solutions should not be publicly visible.
+3. Have the student accept again.
+
+Re-running **organization setup** in Classroom 50 (Organization settings →
+Re-run setup) applies this along with the rest of the audited lockdown, so it's
+the better fix if the org has drifted in other ways too.
+
+If an enterprise policy pins repository creation at the enterprise level, the
+org-level toggle is ignored and only an enterprise owner can change it. In that
+case the re-run reports success but the setting stays off.
+
+Other causes produce the same message, so if repository creation is already
+enabled, check that the student's org invitation was accepted (a pending invitee
+can't create a repository) and that they're a member rather than an outside
+collaborator.
 
 ## "Could not find `.classroom50.yaml`" on `gh student submit`
 

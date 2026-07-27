@@ -7,6 +7,7 @@ import MissingParams from "@/components/MissingParams"
 import RequireRole from "@/components/RequireRole"
 import { AnimatedAlert, Button } from "@/components/ui"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
+import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
 import CreateAssignmentForm from "@/pages/assignments/CreateAssignmentForm"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useCreateAssignment } from "@/hooks/mutations/useCreateAssignment"
@@ -76,6 +77,7 @@ const CreateAssignmentPage = () => {
             hasRosterRows={emptyRoster.hasRosterRows}
           />
         ) : null}
+        <OrgRepoCreationNotice org={org} />
         <AnimatedAlert tone="error" show={errorShown}>
           {errorContent.kind === "outage" ? (
             <GitHubStatusNote statusDescription={outageStatusDescription} />

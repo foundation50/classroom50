@@ -20,6 +20,11 @@ import { useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import confetti from "canvas-confetti"
 import { type AcceptStepId, type AcceptStepStatus } from "@/domain/assignments"
+import {
+  localizedMessageOf,
+  resolveLocalizedMessage,
+  type LocalizedMessage,
+} from "@/types/localizedMessage"
 import { useAcceptAndVerifyMembership } from "@/hooks/mutations/useAcceptAndVerifyMembership"
 import {
   classifyMembershipError,
@@ -224,8 +229,9 @@ const modeLabelKey: Record<string, string> = {
   group: "accept.modeGroup",
 }
 
-// Pending-state placeholders; once a step emits, the live withAcceptStep
-// message (assignments.ts) overrides these, so they only need loose parity.
+// Pending-state placeholders. Once a step emits, the domain sends the same
+// `accept.steps.*` key back as a { key, params } descriptor — one source of
+// truth for every step label (see AGENTS.md's `{ key, params }` rule).
 const ACCEPT_STEP_ORDER: { id: AcceptStepId; labelKey: string }[] = [
   { id: "account", labelKey: "accept.steps.account" },
   { id: "membership", labelKey: "accept.steps.membership" },
@@ -239,7 +245,11 @@ const ACCEPT_STEP_ORDER: { id: AcceptStepId; labelKey: string }[] = [
 
 type StepState = Record<
   AcceptStepId,
-  { status: AcceptStepStatus; message?: string; error?: string }
+  {
+    status: AcceptStepStatus
+    message?: LocalizedMessage
+    error?: LocalizedMessage
+  }
 >
 
 const initialStepState: StepState = ACCEPT_STEP_ORDER.reduce((acc, step) => {
@@ -283,7 +293,9 @@ const StepRow = ({
   label: string
   state: StepState[AcceptStepId]
 }) => {
-  const text = state.error ?? state.message ?? label
+  const { t } = useTranslation()
+  const deferred = state.error ?? state.message
+  const text = deferred ? resolveLocalizedMessage(t, deferred) : label
 
   return (
     <div className="flex items-center gap-3 text-sm">
@@ -617,6 +629,11 @@ const AcceptAssignmentPage = () => {
     })
   }
 
+  // Accept errors name their message ({ key, params }) rather than carrying
+  // assembled English, so the remedy renders in the student's language. An error
+  // with no descriptor (a browser network throw) falls back to the generic copy.
+  const acceptError = localizedMessageOf(acceptMutation.error)
+
   if (loadingAssignments || isLoadingRepo || loadingOrgMembership) {
     return (
       <AcceptLayout>
@@ -770,8 +787,8 @@ const AcceptAssignmentPage = () => {
                 <div>
                   <div className="font-bold">{t("accept.errorTitle")}</div>
                   <div className="mt-1 whitespace-pre-wrap text-sm">
-                    {acceptMutation.error instanceof Error
-                      ? acceptMutation.error.message
+                    {acceptError
+                      ? resolveLocalizedMessage(t, acceptError)
                       : t("accept.errorGeneric")}
                   </div>
                   {outageHint.isOutage(acceptMutation.error) && (

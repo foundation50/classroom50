@@ -84,6 +84,20 @@ describe("ConcernRow", () => {
       screen.getByText("orgSettings.audit.detail.budgetUnreadable"),
     ).not.toBeNull()
   })
+  it("shows a paused concern as paused, with no Fix it button", () => {
+    const paused: ConcernCheck = {
+      id: "orgActions",
+      title: "Actions permissions",
+      verdict: {
+        state: "paused",
+        detail: { key: "orgSettings.audit.detail.orgActionsPaused" },
+      },
+      settingsUrl: "https://github.com/organizations/acme/settings/actions",
+    }
+    render(<ConcernRow concern={paused} canFix fixing={false} onFix={noop} />)
+    expect(screen.getByText("orgSettings.audit.statePaused")).not.toBeNull()
+    expect(screen.queryByText("orgSettings.audit.fixIt")).toBeNull()
+  })
 })
 
 describe("CONCERN_STATE_BADGE", () => {
@@ -91,6 +105,10 @@ describe("CONCERN_STATE_BADGE", () => {
     // A ghost badge would ignore the tone and render neutral-grey (Badge.tsx),
     // silently swallowing the warning intent — guard against that regression.
     expect(CONCERN_STATE_BADGE.unreadable).toEqual({ tone: "warning" })
+  })
+
+  it("renders a paused concern amber, matching the autograding-paused badge", () => {
+    expect(CONCERN_STATE_BADGE.paused).toEqual({ tone: "warning" })
   })
 })
 

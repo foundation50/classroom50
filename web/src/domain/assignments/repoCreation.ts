@@ -5,8 +5,11 @@ import { DEFAULT_BRANCH } from "@/util/configRepo"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
   inOrgTemplateError,
+  isOrgRepoCreationDenied,
+  orgRepoCreationDeniedError,
   outOfOrgTemplateError,
 } from "@/util/templateAccessError"
+import { log } from "./accessPrimitives"
 import { withGitConflictRetry } from "../classrooms"
 import { createAssignment } from "./createEdit"
 
@@ -81,8 +84,27 @@ export async function createAssignmentRepo(params: {
       if (err.isRateLimited) {
         throw err
       }
+      // The destination org refusing the create is independent of where the
+      // template lives, so it is classified before the in-org/out-of-org split —
+      // which would otherwise blame the template for a destination problem
+      // (issue #413). `owner` is the destination org, not templateOwner.
+      if (isOrgRepoCreationDenied(err)) {
+        throw orgRepoCreationDeniedError(owner, err.status, err.message)
+      }
       if (err.isForbidden || err.isNotFound) {
         const inOrg = templateOwner.toLowerCase() === owner.toLowerCase()
+        // Tripwire for GitHub rewording the destination-org 403: the match stops
+        // firing, students silently get the template message again, and the tests
+        // can't catch it (they assert our own fixture). A 404 is not evidence of
+        // that, so it stays out of the warn.
+        if (err.isForbidden) {
+          log.warn("accept: repo create 403 fell through to template blame", {
+            org: owner,
+            templateOwner,
+            inOrg,
+            githubMessage: err.message,
+          })
+        }
         throw inOrg
           ? inOrgTemplateError(
               templateOwner,
@@ -171,6 +193,21 @@ async function createEmptyAssignmentRepo(params: {
       return {
         kind: "already-accepted",
         repo: existing,
+      }
+    }
+
+    if (err instanceof GitHubAPIError) {
+      // Template-less and empty_repo assignments hit this path, where the same
+      // destination-org refusal used to rethrow raw and degrade to generic text.
+      if (isOrgRepoCreationDenied(err)) {
+        throw orgRepoCreationDeniedError(owner, err.status, err.message)
+      }
+      if (err.isForbidden) {
+        // Same tripwire as the templated path above.
+        log.warn("accept: repo create 403 fell through unclassified", {
+          org: owner,
+          githubMessage: err.message,
+        })
       }
     }
 

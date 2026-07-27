@@ -16,6 +16,7 @@ import (
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/classroom50-cli-shared/ghui"
+	"github.com/foundation50/classroom50-cli-shared/ghutil"
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/classroomcfg"
 	"github.com/foundation50/gh-student/internal/githubapi"
@@ -711,15 +712,18 @@ func is422AlreadyExists(httpErr *githubapi.HTTPError) bool {
 	return has422Message(httpErr, "already exists")
 }
 
-// has422Message reports whether a 422's message or any Errors[] item contains
-// needle (lower-case). Message-substring matching is the only discriminator
-// GitHub offers for these validation failures — errors[].code is the generic
-// "custom". The status check lives here so no caller can accept the same
-// wording arriving from an unrelated failure.
+// has422Message gates httpErrorMentions on a 422 status, so a caller that isn't
+// already switching on the status can't accept the same wording arriving from an
+// unrelated failure.
 func has422Message(httpErr *githubapi.HTTPError, needle string) bool {
-	if httpErr.StatusCode != http.StatusUnprocessableEntity {
-		return false
-	}
+	return httpErr.StatusCode == http.StatusUnprocessableEntity &&
+		httpErrorMentions(httpErr, needle)
+}
+
+// httpErrorMentions reports whether needle (lower-case) appears in the error's
+// top-level message or in any Errors[] item. GitHub puts the reason in either
+// slot depending on the endpoint.
+func httpErrorMentions(httpErr *githubapi.HTTPError, needle string) bool {
 	if strings.Contains(strings.ToLower(httpErr.Message), needle) {
 		return true
 	}
@@ -729,6 +733,39 @@ func has422Message(httpErr *githubapi.HTTPError, needle string) bool {
 		}
 	}
 	return false
+}
+
+// The one 403 message GitHub was observed to return when the destination org
+// refuses the create (issue #413). Add a variant only alongside a cited GitHub
+// response showing the same cause, since the plausible alternatives (enterprise
+// or ruleset blocks) are ones this remedy cannot fix.
+const orgRepoCreationDeniedSignature = "admin access to the organization"
+
+// is403OrgRepoCreationDenied reports whether err is the destination org refusing
+// to let a member create the repo. Owns its own exclusions (mirroring the web's
+// isOrgRepoCreationDenied) so no call site can forget one: a rate limit also
+// surfaces as 403, and rendering a throttle as "your org blocks repo creation" is
+// the mislabeling #413 exists to remove.
+func is403OrgRepoCreationDenied(err error) bool {
+	httpErr, ok := errors.AsType[*githubapi.HTTPError](err)
+	if !ok || httpErr.StatusCode != http.StatusForbidden {
+		return false
+	}
+	if ghutil.IsRateLimited(err) {
+		return false
+	}
+	return httpErrorMentions(httpErr, orgRepoCreationDeniedSignature)
+}
+
+// orgRepoCreationDeniedError is the shared remedy, kept in step with the web copy
+// at accept.templateErrors.orgRepoCreationDenied (see that key's factory for why
+// it hedges and stays a diagnosis rather than a how-to). Unlike the web alert this
+// lets the wrapped cause trail GitHub's raw text: a terminal reader expects the
+// API detail after the colon, and it keeps the error chain intact.
+func orgRepoCreationDeniedError(org string, cause error) error {
+	return fmt.Errorf("`%s` may not allow members to create private repositories, so your "+
+		"assignment repository couldn't be created. Ask your teacher to enable it, "+
+		"then run accept again: %w", org, cause)
 }
 
 // reportAccepted writes the success header + clone instructions on stdout
@@ -838,6 +875,12 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 			case http.StatusNotFound:
 				return "", "", "", false, fmt.Errorf("template `%s/%s` is not accessible to you — ask your teacher to make it public or grant your account access",
 					tmpl.Owner, tmpl.Repo)
+			case http.StatusForbidden:
+				// The refusal is about the destination org, not the template, so
+				// it is classified here rather than blamed on `tmpl`.
+				if is403OrgRepoCreationDenied(err) {
+					return "", "", "", false, orgRepoCreationDeniedError(org, err)
+				}
 			}
 		}
 		return "", "", "", false, fmt.Errorf("POST %s: %w", createPath, err)
@@ -908,12 +951,23 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 
 	var created GeneratedRepo
 	if err := client.Post(createPath, bytes.NewReader(createBody), &created); err != nil {
-		if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok && is422AlreadyExists(httpErr) {
-			getPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
-			if getErr := client.Get(getPath, &created); getErr != nil {
-				return "", "", "", false, fmt.Errorf("POST %s returned 422 and follow-up GET %s failed: %w", createPath, getPath, getErr)
+		if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok {
+			switch httpErr.StatusCode {
+			case http.StatusUnprocessableEntity:
+				if is422AlreadyExists(httpErr) {
+					getPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
+					if getErr := client.Get(getPath, &created); getErr != nil {
+						return "", "", "", false, fmt.Errorf("POST %s returned 422 and follow-up GET %s failed: %w", createPath, getPath, getErr)
+					}
+					return created.HTMLURL, created.FullName, defaultBranchOrMain(created.DefaultBranch), true, nil
+				}
+			case http.StatusForbidden:
+				// Serves both the template-less shim path and empty_repo, which
+				// previously wrapped this 403 raw.
+				if is403OrgRepoCreationDenied(err) {
+					return "", "", "", false, orgRepoCreationDeniedError(org, err)
+				}
 			}
-			return created.HTMLURL, created.FullName, defaultBranchOrMain(created.DefaultBranch), true, nil
 		}
 		return "", "", "", false, fmt.Errorf("POST %s: %w", createPath, err)
 	}

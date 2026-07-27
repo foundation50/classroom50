@@ -45,6 +45,23 @@ vi.mock("@/hooks/useGetClassAssignments", () => ({
 vi.mock("@/hooks/useEmptyRosterWarning", () => ({
   default: () => ({ show: false, hasRosterRows: false }),
 }))
+const orgRepoCreationWarning = vi.fn()
+vi.mock("@/hooks/useOrgRepoCreationWarning", () => ({
+  default: () => orgRepoCreationWarning(),
+}))
+// The notice's own copy/placement is covered in OrgRepoCreationNotice.test.tsx;
+// here it stands in for "did the page mount it", so stub it to its i18n key.
+vi.mock("@/components/OrgRepoCreationNotice", async () => {
+  const { default: useWarning } =
+    await import("@/hooks/useOrgRepoCreationWarning")
+  return {
+    OrgRepoCreationNotice: () => {
+      const warning = useWarning(undefined)
+      if (!warning.show) return null
+      return <div>{`components.notices.orgRepoCreation.${warning.field}`}</div>
+    },
+  }
+})
 vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
   useClassroomRoleContext: () => ({ role: "teacher" }),
 }))
@@ -57,6 +74,7 @@ vi.mock("@/pages/assignments/AssignmentsToolbar", () => ({
 import { TeacherAssignmentsView } from "./AssignmentsPage"
 
 beforeEach(() => {
+  orgRepoCreationWarning.mockReturnValue({ show: false })
   studentCount.mockReset()
   getStudents.mockReset()
   getClassroom.mockReset()
@@ -102,5 +120,38 @@ describe("Assignments header student count", () => {
     render(<TeacherAssignmentsView org="acme" classroom="cs101" />)
     expect(screen.getByText("…")).toBeTruthy()
     expect(screen.queryByText(/assignments\.studentCount/)).toBeNull()
+  })
+})
+
+// The drift-after-creation case: a teacher who created assignments before the
+// setting flipped never reopens create or edit, so without the list surface the
+// warning never reaches them and students accept days later.
+describe("Assignments org repo-creation warning", () => {
+  const renderView = () => {
+    studentCount.mockReturnValue({
+      studentCount: 1,
+      isLoading: false,
+      isError: false,
+    })
+    render(<TeacherAssignmentsView org="acme" classroom="cs101" />)
+  }
+
+  it("renders the notice when the org blocks repo creation", () => {
+    orgRepoCreationWarning.mockReturnValue({ show: true, field: "master" })
+    renderView()
+    expect(
+      screen.queryByText("components.notices.orgRepoCreation.master"),
+    ).not.toBeNull()
+  })
+
+  it("renders nothing when the hook is silent", () => {
+    orgRepoCreationWarning.mockReturnValue({ show: false })
+    renderView()
+    expect(
+      screen.queryByText("components.notices.orgRepoCreation.master"),
+    ).toBeNull()
+    expect(
+      screen.queryByText("components.notices.orgRepoCreation.private"),
+    ).toBeNull()
   })
 })

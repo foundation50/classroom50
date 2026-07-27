@@ -13,7 +13,7 @@ import {
   type BulkUnenrollRosterResult,
 } from "@/domain/roster/bulkUnenrollRoster"
 import { resendClassroomInvite } from "@/domain/students"
-import { parseGitHubId } from "@/util/students"
+import { isMalformedGitHubId, resolveGitHubId } from "@/util/students"
 import { sortRolesByRank } from "@/util/teamRoster"
 import {
   BulkResultSection,
@@ -241,12 +241,14 @@ const RosterBulkActionsBar = ({
         tick(label)
         continue
       }
-      const inviteeId = parseGitHubId(row.github_id)
+      const inviteeId = resolveGitHubId(row.github_id)
       if (inviteeId === null || !row.username) {
         skipped.push({
           key: row.key,
           label,
-          detail: t("students.bulk.noInviteId"),
+          detail: isMalformedGitHubId(row.github_id)
+            ? t("students.bulk.malformedInviteId")
+            : t("students.bulk.noInviteId"),
         })
         tick(label)
         continue
