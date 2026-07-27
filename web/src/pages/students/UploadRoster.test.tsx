@@ -133,6 +133,7 @@ describe("UploadRoster detected-kind override", () => {
       needsInvite: [{ username: "ada" }],
       enroll: [],
       roleChanges: [],
+      metadataUpdate: [],
       allAlreadyMembers: false,
     })
     renderModal(
@@ -195,6 +196,7 @@ describe("UploadRoster canProcess gating", () => {
       needsInvite: [],
       enroll: [],
       roleChanges: [],
+      metadataUpdate: [],
       allAlreadyMembers: true,
     })
     renderModal(
@@ -212,5 +214,50 @@ describe("UploadRoster canProcess gating", () => {
       return b
     })
     expect(button.disabled).toBe(true)
+  })
+
+  it("enables the button for a metadata-only upload only after confirmation", async () => {
+    const user = userEvent.setup()
+    resolveRosterUploadPreflight.mockResolvedValue({
+      noAction: [],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [
+        {
+          kind: "metadata_update",
+          username: "ada",
+          role: "student",
+          changedFields: ["email"],
+          changes: [{ field: "email", from: "old@x.edu", to: "ada@x.edu" }],
+        },
+      ],
+      allAlreadyMembers: true,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(
+      user,
+      file("roster.csv", "username,email\nada,ada@x.edu\n"),
+    )
+
+    // The primary button reads "Update ..." and starts disabled (unconfirmed).
+    const button = await waitFor(() => {
+      const b = screen
+        .getByRole("button", { name: /updateMetadata/ })
+        .closest("button") as HTMLButtonElement
+      return b
+    })
+    expect(button.disabled).toBe(true)
+
+    // Checking the metadata confirmation enables it.
+    const checkbox = screen
+      .getByText(/preflightConfirmMetadata/)
+      .closest("label")!
+      .querySelector("input[type=checkbox]") as HTMLInputElement
+    await user.click(checkbox)
+    await waitFor(() => expect(button.disabled).toBe(false))
   })
 })

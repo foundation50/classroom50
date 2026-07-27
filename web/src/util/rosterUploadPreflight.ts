@@ -71,6 +71,9 @@ export type PreflightOutcome =
       role: PreflightRole
       // The metadata fields whose stored value the CSV changes (non-empty).
       changedFields: MetadataField[]
+      // Per changed field, the stored value and the CSV value that replaces it,
+      // so the confirmation UI can show a `from -> to` delta (R9).
+      changes: { field: MetadataField; from: string; to: string }[]
     }
   | { kind: "needs_invite"; username: string; role: PreflightRole }
   | { kind: "enroll"; username: string; role: PreflightRole }
@@ -140,15 +143,20 @@ export function classifyRosterUpload(
     // join can't resolve) stays no_action — the add path owns new rows.
     if (current.roles.includes(row.role)) {
       const stored = storedByIdentity?.(row)
-      const changedFields = stored
-        ? mergeStudentMetadata(stored, row).changedFields
-        : []
-      if (changedFields.length > 0) {
+      const merge = stored
+        ? mergeStudentMetadata(stored, row)
+        : { next: {} as Record<MetadataField, string>, changedFields: [] }
+      if (merge.changedFields.length > 0) {
         outcomes.push({
           kind: "metadata_update",
           username,
           role: row.role,
-          changedFields,
+          changedFields: merge.changedFields,
+          changes: merge.changedFields.map((field) => ({
+            field,
+            from: (stored?.[field] ?? "").trim(),
+            to: merge.next[field],
+          })),
         })
       } else {
         outcomes.push({ kind: "no_action", username, role: row.role })

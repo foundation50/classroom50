@@ -69,14 +69,14 @@ describe("classifyRosterUpload", () => {
       lookupFrom({ ada: { isOrgMember: true, roles: ["student"] } }),
       storedFrom({ ada: { email: "old@x.edu" } }),
     )
-    expect(result.metadataUpdate).toEqual([
-      {
-        kind: "metadata_update",
-        username: "ada",
-        role: "student",
-        changedFields: ["email"],
-      },
-    ])
+    expect(result.metadataUpdate).toHaveLength(1)
+    expect(result.metadataUpdate[0]).toMatchObject({
+      kind: "metadata_update",
+      username: "ada",
+      role: "student",
+      changedFields: ["email"],
+      changes: [{ field: "email", from: "old@x.edu", to: "ada@x.edu" }],
+    })
     expect(result.noAction).toHaveLength(0)
   })
 

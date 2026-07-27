@@ -2,6 +2,15 @@ import { useTranslation } from "react-i18next"
 import { Alert, Badge } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type { PreflightResult } from "@/util/rosterUploadPreflight"
+import type { MetadataField } from "@/util/rosterMetadataMerge"
+
+// i18n label key per updatable metadata field, for the per-field change list.
+const METADATA_FIELD_LABEL_KEY: Record<MetadataField, string> = {
+  first_name: "students.firstNameColumn",
+  last_name: "students.lastNameColumn",
+  email: "students.emailColumn",
+  section: "students.sectionColumn",
+}
 
 // A small summary tile for a preflight bucket (count + label). Zero-count
 // buckets dim so the teacher's eye goes to what actually changes.
@@ -45,6 +54,9 @@ export const PreflightRecap = ({
   confirmGrantsOwner,
   roleChangesConfirmed,
   onRoleChangesConfirmedChange,
+  needsMetadataConfirm,
+  metadataConfirmed,
+  onMetadataConfirmedChange,
 }: {
   preflight: PreflightResult
   roleChanges: PreflightResult["roleChanges"]
@@ -53,6 +65,9 @@ export const PreflightRecap = ({
   confirmGrantsOwner: boolean
   roleChangesConfirmed: boolean
   onRoleChangesConfirmedChange: (checked: boolean) => void
+  needsMetadataConfirm: boolean
+  metadataConfirmed: boolean
+  onMetadataConfirmedChange: (checked: boolean) => void
 }) => {
   const { t } = useTranslation()
   return (
@@ -91,6 +106,11 @@ export const PreflightRecap = ({
           tone="error"
           title={t("students.preflightRoleChangeTitle")}
           count={preflight.roleChanges.length}
+        />
+        <PreflightBucket
+          tone="info"
+          title={t("students.preflightMetadataTitle")}
+          count={preflight.metadataUpdate?.length ?? 0}
         />
       </div>
 
@@ -147,6 +167,51 @@ export const PreflightRecap = ({
             <span>
               {t("students.preflightConfirmRoleChanges", {
                 count: roleChanges.length + teacherEnrolls.length,
+              })}
+            </span>
+          </label>
+        </div>
+      ) : null}
+
+      {/* Metadata updates are non-destructive (info tone, not error): they only
+          change stored name/email/section, never team membership. Still gated
+          behind their own checkbox, listing a per-field stored -> CSV delta so
+          the teacher sees what each value replaces before confirming (R9). */}
+      {needsMetadataConfirm ? (
+        <div className="mt-1 flex flex-col gap-2 rounded-box border border-info/30 bg-info/5 p-4">
+          <h4 className="text-sm font-semibold">
+            {t("students.preflightMetadataConfirmTitle")}
+          </h4>
+          <ul className="flex flex-col gap-2 text-sm">
+            {preflight.metadataUpdate.map((m) => (
+              <li key={`meta-${m.username}`} className="flex flex-col gap-0.5">
+                <code>{m.username}</code>
+                <ul className="ml-4 flex flex-col gap-0.5 opacity-70">
+                  {m.changes.map((c) => (
+                    <li key={c.field}>
+                      {t("students.preflightMetadataDetail", {
+                        field: t(METADATA_FIELD_LABEL_KEY[c.field]),
+                        from: c.from || t("students.preflightMetadataEmpty"),
+                        to: c.to,
+                      })}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm mt-0.5"
+              checked={metadataConfirmed}
+              onChange={(e) =>
+                onMetadataConfirmedChange(e.currentTarget.checked)
+              }
+            />
+            <span>
+              {t("students.preflightConfirmMetadata", {
+                count: preflight.metadataUpdate.length,
               })}
             </span>
           </label>

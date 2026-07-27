@@ -299,7 +299,11 @@ export async function resolveRosterUploadPreflight(
     classroom,
   )
 
-  return classifyRosterUpload(rows, membershipLookup(resolved), storedByIdentity)
+  return classifyRosterUpload(
+    rows,
+    membershipLookup(resolved),
+    storedByIdentity,
+  )
 }
 
 // Read the current roster.csv and build a stored-metadata lookup keyed by

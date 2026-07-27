@@ -114,6 +114,9 @@ const UploadRoster = ({
   const [preflightError, setPreflightError] = useState<string | null>(null)
   // The teacher's explicit confirmation of the role-change (team-move) rows.
   const [roleChangesConfirmed, setRoleChangesConfirmed] = useState(false)
+  // The teacher's explicit confirmation of the metadata-update rows (independent
+  // of the role-change confirmation, so either or both can be pending).
+  const [metadataConfirmed, setMetadataConfirmed] = useState(false)
   const [progress, setProgress] = useState<ImportProgress>({
     processed: 0,
     total: 0,
@@ -154,6 +157,7 @@ const UploadRoster = ({
     setPreflighting(false)
     setPreflightError(null)
     setRoleChangesConfirmed(false)
+    setMetadataConfirmed(false)
     setRoleChangeOutcome(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -193,6 +197,7 @@ const UploadRoster = ({
     setPreflighting(true)
     setPreflightError(null)
     setRoleChangesConfirmed(false)
+    setMetadataConfirmed(false)
     setPreflight(null)
     /* eslint-enable react-hooks/set-state-in-effect */
     const preflightRows = rows.map((r) => ({
@@ -251,8 +256,10 @@ const UploadRoster = ({
   const hasActionableWork =
     (preflight?.needsInvite.length ?? 0) +
       (preflight?.enroll.length ?? 0) +
-      (preflight?.roleChanges.length ?? 0) >
+      (preflight?.roleChanges.length ?? 0) +
+      (preflight?.metadataUpdate?.length ?? 0) >
     0
+  const needsMetadataConfirm = (preflight?.metadataUpdate?.length ?? 0) > 0
   const canProcess =
     uploadKind === "email-list"
       ? emails.length > 0 && (!emailHasTeacher || emailOwnerConfirmed)
@@ -260,16 +267,27 @@ const UploadRoster = ({
         !preflighting &&
         !preflightError &&
         (!preflight || hasActionableWork) &&
-        (!needsRoleConfirm || roleChangesConfirmed)
+        (!needsRoleConfirm || roleChangesConfirmed) &&
+        (!needsMetadataConfirm || metadataConfirmed)
 
   // The roster primary-button label reflects what processing will actually do.
   const willSendInvites = (preflight?.needsInvite.length ?? 0) > 0
+  // Metadata-only: no invites, no enrolls, no role changes — just metadata.
+  const metadataOnly =
+    !willSendInvites &&
+    (preflight?.enroll.length ?? 0) === 0 &&
+    (preflight?.roleChanges.length ?? 0) === 0 &&
+    (preflight?.metadataUpdate?.length ?? 0) > 0
   const rosterPrimaryLabel = willSendInvites
     ? t("students.importAndInviteMembers", { count: rows.length })
     : preflight
-      ? hasActionableWork
-        ? t("students.confirmChanges")
-        : t("students.noChangesToApply")
+      ? metadataOnly
+        ? t("students.updateMetadata", {
+            count: preflight.metadataUpdate.length,
+          })
+        : hasActionableWork
+          ? t("students.confirmChanges")
+          : t("students.noChangesToApply")
       : t("students.importMembers", { count: rows.length })
 
   // Seed the preview state for a given kind from the raw text. Used both on
@@ -568,6 +586,9 @@ const UploadRoster = ({
                 confirmGrantsOwner={confirmGrantsOwner}
                 roleChangesConfirmed={roleChangesConfirmed}
                 onRoleChangesConfirmedChange={setRoleChangesConfirmed}
+                needsMetadataConfirm={needsMetadataConfirm}
+                metadataConfirmed={metadataConfirmed}
+                onMetadataConfirmedChange={setMetadataConfirmed}
               />
             ) : null}
 
