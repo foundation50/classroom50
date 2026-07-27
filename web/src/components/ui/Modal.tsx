@@ -22,7 +22,8 @@ import { cx } from "./cx"
 //     needs the element). `open` may be omitted.
 // `onClose` fires on the native dialog close (Esc, backdrop, close button).
 
-export type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl" | "3xl"
+export type ModalSize =
+  "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl"
 
 const SIZE_CLASS: Record<ModalSize, string> = {
   sm: "max-w-sm",
@@ -31,6 +32,8 @@ const SIZE_CLASS: Record<ModalSize, string> = {
   xl: "max-w-xl",
   "2xl": "max-w-2xl",
   "3xl": "max-w-3xl",
+  "4xl": "max-w-4xl",
+  "5xl": "max-w-5xl",
 }
 
 export type ModalProps = {

@@ -1,0 +1,138 @@
+// @vitest-environment happy-dom
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { render, screen, cleanup, within } from "@testing-library/react"
+
+vi.mock("react-i18next", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-i18next")>()
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string, opts?: Record<string, unknown>) =>
+        opts && "count" in opts ? `${key}:${opts.count}` : key,
+    }),
+  }
+})
+
+import { RosterPreviewTable, type RowChanges } from "./RosterPreviewTable"
+import type { ImportRosterRow } from "@/domain/students"
+
+afterEach(cleanup)
+
+const rows: ImportRosterRow[] = [
+  {
+    username: "ada",
+    first_name: "Ada",
+    last_name: "Lovelace",
+    email: "ada@x.edu",
+    section: "Lab 1",
+  },
+  {
+    username: "bob",
+    first_name: "Bob",
+    last_name: "B",
+    email: "bob@x.edu",
+    section: "Lab 2",
+  },
+]
+
+const cellFor = (name: string) =>
+  screen.getByText(name).closest("td") as HTMLTableCellElement
+
+describe("RosterPreviewTable change highlighting", () => {
+  it("renders plainly when there are no changes", () => {
+    render(
+      <RosterPreviewTable
+        rows={rows}
+        rolesByUser={{}}
+        onRoleChange={vi.fn()}
+      />,
+    )
+    const emailCell = cellFor("ada@x.edu")
+    expect(emailCell.className).not.toContain("bg-warning")
+    // No tooltip element on an unchanged cell.
+    expect(emailCell.querySelector("[data-tip]")).toBeNull()
+  })
+
+  it("highlights a changed cell and exposes a stored->CSV tooltip", () => {
+    const changes: RowChanges = {
+      ada: [{ field: "email", from: "old@x.edu", to: "ada@x.edu" }],
+    }
+    render(
+      <RosterPreviewTable
+        rows={rows}
+        rolesByUser={{}}
+        onRoleChange={vi.fn()}
+        changes={changes}
+      />,
+    )
+    const emailCell = cellFor("ada@x.edu")
+    expect(emailCell.className).toContain("bg-warning")
+    const tip = emailCell.querySelector("[data-tip]") as HTMLElement
+    expect(tip).toBeTruthy()
+    // Tooltip shows the field label and the from -> to transition.
+    expect(tip.getAttribute("data-tip")).toContain("old@x.edu → ada@x.edu")
+    // An unchanged sibling cell (section) is not highlighted.
+    expect(cellFor("Lab 1").className).not.toContain("bg-warning")
+  })
+
+  it("highlights the merged Name cell when either first or last name changed", () => {
+    const changes: RowChanges = {
+      ada: [{ field: "last_name", from: "L", to: "Lovelace" }],
+    }
+    render(
+      <RosterPreviewTable
+        rows={rows}
+        rolesByUser={{}}
+        onRoleChange={vi.fn()}
+        changes={changes}
+      />,
+    )
+    const nameCell = cellFor("Ada Lovelace")
+    expect(nameCell.className).toContain("bg-warning")
+    const tip = nameCell.querySelector("[data-tip]") as HTMLElement
+    expect(tip.getAttribute("data-tip")).toContain("L → Lovelace")
+  })
+
+  it("renders the (empty) fallback in the tooltip for a previously-blank value", () => {
+    const changes: RowChanges = {
+      ada: [{ field: "section", from: "", to: "Lab 9" }],
+    }
+    render(
+      <RosterPreviewTable
+        rows={[{ ...rows[0], section: "Lab 9" }]}
+        rolesByUser={{}}
+        onRoleChange={vi.fn()}
+        changes={changes}
+      />,
+    )
+    const cell = cellFor("Lab 9")
+    const tip = cell.querySelector("[data-tip]") as HTMLElement
+    expect(tip.getAttribute("data-tip")).toContain(
+      "students.preflightMetadataEmpty → Lab 9",
+    )
+  })
+
+  it("marks the whole row as changed while leaving unchanged rows plain", () => {
+    const changes: RowChanges = {
+      ada: [{ field: "email", from: "old@x.edu", to: "ada@x.edu" }],
+    }
+    render(
+      <RosterPreviewTable
+        rows={rows}
+        rolesByUser={{}}
+        onRoleChange={vi.fn()}
+        changes={changes}
+      />,
+    )
+    const adaRow = within(screen.getByText("ada").closest("tr")!)
+    expect(screen.getByText("ada").closest("tr")!.className).toContain(
+      "bg-warning",
+    )
+    // The tooltip carrier is inside ada's row.
+    expect(adaRow.getByText("ada@x.edu").closest("[data-tip]")).toBeTruthy()
+    // bob's row is untouched.
+    expect(
+      screen.getByText("bob").closest("tr")!.className ?? "",
+    ).not.toContain("bg-warning")
+  })
+})

@@ -36,20 +36,16 @@ const baseResult = (over: Partial<PreflightResult> = {}): PreflightResult => ({
 
 const noop = () => {}
 
-describe("PreflightRecap metadata rendering", () => {
-  it("renders the per-field stored->CSV delta and the (empty) fallback", () => {
+describe("PreflightRecap metadata confirmation", () => {
+  it("gates metadata updates behind a review hint + checkbox, not a text list", () => {
     const preflight = baseResult({
       metadataUpdate: [
         {
           kind: "metadata_update",
           username: "ada",
           role: "student",
-          changedFields: ["email", "section"],
-          changes: [
-            { field: "email", from: "old@x.edu", to: "new@x.edu" },
-            // A previously-blank field exercises the (empty) fallback.
-            { field: "section", from: "", to: "Lab 3" },
-          ],
+          changedFields: ["email"],
+          changes: [{ field: "email", from: "old@x.edu", to: "new@x.edu" }],
         },
       ],
     })
@@ -68,23 +64,15 @@ describe("PreflightRecap metadata rendering", () => {
       />,
     )
 
-    // Email delta shows the concrete from -> to values.
-    expect(
-      screen.getByText(
-        /preflightMetadataDetail:.*from=old@x\.edu,to=new@x\.edu/,
-      ),
-    ).toBeTruthy()
-    // Blank stored value renders via the (empty) fallback key, not a literal "".
-    expect(
-      screen.getByText(
-        /preflightMetadataDetail:.*from=students\.preflightMetadataEmpty,to=Lab 3/,
-      ),
-    ).toBeTruthy()
-    // The metadata confirmation checkbox is present.
+    // The recap points the teacher to the highlighted table cells...
+    expect(screen.getByText(/preflightMetadataReviewHint:count=1/)).toBeTruthy()
+    // ...and gates the write with the confirmation checkbox.
     expect(screen.getByText(/preflightConfirmMetadata:count=1/)).toBeTruthy()
+    // The per-field stored->CSV values are shown in the table, NOT re-listed here.
+    expect(screen.queryByText(/preflightMetadataDetail/)).toBeNull()
   })
 
-  it("shows a role-change row's metadata delta and the combined-save notice", () => {
+  it("shows the combined-save notice for a role-change row carrying metadata", () => {
     const preflight = baseResult({
       allAlreadyMembers: false,
       roleChanges: [
@@ -113,18 +101,12 @@ describe("PreflightRecap metadata rendering", () => {
         onMetadataConfirmedChange={noop}
       />,
     )
-
-    // The role move is listed AND its metadata delta is shown beneath it, so the
-    // detail overwrite is visible under the role-change confirmation (not silent).
-    expect(
-      screen.getByText(
-        /preflightMetadataDetail:.*from=old@x\.edu,to=new@x\.edu/,
-      ),
-    ).toBeTruthy()
-    // The notice tells the teacher details are saved with the team change.
+    // The role move is listed; its metadata delta is shown in the table, but the
+    // recap warns the teacher that details are saved with the move.
     expect(
       screen.getByText("students.preflightRoleChangeMetadataNotice"),
     ).toBeTruthy()
+    expect(screen.queryByText(/preflightMetadataDetail/)).toBeNull()
   })
 
   it("omits the combined-save notice when no role-change row carries metadata", () => {

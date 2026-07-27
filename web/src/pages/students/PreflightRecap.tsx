@@ -2,15 +2,6 @@ import { useTranslation } from "react-i18next"
 import { Alert, Badge } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type { PreflightResult } from "@/util/rosterUploadPreflight"
-import type { MetadataField } from "@/util/rosterMetadataMerge"
-
-// i18n label key per updatable metadata field, for the per-field change list.
-const METADATA_FIELD_LABEL_KEY: Record<MetadataField, string> = {
-  first_name: "students.firstNameColumn",
-  last_name: "students.lastNameColumn",
-  email: "students.emailColumn",
-  section: "students.sectionColumn",
-}
 
 // A small summary tile for a preflight bucket (count + label). Zero-count
 // buckets dim so the teacher's eye goes to what actually changes.
@@ -108,7 +99,7 @@ export const PreflightRecap = ({
           count={preflight.roleChanges.length}
         />
         <PreflightBucket
-          tone="info"
+          tone="warning"
           title={t("students.preflightMetadataTitle")}
           count={preflight.metadataUpdate?.length ?? 0}
         />
@@ -117,7 +108,8 @@ export const PreflightRecap = ({
       {/* Team moves and org-owner grants need explicit confirmation: a role
           change is a destructive team move, and a teacher target (role
           change OR enroll) grants org OWNER. List each and gate the primary
-          button on the checkbox. */}
+          button on the checkbox. Metadata deltas for these rows are shown
+          inline in the preview table (highlighted cells), not re-listed here. */}
       {needsRoleConfirm ? (
         <div className="mt-1 flex flex-col gap-2 rounded-box border border-error/30 bg-error/5 p-4">
           <h4 className="text-sm font-semibold">
@@ -127,31 +119,15 @@ export const PreflightRecap = ({
             {roleChanges.map((c) => (
               <li
                 key={`change-${c.username}`}
-                className="flex flex-col gap-0.5"
+                className="flex items-center justify-between gap-2"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <code>{c.username}</code>
-                  <span className="opacity-70">
-                    {t("students.preflightRoleChangeDetail", {
-                      from: t(ROLE_LABEL_KEY[c.currentRole]),
-                      to: t(ROLE_LABEL_KEY[c.role]),
-                    })}
-                  </span>
-                </div>
-                {c.changes.length > 0 ? (
-                  <ul className="ml-4 flex flex-col gap-0.5 opacity-70">
-                    {c.changes.map((chg) => (
-                      <li key={chg.field}>
-                        {t("students.preflightMetadataDetail", {
-                          field: t(METADATA_FIELD_LABEL_KEY[chg.field]),
-                          from:
-                            chg.from || t("students.preflightMetadataEmpty"),
-                          to: chg.to,
-                        })}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
+                <code>{c.username}</code>
+                <span className="opacity-70">
+                  {t("students.preflightRoleChangeDetail", {
+                    from: t(ROLE_LABEL_KEY[c.currentRole]),
+                    to: t(ROLE_LABEL_KEY[c.role]),
+                  })}
+                </span>
               </li>
             ))}
             {teacherEnrolls.map((e) => (
@@ -195,32 +171,19 @@ export const PreflightRecap = ({
       ) : null}
 
       {/* Metadata updates are non-destructive (info tone, not error): they only
-          change stored name/email/section, never team membership. Still gated
-          behind their own checkbox, listing a per-field stored -> CSV delta so
-          the teacher sees what each value replaces before confirming (R9). */}
+          change stored name/email/section, never team membership. The changed
+          values are highlighted in place in the preview table below (hover for
+          the stored -> CSV detail); this block just gates the write. */}
       {needsMetadataConfirm ? (
-        <div className="mt-1 flex flex-col gap-2 rounded-box border border-info/30 bg-info/5 p-4">
+        <div className="mt-1 flex flex-col gap-2 rounded-box border border-warning/40 bg-warning/10 p-4">
           <h4 className="text-sm font-semibold">
             {t("students.preflightMetadataConfirmTitle")}
           </h4>
-          <ul className="flex flex-col gap-2 text-sm">
-            {preflight.metadataUpdate.map((m) => (
-              <li key={`meta-${m.username}`} className="flex flex-col gap-0.5">
-                <code>{m.username}</code>
-                <ul className="ml-4 flex flex-col gap-0.5 opacity-70">
-                  {m.changes.map((c) => (
-                    <li key={c.field}>
-                      {t("students.preflightMetadataDetail", {
-                        field: t(METADATA_FIELD_LABEL_KEY[c.field]),
-                        from: c.from || t("students.preflightMetadataEmpty"),
-                        to: c.to,
-                      })}
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ul>
+          <p className="text-sm opacity-70">
+            {t("students.preflightMetadataReviewHint", {
+              count: preflight.metadataUpdate.length,
+            })}
+          </p>
           <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"

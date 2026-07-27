@@ -233,6 +233,23 @@ const UploadRoster = ({
   }, [phase, rolesKey, org, classroom])
 
   const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
+  // Per-username metadata changes to highlight in the preview table (from
+  // metadata_update rows and role_change rows that also carry a metadata delta),
+  // keyed by lowercased username. The table shows the stored -> CSV transition
+  // inline, so the recap no longer needs a text list of them.
+  const rowChanges = useMemo(() => {
+    const map: Record<
+      string,
+      PreflightResult["metadataUpdate"][number]["changes"]
+    > = {}
+    for (const m of preflight?.metadataUpdate ?? []) {
+      if (m.changes.length > 0) map[m.username.toLowerCase()] = m.changes
+    }
+    for (const c of preflight?.roleChanges ?? []) {
+      if (c.changes.length > 0) map[c.username.toLowerCase()] = c.changes
+    }
+    return map
+  }, [preflight])
   // Enroll rows targeting teacher grant org OWNER on process, so — like a
   // confirmed role change — they must sit behind the confirmation checkbox.
   const teacherEnrolls = useMemo(
@@ -466,7 +483,7 @@ const UploadRoster = ({
         open={isOpen}
         onClose={handleClose}
         closeDisabled={phase === "importing"}
-        size="3xl"
+        size="5xl"
         aria-labelledby={titleId}
       >
         <div className="flex items-start justify-between gap-4">
@@ -604,6 +621,7 @@ const UploadRoster = ({
               <RosterPreviewTable
                 rows={rows}
                 rolesByUser={rolesByUser}
+                changes={rowChanges}
                 onRoleChange={(key, role) =>
                   setRolesByUser((prev) => ({ ...prev, [key]: role }))
                 }
