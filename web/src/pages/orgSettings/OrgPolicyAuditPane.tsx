@@ -77,6 +77,7 @@ const CONCERN_STATE_LABEL: Record<CheckState, string> = {
   enforced: "orgSettings.audit.stateEnforced",
   unenforced: "orgSettings.audit.stateUnenforced",
   warn: "orgSettings.audit.stateWarn",
+  paused: "orgSettings.audit.statePaused",
   unreadable: "orgSettings.audit.stateUnreadable",
 }
 
@@ -87,6 +88,10 @@ export const CONCERN_STATE_BADGE: Record<
   enforced: { tone: "success" },
   unenforced: { tone: "error" },
   warn: { tone: "warning" },
+  // Amber, matching the "Autograding paused" badge on OrgActionsSection: the
+  // teacher chose this, so it isn't an error — but it is off-policy and worth
+  // seeing at a glance.
+  paused: { tone: "warning" },
   // Warning, not ghost: "couldn't verify — confirm manually" is attention-worthy,
   // and a ghost badge would ignore the tone and render neutral-grey (Badge.tsx).
   unreadable: { tone: "warning" },

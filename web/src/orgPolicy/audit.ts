@@ -136,12 +136,13 @@ function concernSettingsUrl(id: ConcernId, org: string): string {
 // non-critical drift (see header). An unreadable concern also fails: a partial
 // read outage is "needs attention", not a clean bill.
 //
-// The one exception is orgBudget: its endpoint is legitimately, permanently
+// Two states never gate. orgBudget's endpoint is legitimately, permanently
 // unreadable for enterprise-managed billing (org budget URLs 400/404) and plans
 // that don't expose budgets, so an unreadable cap is an expected steady state,
 // not an outage. Mirroring the CLI (which lists it under "Recommended"), an
-// unreadable budget is advisory and never gates — but a missing cap
-// (unenforced) is still critical drift that fails.
+// unreadable budget is advisory — but a missing cap (unenforced) is still
+// critical drift that fails. And "paused" is a teacher-chosen setting, not drift
+// (checkOrgActions), so it's excluded here by construction.
 function deriveVerdict(
   readOk: boolean,
   lockdownComplete: boolean,

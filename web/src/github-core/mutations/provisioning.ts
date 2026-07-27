@@ -10,6 +10,11 @@ import { getRepo } from "../repoReads"
 import { getErrorMessage } from "../errorMessage"
 import { checkPages, repairOrgDefaults } from "../orgChecks"
 import {
+  getOrgActionsPermissions,
+  orgActionsSelectionIncludesConfigRepo,
+  type OrgActionsPermissions,
+} from "../orgActionsPolicy"
+import {
   BUDGET_PRODUCT_SKU_ACTIONS,
   BUDGET_SCOPE_ORG,
   BUDGET_TYPE_PRODUCT_PRICING,
@@ -927,12 +932,6 @@ export async function ensureBranchProtection(
   }
 }
 
-type OrgActionsPermissions = {
-  enabled_repositories: "all" | "none" | "selected"
-  allowed_actions?: "all" | "local_only" | "selected"
-  selected_actions_url?: string
-}
-
 export type EnsureOrgActionsEnabledResult =
   | {
       status: "complete"
@@ -952,20 +951,12 @@ export type EnsureOrgActionsEnabledResult =
         | "enterprise_policy"
         | "validation_failed"
         | "readback_failed"
+        | "rate_limited"
         | "autograding_paused"
         | "unknown"
       message: string
       settingsUrl: string
     }
-
-async function getOrgActionsPermissions(
-  client: GitHubClient,
-  org: string,
-): Promise<OrgActionsPermissions> {
-  return client.request<OrgActionsPermissions>(
-    `/orgs/${org}/actions/permissions`,
-  )
-}
 
 async function setOrgActionsPermissions(
   client: GitHubClient,
@@ -1068,6 +1059,21 @@ export async function ensureOrgActionsEnabled(
     const allowedActions = current?.allowed_actions ?? "unknown"
 
     if (err instanceof GitHubAPIError) {
+      // A secondary rate limit also surfaces as 403, so classify it before the
+      // permission wall — it's retryable, and callers key their retry-vs-manual
+      // messaging off the reason.
+      if (err.isRateLimited) {
+        return {
+          status: "warning",
+          org,
+          enabledRepositories,
+          allowedActions,
+          reason: "rate_limited",
+          settingsUrl,
+          message: `${org}: hit a rate limit enabling GitHub Actions; retry shortly.`,
+        }
+      }
+
       if (err.status === 403) {
         return {
           status: "warning",
@@ -1141,42 +1147,6 @@ export type OrgActionsMode = "active" | "paused" | "disabled" | "unknown"
 // config repo selected, so every student repo's autograde shim is blocked while
 // the config repo's own workflows (Pages, score collection, regrade) keep
 // running. Resume == enabled_repositories="all".
-type OrgSelectedRepositories = {
-  total_count: number
-  repositories: { id: number; name: string }[]
-}
-
-async function listOrgActionsSelectedRepositories(
-  client: GitHubClient,
-  org: string,
-  page: number,
-): Promise<OrgSelectedRepositories> {
-  return client.request<OrgSelectedRepositories>(
-    `/orgs/${org}/actions/permissions/repositories?per_page=100&page=${page}`,
-  )
-}
-
-// True when the config repo is currently in the org's "selected" Actions
-// allow-list — the marker that distinguishes our intentional pause from an
-// unrelated teacher-set "selected" policy that happens to exclude it. Paginates
-// to exhaustion: a teacher's own allow-list can exceed 100 repos, and reading
-// only page 1 could misclassify a policy we didn't author (and then wrongly
-// widen it to "all" via the setup guard).
-async function orgActionsSelectionIncludesConfigRepo(
-  client: GitHubClient,
-  org: string,
-): Promise<boolean> {
-  let seen = 0
-  for (let page = 1; ; page++) {
-    const { total_count, repositories } =
-      await listOrgActionsSelectedRepositories(client, org, page)
-    if (repositories.some((r) => r.name === CONFIG_REPO)) return true
-    seen += repositories.length
-    if (repositories.length === 0 || seen >= total_count) return false
-  }
-}
-
-// Read the live autograding mode from org Actions permissions.
 export async function getOrgActionsMode(
   client: GitHubClient,
   org: string,

@@ -86,6 +86,74 @@ describe("repairConcern", () => {
     expect(writePaths(calls)).toContain("PUT /orgs/acme/actions/permissions")
   })
 
+  it("orgActions treats a deliberate pause as a no-op, not an unresolved concern", async () => {
+    const client: GitHubClient = {
+      request: ((path: string, options?: { method?: string }) => {
+        if ((options?.method ?? "GET") !== "GET")
+          return Promise.reject(new Error(`unexpected write: ${path}`))
+        if (path.includes("/actions/permissions/repositories"))
+          return Promise.resolve({
+            total_count: 1,
+            repositories: [{ id: 1, name: "classroom50" }],
+          })
+        return Promise.resolve({
+          enabled_repositories: "selected",
+          allowed_actions: "all",
+        })
+      }) as unknown as GitHubClient["request"],
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    }
+    const result = await repairConcern(client, "acme", "orgActions", "team")
+    expect(result.unresolved).toBeUndefined()
+  })
+
+  it("orgActions surfaces a blocked write as an unresolved concern", async () => {
+    const client: GitHubClient = {
+      request: ((_path: string, options?: { method?: string }) => {
+        if ((options?.method ?? "GET") === "GET")
+          return Promise.resolve({
+            enabled_repositories: "none",
+            allowed_actions: "all",
+          })
+        return Promise.reject(httpError(403))
+      }) as unknown as GitHubClient["request"],
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    }
+    const result = await repairConcern(client, "acme", "orgActions", "team")
+    expect(result.unresolved?.transient).toBe(false)
+    expect(result.unresolved?.message).toContain("acme")
+  })
+
+  it("orgActions marks a rate-limited write transient so the fix stays retryable", async () => {
+    const rateLimited = new GitHubAPIError({
+      status: 403,
+      url: "x",
+      message: "secondary rate limit",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: 60,
+      },
+    })
+    const client: GitHubClient = {
+      request: ((_path: string, options?: { method?: string }) => {
+        if ((options?.method ?? "GET") === "GET")
+          return Promise.resolve({
+            enabled_repositories: "none",
+            allowed_actions: "all",
+          })
+        return Promise.reject(rateLimited)
+      }) as unknown as GitHubClient["request"],
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    }
+    const result = await repairConcern(client, "acme", "orgActions", "team")
+    expect(result.unresolved?.transient).toBe(true)
+  })
+
   it("orgPrCreation enables Actions PR creation", async () => {
     const { client, calls } = makeClient()
     await repairConcern(client, "acme", "orgPrCreation", "team")
