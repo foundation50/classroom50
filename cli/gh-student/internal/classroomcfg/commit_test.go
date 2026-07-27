@@ -75,8 +75,11 @@ func TestCommitFiles_RetriesOnFreshRepoLag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CommitFiles: unexpected error: %v", err)
 	}
-	if sha == "" {
-		t.Error("CommitFiles returned an empty SHA; the accept commit is the Feedback-PR base anchor")
+	if sha != "new-commit-sha" {
+		// Not just non-empty: returning the tree or parent SHA here would
+		// freeze the Feedback-PR base at a commit the runner's baseline check
+		// rejects.
+		t.Errorf("CommitFiles returned %q, want the new commit SHA new-commit-sha", sha)
 	}
 
 	mu.Lock()

@@ -779,24 +779,21 @@ func TestFeedbackPRParity_GoVsPython(t *testing.T) {
 		}
 	}
 
-	// Body: contract.FeedbackPRBody must be a byte-copy of pr_body's output.
-	// The python source builds it from string fragments, so compare
-	// load-bearing fragments that appear verbatim in both: the opening
-	// sentence and the don't-close warning (any wording edit must hit both
-	// languages or this fails).
+	// Body: contract.FeedbackPRBody is asserted BYTE-for-byte against
+	// testdata/feedback_pr_body.golden by its own package
+	// (cli/shared/contract), and the same golden is asserted by python
+	// (skeleton_tests/test_ensure_feedback_pr.py) and TypeScript
+	// (web/src/domain/assignments/feedbackPr.test.ts). What only THIS test can
+	// do is read the embedded python source, so it checks that the golden still
+	// tracks that source — regenerating it from a drifted Go copy can't pass
+	// silently.
 	body := contract.FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL")
-	for _, fragment := range []string{
-		":wave:! Classroom 50 opened this pull request as a place for your ",
-		"**Don't close or merge this pull request** unless your teacher tells you to.",
-		"Click ",
-		"the **Subscribe** button to be notified when that happens.",
-	} {
-		if !strings.Contains(body, fragment) {
-			t.Fatalf("contract.FeedbackPRBody lost the fragment %q; update this test only together with pr_body in ensure_feedback_pr.py", fragment)
-		}
-		if !strings.Contains(script, fragment) {
-			t.Errorf("ensure_feedback_pr.py pr_body is missing the fragment %q mirrored in contract.FeedbackPRBody — the PR body has drifted between Go and Python", fragment)
-		}
+	const opening = ":wave:! Classroom 50 opened this pull request as a place for your "
+	if !strings.Contains(body, opening) {
+		t.Fatalf("contract.FeedbackPRBody lost the opening sentence %q", opening)
+	}
+	if !strings.Contains(script, opening) {
+		t.Errorf("ensure_feedback_pr.py pr_body is missing the opening sentence mirrored in contract.FeedbackPRBody — the PR body has drifted between Go and Python")
 	}
 	// The runner's backfill trigger: the Go body must embed the release URL
 	// placeholder wherever python interpolates release_url.

@@ -1,32 +1,12 @@
 import type { GitHubClient } from "../client"
-import { GitHubAPIError } from "../errors"
+import type { GitHubPullRequest } from "../types"
+import { is422AlreadyExists } from "../errors"
 
-// Pull-request + branch-ref + label writes for the accept-time Feedback PR
+// Pull-request + branch-ref + label WRITES for the accept-time Feedback PR
 // (issue #228). Kept transport-thin like the sibling sub-modules: the
 // orchestration (idempotency, empty-commit fallback, best-effort semantics)
-// lives in domain/assignments/feedbackPr.ts.
-
-export type PullRequestSummary = {
-  number: number
-  state: string
-  html_url: string
-}
-
-// List PRs matching base<-head in ANY state (open/closed/merged), newest
-// first. `head` must be owner-qualified ("org:branch") per the GitHub API.
-export function listPullRequestsByBaseHead(params: {
-  client: GitHubClient
-  owner: string
-  repo: string
-  base: string
-  head: string
-}) {
-  const { client, owner, repo, base, head } = params
-  return client.request<PullRequestSummary[]>(
-    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls?base=${encodeURIComponent(base)}&head=${encodeURIComponent(`${owner}:${head}`)}&state=all&per_page=1`,
-  )
-}
-
+// lives in domain/assignments/feedbackPr.ts, the base+head read in
+// queries/repoRefReads.ts, and the 422 discriminators in ../errors.
 export function createPullRequest(params: {
   client: GitHubClient
   owner: string
@@ -37,7 +17,7 @@ export function createPullRequest(params: {
   body: string
 }) {
   const { client, owner, repo, base, head, title, body } = params
-  return client.request<PullRequestSummary>(
+  return client.request<GitHubPullRequest>(
     `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`,
     {
       method: "POST",
@@ -47,7 +27,8 @@ export function createPullRequest(params: {
 }
 
 // Create refs/heads/<branch> at `sha`. Resolves false (instead of throwing)
-// when the ref already exists — the idempotent re-run case.
+// when the ref already exists, so the caller can verify where it points before
+// adopting it.
 export async function createBranchRef(params: {
   client: GitHubClient
   owner: string
@@ -110,37 +91,5 @@ export function addIssueLabels(params: {
       method: "POST",
       body: { labels },
     },
-  )
-}
-
-// GitHub reports "already exists" for both duplicate refs and duplicate
-// labels as a 422 whose message/errors mention it; there is no structured
-// code beyond the generic "custom"/"already_exists" variants, so match text
-// (mirrors the CLI's is422AlreadyExists).
-export function is422AlreadyExists(err: unknown): boolean {
-  if (!(err instanceof GitHubAPIError) || err.status !== 422) return false
-  return (
-    apiErrorMentions(err, "already exists") ||
-    apiErrorMentions(err, "already_exists")
-  )
-}
-
-// The "no commits between base and head" 422 GitHub returns for a zero-diff
-// PR — the accept-time signal to land the empty commit and retry.
-export function is422NoCommitsBetween(err: unknown): boolean {
-  if (!(err instanceof GitHubAPIError) || err.status !== 422) return false
-  return apiErrorMentions(err, "no commits between")
-}
-
-function apiErrorMentions(err: GitHubAPIError, needle: string): boolean {
-  if (err.message.toLowerCase().includes(needle)) return true
-  const body = err.body as
-    | { message?: string; errors?: Array<{ message?: string; code?: string }> }
-    | undefined
-  if (body?.message?.toLowerCase().includes(needle)) return true
-  return (body?.errors ?? []).some(
-    (item) =>
-      item?.message?.toLowerCase().includes(needle) ||
-      item?.code?.toLowerCase().includes(needle),
   )
 }

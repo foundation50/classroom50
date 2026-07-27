@@ -496,11 +496,9 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 			// from the marker's commit history; existing PRs short-circuit
 			// inside, keeping repeat re-accepts read-only.
 			if p.feedbackPR {
-				if acceptSHA, err := acceptCommitSHA(client, p.org, p.repoName); err != nil {
-					u.Warn("could not open the Feedback PR now; it will be opened automatically on your first submission: %v", err)
-				} else {
-					openFeedbackPRStep(client, u, verbose, p, acceptSHA)
-				}
+				openFeedbackPRStep(client, u, verbose, p, func() (string, error) {
+					return acceptCommitSHA(client, p.org, p.repoName)
+				})
 			}
 			return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
 		}
@@ -627,48 +625,24 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 	// Last, because it's best-effort: everything above must hold for the
 	// accept to count, while a Feedback PR failure only defers to the runner.
 	if p.feedbackPR {
-		openFeedbackPRStep(client, u, verbose, p, acceptSHA)
+		openFeedbackPRStep(client, u, verbose, p, func() (string, error) {
+			return feedbackBaseSHA(client, p.org, p.repoName, acceptSHA), nil
+		})
 	}
 	return nil
 }
 
-// openFeedbackPRStep runs the accept-time Feedback PR creation behind a
-// spinner, converting any failure into a warning (the accept has already
-// succeeded; the autograde runner opens the PR on the first submission
-// instead). Split out so both the fresh-provision and the healthy
-// already-accepted paths report it identically.
-func openFeedbackPRStep(client githubapi.Client, u *ui.UI, verbose bool, p acceptRepoParams, acceptSHA string) {
-	const msg = "Opening feedback pull request"
-	sp := u.Spinner(msg)
-	sp.Start()
-	if err := ensureFeedbackPullRequest(client, u, verbose, p.org, p.repoName, p.branch, acceptSHA, p.mode); err != nil {
-		sp.Fail(msg)
-		u.Warn("could not open the Feedback PR now; it will be opened automatically on your first submission: %v", err)
-		return
+// feedbackBaseSHA resolves the commit to freeze `feedback` at, preferring the
+// marker's earliest commit over the SHA DropFiles just wrote. On the HEAL path
+// the marker already exists, so the repair commit is NOT the baseline the
+// runner resolves — freezing there would make the runner refuse to maintain the
+// PR for the repo's whole life. On a fresh accept the lookup returns the commit
+// just written (or fails on read lag), so falling back to it is correct.
+func feedbackBaseSHA(client githubapi.Client, org, repoName, committedSHA string) string {
+	if sha, err := acceptCommitSHA(client, org, repoName); err == nil && sha != "" {
+		return sha
 	}
-	sp.Stop("Feedback pull request ready")
-}
-
-// acceptCommitSHA recovers the accept commit — the earliest commit touching
-// the .classroom50.yaml marker — for a repo provisioned by an earlier accept.
-// Same resolution rule as the runner's baseline_sha(), so the feedback base
-// frozen here matches what the runner later verifies. The commits list is
-// newest-first; the marker is created exactly once (later accepts never
-// rewrite it), so the OLDEST entry is the accept commit.
-func acceptCommitSHA(client githubapi.Client, org, repoName string) (string, error) {
-	path := fmt.Sprintf("repos/%s/%s/commits?path=%s&per_page=100",
-		url.PathEscape(org), url.PathEscape(repoName),
-		classroomcfg.EscapeContentPath(classroomcfg.MetadataPath))
-	var commits []struct {
-		SHA string `json:"sha"`
-	}
-	if err := client.Get(path, &commits); err != nil {
-		return "", fmt.Errorf("GET %s: %w", path, err)
-	}
-	if len(commits) == 0 {
-		return "", fmt.Errorf("no commits touch %s in %s/%s", classroomcfg.MetadataPath, org, repoName)
-	}
-	return commits[len(commits)-1].SHA, nil
+	return committedSHA
 }
 
 // verifyProvisioned confirms the repo is autogradable before accept reports
@@ -731,14 +705,26 @@ func classroomFromRepo(repoName string) string {
 	return repoName
 }
 
-// is422AlreadyExists matches "already exists" (case-insensitive) in
-// the 422 message or any Errors[] item.
+// is422AlreadyExists matches GitHub's "already exists" 422 (duplicate ref,
+// duplicate label, existing repo).
 func is422AlreadyExists(httpErr *githubapi.HTTPError) bool {
-	if strings.Contains(strings.ToLower(httpErr.Message), "already exists") {
+	return has422Message(httpErr, "already exists")
+}
+
+// has422Message reports whether a 422's message or any Errors[] item contains
+// needle (lower-case). Message-substring matching is the only discriminator
+// GitHub offers for these validation failures — errors[].code is the generic
+// "custom". The status check lives here so no caller can accept the same
+// wording arriving from an unrelated failure.
+func has422Message(httpErr *githubapi.HTTPError, needle string) bool {
+	if httpErr.StatusCode != http.StatusUnprocessableEntity {
+		return false
+	}
+	if strings.Contains(strings.ToLower(httpErr.Message), needle) {
 		return true
 	}
 	for _, item := range httpErr.Errors {
-		if strings.Contains(strings.ToLower(item.Message), "already exists") {
+		if strings.Contains(strings.ToLower(item.Message), needle) {
 			return true
 		}
 	}
@@ -922,7 +908,7 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 
 	var created GeneratedRepo
 	if err := client.Post(createPath, bytes.NewReader(createBody), &created); err != nil {
-		if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok && httpErr.StatusCode == http.StatusUnprocessableEntity && is422AlreadyExists(httpErr) {
+		if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok && is422AlreadyExists(httpErr) {
 			getPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
 			if getErr := client.Get(getPath, &created); getErr != nil {
 				return "", "", "", false, fmt.Errorf("POST %s returned 422 and follow-up GET %s failed: %w", createPath, getPath, getErr)

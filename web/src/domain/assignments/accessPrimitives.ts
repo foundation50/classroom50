@@ -33,9 +33,7 @@ export class AcceptStepError extends Error {
 }
 
 // Ordered accept-flow phases, shown as a progress checklist in the GUI.
-// "feedback" (the accept-time Feedback PR, issue #228) is best-effort: it
-// always resolves complete — with a deferred-to-the-runner message on failure
-// — never error, since the accept itself has already succeeded by then.
+// "feedback" (issue #228) never resolves error — see openFeedbackPrStep.
 export type AcceptStepId =
   | "account"
   | "membership"

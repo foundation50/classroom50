@@ -47,8 +47,9 @@ export {
   getOrgRepos,
   getRepoPermissionForUser,
   getOpenPullRequests,
-  type GitHubPullRequest,
+  listPullRequestsByBaseHead,
 } from "./queries/repoRefReads"
+export type { GitHubPullRequest } from "./types"
 export {
   rawFileQuery,
   jsonFileQuery,

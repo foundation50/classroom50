@@ -14,6 +14,7 @@ leave; HEAD_BRANCH lookup failure -> error status (the F3 fix).
 from __future__ import annotations
 
 import json
+import pathlib
 
 import pytest
 
@@ -394,6 +395,23 @@ def test_accept_time_pr_adopted_without_edits(monkeypatch):
     assert not fake.made("pr create")
     assert not fake.made("pr reopen")
     assert not fake.made("pr edit")           # backfill no-ops on the link
+
+
+def test_pr_body_matches_the_cross_language_golden():
+    """pr_body is the de-facto source of truth for the Feedback PR body, and both
+    accept clients hand-mirror it (cli/shared/contract FeedbackPRBody, web's
+    feedbackPrBody). The runner adopts an accept-time PR by base+head, so a
+    one-sided wording edit would leave teachers looking at two different bodies —
+    and backfill_release_link rewriting whichever it finds. All three languages
+    render with the same placeholders and compare in FULL against this golden
+    (fragment matching would let a reworded sentence through); regenerate it only
+    when every language changes together.
+    """
+    golden = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "shared" / "contract" / "testdata" / "feedback_pr_body.golden"
+    ).read_text()
+    assert efp.pr_body("HEAD_BRANCH", "RELEASE_URL") == golden
 
 
 def test_pr_body_mentions_head_and_base(monkeypatch):

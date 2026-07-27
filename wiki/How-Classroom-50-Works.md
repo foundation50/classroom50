@@ -144,12 +144,14 @@ tool (or an org/enterprise policy) is changing it back.
 Autograding is optional — an assignment with no tests still tags submissions and
 supports feedback. See [Autograders](Autograders) for the full pipeline.
 
-### The Feedback PR opens on the first submission, not at accept
+### The Feedback PR opens at accept, with the diff starting at the baseline
 
-If you enable the Feedback pull request, it appears on the student's **first
-submission that adds work**, not when they accept. This is by design: GitHub
-can't open a pull request with no changes, and opening it later keeps the setup
-files (the accept marker and autograde workflow) out of the diff you review. See
+If you enable the Feedback pull request, it is opened when the student accepts,
+so it is waiting before their first submission — and it exists even when GitHub
+Actions is disabled for student repos. Its base is frozen at the accept commit,
+so the setup files (the accept marker and autograde workflow) stay out of the
+diff you review. Should accept not manage it, the autograde runner opens the same
+PR on the first submission instead. See
 [Autograders](Autograders#feedback-pull-requests).
 
 ## Lifecycle: enroll, unenroll, and remove are separate
@@ -201,7 +203,7 @@ organization. See [the service-token setup](CLI-Teacher-Guide#create-the-service
 | Backend | Hosted service | None (GitHub repos + Actions) |
 | Classroom ↔ org | One classroom per org | Many classrooms per org |
 | Grading | Hosted autograder | GitHub Actions in each repo |
-| Feedback PR | Opened at accept | Opened on first submission |
+| Feedback PR | Opened at accept | Opened at accept |
 | Group naming | Team names | Founder's username |
 | Data | In the service | In your `classroom50` config repo (yours to keep) |
 

@@ -109,9 +109,9 @@ override the default identity.
 
 > [!NOTE]
 > **Feedback PR timing.** If your teacher enabled feedback, one long-lived
-> Feedback pull request appears on your **first submission that adds work**, not
-> at accept time (GitHub can't open a PR with no changes). The one PR is reused
-> for every later submission.
+> Feedback pull request is opened when you accept, and the same PR is reused for
+> every later submission. If it couldn't be opened then, run `accept` again to
+> retry (or it appears on your first submission when autograding is enabled).
 
 ## `whoami` / `login` / `logout`
 

@@ -187,8 +187,6 @@ async function provisionAcceptedRepo(params: {
   metadataYaml: string
   autogradeYaml: string
   // Open the accept-time Feedback PR after setup succeeds (issue #228).
-  // Best-effort: its step always resolves complete, deferring to the runner
-  // on failure.
   feedbackPr?: boolean
   isOwner?: boolean
   rerenderShimForBranch?: (branch: string) => string
@@ -248,25 +246,66 @@ async function provisionAcceptedRepo(params: {
     org,
     repo: repo.name,
     branch: committed.branch,
-    acceptCommitSha: committed.commitSha,
+    resolveAcceptCommitSha: () =>
+      resolveFeedbackBaseSha({
+        client,
+        org,
+        repo: repo.name,
+        committedSha: committed.commitSha,
+      }),
     mode,
     feedbackPr,
     onStepUpdate,
   })
 }
 
+// The commit to freeze `feedback` at, preferring the marker's earliest commit
+// over the SHA this run just wrote. On the HEAL path the marker already exists,
+// so the repair commit is NOT the baseline the runner resolves — freezing there
+// would make the runner refuse to maintain the PR for the repo's whole life. On
+// a fresh accept the lookup returns the commit just written (or fails on read
+// lag), so falling back to it is correct. With no committed SHA to fall back on
+// (the already-accepted path, where no commit ran), an unresolvable marker
+// leaves nothing to anchor the base and the step defers.
+async function resolveFeedbackBaseSha(params: {
+  client: GitHubClient
+  org: string
+  repo: string
+  committedSha: string | null
+}): Promise<string | null> {
+  const { client, org, repo, committedSha } = params
+  const oldest = await getOldestCommitShaForPath(
+    client,
+    org,
+    repo,
+    ".classroom50.yaml",
+  ).catch(() => null)
+  return oldest ?? committedSha
+}
+
+// The "feedback" step's skip message, shared by the disabled-assignment paths.
+function skipFeedbackPrStep(onStepUpdate?: OnAcceptStepUpdate) {
+  onStepUpdate?.({
+    id: "feedback",
+    status: "complete",
+    message: "No feedback pull request for this assignment",
+  })
+}
+
 // The tracked "feedback" step around ensureFeedbackPullRequest. Unlike the
 // throwing withAcceptStep steps, this ALWAYS resolves complete: a red error
-// row on an accept that succeeded would mislead — on failure the runner opens
-// the PR on the first submission instead, and the message says so. Skips
-// (feedbackPr false / missing accept SHA) also complete, so the checklist
-// never looks stuck.
+// row on an accept that succeeded would mislead, and the deferred message
+// names the retry instead. Skips (feedbackPr false / missing accept SHA) also
+// complete, so the checklist never looks stuck.
+//
+// resolveAcceptCommitSha is called lazily, only once the step is actually going
+// to run — it costs a paginated commit-history read.
 async function openFeedbackPrStep(params: {
   client: GitHubClient
   org: string
   repo: string
   branch: string
-  acceptCommitSha: string | null
+  resolveAcceptCommitSha: () => Promise<string | null>
   mode: AssignmentMode
   feedbackPr: boolean
   onStepUpdate?: OnAcceptStepUpdate
@@ -276,18 +315,14 @@ async function openFeedbackPrStep(params: {
     org,
     repo,
     branch,
-    acceptCommitSha,
+    resolveAcceptCommitSha,
     mode,
     feedbackPr,
     onStepUpdate,
   } = params
 
   if (!feedbackPr) {
-    onStepUpdate?.({
-      id: "feedback",
-      status: "complete",
-      message: "No feedback pull request for this assignment",
-    })
+    skipFeedbackPrStep(onStepUpdate)
     return
   }
 
@@ -298,8 +333,9 @@ async function openFeedbackPrStep(params: {
   })
 
   const deferred =
-    "Couldn't open the feedback pull request now — it will open automatically on your first submission"
+    "Couldn't open the feedback pull request now — accept again to retry, or it opens on your first submission if autograding is enabled"
 
+  const acceptCommitSha = await resolveAcceptCommitSha()
   if (!acceptCommitSha) {
     log.warn("feedback PR: accept commit not resolvable (non-fatal)", {
       org,
@@ -554,11 +590,7 @@ export async function acceptAssignment(params: {
       status: "complete",
       message: "No setup needed — this assignment uses an empty repository",
     })
-    onStepUpdate?.({
-      id: "feedback",
-      status: "complete",
-      message: "No feedback pull request for this assignment",
-    })
+    skipFeedbackPrStep(onStepUpdate)
 
     return {
       status: alreadyAccepted ? "already-accepted" : "created",
@@ -652,14 +684,13 @@ export async function acceptAssignment(params: {
         org,
         repo: created.repo.name,
         branch: created.repo.default_branch || sourceBranch,
-        acceptCommitSha: wantsFeedbackPr
-          ? await getOldestCommitShaForPath(
-              client,
-              org,
-              created.repo.name,
-              ".classroom50.yaml",
-            ).catch(() => null)
-          : null,
+        resolveAcceptCommitSha: () =>
+          resolveFeedbackBaseSha({
+            client,
+            org,
+            repo: created.repo.name,
+            committedSha: null,
+          }),
         mode: assignment.mode,
         feedbackPr: wantsFeedbackPr,
         onStepUpdate,

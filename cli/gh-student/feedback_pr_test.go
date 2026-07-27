@@ -24,6 +24,9 @@ type feedbackPRServer struct {
 	existingPRState string
 	// refExists makes POST /git/refs 422 "Reference already exists".
 	refExists bool
+	// existingBaseSHA is what GET /git/ref/heads/feedback reports when
+	// refExists. Empty means the read 404s (unverifiable base).
+	existingBaseSHA string
 	// headHasDiff makes the FIRST pulls POST succeed immediately (no
 	// zero-diff 422) — the interrupted-prior-accept case where the empty
 	// commit already landed.
@@ -31,16 +34,33 @@ type feedbackPRServer struct {
 	// failPRCreate makes every pulls POST fail 403 (e.g. a fork of the
 	// permissions problem the best-effort contract must absorb).
 	failPRCreate bool
+	// prCreateRace makes the pulls POST 422 "A pull request already exists"
+	// and the NEXT list report one, modelling a concurrent accept that won.
+	prCreateRace bool
+	// failLabelAdd makes POST /issues/{n}/labels fail, so tests can assert a
+	// label failure never fails the step.
+	failLabelAdd bool
+	// prListStates records the `state` query of every base+head PR list, so
+	// tests can prove the any-state short-circuit really asks for state=all.
+	prListStates []string
+	prListBases  []string
+	prListHeads  []string
 
 	refCreates    int
+	refReads      int
 	commitCreates int
 	refPatches    int
 	prCreates     int
 	labelCreates  int
 	labelAdds     int
 
+	// acceptSHAResolves counts lazy accept-SHA resolutions, so a test can prove
+	// the paginated commit-history read is skipped when it isn't needed.
+	acceptSHAResolves int
+
 	lastCommitMessage string
 	lastCommitTree    string
+	lastRefBody       map[string]string
 	lastPRBody        map[string]string
 	lastLabelName     string
 	lastAddedLabels   []string
@@ -52,8 +72,18 @@ func (s *feedbackPRServer) mux(t *testing.T) *http.ServeMux {
 
 	mux.HandleFunc("/repos/o/r/pulls", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			if s.existingPRState != "" {
-				_ = json.NewEncoder(w).Encode([]map[string]any{{"number": 7, "state": s.existingPRState}})
+			q := r.URL.Query()
+			s.prListStates = append(s.prListStates, q.Get("state"))
+			s.prListBases = append(s.prListBases, q.Get("base"))
+			s.prListHeads = append(s.prListHeads, q.Get("head"))
+			// A won race becomes visible only on the re-query after the
+			// failed create.
+			if s.existingPRState != "" || (s.prCreateRace && s.prCreates > 0) {
+				state := s.existingPRState
+				if state == "" {
+					state = "open"
+				}
+				_ = json.NewEncoder(w).Encode([]map[string]any{{"number": 7, "state": state}})
 				return
 			}
 			_ = json.NewEncoder(w).Encode([]map[string]any{})
@@ -71,6 +101,12 @@ func (s *feedbackPRServer) mux(t *testing.T) *http.ServeMux {
 			_, _ = io.WriteString(w, `{"message":"Resource not accessible by integration"}`)
 			return
 		}
+		if s.prCreateRace {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = io.WriteString(w, `{"message":"Validation Failed","errors":[{"resource":"PullRequest","code":"custom","message":"A pull request already exists for o:main."}]}`)
+			return
+		}
 		// First create 422s zero-diff unless the head already moved past the
 		// accept commit (headHasDiff) or the empty commit landed (refPatches).
 		if !s.headHasDiff && s.refPatches == 0 {
@@ -85,6 +121,10 @@ func (s *feedbackPRServer) mux(t *testing.T) *http.ServeMux {
 
 	mux.HandleFunc("/repos/o/r/git/refs", func(w http.ResponseWriter, r *http.Request) {
 		s.refCreates++
+		body, _ := io.ReadAll(r.Body)
+		var ref map[string]string
+		_ = json.Unmarshal(body, &ref)
+		s.lastRefBody = ref
 		if s.refExists {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -93,6 +133,18 @@ func (s *feedbackPRServer) mux(t *testing.T) *http.ServeMux {
 		}
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{"ref": "refs/heads/feedback"})
+	})
+
+	mux.HandleFunc("/repos/o/r/git/ref/heads/feedback", func(w http.ResponseWriter, _ *http.Request) {
+		s.refReads++
+		if s.existingBaseSHA == "" {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"message":"Not Found"}`)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": map[string]string{"sha": s.existingBaseSHA},
+		})
 	})
 
 	mux.HandleFunc("/repos/o/r/git/ref/heads/main", func(w http.ResponseWriter, _ *http.Request) {
@@ -146,6 +198,12 @@ func (s *feedbackPRServer) mux(t *testing.T) *http.ServeMux {
 		}
 		_ = json.Unmarshal(body, &add)
 		s.lastAddedLabels = add.Labels
+		if s.failLabelAdd {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = io.WriteString(w, `{"message":"Resource not accessible by integration"}`)
+			return
+		}
 		_, _ = io.WriteString(w, `[]`)
 	})
 
@@ -158,7 +216,11 @@ func runEnsureFeedbackPR(t *testing.T, s *feedbackPRServer, mode string) error {
 	t.Cleanup(server.Close)
 	client := newTestRESTClient(t, server)
 	var out bytes.Buffer
-	return ensureFeedbackPullRequest(client, ui.NewForced(&out, false), false, "o", "r", "main", "accept-sha", mode)
+	return ensureFeedbackPullRequest(client, ui.NewForced(&out, false), false, "o", "r", "main", mode,
+		func() (string, error) {
+			s.acceptSHAResolves++
+			return "accept-sha", nil
+		})
 }
 
 // TestEnsureFeedbackPullRequest_FreshAccept pins the full accept-time
@@ -231,20 +293,114 @@ func TestEnsureFeedbackPullRequest_ExistingPRIsReadOnly(t *testing.T) {
 				t.Errorf("writes happened on an already-PR'd repo: refs=%d commits=%d patches=%d prs=%d labels=%d/%d",
 					s.refCreates, s.commitCreates, s.refPatches, s.prCreates, s.labelCreates, s.labelAdds)
 			}
+			// The short-circuit only covers a closed/merged PR because the
+			// query asks for every state; state=open would silently reopen the
+			// duplicate-PR hole.
+			if len(s.prListStates) == 0 || s.prListStates[0] != "all" {
+				t.Errorf("PR lookup used state=%v, want state=all", s.prListStates)
+			}
+			if s.prListBases[0] != contract.FeedbackBaseBranch {
+				t.Errorf("PR lookup base = %q, want %q", s.prListBases[0], contract.FeedbackBaseBranch)
+			}
+			if s.prListHeads[0] != "o:main" {
+				t.Errorf("PR lookup head = %q, want the owner-qualified o:main", s.prListHeads[0])
+			}
+			// The accept SHA costs a paginated commit-history read, so it must
+			// not be resolved on the path that short-circuits without it.
+			if s.acceptSHAResolves != 0 {
+				t.Errorf("accept SHA resolved %d times on an already-PR'd repo, want 0", s.acceptSHAResolves)
+			}
 		})
 	}
 }
 
-// TestEnsureFeedbackPullRequest_RefExistsIsTolerated pins the heal path: the
-// feedback branch surviving a prior interrupted run (or created by the
-// runner) is not an error; the flow continues to the PR create.
-func TestEnsureFeedbackPullRequest_RefExistsIsTolerated(t *testing.T) {
-	s := &feedbackPRServer{refExists: true}
+// TestEnsureFeedbackPullRequest_RefExistsAtAcceptSHAIsTolerated pins the heal
+// path: a feedback branch surviving a prior interrupted run (or created by the
+// runner) at the SAME accept commit is not an error; the flow continues to the
+// PR create.
+func TestEnsureFeedbackPullRequest_RefExistsAtAcceptSHAIsTolerated(t *testing.T) {
+	s := &feedbackPRServer{refExists: true, existingBaseSHA: "accept-sha"}
 	if err := runEnsureFeedbackPR(t, s, contract.ModeIndividual); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if s.refReads == 0 {
+		t.Error("existing feedback ref was adopted without reading its SHA back")
+	}
 	if s.prCreates == 0 {
 		t.Error("PR was never created after tolerating the existing ref")
+	}
+}
+
+// TestEnsureFeedbackPullRequest_RefExistsAtWrongSHAIsRefused is the
+// poisoned-base guard. The org ruleset locks updates and deletion but leaves
+// creation open, so a student can pre-create `feedback` at their finished HEAD;
+// opening the PR there would show the teacher an empty grading diff. Mirrors
+// the runner's `existing != base_sha` refusal.
+func TestEnsureFeedbackPullRequest_RefExistsAtWrongSHAIsRefused(t *testing.T) {
+	s := &feedbackPRServer{refExists: true, existingBaseSHA: "student-chosen-sha"}
+	err := runEnsureFeedbackPR(t, s, contract.ModeIndividual)
+	if err == nil {
+		t.Fatal("want an error when feedback points at a commit other than the accept SHA, got nil")
+	}
+	if !strings.Contains(err.Error(), "student-chosen-sha") {
+		t.Errorf("error should name the unexpected base SHA, got %v", err)
+	}
+	if s.prCreates != 0 {
+		t.Errorf("PR created (%d times) over an unverified base", s.prCreates)
+	}
+}
+
+// TestEnsureFeedbackPullRequest_UnreadableRefIsRefused pins that an
+// unverifiable base is treated like a wrong one: the read failing (403/5xx) must
+// not be read as "matches". Same rule as the runner's existing_base_sha, which
+// raises on anything but a genuine 404.
+func TestEnsureFeedbackPullRequest_UnreadableRefIsRefused(t *testing.T) {
+	s := &feedbackPRServer{refExists: true} // existingBaseSHA empty -> read 404s
+	if err := runEnsureFeedbackPR(t, s, contract.ModeIndividual); err == nil {
+		t.Fatal("want an error when the existing feedback ref can't be read, got nil")
+	}
+	if s.prCreates != 0 {
+		t.Errorf("PR created (%d times) over an unreadable base", s.prCreates)
+	}
+}
+
+// TestEnsureFeedbackPullRequest_FreezesBaseAtAcceptSHA pins the ref body: the
+// base must be frozen at the accept commit, since the runner verifies exactly
+// that SHA before it will maintain the PR.
+func TestEnsureFeedbackPullRequest_FreezesBaseAtAcceptSHA(t *testing.T) {
+	s := &feedbackPRServer{}
+	if err := runEnsureFeedbackPR(t, s, contract.ModeIndividual); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := s.lastRefBody["ref"]; got != "refs/heads/"+contract.FeedbackBaseBranch {
+		t.Errorf("created ref = %q, want refs/heads/%s", got, contract.FeedbackBaseBranch)
+	}
+	if got := s.lastRefBody["sha"]; got != "accept-sha" {
+		t.Errorf("feedback base frozen at %q, want the accept commit accept-sha", got)
+	}
+}
+
+// TestEnsureFeedbackPullRequest_LostCreateRaceIsNotAFailure pins the
+// concurrent-accept case (two group members, or a re-accept racing the runner):
+// the loser gets GitHub's "A pull request already exists" 422, and re-querying
+// finds the PR, so the student is never told nothing was opened.
+func TestEnsureFeedbackPullRequest_LostCreateRaceIsNotAFailure(t *testing.T) {
+	s := &feedbackPRServer{prCreateRace: true, headHasDiff: true}
+	if err := runEnsureFeedbackPR(t, s, contract.ModeIndividual); err != nil {
+		t.Fatalf("a lost create race must resolve as success, got %v", err)
+	}
+}
+
+// TestEnsureFeedbackPullRequest_LabelFailureDoesNotFailTheStep pins the
+// best-effort label: the PR is in place, so a label failure is reported but
+// never returned.
+func TestEnsureFeedbackPullRequest_LabelFailureDoesNotFailTheStep(t *testing.T) {
+	s := &feedbackPRServer{failLabelAdd: true}
+	if err := runEnsureFeedbackPR(t, s, contract.ModeIndividual); err != nil {
+		t.Fatalf("a label failure must not fail the step, got %v", err)
+	}
+	if s.labelAdds == 0 {
+		t.Error("label add was never attempted")
 	}
 }
 
@@ -328,6 +484,48 @@ func TestAcceptCommitSHA(t *testing.T) {
 	}
 	if sha != "accept-sha" {
 		t.Errorf("acceptCommitSHA = %q, want the OLDEST commit accept-sha", sha)
+	}
+}
+
+// TestAcceptCommitSHA_PaginatesToTheOldestCommit pins the page walk. A single
+// full page would hand back a NEWER commit as the "accept commit", freezing the
+// feedback base where the runner's baseline_sha() disagrees — which strands the
+// PR behind the runner's poisoned-base refusal for the repo's whole life.
+func TestAcceptCommitSHA_PaginatesToTheOldestCommit(t *testing.T) {
+	var server *httptest.Server
+	mux := http.NewServeMux()
+	var requests int
+	mux.HandleFunc("/repos/o/r/commits", func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Query().Get("cursor") == "two" {
+			// Final page, no Link rel=next -> the walk stops here.
+			_ = json.NewEncoder(w).Encode([]map[string]string{
+				{"sha": "older"}, {"sha": "accept-sha"},
+			})
+			return
+		}
+		// A FULL first page advertising the next one, exactly as GitHub replies
+		// when the marker's history exceeds a page.
+		w.Header().Set("Link", `<`+server.URL+`/repos/o/r/commits?cursor=two>; rel="next"`)
+		full := make([]map[string]string, 100)
+		for i := range full {
+			full[i] = map[string]string{"sha": "newer"}
+		}
+		_ = json.NewEncoder(w).Encode(full)
+	})
+	server = httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := newTestRESTClient(t, server)
+
+	sha, err := acceptCommitSHA(client, "o", "r")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sha != "accept-sha" {
+		t.Errorf("acceptCommitSHA = %q, want the oldest commit accept-sha across pages", sha)
+	}
+	if requests < 2 {
+		t.Errorf("only %d request(s); a full page must be followed to its next page", requests)
 	}
 }
 

@@ -200,12 +200,14 @@ func TestFeedbackLabelForMode(t *testing.T) {
 	}
 }
 
-// TestFeedbackPRBody pins the body's load-bearing properties rather than the
-// full prose (byte-parity with ensure_feedback_pr.py's pr_body is asserted by
-// gh-teacher's skeleton parity test, which can read the Python source): the
-// release URL MUST be embedded — the runner's backfill_release_link()
-// rewrites any open Feedback PR whose body lacks it, clobbering an
-// accept-time body without it — and the head branch and frozen base are named.
+// TestFeedbackPRBody pins the body BYTE-for-byte against the cross-language
+// golden that gh-teacher's skeleton test (Python) and the web suite (TypeScript)
+// assert against too, so a one-sided prose edit fails on every side. It also
+// re-states the load-bearing properties, since the golden alone would not say
+// WHY they matter: the release URL MUST be embedded — the runner's
+// backfill_release_link() rewrites any open Feedback PR whose body lacks it,
+// clobbering an accept-time body without it — and the head branch and frozen
+// base are named.
 func TestFeedbackPRBody(t *testing.T) {
 	body := FeedbackPRBody("main", "https://github.com/o/r/releases/latest")
 	for _, want := range []string{
@@ -218,4 +220,17 @@ func TestFeedbackPRBody(t *testing.T) {
 			t.Errorf("FeedbackPRBody missing %q", want)
 		}
 	}
+
+	golden, err := os.ReadFile(filepath.Clean(feedbackPRBodyGoldenPath))
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+	if got := FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL"); got != string(golden) {
+		t.Errorf("FeedbackPRBody no longer matches %s; if intentional, update pr_body in ensure_feedback_pr.py and feedbackPrBody in web/src/domain/assignments/feedbackPr.ts too, then regenerate the golden",
+			feedbackPRBodyGoldenPath)
+	}
 }
+
+// feedbackPRBodyGoldenPath locates the rendered-body golden, also consumed by
+// the Python (skeleton_tests) and TypeScript (web) mirror tests.
+const feedbackPRBodyGoldenPath = "testdata/feedback_pr_body.golden"

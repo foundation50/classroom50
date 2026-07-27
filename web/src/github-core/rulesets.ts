@@ -8,12 +8,11 @@ import type { GitHubClient } from "./client"
 import { paginateAll } from "./paginate"
 import type { CheckVerdict } from "./orgChecks"
 import { readFailedDetail } from "./orgChecks"
+import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
 
 const log = logger.scope(LOG_SCOPE_GITHUB_SETUP)
-
-const FEEDBACK_BASE_BRANCH = "feedback"
 
 export const RULESET_NAME_SUBMISSION_HISTORY =
   "classroom50-protect-submission-history"

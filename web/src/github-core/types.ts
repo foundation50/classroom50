@@ -287,3 +287,13 @@ export type GitHubTreeResponse = {
   }>
   truncated: boolean
 }
+
+export type GitHubPullRequest = {
+  number: number
+  html_url: string
+  state: "open" | "closed"
+  title: string
+  draft?: boolean
+  head: { ref: string }
+  base: { ref: string }
+}

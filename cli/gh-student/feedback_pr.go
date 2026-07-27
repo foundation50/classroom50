@@ -5,34 +5,88 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
-	"strings"
+	"time"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/classroom50-cli-shared/ghutil"
+	"github.com/foundation50/gh-student/internal/classroomcfg"
 	"github.com/foundation50/gh-student/internal/githubapi"
 	"github.com/foundation50/gh-student/internal/ui"
 )
 
 // ensureFeedbackPullRequest opens the assignment's Feedback PR at accept time
-// (issue #228): base = the frozen `feedback` branch at the accept commit, head
-// = the repo's default branch. Creating it here — with the student's own token
-// — means the PR exists even when GitHub Actions is disabled; when Actions IS
-// on, the autograde runner (ensure_feedback_pr.py) discovers the PR by
-// base+head and adopts it instead of creating its own.
+// (issue #228) — base = the frozen `feedback` branch at the accept commit, head
+// = the repo's default branch — retrying the whole idempotent sequence through
+// GitHub's post-create git-data lag.
 //
-// Best-effort BY CONTRACT: every failure returns an error for the caller to
-// warn on, never to fail the accept — a classroom bootstrapped by an older
-// `gh teacher init` (no feedback-base ruleset), a permissions oddity, or a
-// race with an instant first push must not break accepting. The runner
-// remains the fallback creator on the first submission.
-//
-// Idempotent: a PR in ANY state (open/closed/merged) short-circuits before
-// any write, so a re-accept never duplicates the PR or its empty commit, and
-// never reopens a PR a teacher or the runner has since closed/merged.
+// Creating it with the student's own token is what makes the PR exist when
+// GitHub Actions is disabled; when Actions IS on, the autograde runner
+// (ensure_feedback_pr.py) finds this PR by base+head and adopts it. Every
+// failure returns an error for the caller to warn on, never to fail the accept.
 //
 // Mirrors the GUI's ensureFeedbackPullRequest
 // (web/src/domain/assignments/feedbackPr.ts) — keep behavior in lockstep.
-func ensureFeedbackPullRequest(client githubapi.Client, u *ui.UI, verbose bool, org, repoName, branch, acceptSHA, mode string) error {
+//
+// resolveAcceptSHA is called lazily: on the dominant re-accept path a PR already
+// exists, and resolving the SHA costs a paginated commit-history read whose
+// result would be discarded.
+func ensureFeedbackPullRequest(client githubapi.Client, u *ui.UI, verbose bool, org, repoName, branch, mode string, resolveAcceptSHA func() (string, error)) error {
+	acceptSHA := memoizeSHA(resolveAcceptSHA)
+	var lastErr error
+	for attempt := range feedbackPRAttempts {
+		err := tryEnsureFeedbackPullRequest(client, u, verbose, org, repoName, branch, mode, acceptSHA)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if !isFeedbackPRRetryable(err) {
+			return err
+		}
+		if attempt < feedbackPRAttempts-1 {
+			time.Sleep(ghutil.BackoffDelay(attempt))
+		}
+	}
+	return lastErr
+}
+
+// memoizeSHA resolves at most once across the retry attempts, so a retry never
+// re-reads the commit history. A failed resolution is not cached — it is one of
+// the transient conditions the retry exists for.
+func memoizeSHA(resolve func() (string, error)) func() (string, error) {
+	var cached string
+	return func() (string, error) {
+		if cached != "" {
+			return cached, nil
+		}
+		sha, err := resolve()
+		if err != nil {
+			return "", err
+		}
+		cached = sha
+		return sha, nil
+	}
+}
+
+// feedbackPRAttempts / isFeedbackPRRetryable bound retries of the whole ensure
+// against GitHub's post-create git-data lag — the same window DropFiles rides
+// out with commitFilesAttempts and verifyProvisioned polls through. Without it
+// one transient 404/409/5xx leaves no PR at all, which in an Actions-disabled
+// classroom is permanent. The ensure is idempotent (a PR in any state
+// short-circuits, the base ref tolerates already-exists), so a retry after a
+// partial write is safe.
+const feedbackPRAttempts = 3
+
+func isFeedbackPRRetryable(err error) bool {
+	if ghutil.IsHTTPNotFound(err) || ghutil.IsHTTPStatus(err, http.StatusConflict) {
+		return true
+	}
+	httpErr, ok := errors.AsType[*githubapi.HTTPError](err)
+	return ok && httpErr.StatusCode >= 500
+}
+
+func tryEnsureFeedbackPullRequest(client githubapi.Client, u *ui.UI, verbose bool, org, repoName, branch, mode string, resolveAcceptSHA func() (string, error)) error {
 	if exists, err := feedbackPRExists(client, org, repoName, branch); err != nil {
 		return err
 	} else if exists {
@@ -42,6 +96,10 @@ func ensureFeedbackPullRequest(client githubapi.Client, u *ui.UI, verbose bool, 
 		return nil
 	}
 
+	acceptSHA, err := resolveAcceptSHA()
+	if err != nil {
+		return err
+	}
 	if err := createFeedbackBaseRef(client, org, repoName, acceptSHA); err != nil {
 		return err
 	}
@@ -49,7 +107,7 @@ func ensureFeedbackPullRequest(client githubapi.Client, u *ui.UI, verbose bool, 
 	prNumber, err := createFeedbackPR(client, org, repoName, branch)
 	if err != nil {
 		if !isNoCommitsBetween(err) {
-			return err
+			return feedbackPRRaceOr(client, org, repoName, branch, err)
 		}
 		// Zero diff at accept time is the normal case: GitHub refuses a PR
 		// with no commits between base and head, so land one empty commit
@@ -62,16 +120,79 @@ func ensureFeedbackPullRequest(client githubapi.Client, u *ui.UI, verbose bool, 
 		}
 		prNumber, err = createFeedbackPR(client, org, repoName, branch)
 		if err != nil {
-			return err
+			return feedbackPRRaceOr(client, org, repoName, branch, err)
 		}
 	}
 
 	// Label best-effort (mirrors the runner's check=False label step): the PR
-	// is in place, so a label failure is detail-level, not warn-level.
-	if err := labelFeedbackPR(client, org, repoName, prNumber, mode); err != nil && verbose {
+	// is in place, so a label failure never fails the step. Reported
+	// unconditionally, not just under --verbose — the runner's adoption path
+	// only reopens and backfills the body, so it never repairs a missing
+	// label, leaving an unlabeled PR nobody knows about.
+	if err := labelFeedbackPR(client, org, repoName, prNumber, mode); err != nil {
 		u.Detail("could not label feedback PR #%d on %s/%s: %v", prNumber, org, repoName, err)
 	}
 	return nil
+}
+
+// feedbackPRRaceOr swallows createErr when the PR turns out to exist after all.
+// Two concurrent accepts (group members, or a re-accept racing the runner) can
+// both pass the existence probe; the loser gets GitHub's "A pull request
+// already exists" 422 and would otherwise warn the student that nothing was
+// opened. Mirrors the runner's existing_pr_url re-query. The original error
+// survives when the re-query finds nothing (or itself fails), so a genuine
+// failure is never masked.
+func feedbackPRRaceOr(client githubapi.Client, org, repoName, branch string, createErr error) error {
+	if exists, err := feedbackPRExists(client, org, repoName, branch); err == nil && exists {
+		return nil
+	}
+	return createErr
+}
+
+// openFeedbackPRStep runs the accept-time Feedback PR creation behind a
+// spinner, converting any failure into a warning (the accept has already
+// succeeded). Split out so both the fresh-provision and the healthy
+// already-accepted paths report it identically.
+func openFeedbackPRStep(client githubapi.Client, u *ui.UI, verbose bool, p acceptRepoParams, resolveAcceptSHA func() (string, error)) {
+	const msg = "Opening feedback pull request"
+	sp := u.Spinner(msg)
+	sp.Start()
+	if err := ensureFeedbackPullRequest(client, u, verbose, p.org, p.repoName, p.branch, p.mode, resolveAcceptSHA); err != nil {
+		sp.Fail(msg)
+		u.Warn("%s: %v", feedbackPRDeferredHint, err)
+		return
+	}
+	sp.Stop("Feedback pull request ready")
+}
+
+// feedbackPRDeferredHint names the remedy the student actually controls.
+// Pointing only at "your first submission" would be false in exactly the
+// Actions-disabled classroom this feature exists for — the runner never runs
+// there, so re-accepting is the only route. Mirrors the GUI's deferred message.
+const feedbackPRDeferredHint = "could not open the Feedback PR now; run accept again to retry (or it opens on your first submission if autograding is enabled)"
+
+// acceptCommitSHA recovers the accept commit — the earliest commit touching
+// the .classroom50.yaml marker — for a repo provisioned by an earlier accept.
+// Same resolution rule as the runner's baseline_sha(), so the feedback base
+// frozen here matches what the runner later verifies; a mismatch would strand
+// the PR behind the runner's poisoned-base refusal, so the history is walked to
+// exhaustion rather than trusting one page.
+func acceptCommitSHA(client githubapi.Client, org, repoName string) (string, error) {
+	commits, err := githubapi.PaginateAll[struct {
+		SHA string `json:"sha"`
+	}](client, 100, 100, func(page int) string {
+		return fmt.Sprintf("repos/%s/%s/commits?path=%s&per_page=100&page=%d",
+			url.PathEscape(org), url.PathEscape(repoName),
+			url.QueryEscape(classroomcfg.MetadataPath), page)
+	}, nil)
+	if err != nil {
+		return "", err
+	}
+	if len(commits) == 0 {
+		return "", fmt.Errorf("no commits touch %s in %s/%s", classroomcfg.MetadataPath, org, repoName)
+	}
+	// Newest-first, so the last entry is the accept commit.
+	return commits[len(commits)-1].SHA, nil
 }
 
 // feedbackPRExists reports whether a Feedback PR (base=feedback, head=branch)
@@ -93,8 +214,16 @@ func feedbackPRExists(client githubapi.Client, org, repoName, branch string) (bo
 
 // createFeedbackBaseRef freezes the `feedback` branch at the accept commit —
 // the same baseline the runner resolves from the .classroom50.yaml marker, so
-// its base-SHA check adopts this branch as its own. "Reference already
-// exists" is a healthy re-run (or the runner got there first), not an error.
+// its base-SHA check adopts this branch as its own.
+//
+// An already-existing ref is only adopted once it is READ BACK at acceptSHA.
+// The ruleset gh teacher init deploys locks updates and deletion but leaves
+// creation open, so a student can pre-create `feedback` at a commit of their
+// choosing; opening the PR over that base would hand the teacher a grading
+// diff the student picked. A mismatch therefore errors out (the caller
+// downgrades it to a warning) and defers to the runner, whose
+// existing_base_sha check refuses the same case and reports it as a failing
+// commit status an org admin can act on.
 func createFeedbackBaseRef(client githubapi.Client, org, repoName, acceptSHA string) error {
 	body, err := json.Marshal(map[string]string{
 		"ref": "refs/heads/" + contract.FeedbackBaseBranch,
@@ -106,11 +235,44 @@ func createFeedbackBaseRef(client githubapi.Client, org, repoName, acceptSHA str
 	path := fmt.Sprintf("repos/%s/%s/git/refs", url.PathEscape(org), url.PathEscape(repoName))
 	if err := client.Post(path, bytes.NewReader(body), nil); err != nil {
 		if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok && is422AlreadyExists(httpErr) {
-			return nil
+			return verifyFeedbackBaseRef(client, org, repoName, acceptSHA)
 		}
 		return fmt.Errorf("POST %s: %w", path, err)
 	}
 	return nil
+}
+
+// verifyFeedbackBaseRef confirms the existing `feedback` branch points at
+// acceptSHA. A read failure is NOT treated as a match: an unverifiable base is
+// as unsafe as a wrong one (same rule as the runner's existing_base_sha, which
+// raises on anything but a genuine 404).
+func verifyFeedbackBaseRef(client githubapi.Client, org, repoName, acceptSHA string) error {
+	sha, err := branchTipSHA(client, org, repoName, contract.FeedbackBaseBranch)
+	if err != nil {
+		return err
+	}
+	if sha != acceptSHA {
+		return fmt.Errorf("%s branch is at %s, not the expected baseline %s — an org admin must delete it so it can be re-frozen correctly",
+			contract.FeedbackBaseBranch, sha, acceptSHA)
+	}
+	return nil
+}
+
+// branchTipSHA reads one branch's tip. Uses the SINGULAR git/ref/heads/<branch>
+// endpoint: the plural form matches by prefix and returns an array, so a branch
+// whose name prefixes another would silently resolve to the wrong ref.
+func branchTipSHA(client githubapi.Client, org, repoName, branch string) (string, error) {
+	path := fmt.Sprintf("repos/%s/%s/git/ref/heads/%s",
+		url.PathEscape(org), url.PathEscape(repoName), url.PathEscape(branch))
+	var ref struct {
+		Object struct {
+			SHA string `json:"sha"`
+		} `json:"object"`
+	}
+	if err := client.Get(path, &ref); err != nil {
+		return "", fmt.Errorf("GET %s: %w", path, err)
+	}
+	return ref.Object.SHA, nil
 }
 
 // createFeedbackPR opens the Feedback PR and returns its number. Title and
@@ -138,22 +300,11 @@ func createFeedbackPR(client githubapi.Client, org, repoName, branch string) (in
 }
 
 // isNoCommitsBetween matches GitHub's 422 refusal of a zero-diff PR ("No
-// commits between feedback and main"). Message-substring matching is the only
-// discriminator GitHub offers — the errors[].code is the generic "custom".
+// commits between feedback and main") — the accept-time signal to land the
+// empty commit and retry.
 func isNoCommitsBetween(err error) bool {
 	httpErr, ok := errors.AsType[*githubapi.HTTPError](err)
-	if !ok {
-		return false
-	}
-	if strings.Contains(strings.ToLower(httpErr.Message), "no commits between") {
-		return true
-	}
-	for _, item := range httpErr.Errors {
-		if strings.Contains(strings.ToLower(item.Message), "no commits between") {
-			return true
-		}
-	}
-	return false
+	return ok && has422Message(httpErr, "no commits between")
 }
 
 // pushFeedbackEmptyCommit fast-forwards `branch` by one empty commit (same
@@ -162,19 +313,13 @@ func isNoCommitsBetween(err error) bool {
 // push means the runner will open the PR on that submission instead —
 // overwriting their work is never acceptable.
 func pushFeedbackEmptyCommit(client githubapi.Client, org, repoName, branch string) error {
-	refPath := fmt.Sprintf("repos/%s/%s/git/ref/heads/%s",
-		url.PathEscape(org), url.PathEscape(repoName), url.PathEscape(branch))
-	var ref struct {
-		Object struct {
-			SHA string `json:"sha"`
-		} `json:"object"`
-	}
-	if err := client.Get(refPath, &ref); err != nil {
-		return fmt.Errorf("GET %s: %w", refPath, err)
+	headSHA, err := branchTipSHA(client, org, repoName, branch)
+	if err != nil {
+		return err
 	}
 
 	commitPath := fmt.Sprintf("repos/%s/%s/git/commits/%s",
-		url.PathEscape(org), url.PathEscape(repoName), url.PathEscape(ref.Object.SHA))
+		url.PathEscape(org), url.PathEscape(repoName), url.PathEscape(headSHA))
 	var head struct {
 		Tree struct {
 			SHA string `json:"sha"`
@@ -187,7 +332,7 @@ func pushFeedbackEmptyCommit(client githubapi.Client, org, repoName, branch stri
 	createBody, err := json.Marshal(map[string]any{
 		"message": contract.FeedbackOpenCommitMessage(),
 		"tree":    head.Tree.SHA,
-		"parents": []string{ref.Object.SHA},
+		"parents": []string{headSHA},
 	})
 	if err != nil {
 		return fmt.Errorf("encoding empty commit body: %w", err)
