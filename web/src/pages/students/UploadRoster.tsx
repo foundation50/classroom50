@@ -254,6 +254,9 @@ const UploadRoster = ({
     for (const c of preflight?.roleChanges ?? []) {
       if (c.changes.length > 0) map[c.username.toLowerCase()] = c.changes
     }
+    for (const e of preflight?.enroll ?? []) {
+      if (e.changes.length > 0) map[e.username.toLowerCase()] = e.changes
+    }
     return map
   }, [preflight])
   // Per-username role change (current -> CSV role) to highlight the Role cell,
@@ -290,9 +293,9 @@ const UploadRoster = ({
     (preflight?.needsInvite.length ?? 0) +
       (preflight?.enroll.length ?? 0) +
       (preflight?.roleChanges.length ?? 0) +
-      (preflight?.metadataUpdate?.length ?? 0) >
+      (preflight?.metadataUpdate.length ?? 0) >
     0
-  const needsMetadataConfirm = (preflight?.metadataUpdate?.length ?? 0) > 0
+  const needsMetadataConfirm = (preflight?.metadataUpdate.length ?? 0) > 0
   // Show the detailed table when the teacher opened it, when a confirmation is
   // pending (so the highlighted role/detail changes are visible to confirm), or
   // when the preflight found NO actionable changes — so the teacher still sees
@@ -320,7 +323,7 @@ const UploadRoster = ({
     !willSendInvites &&
     (preflight?.enroll.length ?? 0) === 0 &&
     (preflight?.roleChanges.length ?? 0) === 0 &&
-    (preflight?.metadataUpdate?.length ?? 0) > 0
+    (preflight?.metadataUpdate.length ?? 0) > 0
   const rosterPrimaryLabel = willSendInvites
     ? t("students.importAndInviteMembers", { count: rows.length })
     : preflight
@@ -637,7 +640,7 @@ const UploadRoster = ({
                   roleChangesConfirmed={roleChangesConfirmed}
                   onRoleChangesConfirmedChange={setRoleChangesConfirmed}
                   needsMetadataConfirm={needsMetadataConfirm}
-                  metadataUpdateCount={preflight.metadataUpdate?.length ?? 0}
+                  metadataUpdateCount={preflight.metadataUpdate.length}
                   metadataConfirmed={metadataConfirmed}
                   onMetadataConfirmedChange={setMetadataConfirmed}
                 />

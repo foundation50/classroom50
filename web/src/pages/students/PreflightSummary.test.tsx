@@ -40,7 +40,15 @@ describe("summarizePreflight", () => {
     const s = summarizePreflight(
       result({
         needsInvite: [{ kind: "needs_invite", username: "a", role: "student" }],
-        enroll: [{ kind: "enroll", username: "b", role: "student" }],
+        enroll: [
+          {
+            kind: "enroll",
+            username: "b",
+            role: "student",
+            changedFields: [],
+            changes: [],
+          },
+        ],
         metadataUpdate: [
           {
             kind: "metadata_update",

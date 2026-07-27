@@ -2,6 +2,7 @@ import type { BadgeTone } from "@/types/badgeTone"
 import { ROLE_RANK, sortRolesByRank, type ClassroomRole } from "@/authz"
 import type { StaffRole } from "@/types/classroom"
 import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
+import type { MetadataField } from "@/util/rosterMetadataMerge"
 
 // Single source of truth for how a classroom role is presented and ranked.
 // Shared by the Roster view and the classroom Settings staff section so the two
@@ -65,6 +66,16 @@ export const STATE_LABEL_KEY: Record<TeamRosterRowState, string> = {
   pending: "students.statusPending",
   needs_attention_in_org: "students.statusNeedsAttentionInOrg",
   needs_attention_not_in_org: "students.statusNeedsAttentionNotInOrg",
+}
+
+// i18n label key per updatable roster metadata field, used by the CSV import
+// preview's per-cell change tooltip. Kept here beside the other label maps so
+// the field->label mapping has one home rather than living inline in a page.
+export const METADATA_FIELD_LABEL_KEY: Record<MetadataField, string> = {
+  first_name: "students.firstNameColumn",
+  last_name: "students.lastNameColumn",
+  email: "students.emailColumn",
+  section: "students.sectionColumn",
 }
 
 // Whether a row carries a student enrollment (a roster.csv row + student-team

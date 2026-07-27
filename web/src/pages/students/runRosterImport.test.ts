@@ -256,6 +256,35 @@ describe("runRosterImport — metadata writeback", () => {
     expect(arg.updates.map((u) => u.username)).toEqual(["carol"])
   })
 
+  it("folds an enroll row that carries a metadata delta into the update set", async () => {
+    updateClassroomMetadata.mockResolvedValueOnce({ changed: 1 })
+    await call({
+      rows: [{ username: "dave", email: "d@x.edu" }],
+      rolesByUser: { dave: "student" },
+      plan: {
+        allAlreadyMembers: true,
+        needsInvite: [],
+        noAction: [],
+        metadataUpdate: [],
+        roleChanges: [],
+        enroll: [
+          {
+            kind: "enroll",
+            username: "dave",
+            role: "student",
+            changedFields: ["email"],
+            changes: [{ field: "email", from: "old@x.edu", to: "d@x.edu" }],
+          },
+        ],
+      },
+    })
+    expect(updateClassroomMetadata).toHaveBeenCalledOnce()
+    const arg = updateClassroomMetadata.mock.calls[0][1] as {
+      updates: { username: string }[]
+    }
+    expect(arg.updates.map((u) => u.username)).toEqual(["dave"])
+  })
+
   it("does NOT write metadata for a role-changed row with no metadata delta", async () => {
     // A pure team move (no CSV metadata change) must never enter the metadata
     // write — otherwise an unrelated malformed roster row could surface a
@@ -311,7 +340,14 @@ describe("runRosterImport — confirmed team moves", () => {
             changes: [],
           },
         ],
-        enroll: [{ username: "dave", role: "student" }],
+        enroll: [
+          {
+            username: "dave",
+            role: "student",
+            changedFields: [],
+            changes: [],
+          },
+        ],
       },
     })
     expect(out.ok).toBe(true)
@@ -345,7 +381,14 @@ describe("runRosterImport — confirmed team moves", () => {
             changes: [],
           },
         ],
-        enroll: [{ username: "dave", role: "student" }],
+        enroll: [
+          {
+            username: "dave",
+            role: "student",
+            changedFields: [],
+            changes: [],
+          },
+        ],
       },
     })
     expect(out.ok).toBe(true)

@@ -2,25 +2,42 @@ import type { GitHubClient } from "@/github-core/client"
 import {
   addUserToTeam,
   cancelOrgInvitation,
+  createGitCommit,
+  createGitTree,
   ensureClassroomRoleTeam,
   grantTeamConfigRepoAccess,
   resendOrgInvitation,
+  updateRef,
   type GitTreeEntry,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   getRawFile,
+  getRawFileWithFallbackSource,
   listTeamInvitations,
   listTeamMembers,
   sleep,
 } from "@/github-core/queries"
-import { getClassroomJson } from "@/github-core/configRepoReads"
+import {
+  getBranchRef,
+  getClassroomJson,
+  getCommit,
+  getConfigRepoBranch,
+} from "@/github-core/configRepoReads"
 import {
   GitHubAPIError,
   isDefinitiveGitHubStatus,
   tolerateGitHubError,
 } from "@/github-core/errors"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { prefixCommit } from "@/util/commit"
+import {
+  formatRosterProblems,
+  parseRosterCsv,
+  stringifyStudentsCsv,
+  type StudentCsvRow,
+} from "@/util/rosterCsv"
+import { withGitConflictRetry } from "../classrooms"
 import {
   ROLE_RANK,
   githubOrgRoleForRole,
@@ -29,7 +46,6 @@ import {
 import { isTeacherRole } from "@/authz"
 import { classroomTeamSlug, resolveClassroomRoleSlug } from "@/util/teamSlug"
 import { STAFF_ROLES, type StaffRole, type Student } from "@/types/classroom"
-import type { StudentCsvRow } from "@/util/rosterCsv"
 import { logger } from "@/lib/logger"
 
 export const log = logger.scope("mutations:students")
@@ -55,6 +71,63 @@ export function rosterWriteTree(
     })
   }
   return tree
+}
+
+// The conflict-safe roster.csv read-modify-write shared by the roster writers
+// (writeClassroomRoles, updateClassroomMetadata). Runs inside withGitConflictRetry:
+// reads the config branch/ref/commit, reads roster.csv with the legacy fallback,
+// parses it tolerantly and REFUSES a malformed file with a typed
+// RosterCsvMalformedError (a positional re-serialize would corrupt the bad row),
+// then hands the parsed rows to `mutate`. `mutate` returns the next rows plus how
+// many changed and the commit message; when `changed === 0` no commit is made.
+// The formula-injection guard + canonical column order come from
+// stringifyStudentsCsv. Callers own their own identity/field-diff logic and the
+// archived-classroom guard.
+export async function withRosterRewrite(
+  client: GitHubClient,
+  input: { org: string; classroom: string },
+  mutate: (rows: StudentCsvRow[]) => {
+    nextStudents: StudentCsvRow[]
+    changed: number
+    message: string
+  },
+): Promise<{ changed: number }> {
+  const { org, classroom } = input
+  return withGitConflictRetry(async () => {
+    const configBranch = await getConfigRepoBranch(client, org)
+    const ref = await getBranchRef(client, org, configBranch)
+    const commit = await getCommit(client, org, ref.object.sha)
+    const currentCsv = await getRawFileWithFallbackSource(client, {
+      org,
+      path: rosterPath(classroom),
+      fallbackPath: legacyRosterPath(classroom),
+      ref: ref.object.sha,
+    })
+    const { rows: currentStudents, problems } = parseRosterCsv(
+      currentCsv.content,
+    )
+    if (problems.length > 0) {
+      throw new RosterCsvMalformedError(formatRosterProblems(problems))
+    }
+
+    const { nextStudents, changed, message } = mutate(currentStudents)
+    if (changed === 0) return { changed: 0 }
+
+    const nextCsv = stringifyStudentsCsv(nextStudents)
+    const tree = await createGitTree(client, {
+      org,
+      base_tree: commit.tree.sha,
+      tree: rosterWriteTree(classroom, nextCsv, currentCsv.fromLegacy),
+    })
+    const newCommit = await createGitCommit(client, {
+      org,
+      message: prefixCommit(message),
+      tree_sha: tree.sha,
+      parents: [ref.object.sha],
+    })
+    await updateRef(client, org, newCommit.sha, configBranch)
+    return { changed }
+  })
 }
 
 // Slug is authoritative in classroom.json: GitHub may assign a non-derived slug

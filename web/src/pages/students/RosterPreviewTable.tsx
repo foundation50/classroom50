@@ -2,7 +2,10 @@ import { useTranslation } from "react-i18next"
 import { Select } from "@/components/ui"
 import type { ImportRosterRow } from "@/domain/students"
 import type { ClassroomRole } from "@/util/teamRoster"
-import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
+import {
+  ROLE_LABEL_KEY,
+  METADATA_FIELD_LABEL_KEY,
+} from "@/util/classroomRoleUI"
 import type { MetadataField } from "@/util/rosterMetadataMerge"
 import type { MetadataChange } from "@/util/rosterUploadPreflight"
 import { coerceImportRole } from "./rosterImportParse"
@@ -26,14 +29,6 @@ const CHANGED_CELL_CLASS =
   "bg-warning/25 font-semibold text-base-content ring-1 ring-inset ring-warning/50"
 const CHANGED_TOOLTIP_CLASS =
   "tooltip tooltip-warning cursor-help whitespace-pre-line"
-
-// i18n label key per updatable metadata field, so the tooltip labels each field.
-const METADATA_FIELD_LABEL_KEY: Record<MetadataField, string> = {
-  first_name: "students.firstNameColumn",
-  last_name: "students.lastNameColumn",
-  email: "students.emailColumn",
-  section: "students.sectionColumn",
-}
 
 // The Name column merges first_name + last_name, so a change to EITHER highlights
 // that one cell.

@@ -217,8 +217,9 @@ export async function runRosterImport(
   //    preflight flagged with a metadata delta. Two sources contribute, and BOTH
   //    are surfaced in the preview and confirmed before we get here:
   //      - metadata_update rows (gated by the metadata confirmation), and
-  //      - role_change rows that ALSO carry a metadata delta (shown under, and
-  //        gated by, the role-change confirmation).
+  //      - role_change / enroll rows that ALSO carry a metadata delta (role_change
+  //        is shown under and gated by the role-change confirmation; enroll is an
+  //        additive team-add that needs no destructive-move gate).
   //    Only rows with a genuine `changedFields` delta are included — never a
   //    blind fold of every role-changed row — so a pure team move with no
   //    metadata change never enters this read-modify-write (and can't surface a
@@ -228,6 +229,7 @@ export async function runRosterImport(
   const metadataOutcomes = [
     ...(plan?.metadataUpdate ?? []),
     ...(plan?.roleChanges ?? []).filter((c) => c.changedFields.length > 0),
+    ...(plan?.enroll ?? []).filter((e) => e.changedFields.length > 0),
   ]
   const rowByLogin = new Map(rows.map((r) => [r.username.toLowerCase(), r]))
   const metadataUpdates = metadataOutcomes

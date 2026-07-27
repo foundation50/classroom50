@@ -159,7 +159,24 @@ describe("classifyRosterUpload", () => {
       lookupFrom({ newmember: { isOrgMember: true, roles: [] } }),
     )
     expect(result.enroll.map((o) => o.username)).toEqual(["newmember"])
+    expect(result.enroll[0].changedFields).toEqual([])
     expect(result.roleChanges).toHaveLength(0)
+  })
+
+  it("carries a metadata delta on an enroll row so the team-add also updates details", () => {
+    // Active org member on no classroom team whose CSV also corrects their email.
+    const rows: PreflightRow[] = [
+      { username: "newmember", role: "student", email: "new@x.edu" },
+    ]
+    const result = classifyRosterUpload(
+      rows,
+      lookupFrom({ newmember: { isOrgMember: true, roles: [] } }),
+      storedFrom({ newmember: { email: "old@x.edu" } }),
+    )
+    expect(result.enroll[0].changedFields).toEqual(["email"])
+    expect(result.enroll[0].changes).toEqual([
+      { field: "email", from: "old@x.edu", to: "new@x.edu" },
+    ])
   })
 
   it("flags a role change when a student is uploaded as TA", () => {

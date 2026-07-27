@@ -1,17 +1,14 @@
 import type { GitHubClient } from "@/github-core/client"
 import {
   addUserToTeam,
-  createGitCommit,
-  createGitTree,
   ensureClassroomRoleTeam,
   grantTeamConfigRepoAccess,
   readOrgMembershipState,
   removeUserFromTeam,
   setOrgMembershipRole,
-  updateRef,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
-import { withGitConflictRetry, assertClassroomNotArchived } from "../classrooms"
+import { assertClassroomNotArchived } from "../classrooms"
 import {
   getRawFileWithFallbackSource,
   getUser,
@@ -22,16 +19,10 @@ import {
 import { getAuthenticatedUser } from "@/domain/queries/users"
 import {
   getBranchRef,
-  getCommit,
   getConfigRepoBranch,
 } from "@/github-core/configRepoReads"
 import { isSameGitHubUser } from "@/util/students"
-import { prefixCommit } from "@/util/commit"
-import {
-  formatRosterProblems,
-  parseRosterCsv,
-  stringifyStudentsCsv,
-} from "@/util/rosterCsv"
+import { parseRosterCsv } from "@/util/rosterCsv"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import { type ClassroomRole } from "@/util/teamRoster"
 import { isTeacherRole } from "@/authz"
@@ -52,10 +43,9 @@ import {
 import {
   log,
   normalizeGithubUsername,
-  rosterWriteTree,
+  withRosterRewrite,
   resolveClassroomTeamSlug,
   resolveClassroomTeamSlugs,
-  RosterCsvMalformedError,
 } from "./rosterPrimitives"
 import type { StaffRole } from "@/types/classroom"
 
@@ -85,30 +75,7 @@ export async function writeClassroomRoles(
   )
   if (roleByLogin.size === 0) return { changed: 0 }
 
-  return withGitConflictRetry(async () => {
-    const configBranch = await getConfigRepoBranch(client, org)
-    const ref = await getBranchRef(client, org, configBranch)
-    const commit = await getCommit(client, org, ref.object.sha)
-    const studentsFilePath = rosterPath(classroom)
-    const currentCsv = await getRawFileWithFallbackSource(client, {
-      org,
-      path: studentsFilePath,
-      fallbackPath: legacyRosterPath(classroom),
-      ref: ref.object.sha,
-    })
-    // Parse tolerantly: a role writeback must not throw an opaque error on a
-    // malformed sibling row (the exact self-healing case this feature targets).
-    // But we refuse to rewrite a file we can't fully parse — re-serializing
-    // positionally would corrupt the malformed row — so raise a TYPED error the
-    // caller can surface as "fix roster.csv, then re-check" instead of silently
-    // dropping the role. The role still converges on the next clean sync.
-    const { rows: currentStudents, problems } = parseRosterCsv(
-      currentCsv.content,
-    )
-    if (problems.length > 0) {
-      throw new RosterCsvMalformedError(formatRosterProblems(problems))
-    }
-
+  return withRosterRewrite(client, { org, classroom }, (currentStudents) => {
     let changed = 0
     const nextStudents = currentStudents.map((s) => {
       const role = roleByLogin.get(s.username.trim().toLowerCase())
@@ -118,26 +85,11 @@ export async function writeClassroomRoles(
       }
       return s
     })
-
-    if (changed === 0) return { changed: 0 }
-
-    const nextCsv = stringifyStudentsCsv(nextStudents)
-    const tree = await createGitTree(client, {
-      org,
-      base_tree: commit.tree.sha,
-      tree: rosterWriteTree(classroom, nextCsv, currentCsv.fromLegacy),
-    })
-    const newCommit = await createGitCommit(client, {
-      org,
-      message: prefixCommit(
-        `Set role on ${changed} roster member${changed === 1 ? "" : "s"}: ${classroom}`,
-      ),
-      tree_sha: tree.sha,
-      parents: [ref.object.sha],
-    })
-    await updateRef(client, org, newCommit.sha, configBranch)
-    log.info("write roster roles: committed", { org, classroom, changed })
-    return { changed }
+    return {
+      nextStudents,
+      changed,
+      message: `Set role on ${changed} roster member${changed === 1 ? "" : "s"}: ${classroom}`,
+    }
   })
 }
 
@@ -179,27 +131,7 @@ export async function updateClassroomMetadata(
   }
   if (updateById.size === 0 && updateByLogin.size === 0) return { changed: 0 }
 
-  return withGitConflictRetry(async () => {
-    const configBranch = await getConfigRepoBranch(client, org)
-    const ref = await getBranchRef(client, org, configBranch)
-    const commit = await getCommit(client, org, ref.object.sha)
-    const studentsFilePath = rosterPath(classroom)
-    const currentCsv = await getRawFileWithFallbackSource(client, {
-      org,
-      path: studentsFilePath,
-      fallbackPath: legacyRosterPath(classroom),
-      ref: ref.object.sha,
-    })
-    // Refuse to rewrite a file we can't fully parse (positional re-serialize
-    // would corrupt the malformed row); the caller surfaces this as a typed
-    // "fix roster.csv, then re-check" warning. Mirrors writeClassroomRoles.
-    const { rows: currentStudents, problems } = parseRosterCsv(
-      currentCsv.content,
-    )
-    if (problems.length > 0) {
-      throw new RosterCsvMalformedError(formatRosterProblems(problems))
-    }
-
+  return withRosterRewrite(client, { org, classroom }, (currentStudents) => {
     let changed = 0
     const nextStudents = currentStudents.map((s) => {
       const update =
@@ -211,26 +143,11 @@ export async function updateClassroomMetadata(
       changed++
       return applyMetadataMerge(s, next)
     })
-
-    if (changed === 0) return { changed: 0 }
-
-    const nextCsv = stringifyStudentsCsv(nextStudents)
-    const tree = await createGitTree(client, {
-      org,
-      base_tree: commit.tree.sha,
-      tree: rosterWriteTree(classroom, nextCsv, currentCsv.fromLegacy),
-    })
-    const newCommit = await createGitCommit(client, {
-      org,
-      message: prefixCommit(
-        `Update metadata on ${changed} roster member${changed === 1 ? "" : "s"}: ${classroom}`,
-      ),
-      tree_sha: tree.sha,
-      parents: [ref.object.sha],
-    })
-    await updateRef(client, org, newCommit.sha, configBranch)
-    log.info("update roster metadata: committed", { org, classroom, changed })
-    return { changed }
+    return {
+      nextStudents,
+      changed,
+      message: `Update metadata on ${changed} roster member${changed === 1 ? "" : "s"}: ${classroom}`,
+    }
   })
 }
 

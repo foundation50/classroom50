@@ -79,7 +79,17 @@ export type PreflightOutcome =
       changes: MetadataChange[]
     }
   | { kind: "needs_invite"; username: string; role: PreflightRole }
-  | { kind: "enroll"; username: string; role: PreflightRole }
+  | {
+      kind: "enroll"
+      username: string
+      role: PreflightRole
+      // Metadata the CSV also changes for this member. An enroll (active member
+      // on no classroom team) is team-added on process; if the CSV also corrects
+      // their name/email/section, that delta travels here so it's shown in the
+      // preview and written alongside the team-add. Empty when there's no delta.
+      changedFields: MetadataField[]
+      changes: MetadataChange[]
+    }
   | {
       kind: "role_change"
       username: string
@@ -192,9 +202,20 @@ export function classifyRosterUpload(
     const currentRole = primaryOf(current.roles)
     // Active member on NONE of this classroom's teams: enrolling them onto the
     // CSV role's team is additive (no team to leave), so it's a safe action that
-    // needs no destructive-move confirmation.
+    // needs no destructive-move confirmation. Carry any metadata delta so the
+    // team-add also corrects the member's stored details (shown in the preview).
     if (!currentRole) {
-      outcomes.push({ kind: "enroll", username, role: row.role })
+      const { changedFields, changes } = computeMetadataChanges(
+        row,
+        storedByIdentity?.(row),
+      )
+      outcomes.push({
+        kind: "enroll",
+        username,
+        role: row.role,
+        changedFields,
+        changes,
+      })
       continue
     }
 

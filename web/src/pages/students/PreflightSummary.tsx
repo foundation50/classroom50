@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Badge } from "@/components/ui"
+import { Badge, Button } from "@/components/ui"
 import type { PreflightResult } from "@/util/rosterUploadPreflight"
 
 // One concise, high-level category the import will apply, derived from the
@@ -24,7 +24,7 @@ export function summarizePreflight(preflight: PreflightResult): {
 } {
   const addCount = preflight.needsInvite.length + preflight.enroll.length
   const updateCount =
-    (preflight.metadataUpdate?.length ?? 0) + preflight.roleChanges.length
+    preflight.metadataUpdate.length + preflight.roleChanges.length
   const skipCount = preflight.noAction.length
   const categories: SummaryCategory[] = [
     { key: "add", count: addCount, pillClass: "badge-success" },
@@ -71,16 +71,16 @@ export const PreflightSummary = ({
         )}
       </div>
       {canToggle ? (
-        <button
-          type="button"
-          className="btn btn-ghost btn-xs"
+        <Button
+          variant="ghost"
+          size="xs"
           aria-expanded={detailsOpen}
           onClick={onToggleDetails}
         >
           {detailsOpen
             ? t("students.summaryHideDetails")
             : t("students.summaryViewDetails")}
-        </button>
+        </Button>
       ) : null}
     </div>
   )
