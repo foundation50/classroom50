@@ -197,6 +197,10 @@ const UploadRoster = ({
     /* eslint-enable react-hooks/set-state-in-effect */
     const preflightRows = rows.map((r) => ({
       username: r.username,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      email: r.email,
+      section: r.section,
       role:
         rolesByUser[r.username.toLowerCase()] ?? ("student" as ClassroomRole),
     }))

@@ -41,12 +41,14 @@ export {
 } from "./students/rosterSync"
 export {
   writeClassroomRoles,
+  updateClassroomMetadata,
   applyClassroomRoleChange,
   assignRosterMemberRole,
   addClassroomStaffMember,
   removeClassroomStaffMember,
   resolveRosterUploadPreflight,
   type WriteClassroomRolesInput,
+  type UpdateClassroomMetadataInput,
   type ApplyClassroomRoleChangeInput,
   type ApplyClassroomRoleChangeResult,
   type AssignRosterMemberRoleInput,

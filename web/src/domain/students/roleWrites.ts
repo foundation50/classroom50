@@ -42,7 +42,13 @@ import {
   type PreflightResult,
   type PreflightRow,
   type ResolvedMembership,
+  type StoredRosterRow,
 } from "@/util/rosterUploadPreflight"
+import {
+  mergeStudentMetadata,
+  applyMetadataMerge,
+  type StudentMetadata,
+} from "@/util/rosterMetadataMerge"
 import {
   log,
   normalizeGithubUsername,
@@ -135,6 +141,99 @@ export async function writeClassroomRoles(
   })
 }
 
+export type UpdateClassroomMetadataInput = {
+  org: string
+  classroom: string
+  // Existing members whose roster.csv metadata the CSV upload changes. Matched
+  // to a stored row by github_id (when known) then lowercased login. Only the
+  // four metadata fields are updatable; identity and role are never touched.
+  updates: (StudentMetadata & { username: string; github_id?: string })[]
+}
+
+// Merge changed non-empty metadata (first/last/email/section) into existing
+// roster.csv rows in a single conflict-safe commit. Mirrors writeClassroomRoles:
+// only touches rows that exist and actually change, never appends/removes/
+// reorders, applies the formula-injection guard via stringifyStudentsCsv, and
+// raises a typed RosterCsvMalformedError on an unparseable file rather than
+// corrupting it. A blank CSV cell never clears a stored value (mergeStudentMetadata).
+export async function updateClassroomMetadata(
+  client: GitHubClient,
+  input: UpdateClassroomMetadataInput,
+): Promise<{ changed: number }> {
+  const { org, classroom } = input
+  await assertClassroomNotArchived(client, org, classroom)
+
+  const updateById = new Map<string, StudentMetadata>()
+  const updateByLogin = new Map<string, StudentMetadata>()
+  for (const u of input.updates) {
+    const metadata: StudentMetadata = {
+      first_name: u.first_name,
+      last_name: u.last_name,
+      email: u.email,
+      section: u.section,
+    }
+    const id = u.github_id?.trim()
+    const login = u.username.trim().toLowerCase()
+    if (id) updateById.set(id, metadata)
+    if (login) updateByLogin.set(login, metadata)
+  }
+  if (updateById.size === 0 && updateByLogin.size === 0) return { changed: 0 }
+
+  return withGitConflictRetry(async () => {
+    const configBranch = await getConfigRepoBranch(client, org)
+    const ref = await getBranchRef(client, org, configBranch)
+    const commit = await getCommit(client, org, ref.object.sha)
+    const studentsFilePath = rosterPath(classroom)
+    const currentCsv = await getRawFileWithFallbackSource(client, {
+      org,
+      path: studentsFilePath,
+      fallbackPath: legacyRosterPath(classroom),
+      ref: ref.object.sha,
+    })
+    // Refuse to rewrite a file we can't fully parse (positional re-serialize
+    // would corrupt the malformed row); the caller surfaces this as a typed
+    // "fix roster.csv, then re-check" warning. Mirrors writeClassroomRoles.
+    const { rows: currentStudents, problems } = parseRosterCsv(
+      currentCsv.content,
+    )
+    if (problems.length > 0) {
+      throw new RosterCsvMalformedError(formatRosterProblems(problems))
+    }
+
+    let changed = 0
+    const nextStudents = currentStudents.map((s) => {
+      const update =
+        (s.github_id ? updateById.get(s.github_id.trim()) : undefined) ??
+        updateByLogin.get(s.username.trim().toLowerCase())
+      if (!update) return s
+      const { next, changedFields } = mergeStudentMetadata(s, update)
+      if (changedFields.length === 0) return s
+      changed++
+      return applyMetadataMerge(s, next)
+    })
+
+    if (changed === 0) return { changed: 0 }
+
+    const nextCsv = stringifyStudentsCsv(nextStudents)
+    const tree = await createGitTree(client, {
+      org,
+      base_tree: commit.tree.sha,
+      tree: rosterWriteTree(classroom, nextCsv, currentCsv.fromLegacy),
+    })
+    const newCommit = await createGitCommit(client, {
+      org,
+      message: prefixCommit(
+        `Update metadata on ${changed} roster member${changed === 1 ? "" : "s"}: ${classroom}`,
+      ),
+      tree_sha: tree.sha,
+      parents: [ref.object.sha],
+    })
+    await updateRef(client, org, newCommit.sha, configBranch)
+    log.info("update roster metadata: committed", { org, classroom, changed })
+    return { changed }
+  })
+}
+
 export type ResolveRosterUploadPreflightInput = {
   org: string
   classroom: string
@@ -194,7 +293,60 @@ export async function resolveRosterUploadPreflight(
     },
   }
 
-  return classifyRosterUpload(rows, membershipLookup(resolved))
+  const storedByIdentity = await resolveStoredRosterLookup(
+    client,
+    org,
+    classroom,
+  )
+
+  return classifyRosterUpload(rows, membershipLookup(resolved), storedByIdentity)
+}
+
+// Read the current roster.csv and build a stored-metadata lookup keyed by
+// github_id first, then lowercased login (mirroring the membership join). Used
+// by the upload preflight to detect a metadata_update against an already-
+// enrolled member. Tolerant by design: a malformed/absent roster degrades to an
+// empty lookup (classify as today, no metadata_update) rather than failing the
+// read-only preview — the write path (updateClassroomMetadata) re-reads and
+// surfaces RosterCsvMalformedError when the teacher actually commits.
+async function resolveStoredRosterLookup(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+): Promise<(row: PreflightRow) => StoredRosterRow | undefined> {
+  const byId = new Map<string, StoredRosterRow>()
+  const byLogin = new Map<string, StoredRosterRow>()
+  try {
+    const configBranch = await getConfigRepoBranch(client, org)
+    const ref = await getBranchRef(client, org, configBranch)
+    const currentCsv = await getRawFileWithFallbackSource(client, {
+      org,
+      path: rosterPath(classroom),
+      fallbackPath: legacyRosterPath(classroom),
+      ref: ref.object.sha,
+    })
+    const { rows: students } = parseRosterCsv(currentCsv.content)
+    for (const s of students) {
+      const metadata: StoredRosterRow = {
+        first_name: s.first_name,
+        last_name: s.last_name,
+        email: s.email,
+        section: s.section,
+      }
+      if (s.github_id) byId.set(s.github_id.trim(), metadata)
+      if (s.username) byLogin.set(s.username.trim().toLowerCase(), metadata)
+    }
+  } catch (err) {
+    log.warn("roster upload preflight: stored-roster read failed", { err })
+    return () => undefined
+  }
+  return (row: PreflightRow) => {
+    const id = row.github_id?.trim()
+    return (
+      (id ? byId.get(id) : undefined) ??
+      byLogin.get(row.username.trim().toLowerCase())
+    )
+  }
 }
 
 export type ApplyClassroomRoleChangeInput = {
