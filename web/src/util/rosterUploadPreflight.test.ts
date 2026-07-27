@@ -6,12 +6,19 @@ import {
   type CurrentMembership,
   type PreflightRow,
   type ResolvedMembership,
+  type StoredRosterRow,
 } from "./rosterUploadPreflight"
 
 // A lookup built from an explicit per-username map, for the pure classifier.
 const lookupFrom =
   (map: Record<string, CurrentMembership>) =>
   (row: PreflightRow): CurrentMembership | undefined =>
+    map[row.username.toLowerCase()]
+
+// A stored-roster lookup built from an explicit per-username map.
+const storedFrom =
+  (map: Record<string, StoredRosterRow>) =>
+  (row: PreflightRow): StoredRosterRow | undefined =>
     map[row.username.toLowerCase()]
 
 describe("classifyRosterUpload", () => {
@@ -51,6 +58,79 @@ describe("classifyRosterUpload", () => {
       }),
     )
     expect(result.noAction.map((o) => o.username)).toEqual(["prof"])
+  })
+
+  it("classifies metadata_update when an existing member's CSV metadata differs", () => {
+    const rows: PreflightRow[] = [
+      { username: "ada", role: "student", email: "ada@x.edu" },
+    ]
+    const result = classifyRosterUpload(
+      rows,
+      lookupFrom({ ada: { isOrgMember: true, roles: ["student"] } }),
+      storedFrom({ ada: { email: "old@x.edu" } }),
+    )
+    expect(result.metadataUpdate).toEqual([
+      {
+        kind: "metadata_update",
+        username: "ada",
+        role: "student",
+        changedFields: ["email"],
+      },
+    ])
+    expect(result.noAction).toHaveLength(0)
+  })
+
+  it("stays no_action when the CSV metadata is identical or blank", () => {
+    const rows: PreflightRow[] = [
+      { username: "ada", role: "student", email: "same@x.edu", section: "" },
+    ]
+    const result = classifyRosterUpload(
+      rows,
+      lookupFrom({ ada: { isOrgMember: true, roles: ["student"] } }),
+      storedFrom({ ada: { email: "same@x.edu", section: "A" } }),
+    )
+    expect(result.metadataUpdate).toHaveLength(0)
+    expect(result.noAction.map((o) => o.username)).toEqual(["ada"])
+  })
+
+  it("stays no_action when an existing member has no stored roster row", () => {
+    // A login-only join can't match a renamed login; the add path owns new rows.
+    const rows: PreflightRow[] = [
+      { username: "renamed", role: "student", email: "new@x.edu" },
+    ]
+    const result = classifyRosterUpload(
+      rows,
+      lookupFrom({ renamed: { isOrgMember: true, roles: ["student"] } }),
+      storedFrom({}),
+    )
+    expect(result.metadataUpdate).toHaveLength(0)
+    expect(result.noAction.map((o) => o.username)).toEqual(["renamed"])
+  })
+
+  it("does not classify metadata_update without a stored lookup (legacy behavior)", () => {
+    const rows: PreflightRow[] = [
+      { username: "ada", role: "student", email: "ada@x.edu" },
+    ]
+    const result = classifyRosterUpload(
+      rows,
+      lookupFrom({ ada: { isOrgMember: true, roles: ["student"] } }),
+    )
+    expect(result.metadataUpdate).toHaveLength(0)
+    expect(result.noAction.map((o) => o.username)).toEqual(["ada"])
+  })
+
+  it("keeps a member on a different team as role_change even with metadata delta", () => {
+    // userb is on the student team; CSV says ta AND supplies a new email.
+    const rows: PreflightRow[] = [
+      { username: "userb", role: "ta", email: "new@x.edu" },
+    ]
+    const result = classifyRosterUpload(
+      rows,
+      lookupFrom({ userb: { isOrgMember: true, roles: ["student"] } }),
+      storedFrom({ userb: { email: "old@x.edu" } }),
+    )
+    expect(result.roleChanges.map((o) => o.username)).toEqual(["userb"])
+    expect(result.metadataUpdate).toHaveLength(0)
   })
 
   it("enrolls an active member on no classroom team (additive, no confirm)", () => {
