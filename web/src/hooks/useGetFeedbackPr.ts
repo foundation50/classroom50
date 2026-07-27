@@ -7,10 +7,12 @@ import {
   type GitHubPullRequest,
 } from "@/github-core/queries"
 
-// The Feedback PR for a student/group repo: the open PR the autograde workflow
-// opens after an accept. Returns the first open PR (there's at most one), or null
-// when none exists yet. `enabled` defaults true; pass false to defer (e.g.
-// resolve on demand instead of one /pulls call per table row on mount).
+// The Feedback PR for a student/group repo: the open PR accept creates right
+// away (issue #228) — or, for pre-feature repos / a failed best-effort accept
+// step, the one the autograde runner opens on the first submission. Returns
+// the first open PR (there's at most one), or null when none exists yet.
+// `enabled` defaults true; pass false to defer (e.g. resolve on demand
+// instead of one /pulls call per table row on mount).
 const useGetFeedbackPr = (
   org: string | undefined,
   repo: string | undefined,

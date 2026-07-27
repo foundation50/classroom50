@@ -42,13 +42,15 @@ export {
   getBranchRefRepo,
   branchRefQuery,
   getCommitByRepo,
+  getOldestCommitShaForPath,
   commitQuery,
   repoQuery,
   getOrgRepos,
   getRepoPermissionForUser,
   getOpenPullRequests,
-  type GitHubPullRequest,
+  listPullRequestsByBaseHead,
 } from "./queries/repoRefReads"
+export type { GitHubPullRequest } from "./types"
 export {
   rawFileQuery,
   jsonFileQuery,

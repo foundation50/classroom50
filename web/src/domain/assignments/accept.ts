@@ -12,8 +12,10 @@ import type { GitHubRepo } from "@/github-core/types"
 import {
   getBranchRefRepo,
   getCommitByRepo,
+  getOldestCommitShaForPath,
   withFreshRepoRetry,
 } from "@/github-core/queries"
+import { ensureFeedbackPullRequest } from "./feedbackPr"
 import { fetchAssignmentFromPages } from "../queries/assignments"
 import { getAuthenticatedUser } from "../queries/users"
 import { acceptAndVerifyOrgMembership } from "../users"
@@ -41,6 +43,7 @@ import {
   patchRepoSurface,
 } from "./permissions"
 import { createAssignmentRepo } from "./repoCreation"
+import type { LocalizedMessage } from "@/types/localizedMessage"
 
 // Land .classroom50.yaml + the autograde workflow as one Tree commit, riding out
 // GitHub's git-data lag after POST .../generate (reads 404, the first write 409s
@@ -60,7 +63,7 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
   // default branch, which is only known after GitHub's async template copy
   // settles (see below). Omitted for branch-agnostic (teacher-authored) shims.
   rerenderShimForBranch?: (branch: string) => string
-}) {
+}): Promise<{ commitSha: string; branch: string }> {
   const {
     client,
     owner,
@@ -71,7 +74,7 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
     rerenderShimForBranch,
   } = params
 
-  await withFreshRepoRetry(async () => {
+  return await withFreshRepoRetry(async () => {
     // A freshly template-generated repo's real branch (copied from the template,
     // e.g., `master`) only materializes after GitHub finishes the async copy —
     // until then `default_branch` transiently reports the org default (`main`)
@@ -123,6 +126,11 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
       branch: targetBranch,
       commitSha: commit.sha,
     })
+
+    // The accept commit's SHA (the Feedback-PR base anchor) and the SETTLED
+    // branch it actually landed on — the caller's pre-guessed branch may be a
+    // transient `main` on a `master` template.
+    return { commitSha: commit.sha, branch: targetBranch }
   })
 }
 
@@ -172,7 +180,8 @@ function grantFounderAccessStep(params: {
 }
 
 // Provision (or heal) a just-created student repo — grant the founder role,
-// land the control files. Idempotent, so safe to re-run mid-flow.
+// land the control files, then (opt-in) open the Feedback PR. Idempotent, so
+// safe to re-run mid-flow.
 async function provisionAcceptedRepo(params: {
   client: GitHubClient
   org: string
@@ -182,6 +191,8 @@ async function provisionAcceptedRepo(params: {
   branch: string
   metadataYaml: string
   autogradeYaml: string
+  // Open the accept-time Feedback PR after setup succeeds (issue #228).
+  feedbackPr?: boolean
   isOwner?: boolean
   rerenderShimForBranch?: (branch: string) => string
   onStepUpdate?: OnAcceptStepUpdate
@@ -195,6 +206,7 @@ async function provisionAcceptedRepo(params: {
     branch,
     metadataYaml,
     autogradeYaml,
+    feedbackPr = false,
     isOwner = false,
     rerenderShimForBranch,
     onStepUpdate,
@@ -212,7 +224,7 @@ async function provisionAcceptedRepo(params: {
 
   // Land the metadata + autograde shim, retrying through GitHub's post-generate
   // git-data lag (see commitAcceptFilesWithFreshRepoRetry).
-  await withAcceptStep(
+  const committed = await withAcceptStep(
     {
       id: "setup",
       label: { key: "accept.steps.setup" },
@@ -234,6 +246,125 @@ async function provisionAcceptedRepo(params: {
         rerenderShimForBranch,
       }),
   )
+
+  // Last, because it's best-effort: everything above must hold for the accept
+  // to count, while a Feedback PR failure only defers creation to the runner.
+  await openFeedbackPrStep({
+    client,
+    org,
+    repo: repo.name,
+    branch: committed.branch,
+    resolveAcceptCommitSha: () =>
+      resolveFeedbackBaseSha({
+        client,
+        org,
+        repo: repo.name,
+        committedSha: committed.commitSha,
+      }),
+    mode,
+    feedbackPr,
+    onStepUpdate,
+  })
+}
+
+// The commit to freeze `feedback` at, preferring the marker's earliest commit
+// over the SHA this run just wrote. On the HEAL path the marker already exists,
+// so the repair commit is NOT the baseline the runner resolves — freezing there
+// would make the runner refuse to maintain the PR for the repo's whole life. On
+// a fresh accept the lookup returns the commit just written (or fails on read
+// lag), so falling back to it is correct. With no committed SHA to fall back on
+// (the already-accepted path, where no commit ran), an unresolvable marker
+// leaves nothing to anchor the base and the step defers.
+async function resolveFeedbackBaseSha(params: {
+  client: GitHubClient
+  org: string
+  repo: string
+  committedSha: string | null
+}): Promise<string | null> {
+  const { client, org, repo, committedSha } = params
+  const oldest = await getOldestCommitShaForPath(
+    client,
+    org,
+    repo,
+    ".classroom50.yaml",
+  ).catch(() => null)
+  return oldest ?? committedSha
+}
+
+// The "feedback" step's skip message, shared by the disabled-assignment paths.
+function skipFeedbackPrStep(onStepUpdate?: OnAcceptStepUpdate) {
+  onStepUpdate?.({
+    id: "feedback",
+    status: "complete",
+    message: { key: "accept.stepDone.feedbackSkipped" },
+  })
+}
+
+// The tracked "feedback" step around ensureFeedbackPullRequest. Unlike the
+// throwing withAcceptStep steps, this ALWAYS resolves complete: a red error
+// row on an accept that succeeded would mislead, and the deferred message
+// names the retry instead. Skips (feedbackPr false / missing accept SHA) also
+// complete, so the checklist never looks stuck.
+//
+// resolveAcceptCommitSha is called lazily, only once the step is actually going
+// to run — it costs a paginated commit-history read.
+async function openFeedbackPrStep(params: {
+  client: GitHubClient
+  org: string
+  repo: string
+  branch: string
+  resolveAcceptCommitSha: () => Promise<string | null>
+  mode: AssignmentMode
+  feedbackPr: boolean
+  onStepUpdate?: OnAcceptStepUpdate
+}) {
+  const {
+    client,
+    org,
+    repo,
+    branch,
+    resolveAcceptCommitSha,
+    mode,
+    feedbackPr,
+    onStepUpdate,
+  } = params
+
+  if (!feedbackPr) {
+    skipFeedbackPrStep(onStepUpdate)
+    return
+  }
+
+  onStepUpdate?.({
+    id: "feedback",
+    status: "running",
+    message: { key: "accept.steps.feedback" },
+  })
+
+  const deferred: LocalizedMessage = { key: "accept.stepDone.feedbackDeferred" }
+
+  const acceptCommitSha = await resolveAcceptCommitSha()
+  if (!acceptCommitSha) {
+    log.warn("feedback PR: accept commit not resolvable (non-fatal)", {
+      org,
+      repo,
+    })
+    onStepUpdate?.({ id: "feedback", status: "complete", message: deferred })
+    return
+  }
+
+  const result = await ensureFeedbackPullRequest({
+    client,
+    owner: org,
+    repo,
+    branch,
+    acceptCommitSha,
+    mode,
+  })
+  onStepUpdate?.({
+    id: "feedback",
+    status: "complete",
+    message: result.ok ? { key: "accept.stepDone.feedback" } : deferred,
+  })
 }
 
 export async function acceptAssignment(params: {
@@ -312,6 +443,11 @@ export async function acceptAssignment(params: {
   // control files are ever committed, so the autograder resolution and the
   // whole setup step are skipped. Mirrors the CLI's acceptIntoBareRepo.
   const isEmptyRepo = assignment.empty_repo === true
+
+  // feedback_pr opts into the accept-time Feedback PR (issue #228). Never
+  // set together with empty_repo (the teacher CLI enforces the exclusivity;
+  // the bare path below skips the step regardless).
+  const wantsFeedbackPr = assignment.feedback_pr === true && !isEmptyRepo
 
   // empty_repo and template are mutually exclusive at write time, but the
   // published manifest is not re-validated, so a hand-edited entry can carry
@@ -478,6 +614,7 @@ export async function acceptAssignment(params: {
       status: "complete",
       message: { key: "accept.stepDone.setupSkippedEmptyRepo" },
     })
+    skipFeedbackPrStep(onStepUpdate)
 
     return {
       status: alreadyAccepted ? "already-accepted" : "created",
@@ -563,6 +700,28 @@ export async function acceptAssignment(params: {
       })
       onStepUpdate?.({ id: "access", status: "complete" })
       onStepUpdate?.({ id: "setup", status: "complete" })
+      // Ensure the Feedback PR exists even on the healthy path: repos
+      // accepted before the accept-time-PR feature get their PR by
+      // re-accepting — the only Actions-free route. The accept SHA isn't in
+      // hand here (no commit ran), so recover it as the oldest commit
+      // touching the marker (the runner's baseline_sha() rule); existing PRs
+      // short-circuit inside, keeping repeat re-accepts read-only.
+      await openFeedbackPrStep({
+        client,
+        org,
+        repo: created.repo.name,
+        branch: created.repo.default_branch || sourceBranch,
+        resolveAcceptCommitSha: () =>
+          resolveFeedbackBaseSha({
+            client,
+            org,
+            repo: created.repo.name,
+            committedSha: null,
+          }),
+        mode: assignment.mode,
+        feedbackPr: wantsFeedbackPr,
+        onStepUpdate,
+      })
       return {
         status: "already-accepted",
         repo: created.repo,
@@ -596,6 +755,7 @@ export async function acceptAssignment(params: {
       branch: created.repo.default_branch || sourceBranch,
       metadataYaml,
       autogradeYaml,
+      feedbackPr: wantsFeedbackPr,
       isOwner,
       rerenderShimForBranch: rerenderShim,
       onStepUpdate,
@@ -632,6 +792,7 @@ export async function acceptAssignment(params: {
     branch: targetBranch,
     metadataYaml,
     autogradeYaml,
+    feedbackPr: wantsFeedbackPr,
     isOwner,
     rerenderShimForBranch: rerenderShim,
     onStepUpdate,

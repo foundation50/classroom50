@@ -49,6 +49,12 @@ type Entry struct {
 	// autograde shim), so the assignment never autogrades. Absent reads as
 	// false (the teacher CLI omits it when false).
 	EmptyRepo bool `json:"empty_repo,omitempty"`
+
+	// FeedbackPR opts the assignment into the GitHub-Classroom-style Feedback
+	// PR. Accept opens it best-effort right away (issue #228, works without
+	// Actions); the autograde runner adopts/maintains it from the first
+	// submission on. Mutually exclusive with EmptyRepo (teacher CLI enforces).
+	FeedbackPR bool `json:"feedback_pr,omitempty"`
 }
 
 // defaultAutograderName is the fallback when Entry.Autograder is empty.

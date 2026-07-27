@@ -418,6 +418,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		shim:           shim,
 		autograderName: autograderName,
 		emptyRepo:      entry.EmptyRepo,
+		feedbackPR:     entry.FeedbackPR,
 		fullName:       fullName,
 		htmlURL:        htmlURL,
 		alreadyExisted: alreadyExisted,
@@ -443,7 +444,11 @@ type acceptRepoParams struct {
 	shim, autograderName       string
 	// emptyRepo selects the bare path: no control files are committed and no
 	// marker probe runs — the only provisioning is the idempotent admin grant.
-	emptyRepo         bool
+	emptyRepo bool
+	// feedbackPR opts into opening the Feedback PR at accept time (issue
+	// #228) — best-effort, after provisioning succeeds. Never set together
+	// with emptyRepo (the entry validation fails closed on that combination).
+	feedbackPR        bool
 	fullName, htmlURL string
 	alreadyExisted    bool
 	// isOwner tolerates an org owner's unavoidable residual admin at the
@@ -485,6 +490,17 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 				u.Detail("could not reconcile %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 			}
 			p.createSp.Stop(fmt.Sprintf("Repo already exists: %s", p.fullName))
+			// Ensure the Feedback PR exists even on the healthy path: repos
+			// accepted before the accept-time-PR feature (issue #228) get
+			// their PR by re-accepting — the only Actions-free route. The
+			// accept SHA isn't in hand here (no DropFiles ran), so recover it
+			// from the marker's commit history; existing PRs short-circuit
+			// inside, keeping repeat re-accepts read-only.
+			if p.feedbackPR {
+				openFeedbackPRStep(client, u, verbose, p, func() (string, error) {
+					return acceptCommitSHA(client, p.org, p.repoName)
+				})
+			}
 			return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
 		}
 		// The ✓ here marks the completed probe (setup found incomplete), not
@@ -590,7 +606,8 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 	const setupMsg = "Setting up autograder and metadata"
 	setupSp := u.Spinner(setupMsg)
 	setupSp.Start()
-	if err := classroomcfg.DropFiles(client, p.org, p.repoName, p.branch, cfg, p.shim); err != nil {
+	acceptSHA, err := classroomcfg.DropFiles(client, p.org, p.repoName, p.branch, cfg, p.shim)
+	if err != nil {
 		setupSp.Fail(setupMsg)
 		return err
 	}
@@ -605,7 +622,28 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 	if err := verifyProvisioned(client, p.org, p.repoName); err != nil {
 		return err
 	}
+
+	// Last, because it's best-effort: everything above must hold for the
+	// accept to count, while a Feedback PR failure only defers to the runner.
+	if p.feedbackPR {
+		openFeedbackPRStep(client, u, verbose, p, func() (string, error) {
+			return feedbackBaseSHA(client, p.org, p.repoName, acceptSHA), nil
+		})
+	}
 	return nil
+}
+
+// feedbackBaseSHA resolves the commit to freeze `feedback` at, preferring the
+// marker's earliest commit over the SHA DropFiles just wrote. On the HEAL path
+// the marker already exists, so the repair commit is NOT the baseline the
+// runner resolves — freezing there would make the runner refuse to maintain the
+// PR for the repo's whole life. On a fresh accept the lookup returns the commit
+// just written (or fails on read lag), so falling back to it is correct.
+func feedbackBaseSHA(client githubapi.Client, org, repoName, committedSHA string) string {
+	if sha, err := acceptCommitSHA(client, org, repoName); err == nil && sha != "" {
+		return sha
+	}
+	return committedSHA
 }
 
 // verifyProvisioned confirms the repo is autogradable before accept reports
@@ -668,6 +706,20 @@ func classroomFromRepo(repoName string) string {
 	return repoName
 }
 
+// is422AlreadyExists matches GitHub's "already exists" 422 (duplicate ref,
+// duplicate label, existing repo).
+func is422AlreadyExists(httpErr *githubapi.HTTPError) bool {
+	return has422Message(httpErr, "already exists")
+}
+
+// has422Message gates httpErrorMentions on a 422 status, so a caller that isn't
+// already switching on the status can't accept the same wording arriving from an
+// unrelated failure.
+func has422Message(httpErr *githubapi.HTTPError, needle string) bool {
+	return httpErr.StatusCode == http.StatusUnprocessableEntity &&
+		httpErrorMentions(httpErr, needle)
+}
+
 // httpErrorMentions reports whether needle (lower-case) appears in the error's
 // top-level message or in any Errors[] item. GitHub puts the reason in either
 // slot depending on the endpoint.
@@ -681,10 +733,6 @@ func httpErrorMentions(httpErr *githubapi.HTTPError, needle string) bool {
 		}
 	}
 	return false
-}
-
-func is422AlreadyExists(httpErr *githubapi.HTTPError) bool {
-	return httpErrorMentions(httpErr, "already exists")
 }
 
 // The one 403 message GitHub was observed to return when the destination org

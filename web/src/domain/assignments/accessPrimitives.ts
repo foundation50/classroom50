@@ -43,6 +43,7 @@ export class AcceptStepError extends Error {
 }
 
 // Ordered accept-flow phases, shown as a progress checklist in the GUI.
+// "feedback" (issue #228) never resolves error — see openFeedbackPrStep.
 export type AcceptStepId =
   | "account"
   | "membership"
@@ -51,6 +52,7 @@ export type AcceptStepId =
   | "repo"
   | "access"
   | "setup"
+  | "feedback"
 
 export type AcceptStepStatus = "pending" | "running" | "complete" | "error"
 

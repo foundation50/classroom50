@@ -71,9 +71,15 @@ func TestCommitFiles_RetriesOnFreshRepoLag(t *testing.T) {
 	defer server.Close()
 	client := githubtest.NewTestClient(t, server)
 
-	err := CommitFiles(client, "o", "r", "main", "msg", map[string]string{"a.txt": "hi"})
+	sha, err := CommitFiles(client, "o", "r", "main", "msg", map[string]string{"a.txt": "hi"})
 	if err != nil {
 		t.Fatalf("CommitFiles: unexpected error: %v", err)
+	}
+	if sha != "new-commit-sha" {
+		// Not just non-empty: returning the tree or parent SHA here would
+		// freeze the Feedback-PR base at a commit the runner's baseline check
+		// rejects.
+		t.Errorf("CommitFiles returned %q, want the new commit SHA new-commit-sha", sha)
 	}
 
 	mu.Lock()
@@ -98,7 +104,7 @@ func TestCommitFiles_EmptyIsNoop(t *testing.T) {
 	defer server.Close()
 	client := githubtest.NewTestClient(t, server)
 
-	if err := CommitFiles(client, "o", "r", "main", "msg", nil); err != nil {
+	if _, err := CommitFiles(client, "o", "r", "main", "msg", nil); err != nil {
 		t.Fatalf("CommitFiles(nil): %v", err)
 	}
 }

@@ -50,6 +50,13 @@ func TestContractLiterals(t *testing.T) {
 		// cli/gh-teacher/skeleton/dotgithub/workflows/collect-scores.yaml.
 		// Update every copy in lockstep on change.
 		{"CommitPrefix", CommitPrefix, "[Classroom 50]"},
+		// FeedbackBaseBranch / FeedbackPRTitle are mirrored, with NO
+		// compile-time link, in ensure_feedback_pr.py (BASE_BRANCH, --title) and
+		// the web GUI (web/src/domain/assignments/feedbackPr.ts). The branch
+		// name is also baked into already-deployed org rulesets
+		// (classroom50-feedback-base-lock) — changing it strands them.
+		{"FeedbackBaseBranch", FeedbackBaseBranch, "feedback"},
+		{"FeedbackPRTitle", FeedbackPRTitle, "Feedback"},
 	}
 	for _, tc := range cases {
 		if tc.got != tc.want {
@@ -158,3 +165,72 @@ func TestPrefixCommit(t *testing.T) {
 		t.Errorf("PrefixCommit = %q, want %q", got, want)
 	}
 }
+
+// TestFeedbackOpenCommitMessage pins the accept-time empty commit's message:
+// the [skip ci] body line is load-bearing (it keeps the autograde shim from
+// running on the diff-less commit), and the web GUI mirrors the whole string
+// with NO compile-time link.
+func TestFeedbackOpenCommitMessage(t *testing.T) {
+	got := FeedbackOpenCommitMessage()
+	want := "[Classroom 50] Open Feedback PR (gh student accept)\n\n[skip ci]"
+	if got != want {
+		t.Errorf("FeedbackOpenCommitMessage = %q, want %q", got, want)
+	}
+}
+
+// TestFeedbackLabelForMode pins the mode labels/colors to
+// ensure_feedback_pr.py's _LABELS (no compile-time link): the runner adopts
+// the accept-time PR, so a drift would make teachers see two labels.
+func TestFeedbackLabelForMode(t *testing.T) {
+	cases := []struct {
+		mode, name, color string
+	}{
+		{ModeGroup, "Group Assignment", "5319E7"},
+		{"  GROUP ", "Group Assignment", "5319E7"},
+		{ModeIndividual, "Individual Assignment", "0E8A16"},
+		{"", "Individual Assignment", "0E8A16"},     // unknown -> individual,
+		{"solo", "Individual Assignment", "0E8A16"}, // like label_for_mode
+	}
+	for _, tc := range cases {
+		name, color := FeedbackLabelForMode(tc.mode)
+		if name != tc.name || color != tc.color {
+			t.Errorf("FeedbackLabelForMode(%q) = (%q,%q), want (%q,%q)",
+				tc.mode, name, color, tc.name, tc.color)
+		}
+	}
+}
+
+// TestFeedbackPRBody pins the body BYTE-for-byte against the cross-language
+// golden that gh-teacher's skeleton test (Python) and the web suite (TypeScript)
+// assert against too, so a one-sided prose edit fails on every side. It also
+// re-states the load-bearing properties, since the golden alone would not say
+// WHY they matter: the release URL MUST be embedded — the runner's
+// backfill_release_link() rewrites any open Feedback PR whose body lacks it,
+// clobbering an accept-time body without it — and the head branch and frozen
+// base are named.
+func TestFeedbackPRBody(t *testing.T) {
+	body := FeedbackPRBody("main", "https://github.com/o/r/releases/latest")
+	for _, want := range []string{
+		"https://github.com/o/r/releases/latest",
+		"`main`",
+		"`" + FeedbackBaseBranch + "`",
+		"**Don't close or merge this pull request**",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("FeedbackPRBody missing %q", want)
+		}
+	}
+
+	golden, err := os.ReadFile(filepath.Clean(feedbackPRBodyGoldenPath))
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+	if got := FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL"); got != string(golden) {
+		t.Errorf("FeedbackPRBody no longer matches %s; if intentional, update pr_body in ensure_feedback_pr.py and feedbackPrBody in web/src/domain/assignments/feedbackPr.ts too, then regenerate the golden",
+			feedbackPRBodyGoldenPath)
+	}
+}
+
+// feedbackPRBodyGoldenPath locates the rendered-body golden, also consumed by
+// the Python (skeleton_tests) and TypeScript (web) mirror tests.
+const feedbackPRBodyGoldenPath = "testdata/feedback_pr_body.golden"

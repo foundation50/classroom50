@@ -444,28 +444,36 @@ is required and injection-checked; `user` accepts `docker run --user` syntax.
 ## Feedback pull requests
 
 The Feedback PR is **on by default** for assignments created with `gh teacher
-assignment add` (`--feedback-pr=false` to disable). When on, the runner maintains
+assignment add` (`--feedback-pr=false` to disable). When on, there is
 **one long-lived "Feedback" pull request per student repo** so you review
 cumulative work with inline comments alongside the scored Release.
 
-- **Base = a frozen branch.** On the first submission with a diff, the runner
-  creates a `feedback` branch at the student's baseline commit (the accept
-  commit) and never advances it. The PR is `base = feedback`, `head = default
-  branch`, so it always shows the full starter→latest diff.
+- **Base = a frozen branch.** Accept creates a `feedback` branch at the
+  student's baseline commit (the accept commit) and never advances it. The PR is
+  `base = feedback`, `head = default branch`, so it always shows the full
+  starter→latest diff.
+- **Opens at accept**, so it is there before the first submission and exists even
+  when GitHub Actions is disabled for student repos. The diff still starts at the
+  baseline, so the setup files never appear in it.
 - **One PR, reused** across submissions, labeled **Individual Assignment** or
   **Group Assignment**. A student closing it reopens it; a teacher merge is left
   alone.
-- **Opens on first work, not at accept** — unlike GitHub Classroom, so the diff
-  never includes the setup files.
+- **The runner adopts it** by base+head and maintains it from then on. If accept
+  could not open it (a permissions oddity, or a repo accepted before this
+  feature), the runner opens it on the first submission instead — and
+  re-accepting also retries, which is the only route with Actions off.
 
 <details>
 <summary>Baseline resolution and prerequisites</summary>
 
-The runner resolves the baseline as **the commit that introduced
-`.classroom50.yaml`** (a structural marker, not a commit subject). If no such
-commit is found, it opens the PR against the root commit and **warns** that the
-baseline is untrusted; if no baseline resolves at all, it **skips** with a
-warning.
+Both accept and the runner resolve the baseline as **the commit that introduced
+`.classroom50.yaml`** (a structural marker, not a commit subject) so they agree
+on where the base is frozen. The runner refuses to open or update the PR when
+the `feedback` branch sits at any other commit, since a student can create that
+branch themselves; an org admin deleting it lets the next submission re-freeze
+it correctly. If no marker commit is found, the runner opens the PR against the
+root commit and **warns** that the baseline is untrusted; if no baseline resolves
+at all, it **skips** with a warning.
 
 **Prerequisites (handled by `gh teacher init`):** the org setting "Allow GitHub
 Actions to create and approve pull requests" must be on, and two org rulesets

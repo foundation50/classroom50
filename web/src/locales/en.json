@@ -1674,7 +1674,8 @@
       "autograder": "Resolving the autograder",
       "repo": "Creating your repository",
       "access": "Granting you access",
-      "setup": "Setting up autograding"
+      "setup": "Setting up autograding",
+      "feedback": "Opening feedback pull request"
     },
     "stepDone": {
       "account": "Checked your GitHub account",
@@ -1687,7 +1688,10 @@
       "repoIncomplete": "Found incomplete setup: {{org}}/{{repo}}",
       "access": "Granted you access to your repository",
       "setup": "Autograding configured",
-      "setupSkippedEmptyRepo": "No setup needed: this assignment uses an empty repository"
+      "setupSkippedEmptyRepo": "No setup needed: this assignment uses an empty repository",
+      "feedback": "Feedback pull request ready",
+      "feedbackSkipped": "No feedback pull request for this assignment",
+      "feedbackDeferred": "Couldn't open the feedback pull request now: accept again to retry, or it opens on your first submission if autograding is enabled"
     },
     "stepActions": {
       "account": "Couldn't read your GitHub account. Sign out and sign back in, then accept again.",

@@ -268,6 +268,37 @@ export function githubNonJsonResponseError(
   })
 }
 
+// GitHub reports "already exists" (duplicate ref, duplicate label) and the
+// zero-diff PR refusal as 422s whose message or errors[] mention it; there is
+// no structured code beyond the generic "custom"/"already_exists" variants, so
+// these match text. Mirrors the CLI's is422AlreadyExists / isNoCommitsBetween.
+export function is422AlreadyExists(err: unknown): boolean {
+  return (
+    is422Mentioning(err, "already exists") ||
+    is422Mentioning(err, "already_exists")
+  )
+}
+
+// The "no commits between base and head" 422 — the accept-time signal to land
+// the empty commit and retry.
+export function is422NoCommitsBetween(err: unknown): boolean {
+  return is422Mentioning(err, "no commits between")
+}
+
+function is422Mentioning(err: unknown, needle: string): boolean {
+  if (!(err instanceof GitHubAPIError) || err.status !== 422) return false
+  if (err.message.toLowerCase().includes(needle)) return true
+  const body = err.body as
+    | { message?: string; errors?: Array<{ message?: string; code?: string }> }
+    | undefined
+  if (body?.message?.toLowerCase().includes(needle)) return true
+  return (body?.errors ?? []).some(
+    (item) =>
+      item?.message?.toLowerCase().includes(needle) ||
+      item?.code?.toLowerCase().includes(needle),
+  )
+}
+
 // Run a GitHub read/write, swallowing a tolerated error into `fallback` instead
 // of throwing — the "absent reads as empty/none" idiom, unified so call sites
 // stop re-spelling the `instanceof GitHubAPIError && status === 404` guard.

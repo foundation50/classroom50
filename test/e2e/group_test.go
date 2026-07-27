@@ -114,6 +114,22 @@ func TestGroupAssignment(t *testing.T) {
 		if perm := collaboratorPermission(t, repo, founder); perm != "admin" {
 			t.Errorf("founder %s permission on %s = %q, want admin", founder, repo, perm)
 		}
+		// Issue #228: accept opens the Feedback PR immediately, carrying the
+		// group-mode label the runner's _LABELS table would apply — a drift
+		// would show teachers two label sets once the runner adopts the PR.
+		prs := listFeedbackPRs(t, repo)
+		if len(prs) != 1 {
+			t.Fatalf("open feedback PRs right after group accept = %d, want 1", len(prs))
+		}
+		hasGroupLabel := false
+		for _, l := range prs[0].Labels {
+			if l.Name == "Group Assignment" {
+				hasGroupLabel = true
+			}
+		}
+		if !hasGroupLabel {
+			t.Errorf("feedback PR #%d lacks the %q label", prs[0].Number, "Group Assignment")
+		}
 	})
 
 	step(t, "G8 founder invites teammate to push", func(t *testing.T) {

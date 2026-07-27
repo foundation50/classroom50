@@ -308,3 +308,24 @@ func TestEntryDecodesEmptyRepo(t *testing.T) {
 		t.Error("hello.EmptyRepo = true, want false (field absent)")
 	}
 }
+
+func TestEntryDecodesFeedbackPR(t *testing.T) {
+	// feedback_pr decodes when present and defaults to false when absent —
+	// the accept flow gates the accept-time Feedback PR on it (issue #228).
+	var file assignmentsFile
+	if err := json.Unmarshal([]byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {"slug": "fb", "name": "FB", "mode": "individual", "autograder": "default", "feedback_pr": true},
+    {"slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default"}
+  ]
+}`), &file); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !file.Assignments[0].FeedbackPR {
+		t.Error("fb.FeedbackPR = false, want true")
+	}
+	if file.Assignments[1].FeedbackPR {
+		t.Error("hello.FeedbackPR = true, want false (field absent)")
+	}
+}
