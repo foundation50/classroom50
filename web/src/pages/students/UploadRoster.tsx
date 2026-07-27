@@ -12,7 +12,7 @@ import type {
   ImportRosterRow,
 } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
-import { Alert, Button, Modal, Spinner } from "@/components/ui"
+import { Alert, Button, Modal } from "@/components/ui"
 import {
   hasTeacherPromotion,
   type PreflightResult,
@@ -253,6 +253,16 @@ const UploadRoster = ({
     }
     for (const c of preflight?.roleChanges ?? []) {
       if (c.changes.length > 0) map[c.username.toLowerCase()] = c.changes
+    }
+    return map
+  }, [preflight])
+  // Per-username role change (current -> CSV role) to highlight the Role cell,
+  // keyed by lowercased username. Kept separate from the metadata `changes` map
+  // because a role change lives in the Role column's Select, not a text cell.
+  const roleChangeByUser = useMemo(() => {
+    const map: Record<string, { from: ClassroomRole; to: ClassroomRole }> = {}
+    for (const c of preflight?.roleChanges ?? []) {
+      map[c.username.toLowerCase()] = { from: c.currentRole, to: c.role }
     }
     return map
   }, [preflight])
@@ -587,13 +597,10 @@ const UploadRoster = ({
         {phase === "preview" && uploadKind !== "email-list" && (
           <div>
             {/* Preflight against current GitHub membership: what processing will
-                do to each row. Resolving/failed states gate the primary button. */}
-            {preflighting ? (
-              <div className="mb-4 flex items-center gap-3 rounded-box border border-base-300 px-4 py-3 text-sm text-base-content/70">
-                <Spinner size="sm" />
-                <span>{t("students.preflightChecking")}</span>
-              </div>
-            ) : preflightError ? (
+                do to each row. While it resolves, the summary/recap are withheld
+                and the table below shows a skeleton; a hard failure surfaces an
+                error and gates the primary button. */}
+            {preflightError ? (
               <Alert tone="error" className="mb-4">
                 <span>
                   {t("students.preflightFailed", { message: preflightError })}
@@ -646,14 +653,17 @@ const UploadRoster = ({
             ) : null}
 
             {rows.length > 0 ? (
-              // Before the preflight resolves, show the table so the teacher can
-              // review/assign roles; after it resolves, show it only when
-              // expanded or a confirmation needs the highlighted changes visible.
-              !preflight || showDetails ? (
+              // While the preflight resolves, show the table as a skeleton
+              // (loading). Before it has ever resolved, show it so roles can be
+              // assigned; after it resolves, show it only when expanded or a
+              // confirmation needs the highlighted changes visible.
+              preflighting || !preflight || showDetails ? (
                 <RosterPreviewTable
                   rows={rows}
                   rolesByUser={rolesByUser}
                   changes={rowChanges}
+                  roleChanges={roleChangeByUser}
+                  loading={preflighting}
                   onRoleChange={(key, role) =>
                     setRolesByUser((prev) => ({ ...prev, [key]: role }))
                   }

@@ -135,4 +135,47 @@ describe("RosterPreviewTable change highlighting", () => {
       screen.getByText("bob").closest("tr")!.className ?? "",
     ).not.toContain("bg-warning")
   })
+
+  it("highlights the Role cell and marks the row when the role changes", () => {
+    render(
+      <RosterPreviewTable
+        rows={rows}
+        rolesByUser={{ ada: "student" }}
+        onRoleChange={vi.fn()}
+        roleChanges={{ ada: { from: "teacher", to: "student" } }}
+      />,
+    )
+    // The Role cell (the one containing the role Select) is highlighted...
+    const roleCell = screen
+      .getByText("ada")
+      .closest("tr")!
+      .querySelector("select")!
+      .closest("td") as HTMLTableCellElement
+    expect(roleCell.className).toContain("bg-warning")
+    // ...with an inline "was <previous role>" hint (no hover tooltip that would
+    // overlap the native Select dropdown).
+    expect(within(roleCell).getByText(/rolePreviousHint/)).toBeTruthy()
+    expect(roleCell.querySelector("[data-tip]")).toBeNull()
+    // ...and the whole row is marked changed even with no metadata change.
+    expect(screen.getByText("ada").closest("tr")!.className).toContain(
+      "bg-warning",
+    )
+  })
+
+  it("renders skeletons for the change columns while loading", () => {
+    const { container } = render(
+      <RosterPreviewTable
+        rows={rows}
+        rolesByUser={{}}
+        onRoleChange={vi.fn()}
+        loading={true}
+      />,
+    )
+    // Skeleton bars stand in for the still-resolving change columns...
+    expect(container.querySelectorAll(".skeleton").length).toBeGreaterThan(0)
+    // ...the username is still shown (known from parsing)...
+    expect(screen.getByText("ada")).toBeTruthy()
+    // ...but no role Select renders while loading (its change is unknown yet).
+    expect(container.querySelector("select")).toBeNull()
+  })
 })
