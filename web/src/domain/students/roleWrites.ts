@@ -228,15 +228,10 @@ export async function resolveRosterUploadContext(
   return { lookup: membershipLookup(resolved), storedByIdentity }
 }
 
-// Preflight a CSV roster upload: read the classroom's CURRENT GitHub membership
-// (all active org members + the three per-classroom team memberships) once, then
-// classify each uploaded row (pure, via classifyRosterUpload) into no-action /
-// invite / enroll / role-change. Read-only — sends NOTHING to GitHub — so the
-// upload dialog can preview the plan and gate role changes behind confirmation.
-//
-// The team reads 404-tolerate (an uncreated staff team reads as empty), and the
-// org-member read pages to completion; a hard failure of either propagates so
-// the caller surfaces "couldn't preview, try again" rather than a wrong plan.
+// Convenience wrapper: read the context (see resolveRosterUploadContext) and
+// run the pure classification in one call, returning the full PreflightResult.
+// Callers that reclassify repeatedly (per role edit) should instead read the
+// context once and call classifyRosterUpload themselves.
 export async function resolveRosterUploadPreflight(
   client: GitHubClient,
   input: ResolveRosterUploadPreflightInput,

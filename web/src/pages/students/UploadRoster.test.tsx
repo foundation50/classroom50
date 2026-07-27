@@ -367,5 +367,104 @@ describe("UploadRoster role-edit reclassification", () => {
     )
     // Still exactly one context fetch — the expensive read was not repeated.
     expect(resolveRosterUploadContext).toHaveBeenCalledTimes(1)
+    // ...and the table never flips back into the loading skeleton on the edit.
+    expect(document.querySelectorAll(".skeleton").length).toBe(0)
+  })
+
+  it("re-clears a ticked confirmation when a role is edited", async () => {
+    const user = userEvent.setup()
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [
+        {
+          username: "ada",
+          role: "ta",
+          currentRole: "student",
+          currentRoles: ["student"],
+          changedFields: [],
+          changes: [],
+        },
+      ],
+      metadataUpdate: [],
+      allAlreadyMembers: true,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(user, file("roster.csv", "username\nada\n"))
+    const roleSelect = await waitFor(() => {
+      const row = screen
+        .getAllByRole("combobox")
+        .find(
+          (s) => s.getAttribute("aria-label") === "students.assignRoleLabel",
+        )
+      if (!row) throw new Error("role select not rendered yet")
+      return row as HTMLSelectElement
+    })
+
+    // Tick the role-change confirmation → primary button enables.
+    const confirm = screen
+      .getByText(/preflightConfirmRoleChanges/)
+      .closest("label")!
+      .querySelector("input[type=checkbox]") as HTMLInputElement
+    await user.click(confirm)
+    const button = screen
+      .getByRole("button", { name: /confirmChanges/ })
+      .closest("button") as HTMLButtonElement
+    await waitFor(() => expect(button.disabled).toBe(false))
+
+    // Editing a role invalidates the prior confirmation: checkbox clears and the
+    // button disables until the teacher re-confirms.
+    await user.selectOptions(roleSelect, "hta")
+    await waitFor(() => expect(confirm.checked).toBe(false))
+    expect(button.disabled).toBe(true)
+  })
+
+  it("re-requires metadata confirmation after a same-username re-upload with changed details", async () => {
+    const user = userEvent.setup()
+    // A metadata_update forces the details table open + the metadata checkbox.
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [
+        {
+          kind: "metadata_update",
+          username: "ada",
+          role: "student",
+          changedFields: ["email"],
+          changes: [{ field: "email", from: "old@x.edu", to: "a@x.edu" }],
+        },
+      ],
+      allAlreadyMembers: true,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(user, file("roster.csv", "username,email\nada,a@x.edu\n"))
+    const confirm = await waitFor(() => {
+      const box = screen
+        .getByText(/preflightConfirmMetadata/)
+        .closest("label")!
+        .querySelector("input[type=checkbox]") as HTMLInputElement
+      return box
+    })
+    await user.click(confirm)
+    const button = screen
+      .getByRole("button", { name: /updateMetadata/ })
+      .closest("button") as HTMLButtonElement
+    await waitFor(() => expect(button.disabled).toBe(false))
+
+    // Re-upload a file with the SAME username (ada) but a DIFFERENT email. The
+    // username set + roles are unchanged, so the rolesKey reset effect alone
+    // wouldn't fire — applyKind must re-arm the gate so the teacher re-confirms.
+    await uploadFile(user, file("roster.csv", "username,email\nada,b@x.edu\n"))
+    await waitFor(() => expect(confirm.checked).toBe(false))
+    expect(button.disabled).toBe(true)
   })
 })

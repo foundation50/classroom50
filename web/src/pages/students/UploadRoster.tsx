@@ -122,11 +122,13 @@ const UploadRoster = ({
     {},
   )
   // The role-independent GitHub membership + stored-roster read, fetched ONCE
-  // per uploaded file. The actual classification (`preflight`) is derived from
-  // this synchronously, so changing a role reclassifies instantly without a
-  // network round-trip or a loading state. Null until the read resolves.
-  const [preflightContext, setPreflightContext] =
-    useState<RosterUploadContext | null>(null)
+  // per uploaded file, tagged with the usersKey it was fetched for. The actual
+  // classification (`preflight`) is derived from this synchronously, so changing
+  // a role reclassifies instantly without a network round-trip or a loading
+  // state. Null until the read resolves.
+  const [preflightContext, setPreflightContext] = useState<
+    (RosterUploadContext & { usersKey: string }) | null
+  >(null)
   const [preflighting, setPreflighting] = useState(false)
   const [preflightError, setPreflightError] = useState<string | null>(null)
   // The teacher's explicit confirmation of the role-change (team-move) rows.
@@ -204,7 +206,11 @@ const UploadRoster = ({
   // Fetch the role-independent membership + stored-roster context ONCE per
   // uploaded file (keyed on the set of usernames, not their assigned roles).
   // Changing a role reclassifies synchronously below — no refetch, no skeleton.
-  // A stale-response guard drops a slow read superseded by a new file.
+  // A stale-response guard drops a slow read superseded by a new file. The
+  // context is tagged with the usersKey it was fetched for, so the derived
+  // classification below only trusts it when it matches the CURRENT rows — the
+  // fetch effect runs post-commit, so without this a new-file render could
+  // briefly classify the new rows against the previous file's context.
   const preflightToken = useRef(0)
   const usersKey = rows
     .map((r) => r.username.toLowerCase())
@@ -213,6 +219,7 @@ const UploadRoster = ({
   useEffect(() => {
     if (phase !== "preview" || rows.length === 0) return
     const token = ++preflightToken.current
+    const fetchedFor = usersKey
     /* eslint-disable react-hooks/set-state-in-effect */
     setPreflighting(true)
     setPreflightError(null)
@@ -221,7 +228,7 @@ const UploadRoster = ({
     void resolveRosterUploadContext(client, { org, classroom })
       .then((context) => {
         if (preflightToken.current !== token) return
-        setPreflightContext(context)
+        setPreflightContext({ usersKey: fetchedFor, ...context })
       })
       .catch((err) => {
         if (preflightToken.current !== token) return
@@ -239,9 +246,12 @@ const UploadRoster = ({
 
   // The classification itself is pure and role-dependent: derive it
   // synchronously from the fetched context + the current per-row roles, so a
-  // role edit updates the preview instantly with no loading state.
+  // role edit updates the preview instantly with no loading state. Only trust a
+  // context fetched for the CURRENT usernames — a stale context from a just-
+  // replaced file must not classify the new rows (the fetch effect that nulls it
+  // runs after this render).
   const preflight = useMemo<PreflightResult | null>(() => {
-    if (!preflightContext) return null
+    if (!preflightContext || preflightContext.usersKey !== usersKey) return null
     const preflightRows = rows.map((r) => ({
       username: r.username,
       first_name: r.first_name,
@@ -256,7 +266,7 @@ const UploadRoster = ({
       preflightContext.lookup,
       preflightContext.storedByIdentity,
     )
-  }, [preflightContext, rows, rolesByUser])
+  }, [preflightContext, usersKey, rows, rolesByUser])
 
   // A role edit changes the plan (a team move / owner grant may appear or
   // vanish), so any prior confirmation is stale — clear the checkboxes when the
@@ -371,6 +381,13 @@ const UploadRoster = ({
   // initial ingest and when the teacher overrides the detected kind.
   const applyKind = (text: string, kind: UploadKind) => {
     setUploadKind(kind)
+    // A new file (or a re-parse under a different kind) is a fresh plan, so any
+    // confirmation the teacher ticked for the PREVIOUS content is stale — even
+    // when the new file shares the same usernames/roles (only metadata changed),
+    // which the rolesKey reset effect wouldn't catch. Re-arm the gates here so a
+    // changed plan can never be processed against an old confirmation.
+    setRoleChangesConfirmed(false)
+    setMetadataConfirmed(false)
     if (kind === "email-list") {
       const parsed = parseEmailInviteFile(text)
       setEmails(parsed.valid.map((r) => r.email))
