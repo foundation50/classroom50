@@ -61,9 +61,32 @@ export async function repairConcern(
       const result = await repairOrgDefaults(client, org, plan)
       return { unfixableFields: result.enterprisePinned.map((s) => s.field) }
     }
-    case "orgActions":
-      await ensureOrgActionsEnabled(client, org)
+    case "orgActions": {
+      const result = await ensureOrgActionsEnabled(client, org)
+      // "autograding_paused" isn't a failure: the mutation deliberately refuses
+      // to resume grading behind the teacher's back. Report success and let the
+      // audit refetch render the pause. Anything else genuinely didn't apply —
+      // surfacing it stops "Fix it" reporting a silent success (#419).
+      if (
+        result.status === "warning" &&
+        result.reason !== "autograding_paused"
+      ) {
+        return {
+          unfixableFields: [],
+          unresolved: {
+            message: result.message,
+            // Retryable causes must stay transient: a non-transient outcome is
+            // persisted to the per-org store, which nothing clears, so it would
+            // permanently pin "Needs manual setup" after one blip.
+            transient:
+              result.reason === "rate_limited" ||
+              result.reason === "readback_failed" ||
+              result.reason === "unknown",
+          },
+        }
+      }
       return { unfixableFields: [] }
+    }
     case "orgBudget": {
       // Create-only reconciliation: creates the $0 cap if missing, never
       // touches a teacher's budget. A read/permission failure or an

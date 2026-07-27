@@ -25,6 +25,10 @@ import {
 } from "@/orgPolicy/budget"
 import { logger } from "@/lib/logger"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
+import {
+  getOrgActionsPermissions,
+  orgActionsSelectionIncludesConfigRepo,
+} from "./orgActionsPolicy"
 
 const log = logger.scope("github:orgChecks")
 
@@ -34,10 +38,12 @@ export const RECOMMENDED_ORG_DEFAULT_BRANCH = DEFAULT_BRANCH
 
 // A concern's read-only state: enforced means the live value already matches
 // the desired policy; unenforced means it drifted; warn means it's acceptable
-// but not ideal (a non-gating advisory, e.g., an oversized budget); unreadable
-// means the read itself failed (permission/transient) so the verdict is
-// inconclusive.
-export type CheckState = "enforced" | "unenforced" | "warn" | "unreadable"
+// but not ideal (a non-gating advisory, e.g., an oversized budget); paused means
+// the teacher deliberately turned the setting off via a Classroom 50 control, so
+// it's off-policy on purpose and never gates; unreadable means the read itself
+// failed (permission/transient) so the verdict is inconclusive.
+export type CheckState =
+  "enforced" | "unenforced" | "warn" | "paused" | "unreadable"
 
 // An i18n descriptor for a concern's `detail`: a translation key plus its
 // interpolation params. The data layer stays language-free — it names the
@@ -130,37 +136,66 @@ export async function checkConfigRepoDefaultBranch(
   }
 }
 
-type OrgActionsPermissions = {
-  enabled_repositories: "all" | "none" | "selected"
-  allowed_actions?: "all" | "local_only" | "selected"
-}
-
 // orgActions: GET /orgs/{org}/actions/permissions — enforced when Actions are
 // enabled for all repos with all actions allowed.
+//
+// An org restricted to "selected" repos is normally drift, but it's also exactly
+// how the autograding kill switch pauses grading (setOrgActionsMode allow-lists
+// the config repo). Reporting that as drift failed the whole audit and lit the
+// preflight banner for a teacher who did nothing wrong (#419), so a confirmed
+// pause gets its own non-gating state instead.
 export async function checkOrgActions(
   client: GitHubClient,
   org: string,
 ): Promise<CheckVerdict> {
   try {
-    const perms = await client.request<OrgActionsPermissions>(
-      `/orgs/${org}/actions/permissions`,
-    )
-    const enforced =
-      perms.enabled_repositories === "all" && perms.allowed_actions === "all"
+    const perms = await getOrgActionsPermissions(client, org)
+    if (
+      perms.enabled_repositories === "all" &&
+      perms.allowed_actions === "all"
+    ) {
+      return { state: "enforced" }
+    }
+    // A pause is defined exactly as the writer defines it — "selected" with the
+    // config repo allow-listed (setOrgActionsMode deliberately leaves
+    // allowed_actions alone, so demanding "all" here would report an unfixable
+    // drift: ensureOrgActionsEnabled refuses to write while paused).
+    // Fail OPEN (unlike the write paths): if the allow-list read fails we report
+    // the pre-existing drift verdict, which keeps "Fix it" available rather than
+    // hiding a genuine misconfiguration behind an unproven pause.
+    if (
+      perms.enabled_repositories === "selected" &&
+      (await isAutogradingPause(client, org))
+    ) {
+      return {
+        state: "paused",
+        detail: { key: "orgSettings.audit.detail.orgActionsPaused" },
+      }
+    }
     return {
-      state: enforced ? "enforced" : "unenforced",
-      detail: enforced
-        ? undefined
-        : {
-            key: "orgSettings.audit.detail.orgActions",
-            params: {
-              enabledRepositories: perms.enabled_repositories,
-              allowedActions: perms.allowed_actions ?? "unset",
-            },
-          },
+      state: "unenforced",
+      detail: {
+        key: "orgSettings.audit.detail.orgActions",
+        params: {
+          enabledRepositories: perms.enabled_repositories,
+          allowedActions: perms.allowed_actions ?? "unset",
+        },
+      },
     }
   } catch (err) {
     return unreadableFrom(err)
+  }
+}
+
+async function isAutogradingPause(
+  client: GitHubClient,
+  org: string,
+): Promise<boolean> {
+  try {
+    return await orgActionsSelectionIncludesConfigRepo(client, org)
+  } catch (err) {
+    log.warn("couldn't read the org Actions allow-list", { org, err })
+    return false
   }
 }
 
