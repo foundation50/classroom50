@@ -5,6 +5,8 @@ const bulkEnrollStudentsInClassroom =
   vi.fn<(...args: unknown[]) => Promise<unknown>>()
 const inviteRosterStudents = vi.fn<(...args: unknown[]) => Promise<unknown>>()
 const writeClassroomRoles = vi.fn<(...args: unknown[]) => Promise<unknown>>()
+const updateClassroomMetadata =
+  vi.fn<(...args: unknown[]) => Promise<unknown>>()
 const applyClassroomRoleChange =
   vi.fn<(...args: unknown[]) => Promise<unknown>>()
 
@@ -17,6 +19,7 @@ vi.mock("@/domain/students", () => {
       bulkEnrollStudentsInClassroom(...a),
     inviteRosterStudents: (...a: unknown[]) => inviteRosterStudents(...a),
     writeClassroomRoles: (...a: unknown[]) => writeClassroomRoles(...a),
+    updateClassroomMetadata: (...a: unknown[]) => updateClassroomMetadata(...a),
     applyClassroomRoleChange: (...a: unknown[]) =>
       applyClassroomRoleChange(...a),
     NoNewStudentsError,
@@ -44,6 +47,8 @@ const messages = {
   importFailed: "import-failed",
   roleWritebackMalformed: "roleback-malformed",
   roleWritebackFailed: "roleback-failed",
+  metadataWritebackMalformed: "metadata-malformed",
+  metadataWritebackFailed: "metadata-failed",
 }
 
 const rows: ImportRosterRow[] = [{ username: "alice" }, { username: "bob" }]
@@ -72,6 +77,7 @@ beforeEach(() => {
     failed: [],
   })
   writeClassroomRoles.mockResolvedValue(undefined)
+  updateClassroomMetadata.mockResolvedValue({ changed: 0 })
   applyClassroomRoleChange.mockImplementation((...args: unknown[]) => {
     const input = args[1] as { username: string; toRole: string }
     return Promise.resolve({
@@ -161,6 +167,87 @@ describe("runRosterImport — allAlreadyMembers skips invites", () => {
     })
     expect(out.ok).toBe(true)
     expect(inviteRosterStudents).not.toHaveBeenCalled()
+  })
+})
+
+describe("runRosterImport — metadata writeback", () => {
+  const metaRows: ImportRosterRow[] = [
+    { username: "alice", email: "ada@x.edu" },
+    { username: "bob" },
+  ]
+  const metaPlan = {
+    allAlreadyMembers: true,
+    needsInvite: [],
+    enroll: [],
+    roleChanges: [],
+    noAction: [],
+    metadataUpdate: [
+      { username: "alice", role: "student", changedFields: ["email"] },
+    ],
+  }
+
+  it("calls updateClassroomMetadata with the row's CSV metadata", async () => {
+    updateClassroomMetadata.mockResolvedValueOnce({ changed: 1 })
+    const out = await call({ rows: metaRows, plan: metaPlan })
+    expect(out.ok).toBe(true)
+    expect(updateClassroomMetadata).toHaveBeenCalledOnce()
+    const arg = updateClassroomMetadata.mock.calls[0][1] as {
+      updates: { username: string; email?: string }[]
+    }
+    expect(arg.updates).toHaveLength(1)
+    expect(arg.updates[0]).toMatchObject({
+      username: "alice",
+      email: "ada@x.edu",
+    })
+  })
+
+  it("maps a malformed roster.csv metadata write to the malformed message", async () => {
+    updateClassroomMetadata.mockRejectedValueOnce(
+      new RosterCsvMalformedError("bad"),
+    )
+    const out = await call({ rows: metaRows, plan: metaPlan })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.inviteError).toBe("metadata-malformed")
+  })
+
+  it("maps a generic metadata write failure to the soft-warning message", async () => {
+    updateClassroomMetadata.mockRejectedValueOnce(new Error("transient"))
+    const out = await call({ rows: metaRows, plan: metaPlan })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.inviteError).toBe("metadata-failed")
+  })
+
+  it("does not call updateClassroomMetadata when nothing needs a metadata update", async () => {
+    await call({
+      rows: metaRows,
+      plan: { ...metaPlan, metadataUpdate: [] },
+    })
+    expect(updateClassroomMetadata).not.toHaveBeenCalled()
+  })
+
+  it("folds a role-changed row that carries metadata into the update set", async () => {
+    updateClassroomMetadata.mockResolvedValueOnce({ changed: 1 })
+    await call({
+      rows: [{ username: "carol", email: "c@x.edu" }],
+      rolesByUser: { carol: "ta" },
+      plan: {
+        allAlreadyMembers: true,
+        needsInvite: [],
+        enroll: [],
+        noAction: [],
+        metadataUpdate: [],
+        roleChanges: [
+          { username: "carol", currentRoles: ["student"], role: "ta" },
+        ],
+      },
+    })
+    expect(updateClassroomMetadata).toHaveBeenCalledOnce()
+    const arg = updateClassroomMetadata.mock.calls[0][1] as {
+      updates: { username: string }[]
+    }
+    expect(arg.updates.map((u) => u.username)).toEqual(["carol"])
   })
 })
 

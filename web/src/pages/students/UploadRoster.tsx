@@ -410,6 +410,8 @@ const UploadRoster = ({
         importFailed: t("students.importFailed"),
         roleWritebackMalformed: t("students.roleWritebackMalformed"),
         roleWritebackFailed: t("students.roleWritebackFailed"),
+        metadataWritebackMalformed: t("students.metadataWritebackMalformed"),
+        metadataWritebackFailed: t("students.metadataWritebackFailed"),
       },
     })
 
