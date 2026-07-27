@@ -63,6 +63,10 @@ export type PreflightRow = StudentMetadata & {
 // lookup so the classifier can diff the CSV against what's already recorded.
 export type StoredRosterRow = StudentMetadata
 
+// A single metadata field's change: the stored value and the CSV value that
+// replaces it, so the confirmation UI can show a `from -> to` delta (R9).
+export type MetadataChange = { field: MetadataField; from: string; to: string }
+
 export type PreflightOutcome =
   | { kind: "no_action"; username: string; role: PreflightRole }
   | {
@@ -71,9 +75,8 @@ export type PreflightOutcome =
       role: PreflightRole
       // The metadata fields whose stored value the CSV changes (non-empty).
       changedFields: MetadataField[]
-      // Per changed field, the stored value and the CSV value that replaces it,
-      // so the confirmation UI can show a `from -> to` delta (R9).
-      changes: { field: MetadataField; from: string; to: string }[]
+      // Per changed field, the stored value and the CSV value that replaces it.
+      changes: MetadataChange[]
     }
   | { kind: "needs_invite"; username: string; role: PreflightRole }
   | { kind: "enroll"; username: string; role: PreflightRole }
@@ -88,6 +91,13 @@ export type PreflightOutcome =
       // drops every non-target team, so a member on both the teacher and TA
       // teams moved to student leaves neither staff team behind.
       currentRoles: ClassroomRole[]
+      // Metadata the CSV also changes for this member. A role_change is NOT in the
+      // metadataUpdate bucket, so these travel with the move: the confirmation UI
+      // shows them under the role-change block and the writeback applies ONLY
+      // these (never a blind fold of every role-changed row). Empty when the CSV
+      // supplies no metadata delta.
+      changedFields: MetadataField[]
+      changes: MetadataChange[]
     }
 
 export type PreflightResult = {
@@ -107,6 +117,25 @@ export type PreflightResult = {
 // precedence order has a single source (teamRoster.ROLE_RANK).
 function primaryOf(roles: ClassroomRole[]): ClassroomRole | undefined {
   return roles.length === 0 ? undefined : sortRolesByRank(roles)[0]
+}
+
+// Diff a row's CSV metadata against its stored roster row (when known) into the
+// per-field `from -> to` changes both the metadata_update and role_change
+// outcomes carry. Empty when there's no stored row or no non-empty delta.
+function computeMetadataChanges(
+  row: PreflightRow,
+  stored: StoredRosterRow | undefined,
+): { changedFields: MetadataField[]; changes: MetadataChange[] } {
+  if (!stored) return { changedFields: [], changes: [] }
+  const { next, changedFields } = mergeStudentMetadata(stored, row)
+  return {
+    changedFields,
+    changes: changedFields.map((field) => ({
+      field,
+      from: (stored[field] ?? "").trim(),
+      to: next[field],
+    })),
+  }
 }
 
 // Classify each uploaded row against current membership. `lookup` resolves a
@@ -142,21 +171,17 @@ export function classifyRosterUpload(
     // stored match (brand-new to roster.csv, e.g. a login rename the login-only
     // join can't resolve) stays no_action — the add path owns new rows.
     if (current.roles.includes(row.role)) {
-      const stored = storedByIdentity?.(row)
-      const merge = stored
-        ? mergeStudentMetadata(stored, row)
-        : { next: {} as Record<MetadataField, string>, changedFields: [] }
-      if (merge.changedFields.length > 0) {
+      const { changedFields, changes } = computeMetadataChanges(
+        row,
+        storedByIdentity?.(row),
+      )
+      if (changedFields.length > 0) {
         outcomes.push({
           kind: "metadata_update",
           username,
           role: row.role,
-          changedFields: merge.changedFields,
-          changes: merge.changedFields.map((field) => ({
-            field,
-            from: (stored?.[field] ?? "").trim(),
-            to: merge.next[field],
-          })),
+          changedFields,
+          changes,
         })
       } else {
         outcomes.push({ kind: "no_action", username, role: row.role })
@@ -176,13 +201,20 @@ export function classifyRosterUpload(
     // Active member whose current role differs from the CSV role -> a move that
     // requires confirmation (student<->ta<->teacher, up or down). Carry the
     // full current role set so the move drops every non-target team, not just
-    // the primary one.
+    // the primary one, plus any metadata delta so the move also updates (and
+    // shows) the member's changed details rather than folding them in blindly.
+    const { changedFields, changes } = computeMetadataChanges(
+      row,
+      storedByIdentity?.(row),
+    )
     outcomes.push({
       kind: "role_change",
       username,
       role: row.role,
       currentRole,
       currentRoles: [...current.roles],
+      changedFields,
+      changes,
     })
   }
 

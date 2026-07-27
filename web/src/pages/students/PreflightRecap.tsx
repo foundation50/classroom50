@@ -127,15 +127,31 @@ export const PreflightRecap = ({
             {roleChanges.map((c) => (
               <li
                 key={`change-${c.username}`}
-                className="flex items-center justify-between gap-2"
+                className="flex flex-col gap-0.5"
               >
-                <code>{c.username}</code>
-                <span className="opacity-70">
-                  {t("students.preflightRoleChangeDetail", {
-                    from: t(ROLE_LABEL_KEY[c.currentRole]),
-                    to: t(ROLE_LABEL_KEY[c.role]),
-                  })}
-                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <code>{c.username}</code>
+                  <span className="opacity-70">
+                    {t("students.preflightRoleChangeDetail", {
+                      from: t(ROLE_LABEL_KEY[c.currentRole]),
+                      to: t(ROLE_LABEL_KEY[c.role]),
+                    })}
+                  </span>
+                </div>
+                {c.changes.length > 0 ? (
+                  <ul className="ml-4 flex flex-col gap-0.5 opacity-70">
+                    {c.changes.map((chg) => (
+                      <li key={chg.field}>
+                        {t("students.preflightMetadataDetail", {
+                          field: t(METADATA_FIELD_LABEL_KEY[chg.field]),
+                          from:
+                            chg.from || t("students.preflightMetadataEmpty"),
+                          to: chg.to,
+                        })}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </li>
             ))}
             {teacherEnrolls.map((e) => (
@@ -154,6 +170,11 @@ export const PreflightRecap = ({
             <Alert tone="warning">
               <span>{t("students.preflightRoleChangeOwnerNotice")}</span>
             </Alert>
+          ) : null}
+          {roleChanges.some((c) => c.changes.length > 0) ? (
+            <p className="text-sm opacity-70">
+              {t("students.preflightRoleChangeMetadataNotice")}
+            </p>
           ) : null}
           <label className="flex items-start gap-2 text-sm">
             <input

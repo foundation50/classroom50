@@ -494,6 +494,7 @@
     "preflightConfirmMetadata_one": "I confirm updating the details of {{count}} student as listed above.",
     "preflightConfirmMetadata_other": "I confirm updating the details of {{count}} students as listed above.",
     "preflightRoleChangeDetail": "{{from}} → {{to}}",
+    "preflightRoleChangeMetadataNotice": "Some of these members also have updated details (shown above), which will be saved together with the team change.",
     "preflightConfirmTitle": "Confirm before processing",
     "preflightEnrollOwnerDetail": "enroll as teacher (organization OWNER)",
     "preflightAllMembersNote": "Everyone in this file is already an organization member, so no invitations will be sent.",

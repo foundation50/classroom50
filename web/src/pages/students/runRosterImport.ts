@@ -213,25 +213,25 @@ export async function runRosterImport(
     }
   }
 
-  // 3.5) Persist changed name/email/section back to roster.csv for existing
-  //    members the preflight flagged as metadata_update. A row that is both a
-  //    role change AND a metadata delta is classified role_change (not
-  //    metadata_update), so its metadata is folded in here too by joining
-  //    role-changed usernames that carry CSV metadata — updateClassroomMetadata
-  //    is a safe no-op when nothing actually changed. Such a row was already
-  //    gated by the role-change confirmation it required, so nothing is written
-  //    unconfirmed. Runs AFTER the role writeback commits so this read-modify-
-  //    write sees the role change; best-effort — a failure converges on the
+  // 3.5) Persist changed name/email/section back to roster.csv for members the
+  //    preflight flagged with a metadata delta. Two sources contribute, and BOTH
+  //    are surfaced in the preview and confirmed before we get here:
+  //      - metadata_update rows (gated by the metadata confirmation), and
+  //      - role_change rows that ALSO carry a metadata delta (shown under, and
+  //        gated by, the role-change confirmation).
+  //    Only rows with a genuine `changedFields` delta are included — never a
+  //    blind fold of every role-changed row — so a pure team move with no
+  //    metadata change never enters this read-modify-write (and can't surface a
+  //    spurious malformed/failed warning). Runs AFTER the role writeback commits
+  //    so this RMW sees the role change; best-effort — a failure converges on the
   //    next sync and never blocks invites or team moves.
-  const metadataUsernames = new Set(
-    [
-      ...(plan?.metadataUpdate ?? []).map((m) => m.username),
-      ...(plan?.roleChanges ?? []).map((c) => c.username),
-    ].map((u) => u.toLowerCase()),
-  )
+  const metadataOutcomes = [
+    ...(plan?.metadataUpdate ?? []),
+    ...(plan?.roleChanges ?? []).filter((c) => c.changedFields.length > 0),
+  ]
   const rowByLogin = new Map(rows.map((r) => [r.username.toLowerCase(), r]))
-  const metadataUpdates = [...metadataUsernames]
-    .map((login) => rowByLogin.get(login))
+  const metadataUpdates = metadataOutcomes
+    .map((o) => rowByLogin.get(o.username.toLowerCase()))
     .filter((r): r is ImportRosterRow => Boolean(r))
     .map((r) => ({
       username: r.username,

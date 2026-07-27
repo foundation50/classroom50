@@ -227,7 +227,7 @@ describe("runRosterImport — metadata writeback", () => {
     expect(updateClassroomMetadata).not.toHaveBeenCalled()
   })
 
-  it("folds a role-changed row that carries metadata into the update set", async () => {
+  it("folds a role-changed row whose metadata delta was detected into the update set", async () => {
     updateClassroomMetadata.mockResolvedValueOnce({ changed: 1 })
     await call({
       rows: [{ username: "carol", email: "c@x.edu" }],
@@ -239,7 +239,13 @@ describe("runRosterImport — metadata writeback", () => {
         noAction: [],
         metadataUpdate: [],
         roleChanges: [
-          { username: "carol", currentRoles: ["student"], role: "ta" },
+          {
+            username: "carol",
+            currentRoles: ["student"],
+            role: "ta",
+            changedFields: ["email"],
+            changes: [{ field: "email", from: "old@x.edu", to: "c@x.edu" }],
+          },
         ],
       },
     })
@@ -248,6 +254,44 @@ describe("runRosterImport — metadata writeback", () => {
       updates: { username: string }[]
     }
     expect(arg.updates.map((u) => u.username)).toEqual(["carol"])
+  })
+
+  it("does NOT write metadata for a role-changed row with no metadata delta", async () => {
+    // A pure team move (no CSV metadata change) must never enter the metadata
+    // write — otherwise an unrelated malformed roster row could surface a
+    // spurious metadata warning on a team-move-only import.
+    await call({
+      rows: [{ username: "carol" }],
+      rolesByUser: { carol: "ta" },
+      plan: {
+        allAlreadyMembers: true,
+        needsInvite: [],
+        enroll: [],
+        noAction: [],
+        metadataUpdate: [],
+        roleChanges: [
+          {
+            username: "carol",
+            currentRoles: ["student"],
+            role: "ta",
+            changedFields: [],
+            changes: [],
+          },
+        ],
+      },
+    })
+    expect(updateClassroomMetadata).not.toHaveBeenCalled()
+  })
+
+  it("preserves an earlier role-writeback warning over a metadata failure", async () => {
+    // Step 3 (role writeback) sets inviteError first; step 3.5's metadata
+    // failure must NOT clobber it (the `inviteError ??` coalescing).
+    writeClassroomRoles.mockRejectedValueOnce(new Error("roleback-transient"))
+    updateClassroomMetadata.mockRejectedValueOnce(new Error("meta-transient"))
+    const out = await call({ rows: metaRows, plan: metaPlan })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.inviteError).toBe("roleback-failed")
   })
 })
 
@@ -259,7 +303,13 @@ describe("runRosterImport — confirmed team moves", () => {
         needsInvite: [],
         noAction: [],
         roleChanges: [
-          { username: "carol", currentRoles: ["student"], role: "ta" },
+          {
+            username: "carol",
+            currentRoles: ["student"],
+            role: "ta",
+            changedFields: [],
+            changes: [],
+          },
         ],
         enroll: [{ username: "dave", role: "student" }],
       },
@@ -287,7 +337,13 @@ describe("runRosterImport — confirmed team moves", () => {
         needsInvite: [],
         noAction: [],
         roleChanges: [
-          { username: "carol", currentRoles: ["student"], role: "ta" },
+          {
+            username: "carol",
+            currentRoles: ["student"],
+            role: "ta",
+            changedFields: [],
+            changes: [],
+          },
         ],
         enroll: [{ username: "dave", role: "student" }],
       },

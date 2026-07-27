@@ -259,5 +259,16 @@ describe("UploadRoster canProcess gating", () => {
       .querySelector("input[type=checkbox]") as HTMLInputElement
     await user.click(checkbox)
     await waitFor(() => expect(button.disabled).toBe(false))
+
+    // The CSV metadata must reach the preflight, or metadata_update can never
+    // be detected. Guards against a dropped field in the preflightRows mapping.
+    expect(resolveRosterUploadPreflight).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({
+        rows: [
+          expect.objectContaining({ username: "ada", email: "ada@x.edu" }),
+        ],
+      }),
+    )
   })
 })

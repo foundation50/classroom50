@@ -131,6 +131,25 @@ describe("classifyRosterUpload", () => {
     )
     expect(result.roleChanges.map((o) => o.username)).toEqual(["userb"])
     expect(result.metadataUpdate).toHaveLength(0)
+    // The metadata delta travels WITH the role_change so it is shown under the
+    // role-change confirmation and written only when real (not blindly folded).
+    expect(result.roleChanges[0].changedFields).toEqual(["email"])
+    expect(result.roleChanges[0].changes).toEqual([
+      { field: "email", from: "old@x.edu", to: "new@x.edu" },
+    ])
+  })
+
+  it("leaves a role_change's metadata empty when the CSV supplies no delta", () => {
+    const rows: PreflightRow[] = [
+      { username: "userb", role: "ta", email: "same@x.edu" },
+    ]
+    const result = classifyRosterUpload(
+      rows,
+      lookupFrom({ userb: { isOrgMember: true, roles: ["student"] } }),
+      storedFrom({ userb: { email: "same@x.edu" } }),
+    )
+    expect(result.roleChanges[0].changedFields).toEqual([])
+    expect(result.roleChanges[0].changes).toEqual([])
   })
 
   it("enrolls an active member on no classroom team (additive, no confirm)", () => {
@@ -157,6 +176,8 @@ describe("classifyRosterUpload", () => {
         role: "ta",
         currentRole: "student",
         currentRoles: ["student"],
+        changedFields: [],
+        changes: [],
       },
     ])
   })
@@ -175,6 +196,8 @@ describe("classifyRosterUpload", () => {
         role: "student",
         currentRole: "ta",
         currentRoles: ["ta"],
+        changedFields: [],
+        changes: [],
       },
     ])
   })
@@ -273,6 +296,8 @@ describe("hasTeacherPromotion", () => {
           role: "ta",
           currentRole: "student",
           currentRoles: ["student"],
+          changedFields: [],
+          changes: [],
         },
       ]),
     ).toBe(false)
@@ -284,6 +309,8 @@ describe("hasTeacherPromotion", () => {
           role: "teacher",
           currentRole: "student",
           currentRoles: ["student"],
+          changedFields: [],
+          changes: [],
         },
       ]),
     ).toBe(true)
