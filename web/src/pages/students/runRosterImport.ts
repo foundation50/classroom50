@@ -214,18 +214,12 @@ export async function runRosterImport(
   }
 
   // 3.5) Persist changed name/email/section back to roster.csv for members the
-  //    preflight flagged with a metadata delta. Two sources contribute, and BOTH
-  //    are surfaced in the preview and confirmed before we get here:
-  //      - metadata_update rows (gated by the metadata confirmation), and
-  //      - role_change / enroll rows that ALSO carry a metadata delta (role_change
-  //        is shown under and gated by the role-change confirmation; enroll is an
-  //        additive team-add that needs no destructive-move gate).
-  //    Only rows with a genuine `changedFields` delta are included — never a
-  //    blind fold of every role-changed row — so a pure team move with no
-  //    metadata change never enters this read-modify-write (and can't surface a
-  //    spurious malformed/failed warning). Runs AFTER the role writeback commits
-  //    so this RMW sees the role change; best-effort — a failure converges on the
-  //    next sync and never blocks invites or team moves.
+  //    preflight flagged with a metadata delta (metadata_update, plus role_change
+  //    / enroll rows that also carry one — all surfaced and confirmed in the
+  //    preview before we get here). Only rows with a genuine delta are folded in,
+  //    so a pure team move never enters this write. Runs AFTER the role writeback
+  //    commits so this RMW sees the role change; best-effort — a failure converges
+  //    on the next sync and never blocks invites or team moves.
   const metadataOutcomes = [
     ...(plan?.metadataUpdate ?? []),
     ...(plan?.roleChanges ?? []).filter((c) => c.changedFields.length > 0),

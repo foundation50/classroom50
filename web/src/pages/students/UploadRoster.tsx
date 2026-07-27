@@ -39,7 +39,11 @@ import { runRosterImport, type ImportProgress } from "./runRosterImport"
 import type { InviteOutcome, RoleChangeOutcome } from "./runRosterImport"
 import { PreflightRecap } from "./PreflightRecap"
 import { PreflightSummary } from "./PreflightSummary"
-import { RosterPreviewTable } from "./RosterPreviewTable"
+import {
+  RosterPreviewTable,
+  type RowChanges,
+  type RowRoleChanges,
+} from "./RosterPreviewTable"
 import { ImportResultSection, RosterImportResult } from "./RosterImportResult"
 
 // Preserve the module's original public surface: the pure parse helpers live in
@@ -244,10 +248,7 @@ const UploadRoster = ({
   // keyed by lowercased username. The table shows the stored -> CSV transition
   // inline, so the recap no longer needs a text list of them.
   const rowChanges = useMemo(() => {
-    const map: Record<
-      string,
-      PreflightResult["metadataUpdate"][number]["changes"]
-    > = {}
+    const map: RowChanges = {}
     for (const m of preflight?.metadataUpdate ?? []) {
       if (m.changes.length > 0) map[m.username.toLowerCase()] = m.changes
     }
@@ -263,7 +264,7 @@ const UploadRoster = ({
   // keyed by lowercased username. Kept separate from the metadata `changes` map
   // because a role change lives in the Role column's Select, not a text cell.
   const roleChangeByUser = useMemo(() => {
-    const map: Record<string, { from: ClassroomRole; to: ClassroomRole }> = {}
+    const map: RowRoleChanges = {}
     for (const c of preflight?.roleChanges ?? []) {
       map[c.username.toLowerCase()] = { from: c.currentRole, to: c.role }
     }

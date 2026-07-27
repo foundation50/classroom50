@@ -176,14 +176,22 @@ export async function resolveRosterUploadPreflight(
   const { org, classroom, rows } = input
   const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
 
-  const [orgMembers, studentMembers, teacherMembers, htaMembers, taMembers] =
-    await Promise.all([
+  // The stored-roster read is independent of the team/org-membership reads, so
+  // run it in the same wave rather than as a serial second stage — the preflight
+  // re-runs on every per-row role edit, so shaving a round-trip matters.
+  const [
+    [orgMembers, studentMembers, teacherMembers, htaMembers, taMembers],
+    storedByIdentity,
+  ] = await Promise.all([
+    Promise.all([
       listAllOrgMembers(client, org),
       listTeamMembers(client, org, slugs.student),
       listTeamMembers(client, org, slugs.staff.teacher),
       listTeamMembers(client, org, slugs.staff.hta),
       listTeamMembers(client, org, slugs.staff.ta),
-    ])
+    ]),
+    resolveStoredRosterLookup(client, org, classroom),
+  ])
 
   const orgSets = memberIdentitySets(orgMembers)
   const studentSets = memberIdentitySets(studentMembers)
@@ -209,12 +217,6 @@ export async function resolveRosterUploadPreflight(
       ta: taSets.logins,
     },
   }
-
-  const storedByIdentity = await resolveStoredRosterLookup(
-    client,
-    org,
-    classroom,
-  )
 
   return classifyRosterUpload(
     rows,

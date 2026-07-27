@@ -123,8 +123,6 @@ export const RosterPreviewTable = ({
                   <td>
                     <code>{row.username}</code>
                   </td>
-                  {/* Name / Email / Section / Role skeletons: their change state
-                      is still being resolved. */}
                   <td>
                     <div className="skeleton skeleton-shimmer h-4 w-28" />
                   </td>
