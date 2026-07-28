@@ -1,9 +1,6 @@
-// Guarded access to the Web Storage APIs. `window` can exist while
-// `localStorage`/`sessionStorage` is absent (some SSR/test DOMs, storage
-// disabled), and the property access itself can *throw* — a sandboxed iframe or
-// blocked cookies raises a SecurityError on the getter, before any read. The
-// persisted-preference modules degrade to their defaults rather than failing, so
-// they go through here instead of touching the globals directly.
+// Guarded access to the Web Storage APIs. The property access itself can throw —
+// a sandboxed iframe or blocked cookies raises SecurityError on the getter,
+// before any read — so persisted-preference modules degrade instead of failing.
 
 function probe(key: "localStorage" | "sessionStorage"): Storage | null {
   try {

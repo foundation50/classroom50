@@ -10,8 +10,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-// Swap a window property and register its undo, so a throwing accessor can't
-// leak into a sibling test.
+// Registers each swap's undo, so a throwing accessor can't leak into a sibling test.
 function redefine(
   name: "localStorage" | "sessionStorage",
   descriptor: PropertyDescriptor,
@@ -42,8 +41,7 @@ function installStore(name: "localStorage" | "sessionStorage"): Storage {
   return storage
 }
 
-// The helper exists because a *property read* can raise, not just return
-// undefined — a getter is the only way to reproduce that.
+// A getter is the only way to reproduce a *read* that raises.
 function stubAccessor(
   name: "localStorage" | "sessionStorage",
   get: () => Storage,

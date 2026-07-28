@@ -76,8 +76,8 @@ describe("budgetNoticeStore", () => {
     expect(n.dismissed).toBe(false)
   })
 
-  // A sandboxed iframe or blocked cookies makes the localStorage *getter* throw,
-  // before any read — the banner logic must degrade, not take down the page.
+  // A sandboxed iframe or blocked cookies makes the getter throw; the banner
+  // logic must degrade, not take down the page.
   it("degrades to defaults when the storage accessor throws", () => {
     Object.defineProperty(window, "localStorage", {
       get() {

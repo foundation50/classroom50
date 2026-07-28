@@ -15,8 +15,6 @@ describe("PlanBadge", () => {
     expect(container.querySelector(".badge")).toBeNull()
   })
 
-  // cx drops falsy fragments and trims, so an absent className can't leave a
-  // stray token or a double/trailing space in the class list.
   it("emits a clean class list when className is omitted", () => {
     const { container } = render(<PlanBadge name="enterprise" />)
     const cls = badgeClass(container)

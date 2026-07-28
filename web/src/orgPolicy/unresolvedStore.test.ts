@@ -79,9 +79,8 @@ describe("unresolvedStore", () => {
     expect(readUnresolved("acme").concerns.size).toBe(0)
   })
 
-  // A sandboxed iframe or blocked cookies makes the localStorage *getter* throw,
-  // before any read. Every entry point must degrade rather than propagate, or the
-  // audit pane dies on mount.
+  // A sandboxed iframe or blocked cookies makes the getter throw, and the audit
+  // pane would die on mount if any entry point propagated that.
   it("degrades to empty when the storage accessor throws", () => {
     Object.defineProperty(window, "localStorage", {
       get() {

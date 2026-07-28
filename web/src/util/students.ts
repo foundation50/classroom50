@@ -11,11 +11,10 @@ export { isMalformedGitHubId, isSameGitHubUser, parseGitHubId, resolveGitHubId }
 export const capitalize = (s: string) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1) : ""
 
-// First user-perceived character of a string, or "" when empty. `s[0]` and
-// `slice(0, 1)` yield a UTF-16 code *unit*, so a self-reported roster name
-// starting with an emoji would render as a lone surrogate. Built lazily behind a
-// feature test because this module is imported app-wide: a runtime without
-// Intl.Segmenter must degrade to a mangled initial, not a blank page.
+// First user-perceived character, or "" when empty. `s[0]` and `slice(0, 1)`
+// yield a UTF-16 code *unit*, so a roster name starting with an emoji would
+// render as a lone surrogate. Lazy + feature-tested: this module is imported
+// app-wide, so a runtime without Intl.Segmenter must degrade, not blank the page.
 let segmenter: Intl.Segmenter | null | undefined
 
 export const firstGrapheme = (s: string): string => {

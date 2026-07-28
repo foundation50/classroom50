@@ -54,15 +54,14 @@ describe("initialsFromParts — avatar initials from self-reported names", () =>
     expect(initialsFromParts(undefined, undefined)).toBe("")
   })
 
-  // Roster names are self-reported free text, so a leading emoji or astral
-  // character is reachable in production.
+  // Roster names are self-reported free text, so a leading emoji is reachable.
   it("keeps an astral first character whole", () => {
     expect(initialsFromParts("😀mona", "🎓lisa")).toBe("😀🎓")
     expect(initialsFromParts("𝒜lice", "")).toBe("𝒜")
   })
 
   it("keeps a combining mark attached to its base letter", () => {
-    // "e" + U+0301 COMBINING ACUTE ACCENT — one grapheme, two code units.
+    // "e" + U+0301 COMBINING ACUTE ACCENT: one grapheme, two code units.
     expect(initialsFromParts("e\u0301lodie", "")).toBe("E\u0301")
   })
 })

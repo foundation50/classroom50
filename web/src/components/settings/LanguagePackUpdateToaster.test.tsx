@@ -13,9 +13,8 @@ vi.mock("@/context/notifications/NotificationProvider", () => ({
 }))
 
 vi.mock("@/i18n/customLocale", async () => {
-  // Exercise the real formatter — the locale-aware list is the behavior under
-  // test — over stubbed labels, so the assertions don't depend on ICU's
-  // language *names* (which vary by ICU version).
+  // Real formatter over stubbed labels: the locale-aware list is what's under
+  // test, but ICU's language *names* vary by ICU version.
   const actual = await vi.importActual<typeof import("@/i18n/customLocale")>(
     "@/i18n/customLocale",
   )
@@ -52,9 +51,8 @@ afterEach(() => {
   uiLanguage = "en"
 })
 
-// The toast names the languages whose packs just updated, so its audience is
-// non-English readers by definition. A hard-coded ", " is wrong for most of
-// them — Japanese enumerates with "、" and Chinese with no separator at all.
+// A hard-coded ", " is wrong for most of the languages this toast announces:
+// Japanese enumerates with "、", Chinese with no separator at all.
 describe("LanguagePackUpdateToaster", () => {
   it("joins an English list with a comma and a conjunction", () => {
     render(<LanguagePackUpdateToaster />)

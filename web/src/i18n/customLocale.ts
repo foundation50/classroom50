@@ -243,9 +243,9 @@ function languageName(code: string, uiLocale?: string): string | null {
   }
 }
 
-// Human-readable enumeration of language labels, in the UI language's own list
-// style. Guarded like languageName: langCodeSchema admits tags Intl rejects
-// (`en-1`), and a sideloaded pack's code can become the active uiLocale.
+// Language labels enumerated in the UI language's own list style. Guarded like
+// languageName: langCodeSchema admits tags Intl rejects (`en-1`), and a
+// sideloaded pack's code can become the active uiLocale.
 export function languageLabelList(codes: string[], uiLocale?: string): string {
   const labels = codes.map((code) => languageLabel(code, uiLocale))
   if (typeof Intl === "undefined" || typeof Intl.ListFormat !== "function") {
@@ -619,11 +619,10 @@ export async function prepareFromUrl(
 
   const resolved = resolveCode(code, parsed.pathname)
 
-  // The manual controller stays for the size-cap aborts below; the deadline
-  // comes from the platform. It must cover the body read, not just the headers —
-  // a slow-drip response (bytes trickled under the cap) would otherwise stream
-  // forever. An AbortSignal.timeout can't be disarmed early, which is exactly
-  // the property we want here.
+  // The controller stays for the size-cap aborts below; the deadline comes from
+  // the platform. It has to cover the body read, not just the headers — a
+  // slow-drip response (bytes trickled under the cap) would stream forever — and
+  // an AbortSignal.timeout can't be disarmed early, which is what we want.
   const controller = new AbortController()
   const signal = AbortSignal.any([
     controller.signal,
@@ -697,8 +696,8 @@ export function fetchRegistry(): Promise<RegistryLanguage[]> {
 // Fetch the manifest and return the offered language codes. Invalid entries are
 // skipped; a fetch/parse failure throws LanguagePackError for the UI to show.
 async function fetchRegistryUncached(): Promise<RegistryLanguage[]> {
-  // Manual controller for the size-cap aborts, platform deadline for the
-  // timeout, which must cover the streaming read (see prepareFromUrl).
+  // Controller for the size-cap aborts, platform deadline for the timeout, which
+  // has to cover the streaming read (see prepareFromUrl).
   const controller = new AbortController()
   const signal = AbortSignal.any([
     controller.signal,
