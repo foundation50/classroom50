@@ -9,6 +9,11 @@ export type ReconcileTemplateAccessInput = {
   classroom: string
   slug: string
   template: NonNullable<Assignment["template"]>
+  // Whether the assignment is locked. A locked assignment intentionally has no
+  // student-team template read, so reconciling (re-granting) it would silently
+  // re-open it — the hook refuses and returns a warning instead. Mirrors the
+  // CLI add/reuse guard and editAssignment's skip.
+  locked?: boolean
 }
 
 // A non-empty `warning` means the student grant failed (the domain layer never
@@ -39,7 +44,15 @@ export function useReconcileTemplateAccess() {
     Error,
     ReconcileTemplateAccessInput
   >({
-    mutationFn: async ({ org, classroom, slug, template }) => {
+    mutationFn: async ({ org, classroom, slug, template, locked }) => {
+      // Refuse to re-grant a locked assignment: doing so would undo the lock's
+      // whole point (student-team read removed on the private template). Return
+      // a warning the call site surfaces, rather than silently re-opening it.
+      if (locked) {
+        return {
+          warning: `"${slug}" is locked, so its template access was not changed. Unlock the assignment first to restore the student team's read on ${template.owner}/${template.repo}.`,
+        }
+      }
       const warning = await tryGrantTeamTemplateRead(
         client,
         org,

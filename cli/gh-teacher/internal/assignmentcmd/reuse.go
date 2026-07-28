@@ -276,7 +276,13 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		return err
 	}
 
-	_, _ = fmt.Fprintf(errOut, "Students can now run: gh student accept %s %s %s\n", p.Org, p.To, finalSlug)
+	// A locked copy can't be accepted yet, so the usual "students can now
+	// accept" hint would mislead — point at unlock instead.
+	if copied.Locked {
+		_, _ = fmt.Fprintf(errOut, "Unlock it first: gh teacher assignment unlock %s %s %s\n", p.Org, p.To, finalSlug)
+	} else {
+		_, _ = fmt.Fprintf(errOut, "Students can now run: gh student accept %s %s %s\n", p.Org, p.To, finalSlug)
+	}
 	return nil
 }
 
