@@ -21,6 +21,7 @@ import { studentAssignmentListPrefs } from "@/lib/studentAssignmentListPrefs"
 import {
   DEFAULT_STUDENT_FILTERS,
   filterAndSortStudentAssignments,
+  isListableToStudent,
   type StudentAssignmentFilters,
   type StudentAssignmentSort,
 } from "@/components/org/studentAssignmentFilters"
@@ -421,6 +422,17 @@ export function StudentAssignmentList({
     [assignments, query, filters, sortKey, acceptedSlugs],
   )
 
+  // Assignments listable to this student ignoring the search/status/type/due
+  // facets: released or already accepted. Distinguishes "nothing available to
+  // you yet" (all still link-only) from "your filters hid everything".
+  const listableCount = useMemo(
+    () =>
+      (assignments ?? []).filter((a) =>
+        isListableToStudent(a, acceptedSlugs.has(a.slug)),
+      ).length,
+    [assignments, acceptedSlugs],
+  )
+
   if (isLoading) {
     return (
       <div className="grid grid-cols-12 gap-4">
@@ -450,6 +462,18 @@ export function StudentAssignmentList({
       <EmptyState
         title={t("assignments.discover.emptyTitle")}
         body={t("assignments.discover.emptyBody")}
+      />
+    )
+  }
+
+  // Assignments exist but none are listable to this student yet (all still
+  // link-only, none accepted). Point them at the invite link rather than
+  // showing a filter-oriented "no results" that clearing filters won't fix.
+  if (listableCount === 0) {
+    return (
+      <EmptyState
+        title={t("assignments.discover.linkOnlyTitle")}
+        body={t("assignments.discover.linkOnlyBody")}
       />
     )
   }

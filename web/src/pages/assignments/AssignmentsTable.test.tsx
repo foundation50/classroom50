@@ -191,3 +191,43 @@ describe("AssignmentsTable — Template access button", () => {
     expect(screen.getByTestId("template-access-modal").textContent).toBe("hw1")
   })
 })
+
+describe("AssignmentsTable — Release date column", () => {
+  it("shows the link-only badge when no release date is set", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment()]}
+        studentCount={0}
+      />,
+    )
+    expect(screen.getByText("assignments.table.releaseNotSet")).toBeTruthy()
+  })
+
+  it("shows the scheduled badge when the release date is in the future", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ available_from: "2999-01-01T00:00:00Z" })]}
+        studentCount={0}
+      />,
+    )
+    expect(screen.getByText("assignments.table.scheduled")).toBeTruthy()
+    expect(screen.queryByText("assignments.table.releaseNotSet")).toBeNull()
+  })
+
+  it("shows the released date (no link-only/scheduled badge) once it has passed", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ available_from: "2020-01-01T00:00:00Z" })]}
+        studentCount={0}
+      />,
+    )
+    expect(screen.queryByText("assignments.table.releaseNotSet")).toBeNull()
+    expect(screen.queryByText("assignments.table.scheduled")).toBeNull()
+  })
+})

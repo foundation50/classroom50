@@ -122,6 +122,7 @@ const CreateAssignmentPage = () => {
                 template_repo: values.template_repo,
                 description: values.description,
                 due_date: values.due_date,
+                available_from_date: values.available_from_date,
                 max_group_size: values.max_group_size,
                 feedback_pr: values.feedback_pr,
                 empty_repo: values.empty_repo,

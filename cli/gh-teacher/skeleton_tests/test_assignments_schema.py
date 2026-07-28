@@ -157,6 +157,26 @@ class TestSchemaAccepts:
         )
         assert _errors(_manifest(entry)) == []
 
+    @pytest.mark.parametrize("available_from", [
+        "2026-09-01T00:00:00-04:00",
+        "2026-09-01T00:00:00Z",
+        "2026-09-01T00:00:00.500Z",
+    ])
+    def test_available_from_rfc3339_shapes(self, available_from):
+        assert _errors(_manifest(_entry(available_from=available_from))) == []
+
+    def test_available_from_meta_accepted(self):
+        entry = _entry(
+            available_from="2026-09-01T04:00:00Z",
+            available_from_meta={
+                "input": "2026-09-01T00:00:00",
+                "zone": "America/New_York",
+                "offset": "-04:00",
+                "source": "auto-detected",
+            },
+        )
+        assert _errors(_manifest(entry)) == []
+
 
 class TestSchemaRejects:
     def test_template_null_rejected(self):
@@ -296,6 +316,23 @@ class TestSchemaRejects:
     ])
     def test_bad_due_meta(self, due_meta):
         entry = _entry(due="2026-09-16T03:59:00Z", due_meta=due_meta)
+        assert _errors(_manifest(entry)) != []
+
+    @pytest.mark.parametrize("available_from", [
+        "2026-09-01",
+        "2026-09-01T00:00:00",
+        "next Tuesday",
+        "",
+    ])
+    def test_available_from_must_be_full_rfc3339(self, available_from):
+        assert _errors(_manifest(_entry(available_from=available_from))) != []
+
+    def test_bad_available_from_meta(self):
+        # Unknown key inside the closed available_from_meta sub-object.
+        entry = _entry(
+            available_from="2026-09-01T04:00:00Z",
+            available_from_meta={"input": "x", "offset": "-04:00", "source": "auto-detected", "tz": "x"},
+        )
         assert _errors(_manifest(entry)) != []
 
     def test_wrong_schema_sentinel(self):

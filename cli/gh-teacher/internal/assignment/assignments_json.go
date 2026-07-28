@@ -95,23 +95,25 @@ type AssignmentsJSON struct {
 // exists — flipping it later would mean retrofitting every already-accepted repo.
 // Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
 type AssignmentEntry struct {
-	Slug          string           `json:"slug"`
-	Name          string           `json:"name"`
-	Description   string           `json:"description,omitempty"`
-	Template      *TemplateRef     `json:"template,omitempty"`
-	Due           string           `json:"due,omitempty"`
-	DueMeta       *DueMeta         `json:"due_meta,omitempty"`
-	Mode          string           `json:"mode"`
-	Autograder    string           `json:"autograder"`
-	MaxGroupSize  int              `json:"max_group_size,omitempty"`
-	Runtime       *RuntimeRef      `json:"runtime,omitempty"`
-	Tests         []TestSpec       `json:"tests,omitempty"`
-	FeedbackPR    bool             `json:"feedback_pr,omitempty"`
-	EmptyRepo     bool             `json:"empty_repo,omitempty"`
-	AllowedFiles  []string         `json:"allowed_files,omitempty"`
-	ReleaseAssets []string         `json:"release_assets,omitempty"`
-	PassThreshold *int             `json:"pass_threshold,omitempty"`
-	MigratedFrom  *MigratedFromRef `json:"migrated_from,omitempty"`
+	Slug              string           `json:"slug"`
+	Name              string           `json:"name"`
+	Description       string           `json:"description,omitempty"`
+	Template          *TemplateRef     `json:"template,omitempty"`
+	Due               string           `json:"due,omitempty"`
+	DueMeta           *DueMeta         `json:"due_meta,omitempty"`
+	AvailableFrom     string           `json:"available_from,omitempty"`
+	AvailableFromMeta *DueMeta         `json:"available_from_meta,omitempty"`
+	Mode              string           `json:"mode"`
+	Autograder        string           `json:"autograder"`
+	MaxGroupSize      int              `json:"max_group_size,omitempty"`
+	Runtime           *RuntimeRef      `json:"runtime,omitempty"`
+	Tests             []TestSpec       `json:"tests,omitempty"`
+	FeedbackPR        bool             `json:"feedback_pr,omitempty"`
+	EmptyRepo         bool             `json:"empty_repo,omitempty"`
+	AllowedFiles      []string         `json:"allowed_files,omitempty"`
+	ReleaseAssets     []string         `json:"release_assets,omitempty"`
+	PassThreshold     *int             `json:"pass_threshold,omitempty"`
+	MigratedFrom      *MigratedFromRef `json:"migrated_from,omitempty"`
 
 	// Extra holds unknown top-level entry keys, re-emitted verbatim so a
 	// read-modify-write never drops a field a newer binary/GUI added.
@@ -126,7 +128,7 @@ var knownEntryKeys = map[string]struct{}{
 	"due_meta": {}, "mode": {}, "autograder": {}, "max_group_size": {},
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
 	"allowed_files": {}, "release_assets": {}, "pass_threshold": {},
-	"migrated_from": {},
+	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then strictly
@@ -352,11 +354,38 @@ func ParseDueTime(raw string, loc *time.Location) (parsed time.Time, hadOffset b
 // no knowable machine zone to attach. Naive-input tolerance lives only in
 // ParseDueTime.
 func ValidateDueDate(due string) error {
-	if due == "" {
+	return validateRFC3339Field("due", due, "2026-09-15T23:59:00-04:00")
+}
+
+// ValidateAvailableFrom guards the stored release date, same shape rule as
+// ValidateDueDate: empty (always listed) or an RFC 3339 timestamp with offset.
+func ValidateAvailableFrom(availableFrom string) error {
+	return validateRFC3339Field("available_from", availableFrom, "2026-09-15T00:00:00-04:00")
+}
+
+// validateRFC3339Field accepts an empty value (feature off) or a full RFC 3339
+// timestamp with a zone; anything else is rejected with a field-named, example-
+// bearing error. Single source for the due / available_from stored-form checks.
+func validateRFC3339Field(field, value, example string) error {
+	if value == "" {
 		return nil
 	}
-	if _, err := time.Parse(time.RFC3339, due); err != nil {
-		return fmt.Errorf("due %q is not an RFC 3339 timestamp with timezone (e.g., 2026-09-15T23:59:00-04:00)", due)
+	if _, err := time.Parse(time.RFC3339, value); err != nil {
+		return fmt.Errorf("%s %q is not an RFC 3339 timestamp with timezone (e.g., %s)", field, value, example)
+	}
+	return nil
+}
+
+// validateAvailableFromFields checks the release-date pair the same way both
+// entry validators check the due pair.
+func validateAvailableFromFields(entry AssignmentEntry) error {
+	if err := ValidateAvailableFrom(entry.AvailableFrom); err != nil {
+		return err
+	}
+	if entry.AvailableFromMeta != nil {
+		if err := ValidateDueMeta(entry.AvailableFromMeta); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -718,6 +747,9 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 			return err
 		}
 	}
+	if err := validateAvailableFromFields(entry); err != nil {
+		return err
+	}
 	if entry.Autograder == "" {
 		return fmt.Errorf("autograder must not be empty (default is %q)", contract.DefaultAutograderName)
 	}
@@ -838,6 +870,9 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		if err := ValidateDueMeta(entry.DueMeta); err != nil {
 			return fmt.Errorf("entry %q: %w", entry.Slug, err)
 		}
+	}
+	if err := validateAvailableFromFields(entry); err != nil {
+		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	// Empty Autograder normalizes to "default" so older entries parse; the
 	// pattern check still runs so a hand-edit can't round-trip a bad name.

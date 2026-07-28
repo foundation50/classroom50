@@ -11,7 +11,7 @@ import {
 } from "lucide-react"
 
 import useGetScores from "@/hooks/useGetScores"
-import { formatDueDate } from "@/util/formatDate"
+import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { ConfirmModal } from "@/components/modals"
@@ -178,6 +178,32 @@ const TemplateAccessButton = ({
   )
 }
 
+// The Release Date cell. A released assignment (date set and passed) shows the
+// date in a neutral badge like Due date; an unreleased one is warning-toned
+// because it's hidden from students' lists until then (link-only accept),
+// which the tooltip explains. "Not set" is the common link-only default.
+const ReleaseDateBadge = ({ assignment }: { assignment: Assignment }) => {
+  const { t } = useTranslation()
+  const releasesAt = assignment.available_from
+  const released = releasesAt ? isPastDue(releasesAt) : false
+  return (
+    <Badge
+      tone={released ? "neutral" : "warning"}
+      size="md"
+      className="max-xl:text-xs xl:text-sm whitespace-nowrap w-full"
+      title={released ? undefined : t("assignments.table.linkOnlyTitle")}
+    >
+      {releasesAt
+        ? released
+          ? formatDueDate(releasesAt)
+          : t("assignments.table.scheduled", {
+              date: formatDueDateTime(releasesAt),
+            })
+        : t("assignments.table.releaseNotSet")}
+    </Badge>
+  )
+}
+
 const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
   <>
     {Array.from({ length: rows }).map((_, i) => (
@@ -187,6 +213,9 @@ const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
         </td>
         <td>
           <div className="skeleton skeleton-shimmer h-4 w-24" />
+        </td>
+        <td>
+          <div className="skeleton skeleton-shimmer h-6 w-28" />
         </td>
         <td>
           <div className="skeleton skeleton-shimmer h-6 w-28" />
@@ -245,6 +274,7 @@ const AssignmentsTable = ({
           <tr>
             <th scope="col">{t("assignments.table.colAssignment")}</th>
             <th scope="col">{t("assignments.table.colType")}</th>
+            <th scope="col">{t("assignments.table.colReleaseDate")}</th>
             <th scope="col">{t("assignments.table.colDueDate")}</th>
             <th scope="col">{t("assignments.table.colSubmissions")}</th>
             <th scope="col">
@@ -258,7 +288,7 @@ const AssignmentsTable = ({
           {loading && <SkeletonRows />}
           {!loading && !assignments?.length && (
             <tr>
-              <td colSpan={5} className="text-center">
+              <td colSpan={6} className="text-center">
                 {t("assignments.table.empty")}
               </td>
             </tr>
@@ -309,6 +339,16 @@ const AssignmentsTable = ({
                       {t("assignments.table.group")}
                     </div>
                   )}
+                </td>
+                <td
+                  onClick={() =>
+                    navigate({
+                      to: "/$org/$classroom/assignments/$assignment/submissions",
+                      params: { org, classroom, assignment: assignment.slug },
+                    })
+                  }
+                >
+                  <ReleaseDateBadge assignment={assignment} />
                 </td>
                 <td
                   onClick={() =>

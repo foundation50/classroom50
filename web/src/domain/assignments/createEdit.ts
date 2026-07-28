@@ -87,6 +87,8 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   template: "managed",
   due: "managed",
   due_meta: "managed",
+  available_from: "managed",
+  available_from_meta: "managed",
   mode: "managed",
   autograder: "managed",
   max_group_size: "managed",
@@ -410,6 +412,14 @@ async function buildAssignmentEntry(
     entry.due = due
     if (due_meta) {
       entry.due_meta = due_meta
+    }
+  }
+  // Reuses buildDueFields (UTC instant + provenance), remapped to available_from.
+  if (input.available_from_date?.trim()) {
+    const { due, due_meta } = buildDueFields(input.available_from_date.trim())
+    entry.available_from = due
+    if (due_meta) {
+      entry.available_from_meta = due_meta
     }
   }
   if (input.mode === "group") {

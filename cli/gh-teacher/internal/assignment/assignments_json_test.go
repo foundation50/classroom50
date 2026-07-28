@@ -47,6 +47,53 @@ func TestParseAssignments_Canonical(t *testing.T) {
 	}
 }
 
+func TestParseAssignments_AvailableFrom(t *testing.T) {
+	// available_from + available_from_meta are known keys: they decode onto the
+	// struct (not Extra) and survive a marshal round-trip.
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "hello",
+      "name": "Hello",
+      "available_from": "2026-09-01T04:00:00Z",
+      "available_from_meta": { "input": "2026-09-01T00:00:00", "zone": "America/New_York", "offset": "-04:00", "source": "auto-detected" },
+      "mode": "individual",
+      "autograder": "default"
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	got := file.Assignments[0]
+	if got.AvailableFrom != "2026-09-01T04:00:00Z" {
+		t.Errorf("AvailableFrom = %q, want %q", got.AvailableFrom, "2026-09-01T04:00:00Z")
+	}
+	if got.AvailableFromMeta == nil || got.AvailableFromMeta.Offset != "-04:00" {
+		t.Fatalf("AvailableFromMeta = %+v, want offset -04:00", got.AvailableFromMeta)
+	}
+	if _, isExtra := got.Extra["available_from"]; isExtra {
+		t.Error("available_from leaked into Extra (should be a known key)")
+	}
+	if err := ValidateAssignmentEntry(got); err != nil {
+		t.Errorf("entry with available_from should validate, got %v", err)
+	}
+
+	out, err := json.Marshal(file)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	round, err := ParseAssignments(out)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if !reflect.DeepEqual(round.Assignments[0], got) {
+		t.Errorf("round-trip mismatch:\n got: %#v\nwant: %#v", round.Assignments[0], got)
+	}
+}
+
 func TestParseAssignments_TemplateLess(t *testing.T) {
 	// A template-less assignment omits the `template` block and parses to a
 	// nil Template (accept-time creates an empty shim-only repo).
@@ -1060,6 +1107,12 @@ func TestValidateAssignmentEntry_Rejects(t *testing.T) {
 		{"due_meta bad source", func(e *AssignmentEntry) {
 			e.DueMeta = &DueMeta{Input: "x", Offset: "-04:00", Source: "guessed"}
 		}, "due_meta.source"},
+		{"available_from date-only", func(e *AssignmentEntry) { e.AvailableFrom = "2026-09-15" }, "RFC 3339"},
+		{"available_from missing timezone", func(e *AssignmentEntry) { e.AvailableFrom = "2026-09-15T00:00:00" }, "RFC 3339"},
+		{"available_from garbage", func(e *AssignmentEntry) { e.AvailableFrom = "next Tuesday" }, "RFC 3339"},
+		{"available_from_meta bad offset", func(e *AssignmentEntry) {
+			e.AvailableFromMeta = &DueMeta{Input: "x", Offset: "Z", Source: DueSourceExplicit}
+		}, "due_meta.offset"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

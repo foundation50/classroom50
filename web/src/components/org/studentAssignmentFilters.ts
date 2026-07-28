@@ -37,6 +37,15 @@ export const DEFAULT_STUDENT_FILTERS: StudentAssignmentFilters = {
 const dueInstant = (assignment: Assignment): Date | null =>
   assignment.due ? dueDeadlineInstant(assignment.due) : null
 
+// True when the assignment is released to students: a release date is set AND
+// has passed. Absent, null, unparseable, or future all read as NOT released —
+// the assignment is link-only (hidden from students who haven't accepted it).
+const isReleased = (assignment: Assignment, now: number): boolean => {
+  if (!assignment.available_from) return false
+  const instant = dueDeadlineInstant(assignment.available_from)
+  return instant !== null && instant.getTime() <= now
+}
+
 const matchesQuery = (assignment: Assignment, query: string): boolean => {
   const q = query.trim().toLowerCase()
   if (!q) return true
@@ -46,12 +55,25 @@ const matchesQuery = (assignment: Assignment, query: string): boolean => {
   )
 }
 
+// Whether an assignment appears on a student's list at all: it's released
+// (date set and passed) OR the student already accepted it. The search/status/
+// type/due facets narrow this set further; this is the baseline the empty-state
+// copy keys off (nothing listable vs. filters hid everything).
+export const isListableToStudent = (
+  assignment: Assignment,
+  accepted: boolean,
+  now: number = Date.now(),
+): boolean => accepted || isReleased(assignment, now)
+
 const matchesFilters = (
   assignment: Assignment,
   filters: StudentAssignmentFilters,
   accepted: boolean,
   now: number,
 ): boolean => {
+  // Hide link-only assignments unless the student already accepted (see
+  // isListableToStudent) — an accepted assignment always stays reachable.
+  if (!isListableToStudent(assignment, accepted, now)) return false
   if (filters.status === "accepted" && !accepted) return false
   if (filters.status === "todo" && accepted) return false
   if (filters.type !== "all" && assignment.mode !== filters.type) return false

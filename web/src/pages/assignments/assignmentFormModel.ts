@@ -55,6 +55,8 @@ export type CreateAssignmentFormValues = {
   mode: "group" | "individual"
   template_repo: string
   due_date: string
+  // Release date (datetime-local wall-clock, "" when unset).
+  available_from_date: string
   max_group_size: number
   feedback_pr: boolean
   // Truly bare student repos: no starter content, no control files, autograding
@@ -297,6 +299,7 @@ export function toSubmitValues(
     mode: value.mode,
     template_repo: isEmptyRepo ? "" : value.template_repo.trim(),
     due_date: value.due_date.trim(),
+    available_from_date: value.available_from_date.trim(),
     max_group_size: value.max_group_size,
     feedback_pr: isEmptyRepo ? false : value.feedback_pr,
     empty_repo: isEmptyRepo,
@@ -333,6 +336,9 @@ export const useAssignmentForm = (
       mode: defaultValues?.mode || "individual",
       template_repo: defaultValues?.template_repo || "",
       due_date: utcIsoToDatetimeLocalValue(defaultValues?.due_date),
+      available_from_date: utcIsoToDatetimeLocalValue(
+        defaultValues?.available_from_date,
+      ),
       max_group_size: defaultValues?.max_group_size || 2,
       feedback_pr: defaultValues?.feedback_pr ?? true,
       empty_repo: defaultValues?.empty_repo ?? false,
@@ -394,6 +400,7 @@ export const assignmentToFormValues = (
       ? `${assignment.template.owner}/${assignment.template.repo}`
       : "",
     due_date: utcIsoToDatetimeLocalValue(assignment.due),
+    available_from_date: utcIsoToDatetimeLocalValue(assignment.available_from),
     max_group_size: assignment.max_group_size ?? 2,
     feedback_pr: assignment.feedback_pr ?? true,
     empty_repo: assignment.empty_repo ?? false,

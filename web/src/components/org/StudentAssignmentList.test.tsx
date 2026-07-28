@@ -64,11 +64,14 @@ vi.mock("@/auth/useGithubAuth", () => ({
 
 import { StudentAssignmentList } from "./StudentAssignmentList"
 
+// Fixtures default to a passed release date so the toolbar/sort/CTA specs
+// exercise listed assignments; the hide-by-default spec overrides it.
 const assignment = (slug: string, over: Record<string, unknown> = {}) => ({
   slug,
   name: slug.toUpperCase(),
   mode: "individual",
   autograder: "default",
+  available_from: "2020-01-01T00:00:00Z",
   ...over,
 })
 
@@ -162,6 +165,37 @@ describe("StudentAssignmentList", () => {
     render(<StudentAssignmentList org="acme" classroom="cs" />)
 
     expect(screen.getByText("assignments.discover.emptyTitle")).toBeTruthy()
+  })
+
+  it("shows the link-only guidance when published assignments are unreleased and not accepted", () => {
+    // Hide-by-default: an assignment with no release date the student hasn't
+    // accepted is off the list; surface the invite-link guidance, not the
+    // filter-oriented "no results".
+    pagesAssignments.mockReturnValue({
+      data: [assignment("hw1", { available_from: undefined })],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({ data: [] })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    expect(screen.getByText("assignments.discover.linkOnlyTitle")).toBeTruthy()
+    expect(screen.queryByRole("heading", { name: "HW1" })).toBeNull()
+  })
+
+  it("always lists an assignment the student accepted, even with no release date", () => {
+    pagesAssignments.mockReturnValue({
+      data: [assignment("hw1", { available_from: undefined })],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({ data: [repo("cs-hw1-student1")] })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    expect(screen.getByRole("heading", { name: "HW1" })).toBeTruthy()
+    expect(screen.getByText("assignments.discover.viewSubmission")).toBeTruthy()
   })
 
   it("renders the toolbar and orders assignments due-soonest-first by default", () => {

@@ -67,6 +67,36 @@
           },
           "description": "Write-side provenance for `due`, for auditing a wrong-zone deadline. Advisory metadata only -- collect-scores reads `due`, never this."
         },
+        "available_from": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(\\.\\d+)?(Z|[+-]([01]\\d|2[0-3]):[0-5]\\d)$",
+          "description": "RFC 3339 timestamp (mirrors `due`): the release date at/after which the assignment is listed on the student's assignments page for everyone. HIDE-BY-DEFAULT: an absent or future value keeps the assignment OFF the student list — students can only accept it via the invite link until the release date passes. A student who has already accepted (their repo exists) always sees it. The CLI normalizes the teacher's input to a UTC instant and records the original value/zone in `available_from_meta`; clients should write UTC too. LISTING-ADVISORY ONLY, not access control: assignments.json is published publicly to GitHub Pages, so a determined student can still read the raw file or a saved accept link — this gates the student UI listing, nothing else."
+        },
+        "available_from_meta": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input", "offset", "source"],
+          "properties": {
+            "input": {
+              "type": "string",
+              "description": "The available_from value as supplied (--available-from flag or GUI input), whitespace-trimmed but otherwise verbatim, before UTC normalization."
+            },
+            "zone": {
+              "type": "string",
+              "description": "Best-effort IANA/local zone name; present only when the offset was auto-detected (an explicit offset carries no zone name)."
+            },
+            "offset": {
+              "type": "string",
+              "pattern": "^[+-]([01]\\d|2[0-3]):[0-5]\\d$",
+              "description": "Zone offset applied at normalization, e.g., -04:00 (UTC is +00:00)."
+            },
+            "source": {
+              "enum": ["explicit-offset", "auto-detected", "migrated"],
+              "description": "How the offset was determined: from the input itself, auto-detected from the machine's local zone, or carried in from a migrated value."
+            }
+          },
+          "description": "Write-side provenance for `available_from` (same shape as `due_meta`), for auditing a wrong-zone release date. Advisory metadata only."
+        },
         "mode": {
           "enum": ["individual", "group"],
           "description": "`individual` = one repo per student. `group` = a shared repo: the first accepter creates it and becomes its admin, then adds teammates with `gh student invite`. Group size is advisory — `max_group_size` is a coordination hint the founder is expected to respect, NOT a hard security cap. `gh student invite` does apply it as a best-effort guardrail (it refuses to add a collaborator past the cap when run from inside the founder's own group repo), but it is bypassable (the GitHub UI, or simply not running the CLI) — the joiner-driven `gh student group join` that once enforced it was removed. Group mode still REQUIRES `max_group_size` (>= 2) as a contract field for clients like the GUI; individual mode must omit it. See the conditional at the assignment level."
