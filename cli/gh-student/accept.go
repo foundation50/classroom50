@@ -229,6 +229,68 @@ type AcceptStatus struct {
 	StatusCode int
 }
 
+// classroomStudentTeamSlug derives the student team slug `classroom50-<short>`.
+// A student can't read classroom.json for the GitHub-assigned slug, so it's
+// derived; on a slug-collision rewrite the derived slug 404s and reads as
+// non-member, so a miss never grants false access. Byte-mirrors the web
+// classroomTeamSlug and the teacher CLI's classroomTeamName — a cross-tool
+// contract with no compile-time link; keep in lockstep.
+func classroomStudentTeamSlug(classroom string) string {
+	return contract.ConfigRepoName + "-" + classroom
+}
+
+// classroomStaffTeamSlugs derives the staff team slugs, including the legacy
+// `-instructor` team so a not-yet-migrated classroom's staffer still reads as
+// enrolled.
+func classroomStaffTeamSlugs(classroom string) []string {
+	base := contract.ConfigRepoName + "-" + classroom
+	return []string{
+		base + "-teacher",
+		base + "-instructor",
+		base + "-hta",
+		base + "-ta",
+	}
+}
+
+// isActiveTeamMember reports whether the authed user is an active member of the
+// team. 2xx + active => true, a definitive 404 => false; any other error (e.g.
+// transient) propagates so the caller fails OPEN rather than blocking a real
+// student on a blip.
+func isActiveTeamMember(client githubapi.Client, org, teamSlug, username string) (bool, error) {
+	path := fmt.Sprintf("orgs/%s/teams/%s/memberships/%s",
+		url.PathEscape(org), url.PathEscape(teamSlug), url.PathEscape(username))
+	var resp struct {
+		State string `json:"state"`
+	}
+	if err := client.Get(path, &resp); err != nil {
+		if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok {
+			if httpErr.StatusCode == http.StatusNotFound {
+				return false, nil
+			}
+		}
+		return false, fmt.Errorf("GET %s: %w", path, err)
+	}
+	return resp.State == "active", nil
+}
+
+// assertEnrolledOrStaff enforces that the authed user is enrolled in the
+// classroom — on its student team, or holding a staff role — before accept.
+// A transient read propagates (fail-open); only a set of definitive answers
+// with no membership blocks, with a clear roster remedy.
+func assertEnrolledOrStaff(client githubapi.Client, org, classroom, username string) error {
+	slugs := append([]string{classroomStudentTeamSlug(classroom)}, classroomStaffTeamSlugs(classroom)...)
+	for _, slug := range slugs {
+		member, err := isActiveTeamMember(client, org, slug, username)
+		if err != nil {
+			return err
+		}
+		if member {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s/%s: this assignment isn't available to you; ask your teacher if you think this is a mistake", org, classroom)
+}
+
 // acceptOrgInvite PATCHes the user's pending org membership to "active".
 func acceptOrgInvite(client githubapi.Client, org string) (AcceptStatus, error) {
 	body, err := json.Marshal(map[string]string{"state": "active"})
@@ -280,6 +342,18 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	if err != nil {
 		return fmt.Errorf("retrieving authed user: %w", err)
 	}
+
+	// Enrollment gate: a plain org member who isn't on this classroom's student
+	// team (and holds no staff role) can't accept. Mirrors the web accept gate
+	// and the student list; org owners bypass (they administer every classroom).
+	// Advisory like every client-side gate — GitHub's private-template
+	// permission is the hard boundary — but it fails early with a clear message.
+	if !isOwner {
+		if err := assertEnrolledOrStaff(client, org, classroom, username); err != nil {
+			return err
+		}
+	}
+
 	acceptedAt := time.Now().UTC().Format(time.RFC3339)
 
 	// 1) Look up the assignment entry on the public Pages site (no token).

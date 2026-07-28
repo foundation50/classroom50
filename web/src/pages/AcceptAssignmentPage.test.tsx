@@ -17,6 +17,9 @@ const pagesAssignmentsSpy =
   vi.fn<(org?: string, classroom?: string, secret?: string) => void>()
 const searchParams: { k?: string } = { k: "test-secret" }
 let studentClassroomsData: Array<{ classroom: string; secret?: string }> = []
+// Enrollment-gate inputs, reset per test. Default: active member, enrolled.
+let orgRole = "member"
+let enrollmentVerdict: "enrolled" | "not-enrolled" | "unresolved" = "enrolled"
 
 vi.mock("@/domain/assignments", () => ({
   acceptAssignment: (...args: unknown[]) => acceptAssignment(...args),
@@ -56,9 +59,16 @@ vi.mock("@/hooks/useGetRepo", () => ({
 }))
 vi.mock("@/hooks/useGetOwnOrgMembership", () => ({
   default: () => ({
-    data: { state: "active" },
+    data: { state: "active", role: orgRole },
     isLoading: false,
     error: null,
+    refetch: vi.fn(),
+  }),
+}))
+vi.mock("@/hooks/useClassroomEnrollment", () => ({
+  useClassroomEnrollment: () => ({
+    verdict: enrollmentVerdict,
+    isLoading: false,
     refetch: vi.fn(),
   }),
 }))
@@ -160,6 +170,8 @@ beforeEach(() => {
   pagesAssignmentsSpy.mockReset()
   searchParams.k = "test-secret"
   studentClassroomsData = []
+  orgRole = "member"
+  enrollmentVerdict = "enrolled"
   __resetGitHubHealthForTest()
 })
 
@@ -472,5 +484,54 @@ describe("AcceptAssignmentPage outage hint", () => {
       new Error("Couldn't copy the template — ask your teacher."),
     )
     expect(screen.queryByText(STATUS_LINK)).toBeNull()
+  })
+})
+
+describe("AcceptAssignmentPage enrollment gate", () => {
+  const renderWith = () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    renderPage(client)
+  }
+
+  it("blocks a member who is not enrolled in the classroom", () => {
+    enrollmentVerdict = "not-enrolled"
+    renderWith()
+    expect(screen.queryByText("accept.notEnrolled.title")).not.toBeNull()
+    expect(
+      screen.queryByRole("button", { name: "accept.acceptButton" }),
+    ).toBeNull()
+  })
+
+  it("lets an enrolled student reach the accept card", () => {
+    enrollmentVerdict = "enrolled"
+    renderWith()
+    expect(screen.queryByText("accept.notEnrolled.title")).toBeNull()
+    expect(
+      screen.queryByRole("button", { name: "accept.acceptButton" }),
+    ).not.toBeNull()
+  })
+
+  it("lets an org owner bypass the gate even when not enrolled", () => {
+    enrollmentVerdict = "not-enrolled"
+    orgRole = "admin"
+    renderWith()
+    expect(screen.queryByText("accept.notEnrolled.title")).toBeNull()
+    expect(
+      screen.queryByRole("button", { name: "accept.acceptButton" }),
+    ).not.toBeNull()
+  })
+
+  it("fails open on an unresolved verdict (a transient team read)", () => {
+    enrollmentVerdict = "unresolved"
+    renderWith()
+    expect(screen.queryByText("accept.notEnrolled.title")).toBeNull()
+    expect(
+      screen.queryByRole("button", { name: "accept.acceptButton" }),
+    ).not.toBeNull()
   })
 })

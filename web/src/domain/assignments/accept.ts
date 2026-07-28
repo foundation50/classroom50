@@ -22,6 +22,9 @@ import { fetchAssignmentFromPages } from "../queries/assignments"
 import { getAuthenticatedUser } from "../queries/users"
 import { acceptAndVerifyOrgMembership } from "../users"
 import { isOwnerGitHubOrgRole } from "@/authz"
+import { classroomTeamSlug } from "@/util/teamSlug"
+import { STAFF_ROLES_WITH_LEGACY } from "@/types/classroom"
+import { GitHubAPIError } from "@/github-core/errors"
 import {
   log,
   withAcceptStep,
@@ -364,6 +367,55 @@ async function openFeedbackPrStep(params: {
   })
 }
 
+// Self-scoped "is the viewer active on this team?" probe. 2xx + active =>
+// member, a definitive 404 => non-member; any other status (transient) throws
+// so the caller fails OPEN rather than blocking a real student on a blip.
+async function isActiveTeamMember(
+  client: GitHubClient,
+  org: string,
+  teamSlug: string,
+  username: string,
+): Promise<boolean> {
+  try {
+    const membership = await client.request<{ state?: string }>(
+      `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+        teamSlug,
+      )}/memberships/${encodeURIComponent(username)}`,
+    )
+    return membership.state === "active"
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.isNotFound) return false
+    throw err
+  }
+}
+
+// Enforce that the viewer is enrolled in this classroom before accept: on the
+// `classroom50-<classroom>` student team, OR holding a staff role
+// (teacher/hta/ta, incl. the legacy `-instructor` team). Owners are filtered by
+// the caller. The student-team slug is derived (a student can't read
+// classroom.json for the GitHub-assigned slug); a slug-collision rewrite 404s
+// and reads as non-member, so a miss never grants false access. A transient
+// read rethrows (fail-open) rather than blocking; the definitive block is a
+// localized AcceptStepError only when every probe returns a definitive answer.
+export async function assertEnrolledOrStaff(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+  username: string,
+): Promise<void> {
+  const slugs = [
+    classroomTeamSlug(classroom),
+    ...STAFF_ROLES_WITH_LEGACY.map((role) =>
+      classroomTeamSlug(classroom, role),
+    ),
+  ]
+  const results = await Promise.all(
+    slugs.map((slug) => isActiveTeamMember(client, org, slug, username)),
+  )
+  if (results.some(Boolean)) return
+  throw new AcceptStepError({ key: "accept.notEnrolled.error" })
+}
+
 export async function acceptAssignment(params: {
   client: GitHubClient
   org: string
@@ -399,6 +451,13 @@ export async function acceptAssignment(params: {
   // can't create their repo). Verifying here means a SAML-SSO-gated 403 surfaces
   // as an actionable step failure right away (with the SSO/HTTP status) instead
   // of a confusing downstream repo/access failure.
+  //
+  // Also enforce classroom enrollment: a plain org member who isn't on this
+  // classroom's student team (and holds no staff role) can't accept — the same
+  // rule the student list and a private template already imply, made consistent
+  // for public templates too. Org owners bypass (they administer every
+  // classroom). Advisory like every client-side gate; GitHub's private-template
+  // permission remains the hard boundary.
   const membership = await withAcceptStep(
     {
       id: "membership",
@@ -407,7 +466,13 @@ export async function acceptAssignment(params: {
       doneMessage: { key: "accept.stepDone.membership" },
       onStepUpdate,
     },
-    () => acceptAndVerifyOrgMembership(client, org),
+    async () => {
+      const verified = await acceptAndVerifyOrgMembership(client, org)
+      if (!isOwnerGitHubOrgRole(verified.role)) {
+        await assertEnrolledOrStaff(client, org, classroom, username)
+      }
+      return verified
+    },
   )
 
   // An org owner who creates the repo holds admin and can't self-downgrade to
