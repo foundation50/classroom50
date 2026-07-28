@@ -284,19 +284,27 @@ const AssignmentsTable = ({
                   <div className="font-mono text-xs text-base-content/70">
                     {assignment.slug}
                   </div>
-                  {assignment.available_from &&
-                    !isPastDue(assignment.available_from) && (
+                  {(() => {
+                    // Students only see an assignment once its release date has
+                    // passed; otherwise it's link-only. Flag the hidden cases so
+                    // teachers know why students can't see it in their list.
+                    const releasesAt = assignment.available_from
+                    if (releasesAt && isPastDue(releasesAt)) return null
+                    return (
                       <Badge
                         tone="warning"
                         size="sm"
                         className="mt-1 whitespace-nowrap"
-                        title={t("assignments.table.scheduledTitle")}
+                        title={t("assignments.table.linkOnlyTitle")}
                       >
-                        {t("assignments.table.scheduled", {
-                          date: formatDueDateTime(assignment.available_from),
-                        })}
+                        {releasesAt
+                          ? t("assignments.table.scheduled", {
+                              date: formatDueDateTime(releasesAt),
+                            })
+                          : t("assignments.table.linkOnly")}
                       </Badge>
-                    )}
+                    )
+                  })()}
                 </td>
                 <td
                   onClick={() =>

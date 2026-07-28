@@ -70,7 +70,7 @@
         "available_from": {
           "type": "string",
           "pattern": "^\\d{4}-\\d{2}-\\d{2}T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(\\.\\d+)?(Z|[+-]([01]\\d|2[0-3]):[0-5]\\d)$",
-          "description": "RFC 3339 timestamp (mirrors `due`): the release date at/after which the assignment is listed on the student's assignments page. Before it, the assignment is hidden from students who have not yet accepted it; a student who has already accepted (their repo exists) always sees it. The CLI normalizes the teacher's input to a UTC instant and records the original value/zone in `available_from_meta`; clients should write UTC too. Absent means always listed. LISTING-ADVISORY ONLY, not access control: assignments.json is published publicly to GitHub Pages, so a determined student can still read the raw file or a saved accept link — this gates the student UI, nothing else."
+          "description": "RFC 3339 timestamp (mirrors `due`): the release date at/after which the assignment is listed on the student's assignments page for everyone. HIDE-BY-DEFAULT: absent, null, or a future value all keep the assignment OFF the student list — students can only accept it via the invite link until the release date passes. A student who has already accepted (their repo exists) always sees it. The CLI normalizes the teacher's input to a UTC instant and records the original value/zone in `available_from_meta`; clients should write UTC too. LISTING-ADVISORY ONLY, not access control: assignments.json is published publicly to GitHub Pages, so a determined student can still read the raw file or a saved accept link — this gates the student UI listing, nothing else."
         },
         "available_from_meta": {
           "type": "object",
