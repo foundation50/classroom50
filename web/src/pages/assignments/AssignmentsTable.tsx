@@ -200,6 +200,24 @@ const LockAssignmentButton = ({
   const { notify } = useToast()
   const [open, setOpen] = useState(false)
   const locked = Boolean(assignment.locked)
+  const label = name(assignment)
+  // The lock-vs-unlock label set, chosen once so the JSX below reads one field
+  // each instead of repeating the `locked ? … : …` branch at every attribute.
+  const copy = locked
+    ? {
+        title: t("assignments.table.unlockTitle"),
+        aria: t("assignments.table.unlockAria", { name: label }),
+        modalTitle: t("assignments.table.unlockTitleModal"),
+        descriptionKey: "assignments.table.unlockDescription",
+        confirm: t("assignments.table.unlockConfirm"),
+      }
+    : {
+        title: t("assignments.table.lockTitle"),
+        aria: t("assignments.table.lockAria", { name: label }),
+        modalTitle: t("assignments.table.lockTitleModal"),
+        descriptionKey: "assignments.table.lockDescription",
+        confirm: t("assignments.table.lockConfirm"),
+      }
   const setLock = useSetAssignmentLock(org, classroom, (result) => {
     if (result.templateAccessWarning) {
       notify({ tone: "warning", message: result.templateAccessWarning })
@@ -208,8 +226,8 @@ const LockAssignmentButton = ({
     notify({
       tone: "success",
       message: result.locked
-        ? t("assignments.table.lockSuccess", { name: name(assignment) })
-        : t("assignments.table.unlockSuccess", { name: name(assignment) }),
+        ? t("assignments.table.lockSuccess", { name: label })
+        : t("assignments.table.unlockSuccess", { name: label }),
     })
   })
 
@@ -220,16 +238,8 @@ const LockAssignmentButton = ({
         size="sm"
         shape="circle"
         className={locked ? "text-warning" : undefined}
-        title={
-          locked
-            ? t("assignments.table.unlockTitle")
-            : t("assignments.table.lockTitle")
-        }
-        aria-label={
-          locked
-            ? t("assignments.table.unlockAria", { name: name(assignment) })
-            : t("assignments.table.lockAria", { name: name(assignment) })
-        }
+        title={copy.title}
+        aria-label={copy.aria}
         onClick={(e) => {
           e.stopPropagation()
           setOpen(true)
@@ -244,29 +254,17 @@ const LockAssignmentButton = ({
 
       <ConfirmModal
         open={open}
-        title={
-          locked
-            ? t("assignments.table.unlockTitleModal")
-            : t("assignments.table.lockTitleModal")
-        }
+        title={copy.modalTitle}
         description={
           <Trans
-            i18nKey={
-              locked
-                ? "assignments.table.unlockDescription"
-                : "assignments.table.lockDescription"
-            }
-            values={{ assignment: name(assignment) }}
+            i18nKey={copy.descriptionKey}
+            values={{ assignment: label }}
             components={{
               assignment: <EmphasisLtr className="text-base-content" />,
             }}
           />
         }
-        confirmLabel={
-          locked
-            ? t("assignments.table.unlockConfirm")
-            : t("assignments.table.lockConfirm")
-        }
+        confirmLabel={copy.confirm}
         cancelLabel={t("assignments.table.lockCancel")}
         dangerous={!locked}
         needsConfirm={false}

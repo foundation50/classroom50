@@ -270,17 +270,15 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		grantOut = errOut
 	}
 	if copied.Locked {
-		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the target classroom student team was NOT granted read on its private template — unlock it with `gh teacher assignment unlock %s %s %s` when students should accept.\n",
-			finalSlug, p.Org, p.To, finalSlug)
-	} else if err := grantReusedTemplateAccess(client, grantOut, errOut, p.Org, p.To, branch, finalSlug, copied.Template); err != nil {
-		return err
-	}
-
-	// A locked copy can't be accepted yet, so the usual "students can now
-	// accept" hint would mislead — point at unlock instead.
-	if copied.Locked {
+		// A locked copy has no student-team grant and can't be accepted yet, so
+		// skip the grant and point the teacher at unlock instead of the usual
+		// "students can now accept" hint.
+		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the target classroom student team was NOT granted read on its private template.\n", finalSlug)
 		_, _ = fmt.Fprintf(errOut, "Unlock it first: gh teacher assignment unlock %s %s %s\n", p.Org, p.To, finalSlug)
 	} else {
+		if err := grantReusedTemplateAccess(client, grantOut, errOut, p.Org, p.To, branch, finalSlug, copied.Template); err != nil {
+			return err
+		}
 		_, _ = fmt.Fprintf(errOut, "Students can now run: gh student accept %s %s %s\n", p.Org, p.To, finalSlug)
 	}
 	return nil
