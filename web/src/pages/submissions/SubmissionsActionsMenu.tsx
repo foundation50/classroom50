@@ -123,6 +123,35 @@ export function SubmissionsActionsMenu({
             role="separator"
           />
         )}
+        {/* Open all Feedback PRs — the bulk PR action leads the menu. Its own
+            group (owner-only, non-empty_repo), above the grading actions. */}
+        {!emptyRepo && onOpenAllPrs && (
+          <>
+            <li>
+              <button
+                type="button"
+                disabled={disabledActions}
+                title={
+                  emptyRoster
+                    ? t("submissions.openAllPrs.titleEmptyRoster")
+                    : t("submissions.openAllPrs.title")
+                }
+                onClick={() => {
+                  closeMenu()
+                  if (disabledActions) return
+                  onOpenAllPrs()
+                }}
+              >
+                <GitPullRequest aria-hidden="true" className="size-4" />
+                {t("submissions.openAllPrs.menuLabel")}
+              </button>
+            </li>
+            <div
+              className="my-1 border-t border-base-content/10"
+              role="separator"
+            />
+          </>
+        )}
         {/* Collect stays for empty_repo assignments: it's org-wide and
             collect_scores.py skips this assignment server-side (see the
             SubmissionsPage comment). Only grading actions hide. */}
@@ -173,33 +202,12 @@ export function SubmissionsActionsMenu({
                 {viewLabel}
               </a>
             </li>
-            {onOpenAllPrs && (
-              <li>
-                <button
-                  type="button"
-                  disabled={disabledActions}
-                  title={
-                    emptyRoster
-                      ? t("submissions.openAllPrs.titleEmptyRoster")
-                      : t("submissions.openAllPrs.title")
-                  }
-                  onClick={() => {
-                    closeMenu()
-                    if (disabledActions) return
-                    onOpenAllPrs()
-                  }}
-                >
-                  <GitPullRequest aria-hidden="true" className="size-4" />
-                  {t("submissions.openAllPrs.menuLabel")}
-                </button>
-              </li>
-            )}
-            <div
-              className="my-1 border-t border-base-content/10"
-              role="separator"
-            />
           </>
         )}
+        <div
+          className="my-1 border-t border-base-content/10"
+          role="separator"
+        />
         <li>
           <button
             type="button"
