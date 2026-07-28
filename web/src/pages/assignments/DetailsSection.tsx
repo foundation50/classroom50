@@ -33,6 +33,8 @@ export const DetailsSection = ({
   setSlugTouched,
   dueDateEnabled,
   setDueDateEnabled,
+  availableFromEnabled,
+  setAvailableFromEnabled,
 }: {
   form: AssignmentForm
   edit: boolean
@@ -43,6 +45,8 @@ export const DetailsSection = ({
   setSlugTouched: Dispatch<SetStateAction<boolean>>
   dueDateEnabled: boolean
   setDueDateEnabled: Dispatch<SetStateAction<boolean>>
+  availableFromEnabled: boolean
+  setAvailableFromEnabled: Dispatch<SetStateAction<boolean>>
 }) => {
   const { t } = useTranslation()
   const tzShort = new Intl.DateTimeFormat(undefined, {
@@ -378,6 +382,47 @@ export const DetailsSection = ({
                       />
                       <p className="mt-1.5 text-sm text-base-content/70">
                         {t("assignments.form.dueDateTz", { tz: tzShort })}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field name="available_from_date">
+              {(field) => (
+                <div>
+                  <ToggleRow
+                    id={`${field.name}-enabled`}
+                    checked={availableFromEnabled}
+                    onChange={(checked) => {
+                      setAvailableFromEnabled(checked)
+                      if (!checked) field.handleChange("")
+                    }}
+                    label={t("assignments.form.setAvailableFrom")}
+                    help={t("assignments.form.setAvailableFromTip")}
+                  />
+                  {availableFromEnabled ? (
+                    <div className="mt-2 ms-[3.75rem]">
+                      <Input
+                        id={field.name}
+                        name={field.name}
+                        type="datetime-local"
+                        className="w-full sm:max-w-xs"
+                        aria-label={t("assignments.form.availableFrom", {
+                          tz: tzShort,
+                        })}
+                        value={field.state.value}
+                        onBlur={(e) => {
+                          // Clearing the picker retires the release date: hide it
+                          // and uncheck the box (value is already "").
+                          if (!e.target.value) setAvailableFromEnabled(false)
+                          field.handleBlur()
+                        }}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                      />
+                      <p className="mt-1.5 text-sm text-base-content/70">
+                        {t("assignments.form.availableFromTz", { tz: tzShort })}
                       </p>
                     </div>
                   ) : null}

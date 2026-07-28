@@ -239,6 +239,8 @@ export type CreateAssignmentInput = {
   description: string
   template_repo: string
   due_date: string
+  // Release date (datetime-local wall-clock or ""); normalized like due_date.
+  available_from_date: string
   mode: string
   slug: string
   classroom: string

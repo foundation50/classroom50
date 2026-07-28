@@ -11,7 +11,7 @@ import {
 } from "lucide-react"
 
 import useGetScores from "@/hooks/useGetScores"
-import { formatDueDate } from "@/util/formatDate"
+import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { ConfirmModal } from "@/components/modals"
@@ -284,6 +284,19 @@ const AssignmentsTable = ({
                   <div className="font-mono text-xs text-base-content/70">
                     {assignment.slug}
                   </div>
+                  {assignment.available_from &&
+                    !isPastDue(assignment.available_from) && (
+                      <Badge
+                        tone="warning"
+                        size="sm"
+                        className="mt-1 whitespace-nowrap"
+                        title={t("assignments.table.scheduledTitle")}
+                      >
+                        {t("assignments.table.scheduled", {
+                          date: formatDueDateTime(assignment.available_from),
+                        })}
+                      </Badge>
+                    )}
                 </td>
                 <td
                   onClick={() =>

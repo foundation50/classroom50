@@ -105,6 +105,12 @@ export type Assignment = {
   }
   due?: string
   due_meta?: DueMeta
+  // Release date: the instant at/after which the assignment is listed on the
+  // student assignments page. Before it, students who haven't accepted don't see
+  // it; an already-accepted student always does. Absent = always listed.
+  // Listing-advisory only (assignments.json is public), mirrors due/due_meta.
+  available_from?: string
+  available_from_meta?: DueMeta
   mode: AssignmentMode
   // Workflow-shim name (`default` for the universal shim), not the grading logic.
   autograder: string

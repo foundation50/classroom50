@@ -38,6 +38,7 @@ const base: CreateAssignmentFormValues = {
   mode: "individual",
   template_repo: "",
   due_date: "",
+  available_from_date: "",
   max_group_size: 2,
   feedback_pr: true,
   empty_repo: false,
@@ -318,5 +319,38 @@ describe("release_assets", () => {
     const value = { ...base, empty_repo: true, release_assets: "../bad.pdf" }
     expect(validateAssignmentForm(value, t).release_assets).toBeUndefined()
     expect(toSubmitValues(value).release_assets).toBe("")
+  })
+})
+
+describe("available_from (release date)", () => {
+  it("maps a stored UTC instant back to a datetime-local value", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      available_from: "2026-09-01T12:00:00Z",
+    })
+    // A datetime-local wall-clock value (no zone suffix), non-empty.
+    expect(values.available_from_date).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/,
+    )
+  })
+
+  it("leaves the field empty when no release date is stored", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+    })
+    expect(values.available_from_date).toBe("")
+  })
+
+  it("trims the field on submit", () => {
+    expect(
+      toSubmitValues({ ...base, available_from_date: " 2026-09-01T12:00 " })
+        .available_from_date,
+    ).toBe("2026-09-01T12:00")
   })
 })

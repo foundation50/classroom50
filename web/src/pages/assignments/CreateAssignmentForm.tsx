@@ -62,6 +62,12 @@ const CreateAssignmentForm = ({
   const [dueDateEnabled, setDueDateEnabled] = useState(
     Boolean(form.state.values.due_date),
   )
+  // Whether the release-date picker is shown. Seeded from the initial value;
+  // a release date is opt-in. Unchecking clears available_from_date so the
+  // write path omits it (mirrors the due-date toggle).
+  const [availableFromEnabled, setAvailableFromEnabled] = useState(
+    Boolean(form.state.values.available_from_date),
+  )
 
   return (
     <form
@@ -83,6 +89,8 @@ const CreateAssignmentForm = ({
           setSlugTouched={setSlugTouched}
           dueDateEnabled={dueDateEnabled}
           setDueDateEnabled={setDueDateEnabled}
+          availableFromEnabled={availableFromEnabled}
+          setAvailableFromEnabled={setAvailableFromEnabled}
         />
 
         <Card bordered={false} className="w-full mb-6">

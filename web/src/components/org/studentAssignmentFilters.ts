@@ -37,6 +37,14 @@ export const DEFAULT_STUDENT_FILTERS: StudentAssignmentFilters = {
 const dueInstant = (assignment: Assignment): Date | null =>
   assignment.due ? dueDeadlineInstant(assignment.due) : null
 
+// True when the assignment has a parseable release date still in the future.
+// Fails open: absent or unparseable available_from is treated as released.
+const isUnreleased = (assignment: Assignment, now: number): boolean => {
+  if (!assignment.available_from) return false
+  const instant = dueDeadlineInstant(assignment.available_from)
+  return instant !== null && instant.getTime() > now
+}
+
 const matchesQuery = (assignment: Assignment, query: string): boolean => {
   const q = query.trim().toLowerCase()
   if (!q) return true
@@ -52,6 +60,9 @@ const matchesFilters = (
   accepted: boolean,
   now: number,
 ): boolean => {
+  // Not-yet-released assignments stay hidden until their release date passes,
+  // unless the student already accepted it (their repo exists).
+  if (!accepted && isUnreleased(assignment, now)) return false
   if (filters.status === "accepted" && !accepted) return false
   if (filters.status === "todo" && accepted) return false
   if (filters.type !== "all" && assignment.mode !== filters.type) return false

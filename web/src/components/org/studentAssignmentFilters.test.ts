@@ -108,4 +108,35 @@ describe("filterAndSortStudentAssignments", () => {
     })
     expect(list.map((x) => x.slug)).toEqual(before)
   })
+
+  describe("available_from release gate", () => {
+    it("hides an assignment whose release date is in the future", () => {
+      const list = [
+        a("released", { available_from: "2026-01-01T00:00:00Z" }),
+        a("scheduled", { available_from: "2026-12-01T00:00:00Z" }),
+      ]
+      expect(run(list)).toEqual(["released"])
+    })
+
+    it("shows a future-release assignment the student already accepted", () => {
+      const list = [a("scheduled", { available_from: "2026-12-01T00:00:00Z" })]
+      expect(run(list, { acceptedSlugs: new Set(["scheduled"]) })).toEqual([
+        "scheduled",
+      ])
+    })
+
+    it("shows an assignment with no release date", () => {
+      expect(run([a("always")])).toEqual(["always"])
+    })
+
+    it("shows an assignment whose release date has passed", () => {
+      const list = [a("past", { available_from: "2026-05-31T23:00:00Z" })]
+      expect(run(list)).toEqual(["past"])
+    })
+
+    it("fails open on an unparseable release date", () => {
+      const list = [a("garbled", { available_from: "not-a-date" })]
+      expect(run(list)).toEqual(["garbled"])
+    })
+  })
 })
