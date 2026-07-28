@@ -1782,6 +1782,7 @@
     "downloadCsv": "Download scores (CSV)",
     "viewSourceRepo": "View template",
     "emptyRepoNote": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted.",
+    "lockedNotice": "This assignment is locked. Students can't accept or open it, and if it uses a private template the student team's access to that template has been removed. Existing repositories and their submissions are unaffected. Unlock it from the assignments list to reopen it.",
     "freshness": {
       "collected": "Submission data synced {{when}}",
       "neverCollected": "Submission data not synced yet",

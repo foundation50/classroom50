@@ -152,6 +152,10 @@ const SubmissionsPageContent = () => {
   // Feedback PR) is hidden and a notice explains why. Collect stays enabled —
   // it's org-wide and collect_scores.py skips this assignment itself.
   const isEmptyRepoAssignment = assignmentInfo?.empty_repo === true
+  // Locked assignments are closed to students (accept + submission surfaces
+  // refuse them); the gradebook stays fully functional for staff, so this is a
+  // heads-up banner, not a gate.
+  const isLockedAssignment = assignmentInfo?.locked === true
   // Org repo list drives repo-existence signals (individual acceptance below,
   // group-repo enumeration, the staff-acceptance gate, and the pushed_at
   // staleness heuristic). `refetch` is wired to Sync + collect-completion so
@@ -843,6 +847,12 @@ const SubmissionsPageContent = () => {
           </div>
         }
       />
+
+      {isLockedAssignment && (
+        <Alert tone="warning" role="status">
+          {t("submissions.lockedNotice")}
+        </Alert>
+      )}
 
       {/* Live status strip. Full phase mapping: dispatching stays a quiet
           neutral line (transient); running/completed/failed/timeout become an
