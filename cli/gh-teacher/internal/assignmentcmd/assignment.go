@@ -68,6 +68,7 @@ func assignmentAddCmd() *cobra.Command {
 		template      string
 		description   string
 		due           string
+		availableFrom string
 		mode          string
 		maxGroupSize  int
 		autograder    string
@@ -199,6 +200,10 @@ func assignmentAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			availableFromVal, availableFromMetaVal, err := normalizeAvailableFrom(strings.TrimSpace(availableFrom))
+			if err != nil {
+				return err
+			}
 			// --template is optional. When omitted, the assignment has no
 			// starter repo and `student accept` creates an empty shim-only
 			// repo. When present, parse + (later) validate it.
@@ -225,23 +230,25 @@ func assignmentAddCmd() *cobra.Command {
 			}
 			return runAssignmentAdd(client, cmd.OutOrStdout(), cmd.ErrOrStderr(),
 				addAssignmentParams{
-					Org:           org,
-					Classroom:     classroom,
-					Slug:          slug,
-					Name:          nameVal,
-					Description:   strings.TrimSpace(description),
-					Tmpl:          tmplArg,
-					Due:           dueVal,
-					DueMeta:       dueMetaVal,
-					Mode:          modeVal,
-					MaxGroupSize:  maxGroupSize,
-					Autograder:    autograderVal,
-					Runtime:       runtime,
-					Tests:         tests,
-					FeedbackPR:    feedbackPRVal,
-					EmptyRepo:     emptyRepo,
-					AllowedFiles:  allowedFiles,
-					PassThreshold: passThresholdPtr,
+					Org:               org,
+					Classroom:         classroom,
+					Slug:              slug,
+					Name:              nameVal,
+					Description:       strings.TrimSpace(description),
+					Tmpl:              tmplArg,
+					Due:               dueVal,
+					DueMeta:           dueMetaVal,
+					AvailableFrom:     availableFromVal,
+					AvailableFromMeta: availableFromMetaVal,
+					Mode:              modeVal,
+					MaxGroupSize:      maxGroupSize,
+					Autograder:        autograderVal,
+					Runtime:           runtime,
+					Tests:             tests,
+					FeedbackPR:        feedbackPRVal,
+					EmptyRepo:         emptyRepo,
+					AllowedFiles:      allowedFiles,
+					PassThreshold:     passThresholdPtr,
 				})
 		},
 	}
@@ -250,6 +257,7 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&template, "template", "", "Optional template repo as <owner>/<repo> or <owner>/<repo>@<branch>. Omit for a template-less assignment (students get an empty repo with just the autograder shim).")
 	cmd.Flags().StringVar(&description, "description", "", "Optional one-line description")
 	cmd.Flags().StringVar(&due, "due", "", "Optional due date (e.g., 2026-09-15T23:59:00-04:00); stored as UTC. Omit the offset to use the machine's local timezone")
+	cmd.Flags().StringVar(&availableFrom, "available-from", "", "Optional release date (e.g., 2026-09-15T00:00:00-04:00); stored as UTC. Before it, the assignment is hidden from students who haven't accepted it (listing-only, not access control). Omit the offset to use the machine's local timezone.")
 	cmd.Flags().StringVar(&mode, "mode", assignment.ModeIndividual, "Assignment mode: `individual` (default) or `group`. Group mode requires --max-group-size.")
 	cmd.Flags().IntVar(&maxGroupSize, "max-group-size", 0, "Maximum collaborators on a group repo (>= 2; required with --mode group). Enforced within the CLI when students join; direct GitHub-UI invites can bypass it.")
 	cmd.Flags().StringVar(&autograder, "autograder", contract.DefaultAutograderName, "Autograder workflow shim this assignment opts into; resolves to <classroom>/autograders/<name>.yaml in the config repo")
@@ -512,23 +520,25 @@ func passThresholdFromFlag(changed bool, value int) *int {
 // transposition a compile-clean footgun; field names keep call sites
 // order-independent.
 type addAssignmentParams struct {
-	Org           string
-	Classroom     string
-	Slug          string
-	Name          string
-	Description   string
-	Tmpl          *templateArg
-	Due           string
-	DueMeta       *assignment.DueMeta
-	Mode          string
-	MaxGroupSize  int
-	Autograder    string
-	Runtime       *assignment.RuntimeRef
-	Tests         []assignment.TestSpec
-	FeedbackPR    bool
-	EmptyRepo     bool
-	AllowedFiles  []string
-	PassThreshold *int
+	Org               string
+	Classroom         string
+	Slug              string
+	Name              string
+	Description       string
+	Tmpl              *templateArg
+	Due               string
+	DueMeta           *assignment.DueMeta
+	AvailableFrom     string
+	AvailableFromMeta *assignment.DueMeta
+	Mode              string
+	MaxGroupSize      int
+	Autograder        string
+	Runtime           *assignment.RuntimeRef
+	Tests             []assignment.TestSpec
+	FeedbackPR        bool
+	EmptyRepo         bool
+	AllowedFiles      []string
+	PassThreshold     *int
 }
 
 // runAssignmentAdd validates template visibility and entry shape before the
@@ -540,6 +550,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	org, classroom, slug := p.Org, p.Classroom, p.Slug
 	name, description := p.Name, p.Description
 	tmpl, due, dueMetaVal := p.Tmpl, p.Due, p.DueMeta
+	availableFrom, availableFromMetaVal := p.AvailableFrom, p.AvailableFromMeta
 	mode, maxGroupSize, autograder := p.Mode, p.MaxGroupSize, p.Autograder
 	runtime, tests := p.Runtime, p.Tests
 	feedbackPR, allowedFiles := p.FeedbackPR, p.AllowedFiles
@@ -584,21 +595,23 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	}
 
 	entry := assignment.AssignmentEntry{
-		Slug:          slug,
-		Name:          name,
-		Description:   description,
-		Template:      resolved,
-		Due:           due,
-		DueMeta:       dueMetaVal,
-		Mode:          mode,
-		MaxGroupSize:  maxGroupSize,
-		Autograder:    autograder,
-		Runtime:       runtime,
-		Tests:         tests,
-		FeedbackPR:    feedbackPR,
-		EmptyRepo:     p.EmptyRepo,
-		AllowedFiles:  allowedFiles,
-		PassThreshold: passThreshold,
+		Slug:              slug,
+		Name:              name,
+		Description:       description,
+		Template:          resolved,
+		Due:               due,
+		DueMeta:           dueMetaVal,
+		AvailableFrom:     availableFrom,
+		AvailableFromMeta: availableFromMetaVal,
+		Mode:              mode,
+		MaxGroupSize:      maxGroupSize,
+		Autograder:        autograder,
+		Runtime:           runtime,
+		Tests:             tests,
+		FeedbackPR:        feedbackPR,
+		EmptyRepo:         p.EmptyRepo,
+		AllowedFiles:      allowedFiles,
+		PassThreshold:     passThreshold,
 	}
 	if err := assignment.ValidateAssignmentEntry(entry); err != nil {
 		return err
@@ -902,7 +915,31 @@ func normalizeDueDate(raw string) (string, *assignment.DueMeta, error) {
 	return t.UTC().Format(time.RFC3339), meta, nil
 }
 
-// localDueLocation resolves the machine's local timezone for a zone-less --due.
+// normalizeAvailableFrom mirrors normalizeDueDate for the --available-from
+// release date: empty → ("", nil, nil); otherwise the value is normalized to a
+// UTC instant with matching provenance (reusing DueMeta for the pair).
+func normalizeAvailableFrom(raw string) (string, *assignment.DueMeta, error) {
+	if raw == "" {
+		return "", nil, nil
+	}
+	loc, locErr := localDueLocation()
+	t, hadOffset, err := assignment.ParseDueTime(raw, loc)
+	if err != nil {
+		return "", nil, fmt.Errorf("invalid --available-from: %w", err)
+	}
+	if !hadOffset && locErr != nil {
+		return "", nil, fmt.Errorf(
+			"invalid --available-from: %q has no timezone offset and the local timezone "+
+				"could not be resolved (%v); pass an explicit offset like -04:00", raw, locErr)
+	}
+	if hadOffset {
+		return t.UTC().Format(time.RFC3339), assignment.NewDueMeta(raw, t, assignment.DueSourceExplicit), nil
+	}
+	meta := assignment.NewDueMeta(raw, t, assignment.DueSourceAuto)
+	meta.Zone = dueZoneName(loc, t)
+	return t.UTC().Format(time.RFC3339), meta, nil
+}
+
 // $TZ is preferred (its IANA name round-trips into due_meta.zone). When $TZ is
 // set but unresolvable, return the error (with time.Local) so the caller
 // refuses to guess; an empty $TZ falls back to time.Local with no error.
