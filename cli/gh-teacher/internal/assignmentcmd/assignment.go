@@ -54,6 +54,7 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(assignmentReuseCmd())
 	cmd.AddCommand(assignmentRemoveCmd())
 	cmd.AddCommand(assignmentListCmd())
+	cmd.AddCommand(assignmentLockCmd())
 	cmd.AddCommand(assignmentTestCmd())
 	cmd.AddCommand(feedbackpr.NewCmd())
 	return cmd
@@ -749,11 +750,19 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	// In-org private template: grant the classroom team read so rostered
 	// students can generate from it. Idempotent. The team slug comes from
 	// classroom.json; a classroom with no team gets an actionable message.
-	if resolved != nil && templatePrivate && inOrg {
+	// A LOCKED assignment intentionally has no student-team template read, so
+	// skip the grant here — otherwise re-running add would silently re-open it
+	// (the lock command removed it on purpose). Staff grants aren't reached
+	// because grantStaffTeamTemplateRead runs inside the student grant path.
+	if resolved != nil && templatePrivate && inOrg && !entry.Locked {
 		if err := grantClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, resolved.Owner, resolved.Repo,
 			grantContext{verb: "committed", classroomNoun: "classroom", rerunHint: ", then re-run `gh teacher assignment add`"}); err != nil {
 			return err
 		}
+	}
+	if resolved != nil && templatePrivate && inOrg && entry.Locked {
+		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the classroom student team was NOT granted read on the private template %s/%s — unlock it with `gh teacher assignment unlock %s %s %s` when you want students to accept again.\n",
+			slug, resolved.Owner, resolved.Repo, org, classroom, slug)
 	}
 	if droppedTests > 0 {
 		_, _ = fmt.Fprintf(errOut,

@@ -94,6 +94,13 @@ type AssignmentsJSON struct {
 // AllowedFiles, ReleaseAssets, and PassThreshold, and IMMUTABLE once the entry
 // exists — flipping it later would mean retrofitting every already-accepted repo.
 // Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
+//
+// Locked hard-blocks student access: every accept surface (web + `gh student
+// accept`) refuses a locked assignment for all students, including ones who
+// already accepted. Client gates are advisory (assignments.json is public); the
+// enforceable boundary is that locking a PRIVATE in-org template also removes
+// the STUDENT team's read on it (staff teams untouched), and unlocking
+// re-grants it. Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
 type AssignmentEntry struct {
 	Slug              string           `json:"slug"`
 	Name              string           `json:"name"`
@@ -110,6 +117,7 @@ type AssignmentEntry struct {
 	Tests             []TestSpec       `json:"tests,omitempty"`
 	FeedbackPR        bool             `json:"feedback_pr,omitempty"`
 	EmptyRepo         bool             `json:"empty_repo,omitempty"`
+	Locked            bool             `json:"locked,omitempty"`
 	AllowedFiles      []string         `json:"allowed_files,omitempty"`
 	ReleaseAssets     []string         `json:"release_assets,omitempty"`
 	PassThreshold     *int             `json:"pass_threshold,omitempty"`
@@ -127,7 +135,7 @@ var knownEntryKeys = map[string]struct{}{
 	"slug": {}, "name": {}, "description": {}, "template": {}, "due": {},
 	"due_meta": {}, "mode": {}, "autograder": {}, "max_group_size": {},
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
-	"allowed_files": {}, "release_assets": {}, "pass_threshold": {},
+	"locked": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
 }
 

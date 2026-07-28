@@ -263,11 +263,16 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 
 	// Re-apply the target classroom's private in-org template team grant. In
 	// --json mode the "granted" line goes to stderr so stdout stays parseable.
+	// A locked copy intentionally has no student-team read, so skip the grant
+	// (the destination stays locked); staff grants live inside that path too.
 	grantOut := out
 	if p.AsJSON {
 		grantOut = errOut
 	}
-	if err := grantReusedTemplateAccess(client, grantOut, errOut, p.Org, p.To, branch, finalSlug, copied.Template); err != nil {
+	if copied.Locked {
+		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the target classroom student team was NOT granted read on its private template — unlock it with `gh teacher assignment unlock %s %s %s` when students should accept.\n",
+			finalSlug, p.Org, p.To, finalSlug)
+	} else if err := grantReusedTemplateAccess(client, grantOut, errOut, p.Org, p.To, branch, finalSlug, copied.Template); err != nil {
 		return err
 	}
 

@@ -712,7 +712,25 @@ func grantTeamRepo(client githubapi.Client, org, slug, repoOwner, repo, permissi
 	return true, nil
 }
 
-// ResolveClassroomTeamSlug returns the classroom team's addressing slug: the
+// RemoveTeamRepo removes the team's access to <repoOwner>/<repo>. A 404 (the
+// team never had access, or the repo/team is gone) is success, so revoking is
+// idempotent. Used when LOCKING a private-template assignment: the classroom
+// STUDENT team's read on the template is dropped so no new student can generate
+// a repo from it. Staff teams are addressed separately and left untouched.
+func RemoveTeamRepo(client githubapi.Client, org, slug, repoOwner, repo string) error {
+	path := fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s",
+		url.PathEscape(org), url.PathEscape(slug), url.PathEscape(repoOwner), url.PathEscape(repo))
+	resp, err := client.Request(http.MethodDelete, path, nil)
+	if err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return nil
+		}
+		return fmt.Errorf("DELETE %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return nil
+}
 // persisted classroom.json `team.slug` when present (authoritative — GitHub may
 // re-slug on a collision), else the derived `classroom50-<short>`. Mirrors the
 // web's resolveClassroomTeam and the Python collector's resolve_team_slug. A
