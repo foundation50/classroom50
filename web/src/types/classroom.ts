@@ -106,10 +106,11 @@ export type Assignment = {
   due?: string
   due_meta?: DueMeta
   // Release date: the instant at/after which the assignment is listed on the
-  // student assignments page for everyone. HIDE-BY-DEFAULT: absent, null, or a
-  // future value keep it OFF the student list (link-only accept); an
-  // already-accepted student always sees it. Listing-advisory only
-  // (assignments.json is public); mirrors due/due_meta.
+  // student assignments page for everyone. HIDE-BY-DEFAULT: an absent or future
+  // value keeps it OFF the student list (link-only accept); an already-accepted
+  // student always sees it. Listing-advisory only (assignments.json is public);
+  // mirrors due/due_meta. A defensive reader also treats a hand-written null as
+  // absent (hidden), though the schema types this as a string.
   available_from?: string
   available_from_meta?: DueMeta
   mode: AssignmentMode
