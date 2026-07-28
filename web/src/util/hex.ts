@@ -1,4 +1,6 @@
-// Lowercase hex of a byte array. Output is lowercase, zero-padded, no separator.
+// Lowercase hex of a byte array.
 export function bytesToHex(bytes: Uint8Array): string {
-  return bytes.toHex()
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
 }

@@ -1,5 +1,8 @@
 function base64Url(bytes: Uint8Array) {
-  return bytes.toBase64({ alphabet: "base64url", omitPadding: true })
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "")
 }
 
 export function randomBase64Url(byteLength = 32) {

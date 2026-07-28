@@ -5,7 +5,10 @@ import { decodeBase64Utf8 } from "./github"
 // Encode a UTF-8 string to base64 the way GitHub's Contents API returns it:
 // standard base64, wrapped at `wrap` columns with newlines.
 function encodeWrapped(text: string, wrap = 0): string {
-  const b64 = new Uint8Array(new TextEncoder().encode(text)).toBase64()
+  const bytes = new TextEncoder().encode(text)
+  let binary = ""
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  const b64 = btoa(binary)
   if (wrap <= 0) return b64
   return (b64.match(new RegExp(`.{1,${wrap}}`, "g")) ?? []).join("\n") + "\n"
 }
