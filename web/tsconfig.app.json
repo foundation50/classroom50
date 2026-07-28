@@ -2,7 +2,12 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "target": "es2023",
-    "lib": ["ES2023", "DOM"],
+    // ES2024 for Map.groupBy. Held at ES2024, not ESNext, so the Uint8Array
+    // base64/hex family can't be adopted by accident: it would replace the only
+    // fallback-free path for assignment upload with an API ~2 years younger than
+    // the app's de facto floor (Safari 17.4, already set by AbortSignal.any).
+    // `target` stays es2023 — ES2024 added no syntax we emit.
+    "lib": ["ES2024", "DOM"],
     "module": "esnext",
     "types": ["vite/client"],
     "skipLibCheck": true,

@@ -3,6 +3,8 @@ import { useParams } from "@tanstack/react-router"
 import { Link } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 
+import { cx } from "@/components/ui"
+
 const Breadcrumb = ({
   className,
   endpoint,
@@ -19,7 +21,7 @@ const Breadcrumb = ({
   return (
     <nav
       aria-label={t("components.breadcrumb.label")}
-      className={`breadcrumbs text-sm [&_a]:text-primary ${className ?? ""}`}
+      className={cx("breadcrumbs text-sm [&_a]:text-primary", className)}
     >
       <ol>
         {org && (

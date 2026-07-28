@@ -5,17 +5,7 @@
 
 import { useState } from "react"
 
-function canUseStorage() {
-  // `window` can exist while `localStorage` is absent (some SSR/test DOMs, or a
-  // browser with storage disabled). Probe the actual API, not just `window`, so
-  // a read/write never throws and list prefs degrade to defaults.
-  try {
-    return typeof window !== "undefined" && window.localStorage != null
-  } catch {
-    // Accessing localStorage can itself throw (sandboxed iframes, blocked cookies).
-    return false
-  }
-}
+import { localStorageOrNull } from "@/lib/webStorage"
 
 export type ListPrefsConfig<ViewMode extends string, SortKey extends string> = {
   viewKey: string
@@ -34,21 +24,22 @@ export function createListPrefs<
   SortKey extends string,
 >(config: ListPrefsConfig<ViewMode, SortKey>) {
   const getStoredViewMode = (): ViewMode => {
-    if (!canUseStorage()) return config.defaultView
-    const raw = localStorage.getItem(config.viewKey)
+    const ls = localStorageOrNull()
+    if (ls === null) return config.defaultView
+    const raw = ls.getItem(config.viewKey)
     return config.viewValues.includes(raw as ViewMode)
       ? (raw as ViewMode)
       : config.defaultView
   }
 
   const persistViewMode = (mode: ViewMode) => {
-    if (!canUseStorage()) return
-    localStorage.setItem(config.viewKey, mode)
+    localStorageOrNull()?.setItem(config.viewKey, mode)
   }
 
   const getStoredSortKey = (): SortKey => {
-    if (!canUseStorage()) return config.defaultSort
-    const raw = localStorage.getItem(config.sortKey)
+    const ls = localStorageOrNull()
+    if (ls === null) return config.defaultSort
+    const raw = ls.getItem(config.sortKey)
     const parsed = config.sortValues.includes(raw as SortKey)
       ? (raw as SortKey)
       : config.defaultSort
@@ -58,8 +49,7 @@ export function createListPrefs<
   }
 
   const persistSortKey = (key: SortKey) => {
-    if (!canUseStorage()) return
-    localStorage.setItem(config.sortKey, key)
+    localStorageOrNull()?.setItem(config.sortKey, key)
   }
 
   return {

@@ -44,7 +44,7 @@ function OrgPicker({
 
   // Newly appeared first, then A-Z — GitHub returns memberships in no useful
   // order, and the home page already sorts by name.
-  const sorted = [...needsSetupOrgs].sort(
+  const sorted = needsSetupOrgs.toSorted(
     (a, b) =>
       Number(newLogins.has(b.org.login)) - Number(newLogins.has(a.org.login)) ||
       a.org.login.localeCompare(b.org.login),

@@ -1,7 +1,7 @@
 import GitHub from "@/assets/github.svg?react"
 import { useTranslation } from "react-i18next"
 
-import { Badge } from "@/components/ui"
+import { Badge, cx } from "@/components/ui"
 
 // Shared GitHub-plan badge (org's billing plan). GitHub returns the plan name
 // only to org owners, so callers pass `undefined` for non-owners and nothing
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui"
 const PlanBadge = ({
   name,
   title,
-  className = "",
+  className,
 }: {
   name?: string
   title?: string
@@ -20,11 +20,7 @@ const PlanBadge = ({
   if (!name) return null
 
   return (
-    <Badge
-      ghost
-      className={`gap-1 capitalize ${className}`.trim()}
-      title={title}
-    >
+    <Badge ghost className={cx("gap-1 capitalize", className)} title={title}>
       <GitHub className="size-3" aria-hidden="true" />
       {t("components.planBadge.label", { name })}
     </Badge>

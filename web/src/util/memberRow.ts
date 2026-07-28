@@ -1,6 +1,10 @@
 import type { OrgMemberRow } from "@/util/orgMembers"
 import type { TeamRosterRow } from "@/util/teamRoster"
-import { nameFromParts, initialsFromParts } from "@/util/students"
+import {
+  nameFromParts,
+  initialsFromParts,
+  firstGrapheme,
+} from "@/util/students"
 
 // Minimal display shape the shared presentation helpers (initialsFor,
 // GitHubIdentity, MemberDetailHeader) target. Neither native row satisfies it
@@ -40,5 +44,5 @@ export const rosterRowToMemberRow = (row: TeamRosterRow): MemberListRow => ({
 // character of the handle/email.
 export const rosterRowInitials = (row: TeamRosterRow): string =>
   initialsFromParts(row.first_name, row.last_name) ||
-  (row.username || row.email)[0]?.toUpperCase() ||
+  firstGrapheme(row.username || row.email).toUpperCase() ||
   "?"

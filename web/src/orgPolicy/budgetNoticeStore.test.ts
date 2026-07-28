@@ -33,7 +33,8 @@ describe("budgetNoticeStore", () => {
   })
 
   afterEach(() => {
-    window.localStorage.clear()
+    // Re-install: a test may have left a throwing accessor in place.
+    installLocalStorage()
   })
 
   it("defaults to not-created, not-dismissed", () => {
@@ -73,5 +74,22 @@ describe("budgetNoticeStore", () => {
     const n = readBudgetNotice("acme")
     expect(n.created).toBe(false)
     expect(n.dismissed).toBe(false)
+  })
+
+  // A sandboxed iframe or blocked cookies makes the localStorage *getter* throw,
+  // before any read — the banner logic must degrade, not take down the page.
+  it("degrades to defaults when the storage accessor throws", () => {
+    Object.defineProperty(window, "localStorage", {
+      get() {
+        throw new DOMException("denied", "SecurityError")
+      },
+      configurable: true,
+    })
+    expect(readBudgetNotice("acme")).toEqual({
+      created: false,
+      dismissed: false,
+    })
+    expect(() => markBudgetCreated("acme")).not.toThrow()
+    expect(() => dismissBudgetNotice("acme")).not.toThrow()
   })
 })

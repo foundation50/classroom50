@@ -5,7 +5,7 @@ import { ExternalLink } from "lucide-react"
 import GitHub from "@/assets/github.svg?react"
 import { Badge, Button, Modal } from "@/components/ui"
 import type { Student } from "@/types/classroom"
-import { getName, getInitials } from "@/util/students"
+import { getName, getInitials, firstGrapheme } from "@/util/students"
 
 type ProfileRow = { label: string; value: React.ReactNode }
 
@@ -38,8 +38,8 @@ export const StudentProfileModal = ({
   const name = getName(student.username, students) || student.username || "—"
   const initials =
     getInitials(student.username, students) ||
-    student.username?.[0]?.toUpperCase() ||
-    student.email?.[0]?.toUpperCase() ||
+    firstGrapheme(student.username ?? "").toUpperCase() ||
+    firstGrapheme(student.email ?? "").toUpperCase() ||
     "?"
 
   const rows: ProfileRow[] = [

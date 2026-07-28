@@ -5,13 +5,10 @@ import { NO_SECTION } from "@/pages/students/rosterFilter"
 export function groupStudentsBySection<T extends { section?: string }>(
   students: T[],
 ): Array<{ section: string; students: T[] }> {
-  const bySection = new Map<string, T[]>()
-  for (const student of students) {
-    const label = student.section?.trim() || NO_SECTION
-    const bucket = bySection.get(label)
-    if (bucket) bucket.push(student)
-    else bySection.set(label, [student])
-  }
+  const bySection = Map.groupBy(
+    students,
+    (student) => student.section?.trim() || NO_SECTION,
+  )
   return Array.from(bySection.entries())
     .sort(([a], [b]) => {
       if (a === NO_SECTION) return 1

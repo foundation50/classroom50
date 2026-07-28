@@ -3,6 +3,7 @@ import { Trans, useTranslation } from "react-i18next"
 import GitHub from "@/assets/github.svg?react"
 import { MonoLtr } from "@/components/ui"
 import type { MemberListRow } from "@/util/memberRow"
+import { firstGrapheme } from "@/util/students"
 
 // View-agnostic member presentation primitives shared by member lists and detail
 // modals (Org Members + classroom roster). They target the adapter type
@@ -13,7 +14,8 @@ import type { MemberListRow } from "@/util/memberRow"
 
 // First initial of a row's best display string, for the avatar fallback.
 export const initialsFor = (row: MemberListRow) =>
-  (row.name || row.username || row.email || "?")[0]?.toUpperCase() ?? "?"
+  firstGrapheme(row.name || row.username || row.email || "?").toUpperCase() ||
+  "?"
 
 // GitHub identity line: shows @username and the immutable numeric GitHub id to
 // make clear these are GitHub members. Single-sentence keys (not affix concat)

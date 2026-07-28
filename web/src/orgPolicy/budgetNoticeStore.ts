@@ -5,17 +5,9 @@
 // unresolvedStore.ts. Kept separate from the audit unresolvedStore so the
 // audit's "fix-it" outcome semantics stay clean.
 
+import { localStorageOrNull } from "@/lib/webStorage"
+
 const KEY_PREFIX = "c50:budget:notice:v1:"
-
-function canUseStorage(): boolean {
-  return (
-    typeof window !== "undefined" && typeof window.localStorage !== "undefined"
-  )
-}
-
-function store(): Storage | null {
-  return canUseStorage() ? window.localStorage : null
-}
 
 function keyFor(org: string): string {
   return `${KEY_PREFIX}${org}`
@@ -36,7 +28,7 @@ function empty(): BudgetNotice {
 // Read the persisted notice for an org. Tolerates missing or corrupt JSON by
 // returning defaults — a bad value must never throw and hide the banner logic.
 export function readBudgetNotice(org: string): BudgetNotice {
-  const ls = store()
+  const ls = localStorageOrNull()
   if (ls === null) return empty()
   const raw = ls.getItem(keyFor(org))
   if (raw === null) return empty()
@@ -61,7 +53,7 @@ function notifyChanged(): void {
 }
 
 function write(org: string, notice: BudgetNotice): void {
-  const ls = store()
+  const ls = localStorageOrNull()
   if (ls === null) return
   ls.setItem(keyFor(org), JSON.stringify(notice))
   notifyChanged()

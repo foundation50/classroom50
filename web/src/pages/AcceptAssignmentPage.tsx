@@ -43,6 +43,7 @@ import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useOutageHint } from "@/lib/githubHealth"
 import { EnterDiv } from "@/lib/motionComponents"
 import { collapseVariants } from "@/lib/motion"
+import { firstGrapheme } from "@/util/students"
 import { AnimatePresence, motion } from "motion/react"
 
 const initialsFor = (user: GitHubUser | null) => {
@@ -51,7 +52,7 @@ const initialsFor = (user: GitHubUser | null) => {
     .split(/\s|-/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
+    .map((part) => firstGrapheme(part).toUpperCase())
     .join("")
 }
 
@@ -252,10 +253,9 @@ type StepState = Record<
   }
 >
 
-const initialStepState: StepState = ACCEPT_STEP_ORDER.reduce((acc, step) => {
-  acc[step.id] = { status: "pending" }
-  return acc
-}, {} as StepState)
+const initialStepState: StepState = Object.fromEntries(
+  ACCEPT_STEP_ORDER.map((step) => [step.id, { status: "pending" as const }]),
+) as StepState
 
 const StatusIcon = ({ status }: { status: AcceptStepStatus }) => {
   if (status === "complete")

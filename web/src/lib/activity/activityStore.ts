@@ -16,6 +16,7 @@
 // name, and message.
 
 import { GitHubAPIError } from "@/github-core/errors"
+import { sessionStorageOrNull } from "@/lib/webStorage"
 
 export type ActivityKind = "error" | "action"
 
@@ -58,17 +59,11 @@ let recentByKey: PendingDedup[] = []
 let entries: ActivityEntry[] = load()
 const listeners = new Set<() => void>()
 
-function canUseStorage(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.sessionStorage !== "undefined"
-  )
-}
-
 function load(): ActivityEntry[] {
-  if (!canUseStorage()) return []
+  const ss = sessionStorageOrNull()
+  if (ss === null) return []
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY)
+    const raw = ss.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
@@ -82,16 +77,17 @@ function load(): ActivityEntry[] {
 }
 
 function persist(): void {
-  if (!canUseStorage()) return
+  const ss = sessionStorageOrNull()
+  if (ss === null) return
   try {
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
+    ss.setItem(STORAGE_KEY, JSON.stringify(entries))
   } catch {
     // Quota/private-mode failure: drop the oldest half and retry once so a
     // burst degrades to the most-recent entries rather than dropping the write
     // wholesale. In-memory tracking still holds the full set this mount.
     try {
       const trimmed = entries.slice(Math.ceil(entries.length / 2))
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
+      ss.setItem(STORAGE_KEY, JSON.stringify(trimmed))
     } catch {
       // Still failing — best-effort; give up on persistence this write.
     }
@@ -196,7 +192,7 @@ function pushEntry(entry: ActivityEntry, dedupKey?: string): void {
 
   entries = [...entries.filter((e) => e.at >= cutoff), entry]
   if (entries.length > MAX_ENTRIES) {
-    entries = entries.slice(entries.length - MAX_ENTRIES)
+    entries = entries.slice(-MAX_ENTRIES)
   }
   persist()
   emit()

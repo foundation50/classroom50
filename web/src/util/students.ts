@@ -11,6 +11,25 @@ export { isMalformedGitHubId, isSameGitHubUser, parseGitHubId, resolveGitHubId }
 export const capitalize = (s: string) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1) : ""
 
+// First user-perceived character of a string, or "" when empty. `s[0]` and
+// `slice(0, 1)` yield a UTF-16 code *unit*, so a self-reported roster name
+// starting with an emoji would render as a lone surrogate. Built lazily behind a
+// feature test because this module is imported app-wide: a runtime without
+// Intl.Segmenter must degrade to a mangled initial, not a blank page.
+let segmenter: Intl.Segmenter | null | undefined
+
+export const firstGrapheme = (s: string): string => {
+  if (segmenter === undefined) {
+    segmenter =
+      typeof Intl !== "undefined" && typeof Intl.Segmenter === "function"
+        ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+        : null
+  }
+  if (!segmenter) return s.slice(0, 1)
+  const [first] = segmenter.segment(s)
+  return first?.segment ?? ""
+}
+
 // Find a roster student by username, case-insensitively: GitHub logins and
 // scores.json logins can differ in case from the CSV, so `===` would miss.
 const findByUsername = (key: string, students: Student[]) => {
@@ -63,8 +82,8 @@ export const initialsFromParts = (
   firstName?: string,
   lastName?: string,
 ): string => {
-  const first = capitalize((firstName ?? "").trim().slice(0, 1))
-  const last = capitalize((lastName ?? "").trim().slice(0, 1))
+  const first = firstGrapheme((firstName ?? "").trim()).toUpperCase()
+  const last = firstGrapheme((lastName ?? "").trim()).toUpperCase()
   return `${first}${last}`
 }
 
@@ -84,7 +103,7 @@ export const studentSortKey = (student: Student): string => {
 // break on the lowercased username so the order is fully deterministic — the
 // spine the submissions dashboard pages over and targets repos by.
 export const sortStudentsByName = (students: Student[]): Student[] =>
-  [...students].sort((a, b) => {
+  students.toSorted((a, b) => {
     const byName = studentSortKey(a).localeCompare(studentSortKey(b))
     if (byName !== 0) return byName
     return a.username

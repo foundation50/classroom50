@@ -33,7 +33,8 @@ describe("unresolvedStore", () => {
   })
 
   afterEach(() => {
-    window.localStorage.clear()
+    // Re-install: a test may have left a throwing accessor in place.
+    installLocalStorage()
   })
 
   it("returns empty sets when nothing is stored", () => {
@@ -76,5 +77,22 @@ describe("unresolvedStore", () => {
     mergeUnresolved("acme", { concerns: ["rulesets"] })
     clearUnresolved("acme")
     expect(readUnresolved("acme").concerns.size).toBe(0)
+  })
+
+  // A sandboxed iframe or blocked cookies makes the localStorage *getter* throw,
+  // before any read. Every entry point must degrade rather than propagate, or the
+  // audit pane dies on mount.
+  it("degrades to empty when the storage accessor throws", () => {
+    Object.defineProperty(window, "localStorage", {
+      get() {
+        throw new DOMException("denied", "SecurityError")
+      },
+      configurable: true,
+    })
+    expect(readUnresolved("acme").concerns.size).toBe(0)
+    expect(() =>
+      mergeUnresolved("acme", { concerns: ["rulesets"] }),
+    ).not.toThrow()
+    expect(() => clearUnresolved("acme")).not.toThrow()
   })
 })

@@ -52,7 +52,7 @@ export const ROLE_RANK: Record<ClassroomRole, number> = {
 }
 
 export function sortRolesByRank(roles: ClassroomRole[]): ClassroomRole[] {
-  return [...roles].sort((a, b) => ROLE_RANK[b] - ROLE_RANK[a])
+  return roles.toSorted((a, b) => ROLE_RANK[b] - ROLE_RANK[a])
 }
 
 // The single predicate for "is this the top staff role" — the canonical

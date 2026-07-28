@@ -88,9 +88,9 @@ export function useLiveSubmissions({
   // the owners change, not on every render.
   const ownersKey = useMemo(
     () =>
-      [...repoOwners]
+      repoOwners
         .map((o) => o.toLowerCase())
-        .sort()
+        .toSorted()
         .join(","),
     [repoOwners],
   )

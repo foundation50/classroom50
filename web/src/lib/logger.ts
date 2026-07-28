@@ -101,11 +101,9 @@ function sanitizeValue(value: unknown): unknown {
 function sanitizeContext(
   rest: Record<string, unknown>,
 ): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(rest)) {
-    out[key] = sanitizeValue(value)
-  }
-  return out
+  return Object.fromEntries(
+    Object.entries(rest).map(([key, value]) => [key, sanitizeValue(value)]),
+  )
 }
 
 function emit(

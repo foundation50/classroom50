@@ -2,6 +2,7 @@ import i18n from "i18next"
 import { z } from "zod"
 
 import en from "@/locales/en.json"
+import { localStorageOrNull } from "@/lib/webStorage"
 
 // Sideloadable language packs: English is the bundled base; users install extra
 // languages at runtime (file/URL) and switch between them. Stored packs are
@@ -242,6 +243,25 @@ function languageName(code: string, uiLocale?: string): string | null {
   }
 }
 
+// Human-readable enumeration of language labels, in the UI language's own list
+// style. Guarded like languageName: langCodeSchema admits tags Intl rejects
+// (`en-1`), and a sideloaded pack's code can become the active uiLocale.
+export function languageLabelList(codes: string[], uiLocale?: string): string {
+  const labels = codes.map((code) => languageLabel(code, uiLocale))
+  if (typeof Intl === "undefined" || typeof Intl.ListFormat !== "function") {
+    return labels.join(", ")
+  }
+  try {
+    const locale = uiLocale || i18n.language || BASE_LANG
+    return new Intl.ListFormat([locale], {
+      style: "long",
+      type: "conjunction",
+    }).format(labels)
+  } catch {
+    return labels.join(", ")
+  }
+}
+
 // Infer a language code from a file name / URL: the last path segment minus a
 // `.json` extension, if it's a valid code. `de.json` -> "de", `zh-CN.json` ->
 // "zh-CN", `translation.json` -> null.
@@ -271,18 +291,10 @@ function tooLargeError(subject = "Language pack"): LanguagePackError {
 
 // ---- Storage ----------------------------------------------------------------
 
-function getStorage(): Storage | null {
-  try {
-    return typeof window !== "undefined" ? window.localStorage : null
-  } catch {
-    return null
-  }
-}
-
 // Read + re-validate all persisted packs; untrusted storage is not trusted, so
 // anything failing validation is dropped rather than registered.
 export function readStoredPacks(): Record<string, LanguagePack> {
-  const storage = getStorage()
+  const storage = localStorageOrNull()
   if (!storage) return {}
   const raw = storage.getItem(PACKS_STORAGE_KEY)
   if (!raw) return {}
@@ -310,7 +322,7 @@ export function readStoredPacks(): Record<string, LanguagePack> {
 }
 
 function writeStoredPacks(packs: Record<string, LanguagePack>): void {
-  const storage = getStorage()
+  const storage = localStorageOrNull()
   if (!storage) return
   try {
     storage.setItem(PACKS_STORAGE_KEY, JSON.stringify(packs))
@@ -333,15 +345,14 @@ function isQuotaError(err: unknown): boolean {
 }
 
 export function getStoredLang(): string {
-  const storage = getStorage()
-  const stored = storage?.getItem(LANG_STORAGE_KEY)
+  const stored = localStorageOrNull()?.getItem(LANG_STORAGE_KEY)
   if (!stored) return BASE_LANG
   const result = langCodeSchema.safeParse(stored)
   return result.success ? result.data : BASE_LANG
 }
 
 function setStoredLang(code: string): void {
-  getStorage()?.setItem(LANG_STORAGE_KEY, code)
+  localStorageOrNull()?.setItem(LANG_STORAGE_KEY, code)
 }
 
 // The language that will actually activate at startup: the stored choice only
@@ -608,41 +619,43 @@ export async function prepareFromUrl(
 
   const resolved = resolveCode(code, parsed.pathname)
 
+  // The manual controller stays for the size-cap aborts below; the deadline
+  // comes from the platform. It must cover the body read, not just the headers —
+  // a slow-drip response (bytes trickled under the cap) would otherwise stream
+  // forever. An AbortSignal.timeout can't be disarmed early, which is exactly
+  // the property we want here.
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  const signal = AbortSignal.any([
+    controller.signal,
+    AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  ])
+
+  let res: Response
   try {
-    let res: Response
-    try {
-      res = await fetch(parsed.toString(), { signal: controller.signal })
-    } catch {
-      throw new LanguagePackError(
-        "Couldn't fetch (CORS/network) — download the file and upload it instead.",
-      )
-    }
-
-    if (!res.ok) {
-      throw new LanguagePackError(
-        `Couldn't fetch (HTTP ${res.status}) — download the file and upload it instead.`,
-      )
-    }
-
-    // A chunked response omits Content-Length (Number(null) === 0 passes a
-    // header-only check), so also enforce the cap while streaming (below).
-    const declared = Number(res.headers.get("content-length"))
-    if (Number.isFinite(declared) && declared > MAX_PACK_BYTES) {
-      controller.abort()
-      throw tooLargeError()
-    }
-
-    // Keep the timeout armed across the body read: clearing it once headers
-    // arrive would leave a slow-drip response (bytes trickled under the cap)
-    // with no deadline, hanging the stream read indefinitely.
-    const text = await readCappedText(res, controller)
-    const bundle = parseBundle(text)
-    return buildPreview(resolved, bundle)
-  } finally {
-    clearTimeout(timeout)
+    res = await fetch(parsed.toString(), { signal })
+  } catch {
+    throw new LanguagePackError(
+      "Couldn't fetch (CORS/network) — download the file and upload it instead.",
+    )
   }
+
+  if (!res.ok) {
+    throw new LanguagePackError(
+      `Couldn't fetch (HTTP ${res.status}) — download the file and upload it instead.`,
+    )
+  }
+
+  // A chunked response omits Content-Length (Number(null) === 0 passes a
+  // header-only check), so also enforce the cap while streaming (below).
+  const declared = Number(res.headers.get("content-length"))
+  if (Number.isFinite(declared) && declared > MAX_PACK_BYTES) {
+    controller.abort()
+    throw tooLargeError()
+  }
+
+  const text = await readCappedText(res, controller)
+  const bundle = parseBundle(text)
+  return buildPreview(resolved, bundle)
 }
 
 // ---- Built-in registry ------------------------------------------------------
@@ -684,67 +697,66 @@ export function fetchRegistry(): Promise<RegistryLanguage[]> {
 // Fetch the manifest and return the offered language codes. Invalid entries are
 // skipped; a fetch/parse failure throws LanguagePackError for the UI to show.
 async function fetchRegistryUncached(): Promise<RegistryLanguage[]> {
+  // Manual controller for the size-cap aborts, platform deadline for the
+  // timeout, which must cover the streaming read (see prepareFromUrl).
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  const signal = AbortSignal.any([
+    controller.signal,
+    AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  ])
+
+  let res: Response
   try {
-    let res: Response
-    try {
-      res = await fetch(REGISTRY_INDEX_URL, { signal: controller.signal })
-    } catch {
-      throw new LanguagePackError(
-        "Couldn't reach the language registry — check your connection or try again.",
-      )
-    }
-
-    if (!res.ok) {
-      throw new LanguagePackError(
-        `Couldn't load the language registry (HTTP ${res.status}).`,
-      )
-    }
-
-    const declared = Number(res.headers.get("content-length"))
-    if (Number.isFinite(declared) && declared > MAX_REGISTRY_BYTES) {
-      controller.abort()
-      throw new LanguagePackError("Language registry manifest is too large.")
-    }
-
-    // Keep the timeout armed across the streaming read (see prepareFromUrl).
-    let text: string
-    try {
-      text = await readCappedText(res, controller, MAX_REGISTRY_BYTES)
-    } catch {
-      throw new LanguagePackError("Language registry manifest is too large.")
-    }
-
-    let json: unknown
-    try {
-      json = JSON.parse(text)
-    } catch {
-      throw new LanguagePackError(
-        "Language registry manifest is not valid JSON.",
-      )
-    }
-
-    const parsed = registrySchema.safeParse(json)
-    if (!parsed.success) {
-      throw new LanguagePackError("Language registry manifest is malformed.")
-    }
-
-    // Keep well-formed entries, drop the base language, dedupe.
-    const seen = new Set<string>()
-    const langs: RegistryLanguage[] = []
-    for (const entry of parsed.data.languages) {
-      const one = registryEntrySchema.safeParse(entry)
-      if (!one.success) continue
-      const { code, version, hash } = one.data
-      if (code === BASE_LANG || seen.has(code)) continue
-      seen.add(code)
-      langs.push({ code, version, hash })
-    }
-    return langs
-  } finally {
-    clearTimeout(timeout)
+    res = await fetch(REGISTRY_INDEX_URL, { signal })
+  } catch {
+    throw new LanguagePackError(
+      "Couldn't reach the language registry — check your connection or try again.",
+    )
   }
+
+  if (!res.ok) {
+    throw new LanguagePackError(
+      `Couldn't load the language registry (HTTP ${res.status}).`,
+    )
+  }
+
+  const declared = Number(res.headers.get("content-length"))
+  if (Number.isFinite(declared) && declared > MAX_REGISTRY_BYTES) {
+    controller.abort()
+    throw new LanguagePackError("Language registry manifest is too large.")
+  }
+
+  let text: string
+  try {
+    text = await readCappedText(res, controller, MAX_REGISTRY_BYTES)
+  } catch {
+    throw new LanguagePackError("Language registry manifest is too large.")
+  }
+
+  let json: unknown
+  try {
+    json = JSON.parse(text)
+  } catch {
+    throw new LanguagePackError("Language registry manifest is not valid JSON.")
+  }
+
+  const parsed = registrySchema.safeParse(json)
+  if (!parsed.success) {
+    throw new LanguagePackError("Language registry manifest is malformed.")
+  }
+
+  // Keep well-formed entries, drop the base language, dedupe.
+  const seen = new Set<string>()
+  const langs: RegistryLanguage[] = []
+  for (const entry of parsed.data.languages) {
+    const one = registryEntrySchema.safeParse(entry)
+    if (!one.success) continue
+    const { code, version, hash } = one.data
+    if (code === BASE_LANG || seen.has(code)) continue
+    seen.add(code)
+    langs.push({ code, version, hash })
+  }
+  return langs
 }
 
 // Build the registry URL for a language pack.
