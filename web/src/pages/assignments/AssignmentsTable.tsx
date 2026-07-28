@@ -178,24 +178,28 @@ const TemplateAccessButton = ({
   )
 }
 
-// Warns teachers why an assignment isn't on students' lists yet: it stays
-// link-only until its release date passes. Renders nothing once released.
-const ReleaseStateBadge = ({ assignment }: { assignment: Assignment }) => {
+// The Release Date cell. A released assignment (date set and passed) shows the
+// date in a neutral badge like Due date; an unreleased one is warning-toned
+// because it's hidden from students' lists until then (link-only accept),
+// which the tooltip explains. "Not set" is the common link-only default.
+const ReleaseDateBadge = ({ assignment }: { assignment: Assignment }) => {
   const { t } = useTranslation()
   const releasesAt = assignment.available_from
-  if (releasesAt && isPastDue(releasesAt)) return null
+  const released = releasesAt ? isPastDue(releasesAt) : false
   return (
     <Badge
-      tone="warning"
-      size="sm"
-      className="mt-1 whitespace-nowrap"
-      title={t("assignments.table.linkOnlyTitle")}
+      tone={released ? "neutral" : "warning"}
+      size="md"
+      className="max-xl:text-xs xl:text-sm whitespace-nowrap w-full"
+      title={released ? undefined : t("assignments.table.linkOnlyTitle")}
     >
       {releasesAt
-        ? t("assignments.table.scheduled", {
-            date: formatDueDateTime(releasesAt),
-          })
-        : t("assignments.table.linkOnly")}
+        ? released
+          ? formatDueDate(releasesAt)
+          : t("assignments.table.scheduled", {
+              date: formatDueDateTime(releasesAt),
+            })
+        : t("assignments.table.releaseNotSet")}
     </Badge>
   )
 }
@@ -209,6 +213,9 @@ const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
         </td>
         <td>
           <div className="skeleton skeleton-shimmer h-4 w-24" />
+        </td>
+        <td>
+          <div className="skeleton skeleton-shimmer h-6 w-28" />
         </td>
         <td>
           <div className="skeleton skeleton-shimmer h-6 w-28" />
@@ -268,6 +275,7 @@ const AssignmentsTable = ({
             <th scope="col">{t("assignments.table.colAssignment")}</th>
             <th scope="col">{t("assignments.table.colType")}</th>
             <th scope="col">{t("assignments.table.colDueDate")}</th>
+            <th scope="col">{t("assignments.table.colReleaseDate")}</th>
             <th scope="col">{t("assignments.table.colSubmissions")}</th>
             <th scope="col">
               <span className="sr-only">
@@ -280,7 +288,7 @@ const AssignmentsTable = ({
           {loading && <SkeletonRows />}
           {!loading && !assignments?.length && (
             <tr>
-              <td colSpan={5} className="text-center">
+              <td colSpan={6} className="text-center">
                 {t("assignments.table.empty")}
               </td>
             </tr>
@@ -306,7 +314,6 @@ const AssignmentsTable = ({
                   <div className="font-mono text-xs text-base-content/70">
                     {assignment.slug}
                   </div>
-                  <ReleaseStateBadge assignment={assignment} />
                 </td>
                 <td
                   onClick={() =>
@@ -350,6 +357,16 @@ const AssignmentsTable = ({
                       ? formatDueDate(assignment.due)
                       : t("assignments.table.noDueDate")}
                   </Badge>
+                </td>
+                <td
+                  onClick={() =>
+                    navigate({
+                      to: "/$org/$classroom/assignments/$assignment/submissions",
+                      params: { org, classroom, assignment: assignment.slug },
+                    })
+                  }
+                >
+                  <ReleaseDateBadge assignment={assignment} />
                 </td>
                 <td
                   onClick={() =>
