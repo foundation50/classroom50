@@ -43,7 +43,7 @@ const fullSource: Assignment = {
     source: "explicit-offset",
   },
   max_group_size: 3,
-  runtime: { "runs-on": "ubuntu-latest", container: { image: "python:3.12" } },
+  runtime: { "runs-on": "ubuntu-latest", container: { image: "python:3.14" } },
   allowed_files: ["src/*.py", "!src/secret.py"],
   release_assets: ["report.pdf", "plots/chart.png"],
   pass_threshold: 80,
@@ -228,7 +228,7 @@ describe("buildReusedEntry", () => {
       mode: "individual",
       autograder: "default",
       runtime: {
-        python: "3.12",
+        python: "3.14",
         node: "20",
         java: "21",
         go: "1.23",
@@ -240,7 +240,7 @@ describe("buildReusedEntry", () => {
       name: "Languages 2",
     })
     expect(entry.runtime).toEqual({
-      python: "3.12",
+      python: "3.14",
       node: "20",
       java: "21",
       go: "1.23",
@@ -634,12 +634,12 @@ describe("editAssignment (preserved-entry integration)", () => {
     })
     const client = { request, requestRaw } as unknown as GitHubClient
 
-    // The edit form round-trips the language fields (python bumped to 3.12,
+    // The edit form round-trips the language fields (python bumped to 3.14,
     // node/apt kept). `rust` is not a schema sub-key, so it must be dropped.
     await editAssignment(
       client,
       editInput({
-        runtime_python: "3.12",
+        runtime_python: "3.14",
         runtime_node: "20",
         runtime_apt: "cmake",
       }),
@@ -650,7 +650,7 @@ describe("editAssignment (preserved-entry integration)", () => {
     }
     const edited = written.assignments.find((a) => a.slug === SLUG)!
     expect(edited.runtime).toEqual({
-      python: "3.12",
+      python: "3.14",
       node: "20",
       apt: ["cmake"],
     })
@@ -668,7 +668,7 @@ describe("editAssignment (preserved-entry integration)", () => {
       client,
       editInput({
         runs_on: "self-hosted, linux, x64",
-        runtime_python: "3.12",
+        runtime_python: "3.14",
         runtime_node: "20",
         runtime_apt: "cmake",
       }),
@@ -693,7 +693,7 @@ describe("editAssignment (preserved-entry integration)", () => {
       client,
       editInput({
         runs_on: "ubuntu-latest",
-        runtime_python: "3.12",
+        runtime_python: "3.14",
         runtime_apt: "cmake",
       }),
     )
@@ -704,7 +704,7 @@ describe("editAssignment (preserved-entry integration)", () => {
     const edited = written.assignments.find((a) => a.slug === SLUG)!
     expect(edited.runtime).toEqual({
       "runs-on": "ubuntu-latest",
-      python: "3.12",
+      python: "3.14",
       apt: ["cmake"],
     })
   })
@@ -732,7 +732,7 @@ describe("editAssignment (preserved-entry integration)", () => {
   it("rejects an invalid language version before any write", async () => {
     const { client } = makeClient()
     await expect(
-      editAssignment(client, editInput({ runtime_python: "3.12 bad" })),
+      editAssignment(client, editInput({ runtime_python: "3.14 bad" })),
     ).rejects.toThrow(/runtime\.python/i)
   })
 

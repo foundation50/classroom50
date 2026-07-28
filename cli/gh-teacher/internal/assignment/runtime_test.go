@@ -19,11 +19,11 @@ func TestValidateRuntime_HostPaths(t *testing.T) {
 		},
 		{
 			name:    "ubuntu-latest with python",
-			runtime: RuntimeRef{RunsOn: RunsOn{"ubuntu-latest"}, Python: "3.12"},
+			runtime: RuntimeRef{RunsOn: RunsOn{"ubuntu-latest"}, Python: "3.14"},
 		},
 		{
 			name:    "all language fields",
-			runtime: RuntimeRef{Python: "3.12", Node: "20", Java: "21", Go: "1.23", Rust: "1.79"},
+			runtime: RuntimeRef{Python: "3.14", Node: "20", Java: "21", Go: "1.23", Rust: "1.79"},
 		},
 		{
 			name:    "apt packages",
@@ -39,7 +39,7 @@ func TestValidateRuntime_HostPaths(t *testing.T) {
 		},
 		{
 			name:    "custom runner with language toolchain accepted",
-			runtime: RuntimeRef{RunsOn: RunsOn{"self-hosted"}, Python: "3.12"},
+			runtime: RuntimeRef{RunsOn: RunsOn{"self-hosted"}, Python: "3.14"},
 		},
 		{
 			name:    "arbitrary unknown label accepted (no allow-list)",
@@ -67,7 +67,7 @@ func TestValidateRuntime_HostPaths(t *testing.T) {
 		},
 		{
 			name:    "python version with semicolon rejected",
-			runtime: RuntimeRef{Python: "3.12; rm -rf /"},
+			runtime: RuntimeRef{Python: "3.14; rm -rf /"},
 			wantErr: "runtime.python",
 		},
 		{
@@ -272,7 +272,7 @@ func TestParseRuntimeFile_HappyPath(t *testing.T) {
 	path := filepath.Join(dir, "runtime.json")
 	body := `{
   "runs-on": "ubuntu-latest",
-  "python": "3.12",
+  "python": "3.14",
   "apt": ["build-essential"]
 }
 `
@@ -287,7 +287,7 @@ func TestParseRuntimeFile_HappyPath(t *testing.T) {
 		t.Fatal("got nil RuntimeRef on happy path")
 		return
 	}
-	if len(got.RunsOn) != 1 || got.RunsOn[0] != "ubuntu-latest" || got.Python != "3.12" {
+	if len(got.RunsOn) != 1 || got.RunsOn[0] != "ubuntu-latest" || got.Python != "3.14" {
 		t.Errorf("fields not parsed: %#v", got)
 	}
 	if len(got.Apt) != 1 || got.Apt[0] != "build-essential" {
@@ -377,7 +377,7 @@ func TestParseAssignments_RuntimeRoundTrips(t *testing.T) {
       "autograder": "default",
       "runtime": {
         "runs-on": "ubuntu-latest",
-        "python": "3.12",
+        "python": "3.14",
         "apt": ["build-essential"]
       }
     }
@@ -392,7 +392,7 @@ func TestParseAssignments_RuntimeRoundTrips(t *testing.T) {
 		t.Fatal("runtime block dropped on parse")
 		return
 	}
-	if len(got.RunsOn) != 1 || got.RunsOn[0] != "ubuntu-latest" || got.Python != "3.12" || len(got.Apt) != 1 {
+	if len(got.RunsOn) != 1 || got.RunsOn[0] != "ubuntu-latest" || got.Python != "3.14" || len(got.Apt) != 1 {
 		t.Errorf("runtime fields not parsed: %#v", got)
 	}
 
@@ -447,7 +447,7 @@ func TestParseAssignments_CustomRunnerArrayRoundTrips(t *testing.T) {
       "autograder": "default",
       "runtime": {
         "runs-on": ["self-hosted", "gpu"],
-        "python": "3.12"
+        "python": "3.14"
       }
     }
   ]
@@ -568,7 +568,7 @@ func TestParseAssignments_OmittedRunsOnIsDefault(t *testing.T) {
       "template": { "owner": "cs50", "repo": "hello-template", "branch": "main" },
       "mode": "individual",
       "autograder": "default",
-      "runtime": { "python": "3.12" }
+      "runtime": { "python": "3.14" }
     }
   ]
 }`)

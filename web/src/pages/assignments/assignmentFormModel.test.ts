@@ -148,7 +148,7 @@ describe("validateAssignmentForm — runtime env", () => {
       {
         ...base,
         runtime_env: "container",
-        container_image: "python:3.12",
+        container_image: "python:3.14",
         runs_on: "macos-latest",
       },
       t,
@@ -163,7 +163,7 @@ describe("validateAssignmentForm — runtime env", () => {
       {
         ...base,
         runtime_env: "container",
-        container_image: "python:3.12",
+        container_image: "python:3.14",
         runtime_apt: "bad;;value",
       },
       t,
@@ -232,7 +232,7 @@ describe("toSubmitValues — runtime field clearing", () => {
       ...base,
       name: "  Homework 1  ",
       runtime_env: "hosted",
-      container_image: "python:3.12",
+      container_image: "python:3.14",
       container_user: "root",
       runtime_apt: " make ",
     })
@@ -246,12 +246,12 @@ describe("toSubmitValues — runtime field clearing", () => {
     const out = toSubmitValues({
       ...base,
       runtime_env: "container",
-      container_image: " python:3.12 ",
+      container_image: " python:3.14 ",
       container_user: " root ",
       runtime_apt: "make",
     })
     expect(out.runtime_apt).toBe("")
-    expect(out.container_image).toBe("python:3.12")
+    expect(out.container_image).toBe("python:3.14")
     expect(out.container_user).toBe("root")
   })
 

@@ -67,7 +67,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: Install PyYAML
         run: python3 -m pip install --quiet --user pyyaml
         working-directory: ${{ runner.temp }}
@@ -458,7 +458,7 @@ jobs:
               # the toolchain. (runner.py itself works on any 3.x
               # via the legacy tar-extraction fallback.)
               if not python:
-                  python = "3.12"
+                  python = "3.14"
 
           # Emit runs-on as a JSON array consumed by the grade job via
           # fromJSON, so a single hosted label and a multi-label

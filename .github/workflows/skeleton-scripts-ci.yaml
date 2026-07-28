@@ -59,7 +59,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.x'
+          python-version: '3.14'
 
       - name: Install test deps
         # pytest-json-report: the declarative grader's pytest-type tests

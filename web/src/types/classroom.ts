@@ -121,7 +121,7 @@ export type Assignment = {
   // pick the setup-X toolchain version the autograder provisions; apt installs
   // extra Ubuntu packages (mutually exclusive with `container` — the image owns
   // its packages). All optional; an absent block means the defaults
-  // (ubuntu-latest + Python 3.12).
+  // (ubuntu-latest + Python 3.14).
   runtime?: {
     "runs-on"?: string | string[]
     container?: {

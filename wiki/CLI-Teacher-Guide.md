@@ -361,7 +361,7 @@ shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--due <ISO-8601>` | Due date, e.g., `2026-09-15T23:59:00-04:00`. Stored as UTC; local timezone assumed if you omit the offset. A bare date with no time is rejected. |
 | `--mode individual\|group` | `individual` (default) or `group`. Group requires `--max-group-size`. |
 | `--max-group-size <N>` | Max collaborators on a group repo (2–100). Advisory, not hard-enforced. |
-| `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.12. See [Autograders](Autograders). |
+| `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.14. See [Autograders](Autograders). |
 | `--autograder <name>` | Reserved for swapping the whole reusable workflow (rare). Use `--runtime` for language toolchains. |
 
 > [!NOTE]

@@ -27,13 +27,13 @@ describe("validateLanguageVersion", () => {
   })
 
   it("accepts versions the CLI's LanguageVersionPattern allows", () => {
-    for (const v of ["3.12", "20", "1.23.4", "latest", "21.0.1+12"]) {
+    for (const v of ["3.14", "20", "1.23.4", "latest", "21.0.1+12"]) {
       expect(validateLanguageVersion(v)).toBeUndefined()
     }
   })
 
   it("rejects a value with whitespace or shell metacharacters", () => {
-    expect(validateLanguageVersion("3.12 rm -rf")).toBeDefined()
+    expect(validateLanguageVersion("3.14 rm -rf")).toBeDefined()
     expect(validateLanguageVersion("$(whoami)")).toBeDefined()
     expect(validateLanguageVersion("a;b")).toBeDefined()
   })
@@ -75,7 +75,7 @@ describe("validateAptPackages", () => {
   it("accepts an empty list and valid lowercase Debian names", () => {
     expect(validateAptPackages([])).toBeUndefined()
     expect(
-      validateAptPackages(["cmake", "libssl-dev", "g++", "python3.12"]),
+      validateAptPackages(["cmake", "libssl-dev", "g++", "python3.14"]),
     ).toBeUndefined()
   })
 

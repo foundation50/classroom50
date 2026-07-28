@@ -388,7 +388,7 @@ edit. Pass a JSON file to `gh teacher assignment add --runtime`:
 ```json
 {
   "runs-on": "ubuntu-latest",
-  "python":  "3.12",
+  "python":  "3.14",
   "node":    "20",
   "java":    "21",
   "go":      "1.23",
@@ -396,13 +396,13 @@ edit. Pass a JSON file to `gh teacher assignment add --runtime`:
 }
 ```
 
-When omitted, the default is `ubuntu-latest` + Python 3.12. Inside a `container`,
+When omitted, the default is `ubuntu-latest` + Python 3.14. Inside a `container`,
 the image owns the toolchain unless you set `python` explicitly.
 
 | Field | Notes |
 |---|---|
 | `runs-on` | A single runner label (`"ubuntu-latest"`) or an array (`["self-hosted", "gpu"]`). No allow-list — you own the label; each is anti-injection-checked (1–10 labels). |
-| `python` / `node` / `java` / `go` | Version passed to the matching `setup-*` action. Skipped when unset (`python` defaults to 3.12 on the host path). |
+| `python` / `node` / `java` / `go` | Version passed to the matching `setup-*` action. Skipped when unset (`python` defaults to 3.14 on the host path). |
 | `rust` | Rustup toolchain (`stable`, `1.79`, …) via `dtolnay/rust-toolchain`. |
 | `apt` | Debian/Ubuntu package names. Linux runners only. Mutually exclusive with `container`. |
 | `container` | Escape hatch — see below. |
