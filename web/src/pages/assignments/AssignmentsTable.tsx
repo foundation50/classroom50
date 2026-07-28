@@ -274,8 +274,8 @@ const AssignmentsTable = ({
           <tr>
             <th scope="col">{t("assignments.table.colAssignment")}</th>
             <th scope="col">{t("assignments.table.colType")}</th>
-            <th scope="col">{t("assignments.table.colDueDate")}</th>
             <th scope="col">{t("assignments.table.colReleaseDate")}</th>
+            <th scope="col">{t("assignments.table.colDueDate")}</th>
             <th scope="col">{t("assignments.table.colSubmissions")}</th>
             <th scope="col">
               <span className="sr-only">
@@ -348,15 +348,7 @@ const AssignmentsTable = ({
                     })
                   }
                 >
-                  <Badge
-                    tone="neutral"
-                    size="md"
-                    className="max-xl:text-xs xl:text-sm whitespace-nowrap w-full"
-                  >
-                    {assignment.due
-                      ? formatDueDate(assignment.due)
-                      : t("assignments.table.noDueDate")}
-                  </Badge>
+                  <ReleaseDateBadge assignment={assignment} />
                 </td>
                 <td
                   onClick={() =>
@@ -366,7 +358,15 @@ const AssignmentsTable = ({
                     })
                   }
                 >
-                  <ReleaseDateBadge assignment={assignment} />
+                  <Badge
+                    tone="neutral"
+                    size="md"
+                    className="max-xl:text-xs xl:text-sm whitespace-nowrap w-full"
+                  >
+                    {assignment.due
+                      ? formatDueDate(assignment.due)
+                      : t("assignments.table.noDueDate")}
+                  </Badge>
                 </td>
                 <td
                   onClick={() =>
