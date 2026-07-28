@@ -334,13 +334,13 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// (`runner.environment != 'self-hosted'`); see the workflow comment / #369.
 	for _, want := range []string{
 		"if: needs.setup.outputs.python != '' && runner.environment != 'self-hosted'",
-		"actions/setup-python@v6",
+		"actions/setup-python@v7",
 		"if: needs.setup.outputs.node != '' && runner.environment != 'self-hosted'",
-		"actions/setup-node@v6",
+		"actions/setup-node@v7",
 		"if: needs.setup.outputs.java != '' && runner.environment != 'self-hosted'",
 		"actions/setup-java@v5",
 		"if: needs.setup.outputs.go != '' && runner.environment != 'self-hosted'",
-		"actions/setup-go@v6",
+		"actions/setup-go@v7",
 		"if: needs.setup.outputs.rust != '' && runner.environment != 'self-hosted'",
 		"dtolnay/rust-toolchain@master",
 		"if: needs.setup.outputs.apt != '' && runner.os == 'Linux' && runner.environment != 'self-hosted'",

@@ -65,7 +65,7 @@ jobs:
           # that added .classroom50.yaml; a shallow clone hides it.
           fetch-depth: 0
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.14"
       - name: Install PyYAML
@@ -639,13 +639,13 @@ jobs:
       # with --no-default-labels or selected by a runner group.
       - name: Set up Python
         if: needs.setup.outputs.python != '' && runner.environment != 'self-hosted'
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ needs.setup.outputs.python }}
 
       - name: Set up Node
         if: needs.setup.outputs.node != '' && runner.environment != 'self-hosted'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ needs.setup.outputs.node }}
 
@@ -658,7 +658,7 @@ jobs:
 
       - name: Set up Go
         if: needs.setup.outputs.go != '' && runner.environment != 'self-hosted'
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ needs.setup.outputs.go }}
 

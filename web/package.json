@@ -76,6 +76,7 @@
   "overrides": {
     "eslint-plugin-jsx-a11y": {
       "eslint": "$eslint"
-    }
+    },
+    "brace-expansion": "^5.0.8"
   }
 }

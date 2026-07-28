@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: cli/gh-teacher/go.mod
           cache-dependency-path: cli/gh-teacher/go.sum
@@ -40,7 +40,7 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           working-directory: cli/gh-teacher
-          version: v2.11.4
+          version: v2.12.2
 
       - name: Format (gofmt + goimports)
         run: |
