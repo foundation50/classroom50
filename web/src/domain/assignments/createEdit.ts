@@ -38,11 +38,14 @@ import { parseAllowedFiles, validateAllowedFiles } from "@/util/allowedFiles"
 import { parseReleaseAssets, validateReleaseAssets } from "@/util/releaseAssets"
 import {
   addRepositoryToTeam,
+  removeRepositoryFromTeam,
+  isDeletableClassroomTeamRef,
   createGitCommit,
   createGitTree,
   updateRef,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
+import { getRepo } from "@/github-core/repoReads"
 import {
   getAssignmentsFile,
   type AssignmentsFile,
@@ -109,6 +112,10 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   // Written only by the CLI's `migrate`; the form never manages it, so it must
   // ride through a GUI edit untouched.
   migrated_from: "unmanaged",
+  // Managed by the separate lock/unlock action (useSetAssignmentLock), never
+  // the create/edit form, so an edit must preserve it verbatim — otherwise
+  // saving an edit would silently unlock a locked assignment.
+  locked: "unmanaged",
 }
 
 // Keys the edit form fully owns, derived from the ownership map above so it can
@@ -242,8 +249,13 @@ export async function editAssignment(
   // Grant the (possibly changed) in-org private template a team read — a
   // non-fatal warning, never thrown (the edit already committed). needsTeamGrant
   // implies a resolved template, so the guard just narrows the type.
+  //
+  // A LOCKED assignment intentionally has no student-team template read; editing
+  // any other field must not re-grant it (needsTeamGrant re-affirms the grant on
+  // every save of a private in-org template). Skip the grant while locked so an
+  // ordinary edit can't silently re-open it — mirrors the CLI add/reuse guard.
   let templateGrantWarning: string | undefined
-  if (needsTeamGrant && preservedEntry.template) {
+  if (needsTeamGrant && preservedEntry.template && !preservedEntry.locked) {
     templateGrantWarning = await resolveTemplateGrant(
       client,
       input.org,
@@ -835,4 +847,241 @@ export async function editAssignmentWithConflictRetry(
   input: CreateAssignmentInput,
 ) {
   return withGitConflictRetry(() => editAssignment(client, input))
+}
+
+export type SetAssignmentLockInput = {
+  org: string
+  classroom: string
+  slug: string
+  locked: boolean
+}
+
+export type SetAssignmentLockResult = Omit<
+  CreateClassroomResult,
+  "updatedRef"
+> & {
+  // Present only when the flag actually changed; a no-op (already in the
+  // requested state) skips the commit and leaves this undefined.
+  updatedRef?: CreateClassroomResult["updatedRef"]
+  // The flag value that landed. Echoed so the caller doesn't reread.
+  locked: boolean
+  // Set when the flag flip committed but reconciling the private-template
+  // student-team access failed (non-fatal): a locked assignment whose student
+  // team still has read, or an unlocked one whose read wasn't restored. The UI
+  // surfaces it like templateGrantWarning.
+  templateAccessWarning?: string
+}
+
+// Remove ONLY the classroom student team's read on a private in-org template
+// (the mirror of the student half of grantTeamTemplateRead). Staff teams are
+// deliberately untouched. Never throws — the flag flip already landed, so a
+// failure here is surfaced as a warning, not a failed lock.
+async function revokeStudentTeamTemplateRead(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+  slug: string,
+  template: NonNullable<Assignment["template"]>,
+): Promise<string | undefined> {
+  let team: { id: number; slug: string } | undefined
+  try {
+    const classroomJson = await getClassroomJson(client, { org, classroom })
+    team = classroomJson.team
+  } catch (err) {
+    if (!(err instanceof GitHubAPIError && err.isNotFound)) {
+      log.error("revokeStudentTeamTemplateRead: classroom read failed", { err })
+      return (
+        `Assignment "${slug}" was locked, but reading classroom "${classroom}" to find its team failed ` +
+        `(${getErrorMessage(err)}). The ${classroomTeamSlug(classroom)} team's read on the private template ` +
+        `${template.owner}/${template.repo} was not removed — remove it in GitHub (Settings -> Collaborators and teams) ` +
+        `so students can't accept while it's locked.`
+      )
+    }
+    team = undefined
+  }
+  // No team recorded (pre-feature classroom): nothing was ever granted, so a
+  // locked assignment already has no student-team template read.
+  if (!team?.slug) return undefined
+  const teamSlug = team.slug
+
+  // Fail closed on a drifted/foreign ref: never strip repo access from a team
+  // outside the classroom50- namespace this app owns (mirrors the CLI's
+  // IsDeletableClassroomTeamRef guard on the destructive path).
+  if (!isDeletableClassroomTeamRef(team)) {
+    log.error("revokeStudentTeamTemplateRead: non-namespaced team ref", {
+      teamSlug,
+    })
+    return (
+      `Assignment "${slug}" was locked, but the recorded classroom team "${teamSlug}" is outside the ` +
+      `classroom50- namespace, so its access to ${template.owner}/${template.repo} was left unchanged. ` +
+      `Remove it in GitHub (Settings -> Collaborators and teams) if students should not have read while locked.`
+    )
+  }
+
+  try {
+    await removeRepositoryFromTeam(client, {
+      org,
+      teamSlug,
+      owner: template.owner,
+      repo: template.repo,
+    })
+    return undefined
+  } catch (err) {
+    log.error("revokeStudentTeamTemplateRead failed (assignment locked)", {
+      err,
+    })
+    return (
+      `Assignment "${slug}" was locked, but removing the ${classroomTeamSlug(classroom)} team's read on the ` +
+      `private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}). Students may still be ` +
+      `able to accept — remove the team's access to ${template.owner}/${template.repo} directly in GitHub ` +
+      `(Settings -> Collaborators and teams).`
+    )
+  }
+}
+
+// Flip an assignment's `locked` flag in assignments.json and reconcile the
+// private-template student-team access: locking removes the student team's read
+// on a private in-org template, unlocking re-grants it (student + staff, via
+// the shared grant path). Public/absent/out-of-org templates are a UX-gate-only
+// lock with no GitHub access change. The template side effect never throws (the
+// commit already landed); its failure returns a non-fatal warning.
+export async function setAssignmentLock(
+  client: GitHubClient,
+  input: SetAssignmentLockInput,
+): Promise<SetAssignmentLockResult> {
+  const { org, classroom, slug, locked } = input
+  log.info("set assignment lock: started", { org, classroom, slug, locked })
+
+  const [, configBranch] = await Promise.all([
+    assertClassroomNotArchived(client, org, classroom),
+    getConfigRepoBranch(client, org),
+  ])
+  const ref = await getBranchRef(client, org, configBranch)
+  const commit = await getCommit(client, org, ref.object.sha)
+
+  const assignmentsFilePath = `${classroom}/assignments.json`
+  const currentAssignments = await getAssignmentsFile(client, {
+    org,
+    path: assignmentsFilePath,
+    ref: ref.object.sha,
+  })
+
+  const target = currentAssignments.assignments.find((a) => a.slug === slug)
+  if (!target) {
+    throw new Error(`Existing assignment matching ${slug} was not found.`)
+  }
+
+  const alreadyInState = Boolean(target.locked) === locked
+
+  // Skip the commit when already in the requested state (a double-click or
+  // stale tab), mirroring the CLI's no-op — but still reconcile template access
+  // below, since a prior run may have flipped the flag yet failed the
+  // grant/revoke. Reuse the current ref/tree as the "no change" result.
+  let newCommitSha = ref.object.sha
+  let newTreeSha = commit.tree.sha
+  let updatedRef: CreateClassroomResult["updatedRef"] | undefined
+
+  if (!alreadyInState) {
+    const updatedEntry: Assignment = { ...target, locked }
+    // Collapse to the wire's absent-is-false shape (matches the CLI's
+    // omitempty), so unlocking drops the key rather than writing `locked: false`.
+    if (!locked) delete updatedEntry.locked
+
+    const nextAssignments: AssignmentsFile = {
+      ...currentAssignments,
+      assignments: [
+        ...currentAssignments.assignments.filter((a) => a.slug !== slug),
+        updatedEntry,
+      ],
+    }
+
+    const tree = await createGitTree(client, {
+      org,
+      base_tree: commit.tree.sha,
+      tree: [
+        {
+          path: assignmentsFilePath,
+          mode: "100644",
+          type: "blob",
+          content: JSON.stringify(nextAssignments, null, 2) + "\n",
+        },
+      ],
+    })
+    const newCommit = await createGitCommit(client, {
+      org,
+      message: prefixCommit(
+        `${locked ? "Lock" : "Unlock"} assignment: ${classroom}/${slug}`,
+      ),
+      tree_sha: tree.sha,
+      parents: [ref.object.sha],
+    })
+    updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
+    newCommitSha = newCommit.sha
+    newTreeSha = tree.sha
+  }
+
+  const templateAccessWarning = await reconcileLockTemplateAccess(
+    client,
+    org,
+    classroom,
+    slug,
+    target.template,
+    locked,
+  )
+
+  return {
+    previousCommitSha: ref.object.sha,
+    baseTreeSha: commit.tree.sha,
+    newTreeSha,
+    newCommitSha,
+    updatedRef,
+    locked,
+    templateAccessWarning,
+  }
+}
+
+// Reconcile the private in-org template's student-team read after a lock flip:
+// revoke on lock, re-grant on unlock. Only a private in-org template has a
+// student-team grant to change; public/absent/out-of-org is a UX-gate-only
+// lock. Never throws (the flag flip already committed): a probe or reconcile
+// failure downgrades to a non-fatal warning the caller surfaces.
+async function reconcileLockTemplateAccess(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+  slug: string,
+  template: Assignment["template"],
+  locked: boolean,
+): Promise<string | undefined> {
+  if (!template) return undefined
+  const inOrg = template.owner.toLowerCase() === org.toLowerCase()
+  if (!inOrg) return undefined
+
+  // getRepo returns null on 404 (since-deleted/invisible template → nothing to
+  // reconcile) but rethrows a transient 5xx/429; catch it so a probe failure
+  // can't fail an already-committed lock (the CLI treats this as a warning too).
+  let repo
+  try {
+    repo = await getRepo(client, template.owner, template.repo)
+  } catch (err) {
+    log.error("reconcileLockTemplateAccess: template probe failed", { err })
+    return locked
+      ? `Assignment "${slug}" was locked, but checking the private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}); the ${classroomTeamSlug(classroom)} team's read was not removed. Remove it in GitHub (Settings -> Collaborators and teams) so students can't accept while it's locked.`
+      : `Assignment "${slug}" was unlocked, but checking the private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}); the ${classroomTeamSlug(classroom)} team's read was not restored. Retry the unlock, or grant the team read on ${template.owner}/${template.repo} in GitHub.`
+  }
+  if (!repo?.private) return undefined
+
+  return locked
+    ? revokeStudentTeamTemplateRead(client, org, classroom, slug, template)
+    : tryGrantTeamTemplateRead(client, org, classroom, slug, template)
+}
+
+// Same concurrency story as editAssignment: the lock write hits classroom50's
+// default branch, so a concurrent write 409s; each attempt re-reads the ref and
+// file, so retrying is safe.
+export async function setAssignmentLockWithConflictRetry(
+  client: GitHubClient,
+  input: SetAssignmentLockInput,
+) {
+  return withGitConflictRetry(() => setAssignmentLock(client, input))
 }

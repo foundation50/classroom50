@@ -329,3 +329,24 @@ func TestEntryDecodesFeedbackPR(t *testing.T) {
 		t.Error("hello.FeedbackPR = true, want false (field absent)")
 	}
 }
+
+func TestEntryDecodesLocked(t *testing.T) {
+	// locked decodes when present and defaults to false when absent — the
+	// accept flow refuses a locked assignment, so the wire contract matters.
+	var file assignmentsFile
+	if err := json.Unmarshal([]byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {"slug": "shut", "name": "Shut", "mode": "individual", "autograder": "default", "locked": true},
+    {"slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default"}
+  ]
+}`), &file); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !file.Assignments[0].Locked {
+		t.Error("shut.Locked = false, want true")
+	}
+	if file.Assignments[1].Locked {
+		t.Error("hello.Locked = true, want false (field absent)")
+	}
+}

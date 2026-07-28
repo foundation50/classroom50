@@ -349,6 +349,63 @@ func TestParseAssignments_FeedbackPRRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseAssignments_LockedRoundTrip(t *testing.T) {
+	// locked=true parses onto the struct (not Extra), survives a
+	// re-encode/re-parse, and an entry without the field defaults to false.
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "hello",
+      "name": "Hello",
+      "template": { "owner": "cs50", "repo": "hello-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default",
+      "locked": true
+    },
+    {
+      "slug": "world",
+      "name": "World",
+      "template": { "owner": "cs50", "repo": "world-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default"
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	if !file.Assignments[0].Locked {
+		t.Errorf("hello.Locked = false, want true")
+	}
+	if file.Assignments[1].Locked {
+		t.Errorf("world.Locked = true, want false (field absent)")
+	}
+	if _, isExtra := file.Assignments[0].Extra["locked"]; isExtra {
+		t.Error("locked leaked into Extra (should be a known key)")
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	// false omits from the wire (omitempty); true must persist.
+	if !strings.Contains(string(encoded), `"locked": true`) {
+		t.Errorf("encoded missing locked:\n%s", encoded)
+	}
+	if strings.Contains(string(encoded), `"locked": false`) {
+		t.Errorf("locked:false should omit, not serialize:\n%s", encoded)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if !again.Assignments[0].Locked || again.Assignments[1].Locked {
+		t.Errorf("locked not stable across round-trip: %#v", again.Assignments)
+	}
+}
+
 func TestParseAssignments_AllowedFilesRoundTrip(t *testing.T) {
 	// allowed_files parses, survives a re-encode/re-parse preserving
 	// order, and an entry without the field decodes to a nil slice.

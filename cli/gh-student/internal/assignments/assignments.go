@@ -55,6 +55,14 @@ type Entry struct {
 	// Actions); the autograde runner adopts/maintains it from the first
 	// submission on. Mutually exclusive with EmptyRepo (teacher CLI enforces).
 	FeedbackPR bool `json:"feedback_pr,omitempty"`
+
+	// Locked hard-blocks student access: a locked assignment refuses accept for
+	// every student (see the gate in accept.go). Advisory here since
+	// assignments.json is public — the enforceable boundary is the teacher
+	// removing the student team's read on a private template — but the client
+	// gate still refuses to proceed. Absent reads as false (teacher CLI omits
+	// it when false).
+	Locked bool `json:"locked,omitempty"`
 }
 
 // defaultAutograderName is the fallback when Entry.Autograder is empty.

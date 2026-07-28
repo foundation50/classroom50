@@ -54,6 +54,7 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(assignmentReuseCmd())
 	cmd.AddCommand(assignmentRemoveCmd())
 	cmd.AddCommand(assignmentListCmd())
+	cmd.AddCommand(assignmentLockCmd())
 	cmd.AddCommand(assignmentTestCmd())
 	cmd.AddCommand(feedbackpr.NewCmd())
 	return cmd
@@ -624,6 +625,10 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		droppedTemplate      *assignment.TemplateRef
 		droppedAllowedCnt    int
 		droppedPassThreshold *int
+		// The locked state that actually landed (carried forward from a prior
+		// same-slug entry). Read after the commit to decide the template grant,
+		// since `entry` (rebuilt from flags) never carries Locked.
+		committedLocked bool
 	)
 	build := func(parentSHA string) (map[string]string, error) {
 		droppedTests = 0
@@ -708,11 +713,19 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// The CLI has no release-assets authoring flag. Preserve this typed field and
 		// unknown Extra keys when a same-slug add rebuilds the rest from flags. This
 		// stays inside the retry callback so a rebase observes the latest parent.
+		//
+		// Locked is likewise preserved: it's owned by `assignment lock`, not `add`,
+		// and `locked` is a known key (so it decodes onto the struct, not Extra).
+		// Without this carry-forward a same-slug re-add would clear the lock AND
+		// re-grant the student-team template read (the !entry.Locked guard below
+		// would see false), silently re-opening a locked assignment.
 		if hasPrev {
 			previous := file.Assignments[prevIdx]
 			attemptEntry.ReleaseAssets = append([]string(nil), previous.ReleaseAssets...)
 			attemptEntry.Extra = previous.Extra
+			attemptEntry.Locked = previous.Locked
 		}
+		committedLocked = attemptEntry.Locked
 		updated, replaced := assignment.UpsertAssignment(file.Assignments, attemptEntry)
 		if replaced {
 			action = "updated"
@@ -749,11 +762,22 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	// In-org private template: grant the classroom team read so rostered
 	// students can generate from it. Idempotent. The team slug comes from
 	// classroom.json; a classroom with no team gets an actionable message.
-	if resolved != nil && templatePrivate && inOrg {
+	// A LOCKED assignment intentionally has no student-team template read, so
+	// skip the grant here — otherwise re-running add would silently re-open it
+	// (the lock command removed it on purpose). Staff grants aren't reached
+	// because grantStaffTeamTemplateRead runs inside the student grant path.
+	// committedLocked (not entry.Locked) is authoritative: `entry` is rebuilt
+	// from flags and never carries a prior lock, so the closure captures the
+	// value that actually landed.
+	if resolved != nil && templatePrivate && inOrg && !committedLocked {
 		if err := grantClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, resolved.Owner, resolved.Repo,
 			grantContext{verb: "committed", classroomNoun: "classroom", rerunHint: ", then re-run `gh teacher assignment add`"}); err != nil {
 			return err
 		}
+	}
+	if resolved != nil && templatePrivate && inOrg && committedLocked {
+		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the classroom student team was NOT granted read on the private template %s/%s — unlock it with `gh teacher assignment unlock %s %s %s` when you want students to accept again.\n",
+			slug, resolved.Owner, resolved.Repo, org, classroom, slug)
 	}
 	if droppedTests > 0 {
 		_, _ = fmt.Fprintf(errOut,

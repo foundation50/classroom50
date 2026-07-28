@@ -92,7 +92,13 @@ export const TemplateAccessModal = ({
   const handleFix = () => {
     setGranted(false)
     reconcile.mutate(
-      { org, classroom, slug: assignment.slug, template },
+      {
+        org,
+        classroom,
+        slug: assignment.slug,
+        template,
+        locked: assignment.locked,
+      },
       {
         onSuccess: (result) => {
           if (result.warning) {

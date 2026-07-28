@@ -35,6 +35,7 @@ export {
   ensureStaffTeams,
   deleteClassroomTeam,
   addRepositoryToTeam,
+  removeRepositoryFromTeam,
   addUserToTeam,
   removeUserFromTeam,
   TeamIdMismatchError,

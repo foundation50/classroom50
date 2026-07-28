@@ -16,6 +16,7 @@ import {
   resolveAutograderWorkflow,
   resolveTemplate,
   resolveTemplateGrant,
+  setAssignmentLock,
   TEMPLATE_READ_STAFF_ROLES,
   verifyTemplateAccess,
 } from "./assignments"
@@ -2627,5 +2628,239 @@ describe("extractAssignments manifest guards", () => {
     expect(
       extractAssignments({ version: 1, assignments: [entry] } as never),
     ).toEqual([entry])
+  })
+})
+
+describe("setAssignmentLock", () => {
+  const ORG = "cs50"
+  const CLASSROOM = "cs50"
+  const SLUG = "hw1"
+  const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
+
+  afterEach(() => vi.restoreAllMocks())
+
+  // A fake config repo serving the lock read-modify-commit flow plus the
+  // student-team template DELETE (lock) / GET+PUT (unlock). Records every
+  // team-repo mutation and the committed blob so a test can assert both the
+  // flag flip and the (student-only) access change.
+  function makeLockClient(opts: {
+    locked?: boolean
+    template?: { owner: string; repo: string; branch: string } | null
+    templatePrivate?: boolean
+    team?: { id: number; slug: string } | null
+    onDeleteThrows?: boolean
+  }): {
+    client: GitHubClient
+    revokes: () => string[]
+    grants: () => string[]
+    committed: () => string | undefined
+  } {
+    const revokes: string[] = []
+    const grants: string[] = []
+    let committed: string | undefined
+    const templatePrivate = opts.templatePrivate ?? true
+    const template =
+      opts.template === undefined
+        ? { owner: ORG, repo: "tmpl", branch: "main" }
+        : opts.template
+    const team =
+      opts.team === undefined ? { id: 7, slug: "classroom50-cs50" } : opts.team
+
+    const assignmentsFile = {
+      schema: "classroom50/assignments/v1",
+      assignments: [
+        {
+          slug: SLUG,
+          name: "Homework 1",
+          mode: "individual",
+          autograder: "default",
+          ...(opts.locked ? { locked: true } : {}),
+          ...(template ? { template } : {}),
+        },
+      ],
+    }
+    const classroomJson: Record<string, unknown> = {
+      schema: "classroom50/classroom/v1",
+      short_name: CLASSROOM,
+      ...(team ? { team } : {}),
+    }
+
+    const request = vi.fn(async (url: string, init?: { method?: string }) => {
+      const method = init?.method ?? "GET"
+      const teamRepo = url.match(/\/orgs\/[^/]+\/teams\/([^/]+)\/repos\//)
+      if (teamRepo && method === "DELETE") {
+        if (opts.onDeleteThrows) {
+          throw new GitHubAPIError({
+            status: 500,
+            url,
+            message: "boom",
+            body: null,
+            rateLimit: {
+              limit: null,
+              remaining: null,
+              used: null,
+              reset: null,
+              resource: null,
+              retryAfter: null,
+            },
+          })
+        }
+        revokes.push(teamRepo[1])
+        return {}
+      }
+      if (teamRepo && method === "GET") {
+        // No existing grant, so unlock's grant path PUTs.
+        throw new GitHubAPIError({
+          status: 404,
+          url,
+          message: "not found",
+          body: null,
+          rateLimit: {
+            limit: null,
+            remaining: null,
+            used: null,
+            reset: null,
+            resource: null,
+            retryAfter: null,
+          },
+        })
+      }
+      if (teamRepo && method === "PUT") {
+        grants.push(teamRepo[1])
+        return {}
+      }
+      if (/\/repos\/[^/]+\/classroom50$/.test(url))
+        return { default_branch: "main" }
+      if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
+      if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
+      if (url.includes(`/contents/${CLASSROOM}/classroom.json`)) {
+        return {
+          type: "file",
+          encoding: "base64",
+          content: b64(JSON.stringify(classroomJson)),
+        }
+      }
+      if (url.includes(`/contents/${CLASSROOM}/assignments.json`)) {
+        return {
+          type: "file",
+          encoding: "base64",
+          content: b64(JSON.stringify(assignmentsFile)),
+        }
+      }
+      if (/\/repos\/[^/]+\/tmpl(\?|$)/.test(url)) {
+        return {
+          name: "tmpl",
+          private: templatePrivate,
+          default_branch: "main",
+        }
+      }
+      if (url.endsWith("/git/trees")) return { sha: "newtree" }
+      if (url.endsWith("/git/commits")) return { sha: "newcommit" }
+      if (method === "PATCH" && url.includes("/git/refs/heads/main")) {
+        return { object: { sha: "newcommit" } }
+      }
+      if (method === "POST" && url.endsWith("/git/blobs"))
+        return { sha: "blob" }
+      throw new Error(`unexpected request: ${method} ${url}`)
+    })
+
+    // Capture the committed tree content (the blob is inlined in the tree).
+    const requestWithCapture = vi.fn(
+      async (url: string, init?: { method?: string; body?: unknown }) => {
+        if (url.endsWith("/git/trees") && init?.body) {
+          const body = init.body as { tree?: { content?: string }[] }
+          committed = body.tree?.[0]?.content
+        }
+        return request(url, init)
+      },
+    )
+
+    // getClassroomJson + the archive guard both read classroom.json via
+    // requestRaw (raw JSON string), independent of the typed `request` path.
+    const requestRaw = vi.fn(async () => JSON.stringify(classroomJson))
+
+    return {
+      client: {
+        request: requestWithCapture,
+        requestRaw,
+      } as unknown as GitHubClient,
+      revokes: () => revokes,
+      grants: () => grants,
+      committed: () => committed,
+    }
+  }
+
+  it("locks a private in-org template: flips the flag and revokes ONLY the student team", async () => {
+    const { client, revokes, committed } = makeLockClient({ locked: false })
+    const result = await setAssignmentLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      locked: true,
+    })
+    expect(result.locked).toBe(true)
+    expect(result.templateAccessWarning).toBeUndefined()
+    expect(committed()).toContain(`"locked": true`)
+    // Only the student team (classroom50-cs50) — never a staff team.
+    expect(revokes()).toEqual(["classroom50-cs50"])
+  })
+
+  it("unlocks: clears the flag and re-grants the student team read", async () => {
+    const { client, grants, committed } = makeLockClient({ locked: true })
+    const result = await setAssignmentLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      locked: false,
+    })
+    expect(result.locked).toBe(false)
+    // Unlock collapses to absent-is-false: no `"locked"` key in the wire.
+    expect(committed()).not.toContain(`"locked"`)
+    expect(grants()).toContain("classroom50-cs50")
+  })
+
+  it("makes a public template a UX-gate-only lock (no access change)", async () => {
+    const { client, revokes } = makeLockClient({
+      locked: false,
+      templatePrivate: false,
+    })
+    await setAssignmentLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      locked: true,
+    })
+    expect(revokes()).toEqual([])
+  })
+
+  it("refuses to touch a team outside the classroom50- namespace (fail closed)", async () => {
+    const { client, revokes } = makeLockClient({
+      locked: false,
+      team: { id: 7, slug: "some-foreign-team" },
+    })
+    const result = await setAssignmentLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      locked: true,
+    })
+    // Flag still flips, but no destructive DELETE fires, and a warning explains.
+    expect(result.locked).toBe(true)
+    expect(revokes()).toEqual([])
+    expect(result.templateAccessWarning).toContain("classroom50- namespace")
+  })
+
+  it("downgrades a template-revoke failure to a non-fatal warning (commit already landed)", async () => {
+    const { client } = makeLockClient({ locked: false, onDeleteThrows: true })
+    const result = await setAssignmentLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      locked: true,
+    })
+    // The lock itself succeeds; the access failure is surfaced as a warning.
+    expect(result.locked).toBe(true)
+    expect(result.templateAccessWarning).toBeDefined()
+    expect(result.templateAccessWarning).toContain("tmpl")
   })
 })

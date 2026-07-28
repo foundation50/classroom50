@@ -56,14 +56,16 @@ const matchesQuery = (assignment: Assignment, query: string): boolean => {
 }
 
 // Whether an assignment appears on a student's list at all: it's released
-// (date set and passed) OR the student already accepted it. The search/status/
-// type/due facets narrow this set further; this is the baseline the empty-state
-// copy keys off (nothing listable vs. filters hid everything).
+// (date set and passed) OR the student already accepted it — but NEVER when the
+// assignment is locked, which closes it to every student regardless of prior
+// acceptance. The search/status/type/due facets narrow this set further; this
+// is the baseline the empty-state copy keys off (nothing listable vs. filters
+// hid everything).
 export const isListableToStudent = (
   assignment: Assignment,
   accepted: boolean,
   now: number = Date.now(),
-): boolean => accepted || isReleased(assignment, now)
+): boolean => !assignment.locked && (accepted || isReleased(assignment, now))
 
 const matchesFilters = (
   assignment: Assignment,

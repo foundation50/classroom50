@@ -437,6 +437,43 @@ func TestGrantTeamRepoWrite(t *testing.T) {
 	})
 }
 
+// TestRemoveTeamRepo issues a DELETE on the team-repo path and treats a 404
+// (never granted) as success so revoking is idempotent.
+func TestRemoveTeamRepo(t *testing.T) {
+	t.Run("deletes the team repo access", func(t *testing.T) {
+		var gotMethod, gotPath string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotMethod = r.Method
+			gotPath = r.URL.Path
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		if err := RemoveTeamRepo(client, "o", "classroom50-x", "o", "hello-template"); err != nil {
+			t.Fatalf("RemoveTeamRepo: %v", err)
+		}
+		if gotMethod != http.MethodDelete {
+			t.Errorf("method = %q, want DELETE", gotMethod)
+		}
+		if want := "/orgs/o/teams/classroom50-x/repos/o/hello-template"; gotPath != want {
+			t.Errorf("path = %q, want %q", gotPath, want)
+		}
+	})
+
+	t.Run("404 is success (idempotent)", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		if err := RemoveTeamRepo(client, "o", "classroom50-x", "o", "hello-template"); err != nil {
+			t.Errorf("RemoveTeamRepo on 404 = %v, want nil (idempotent)", err)
+		}
+	})
+}
+
 // TestDeleteClassroomTeam_NamespaceGuard refuses to delete a team whose
 // slug isn't classroom50-namespaced, without issuing any request.
 func TestDeleteClassroomTeam_NamespaceGuard(t *testing.T) {

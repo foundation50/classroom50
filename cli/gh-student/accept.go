@@ -295,6 +295,13 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		return err
 	}
 	lookup.Stop(fmt.Sprintf("Found assignment %s", assignment))
+	// A locked assignment is closed to every student, including a re-run on an
+	// already-accepted repo. For a private-template assignment the student
+	// team's template read is also gone, so the repo generation would fail
+	// anyway; this gate makes the refusal explicit and fast.
+	if entry.Locked {
+		return fmt.Errorf("assignment %q is locked by your teacher and can't be accepted right now — ask them to unlock it", assignment)
+	}
 	// The first accepter accepts a group assignment normally: the repo is
 	// created under their name and they add teammates via
 	// `gh student invite <org>/<repo> <teammate>`. Only an unknown mode errors.

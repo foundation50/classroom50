@@ -294,12 +294,18 @@ const StudentSubmissionPage = () => {
         </div>
       ) : null}
       {org && classroom && assignment ? (
-        <SubmissionBody
-          org={org}
-          classroom={classroom}
-          assignment={assignment}
-          secret={secret}
-        />
+        assignmentData?.locked ? (
+          <EnterDiv className="alert alert-warning alert-soft mt-6">
+            <div>{t("submissions.student.locked")}</div>
+          </EnterDiv>
+        ) : (
+          <SubmissionBody
+            org={org}
+            classroom={classroom}
+            assignment={assignment}
+            secret={secret}
+          />
+        )
       ) : (
         <MissingParams message={t("submissions.student.missingParams")} />
       )}
