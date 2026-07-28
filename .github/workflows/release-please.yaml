@@ -152,7 +152,7 @@ jobs:
           # the released commit + version, not a later main tip.
           ref: ${{ needs.release-please.outputs.web_tag }}
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm

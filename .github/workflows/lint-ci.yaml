@@ -93,14 +93,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
 
       - name: Install ruff
         # Pinned for reproducibility; bump deliberately (matches the
         # golangci-lint version-pinning discipline in the Go CI jobs).
-        run: python -m pip install --quiet ruff==0.15.17
+        run: python -m pip install --quiet ruff==0.16.0
 
       - name: ruff check (shipped Python)
         # Default rule set (pyflakes F + pycodestyle E) over the Python
