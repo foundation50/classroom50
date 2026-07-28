@@ -32,7 +32,7 @@ export const RUNTIME_WIRE_KEYS = [
 ] as const
 
 // Identical to the CLI's LanguageVersionPattern (permissive but injection-safe:
-// "3.12", "20", "1.23.4", "latest").
+// "3.14", "20", "1.23.4", "latest").
 export const LANGUAGE_VERSION_PATTERN = /^[A-Za-z0-9._+-]{1,32}$/
 
 // Identical to the CLI's AptPackagePattern (lowercase Debian package name).
@@ -49,7 +49,7 @@ export const CONTAINER_USER_PATTERN =
 // menu for each toolchain. NOTE: a version string is itself the enable switch —
 // the autograde runner runs a language's setup-* action only when its field is
 // non-empty (leaving Node/Java/Go blank skips that toolchain). The one
-// exception is Python, which the runner defaults to 3.12 on the non-container
+// exception is Python, which the runner defaults to 3.14 on the non-container
 // path. `versions` back the themed dropdown, but the input stays free-text, so
 // a teacher can still type any custom version the setup-* action accepts.
 //
@@ -100,7 +100,7 @@ export function validateLanguageVersion(value: string): string | undefined {
   const trimmed = value.trim()
   if (trimmed === "") return undefined
   if (!LANGUAGE_VERSION_PATTERN.test(trimmed)) {
-    return "Use letters, numbers, and . _ + - only (e.g., 3.12, 20, 1.23.4)."
+    return "Use letters, numbers, and . _ + - only (e.g., 3.14, 20, 1.23.4)."
   }
   return undefined
 }

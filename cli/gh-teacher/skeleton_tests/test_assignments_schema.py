@@ -67,7 +67,7 @@ class TestSchemaAccepts:
             due="2026-09-15T23:59:00-04:00",
             runtime={
                 "container": {"image": "cs50/cli:latest", "user": "root"},
-                "python": "3.12",
+                "python": "3.14",
             },
         )
         assert _errors(_manifest(entry)) == []
@@ -100,7 +100,7 @@ class TestSchemaAccepts:
     def test_custom_runner_labels(self):
         # Custom / self-hosted runner: runs-on
         # accepts an array of labels, no value allow-list.
-        entry = _entry(runtime={"runs-on": ["self-hosted", "gpu"], "python": "3.12"})
+        entry = _entry(runtime={"runs-on": ["self-hosted", "gpu"], "python": "3.14"})
         assert _errors(_manifest(entry)) == []
 
     def test_custom_single_label_runs_on(self):

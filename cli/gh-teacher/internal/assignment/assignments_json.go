@@ -401,7 +401,7 @@ type TemplateRef struct {
 // verbatim into the workflow.
 //
 // All fields optional; an absent RuntimeRef means defaults (ubuntu-latest +
-// Python 3.12, no extra packages).
+// Python 3.14, no extra packages).
 type RuntimeRef struct {
 	RunsOn    RunsOn         `json:"runs-on,omitempty"`
 	Container *ContainerSpec `json:"container,omitempty"`

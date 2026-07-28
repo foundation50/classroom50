@@ -186,7 +186,7 @@ def _manifest(*, slug: str = "hello", runtime: dict | None = None,
 
 
 class TestValidatorHappyPaths:
-    def test_no_runtime_defaults_to_ubuntu_latest_python_312(self, inline_script, tmp_path):
+    def test_no_runtime_defaults_to_ubuntu_latest_python_314(self, inline_script, tmp_path):
         rc, _stdout, _stderr, outputs = _run_validator(
             inline_script, tmp_path,
             classroom50_yaml=_classroom_yaml(),
@@ -196,7 +196,7 @@ class TestValidatorHappyPaths:
         # runs-on is emitted as a JSON array (consumed via fromJSON) so
         # multi-label custom runners share one code path with hosted labels.
         assert outputs.get("runs-on") == '["ubuntu-latest"]'
-        assert outputs.get("python") == "3.12"
+        assert outputs.get("python") == "3.14"
         assert outputs.get("container") == "null"
 
     def test_host_runtime_with_python_apt(self, inline_script, tmp_path):
@@ -252,12 +252,12 @@ class TestValidatorHappyPaths:
             classroom50_yaml=_classroom_yaml(),
             manifest=_manifest(runtime={
                 "runs-on": ["self-hosted", "gpu"],
-                "python": "3.12",
+                "python": "3.14",
             }),
         )
         assert rc == 0
         assert json.loads(outputs["runs-on"]) == ["self-hosted", "gpu"]
-        assert outputs["python"] == "3.12"
+        assert outputs["python"] == "3.14"
         assert outputs["container"] == "null"
 
     def test_custom_single_label_emitted_as_array(self, inline_script, tmp_path):
@@ -377,7 +377,7 @@ class TestUnknownKeyRejection:
             inline_script, tmp_path,
             classroom50_yaml=_classroom_yaml(),
             manifest=_manifest(runtime={
-                "python": "3.12",
+                "python": "3.14",
                 "options": "--privileged",  # would be smuggled through
             }),
         )

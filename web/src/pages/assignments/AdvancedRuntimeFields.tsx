@@ -100,7 +100,7 @@ export const ToggleRow = ({
 // a text input with a chevron that opens a DaisyUI dropdown of the actively-
 // supported versions, but the input stays free-text so a teacher can type any
 // custom version. Empty = toolchain off (except Python, which the runner
-// defaults to 3.12). Advisory shape check mirrors the CLI's
+// defaults to 3.14). Advisory shape check mirrors the CLI's
 // LanguageVersionPattern.
 export const LanguageVersionField = ({
   form,

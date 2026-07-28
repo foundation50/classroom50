@@ -24,7 +24,7 @@ import (
 var RunsOnLabelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 // LanguageVersionPattern: shared shape for python/node/java/go/rust versions.
-// Permissive (`3.12`, `20`, `1.23.4`, `latest`) but injection-safe.
+// Permissive (`3.14`, `20`, `1.23.4`, `latest`) but injection-safe.
 var LanguageVersionPattern = regexp.MustCompile(`^[A-Za-z0-9._+-]{1,32}$`)
 
 // AptPackagePattern matches Debian/Ubuntu package naming. Each `runtime.apt`
@@ -123,7 +123,7 @@ func ValidateRuntime(r RuntimeRef) error {
 			continue
 		}
 		if !LanguageVersionPattern.MatchString(pair.value) {
-			return fmt.Errorf("%s %q must match %s (e.g., \"3.12\", \"20\", \"1.23.4\")", pair.field, pair.value, LanguageVersionPattern.String())
+			return fmt.Errorf("%s %q must match %s (e.g., \"3.14\", \"20\", \"1.23.4\")", pair.field, pair.value, LanguageVersionPattern.String())
 		}
 	}
 
