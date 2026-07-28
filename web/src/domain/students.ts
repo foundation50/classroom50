@@ -47,6 +47,7 @@ export {
   addClassroomStaffMember,
   removeClassroomStaffMember,
   resolveRosterUploadPreflight,
+  resolveRosterUploadContext,
   type WriteClassroomRolesInput,
   type UpdateClassroomMetadataInput,
   type ApplyClassroomRoleChangeInput,
@@ -56,6 +57,7 @@ export {
   type AddClassroomStaffMemberInput,
   type RemoveClassroomStaffMemberInput,
   type ResolveRosterUploadPreflightInput,
+  type RosterUploadContext,
 } from "./students/roleWrites"
 export {
   migrateRosterFile,

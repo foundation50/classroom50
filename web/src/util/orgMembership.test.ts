@@ -24,4 +24,15 @@ describe("isValidEmail", () => {
     expect(isValidEmail("a@b")).toBe(false)
     expect(isValidEmail("a @b.com")).toBe(false)
   })
+
+  it("rejects a whole CSV row (commas / multiple fields) as a single email", () => {
+    // A mis-detected roster row must NOT parse as one valid email — the old
+    // regex allowed commas, so `[^\s@]+@[^\s@]+\.[^\s@]+` matched these.
+    expect(
+      isValidEmail("colton-fifty,,,test@gmail.com,,283008669,teacher"),
+    ).toBe(false)
+    expect(isValidEmail("username,first_name,last_name,email")).toBe(false)
+    expect(isValidEmail("a@b.com,c@d.com")).toBe(false)
+    expect(isValidEmail("name <a@b.com>")).toBe(false)
+  })
 })

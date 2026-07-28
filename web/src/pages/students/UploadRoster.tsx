@@ -4,16 +4,18 @@ import { Upload } from "lucide-react"
 
 import {
   bulkInviteByEmail,
-  resolveRosterUploadPreflight,
+  resolveRosterUploadContext,
 } from "@/domain/students"
 import type {
   BulkImportResult,
   BulkInviteByEmailResult,
   ImportRosterRow,
+  RosterUploadContext,
 } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
 import { Alert, Button, Modal } from "@/components/ui"
 import {
+  classifyRosterUpload,
   hasTeacherPromotion,
   type PreflightResult,
 } from "@/util/rosterUploadPreflight"
@@ -23,7 +25,10 @@ import {
   classifyUploadFile,
   type UploadKind,
 } from "@/pages/students/uploadClassify"
-import { parseEmailInviteFile } from "@/pages/students/emailInvite"
+import {
+  parseEmailInviteFile,
+  type InvalidEmailLine,
+} from "@/pages/students/emailInvite"
 import {
   DetectedFormatSelect,
   EmailInvitePreview,
@@ -98,6 +103,10 @@ const UploadRoster = ({
   // per-address role, the org-owner confirmation, and the send result. Kept
   // separate from the roster rows so the two flows don't entangle.
   const [emails, setEmails] = useState<string[]>([])
+  // Non-empty lines in an email-list upload that aren't valid addresses, with
+  // their file line numbers, so the preview can flag exactly which rows to fix
+  // (empty lines are skipped silently). Valid emails still import.
+  const [invalidEmails, setInvalidEmails] = useState<InvalidEmailLine[]>([])
   const [emailRoles, setEmailRoles] = useState<Record<string, ClassroomRole>>(
     {},
   )
@@ -112,9 +121,12 @@ const UploadRoster = ({
   const [rolesByUser, setRolesByUser] = useState<Record<string, ClassroomRole>>(
     {},
   )
-  // Preflight against current GitHub membership (read-only). Null until the
-  // preview's classification resolves.
-  const [preflight, setPreflight] = useState<PreflightResult | null>(null)
+  // The role-independent GitHub membership + stored-roster read, fetched ONCE
+  // per uploaded file and tagged with the usersKey it was fetched for. Null
+  // until the read resolves.
+  const [preflightContext, setPreflightContext] = useState<
+    (RosterUploadContext & { usersKey: string }) | null
+  >(null)
   const [preflighting, setPreflighting] = useState(false)
   const [preflightError, setPreflightError] = useState<string | null>(null)
   // The teacher's explicit confirmation of the role-change (team-move) rows.
@@ -153,6 +165,7 @@ const UploadRoster = ({
     setRows([])
     setHeaderIssue(null)
     setEmails([])
+    setInvalidEmails([])
     setEmailRoles({})
     setEmailOwnerConfirmed(false)
     setEmailResult(null)
@@ -162,7 +175,7 @@ const UploadRoster = ({
     setInviteError(null)
     setError(null)
     setRolesByUser({})
-    setPreflight(null)
+    setPreflightContext(null)
     setPreflighting(false)
     setPreflightError(null)
     setRoleChangesConfirmed(false)
@@ -188,28 +201,51 @@ const UploadRoster = ({
     onOpenChange?.(false)
   }
 
-  // Preflight the parsed rows against current GitHub membership whenever we're
-  // in the preview and the rows or their assigned roles change. Read-only. A
-  // stale-response guard (token) drops a slow classification superseded by a
-  // newer role edit. Clearing the confirm checkbox on every re-run forces the
-  // teacher to re-confirm after they change a role.
+  // Fetch the role-independent membership + stored-roster context ONCE per
+  // uploaded file (keyed on usernames, not roles). A stale-response guard drops
+  // a slow read superseded by a new file. Tagged with its usersKey so the
+  // derived classification below can reject a context left over from a prior
+  // file (this effect runs post-commit, after the new rows are already set).
   const preflightToken = useRef(0)
-  const rolesKey = rows
-    .map(
-      (r) =>
-        `${r.username.toLowerCase()}:${rolesByUser[r.username.toLowerCase()] ?? "student"}`,
-    )
+  const usersKey = rows
+    .map((r) => r.username.toLowerCase())
+    .sort()
     .join("|")
   useEffect(() => {
     if (phase !== "preview" || rows.length === 0) return
     const token = ++preflightToken.current
+    const fetchedFor = usersKey
     /* eslint-disable react-hooks/set-state-in-effect */
     setPreflighting(true)
     setPreflightError(null)
-    setRoleChangesConfirmed(false)
-    setMetadataConfirmed(false)
-    setPreflight(null)
+    setPreflightContext(null)
     /* eslint-enable react-hooks/set-state-in-effect */
+    void resolveRosterUploadContext(client, { org, classroom })
+      .then((context) => {
+        if (preflightToken.current !== token) return
+        setPreflightContext({ usersKey: fetchedFor, ...context })
+      })
+      .catch((err) => {
+        if (preflightToken.current !== token) return
+        log.warn("roster upload preflight failed", { err, record: true })
+        setPreflightContext(null)
+        setPreflightError(
+          err instanceof Error ? err.message : t("students.somethingWentWrong"),
+        )
+      })
+      .finally(() => {
+        if (preflightToken.current === token) setPreflighting(false)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, usersKey, org, classroom])
+
+  // Derive the classification synchronously from the fetched context + current
+  // roles, so a role edit re-previews with no loading state. Only trust a
+  // context fetched for the CURRENT usernames — a stale context from a just-
+  // replaced file must not classify the new rows (the fetch effect that nulls
+  // it runs after this render).
+  const preflight = useMemo<PreflightResult | null>(() => {
+    if (!preflightContext || preflightContext.usersKey !== usersKey) return null
     const preflightRows = rows.map((r) => ({
       username: r.username,
       first_name: r.first_name,
@@ -219,28 +255,26 @@ const UploadRoster = ({
       role:
         rolesByUser[r.username.toLowerCase()] ?? ("student" as ClassroomRole),
     }))
-    void resolveRosterUploadPreflight(client, {
-      org,
-      classroom,
-      rows: preflightRows,
-    })
-      .then((result) => {
-        if (preflightToken.current !== token) return
-        setPreflight(result)
-      })
-      .catch((err) => {
-        if (preflightToken.current !== token) return
-        log.warn("roster upload preflight failed", { err, record: true })
-        setPreflight(null)
-        setPreflightError(
-          err instanceof Error ? err.message : t("students.somethingWentWrong"),
-        )
-      })
-      .finally(() => {
-        if (preflightToken.current === token) setPreflighting(false)
-      })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, rolesKey, org, classroom])
+    return classifyRosterUpload(
+      preflightRows,
+      preflightContext.lookup,
+      preflightContext.storedByIdentity,
+    )
+  }, [preflightContext, usersKey, rows, rolesByUser])
+
+  // A role edit changes the plan (a team move / owner grant may appear or
+  // vanish), so any prior confirmation is stale — clear the checkboxes when the
+  // assigned roles change.
+  const rolesKey = rows
+    .map(
+      (r) =>
+        `${r.username.toLowerCase()}:${rolesByUser[r.username.toLowerCase()] ?? "student"}`,
+    )
+    .join("|")
+  useEffect(() => {
+    setRoleChangesConfirmed(false)
+    setMetadataConfirmed(false)
+  }, [rolesKey])
 
   const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
   // Per-username metadata changes to highlight in the preview table (from
@@ -309,7 +343,9 @@ const UploadRoster = ({
     (!!preflight && !hasActionableWork)
   const canProcess =
     uploadKind === "email-list"
-      ? emails.length > 0 && (!emailHasTeacher || emailOwnerConfirmed)
+      ? emails.length > 0 &&
+        invalidEmails.length === 0 &&
+        (!emailHasTeacher || emailOwnerConfirmed)
       : rows.length > 0 &&
         !preflighting &&
         !preflightError &&
@@ -341,12 +377,20 @@ const UploadRoster = ({
   // initial ingest and when the teacher overrides the detected kind.
   const applyKind = (text: string, kind: UploadKind) => {
     setUploadKind(kind)
+    // A new file (or a re-parse under a different kind) is a fresh plan, so any
+    // confirmation the teacher ticked for the PREVIOUS content is stale — even
+    // when the new file shares the same usernames/roles (only metadata changed),
+    // which the rolesKey reset effect wouldn't catch. Re-arm the gates here so a
+    // changed plan can never be processed against an old confirmation.
+    setRoleChangesConfirmed(false)
+    setMetadataConfirmed(false)
     if (kind === "email-list") {
       const parsed = parseEmailInviteFile(text)
-      setEmails(parsed.map((r) => r.email))
+      setEmails(parsed.valid.map((r) => r.email))
+      setInvalidEmails(parsed.invalid)
       setEmailRoles(
         Object.fromEntries(
-          parsed.map((r) => [r.email.toLowerCase(), "student"]),
+          parsed.valid.map((r) => [r.email.toLowerCase(), "student"]),
         ),
       )
       setEmailOwnerConfirmed(false)
@@ -367,6 +411,7 @@ const UploadRoster = ({
         ),
       )
       setEmails([])
+      setInvalidEmails([])
     }
   }
 
@@ -582,6 +627,7 @@ const UploadRoster = ({
             {uploadKind === "email-list" ? (
               <EmailInvitePreview
                 emails={emails}
+                invalidEmails={invalidEmails}
                 emailRoles={emailRoles}
                 emailOwnerConfirmed={emailOwnerConfirmed}
                 emailHasTeacher={emailHasTeacher}

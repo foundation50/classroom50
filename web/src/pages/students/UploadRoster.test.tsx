@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { render, screen, cleanup, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import type { ReactElement } from "react"
@@ -19,7 +19,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 // Mock the mutations module so the modal's helpers stay real (parseRosterImportFile
 // etc. are defined IN UploadRoster) while the network-touching calls are stubbed.
 const bulkInviteByEmail = vi.fn()
-const resolveRosterUploadPreflight = vi.fn()
+const resolveRosterUploadContext = vi.fn()
 const inviteRosterStudents = vi.fn()
 const bulkEnrollStudentsInClassroom = vi.fn()
 
@@ -28,11 +28,25 @@ vi.mock("@/domain/students", async (importOriginal) => {
   return {
     ...actual,
     bulkInviteByEmail: (...args: unknown[]) => bulkInviteByEmail(...args),
-    resolveRosterUploadPreflight: (...args: unknown[]) =>
-      resolveRosterUploadPreflight(...args),
+    resolveRosterUploadContext: (...args: unknown[]) =>
+      resolveRosterUploadContext(...args),
     inviteRosterStudents: (...args: unknown[]) => inviteRosterStudents(...args),
     bulkEnrollStudentsInClassroom: (...args: unknown[]) =>
       bulkEnrollStudentsInClassroom(...args),
+  }
+})
+
+// The component fetches a role-independent context (mocked to a stub here) and
+// then runs the REAL pure classifyRosterUpload on it. Mock classify so each test
+// can pin the resulting PreflightResult directly, as before.
+const classifyRosterUpload = vi.fn()
+
+vi.mock("@/util/rosterUploadPreflight", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/util/rosterUploadPreflight")>()
+  return {
+    ...actual,
+    classifyRosterUpload: (...args: unknown[]) => classifyRosterUpload(...args),
   }
 })
 
@@ -42,6 +56,24 @@ import type { GitHubClient } from "@/github-core/client"
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+})
+
+// A stub context — its lookups are never invoked because classifyRosterUpload is
+// mocked. Each preview test sets the classification via classifyRosterUpload.
+const stubContext = {
+  lookup: () => undefined,
+  storedByIdentity: () => undefined,
+}
+beforeEach(() => {
+  resolveRosterUploadContext.mockResolvedValue(stubContext)
+  classifyRosterUpload.mockReturnValue({
+    noAction: [],
+    metadataUpdate: [],
+    needsInvite: [],
+    enroll: [],
+    roleChanges: [],
+    allAlreadyMembers: true,
+  })
 })
 
 const client = {} as unknown as GitHubClient
@@ -128,7 +160,7 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
 describe("UploadRoster detected-kind override", () => {
   it("re-parses the same text and swaps the preview branch (email <-> roster)", async () => {
     const user = userEvent.setup()
-    resolveRosterUploadPreflight.mockResolvedValue({
+    classifyRosterUpload.mockReturnValue({
       noAction: [],
       needsInvite: [{ username: "ada" }],
       enroll: [],
@@ -191,7 +223,7 @@ describe("UploadRoster canProcess gating", () => {
   it("disables the primary button when the preflight resolves to all no-action", async () => {
     const user = userEvent.setup()
     // Every uploaded row is already a correctly-enrolled member: nothing to do.
-    resolveRosterUploadPreflight.mockResolvedValue({
+    classifyRosterUpload.mockReturnValue({
       noAction: [{ username: "ada" }],
       needsInvite: [],
       enroll: [],
@@ -228,7 +260,7 @@ describe("UploadRoster canProcess gating", () => {
 
   it("enables the button for a metadata-only upload only after confirmation", async () => {
     const user = userEvent.setup()
-    resolveRosterUploadPreflight.mockResolvedValue({
+    classifyRosterUpload.mockReturnValue({
       noAction: [],
       needsInvite: [],
       enroll: [],
@@ -270,15 +302,169 @@ describe("UploadRoster canProcess gating", () => {
     await user.click(checkbox)
     await waitFor(() => expect(button.disabled).toBe(false))
 
-    // The CSV metadata must reach the preflight, or metadata_update can never
+    // The CSV metadata must reach the classifier, or metadata_update can never
     // be detected. Guards against a dropped field in the preflightRows mapping.
-    expect(resolveRosterUploadPreflight).toHaveBeenCalledWith(
-      client,
-      expect.objectContaining({
-        rows: [
-          expect.objectContaining({ username: "ada", email: "ada@x.edu" }),
-        ],
-      }),
+    expect(classifyRosterUpload).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ username: "ada", email: "ada@x.edu" }),
+      ]),
+      expect.anything(),
+      expect.anything(),
     )
+  })
+})
+
+describe("UploadRoster role-edit reclassification", () => {
+  it("reclassifies on a role change without re-fetching the membership context", async () => {
+    const user = userEvent.setup()
+    // A role change forces the details table open, so the role Select is visible.
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [
+        {
+          username: "ada",
+          role: "ta",
+          currentRole: "student",
+          currentRoles: ["student"],
+          changedFields: [],
+          changes: [],
+        },
+      ],
+      metadataUpdate: [],
+      allAlreadyMembers: true,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(user, file("roster.csv", "username\nada\n"))
+    // The context read resolves once and the preview table renders (a role
+    // change forces details open, so the per-row role Select is present).
+    const roleSelect = await waitFor(() => {
+      const selects = screen.getAllByRole("combobox")
+      // Selects: the DetectedFormat picker + the per-row role picker. Grab the
+      // row one by its aria-label.
+      const row = selects.find(
+        (s) => s.getAttribute("aria-label") === "students.assignRoleLabel",
+      )
+      if (!row) throw new Error("role select not rendered yet")
+      return row as HTMLSelectElement
+    })
+    expect(resolveRosterUploadContext).toHaveBeenCalledTimes(1)
+    const classifyCallsAfterLoad = classifyRosterUpload.mock.calls.length
+    expect(classifyCallsAfterLoad).toBeGreaterThan(0)
+
+    // Change the row's role: this must re-run the pure classifier but NOT
+    // re-fetch the membership context (no network, no loading skeleton).
+    await user.selectOptions(roleSelect, "ta")
+
+    await waitFor(() =>
+      expect(classifyRosterUpload.mock.calls.length).toBeGreaterThan(
+        classifyCallsAfterLoad,
+      ),
+    )
+    // Still exactly one context fetch — the expensive read was not repeated.
+    expect(resolveRosterUploadContext).toHaveBeenCalledTimes(1)
+    // ...and the table never flips back into the loading skeleton on the edit.
+    expect(document.querySelectorAll(".skeleton").length).toBe(0)
+  })
+
+  it("re-clears a ticked confirmation when a role is edited", async () => {
+    const user = userEvent.setup()
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [
+        {
+          username: "ada",
+          role: "ta",
+          currentRole: "student",
+          currentRoles: ["student"],
+          changedFields: [],
+          changes: [],
+        },
+      ],
+      metadataUpdate: [],
+      allAlreadyMembers: true,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(user, file("roster.csv", "username\nada\n"))
+    const roleSelect = await waitFor(() => {
+      const row = screen
+        .getAllByRole("combobox")
+        .find(
+          (s) => s.getAttribute("aria-label") === "students.assignRoleLabel",
+        )
+      if (!row) throw new Error("role select not rendered yet")
+      return row as HTMLSelectElement
+    })
+
+    // Tick the role-change confirmation → primary button enables.
+    const confirm = screen
+      .getByText(/preflightConfirmRoleChanges/)
+      .closest("label")!
+      .querySelector("input[type=checkbox]") as HTMLInputElement
+    await user.click(confirm)
+    const button = screen
+      .getByRole("button", { name: /confirmChanges/ })
+      .closest("button") as HTMLButtonElement
+    await waitFor(() => expect(button.disabled).toBe(false))
+
+    // Editing a role invalidates the prior confirmation: checkbox clears and the
+    // button disables until the teacher re-confirms.
+    await user.selectOptions(roleSelect, "hta")
+    await waitFor(() => expect(confirm.checked).toBe(false))
+    expect(button.disabled).toBe(true)
+  })
+
+  it("re-requires metadata confirmation after a same-username re-upload with changed details", async () => {
+    const user = userEvent.setup()
+    // A metadata_update forces the details table open + the metadata checkbox.
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [
+        {
+          kind: "metadata_update",
+          username: "ada",
+          role: "student",
+          changedFields: ["email"],
+          changes: [{ field: "email", from: "old@x.edu", to: "a@x.edu" }],
+        },
+      ],
+      allAlreadyMembers: true,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(user, file("roster.csv", "username,email\nada,a@x.edu\n"))
+    const confirm = await waitFor(() => {
+      const box = screen
+        .getByText(/preflightConfirmMetadata/)
+        .closest("label")!
+        .querySelector("input[type=checkbox]") as HTMLInputElement
+      return box
+    })
+    await user.click(confirm)
+    const button = screen
+      .getByRole("button", { name: /updateMetadata/ })
+      .closest("button") as HTMLButtonElement
+    await waitFor(() => expect(button.disabled).toBe(false))
+
+    // Re-upload a file with the SAME username (ada) but a DIFFERENT email. The
+    // username set + roles are unchanged, so the rolesKey reset effect alone
+    // wouldn't fire — applyKind must re-arm the gate so the teacher re-confirms.
+    await uploadFile(user, file("roster.csv", "username,email\nada,b@x.edu\n"))
+    await waitFor(() => expect(confirm.checked).toBe(false))
+    expect(button.disabled).toBe(true)
   })
 })
