@@ -22,6 +22,7 @@ import (
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/configwrite"
+	"github.com/foundation50/gh-teacher/internal/feedbackpr"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 	"github.com/foundation50/gh-teacher/internal/output"
 	"github.com/foundation50/gh-teacher/internal/validate"
@@ -54,6 +55,7 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(assignmentRemoveCmd())
 	cmd.AddCommand(assignmentListCmd())
 	cmd.AddCommand(assignmentTestCmd())
+	cmd.AddCommand(feedbackpr.NewCmd())
 	return cmd
 }
 
