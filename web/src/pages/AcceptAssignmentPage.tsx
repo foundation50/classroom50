@@ -32,6 +32,8 @@ import {
   MembershipError,
 } from "@/components/MembershipError"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
+import { useClassroomEnrollment } from "@/hooks/useClassroomEnrollment"
+import { isOwnerGitHubOrgRole } from "@/authz"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
@@ -261,6 +263,51 @@ const AssignmentLocked = ({
                   ),
                 }}
               />
+            </p>
+          </div>
+
+          <div className="divider my-0" />
+
+          <div className="space-y-3">
+            <label className="label p-0 text-base font-semibold">
+              {t("accept.signedInAs")}
+            </label>
+
+            <UserInfo user={user} />
+          </div>
+        </Card.Body>
+      </AcceptCard>
+    </AcceptLayout>
+  )
+}
+
+// Shown when the viewer is an active org member but is NOT enrolled in this
+// classroom (not on the `classroom50-<classroom>` student team) and holds no
+// staff role. Enrollment is derived from live team-membership reads, the same
+// signal roster/role resolution uses; a student can't read classroom.json, so
+// the slug is derived (a miss reads as non-member — never false access). This
+// is a listing-and-flow guard consistent with the client-side model: the hard
+// boundary for a private template is still GitHub's own template permission.
+// Kept intentionally terse — it states the assignment isn't available without
+// explaining the enrollment mechanics.
+const NotEnrolled = ({ user }: { user: GitHubUser | null }) => {
+  const { t } = useTranslation()
+  return (
+    <AcceptLayout>
+      <AcceptCard>
+        <Card.Body className="gap-8">
+          <div>
+            <span className="badge badge-warning badge-soft gap-2">
+              <Lock aria-hidden="true" className="size-4" />
+              {t("accept.notEnrolled.badge")}
+            </span>
+
+            <h1 className="mt-6 text-2xl font-bold">
+              {t("accept.notEnrolled.title")}
+            </h1>
+
+            <p className="mt-2 text-base text-base-content/70">
+              {t("accept.notEnrolled.body")}
             </p>
           </div>
 
@@ -609,6 +656,17 @@ const AcceptAssignmentPage = () => {
   const { user } = useGithubAuth()
   const username = user?.login
 
+  // Enrollment gate: a student may only accept in a classroom they're enrolled
+  // in (on the `classroom50-<classroom>` student team). Staff bypass via the
+  // verdict; org owners bypass at the check below. Fail-OPEN on "unresolved" (a
+  // settled-but-indeterminate team read) so a blip can't lock out a real
+  // student — the domain membership step and GitHub's private-template
+  // permission still gate. While the read is still in flight we hold the
+  // spinner (loadingEnrollment below) rather than flashing the accept card and
+  // then flipping to "not available".
+  const { verdict: enrollmentVerdict, isLoading: loadingEnrollment } =
+    useClassroomEnrollment(org, classroom, username)
+
   const { data: assignmentsData, isLoading: loadingAssignmentsData } =
     usePagesAssignments(org, classroom, secret, !loadingSecret)
   const loadingAssignments = loadingSecret || loadingAssignmentsData
@@ -688,7 +746,12 @@ const AcceptAssignmentPage = () => {
   // with no descriptor (a browser network throw) falls back to the generic copy.
   const acceptError = localizedMessageOf(acceptMutation.error)
 
-  if (loadingAssignments || isLoadingRepo || loadingOrgMembership) {
+  if (
+    loadingAssignments ||
+    isLoadingRepo ||
+    loadingOrgMembership ||
+    loadingEnrollment
+  ) {
     return (
       <AcceptLayout>
         <Spinner size="xl" label={t("accept.loadingAssignment")} />
@@ -761,6 +824,17 @@ const AcceptAssignmentPage = () => {
         <Spinner size="xl" label={t("accept.loadingAssignment")} />
       </AcceptLayout>
     )
+  }
+
+  // Not enrolled in this classroom (and not staff): the assignment isn't
+  // available to this student. Org owners bypass (they administer every
+  // classroom). Only a SETTLED "not-enrolled" verdict blocks; "unresolved"
+  // falls through (fail-open).
+  if (
+    enrollmentVerdict === "not-enrolled" &&
+    !isOwnerGitHubOrgRole(orgInvite.role)
+  ) {
+    return <NotEnrolled user={user} />
   }
 
   if (!assignmentData) {

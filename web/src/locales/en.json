@@ -1714,6 +1714,12 @@
       "title": "This assignment is locked",
       "body": "Your teacher has locked <assignment>{{assignment}}</assignment>, so it can't be accepted right now. Check back later or ask your teacher to unlock it."
     },
+    "notEnrolled": {
+      "badge": "Unavailable",
+      "title": "This assignment isn't available to you",
+      "body": "Ask your teacher if you think this is a mistake.",
+      "error": "This assignment isn't available to you. Ask your teacher if you think this is a mistake."
+    },
     "steps": {
       "account": "Checking your GitHub account",
       "membership": "Confirming your classroom membership",

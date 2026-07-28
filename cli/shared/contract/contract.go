@@ -235,3 +235,56 @@ func FeedbackPRBody(head, releaseURL string) string {
 		"</details>",
 	}, "\n")
 }
+
+// StaffRole is a per-classroom staff role backing the web GUI's in-app roles.
+// Each maps to a `secret` GitHub team named `classroom50-<short>-<role>`.
+// Mirrors web StaffRole (web/src/types/classroom.ts) and gh-teacher
+// configrepo.StaffRole — a cross-tool contract with no compile-time link.
+type StaffRole string
+
+const (
+	RoleTeacher StaffRole = "teacher"
+	RoleHeadTA  StaffRole = "hta"
+	RoleTA      StaffRole = "ta"
+	// RoleInstructor is the legacy name for RoleTeacher, kept so pre-rename
+	// classrooms (whose team slug says "instructor") still resolve on read.
+	RoleInstructor StaffRole = "instructor"
+)
+
+// StaffRolesWithLegacy is every staff role INCLUDING the legacy instructor
+// alias, for reads (membership probes, slug enumeration) that must recognize a
+// not-yet-migrated `-instructor` team. Mirrors web STAFF_ROLES_WITH_LEGACY.
+var StaffRolesWithLegacy = []StaffRole{
+	RoleTeacher,
+	RoleInstructor,
+	RoleHeadTA,
+	RoleTA,
+}
+
+// ClassroomStudentTeamSlug is the single source of the student team slug
+// `classroom50-<short>`. The short-name is canonical (lowercase alnum +
+// hyphens), so the slug equals the name. Byte-mirrors web classroomTeamSlug and
+// gh-teacher classroomTeamName — keep in lockstep (pinned by contract_test.go).
+func ClassroomStudentTeamSlug(shortName string) string {
+	return ConfigRepoName + "-" + shortName
+}
+
+// StaffTeamSlug is the single source of a staff-role team slug
+// `classroom50-<short>-<role>`. Byte-mirrors web classroomTeamSlug(short, role)
+// and gh-teacher staffTeamName.
+func StaffTeamSlug(shortName string, role StaffRole) string {
+	return ConfigRepoName + "-" + shortName + "-" + string(role)
+}
+
+// ClassroomTeamSlugs is the full set of team slugs whose membership means a
+// user is enrolled in a classroom: the student team plus every staff team
+// (including the legacy instructor team). Single-sources the "is enrolled?"
+// slug enumeration so a role change can't drift the gate. Ordered
+// student-first so a sequential caller can short-circuit on the common case.
+func ClassroomTeamSlugs(shortName string) []string {
+	slugs := []string{ClassroomStudentTeamSlug(shortName)}
+	for _, role := range StaffRolesWithLegacy {
+		slugs = append(slugs, StaffTeamSlug(shortName, role))
+	}
+	return slugs
+}

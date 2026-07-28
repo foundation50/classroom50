@@ -294,3 +294,63 @@ func TestInviteFounder_OwnerTolerated(t *testing.T) {
 		t.Fatalf("owner push grant reading back as admin should be tolerated, got: %v", err)
 	}
 }
+
+// TestAssertEnrolledOrStaff pins the classroom-enrollment accept gate: a
+// student-team member or any staff-team member passes; an active org member on
+// no classroom team is rejected with a roster remedy; a transient (non-404)
+// read fails OPEN by propagating the error rather than falsely blocking.
+func TestAssertEnrolledOrStaff(t *testing.T) {
+	const (
+		org       = "cs50"
+		classroom = "cs-fall"
+		user      = "alice"
+	)
+	studentSlug := "classroom50-" + classroom
+	taSlug := "classroom50-" + classroom + "-ta"
+
+	cases := []struct {
+		name           string
+		activeMembers  map[string]bool
+		transientTeams map[string]bool
+		wantErr        bool
+	}{
+		{"student-team member enrolled", map[string]bool{studentSlug: true}, nil, false},
+		{"ta staff member enrolled", map[string]bool{taSlug: true}, nil, false},
+		{"active member on no team rejected", map[string]bool{}, nil, true},
+		{"transient read fails open (propagates)", map[string]bool{}, map[string]bool{studentSlug: true}, true},
+		// Student-team match must short-circuit BEFORE a later staff-team probe
+		// can error, so an enrolled student is never blocked by an unrelated blip.
+		{"student member short-circuits past a transient staff probe", map[string]bool{studentSlug: true}, map[string]bool{taSlug: true}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/orgs/"+org+"/teams/", func(w http.ResponseWriter, r *http.Request) {
+				parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/orgs/"+org+"/teams/"), "/memberships/")
+				slug := parts[0]
+				switch {
+				case tc.transientTeams[slug]:
+					w.WriteHeader(http.StatusInternalServerError)
+					_, _ = w.Write([]byte(`{}`))
+				case tc.activeMembers[slug]:
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`{"state":"active"}`))
+				default:
+					w.WriteHeader(http.StatusNotFound)
+					_, _ = w.Write([]byte(`{}`))
+				}
+			})
+			server := httptest.NewServer(mux)
+			t.Cleanup(server.Close)
+			client := newTestRESTClient(t, server)
+
+			err := assertEnrolledOrStaff(client, org, classroom, user)
+			if tc.wantErr && err == nil {
+				t.Errorf("expected an error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
