@@ -938,7 +938,22 @@
       "deleteConfirm": "Delete assignment",
       "deleteCancel": "Keep assignment",
       "reuseTitle": "Reuse in another classroom",
-      "reuseAria": "Reuse assignment in another classroom"
+      "reuseAria": "Reuse assignment in another classroom",
+      "lockedBadge": "Locked",
+      "lockedBadgeTitle": "Locked: students can't access or accept this assignment. For a private template, the student team's read access is removed while locked.",
+      "lockTitle": "Lock assignment",
+      "unlockTitle": "Unlock assignment",
+      "lockAria": "Lock {{name}}",
+      "unlockAria": "Unlock {{name}}",
+      "lockTitleModal": "Lock assignment?",
+      "unlockTitleModal": "Unlock assignment?",
+      "lockDescription": "This closes <assignment>{{assignment}}</assignment> to every student — including those who already accepted — on the accept page, the assignments list, the submission view, and the CLI. If it uses a private template, the student team's read on that template is removed too (staff access is unaffected). Existing student repositories are not deleted.",
+      "unlockDescription": "This reopens <assignment>{{assignment}}</assignment> to students. If it uses a private template, the student team's read on that template is restored so students can accept again.",
+      "lockConfirm": "Lock assignment",
+      "unlockConfirm": "Unlock assignment",
+      "lockCancel": "Cancel",
+      "lockSuccess": "Locked {{name}}.",
+      "unlockSuccess": "Unlocked {{name}}."
     },
     "toolbar": {
       "searchPlaceholder": "Search assignments…",
@@ -1694,6 +1709,11 @@
       "expectedSlug": "Expected to find assignment slug:",
       "checkUrl": "Check that the URL is correct, or ask your teacher to confirm that this assignment has been added to <file>assignments.json</file>."
     },
+    "locked": {
+      "badge": "Locked",
+      "title": "This assignment is locked",
+      "body": "Your teacher has locked <assignment>{{assignment}}</assignment>, so it can't be accepted right now. Check back later or ask your teacher to unlock it."
+    },
     "steps": {
       "account": "Checking your GitHub account",
       "membership": "Confirming your classroom membership",
@@ -2005,6 +2025,7 @@
       "modeIndividual": "Individual",
       "loadError": "Could not load your submissions.",
       "notAccepted": "You haven't accepted this assignment yet. <acceptLink>Accept it</acceptLink> to get your repository, then push your work to be graded.",
+      "locked": "This assignment is locked by your teacher and isn't available right now. Check back later or ask your teacher to unlock it.",
       "noGradedYet": "No graded submission yet. Push to your assignment repository from the command line and the autograder will publish your result here.",
       "openMyRepo": "Open my repository",
       "submitGuide": {

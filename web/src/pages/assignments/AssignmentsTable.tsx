@@ -3,6 +3,8 @@ import { Trans, useTranslation } from "react-i18next"
 import {
   Copy,
   Eye,
+  Lock,
+  LockOpen,
   Pencil,
   ShieldCheck,
   Trash2,
@@ -21,6 +23,8 @@ import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { useQueryClient } from "@tanstack/react-query"
 import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
+import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
+import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Badge, Button, EmphasisLtr } from "@/components/ui"
@@ -178,6 +182,112 @@ const TemplateAccessButton = ({
   )
 }
 
+// Per-row Lock/Unlock action. Locking closes the assignment to every student
+// (accept + submission surfaces refuse it) and, for a private in-org template,
+// removes the student team's read on it; unlocking reverses both. The template
+// side effect can partly fail without failing the flag flip, so a non-fatal
+// templateAccessWarning surfaces as a warning toast.
+const LockAssignmentButton = ({
+  org,
+  classroom,
+  assignment,
+}: {
+  org: string
+  classroom: string
+  assignment: Assignment
+}) => {
+  const { t } = useTranslation()
+  const { notify } = useToast()
+  const [open, setOpen] = useState(false)
+  const locked = Boolean(assignment.locked)
+  const setLock = useSetAssignmentLock(org, classroom, (result) => {
+    if (result.templateAccessWarning) {
+      notify({ tone: "warning", message: result.templateAccessWarning })
+      return
+    }
+    notify({
+      tone: "success",
+      message: result.locked
+        ? t("assignments.table.lockSuccess", { name: name(assignment) })
+        : t("assignments.table.unlockSuccess", { name: name(assignment) }),
+    })
+  })
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        shape="circle"
+        className={locked ? "text-warning" : undefined}
+        title={
+          locked
+            ? t("assignments.table.unlockTitle")
+            : t("assignments.table.lockTitle")
+        }
+        aria-label={
+          locked
+            ? t("assignments.table.unlockAria", { name: name(assignment) })
+            : t("assignments.table.lockAria", { name: name(assignment) })
+        }
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen(true)
+        }}
+      >
+        {locked ? (
+          <LockOpen aria-hidden="true" className="size-4" />
+        ) : (
+          <Lock aria-hidden="true" className="size-4" />
+        )}
+      </Button>
+
+      <ConfirmModal
+        open={open}
+        title={
+          locked
+            ? t("assignments.table.unlockTitleModal")
+            : t("assignments.table.lockTitleModal")
+        }
+        description={
+          <Trans
+            i18nKey={
+              locked
+                ? "assignments.table.unlockDescription"
+                : "assignments.table.lockDescription"
+            }
+            values={{ assignment: name(assignment) }}
+            components={{
+              assignment: <EmphasisLtr className="text-base-content" />,
+            }}
+          />
+        }
+        confirmLabel={
+          locked
+            ? t("assignments.table.unlockConfirm")
+            : t("assignments.table.lockConfirm")
+        }
+        cancelLabel={t("assignments.table.lockCancel")}
+        dangerous={!locked}
+        needsConfirm={false}
+        onConfirm={async () => {
+          await setLock.mutateAsync({
+            org,
+            classroom,
+            slug: assignment.slug,
+            locked: !locked,
+          })
+        }}
+        onClose={() => setOpen(false)}
+      />
+    </>
+  )
+}
+
+// Assignment display name with a slug fallback, shared by the row action labels.
+const name = (assignment: Assignment): string =>
+  assignment.name || assignment.slug
+
 // The Release Date cell. A released assignment (date set and passed) shows the
 // date in a neutral badge like Due date; an unreleased one is warning-toned
 // because it's hidden from students' lists until then (link-only accept),
@@ -314,6 +424,17 @@ const AssignmentsTable = ({
                   <div className="font-mono text-xs text-base-content/70">
                     {assignment.slug}
                   </div>
+                  {assignment.locked && (
+                    <Badge
+                      tone="warning"
+                      size="sm"
+                      className="mt-1 gap-1 whitespace-nowrap"
+                      title={t("assignments.table.lockedBadgeTitle")}
+                    >
+                      <Lock aria-hidden="true" className="size-3" />
+                      {t("assignments.table.lockedBadge")}
+                    </Badge>
+                  )}
                 </td>
                 <td
                   onClick={() =>
@@ -464,6 +585,11 @@ const AssignmentsTable = ({
                           assignment={assignment}
                         />
                       )}
+                      <LockAssignmentButton
+                        org={org}
+                        classroom={classroom}
+                        assignment={assignment}
+                      />
                       <DeleteAssignmentButton
                         org={org}
                         classroom={classroom}

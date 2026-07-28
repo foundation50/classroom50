@@ -323,6 +323,34 @@ export function addRepositoryToTeam(
   )
 }
 
+// Remove a team's access to a repo. 404 (never granted, or repo/team gone) is
+// success, so revoking is idempotent. Used when LOCKING a private-template
+// assignment: the classroom STUDENT team's read on the template is dropped so
+// no new student can generate from it. Staff teams are addressed separately and
+// left untouched.
+export async function removeRepositoryFromTeam(
+  client: GitHubClient,
+  input: {
+    org: string
+    teamSlug: string
+    owner: string
+    repo: string
+  },
+): Promise<void> {
+  const { org, teamSlug, owner, repo } = input
+
+  await tolerateGitHubError(
+    () =>
+      client.request(
+        `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+          teamSlug,
+        )}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+        { method: "DELETE" },
+      ),
+    undefined,
+  )
+}
+
 export function addUserToTeam(
   client: GitHubClient,
   input: {

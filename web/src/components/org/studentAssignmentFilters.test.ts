@@ -146,4 +146,24 @@ describe("filterAndSortStudentAssignments", () => {
       expect(run(list)).toEqual([])
     })
   })
+
+  describe("locked gate", () => {
+    it("hides a locked assignment even when released", () => {
+      const list = [
+        a("open", { available_from: "2026-01-01T00:00:00Z" }),
+        a("locked", { available_from: "2026-01-01T00:00:00Z", locked: true }),
+      ]
+      expect(run(list)).toEqual(["open"])
+    })
+
+    it("hides a locked assignment even for a student who already accepted", () => {
+      const list = [a("locked", { locked: true })]
+      expect(run(list, { acceptedSlugs: new Set(["locked"]) })).toEqual([])
+    })
+
+    it("still lists an assignment with locked explicitly false", () => {
+      const list = [a("open", { locked: false })]
+      expect(run(list)).toEqual(["open"])
+    })
+  })
 })

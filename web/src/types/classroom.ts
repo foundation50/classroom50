@@ -124,6 +124,16 @@ export type Assignment = {
   // with template/tests/feedback_pr/allowed_files/pass_threshold and IMMUTABLE
   // after creation. Omitted when false (CLI omitempty); absent reads as false.
   empty_repo?: boolean
+  // Lock the assignment against student access. Every student surface (accept
+  // page, assignments list, submission view, and `gh student accept`) refuses
+  // a locked assignment for EVERY student, including one who already accepted.
+  // Unlike available_from (listing-advisory), this is access control — but the
+  // client gates are still best-effort UX since assignments.json is public.
+  // The enforceable boundary applies only to a PRIVATE in-org template:
+  // locking also removes the classroom STUDENT team's read on it (teacher/
+  // head-TA/TA untouched); unlocking re-grants it. Existing student repos are
+  // not deleted. Omitted when false (CLI omitempty); absent reads as false.
+  locked?: boolean
   // Mirrors classroom50/assignments/v1's `runtime` block and the CLI's
   // RuntimeRef. `runs-on`/`container` select the runner; python/node/java/go/rust
   // pick the setup-X toolchain version the autograder provisions; apt installs

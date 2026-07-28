@@ -86,6 +86,13 @@ class TestSchemaAccepts:
     def test_feedback_pr_must_be_boolean(self):
         assert _errors(_manifest(_entry(feedback_pr="yes"))) != []
 
+    def test_locked_flag_accepted(self):
+        # locked is a CLI-written boolean (gh teacher assignment lock); the
+        # schema must accept both values given the assignment object is
+        # additionalProperties:false.
+        assert _errors(_manifest(_entry(locked=True))) == []
+        assert _errors(_manifest(_entry(locked=False))) == []
+
     def test_allowed_files_accepted(self):
         # allowed_files is a CLI-written ordered list of gitignore-style
         # patterns; the schema must accept it given the assignment object
@@ -337,6 +344,9 @@ class TestSchemaRejects:
 
     def test_wrong_schema_sentinel(self):
         assert _errors({"schema": "v2", "assignments": []}) != []
+
+    def test_locked_must_be_boolean(self):
+        assert _errors(_manifest(_entry(locked="yes"))) != []
 
 
 class TestEmptyRepo:

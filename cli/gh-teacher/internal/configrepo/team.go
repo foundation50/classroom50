@@ -731,6 +731,8 @@ func RemoveTeamRepo(client githubapi.Client, org, slug, repoOwner, repo string) 
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }
+
+// ResolveClassroomTeamSlug returns the classroom team's addressing slug: the
 // persisted classroom.json `team.slug` when present (authoritative — GitHub may
 // re-slug on a collision), else the derived `classroom50-<short>`. Mirrors the
 // web's resolveClassroomTeam and the Python collector's resolve_team_slug. A

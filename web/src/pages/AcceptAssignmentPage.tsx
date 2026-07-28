@@ -4,6 +4,7 @@ import {
   ChevronDown,
   GraduationCap,
   Languages,
+  Lock,
   UserRound,
 } from "lucide-react"
 
@@ -208,6 +209,59 @@ const AssignmentNotFound = ({
                 file: <MonoLtr className="text-base-content" />,
               }}
             />
+          </div>
+
+          <div className="divider my-0" />
+
+          <div className="space-y-3">
+            <label className="label p-0 text-base font-semibold">
+              {t("accept.signedInAs")}
+            </label>
+
+            <UserInfo user={user} />
+          </div>
+        </Card.Body>
+      </AcceptCard>
+    </AcceptLayout>
+  )
+}
+
+// Shown when the requested assignment is locked. A locked assignment is closed
+// to every student (see the Assignment.locked contract), so the accept CTA and
+// mutation are never reached — this is a terminal state, not a retryable error.
+const AssignmentLocked = ({
+  user,
+  assignment,
+}: {
+  user: GitHubUser | null
+  assignment?: string
+}) => {
+  const { t } = useTranslation()
+  return (
+    <AcceptLayout>
+      <AcceptCard>
+        <Card.Body className="gap-8">
+          <div>
+            <span className="badge badge-warning badge-soft gap-2">
+              <Lock aria-hidden="true" className="size-4" />
+              {t("accept.locked.badge")}
+            </span>
+
+            <h1 className="mt-6 text-2xl font-bold">
+              {t("accept.locked.title")}
+            </h1>
+
+            <p className="mt-2 text-base text-base-content/70">
+              <Trans
+                i18nKey="accept.locked.body"
+                values={{ assignment }}
+                components={{
+                  assignment: (
+                    <MonoLtr className="font-semibold text-base-content" />
+                  ),
+                }}
+              />
+            </p>
           </div>
 
           <div className="divider my-0" />
@@ -711,6 +765,10 @@ const AcceptAssignmentPage = () => {
 
   if (!assignmentData) {
     return <AssignmentNotFound user={user} assignment={assignment} />
+  }
+
+  if (assignmentData.locked) {
+    return <AssignmentLocked user={user} assignment={assignment} />
   }
 
   const description = assignmentDescription(assignmentData)

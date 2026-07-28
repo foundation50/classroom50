@@ -17,11 +17,15 @@ export {
   editAssignment,
   createAssignment,
   editAssignmentWithConflictRetry,
+  setAssignmentLock,
+  setAssignmentLockWithConflictRetry,
   preserveUnmanagedAssignmentKeys,
   tryGrantTeamTemplateRead,
   resolveTemplateGrant,
   TEMPLATE_READ_STAFF_ROLES,
   type CreateAssignmentResult,
+  type SetAssignmentLockInput,
+  type SetAssignmentLockResult,
 } from "./assignments/createEdit"
 export {
   createAssignmentRepo,
