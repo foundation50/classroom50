@@ -17,6 +17,21 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.17.0](https://github.com/foundation50/classroom50/compare/web-v1.16.1...web-v1.17.0) (2026-07-28)
+
+
+### Features
+
+* open the Feedback PR at accept time via the GitHub API ([#409](https://github.com/foundation50/classroom50/issues/409)) ([5ce01b7](https://github.com/foundation50/classroom50/commit/5ce01b749db789192f613040715657ff09b38358))
+* **web:** hide the student upload submission button ([#430](https://github.com/foundation50/classroom50/issues/430)) ([7e31f9d](https://github.com/foundation50/classroom50/commit/7e31f9dd088e90abee48d64d36901e53321ce806)), closes [#428](https://github.com/foundation50/classroom50/issues/428)
+* **web:** reclassify roster preview locally and flag invalid email rows ([#429](https://github.com/foundation50/classroom50/issues/429)) ([4fd27ea](https://github.com/foundation50/classroom50/commit/4fd27eae8bf2f4306512d8f56e032b7745021684))
+* **web:** update roster.csv student details on CSV import ([#427](https://github.com/foundation50/classroom50/issues/427)) ([b84363e](https://github.com/foundation50/classroom50/commit/b84363e8a24cfce4435c0a6d98077e1ef7c530e2))
+
+
+### Bug Fixes
+
+* **web:** correct pause and review copy for accept-time Feedback PRs ([#426](https://github.com/foundation50/classroom50/issues/426)) ([bc5d464](https://github.com/foundation50/classroom50/commit/bc5d4642a0825df42548b241c4967c1bf6101464))
+
 ## [1.16.1](https://github.com/foundation50/classroom50/compare/web-v1.16.0...web-v1.16.1) (2026-07-27)
 
 
