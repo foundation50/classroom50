@@ -7,17 +7,9 @@
 // branchProtection/rulesets repair that returned a warning). Only non-transient
 // outcomes are persisted; the caller filters out transient failures.
 
+import { localStorageOrNull } from "@/lib/webStorage"
+
 const KEY_PREFIX = "c50:audit:unresolved:v1:"
-
-function canUseStorage(): boolean {
-  return (
-    typeof window !== "undefined" && typeof window.localStorage !== "undefined"
-  )
-}
-
-function store(): Storage | null {
-  return canUseStorage() ? window.localStorage : null
-}
 
 function keyFor(org: string): string {
   return `${KEY_PREFIX}${org}`
@@ -40,7 +32,7 @@ function empty(): UnresolvedRecord {
 // Read the persisted outcome for an org. Tolerates missing or corrupt JSON by
 // returning empty sets — a bad value must never throw and lock the pane.
 export function readUnresolved(org: string): UnresolvedRecord {
-  const ls = store()
+  const ls = localStorageOrNull()
   if (ls === null) return empty()
   const raw = ls.getItem(keyFor(org))
   if (raw === null) return empty()
@@ -62,7 +54,7 @@ export function mergeUnresolved(
   org: string,
   add: { fields?: Iterable<string>; concerns?: Iterable<string> },
 ): void {
-  const ls = store()
+  const ls = localStorageOrNull()
   if (ls === null) return
   const current = readUnresolved(org)
   for (const f of add.fields ?? []) current.fields.add(f)
@@ -75,7 +67,5 @@ export function mergeUnresolved(
 }
 
 export function clearUnresolved(org: string): void {
-  const ls = store()
-  if (ls === null) return
-  ls.removeItem(keyFor(org))
+  localStorageOrNull()?.removeItem(keyFor(org))
 }

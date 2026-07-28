@@ -34,7 +34,7 @@ export function useGroupRepoMemberLogins(
   const repoNames = repos.map((r) => r.repoName)
   // Stable key over the repo set (sorted) so the batch only refires when the set
   // of group repos changes, not on every render.
-  const repoKey = [...repoNames].sort().join(",")
+  const repoKey = repoNames.toSorted().join(",")
 
   const enabled = Boolean(org) && repoNames.length > 0
 

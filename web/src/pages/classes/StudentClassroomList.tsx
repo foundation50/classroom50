@@ -153,7 +153,7 @@ export function StudentClassroomList({
     })
     const byName = (a: StudentClassroomSummary, b: StudentClassroomSummary) =>
       classroomTitle(a).localeCompare(classroomTitle(b))
-    return [...list].sort((a, b) =>
+    return list.toSorted((a, b) =>
       sortKey === "accepted-desc"
         ? b.acceptedCount - a.acceptedCount || byName(a, b)
         : byName(a, b),

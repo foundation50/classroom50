@@ -2,7 +2,12 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "target": "es2023",
-    "lib": ["ES2023", "DOM"],
+    // ES2024 for Map.groupBy (Baseline widely available). `target` stays es2023
+    // — ES2024 added no syntax we use, so esbuild output is unchanged. Do NOT go
+    // to ESNext: that would silently permit the Uint8Array base64/hex family,
+    // which is only Baseline *newly* available and would drop pre-2024 browsers
+    // on the auth and file-read paths with no graceful degradation.
+    "lib": ["ES2024", "DOM"],
     "module": "esnext",
     "types": ["vite/client"],
     "skipLibCheck": true,

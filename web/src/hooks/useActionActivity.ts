@@ -389,7 +389,7 @@ export function useActionActivity(): ActionActivity {
   // Newest-first so trackers[0] leads the collapsed header: session ops (a
   // retried op jumps ahead, else reverse registration order), then discovered
   // runs by descending id.
-  const discoveredNewestFirst = [...discoveredTrackers].sort(
+  const discoveredNewestFirst = discoveredTrackers.toSorted(
     (a, b) => (b.runId ?? 0) - (a.runId ?? 0),
   )
   // sessionTrackers is oldest-first; rank by retry time (retried ops lead), else
@@ -400,7 +400,7 @@ export function useActionActivity(): ActionActivity {
       { retriedAt: retriedAt[tr.id] ?? 0, index },
     ]),
   )
-  const sessionNewestFirst = [...sessionTrackers].sort((a, b) => {
+  const sessionNewestFirst = sessionTrackers.toSorted((a, b) => {
     const ra = sessionRank.get(a.id)!
     const rb = sessionRank.get(b.id)!
     if (ra.retriedAt !== rb.retriedAt) return rb.retriedAt - ra.retriedAt

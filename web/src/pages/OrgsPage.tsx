@@ -29,7 +29,7 @@ import { AnimatePresence } from "motion/react"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
-import { Badge, Button, Card, Toolbar } from "@/components/ui"
+import { Badge, Button, Card, Toolbar, cx } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
@@ -222,7 +222,7 @@ function HideOrgMenu({
 
   return (
     <>
-      <div className={`dropdown dropdown-end ${className ?? ""}`}>
+      <div className={cx("dropdown dropdown-end", className)}>
         <Button
           variant="ghost"
           size="sm"
@@ -473,16 +473,15 @@ const OrgsPage = () => {
   const sorted = useMemo(() => {
     const byName = (a: Classroom50OrgSummary, b: Classroom50OrgSummary) =>
       a.org.login.localeCompare(b.org.login)
-    const list = [...filtered]
     switch (sortKey) {
       case "status":
-        return list.sort(
+        return filtered.toSorted(
           (a, b) => statusWeight(a) - statusWeight(b) || byName(a, b),
         )
       case "last-modified":
         // Known timestamps newest-first; pending/unknown pinned to the bottom
         // in stable Name order so rows don't reshuffle as queries resolve.
-        return list.sort((a, b) => {
+        return filtered.toSorted((a, b) => {
           const ta = lastModified[a.org.login]
           const tb = lastModified[b.org.login]
           if (ta && tb) return tb.localeCompare(ta)
@@ -492,7 +491,7 @@ const OrgsPage = () => {
         })
       case "name-asc":
       default:
-        return list.sort(byName)
+        return filtered.toSorted(byName)
     }
   }, [filtered, sortKey, lastModified])
 

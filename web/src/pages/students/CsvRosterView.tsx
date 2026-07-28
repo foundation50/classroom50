@@ -22,9 +22,7 @@ const CsvRosterView = ({ students }: { students: Student[] }) => {
 
   const rows = useMemo(
     () =>
-      [...students].sort((a, b) =>
-        displayName(a).localeCompare(displayName(b)),
-      ),
+      students.toSorted((a, b) => displayName(a).localeCompare(displayName(b))),
     [students],
   )
 

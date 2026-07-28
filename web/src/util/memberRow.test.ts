@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { orgRowToMemberRow, rosterRowToMemberRow } from "./memberRow"
+import {
+  orgRowToMemberRow,
+  rosterRowInitials,
+  rosterRowToMemberRow,
+} from "./memberRow"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import type { TeamRosterRow } from "@/util/teamRoster"
 
@@ -42,6 +46,28 @@ describe("rosterRowToMemberRow", () => {
       }),
     )
     expect(row.name).toBe("a@x.edu")
+  })
+})
+
+describe("rosterRowInitials", () => {
+  it("uses two-letter initials from first/last when present", () => {
+    expect(
+      rosterRowInitials(
+        rosterRow({ first_name: "ada", last_name: "lovelace" }),
+      ),
+    ).toBe("AL")
+  })
+
+  it("falls back to the handle, then the email, then a placeholder", () => {
+    expect(rosterRowInitials(rosterRow())).toBe("O")
+    expect(
+      rosterRowInitials(rosterRow({ username: "", email: "zoe@x.edu" })),
+    ).toBe("Z")
+    expect(rosterRowInitials(rosterRow({ username: "", email: "" }))).toBe("?")
+  })
+
+  it("keeps an astral fallback character whole", () => {
+    expect(rosterRowInitials(rosterRow({ username: "😀cat" }))).toBe("😀")
   })
 })
 

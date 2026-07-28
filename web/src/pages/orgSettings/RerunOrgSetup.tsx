@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
-import { Button } from "@/components/ui"
+import { Button, cx } from "@/components/ui"
 import { type InitStepId, type InitStepUpdate } from "@/github-core/mutations"
 import { recordBudgetNoticeFromStep } from "@/orgPolicy/budgetNoticeStore"
 import { githubKeys } from "@/github-core/queries"
@@ -39,7 +39,11 @@ const SummaryBanner = ({
   children: ReactNode
 }) => (
   <CalloutDiv
-    className={`rounded-lg border p-3 text-sm ${BANNER_TONE[tone]} ${className ?? ""}`}
+    className={cx(
+      "rounded-lg border p-3 text-sm",
+      BANNER_TONE[tone],
+      className,
+    )}
   >
     {children}
   </CalloutDiv>

@@ -71,9 +71,9 @@ export function marshalTeamDescription(input: {
   // overwrite each other's description (the reconcile compares strings for exact
   // equality).
   return JSON.stringify(record)
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029")
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("&", "\\u0026")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029")
 }

@@ -100,17 +100,16 @@ const ClassroomList = ({
   const sorted = useMemo(() => {
     const byName = (a: ClassroomSummary, b: ClassroomSummary) =>
       classroomDisplayName(a).localeCompare(classroomDisplayName(b))
-    const list = [...filtered]
     switch (sortKey) {
       case "term":
-        return list.sort(
+        return filtered.toSorted(
           (a, b) => (a.term ?? "").localeCompare(b.term ?? "") || byName(a, b),
         )
       case "student-count":
         // Known counts high-to-low; unresolved/unknown (or errored, reported as
         // undefined by the probe) pinned to the bottom in stable name order so
         // rows don't reshuffle as rosters resolve.
-        return list.sort((a, b) => {
+        return filtered.toSorted((a, b) => {
           const ca = studentCounts[a.path]
           const cb = studentCounts[b.path]
           if (ca !== undefined && cb !== undefined)
@@ -121,7 +120,7 @@ const ClassroomList = ({
         })
       case "name-asc":
       default:
-        return list.sort(byName)
+        return filtered.toSorted(byName)
     }
   }, [filtered, sortKey, studentCounts])
 
