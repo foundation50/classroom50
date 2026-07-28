@@ -318,6 +318,9 @@ func TestAssertEnrolledOrStaff(t *testing.T) {
 		{"ta staff member enrolled", map[string]bool{taSlug: true}, nil, false},
 		{"active member on no team rejected", map[string]bool{}, nil, true},
 		{"transient read fails open (propagates)", map[string]bool{}, map[string]bool{studentSlug: true}, true},
+		// Student-team match must short-circuit BEFORE a later staff-team probe
+		// can error, so an enrolled student is never blocked by an unrelated blip.
+		{"student member short-circuits past a transient staff probe", map[string]bool{studentSlug: true}, map[string]bool{taSlug: true}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

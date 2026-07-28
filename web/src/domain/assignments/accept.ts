@@ -22,8 +22,7 @@ import { fetchAssignmentFromPages } from "../queries/assignments"
 import { getAuthenticatedUser } from "../queries/users"
 import { acceptAndVerifyOrgMembership } from "../users"
 import { isOwnerGitHubOrgRole } from "@/authz"
-import { classroomTeamSlug } from "@/util/teamSlug"
-import { STAFF_ROLES_WITH_LEGACY } from "@/types/classroom"
+import { classroomTeamSlugs } from "@/util/teamSlug"
 import { GitHubAPIError } from "@/github-core/errors"
 import {
   log,
@@ -392,27 +391,35 @@ async function isActiveTeamMember(
 // Enforce that the viewer is enrolled in this classroom before accept: on the
 // `classroom50-<classroom>` student team, OR holding a staff role
 // (teacher/hta/ta, incl. the legacy `-instructor` team). Owners are filtered by
-// the caller. The student-team slug is derived (a student can't read
-// classroom.json for the GitHub-assigned slug); a slug-collision rewrite 404s
-// and reads as non-member, so a miss never grants false access. A transient
-// read rethrows (fail-open) rather than blocking; the definitive block is a
-// localized AcceptStepError only when every probe returns a definitive answer.
+// the caller. The slug set is single-sourced from classroomTeamSlugs. The slugs
+// are derived (a student can't read classroom.json for the GitHub-assigned
+// slug); a slug-collision rewrite 404s and reads as non-member, so a miss never
+// grants false access.
+//
+// Fail-OPEN semantics: a definitive membership on ANY probe means enrolled,
+// even if a sibling probe hit a transient error — so an enrolled student is
+// never blocked by an unrelated blip. Only when every probe returns a
+// definitive non-member do we block; a transient error with no definitive
+// member rethrows so the flow surfaces a retryable failure rather than a
+// wrongful "not enrolled".
 export async function assertEnrolledOrStaff(
   client: GitHubClient,
   org: string,
   classroom: string,
   username: string,
 ): Promise<void> {
-  const slugs = [
-    classroomTeamSlug(classroom),
-    ...STAFF_ROLES_WITH_LEGACY.map((role) =>
-      classroomTeamSlug(classroom, role),
+  const results = await Promise.allSettled(
+    classroomTeamSlugs(classroom).map((slug) =>
+      isActiveTeamMember(client, org, slug, username),
     ),
-  ]
-  const results = await Promise.all(
-    slugs.map((slug) => isActiveTeamMember(client, org, slug, username)),
   )
-  if (results.some(Boolean)) return
+  const isMember = (r: (typeof results)[number]) =>
+    r.status === "fulfilled" && r.value
+  if (results.some(isMember)) return
+  // No definitive membership. If any probe failed transiently, fail open by
+  // rethrowing that error (retryable) instead of a wrongful not-enrolled block.
+  const rejected = results.find((r) => r.status === "rejected")
+  if (rejected && rejected.status === "rejected") throw rejected.reason
   throw new AcceptStepError({ key: "accept.notEnrolled.error" })
 }
 

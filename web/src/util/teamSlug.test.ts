@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   classroomTeamSlug,
+  classroomTeamSlugs,
   resolveClassroomRoleSlug,
   parseClassroomTeamSlug,
   parseStudentClassroomSlug,
@@ -21,6 +22,21 @@ describe("classroomTeamSlug", () => {
       "classroom50-cs101-instructor",
     )
     expect(classroomTeamSlug("cs101", "ta")).toBe("classroom50-cs101-ta")
+  })
+})
+
+// The enrolled-set enumeration, student-first and legacy-inclusive. Byte-mirrors
+// the CLI's contract.ClassroomTeamSlugs — a drift here would let the accept
+// gate and the CLI disagree on who counts as enrolled.
+describe("classroomTeamSlugs", () => {
+  it("returns the student team then every staff team (incl. legacy instructor)", () => {
+    expect(classroomTeamSlugs("cs-principles")).toEqual([
+      "classroom50-cs-principles",
+      "classroom50-cs-principles-teacher",
+      "classroom50-cs-principles-instructor",
+      "classroom50-cs-principles-hta",
+      "classroom50-cs-principles-ta",
+    ])
   })
 })
 

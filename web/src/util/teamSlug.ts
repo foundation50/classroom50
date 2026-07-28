@@ -31,6 +31,23 @@ export function classroomTeamSlug(
     : `${CONFIG_REPO}-${classroom}-${role}`
 }
 
+// The full set of team slugs whose active membership means a user is enrolled
+// in a classroom: the student team plus every staff team (including the legacy
+// `-instructor` team so a not-yet-migrated staffer still reads as enrolled).
+// Single-sources the "is enrolled?" slug enumeration — the accept gate (the
+// self-scoped enrollment probe and the accept-flow guard) derives its slugs
+// here rather than re-listing roles, so a role change can't drift the gate.
+// Ordered student-first so a caller can short-circuit on the common case.
+// Byte-mirrors the CLI's contract.ClassroomTeamSlugs — keep in lockstep.
+export function classroomTeamSlugs(classroom: string): string[] {
+  return [
+    classroomTeamSlug(classroom),
+    ...STAFF_ROLES_WITH_LEGACY.map((role) =>
+      classroomTeamSlug(classroom, role),
+    ),
+  ]
+}
+
 // The authoritative per-classroom team slug for a role, preferring the slug
 // GitHub actually assigned (stored in classroom.json — GitHub can rewrite a slug
 // on a name collision) and falling back to the derived classroomTeamSlug when

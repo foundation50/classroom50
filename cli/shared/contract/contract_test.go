@@ -71,6 +71,42 @@ func TestContractLiterals(t *testing.T) {
 	}
 }
 
+// TestClassroomTeamSlugs pins the team-slug formula and the full enrolled-set
+// enumeration. These are byte-mirrored, with NO compile-time link, in the web
+// GUI (web/src/util/teamSlug.ts classroomTeamSlug / classroomTeamSlugs) and
+// gh-teacher (internal/configrepo/team.go classroomTeamName / staffTeamName).
+// The set is ordered student-first and includes the legacy instructor team so a
+// not-yet-migrated staffer still reads as enrolled. Update every copy in
+// lockstep on change.
+func TestClassroomTeamSlugs(t *testing.T) {
+	if got := ClassroomStudentTeamSlug("cs101"); got != "classroom50-cs101" {
+		t.Errorf("ClassroomStudentTeamSlug = %q, want %q", got, "classroom50-cs101")
+	}
+	if got := StaffTeamSlug("cs101", RoleTeacher); got != "classroom50-cs101-teacher" {
+		t.Errorf("StaffTeamSlug(teacher) = %q, want %q", got, "classroom50-cs101-teacher")
+	}
+	if got := StaffTeamSlug("cs101", RoleInstructor); got != "classroom50-cs101-instructor" {
+		t.Errorf("StaffTeamSlug(instructor) = %q, want %q", got, "classroom50-cs101-instructor")
+	}
+	// A classroom short-name may contain hyphens; the slug must not mangle them.
+	want := []string{
+		"classroom50-cs-principles",
+		"classroom50-cs-principles-teacher",
+		"classroom50-cs-principles-instructor",
+		"classroom50-cs-principles-hta",
+		"classroom50-cs-principles-ta",
+	}
+	got := ClassroomTeamSlugs("cs-principles")
+	if len(got) != len(want) {
+		t.Fatalf("ClassroomTeamSlugs len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("ClassroomTeamSlugs[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 // TestAssignmentRepoName pins the lowercasing of all three segments and the
 // prefix/name relationship (owner is recoverable by stripping the prefix).
 // Cross-language agreement with the Python mirrors is enforced separately by

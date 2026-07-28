@@ -22,7 +22,7 @@ export function useClassroomEnrollment(
   org: string | undefined,
   classroom: string | undefined,
   username: string | undefined,
-): { verdict: EnrollmentVerdict; isLoading: boolean; refetch: () => void } {
+): { verdict: EnrollmentVerdict; isLoading: boolean } {
   const client = useGitHubClient()
   const enabled = Boolean(org && classroom && username)
   const studentSlug = org && classroom ? classroomTeamSlug(classroom) : ""
@@ -36,11 +36,11 @@ export function useClassroomEnrollment(
   // student-team probe collapses a non-member to the "student" default, so it
   // can't tell an enrolled student from an outsider — the dedicated
   // studentQuery above supplies that signal.
-  const {
-    role,
-    isLoading: loadingRole,
-    refetch: refetchRole,
-  } = useClassroomRole(org, classroom, username)
+  const { role, isLoading: loadingRole } = useClassroomRole(
+    org,
+    classroom,
+    username,
+  )
 
   const isStaff = role === "teacher" || role === "hta" || role === "ta"
   const student = membershipFromQuery(
@@ -59,13 +59,7 @@ export function useClassroomEnrollment(
     verdict = "unresolved"
   }
 
-  const { refetch: refetchStudent } = studentQuery
-  const refetch = () => {
-    void refetchStudent()
-    refetchRole()
-  }
-
-  return { verdict, isLoading, refetch }
+  return { verdict, isLoading }
 }
 
 export default useClassroomEnrollment

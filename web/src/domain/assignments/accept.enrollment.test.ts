@@ -93,4 +93,17 @@ describe("assertEnrolledOrStaff", () => {
       assertEnrolledOrStaff(client, org, classroom, user),
     ).rejects.toBeInstanceOf(GitHubAPIError)
   })
+
+  it("a definitive member resolves even when a sibling probe errors transiently", async () => {
+    // Regression: a parallel probe set must not let an unrelated transient
+    // failure block an enrolled student. Student-team member + a 500 on the
+    // staff probe must still resolve (enrolled wins over the sibling blip).
+    const client = makeClient({
+      activeTeams: [studentSlug],
+      transientTeams: [taSlug],
+    })
+    await expect(
+      assertEnrolledOrStaff(client, org, classroom, user),
+    ).resolves.toBeUndefined()
+  })
 })

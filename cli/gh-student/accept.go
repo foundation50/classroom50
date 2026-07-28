@@ -229,29 +229,6 @@ type AcceptStatus struct {
 	StatusCode int
 }
 
-// classroomStudentTeamSlug derives the student team slug `classroom50-<short>`.
-// A student can't read classroom.json for the GitHub-assigned slug, so it's
-// derived; on a slug-collision rewrite the derived slug 404s and reads as
-// non-member, so a miss never grants false access. Byte-mirrors the web
-// classroomTeamSlug and the teacher CLI's classroomTeamName — a cross-tool
-// contract with no compile-time link; keep in lockstep.
-func classroomStudentTeamSlug(classroom string) string {
-	return contract.ConfigRepoName + "-" + classroom
-}
-
-// classroomStaffTeamSlugs derives the staff team slugs, including the legacy
-// `-instructor` team so a not-yet-migrated classroom's staffer still reads as
-// enrolled.
-func classroomStaffTeamSlugs(classroom string) []string {
-	base := contract.ConfigRepoName + "-" + classroom
-	return []string{
-		base + "-teacher",
-		base + "-instructor",
-		base + "-hta",
-		base + "-ta",
-	}
-}
-
 // isActiveTeamMember reports whether the authed user is an active member of the
 // team. 2xx + active => true, a definitive 404 => false; any other error (e.g.
 // transient) propagates so the caller fails OPEN rather than blocking a real
@@ -275,11 +252,12 @@ func isActiveTeamMember(client githubapi.Client, org, teamSlug, username string)
 
 // assertEnrolledOrStaff enforces that the authed user is enrolled in the
 // classroom — on its student team, or holding a staff role — before accept.
-// A transient read propagates (fail-open); only a set of definitive answers
-// with no membership blocks, with a clear roster remedy.
+// The slug set is single-sourced from contract.ClassroomTeamSlugs (student
+// first). A transient read propagates (fail-open); membership short-circuits to
+// nil before any later probe can error, so an enrolled student is never blocked
+// by an unrelated blip. Only a full set of definitive non-member answers blocks.
 func assertEnrolledOrStaff(client githubapi.Client, org, classroom, username string) error {
-	slugs := append([]string{classroomStudentTeamSlug(classroom)}, classroomStaffTeamSlugs(classroom)...)
-	for _, slug := range slugs {
+	for _, slug := range contract.ClassroomTeamSlugs(classroom) {
 		member, err := isActiveTeamMember(client, org, slug, username)
 		if err != nil {
 			return err

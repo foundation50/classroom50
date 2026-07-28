@@ -69,7 +69,6 @@ vi.mock("@/hooks/useClassroomEnrollment", () => ({
   useClassroomEnrollment: () => ({
     verdict: enrollmentVerdict,
     isLoading: false,
-    refetch: vi.fn(),
   }),
 }))
 vi.mock("@/hooks/mutations/useAcceptAndVerifyMembership", () => ({
