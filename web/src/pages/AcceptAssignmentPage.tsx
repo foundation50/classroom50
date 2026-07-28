@@ -659,13 +659,13 @@ const AcceptAssignmentPage = () => {
   // Enrollment gate: a student may only accept in a classroom they're enrolled
   // in (on the `classroom50-<classroom>` student team). Staff bypass via the
   // verdict; org owners bypass at the check below. Fail-OPEN on "unresolved" (a
-  // transient team read) so a blip can't lock out a real student — the domain
-  // membership step and GitHub's private-template permission still gate.
-  const { verdict: enrollmentVerdict } = useClassroomEnrollment(
-    org,
-    classroom,
-    username,
-  )
+  // settled-but-indeterminate team read) so a blip can't lock out a real
+  // student — the domain membership step and GitHub's private-template
+  // permission still gate. While the read is still in flight we hold the
+  // spinner (loadingEnrollment below) rather than flashing the accept card and
+  // then flipping to "not available".
+  const { verdict: enrollmentVerdict, isLoading: loadingEnrollment } =
+    useClassroomEnrollment(org, classroom, username)
 
   const { data: assignmentsData, isLoading: loadingAssignmentsData } =
     usePagesAssignments(org, classroom, secret, !loadingSecret)
@@ -746,7 +746,12 @@ const AcceptAssignmentPage = () => {
   // with no descriptor (a browser network throw) falls back to the generic copy.
   const acceptError = localizedMessageOf(acceptMutation.error)
 
-  if (loadingAssignments || isLoadingRepo || loadingOrgMembership) {
+  if (
+    loadingAssignments ||
+    isLoadingRepo ||
+    loadingOrgMembership ||
+    loadingEnrollment
+  ) {
     return (
       <AcceptLayout>
         <Spinner size="xl" label={t("accept.loadingAssignment")} />

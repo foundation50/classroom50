@@ -48,7 +48,15 @@ export function useClassroomEnrollment(
     studentQuery.error,
   )
 
-  const isLoading = studentQuery.fetchStatus === "fetching" || loadingRole
+  // Loading = the student probe is fetching (incl. retries) OR its result isn't
+  // in yet while enabled, OR the staff-role reads are still resolving. Holding
+  // on the enabled-but-not-yet-settled window is what prevents the accept card
+  // from flashing before the verdict lands and then flipping to "not available".
+  const studentSettled = studentQuery.isSuccess || studentQuery.isError
+  const isLoading =
+    studentQuery.fetchStatus === "fetching" ||
+    (enabled && !studentSettled) ||
+    loadingRole
 
   let verdict: EnrollmentVerdict
   if (isStaff || student === "member") {
