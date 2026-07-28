@@ -17,6 +17,15 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.19.0](https://github.com/foundation50/classroom50/compare/web-v1.18.1...web-v1.19.0) (2026-07-28)
+
+
+### Features
+
+* add lockable assignments that block student access and revoke private-template read ([#441](https://github.com/foundation50/classroom50/issues/441)) ([127982b](https://github.com/foundation50/classroom50/commit/127982b9a518ee6b8a3c91fc4a6e1143f0f793c6))
+* add per-assignment release date (available_from) and hide unreleased assignments from students ([#439](https://github.com/foundation50/classroom50/issues/439)) ([6cc15f0](https://github.com/foundation50/classroom50/commit/6cc15f07852545e0f50988ffa7386339a87dc99e))
+* restrict assignment accept to enrolled classroom members ([#442](https://github.com/foundation50/classroom50/issues/442)) ([0e06012](https://github.com/foundation50/classroom50/commit/0e0601219e6006083da6a6767f8e6a520b85845c))
+
 ## [1.18.1](https://github.com/foundation50/classroom50/compare/web-v1.18.0...web-v1.18.1) (2026-07-28)
 
 
