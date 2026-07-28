@@ -940,6 +940,7 @@ func normalizeAvailableFrom(raw string) (string, *assignment.DueMeta, error) {
 	return t.UTC().Format(time.RFC3339), meta, nil
 }
 
+// localDueLocation resolves the machine's local timezone for a zone-less --due.
 // $TZ is preferred (its IANA name round-trips into due_meta.zone). When $TZ is
 // set but unresolvable, return the error (with time.Local) so the caller
 // refuses to guess; an empty $TZ falls back to time.Local with no error.
