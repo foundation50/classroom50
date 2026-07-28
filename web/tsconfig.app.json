@@ -2,11 +2,12 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "target": "es2023",
-    // ES2024 for Map.groupBy. Not ESNext: that would also admit the Uint8Array
-    // base64/hex family, ~2 years younger than the app's floor (Safari 17.4, set
-    // by AbortSignal.any) and on the fallback-free assignment-upload path.
-    // `target` stays es2023 — ES2024 added no syntax we emit.
-    "lib": ["ES2024", "DOM"],
+    // ESNext for the Uint8Array base64/hex family (toBase64/fromBase64/toHex),
+    // which the web app adopts directly. `target` stays es2023 — those are
+    // library calls, not syntax, so nothing new is emitted. `lib: ESNext` tracks
+    // the installed TypeScript's newest lib, so a TS upgrade can surface new
+    // globals; the full-project tsc -b in `npm run check` is the guard.
+    "lib": ["ESNext", "DOM"],
     "module": "esnext",
     "types": ["vite/client"],
     "skipLibCheck": true,

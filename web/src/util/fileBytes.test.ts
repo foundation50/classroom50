@@ -19,8 +19,7 @@ describe("bytesToBase64", () => {
     expect(bytesToBase64(new Uint8Array(0))).toBe("")
   })
 
-  it("does not overflow the call stack on a large buffer (chunked)", () => {
-    // > one 0x8000 chunk; a naive fromCharCode(...bytes) would risk overflow.
+  it("round-trips a large buffer", () => {
     const bytes = new Uint8Array(200_000).fill(65)
     const b64 = bytesToBase64(bytes)
     expect(atob(b64).length).toBe(200_000)
