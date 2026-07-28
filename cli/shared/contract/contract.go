@@ -189,7 +189,8 @@ func FeedbackLabelForMode(mode string) (name, color string) {
 func FeedbackPRBody(head, releaseURL string) string {
 	return strings.Join([]string{
 		":wave:! Classroom 50 opened this pull request as a place for your " +
-			"teacher to leave feedback on your work. It updates automatically. " +
+			"teacher to leave feedback on your work. It stays up to date " +
+			"automatically as you push. " +
 			"**Don't close or merge this pull request** unless your teacher tells you to.",
 		"",
 		"Each commit is automatically graded — the latest autograding result " +
@@ -218,8 +219,8 @@ func FeedbackPRBody(head, releaseURL string) string {
 			"comment box below.",
 		"",
 		"The base branch (`" + FeedbackBaseBranch + "`) is frozen at the starter so the diff " +
-			"always reflects the full body of work. The PR is managed automatically " +
-			"by the autograde runner; merging it is the teacher-side " +
+			"always reflects the full body of work. The PR is kept up to date " +
+			"automatically; merging it is the teacher-side " +
 			"\"grading done\" signal.",
 		"</details>",
 	}, "\n")

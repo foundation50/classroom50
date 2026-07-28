@@ -203,7 +203,8 @@ def pr_body(head: str, release_url: str) -> str:
     """
     return "\n".join([
         ":wave:! Classroom 50 opened this pull request as a place for your "
-        "teacher to leave feedback on your work. It updates automatically. "
+        "teacher to leave feedback on your work. It stays up to date "
+        "automatically as you push. "
         "**Don't close or merge this pull request** unless your teacher tells you to.",
         "",
         f"Each commit is automatically graded — the latest autograding result "
@@ -232,8 +233,8 @@ def pr_body(head: str, release_url: str) -> str:
         "comment box below.",
         "",
         f"The base branch (`{BASE_BRANCH}`) is frozen at the starter so the diff "
-        f"always reflects the full body of work. The PR is managed automatically "
-        f"by the autograde runner; merging it is the teacher-side "
+        f"always reflects the full body of work. The PR is kept up to date "
+        f"automatically; merging it is the teacher-side "
         f"\"grading done\" signal.",
         "</details>",
     ])
