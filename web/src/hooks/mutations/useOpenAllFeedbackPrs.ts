@@ -49,7 +49,7 @@ export function useOpenAllFeedbackPrs() {
     onSuccess: (summary) => {
       if (summary.created > 0) {
         void queryClient.invalidateQueries({
-          queryKey: [...githubKeys.all, "open-pulls"],
+          queryKey: githubKeys.openPullsAll(),
         })
       }
     },

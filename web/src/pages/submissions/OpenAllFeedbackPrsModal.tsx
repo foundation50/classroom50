@@ -4,7 +4,39 @@ import { GitPullRequest } from "lucide-react"
 
 import { Alert, Button, Modal, Spinner } from "@/components/ui"
 import useOpenAllFeedbackPrs from "@/hooks/mutations/useOpenAllFeedbackPrs"
+import type { OpenAllRepoResult } from "@/domain/assignments"
 import type { AssignmentMode } from "@/types/classroom"
+
+// A warning Alert listing the repos in one non-success bucket (blocked /
+// failed). `showReason` appends each repo's reason inline (the failed bucket).
+function RepoListAlert({
+  repos,
+  title,
+  hint,
+  showReason,
+}: {
+  repos: OpenAllRepoResult[]
+  title: string
+  hint: string
+  showReason?: boolean
+}) {
+  return (
+    <Alert tone="warning">
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{title}</p>
+        <ul className="max-h-40 overflow-y-auto text-xs">
+          {repos.map((r) => (
+            <li key={r.repo} className="font-mono">
+              {r.repo}
+              {showReason && r.reason ? ` — ${r.reason}` : ""}
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-base-content/70">{hint}</p>
+      </div>
+    </Alert>
+  )
+}
 
 // Bulk "Open all Feedback PRs" for an assignment (issue #347). Three states in
 // one dialog: confirm (repo count), running (live X/N progress, dismissal
@@ -40,10 +72,9 @@ export function OpenAllFeedbackPrsModal({
 
   const count = repos.length
   const running = isPending
-  const closeDisabled = running
 
   const handleClose = () => {
-    if (closeDisabled) return
+    if (running) return
     onClose()
     // Clear the prior run so reopening starts at the confirm state.
     reset()
@@ -58,7 +89,7 @@ export function OpenAllFeedbackPrsModal({
       open={open}
       onClose={handleClose}
       size="md"
-      closeDisabled={closeDisabled}
+      closeDisabled={running}
       aria-labelledby={titleId}
     >
       <h3 id={titleId} className="flex items-center gap-2 text-lg font-bold">
@@ -110,43 +141,19 @@ export function OpenAllFeedbackPrsModal({
             )}
           </ul>
           {summary.blocked.length > 0 && (
-            <Alert tone="warning">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">
-                  {t("submissions.openAllPrs.blockedTitle")}
-                </p>
-                <ul className="max-h-40 overflow-y-auto text-xs">
-                  {summary.blocked.map((b) => (
-                    <li key={b.repo} className="font-mono">
-                      {b.repo}
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-xs text-base-content/70">
-                  {t("submissions.openAllPrs.blockedHint")}
-                </p>
-              </div>
-            </Alert>
+            <RepoListAlert
+              repos={summary.blocked}
+              title={t("submissions.openAllPrs.blockedTitle")}
+              hint={t("submissions.openAllPrs.blockedHint")}
+            />
           )}
           {summary.failed.length > 0 && (
-            <Alert tone="warning">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">
-                  {t("submissions.openAllPrs.failedTitle")}
-                </p>
-                <ul className="max-h-40 overflow-y-auto text-xs">
-                  {summary.failed.map((f) => (
-                    <li key={f.repo} className="font-mono">
-                      {f.repo}
-                      {f.reason ? ` — ${f.reason}` : ""}
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-xs text-base-content/70">
-                  {t("submissions.openAllPrs.failedHint")}
-                </p>
-              </div>
-            </Alert>
+            <RepoListAlert
+              repos={summary.failed}
+              title={t("submissions.openAllPrs.failedTitle")}
+              hint={t("submissions.openAllPrs.failedHint")}
+              showReason
+            />
           )}
         </div>
       ) : running ? (
