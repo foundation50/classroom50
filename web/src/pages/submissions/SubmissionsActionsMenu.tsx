@@ -4,6 +4,7 @@ import {
   DownloadCloud,
   ExternalLink,
   FileDown,
+  GitPullRequest,
   RefreshCw,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -26,6 +27,7 @@ export function SubmissionsActionsMenu({
   onMetrics,
   onCollect,
   onRegradeAll,
+  onOpenAllPrs,
   viewHref,
   viewLabel,
   onDownloadCsv,
@@ -48,6 +50,10 @@ export function SubmissionsActionsMenu({
   onMetrics?: () => void
   onCollect: () => void
   onRegradeAll: () => void
+  // Opens the "Open all Feedback PRs" modal. Omitted (hidden) when the viewer
+  // can't write every repo (non-owner) or the assignment has no Feedback PRs
+  // (empty_repo).
+  onOpenAllPrs?: () => void
   viewHref: string
   viewLabel: string
   onDownloadCsv: () => void
@@ -167,6 +173,27 @@ export function SubmissionsActionsMenu({
                 {viewLabel}
               </a>
             </li>
+            {onOpenAllPrs && (
+              <li>
+                <button
+                  type="button"
+                  disabled={disabledActions}
+                  title={
+                    emptyRoster
+                      ? t("submissions.openAllPrs.titleEmptyRoster")
+                      : t("submissions.openAllPrs.title")
+                  }
+                  onClick={() => {
+                    closeMenu()
+                    if (disabledActions) return
+                    onOpenAllPrs()
+                  }}
+                >
+                  <GitPullRequest aria-hidden="true" className="size-4" />
+                  {t("submissions.openAllPrs.menuLabel")}
+                </button>
+              </li>
+            )}
             <div
               className="my-1 border-t border-base-content/10"
               role="separator"

@@ -8,6 +8,7 @@ import {
   feedbackPrBody,
   ensureFeedbackPullRequest,
   repairFeedbackPullRequest,
+  openAllFeedbackPullRequests,
 } from "./feedbackPr"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import type { GitHubClient } from "@/github-core/client"
@@ -576,5 +577,109 @@ describe("repairFeedbackPullRequest", () => {
       reason: "repo-not-found",
       unsupported: true,
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bulk open (issue #347). A per-repo scriptable client drives each repo to a
+// distinct outcome so the summary classification and progress reporting are
+// exercised end to end over repairFeedbackPullRequest.
+// ---------------------------------------------------------------------------
+
+// The repo name is the 2nd path segment: /repos/o/<repo>/...
+const repoOf = (url: string) => url.split("/")[3]
+
+// Behaviors keyed by repo name:
+//  - "created-*": has a marker + diff, no existing PR -> creates.
+//  - "existed-*": an existing PR short-circuits -> existed.
+//  - "nomarker-*": the marker commit history is empty -> unsupported.
+//  - "missing-*": GET /repos 404s -> unsupported (repo-not-found).
+//  - "fail-*": the PR create hard-fails -> failed.
+function fakeBatchClient() {
+  const request = vi.fn(
+    async (url: string, init?: { method?: string; body?: unknown }) => {
+      const method = init?.method ?? "GET"
+      const repo = repoOf(url)
+      const base = `/repos/o/${repo}`
+
+      if (url === base) {
+        if (repo.startsWith("missing")) throw apiError(404, "Not Found")
+        return { default_branch: "main" }
+      }
+      if (url.startsWith(`${base}/commits?path=`)) {
+        // Empty history for the no-marker repos; one baseline commit otherwise.
+        return repo.startsWith("nomarker") ? [] : [{ sha: "accept-sha" }]
+      }
+      if (url.startsWith(`${base}/pulls?`)) {
+        return repo.startsWith("existed") ? [{ number: 7, state: "open" }] : []
+      }
+      if (url === `${base}/pulls` && method === "POST") {
+        if (repo.startsWith("fail")) {
+          throw apiError(403, "Resource not accessible by integration")
+        }
+        // A diff exists (headHasDiff) so no empty commit is needed.
+        return { number: 1, state: "open", html_url: `https://x/${repo}/1` }
+      }
+      if (url === `${base}/git/refs` && method === "POST") return {}
+      if (url === `${base}/git/ref/heads/${FEEDBACK_BASE_BRANCH}`) {
+        throw apiError(404, "Not Found")
+      }
+      if (url === `${base}/labels` && method === "POST") return {}
+      if (url === `${base}/issues/1/labels` && method === "POST") return []
+      throw new Error(`unexpected request: ${method} ${url}`)
+    },
+  )
+  return { client: { request } as unknown as GitHubClient }
+}
+
+describe("openAllFeedbackPullRequests", () => {
+  it("classifies each repo and reports progress to completion", async () => {
+    const { client } = fakeBatchClient()
+    const repos = [
+      "created-a",
+      "created-b",
+      "existed-a",
+      "nomarker-a",
+      "missing-a",
+      "fail-a",
+    ]
+    const progress: number[] = []
+
+    const summary = await openAllFeedbackPullRequests({
+      client,
+      org: "o",
+      repos,
+      mode: "individual",
+      onProgress: (p) => progress.push(p.done),
+    })
+
+    expect(summary.total).toBe(6)
+    expect(summary.created).toBe(2)
+    expect(summary.existed).toBe(1)
+    expect(summary.unsupported.map((r) => r.repo).toSorted()).toEqual([
+      "missing-a",
+      "nomarker-a",
+    ])
+    expect(summary.failed.map((r) => r.repo)).toEqual(["fail-a"])
+    // Progress fires once per repo and reaches the total.
+    expect(progress).toHaveLength(6)
+    expect(Math.max(...progress)).toBe(6)
+  })
+
+  it("handles an empty repo list without any requests", async () => {
+    const { client } = fakeBatchClient()
+    const summary = await openAllFeedbackPullRequests({
+      client,
+      org: "o",
+      repos: [],
+      mode: "individual",
+    })
+    expect(summary).toMatchObject({
+      total: 0,
+      created: 0,
+      existed: 0,
+    })
+    expect(summary.failed).toEqual([])
+    expect(client.request).not.toHaveBeenCalled()
   })
 })

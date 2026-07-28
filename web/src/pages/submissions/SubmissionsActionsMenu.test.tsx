@@ -56,3 +56,26 @@ describe("SubmissionsActionsMenu — Metrics item", () => {
     expect(screen.queryByText("submissions.menu.metrics")).not.toBeNull()
   })
 })
+
+describe("SubmissionsActionsMenu — Open all Feedback PRs item", () => {
+  it("shows the item only when onOpenAllPrs is provided (owner, non-empty_repo)", () => {
+    const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)
+    expect(screen.queryByText("submissions.openAllPrs.menuLabel")).toBeNull()
+    rerender(<SubmissionsActionsMenu {...baseProps} onOpenAllPrs={() => {}} />)
+    expect(
+      screen.queryByText("submissions.openAllPrs.menuLabel"),
+    ).not.toBeNull()
+  })
+
+  it("hides the item for an empty_repo assignment even if a handler is passed", () => {
+    render(
+      <SubmissionsActionsMenu
+        {...baseProps}
+        emptyRepo
+        onOpenAllPrs={() => {}}
+      />,
+    )
+    // The whole !emptyRepo block (incl. this item) is gone for empty_repo.
+    expect(screen.queryByText("submissions.openAllPrs.menuLabel")).toBeNull()
+  })
+})

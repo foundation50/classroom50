@@ -438,6 +438,32 @@ export function hasAccepted(username: string, accepted: Set<string>): boolean {
   return accepted.has(username.trim().toLowerCase())
 }
 
+// All existing assignment repo names for a bulk per-repo teacher action (e.g.
+// opening every Feedback PR — issue #347). Mode-aware: individual repos are
+// forward-constructed per accepted student (studentRepoName), group repos come
+// from existingGroupRepos (reverse-parsed, sibling-guarded). Deduped and
+// lowercased to match the org repo list. Empty when the inputs aren't ready.
+export function assignmentRepoNames(params: {
+  isGroup: boolean
+  repos: GitHubRepo[] | null | undefined
+  classroom: string
+  assignment: string
+  students: Student[]
+  siblingSlugs?: string[]
+}): string[] {
+  const { isGroup, repos, classroom, assignment, students, siblingSlugs } =
+    params
+  if (isGroup) {
+    return existingGroupRepos(repos, classroom, assignment, siblingSlugs).map(
+      (r) => r.repoName,
+    )
+  }
+  const accepted = acceptedUsernames(repos, classroom, assignment, students)
+  return [...accepted].map((login) =>
+    studentRepoName(classroom, assignment, login),
+  )
+}
+
 // An existing group repo derived from the org repo list, keyed by its founder
 // (the `<owner>` segment of `<classroom>-<assignment>-<owner>`).
 export type GroupRepo = { owner: string; repoName: string }

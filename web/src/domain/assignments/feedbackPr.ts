@@ -15,9 +15,11 @@ import {
   isFreshRepoLagError,
   listPullRequestsByBaseHead,
   withFreshRepoRetry,
+  REPO_READ_CONCURRENCY,
 } from "@/github-core/queries"
 import { getRepo } from "@/github-core/repoReads"
 import type { AssignmentMode } from "@/types/classroom"
+import { mapWithConcurrency } from "@/util/concurrency"
 import { prefixCommit } from "@/util/commit"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import { logger } from "@/lib/logger"
@@ -413,4 +415,88 @@ export async function repairFeedbackPullRequest(params: {
     acceptCommitSha,
     mode,
   })
+}
+
+// The outcome of one repo in a bulk open, classified for the summary.
+export type OpenAllOutcome = "created" | "existed" | "unsupported" | "failed"
+
+export type OpenAllProgress = {
+  done: number
+  total: number
+}
+
+// Per-repo result kept for the summary's failure/unsupported detail lists.
+export type OpenAllRepoResult = {
+  repo: string
+  outcome: OpenAllOutcome
+  // Present for "failed"/"unsupported": the reason to show the teacher.
+  reason?: string
+}
+
+export type OpenAllFeedbackPrsSummary = {
+  total: number
+  created: number
+  existed: number
+  unsupported: OpenAllRepoResult[]
+  failed: OpenAllRepoResult[]
+  results: OpenAllRepoResult[]
+}
+
+// Open a Feedback PR on EVERY assignment repo in one teacher action (issue
+// #347): a bounded-concurrency fan-out of repairFeedbackPullRequest over
+// `repos`. Idempotent by construction — a repo that already has a PR (any
+// state) short-circuits as "existed", so re-running is safe and only fills the
+// gaps. A single repo's failure is caught and recorded, never aborting the
+// batch (repairFeedbackPullRequest doesn't throw; the try/catch guards an
+// unexpected throw so mapWithConcurrency's all-or-nothing reject can't sink the
+// whole run). `onProgress` fires after each repo settles so the UI can show a
+// live count.
+export async function openAllFeedbackPullRequests(params: {
+  client: GitHubClient
+  org: string
+  repos: string[]
+  mode: AssignmentMode
+  onProgress?: (progress: OpenAllProgress) => void
+  signal?: AbortSignal
+}): Promise<OpenAllFeedbackPrsSummary> {
+  const { client, org, repos, mode, onProgress, signal } = params
+  const total = repos.length
+  let done = 0
+
+  const results = await mapWithConcurrency(
+    repos,
+    REPO_READ_CONCURRENCY,
+    async (repo): Promise<OpenAllRepoResult> => {
+      if (signal?.aborted) return { repo, outcome: "failed", reason: "aborted" }
+      let result: OpenAllRepoResult
+      try {
+        const r = await repairFeedbackPullRequest({ client, org, repo, mode })
+        if (r.ok) {
+          result = { repo, outcome: r.created ? "created" : "existed" }
+        } else if ("unsupported" in r) {
+          result = { repo, outcome: "unsupported", reason: r.reason }
+        } else {
+          result = { repo, outcome: "failed", reason: r.reason }
+        }
+      } catch (err) {
+        result = {
+          repo,
+          outcome: "failed",
+          reason: err instanceof Error ? err.message : String(err),
+        }
+      }
+      done++
+      onProgress?.({ done, total })
+      return result
+    },
+  )
+
+  return {
+    total,
+    created: results.filter((r) => r.outcome === "created").length,
+    existed: results.filter((r) => r.outcome === "existed").length,
+    unsupported: results.filter((r) => r.outcome === "unsupported"),
+    failed: results.filter((r) => r.outcome === "failed"),
+    results,
+  }
 }

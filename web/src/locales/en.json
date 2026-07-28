@@ -1946,6 +1946,28 @@
       "repoNotFound": "Couldn't find the repository {{repo}} — the student may not have accepted yet.",
       "failed": "Couldn't open the Feedback PR: {{reason}}"
     },
+    "openAllPrs": {
+      "menuLabel": "Open all Feedback PRs",
+      "title": "Open Feedback PRs for every repo",
+      "titleEmptyRoster": "Add students to the roster first",
+      "confirmBody_one": "This opens a Feedback PR on the <b>{{count}}</b> assignment repository for <b>{{name}}</b> that doesn't have one yet. Repos that already have a Feedback PR are left untouched.",
+      "confirmBody_other": "This opens a Feedback PR on each of the <b>{{count}}</b> assignment repositories for <b>{{name}}</b> that don't have one yet. Repos that already have a Feedback PR are left untouched.",
+      "confirmHint": "It runs from your browser, one repository at a time, so it may take a while for a large class. Keep this tab open until it finishes.",
+      "confirmLabel_one": "Open PR",
+      "confirmLabel_other": "Open PRs",
+      "running": "Opening… {{done}} of {{total}}",
+      "summaryLead": "Finished processing <b>{{total}}</b> repositories.",
+      "summaryOpened_one": "{{count}} Feedback PR opened",
+      "summaryOpened_other": "{{count}} Feedback PRs opened",
+      "summaryExisted_one": "{{count}} repository already had one",
+      "summaryExisted_other": "{{count}} repositories already had one",
+      "summaryUnsupported_one": "{{count}} repository skipped (no assignment baseline)",
+      "summaryUnsupported_other": "{{count}} repositories skipped (no assignment baseline)",
+      "summaryFailed_one": "{{count}} repository failed",
+      "summaryFailed_other": "{{count}} repositories failed",
+      "failedTitle": "These repositories couldn't be processed:",
+      "failedHint": "This is often a transient GitHub error — run the action again to retry only the repositories still missing a PR."
+    },
     "rowRegrade": {
       "title": "Regrade this submission",
       "titleInFlight": "Regrade in progress…",

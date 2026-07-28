@@ -16,6 +16,7 @@ import SubmissionsControls from "@/pages/submissions/SubmissionsControls"
 import { SubmissionsActionsMenu } from "@/pages/submissions/SubmissionsActionsMenu"
 import { AcceptLinkModal } from "@/pages/submissions/AcceptLinkModal"
 import { MetricsModal } from "@/pages/submissions/MetricsModal"
+import { OpenAllFeedbackPrsModal } from "@/pages/submissions/OpenAllFeedbackPrsModal"
 import { DataFreshness } from "@/pages/submissions/DataFreshness"
 import { ConfirmModal } from "@/components/modals"
 import {
@@ -23,6 +24,7 @@ import {
   DEFAULT_PAGE_SIZE,
   acceptedRosterCount,
   acceptedUsernames,
+  assignmentRepoNames,
   buildScoresCsvRows,
   buildSectionLookup,
   classAverage,
@@ -244,6 +246,7 @@ const SubmissionsPageContent = () => {
   // accept disclosure.
   const [metricsOpen, setMetricsOpen] = useState(false)
   const [acceptOpen, setAcceptOpen] = useState(false)
+  const [openAllPrsOpen, setOpenAllPrsOpen] = useState(false)
 
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
   // Gate on a resolved roster so a transient load/permission failure falls back
@@ -463,6 +466,30 @@ const SubmissionsPageContent = () => {
     [orgRepos, classroom, assignment, students],
   )
   const acceptedAvailable = !isGroupAssignment && orgRepos != null
+
+  // Every existing assignment repo name (individual + group), for the bulk
+  // "Open all Feedback PRs" action. Derived from the already-loaded org repo
+  // list, so no extra reads. Only meaningful for a live-capable owner on a
+  // non-empty_repo assignment (the action is hidden otherwise).
+  const allAssignmentRepos = useMemo(
+    () =>
+      assignmentRepoNames({
+        isGroup: isGroupAssignment,
+        repos: orgRepos,
+        classroom: classroom ?? "",
+        assignment: assignment ?? "",
+        students,
+        siblingSlugs,
+      }),
+    [
+      isGroupAssignment,
+      orgRepos,
+      classroom,
+      assignment,
+      students,
+      siblingSlugs,
+    ],
+  )
 
   // Group repos that exist but have no submission yet: for group assignments the
   // repo is named after the founder (not each member), so acceptance can't be
@@ -948,6 +975,14 @@ const SubmissionsPageContent = () => {
             onMetrics={liveCapable ? undefined : () => setMetricsOpen(true)}
             onCollect={() => collectScores.collect()}
             onRegradeAll={() => setRegradeConfirmOpen(true)}
+            // Bulk-open Feedback PRs: owner-only (needs admin on every repo,
+            // like the live reads), never for empty_repo (no PRs), and only
+            // when there are repos to target.
+            onOpenAllPrs={
+              isOwner && !isEmptyRepoAssignment && allAssignmentRepos.length > 0
+                ? () => setOpenAllPrsOpen(true)
+                : undefined
+            }
             viewHref={viewRun?.html_url || viewWorkflowUrl}
             viewLabel={viewLabel}
             onDownloadCsv={downloadScoresCsv}
@@ -1042,6 +1077,14 @@ const SubmissionsPageContent = () => {
         classroom={classroom}
         classroomName={classroomMeta?.name || classroomMeta?.short_name}
         summary={acceptShareSummary}
+      />
+      <OpenAllFeedbackPrsModal
+        open={openAllPrsOpen}
+        onClose={() => setOpenAllPrsOpen(false)}
+        org={org}
+        assignmentName={assignmentInfo?.name ?? assignment}
+        mode={isGroupAssignment ? "group" : "individual"}
+        repos={allAssignmentRepos}
       />
     </PageShell>
   )

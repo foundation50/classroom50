@@ -9,6 +9,7 @@ import {
   acceptedRosterCount,
   acceptedUsernames,
   applyStatusSelection,
+  assignmentRepoNames,
   buildGroupDisplayItems,
   buildGroupRosterDisplayItems,
   buildRosterDisplayItems,
@@ -553,6 +554,72 @@ describe("existingGroupRepos", () => {
   it("returns an empty list for null/undefined repos", () => {
     expect(existingGroupRepos(null, "cs101", "hw1")).toEqual([])
     expect(existingGroupRepos(undefined, "cs101", "hw1")).toEqual([])
+  })
+})
+
+describe("assignmentRepoNames", () => {
+  const roster = [
+    student({ username: "alice" }),
+    student({ username: "bob" }),
+    student({ username: "charlie" }),
+  ]
+
+  it("forward-constructs individual repo names for accepted students only", () => {
+    const repos = [
+      repo("cs101-hw1-alice"),
+      repo("cs101-hw1-bob"),
+      repo("cs101-hw2-alice"), // sibling assignment
+      repo("unrelated"),
+    ]
+    const names = assignmentRepoNames({
+      isGroup: false,
+      repos,
+      classroom: "cs101",
+      assignment: "hw1",
+      students: roster,
+    }).toSorted()
+    // charlie has no hw1 repo; hw2/unrelated are excluded.
+    expect(names).toEqual(["cs101-hw1-alice", "cs101-hw1-bob"])
+  })
+
+  it("uses reverse-parsed group repo names for a group assignment", () => {
+    const repos = [
+      repo("cs101-hw1-team-rocket"),
+      repo("cs101-hw1-team-magma"),
+      repo("cs101-hw2-team-aqua"),
+    ]
+    const names = assignmentRepoNames({
+      isGroup: true,
+      repos,
+      classroom: "cs101",
+      assignment: "hw1",
+      students: [],
+    }).toSorted()
+    expect(names).toEqual(["cs101-hw1-team-magma", "cs101-hw1-team-rocket"])
+  })
+
+  it("guards a group assignment against a slug-extending sibling", () => {
+    const names = assignmentRepoNames({
+      isGroup: true,
+      repos: [repo("cs101-hw1-bonus-team")],
+      classroom: "cs101",
+      assignment: "hw1",
+      students: [],
+      siblingSlugs: ["hw1", "hw1-bonus"],
+    })
+    expect(names).toEqual([])
+  })
+
+  it("returns an empty list when the org repo list isn't loaded", () => {
+    expect(
+      assignmentRepoNames({
+        isGroup: false,
+        repos: null,
+        classroom: "cs101",
+        assignment: "hw1",
+        students: roster,
+      }),
+    ).toEqual([])
   })
 })
 
