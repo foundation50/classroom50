@@ -354,23 +354,24 @@ func ParseDueTime(raw string, loc *time.Location) (parsed time.Time, hadOffset b
 // no knowable machine zone to attach. Naive-input tolerance lives only in
 // ParseDueTime.
 func ValidateDueDate(due string) error {
-	if due == "" {
-		return nil
-	}
-	if _, err := time.Parse(time.RFC3339, due); err != nil {
-		return fmt.Errorf("due %q is not an RFC 3339 timestamp with timezone (e.g., 2026-09-15T23:59:00-04:00)", due)
-	}
-	return nil
+	return validateRFC3339Field("due", due, "2026-09-15T23:59:00-04:00")
 }
 
 // ValidateAvailableFrom guards the stored release date, same shape rule as
 // ValidateDueDate: empty (always listed) or an RFC 3339 timestamp with offset.
 func ValidateAvailableFrom(availableFrom string) error {
-	if availableFrom == "" {
+	return validateRFC3339Field("available_from", availableFrom, "2026-09-15T00:00:00-04:00")
+}
+
+// validateRFC3339Field accepts an empty value (feature off) or a full RFC 3339
+// timestamp with a zone; anything else is rejected with a field-named, example-
+// bearing error. Single source for the due / available_from stored-form checks.
+func validateRFC3339Field(field, value, example string) error {
+	if value == "" {
 		return nil
 	}
-	if _, err := time.Parse(time.RFC3339, availableFrom); err != nil {
-		return fmt.Errorf("available_from %q is not an RFC 3339 timestamp with timezone (e.g., 2026-09-15T00:00:00-04:00)", availableFrom)
+	if _, err := time.Parse(time.RFC3339, value); err != nil {
+		return fmt.Errorf("%s %q is not an RFC 3339 timestamp with timezone (e.g., %s)", field, value, example)
 	}
 	return nil
 }

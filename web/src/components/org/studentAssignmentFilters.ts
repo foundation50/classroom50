@@ -71,9 +71,8 @@ const matchesFilters = (
   accepted: boolean,
   now: number,
 ): boolean => {
-  // Link-only by default: an assignment is listed for a student only once it's
-  // released (release date set and passed). An already-accepted assignment
-  // (their repo exists) always shows so they can get back to their work.
+  // Hide link-only assignments unless the student already accepted (see
+  // isListableToStudent) — an accepted assignment always stays reachable.
   if (!isListableToStudent(assignment, accepted, now)) return false
   if (filters.status === "accepted" && !accepted) return false
   if (filters.status === "todo" && accepted) return false

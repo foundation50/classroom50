@@ -414,8 +414,7 @@ async function buildAssignmentEntry(
       entry.due_meta = due_meta
     }
   }
-  // Release date, normalized the same way as `due` (buildDueFields builds a UTC
-  // instant + provenance); remapped onto the available_from keys.
+  // Reuses buildDueFields (UTC instant + provenance), remapped to available_from.
   if (input.available_from_date?.trim()) {
     const { due, due_meta } = buildDueFields(input.available_from_date.trim())
     entry.available_from = due

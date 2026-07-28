@@ -178,6 +178,28 @@ const TemplateAccessButton = ({
   )
 }
 
+// Warns teachers why an assignment isn't on students' lists yet: it stays
+// link-only until its release date passes. Renders nothing once released.
+const ReleaseStateBadge = ({ assignment }: { assignment: Assignment }) => {
+  const { t } = useTranslation()
+  const releasesAt = assignment.available_from
+  if (releasesAt && isPastDue(releasesAt)) return null
+  return (
+    <Badge
+      tone="warning"
+      size="sm"
+      className="mt-1 whitespace-nowrap"
+      title={t("assignments.table.linkOnlyTitle")}
+    >
+      {releasesAt
+        ? t("assignments.table.scheduled", {
+            date: formatDueDateTime(releasesAt),
+          })
+        : t("assignments.table.linkOnly")}
+    </Badge>
+  )
+}
+
 const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
   <>
     {Array.from({ length: rows }).map((_, i) => (
@@ -284,27 +306,7 @@ const AssignmentsTable = ({
                   <div className="font-mono text-xs text-base-content/70">
                     {assignment.slug}
                   </div>
-                  {(() => {
-                    // Students only see an assignment once its release date has
-                    // passed; otherwise it's link-only. Flag the hidden cases so
-                    // teachers know why students can't see it in their list.
-                    const releasesAt = assignment.available_from
-                    if (releasesAt && isPastDue(releasesAt)) return null
-                    return (
-                      <Badge
-                        tone="warning"
-                        size="sm"
-                        className="mt-1 whitespace-nowrap"
-                        title={t("assignments.table.linkOnlyTitle")}
-                      >
-                        {releasesAt
-                          ? t("assignments.table.scheduled", {
-                              date: formatDueDateTime(releasesAt),
-                            })
-                          : t("assignments.table.linkOnly")}
-                      </Badge>
-                    )
-                  })()}
+                  <ReleaseStateBadge assignment={assignment} />
                 </td>
                 <td
                   onClick={() =>

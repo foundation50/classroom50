@@ -892,45 +892,35 @@ func parseTemplateRef(raw string) (templateArg, error) {
 // zone, then converted. The original input and applied offset/zone are kept in
 // due_meta so a wrong-zone deadline stays auditable.
 func normalizeDueDate(raw string) (string, *assignment.DueMeta, error) {
+	return normalizeLocalDate("--due", raw)
+}
+
+// normalizeAvailableFrom is the --available-from release-date counterpart of
+// normalizeDueDate; both share normalizeLocalDate and reuse the DueMeta pair.
+func normalizeAvailableFrom(raw string) (string, *assignment.DueMeta, error) {
+	return normalizeLocalDate("--available-from", raw)
+}
+
+// normalizeLocalDate normalizes a wall-clock date flag value to a stored UTC
+// instant plus provenance. `flag` names the source flag for error messages. A
+// value with an offset is converted to UTC; a zone-less value is interpreted in
+// the machine's local zone (failing loudly when it can't be resolved) so the
+// stored instant is never a guess.
+func normalizeLocalDate(flag, raw string) (string, *assignment.DueMeta, error) {
 	if raw == "" {
 		return "", nil, nil
 	}
 	loc, locErr := localDueLocation()
 	t, hadOffset, err := assignment.ParseDueTime(raw, loc)
 	if err != nil {
-		return "", nil, fmt.Errorf("invalid --due: %w", err)
+		return "", nil, fmt.Errorf("invalid %s: %w", flag, err)
 	}
 	if !hadOffset && locErr != nil {
 		// Zone-less value depends entirely on the local zone, but $TZ was
 		// unresolvable. Fail loudly rather than storing the wrong instant.
 		return "", nil, fmt.Errorf(
-			"invalid --due: %q has no timezone offset and the local timezone "+
-				"could not be resolved (%v); pass an explicit offset like -04:00", raw, locErr)
-	}
-	if hadOffset {
-		return t.UTC().Format(time.RFC3339), assignment.NewDueMeta(raw, t, assignment.DueSourceExplicit), nil
-	}
-	meta := assignment.NewDueMeta(raw, t, assignment.DueSourceAuto)
-	meta.Zone = dueZoneName(loc, t)
-	return t.UTC().Format(time.RFC3339), meta, nil
-}
-
-// normalizeAvailableFrom mirrors normalizeDueDate for the --available-from
-// release date: empty → ("", nil, nil); otherwise the value is normalized to a
-// UTC instant with matching provenance (reusing DueMeta for the pair).
-func normalizeAvailableFrom(raw string) (string, *assignment.DueMeta, error) {
-	if raw == "" {
-		return "", nil, nil
-	}
-	loc, locErr := localDueLocation()
-	t, hadOffset, err := assignment.ParseDueTime(raw, loc)
-	if err != nil {
-		return "", nil, fmt.Errorf("invalid --available-from: %w", err)
-	}
-	if !hadOffset && locErr != nil {
-		return "", nil, fmt.Errorf(
-			"invalid --available-from: %q has no timezone offset and the local timezone "+
-				"could not be resolved (%v); pass an explicit offset like -04:00", raw, locErr)
+			"invalid %s: %q has no timezone offset and the local timezone "+
+				"could not be resolved (%v); pass an explicit offset like -04:00", flag, raw, locErr)
 	}
 	if hadOffset {
 		return t.UTC().Format(time.RFC3339), assignment.NewDueMeta(raw, t, assignment.DueSourceExplicit), nil
