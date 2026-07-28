@@ -22,10 +22,13 @@ type ensureServer struct {
 	existingPRState string // non-empty -> the base+head PR list returns one PR in that state
 	refExists       bool   // POST /git/refs 422 "Reference already exists"
 	existingBaseSHA string // GET /git/ref/heads/feedback SHA when refExists ("" -> read 404s)
+	refReadStatus   int    // when refExists and non-zero, GET /git/ref/heads/feedback returns this status (overrides existingBaseSHA)
 	headHasDiff     bool   // first pulls POST succeeds immediately (no zero-diff 422)
 	failPRCreate    bool   // every pulls POST 403
 	prCreateRace    bool   // pulls POST 422 "already exists" and the NEXT list reports one
 	failLabelAdd    bool   // POST /issues/{n}/labels fails
+	failRefPatch    bool   // PATCH /git/refs/heads/main 422 (lost the fast-forward race)
+	retryablePRList int    // fail the first N GET /pulls with a retryable 502, then behave normally
 
 	prListStates []string
 
@@ -35,6 +38,7 @@ type ensureServer struct {
 	refPatches    int
 	prCreates     int
 	labelAdds     int
+	prListCalls   int
 
 	lastCommitMessage string
 	lastCommitTree    string
@@ -55,6 +59,13 @@ func (s *ensureServer) mux(t *testing.T) *http.ServeMux {
 
 	mux.HandleFunc("/repos/o/r/pulls", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
+			s.prListCalls++
+			// Ride out the whole-ensure retry: fail the first N existence
+			// probes with a retryable 502, then behave normally.
+			if s.prListCalls <= s.retryablePRList {
+				write422or403(w, http.StatusBadGateway, `{"message":"Server Error"}`)
+				return
+			}
 			s.prListStates = append(s.prListStates, r.URL.Query().Get("state"))
 			if s.existingPRState != "" || (s.prCreateRace && s.prCreates > 0) {
 				state := s.existingPRState
@@ -104,6 +115,10 @@ func (s *ensureServer) mux(t *testing.T) *http.ServeMux {
 
 	mux.HandleFunc("/repos/o/r/git/ref/heads/feedback", func(w http.ResponseWriter, _ *http.Request) {
 		s.refReads++
+		if s.refReadStatus != 0 {
+			write422or403(w, s.refReadStatus, `{"message":"Server Error"}`)
+			return
+		}
 		if s.existingBaseSHA == "" {
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = io.WriteString(w, `{"message":"Not Found"}`)
@@ -137,6 +152,12 @@ func (s *ensureServer) mux(t *testing.T) *http.ServeMux {
 			return
 		}
 		s.refPatches++
+		if s.failRefPatch {
+			// Lost the fast-forward race (a student pushed between our
+			// branch-tip read and this PATCH): GitHub 422s a non-fast-forward.
+			write422or403(w, http.StatusUnprocessableEntity, `{"message":"Update is not a fast forward"}`)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"ref": "refs/heads/main"})
 	})
 
@@ -337,5 +358,70 @@ func TestEnsure_GroupLabel(t *testing.T) {
 	}
 	if len(s.lastAddedLabels) != 1 || s.lastAddedLabels[0] != "Group Assignment" {
 		t.Errorf("added labels = %v, want [Group Assignment]", s.lastAddedLabels)
+	}
+}
+
+// TestEnsure_RetryableFailureThenSuccess pins the whole-ensure retry loop (the
+// reason this package rides out GitHub's post-create git-data lag): the first
+// existence probe 502s (retryable), so the ensure retries and the second
+// attempt opens the PR. Without the loop this would surface the 502 as a
+// failure.
+func TestEnsure_RetryableFailureThenSuccess(t *testing.T) {
+	s := &ensureServer{retryablePRList: 1, headHasDiff: true}
+	if err := runEnsure(t, s, contract.ModeIndividual); err != nil {
+		t.Fatalf("a retryable 502 on attempt 1 should be ridden out, got %v", err)
+	}
+	if s.prListCalls < 2 {
+		t.Errorf("existence probe called %d times, want >=2 (a retry after the 502)", s.prListCalls)
+	}
+	if s.prCreates == 0 {
+		t.Error("PR never created after the retry succeeded")
+	}
+}
+
+// TestEnsure_RefPatchFailureSurfacesError pins the lost-ref-race path the
+// force:false empty commit is built around: when a student pushes between our
+// branch-tip read and the fast-forward PATCH, GitHub 422s the non-fast-forward,
+// and the ensure surfaces that as a (failed-bucket) error rather than opening a
+// PR over a stale head. 422 is non-retryable, so a re-run — by which point the
+// student's push gives the head a diff — heals it.
+func TestEnsure_RefPatchFailureSurfacesError(t *testing.T) {
+	s := &ensureServer{failRefPatch: true}
+	err := runEnsure(t, s, contract.ModeIndividual)
+	if err == nil {
+		t.Fatal("want an error when the fast-forward PATCH loses the race, got nil")
+	}
+	if isAlreadyExists(err) || isBaseMismatch(err) {
+		t.Errorf("a lost ref race must be a plain (failed) error, got %v", err)
+	}
+	if s.commitCreates != 1 {
+		t.Errorf("empty commit created %d times, want 1 (created before the failing PATCH)", s.commitCreates)
+	}
+	// The retried create must never run: the head never fast-forwarded, so
+	// opening a PR now would be over the stale head.
+	if s.prCreates != 1 {
+		t.Errorf("pulls POST attempted %d times, want 1 (no create after the PATCH failed)", s.prCreates)
+	}
+}
+
+// TestEnsure_UnverifiableBaseIsNotAdopted pins the safety rule that an
+// unverifiable existing base is as unsafe as a wrong one: after the ref-create
+// 422 (already exists), a NON-404 read-back error (here a 500) must fail the
+// ensure — never silently adopt the branch and open a PR over an unverified
+// base.
+func TestEnsure_UnverifiableBaseIsNotAdopted(t *testing.T) {
+	s := &ensureServer{refExists: true, refReadStatus: http.StatusInternalServerError}
+	err := runEnsure(t, s, contract.ModeIndividual)
+	if err == nil {
+		t.Fatal("want an error when the existing base can't be verified, got nil")
+	}
+	if isAlreadyExists(err) || isBaseMismatch(err) {
+		t.Errorf("an unverifiable base must be a plain error, not exists/mismatch, got %v", err)
+	}
+	if s.refReads == 0 {
+		t.Error("the existing feedback ref was never read back")
+	}
+	if s.prCreates != 0 {
+		t.Errorf("PR created (%d times) over an unverified base", s.prCreates)
 	}
 }

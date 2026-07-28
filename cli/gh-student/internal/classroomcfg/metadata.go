@@ -29,9 +29,10 @@ import (
 // Feedback-PR baseline as "the commit that introduced .classroom50.yaml", not
 // by matching the commit subject. Every accept client (this CLI, the web GUI,
 // any future client) MUST create this file in its accept commit; the commit
-// subject carries no contract. Mirrored runner-side as
-// runner.ACCEPT_MARKER_PATH (cli/gh-teacher/skeleton/dotgithub/scripts/runner.py).
-const MetadataPath = ".classroom50.yaml"
+// subject carries no contract. Aliased to the shared contract constant so the
+// runner-side ACCEPT_MARKER_PATH and the teacher CLI can't drift from it
+// (cli/gh-teacher/skeleton/dotgithub/scripts/runner.py).
+const MetadataPath = contract.MetadataPath
 
 // AutogradeWorkflowPath is the in-repo destination for the autograde shim
 // written at accept time.

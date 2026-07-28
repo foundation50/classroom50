@@ -16,10 +16,10 @@ import (
 )
 
 // metadataPath is the in-repo accept marker whose introducing commit anchors
-// the frozen `feedback` base. Kept as a local const (not shared) to avoid
-// widening cli/shared; byte-identical with classroomcfg.MetadataPath
-// (cli/gh-student) and the runner's ACCEPT_MARKER_PATH.
-const metadataPath = ".classroom50.yaml"
+// the frozen `feedback` base. Aliased to the shared contract constant so this
+// fourth reader can't drift from the student CLI, the runner
+// (ACCEPT_MARKER_PATH), and the web GUI.
+const metadataPath = contract.MetadataPath
 
 // errBaseMismatch marks the never-retryable poisoned-base case: the `feedback`
 // branch is frozen at a commit other than the accept SHA (a student
@@ -60,8 +60,15 @@ func isFeedbackPRRetryable(err error) bool {
 //
 // Ports the accept-side flow (cli/gh-student/feedback_pr.go) to the teacher
 // token and the teacher CLI's client (which has no Patch verb — PATCH goes
-// through Request). Keep behavior in lockstep with that file and the runner's
-// ensure_feedback_pr.py.
+// through Request). Keep the GitHub-facing sequence in lockstep with that file
+// and the runner's ensure_feedback_pr.py — but note two DELIBERATE divergences
+// from the student port, so a future sync doesn't "fix" them back: (1) the
+// success/exists/mismatch outcomes are returned as the errAlreadyExists /
+// errBaseMismatch sentinels (the student side returns plain nil for "exists")
+// so run()'s summary can bucket them; (2) verbose/UI reporting lives in the
+// caller, not here. A parity guard would be a shared core returning a typed
+// outcome; until then, treat any behavioral edit here as one to mirror in the
+// student CLI and the runner.
 //
 // branch is the repo's settled default branch (the head the PR opens against),
 // resolved once by the caller from the same repo-object read that gates
@@ -153,11 +160,17 @@ func feedbackPRRaceOr(client githubapi.Client, org, repoName, branch string, cre
 	return createErr
 }
 
-// acceptCommitSHA recovers the accept commit — the earliest commit touching the
-// .classroom50.yaml marker — the same resolution rule the runner's
-// baseline_sha() applies, so the feedback base frozen here matches what the
-// runner later verifies. The history is walked to exhaustion rather than
-// trusting one page.
+// acceptCommitSHA recovers the accept commit — the oldest commit touching the
+// .classroom50.yaml marker — via the commits API, the same rule the web GUI's
+// getOldestCommitShaForPath uses. Both are checkout-less API clients, so they
+// approximate the runner's git-side baseline_sha() (which uses
+// `git log --reverse --first-parent --diff-filter=A`, i.e. the oldest commit
+// that *added* the marker on the mainline). The two agree in the normal
+// single-add case; they can differ only when the marker is deleted-and-readded
+// or added off the mainline, in which case the runner's base-SHA check refuses
+// to adopt the frozen branch (a mismatch an org admin resolves). The history is
+// walked to exhaustion rather than trusting one page — a wrong (newer) SHA is
+// worse than a slow read once the marker's history exceeds one page.
 func acceptCommitSHA(client githubapi.Client, org, repoName string) (string, error) {
 	commits, err := githubapi.PaginateAll[struct {
 		SHA string `json:"sha"`

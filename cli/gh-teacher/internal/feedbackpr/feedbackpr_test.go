@@ -257,6 +257,62 @@ func TestRun_BlockedBaseMismatch(t *testing.T) {
 	}
 }
 
+// TestRun_NonMainDefaultBranch pins that the head branch is resolved from the
+// repo's settled default branch, not a hardcoded `main`: a repo whose default
+// is `master` is probed, opened, and counted against the org:master head. The
+// whole reason defaultBranch reads the repo object is this case.
+func TestRun_NonMainDefaultBranch(t *testing.T) {
+	// classroomMux must not register cs-hello-alice (it would hardcode main and
+	// collide), so pass no repoStates and wire the master repo by hand.
+	mux := classroomMux(t, assignmentsJSON(t, helloEntry), []string{"alice"}, nil)
+	base := "/repos/o/cs-hello-alice"
+	mux.HandleFunc(base, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"default_branch": "master"})
+	})
+	var listedHead, prHead string
+	mux.HandleFunc(base+"/pulls", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			listedHead = r.URL.Query().Get("head")
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		var pr map[string]string
+		_ = json.Unmarshal(body, &pr)
+		prHead = pr["head"]
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"number": 1})
+	})
+	mux.HandleFunc(base+"/commits", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]string{{"sha": "accept-sha"}})
+	})
+	mux.HandleFunc(base+"/git/refs", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ref": "refs/heads/feedback"})
+	})
+	mux.HandleFunc(base+"/labels", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{}`)
+	})
+	mux.HandleFunc(base+"/issues/1/labels", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `[]`)
+	})
+
+	out, _, err := runCmd(t, mux, params(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "1 opened, 0 already had one, 0 blocked, 0 failed (of 1 repo(s))") {
+		t.Errorf("summary not as expected:\n%s", out)
+	}
+	if listedHead != "o:master" {
+		t.Errorf("existence probe head = %q, want o:master", listedHead)
+	}
+	if prHead != "master" {
+		t.Errorf("PR head = %q, want master", prHead)
+	}
+}
+
 // TestRun_EmptyRepoAssignmentRefused pins the up-front guard: an empty_repo
 // assignment has no baseline, so the command refuses rather than churning.
 func TestRun_EmptyRepoAssignmentRefused(t *testing.T) {

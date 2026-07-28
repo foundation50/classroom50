@@ -57,6 +57,12 @@ func TestContractLiterals(t *testing.T) {
 		// (classroom50-feedback-base-lock) — changing it strands them.
 		{"FeedbackBaseBranch", FeedbackBaseBranch, "feedback"},
 		{"FeedbackPRTitle", FeedbackPRTitle, "Feedback"},
+		// MetadataPath is mirrored, with NO compile-time link, in runner.py
+		// (ACCEPT_MARKER_PATH), the web GUI, and
+		// schemas/repo-config-v1.schema.json. It anchors the Feedback-PR
+		// baseline, so a drift silently breaks base-SHA resolution across
+		// tools. Update every copy in lockstep on change.
+		{"MetadataPath", MetadataPath, ".classroom50.yaml"},
 	}
 	for _, tc := range cases {
 		if tc.got != tc.want {
