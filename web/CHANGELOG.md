@@ -17,6 +17,18 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.18.0](https://github.com/foundation50/classroom50/compare/web-v1.17.0...web-v1.18.0) (2026-07-28)
+
+
+### Features
+
+* **web:** teacher tools to open and repair Feedback PRs ([#434](https://github.com/foundation50/classroom50/issues/434)) ([91ce244](https://github.com/foundation50/classroom50/commit/91ce244303cf63e99aac4f183442124babd8c97e))
+
+
+### Bug Fixes
+
+* **web:** adopt platform built-ins, fixing astral initials and locale-aware lists ([#431](https://github.com/foundation50/classroom50/issues/431)) ([a8130e2](https://github.com/foundation50/classroom50/commit/a8130e2d1973f96591b3d344db7466ace65edff6))
+
 ## [1.17.0](https://github.com/foundation50/classroom50/compare/web-v1.16.1...web-v1.17.0) (2026-07-28)
 
 
