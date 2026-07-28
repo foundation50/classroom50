@@ -1782,7 +1782,19 @@
     "downloadCsv": "Download scores (CSV)",
     "viewSourceRepo": "View template",
     "emptyRepoNote": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted.",
-    "lockedNotice": "This assignment is locked. Students can't accept or open it, and if it uses a private template the student team's access to that template has been removed. Existing repositories and their submissions are unaffected. Unlock it from the assignments list to reopen it.",
+    "lockedNotice": "This assignment is locked. Students can't accept or open it, and if it uses a private template the student team's access to that template has been removed. Existing repositories and their submissions are unaffected. Unlock it from the Actions menu (or the assignments list) to reopen it.",
+    "lock": {
+      "lockLabel": "Lock assignment",
+      "unlockLabel": "Unlock assignment",
+      "lockTitle": "Close this assignment to students and, for a private template, remove the student team's read on it",
+      "unlockTitle": "Reopen this assignment to students and restore private-template access",
+      "lockTitleModal": "Lock assignment?",
+      "unlockTitleModal": "Unlock assignment?",
+      "lockDescription": "This closes <assignment>{{assignment}}</assignment> to every student — including those who already accepted — on the accept page, the assignments list, the submission view, and the CLI. If it uses a private template, the student team's read on that template is removed too (staff access is unaffected). Existing student repositories are not deleted.",
+      "unlockDescription": "This reopens <assignment>{{assignment}}</assignment> to students. If it uses a private template, the student team's read on that template is restored so students can accept again.",
+      "lockSuccess": "Assignment locked.",
+      "unlockSuccess": "Assignment unlocked."
+    },
     "freshness": {
       "collected": "Submission data synced {{when}}",
       "neverCollected": "Submission data not synced yet",

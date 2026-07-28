@@ -79,3 +79,20 @@ describe("SubmissionsActionsMenu — Open all Feedback PRs item", () => {
     expect(screen.queryByText("submissions.openAllPrs.menuLabel")).toBeNull()
   })
 })
+
+describe("SubmissionsActionsMenu — Lock/Unlock item", () => {
+  it("shows the item only when onLockToggle is provided (authoring tier)", () => {
+    const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)
+    expect(screen.queryByText("submissions.lock.lockLabel")).toBeNull()
+    rerender(<SubmissionsActionsMenu {...baseProps} onLockToggle={() => {}} />)
+    expect(screen.queryByText("submissions.lock.lockLabel")).not.toBeNull()
+  })
+
+  it("shows Unlock when the assignment is already locked", () => {
+    render(
+      <SubmissionsActionsMenu {...baseProps} locked onLockToggle={() => {}} />,
+    )
+    expect(screen.queryByText("submissions.lock.unlockLabel")).not.toBeNull()
+    expect(screen.queryByText("submissions.lock.lockLabel")).toBeNull()
+  })
+})

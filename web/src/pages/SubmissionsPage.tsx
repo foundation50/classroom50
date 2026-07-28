@@ -67,6 +67,8 @@ import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import { useGroupRepoMemberLogins } from "@/hooks/useGroupRepoMembers"
 import useTriggerScoreCollection from "@/hooks/useTriggerScoreCollection"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
+import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
+import { useToast } from "@/context/notifications/NotificationProvider"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
@@ -447,6 +449,8 @@ const SubmissionsPageContent = () => {
   // Dashboard controls — all client-side over already-loaded data.
   // Drives the "Regrade all" confirmation modal (replaces window.confirm).
   const [regradeConfirmOpen, setRegradeConfirmOpen] = useState(false)
+  // Drives the lock/unlock confirmation modal (opened from the actions menu).
+  const [lockConfirmOpen, setLockConfirmOpen] = useState(false)
 
   // Whether a search/filter is narrowing the set — drives the table's
   // "filters hide everything" vs "nothing collected yet" empty state, and its
@@ -637,6 +641,22 @@ const SubmissionsPageContent = () => {
 
   const collectScores = useTriggerScoreCollection(org)
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
+  const { notify } = useToast()
+  // Lock/unlock this assignment. The page owns the mutation (like Regrade all)
+  // and surfaces the non-fatal template-access warning; the menu just triggers
+  // the confirm. Gated on authoring rights at the call site.
+  const setLock = useSetAssignmentLock(org ?? "", classroom ?? "", (result) => {
+    if (result.templateAccessWarning) {
+      notify({ tone: "warning", message: result.templateAccessWarning })
+      return
+    }
+    notify({
+      tone: "success",
+      message: result.locked
+        ? t("submissions.lock.lockSuccess")
+        : t("submissions.lock.unlockSuccess"),
+    })
+  })
   // `anyRegrading` covers the whole-assignment regrade AND every per-row
   // regrade (via the page coordinator), so collect/regrade controls disable
   // while any regrade is in flight.
@@ -997,6 +1017,13 @@ const SubmissionsPageContent = () => {
             viewLabel={viewLabel}
             onDownloadCsv={downloadScoresCsv}
             downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
+            locked={isLockedAssignment}
+            lockPending={setLock.isPending}
+            // Lock/unlock is an authoring-tier action (teacher|hta), same gate
+            // as Regrade all; a plain TA doesn't see it (GitHub 403s them too).
+            onLockToggle={
+              canRegradeAll ? () => setLockConfirmOpen(true) : undefined
+            }
           />
         }
       />
@@ -1056,6 +1083,42 @@ const SubmissionsPageContent = () => {
           regradeAll.regrade()
         }}
         onClose={() => setRegradeConfirmOpen(false)}
+      />
+      <ConfirmModal
+        open={lockConfirmOpen}
+        title={
+          isLockedAssignment
+            ? t("submissions.lock.unlockTitleModal")
+            : t("submissions.lock.lockTitleModal")
+        }
+        description={
+          <Trans
+            i18nKey={
+              isLockedAssignment
+                ? "submissions.lock.unlockDescription"
+                : "submissions.lock.lockDescription"
+            }
+            values={{ assignment: assignmentInfo?.name ?? assignment }}
+            components={{ assignment: <span className="font-semibold" /> }}
+          />
+        }
+        confirmLabel={
+          isLockedAssignment
+            ? t("submissions.lock.unlockLabel")
+            : t("submissions.lock.lockLabel")
+        }
+        cancelLabel={t("common.cancel")}
+        dangerous={!isLockedAssignment}
+        needsConfirm={false}
+        onConfirm={async () => {
+          await setLock.mutateAsync({
+            org,
+            classroom,
+            slug: assignment,
+            locked: !isLockedAssignment,
+          })
+        }}
+        onClose={() => setLockConfirmOpen(false)}
       />
       <MetricsModal
         open={metricsOpen && !liveCapable}

@@ -5,6 +5,8 @@ import {
   ExternalLink,
   FileDown,
   GitPullRequest,
+  Lock,
+  LockOpen,
   RefreshCw,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -32,6 +34,9 @@ export function SubmissionsActionsMenu({
   viewLabel,
   onDownloadCsv,
   downloadDisabled,
+  locked = false,
+  lockPending = false,
+  onLockToggle,
 }: {
   collecting: boolean
   regrading: boolean
@@ -58,6 +63,14 @@ export function SubmissionsActionsMenu({
   viewLabel: string
   onDownloadCsv: () => void
   downloadDisabled: boolean
+  // Current locked state, for the Lock/Unlock item's label and icon.
+  locked?: boolean
+  // Whether a lock/unlock is mid-flight, to disable the item and show progress.
+  lockPending?: boolean
+  // Opens the lock/unlock confirmation. Omitted (item hidden) when the viewer
+  // can't author assignments (teacher|hta) — the page owns the mutation, this
+  // is just the affordance.
+  onLockToggle?: () => void
 }) {
   const { t } = useTranslation()
   const busy = collecting || regrading
@@ -208,6 +221,42 @@ export function SubmissionsActionsMenu({
           className="my-1 border-t border-base-content/10"
           role="separator"
         />
+        {/* Lock / Unlock — an assignment-lifecycle action (teacher|hta), so the
+            page omits onLockToggle for a viewer who can't author. Its own group,
+            above the CSV export. */}
+        {onLockToggle && (
+          <>
+            <li>
+              <button
+                type="button"
+                disabled={lockPending}
+                title={
+                  locked
+                    ? t("submissions.lock.unlockTitle")
+                    : t("submissions.lock.lockTitle")
+                }
+                onClick={() => {
+                  closeMenu()
+                  if (lockPending) return
+                  onLockToggle()
+                }}
+              >
+                {locked ? (
+                  <LockOpen aria-hidden="true" className="size-4" />
+                ) : (
+                  <Lock aria-hidden="true" className="size-4" />
+                )}
+                {locked
+                  ? t("submissions.lock.unlockLabel")
+                  : t("submissions.lock.lockLabel")}
+              </button>
+            </li>
+            <div
+              className="my-1 border-t border-base-content/10"
+              role="separator"
+            />
+          </>
+        )}
         <li>
           <button
             type="button"
