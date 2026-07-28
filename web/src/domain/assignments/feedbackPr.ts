@@ -11,10 +11,13 @@ import { is422NoCommitsBetween } from "@/github-core/errors"
 import {
   getBranchRefRepo,
   getCommitByRepo,
+  getOldestCommitShaForPath,
   isFreshRepoLagError,
   listPullRequestsByBaseHead,
   withFreshRepoRetry,
 } from "@/github-core/queries"
+import { getRepo } from "@/github-core/repoReads"
+import type { AssignmentMode } from "@/types/classroom"
 import { prefixCommit } from "@/util/commit"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import { logger } from "@/lib/logger"
@@ -339,5 +342,75 @@ async function pushEmptyCommit(params: {
     repo,
     branch,
     commitSha: commit.sha,
+  })
+}
+
+// The baseline commit to freeze `feedback` at: the OLDEST commit touching the
+// .classroom50.yaml marker (the accept commit), or null when the marker can't
+// be resolved — the same rule the runner's baseline_sha() applies. Read-only
+// and 404/lag-tolerant (any read failure collapses to null) so callers decide
+// what to do with an unresolvable baseline. Accept adds a just-committed-SHA
+// fallback on top; the teacher repair has no such fallback and defers instead.
+export async function resolveFeedbackBaselineSha(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+): Promise<string | null> {
+  return getOldestCommitShaForPath(
+    client,
+    org,
+    repo,
+    ".classroom50.yaml",
+  ).catch(() => null)
+}
+
+// A teacher-initiated repair returns the ensure result, plus an "unsupported"
+// verdict for a repo that structurally can't have a Feedback PR (no baseline
+// marker — e.g. an empty_repo assignment), which the UI explains rather than
+// surfacing as a transient failure to retry.
+export type RepairFeedbackPrResult =
+  EnsureFeedbackPrResult | { ok: false; reason: string; unsupported: true }
+
+// Repair a missing Feedback PR from the teacher's side (issue #347): a teacher
+// (org admin) runs the SAME idempotent ensureFeedbackPullRequest as accept,
+// with their own token, when the student's accept-time attempt failed
+// (GitHub outage / transient error) or the repo predates the feature. Resolves
+// its own {branch, baseline SHA, mode}: the settled default branch from the
+// repo object, the baseline from the .classroom50.yaml marker.
+//
+// Reuses ensureFeedbackPullRequest so a teacher-repaired PR is byte-identical
+// to an accept-time or runner-opened one and the runner still adopts it by
+// base+head. Deliberately does NOT widen the base-mismatch guard: a `feedback`
+// branch frozen at the wrong SHA still defers (an org admin must delete it),
+// never force-updates.
+export async function repairFeedbackPullRequest(params: {
+  client: GitHubClient
+  org: string
+  repo: string
+  mode: AssignmentMode
+}): Promise<RepairFeedbackPrResult> {
+  const { client, org, repo, mode } = params
+
+  const repoInfo = await getRepo(client, org, repo)
+  if (!repoInfo) {
+    return { ok: false, reason: "repo-not-found", unsupported: true }
+  }
+  const branch = repoInfo.default_branch || "main"
+
+  const acceptCommitSha = await resolveFeedbackBaselineSha(client, org, repo)
+  if (!acceptCommitSha) {
+    // No .classroom50.yaml marker means no frozen baseline to open the PR
+    // against (an empty_repo assignment, or a repo that isn't a Classroom 50
+    // assignment repo). The runner refuses the same case.
+    return { ok: false, reason: "no-baseline", unsupported: true }
+  }
+
+  return ensureFeedbackPullRequest({
+    client,
+    owner: org,
+    repo,
+    branch,
+    acceptCommitSha,
+    mode,
   })
 }

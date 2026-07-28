@@ -7,6 +7,7 @@ import {
   feedbackLabelForMode,
   feedbackPrBody,
   ensureFeedbackPullRequest,
+  repairFeedbackPullRequest,
 } from "./feedbackPr"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import type { GitHubClient } from "@/github-core/client"
@@ -428,5 +429,152 @@ describe("ensureFeedbackPullRequest", () => {
     expect(list?.url).toContain(`base=${FEEDBACK_BASE_BRANCH}`)
     // Owner-qualified by the helper, so callers pass a bare branch name.
     expect(list?.url).toContain("head=o%3Amain")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Teacher-side repair (issue #347). It resolves its own branch (repo default)
+// and baseline SHA (.classroom50.yaml marker) before delegating to the SAME
+// ensureFeedbackPullRequest, so these scenarios focus on that resolution and
+// the unsupported verdicts; the ensure behavior itself is covered above.
+// ---------------------------------------------------------------------------
+
+// Extends the fakeClient's routes with the two reads repair adds:
+// GET /repos/o/r (repo object -> default_branch) and the marker commit history.
+function fakeRepairClient(opts: {
+  repoMissing?: boolean
+  defaultBranch?: string
+  markerCommits?: string[] // oldest resolves to markerCommits[last]
+  existingPr?: { number: number; state: string }
+}) {
+  const calls: Call[] = []
+  let refPatched = false
+
+  const request = vi.fn(
+    async (url: string, init?: { method?: string; body?: unknown }) => {
+      const method = init?.method ?? "GET"
+      calls.push({ url, method, body: init?.body })
+
+      if (url === "/repos/o/r") {
+        if (opts.repoMissing) throw apiError(404, "Not Found")
+        return { default_branch: opts.defaultBranch ?? "main" }
+      }
+      if (url.startsWith("/repos/o/r/commits?path=")) {
+        // getOldestCommitShaForPath returns newest-first; it takes the last.
+        return (opts.markerCommits ?? []).map((sha) => ({ sha }))
+      }
+      if (url.startsWith("/repos/o/r/pulls?")) {
+        return opts.existingPr ? [opts.existingPr] : []
+      }
+      const head = opts.defaultBranch ?? "main"
+      if (url === "/repos/o/r/pulls" && method === "POST") {
+        if (!refPatched) {
+          throw validationError(`No commits between feedback and ${head}`)
+        }
+        return {
+          number: 1,
+          state: "open",
+          html_url: "https://github.com/o/r/pull/1",
+        }
+      }
+      if (url === "/repos/o/r/git/refs" && method === "POST") return {}
+      if (url === `/repos/o/r/git/ref/heads/${head}`) {
+        return { object: { sha: "accept-sha" } }
+      }
+      if (url === "/repos/o/r/git/commits/accept-sha") {
+        return { sha: "accept-sha", tree: { sha: "tree-sha" } }
+      }
+      if (url === "/repos/o/r/git/commits" && method === "POST") {
+        return { sha: "empty-sha" }
+      }
+      if (url === `/repos/o/r/git/refs/heads/${head}` && method === "PATCH") {
+        refPatched = true
+        return {}
+      }
+      if (url === "/repos/o/r/labels" && method === "POST") return {}
+      if (url === "/repos/o/r/issues/1/labels" && method === "POST") return []
+      throw new Error(`unexpected request: ${method} ${url}`)
+    },
+  )
+
+  const client = { request } as unknown as GitHubClient
+  return { client, calls }
+}
+
+describe("repairFeedbackPullRequest", () => {
+  it("resolves the baseline from the marker and opens the PR against the repo default branch", async () => {
+    const { client, calls } = fakeRepairClient({
+      defaultBranch: "master",
+      markerCommits: ["newer-sha", "accept-sha"],
+    })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+    })
+    expect(result).toEqual({ ok: true, created: true })
+
+    // Base frozen at the OLDEST marker commit (not the newest), the same rule
+    // as accept and the runner.
+    const refCreate = calls.find(
+      (c) => c.url === "/repos/o/r/git/refs" && c.method === "POST",
+    )
+    expect(refCreate?.body).toEqual({
+      ref: `refs/heads/${FEEDBACK_BASE_BRANCH}`,
+      sha: "accept-sha",
+    })
+    // Head is the repo's settled default branch, not a guessed "main".
+    const pr = calls
+      .filter((c) => c.url === "/repos/o/r/pulls" && c.method === "POST")
+      .at(-1)?.body as Record<string, string>
+    expect(pr.head).toBe("master")
+  })
+
+  it("is read-only when a Feedback PR already exists", async () => {
+    const { client, calls } = fakeRepairClient({
+      markerCommits: ["accept-sha"],
+      existingPr: { number: 7, state: "open" },
+    })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+    })
+    expect(result).toEqual({ ok: true, created: false })
+    expect(writeCalls(calls)).toHaveLength(0)
+  })
+
+  it("reports unsupported when the repo has no baseline marker (e.g. empty_repo)", async () => {
+    const { client, calls } = fakeRepairClient({ markerCommits: [] })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+    })
+    expect(result).toEqual({
+      ok: false,
+      reason: "no-baseline",
+      unsupported: true,
+    })
+    // Never attempts any write when there's nothing to anchor the base on.
+    expect(writeCalls(calls)).toHaveLength(0)
+  })
+
+  it("reports unsupported (repo-not-found) when the repo doesn't exist", async () => {
+    const { client } = fakeRepairClient({ repoMissing: true })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+    })
+    expect(result).toEqual({
+      ok: false,
+      reason: "repo-not-found",
+      unsupported: true,
+    })
   })
 })

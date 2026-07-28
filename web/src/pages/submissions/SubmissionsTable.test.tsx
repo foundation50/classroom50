@@ -22,6 +22,12 @@ vi.mock("@/hooks/useGetRepoCollaborators", () => ({
 vi.mock("@/hooks/useGetFeedbackPr", () => ({
   default: () => ({ refetch: vi.fn() }),
 }))
+vi.mock("@/hooks/mutations/useRepairFeedbackPr", () => ({
+  default: () => ({ mutate: vi.fn(), isPending: false }),
+}))
+vi.mock("@/context/notifications/NotificationProvider", () => ({
+  useToast: () => ({ notify: vi.fn() }),
+}))
 vi.mock("@/hooks/useTriggerRegrade", () => ({
   default: () => ({ regrade: vi.fn(), phase: "idle", anyRegrading: false }),
 }))

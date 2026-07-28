@@ -1936,6 +1936,16 @@
       "emptyBody": "No Feedback PR has been opened for <repo>{{repo}}</repo> yet. It's opened when the student accepts the assignment — so if there's nothing to review, the student may not have accepted yet, the assignment may have the Feedback PR disabled, or opening it was deferred (it retries on re-accept, or on the first graded submission).",
       "openRepoPrs": "Open repo PRs"
     },
+    "repairPr": {
+      "hint": "If the student accepted but opening the PR failed (a GitHub outage or transient error), you can open it now.",
+      "repair": "Repair Feedback PR",
+      "repairing": "Repairing…",
+      "created": "Opened the Feedback PR for {{repo}}.",
+      "alreadyExists": "A Feedback PR already exists for {{repo}}.",
+      "noBaseline": "This repository has no assignment baseline, so a Feedback PR can't be opened for it (for example, an empty-repo assignment). Nothing to repair.",
+      "repoNotFound": "Couldn't find the repository {{repo}} — the student may not have accepted yet.",
+      "failed": "Couldn't open the Feedback PR: {{reason}}"
+    },
     "rowRegrade": {
       "title": "Regrade this submission",
       "titleInFlight": "Regrade in progress…",

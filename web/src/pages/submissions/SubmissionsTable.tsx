@@ -56,8 +56,10 @@ import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsM
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
 import useGetFeedbackPr from "@/hooks/useGetFeedbackPr"
+import useRepairFeedbackPr from "@/hooks/mutations/useRepairFeedbackPr"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
-import type { Student } from "@/types/classroom"
+import { useToast } from "@/context/notifications/NotificationProvider"
+import type { AssignmentMode, Student } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 
 const formatDateTime = (datetime: string) =>
@@ -122,18 +124,31 @@ const HistoryLink = ({
     </span>
   )
 
-// Review action: links to the open Feedback PR (opened by the autograde
-// workflow) when one exists, else opens an info modal. The PR is the source of
-// truth. The /pulls lookup is deferred until Review is clicked (an eager per-row
-// query would fan out to one request per repo on mount); on click we refetch.
-const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
+// Review action: links to the open Feedback PR (opened at accept time, or by
+// the autograde runner) when one exists; when none does, offers a teacher-side
+// Repair that re-runs the same idempotent ensure flow with the teacher's token
+// (issue #347 — recovers a PR a student's accept-time attempt failed to open).
+// The PR is the source of truth. The /pulls lookup is deferred until Review is
+// clicked (an eager per-row query would fan out to one request per repo on
+// mount); on click we refetch.
+const ReviewButton = ({
+  org,
+  repo,
+  mode,
+}: {
+  org: string
+  repo: string
+  mode: AssignmentMode
+}) => {
   const { t } = useTranslation()
+  const { notify } = useToast()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
   const [resolving, setResolving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   // enabled: false — driven by refetch() on click, never on mount.
   const { refetch } = useGetFeedbackPr(org, repo, false)
+  const repair = useRepairFeedbackPr()
 
   const handleReview = async () => {
     setResolving(true)
@@ -153,6 +168,44 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
     } finally {
       setResolving(false)
     }
+  }
+
+  // Map the domain's reason code to friendly copy. A `no-baseline` /
+  // `repo-not-found` verdict is structural (no Feedback PR is possible for this
+  // repo), so it stays in the modal rather than as a retryable toast.
+  const repairReasonMessage = (reason: string) =>
+    reason === "no-baseline"
+      ? t("submissions.repairPr.noBaseline")
+      : reason === "repo-not-found"
+        ? t("submissions.repairPr.repoNotFound", { repo })
+        : t("submissions.repairPr.failed", { reason })
+
+  const handleRepair = () => {
+    repair.mutate(
+      { org, repo, mode },
+      {
+        onSuccess: async (result) => {
+          if (result.ok) {
+            notify({
+              tone: "success",
+              durationMs: 5000,
+              message: result.created
+                ? t("submissions.repairPr.created", { repo })
+                : t("submissions.repairPr.alreadyExists", { repo }),
+            })
+            dialogRef.current?.close()
+            // The PR now exists (created or adopted): resolve and open it.
+            const { data: pr } = await refetch()
+            if (pr) window.open(pr.html_url, "_blank", "noopener,noreferrer")
+            return
+          }
+          setErrorMsg(repairReasonMessage(result.reason))
+        },
+        onError: (err) => {
+          setErrorMsg(err instanceof Error ? err.message : String(err))
+        },
+      },
+    )
   }
 
   return (
@@ -198,6 +251,9 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
                 components={{ repo: <MonoLtr /> }}
               />
             </p>
+            <p className="mt-3 text-sm leading-6 text-base-content/70">
+              {t("submissions.repairPr.hint")}
+            </p>
           </>
         )}
         <div className="modal-action">
@@ -209,7 +265,22 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
           >
             {t("submissions.reviewModal.openRepoPrs")}
           </a>
-          <Button size="sm" onClick={() => dialogRef.current?.close()}>
+          {!errorMsg && (
+            <Button
+              size="sm"
+              loading={repair.isPending}
+              loadingLabel={t("submissions.repairPr.repairing")}
+              onClick={handleRepair}
+            >
+              {t("submissions.repairPr.repair")}
+            </Button>
+          )}
+          <Button
+            variant={errorMsg ? undefined : "ghost"}
+            size="sm"
+            disabled={repair.isPending}
+            onClick={() => dialogRef.current?.close()}
+          >
             {t("common.close")}
           </Button>
         </div>
@@ -710,7 +781,11 @@ const SubmissionsTable = ({
               />
               {!emptyRepo && (
                 <>
-                  <ReviewButton org={org} repo={repo} />
+                  <ReviewButton
+                    org={org}
+                    repo={repo}
+                    mode={isGroup ? "group" : "individual"}
+                  />
                   <ActionIconLink
                     href={safeHttpUrl(rest.release)}
                     icon={ScrollText}
