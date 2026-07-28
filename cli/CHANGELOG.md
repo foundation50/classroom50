@@ -17,6 +17,14 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.18.0](https://github.com/foundation50/classroom50/compare/cli-v1.17.0...cli-v1.18.0) (2026-07-28)
+
+
+### Features
+
+* **cli:** open and repair Feedback PRs from the teacher CLI ([#435](https://github.com/foundation50/classroom50/issues/435)) ([70ff18a](https://github.com/foundation50/classroom50/commit/70ff18ae30c95f0823d85f54064dbcc4f9169600))
+* **web:** teacher tools to open and repair Feedback PRs ([#434](https://github.com/foundation50/classroom50/issues/434)) ([91ce244](https://github.com/foundation50/classroom50/commit/91ce244303cf63e99aac4f183442124babd8c97e))
+
 ## [1.17.0](https://github.com/foundation50/classroom50/compare/cli-v1.16.1...cli-v1.17.0) (2026-07-28)
 
 
