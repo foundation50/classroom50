@@ -15,6 +15,7 @@ const SettingsSection = ({
   titleAdornment,
   tone = "default",
   id,
+  className,
   children,
 }: PropsWithChildren<{
   title: string
@@ -23,6 +24,7 @@ const SettingsSection = ({
   titleAdornment?: ReactNode
   tone?: "default" | "danger"
   id?: string
+  className?: string
 }>) => {
   const isDanger = tone === "danger"
 
@@ -33,11 +35,12 @@ const SettingsSection = ({
       radius="2xl"
       shadow={false}
       bordered={!isDanger}
-      className={
+      className={[
         isDanger
           ? "scroll-mt-24 border border-error/30 bg-error/5 p-6"
-          : "scroll-mt-24 p-6"
-      }
+          : "scroll-mt-24 p-6",
+        className ?? "",
+      ].join(" ")}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">

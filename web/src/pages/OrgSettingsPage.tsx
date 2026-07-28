@@ -4,7 +4,7 @@ import { Button, EmphasisLtr, Input, MonoLtr, rtlFlip } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import { useParams } from "@tanstack/react-router"
+import { useParams, useSearch } from "@tanstack/react-router"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useSaveServiceToken } from "@/hooks/mutations/useSaveServiceToken"
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
@@ -145,6 +145,7 @@ export const OrgSettingsPane = () => {
   const { t } = useTranslation()
   const runPat = useSafeSubmit()
   const { org } = useParams({ strict: false })
+  const search = useSearch({ strict: false }) as { focus?: string }
   const [serviceToken, setServiceToken] = useState("")
   const [savedKind, setSavedKind] = useState<null | "saved" | "updated">(null)
   const [expiryDays, setExpiryDays] = useState(String(DEFAULT_EXPIRY_DAYS))
@@ -160,6 +161,22 @@ export const OrgSettingsPane = () => {
   // once they interact; until then it follows the token status.
   const [manualOpen, setManualOpen] = useState<boolean | null>(null)
   const configOpen = manualOpen ?? !tokenAlreadySet
+
+  // Deep-link from the org list's token-health chip (`?focus=serviceToken`):
+  // scroll the section into view, expand the config, and briefly highlight it so
+  // a multi-org teacher lands directly on the rotate flow. Runs once on mount.
+  const focusServiceToken = search?.focus === "serviceToken"
+  const [highlight, setHighlight] = useState(false)
+  useEffect(() => {
+    if (!focusServiceToken) return
+    setManualOpen(true)
+    setHighlight(true)
+    document
+      .getElementById("service-token-section")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+    const id = window.setTimeout(() => setHighlight(false), 2000)
+    return () => window.clearTimeout(id)
+  }, [focusServiceToken])
 
   const [now] = useState(() => Date.now())
 
@@ -199,8 +216,14 @@ export const OrgSettingsPane = () => {
 
   return (
     <SettingsSection
+      id="service-token-section"
       title={t("orgSettings.serviceToken.title")}
       titleAdornment={<ServiceTokenInfo />}
+      className={
+        highlight
+          ? "ring-2 ring-primary ring-offset-2 ring-offset-base-100 transition-shadow"
+          : "transition-shadow"
+      }
     >
       {!tokenStatusLoading &&
         tokenStatus &&
@@ -381,12 +404,18 @@ export const OrgSettingsPane = () => {
               e.stopPropagation()
               if (!patMutation.isPending)
                 void runPat(() =>
-                  patMutation.mutateAsync(serviceToken, {
-                    onSuccess: () => {
-                      setServiceToken("")
-                      setSavedKind(tokenAlreadySet ? "updated" : "saved")
+                  patMutation.mutateAsync(
+                    {
+                      serviceToken,
+                      expiresInDays: expiryValid ? parsedExpiry : undefined,
                     },
-                  }),
+                    {
+                      onSuccess: () => {
+                        setServiceToken("")
+                        setSavedKind(tokenAlreadySet ? "updated" : "saved")
+                      },
+                    },
+                  ),
                 )
             }}
           >

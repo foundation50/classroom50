@@ -1184,6 +1184,20 @@
     "collaboratorsHint_other": "Add or remove collaborators for this assignment repository. This assignment allows up to <count>{{count}}</count> students in addition to the group owner.",
     "manageCollaborators": "Manage collaborators"
   },
+  "serviceTokenHealth": {
+    "summary_one": "{{count}} of {{total}} organizations needs a service-token check.",
+    "summary_other": "{{count}} of {{total}} organizations need a service-token check.",
+    "chip": {
+      "checking": "Checking token…",
+      "ok": "Token OK",
+      "expiringSoon": "Token expiring soon",
+      "expired": "Token expired",
+      "missing": "No service token",
+      "collectFailing": "Collection failing",
+      "unknown": "Token status unknown",
+      "rotateAria": "Review the service token for {{org}}"
+    }
+  },
   "orgSettings": {
     "page": {
       "heading": "Settings",

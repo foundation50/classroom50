@@ -11,6 +11,10 @@ import type { GitHubOrgMembership } from "@/github-core/types"
 import useGetOrgs, { usePendingOrgInvites } from "@/hooks/useGetOrgs"
 import useOrgDisplayName from "@/hooks/useOrgDisplayName"
 import useOrgLastModified from "@/hooks/useOrgLastModified"
+import { useOrgServiceTokenHealth } from "@/hooks/useOrgServiceTokenHealth"
+import type { OrgTokenHealthEntry } from "@/hooks/useOrgServiceTokenHealth"
+import { needsAttention } from "@/util/serviceTokenHealth"
+import { TokenHealthChip } from "@/components/status/TokenHealthChip"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
@@ -22,6 +26,7 @@ import {
   MailOpen,
   Plus,
   ShieldCheck,
+  TriangleAlert,
   User,
 } from "lucide-react"
 import OrgDetailsModal from "@/components/modals/OrgDetailsModal"
@@ -29,7 +34,7 @@ import { AnimatePresence } from "motion/react"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
-import { Badge, Button, Card, Toolbar, cx } from "@/components/ui"
+import { Alert, Badge, Button, Card, Toolbar, cx } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
@@ -296,9 +301,11 @@ function NoAccessBadge() {
 function OrgCard({
   summary,
   updatedAgo,
+  tokenHealth,
 }: {
   summary: Classroom50OrgSummary
   updatedAgo?: string
+  tokenHealth?: OrgTokenHealthEntry
 }) {
   const { t } = useTranslation()
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
@@ -336,9 +343,16 @@ function OrgCard({
               </p>
             )}
 
-            {showNoAccessBadge && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <NoAccessBadge />
+            {(showNoAccessBadge || tokenHealth) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {showNoAccessBadge && <NoAccessBadge />}
+                {tokenHealth && (
+                  <TokenHealthChip
+                    org={org.login}
+                    health={tokenHealth.health}
+                    loading={tokenHealth.loading}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -355,9 +369,11 @@ function OrgCard({
 function OrgRow({
   summary,
   updatedAgo,
+  tokenHealth,
 }: {
   summary: Classroom50OrgSummary
   updatedAgo?: string
+  tokenHealth?: OrgTokenHealthEntry
 }) {
   const { t } = useTranslation()
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
@@ -378,6 +394,15 @@ function OrgRow({
             {showNoAccessBadge && (
               <span className="hidden sm:inline-flex">
                 <NoAccessBadge />
+              </span>
+            )}
+            {tokenHealth && (
+              <span className="hidden sm:inline-flex">
+                <TokenHealthChip
+                  org={org.login}
+                  health={tokenHealth.health}
+                  loading={tokenHealth.loading}
+                />
               </span>
             )}
           </div>
@@ -469,6 +494,34 @@ const OrgsPage = () => {
     [filtered],
   )
   const lastModified = useOrgLastModified(shownLogins, true)
+
+  // Cross-org service-token health, only for orgs the viewer owns and that are
+  // Classroom 50-ready (student/member orgs would 403 on the owner-only secret
+  // read). Reuses the per-org token/collect caches shared with the single-org
+  // panes. Drives the per-card chip and the "N of M need attention" summary.
+  const ownedReadyLogins = useMemo(
+    () =>
+      filtered
+        .filter(
+          (summary) =>
+            isOwnerGitHubOrgRole(summary.membership.role) &&
+            summary.classroom50.status === "ready",
+        )
+        .map((summary) => summary.org.login),
+    [filtered],
+  )
+  const { byOrg: tokenHealthByOrg } = useOrgServiceTokenHealth(
+    ownedReadyLogins,
+    true,
+  )
+  const attentionCount = useMemo(
+    () =>
+      ownedReadyLogins.filter((login) => {
+        const entry = tokenHealthByOrg[login]
+        return entry && !entry.loading && needsAttention(entry.health)
+      }).length,
+    [ownedReadyLogins, tokenHealthByOrg],
+  )
 
   const sorted = useMemo(() => {
     const byName = (a: Classroom50OrgSummary, b: Classroom50OrgSummary) =>
@@ -568,6 +621,18 @@ const OrgsPage = () => {
               </Toolbar>
             )}
 
+            {attentionCount > 0 && (
+              <Alert tone="warning" role="status" className="text-sm">
+                <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+                <span>
+                  {t("serviceTokenHealth.summary", {
+                    count: attentionCount,
+                    total: ownedReadyLogins.length,
+                  })}
+                </span>
+              </Alert>
+            )}
+
             {noSearchResults ? (
               <NoSearchResults
                 title={t("orgs.noResults.title")}
@@ -588,12 +653,14 @@ const OrgsPage = () => {
                         key={summary.org.id}
                         summary={summary}
                         updatedAgo={updatedAgo}
+                        tokenHealth={tokenHealthByOrg[summary.org.login]}
                       />
                     ) : (
                       <OrgRow
                         key={summary.org.id}
                         summary={summary}
                         updatedAgo={updatedAgo}
+                        tokenHealth={tokenHealthByOrg[summary.org.login]}
                       />
                     )
                   })}
