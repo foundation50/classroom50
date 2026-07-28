@@ -11,10 +11,15 @@ import { is422NoCommitsBetween } from "@/github-core/errors"
 import {
   getBranchRefRepo,
   getCommitByRepo,
+  getOldestCommitShaForPath,
   isFreshRepoLagError,
   listPullRequestsByBaseHead,
   withFreshRepoRetry,
+  REPO_READ_CONCURRENCY,
 } from "@/github-core/queries"
+import { getRepo } from "@/github-core/repoReads"
+import type { AssignmentMode } from "@/types/classroom"
+import { mapWithConcurrency } from "@/util/concurrency"
 import { prefixCommit } from "@/util/commit"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import { logger } from "@/lib/logger"
@@ -58,7 +63,8 @@ export function feedbackLabelForMode(mode: string): {
 export function feedbackPrBody(head: string, releaseUrl: string): string {
   return [
     ":wave:! Classroom 50 opened this pull request as a place for your " +
-      "teacher to leave feedback on your work. It updates automatically. " +
+      "teacher to leave feedback on your work. It stays up to date " +
+      "automatically as you push. " +
       "**Don't close or merge this pull request** unless your teacher tells you to.",
     "",
     "Each commit is automatically graded — the latest autograding result " +
@@ -87,15 +93,24 @@ export function feedbackPrBody(head: string, releaseUrl: string): string {
       "comment box below.",
     "",
     `The base branch (\`${FEEDBACK_BASE_BRANCH}\`) is frozen at the starter so the diff ` +
-      "always reflects the full body of work. The PR is managed automatically " +
-      "by the autograde runner; merging it is the teacher-side " +
+      "always reflects the full body of work. The PR is kept up to date " +
+      "automatically; merging it is the teacher-side " +
       '"grading done" signal.',
     "</details>",
   ].join("\n")
 }
 
+// A stable, non-message reason for an ensure/repair failure, so callers can
+// classify without parsing English:
+//   base-mismatch  the `feedback` branch is frozen at the wrong SHA — NEVER
+//                  retryable; only an org admin deleting the branch fixes it.
+//   transient      anything else (a GitHub outage, rate limit, or git-data
+//                  lag) — retryable, so re-running can recover it.
+export type FeedbackPrFailureCode = "base-mismatch" | "transient"
+
 export type EnsureFeedbackPrResult =
-  { ok: true; created: boolean } | { ok: false; reason: string }
+  | { ok: true; created: boolean }
+  | { ok: false; reason: string; code: FeedbackPrFailureCode }
 
 // The frozen base doesn't point where it must. Never retried: unlike git-data
 // lag this can't resolve itself, and only an org admin deleting the branch fixes
@@ -162,6 +177,10 @@ export async function ensureFeedbackPullRequest(
     return {
       ok: false,
       reason: err instanceof Error ? err.message : "Unexpected error",
+      code:
+        err instanceof FeedbackBaseMismatchError
+          ? "base-mismatch"
+          : "transient",
     }
   }
 }
@@ -340,4 +359,172 @@ async function pushEmptyCommit(params: {
     branch,
     commitSha: commit.sha,
   })
+}
+
+// The baseline commit to freeze `feedback` at: the OLDEST commit touching the
+// .classroom50.yaml marker (the accept commit), or null when the marker can't
+// be resolved — the same rule the runner's baseline_sha() applies. Read-only
+// and 404/lag-tolerant (any read failure collapses to null) so callers decide
+// what to do with an unresolvable baseline. Accept adds a just-committed-SHA
+// fallback on top; the teacher repair has no such fallback and defers instead.
+export async function resolveFeedbackBaselineSha(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+): Promise<string | null> {
+  return getOldestCommitShaForPath(
+    client,
+    org,
+    repo,
+    ".classroom50.yaml",
+  ).catch(() => null)
+}
+
+// A teacher-initiated repair returns the ensure result, plus an "unsupported"
+// verdict for a repo that structurally can't have a Feedback PR (no baseline
+// marker — e.g. an empty_repo assignment), which the UI explains rather than
+// surfacing as a transient failure to retry.
+export type RepairFeedbackPrResult =
+  EnsureFeedbackPrResult | { ok: false; reason: string; unsupported: true }
+
+// Repair a missing Feedback PR from the teacher's side (issue #347): a teacher
+// (org admin) runs the SAME idempotent ensureFeedbackPullRequest as accept,
+// with their own token, when the student's accept-time attempt failed
+// (GitHub outage / transient error) or the repo predates the feature. Resolves
+// its own {branch, baseline SHA, mode}: the settled default branch from the
+// repo object, the baseline from the .classroom50.yaml marker.
+//
+// Reuses ensureFeedbackPullRequest so a teacher-repaired PR is byte-identical
+// to an accept-time or runner-opened one and the runner still adopts it by
+// base+head. Deliberately does NOT widen the base-mismatch guard: a `feedback`
+// branch frozen at the wrong SHA still defers (an org admin must delete it),
+// never force-updates.
+export async function repairFeedbackPullRequest(params: {
+  client: GitHubClient
+  org: string
+  repo: string
+  mode: AssignmentMode
+}): Promise<RepairFeedbackPrResult> {
+  const { client, org, repo, mode } = params
+
+  const repoInfo = await getRepo(client, org, repo)
+  if (!repoInfo) {
+    return { ok: false, reason: "repo-not-found", unsupported: true }
+  }
+  const branch = repoInfo.default_branch || "main"
+
+  const acceptCommitSha = await resolveFeedbackBaselineSha(client, org, repo)
+  if (!acceptCommitSha) {
+    // No .classroom50.yaml marker means no frozen baseline to open the PR
+    // against (an empty_repo assignment, or a repo that isn't a Classroom 50
+    // assignment repo). The runner refuses the same case.
+    return { ok: false, reason: "no-baseline", unsupported: true }
+  }
+
+  return ensureFeedbackPullRequest({
+    client,
+    owner: org,
+    repo,
+    branch,
+    acceptCommitSha,
+    mode,
+  })
+}
+
+// The outcome of one repo in a bulk open, classified for the summary. The
+// three failure shapes are deliberately distinct because their remedies are:
+//   unsupported  no Feedback PR is possible for this repo (no baseline marker /
+//                repo missing) — nothing to retry.
+//   blocked      the `feedback` branch is frozen at the wrong SHA — only an org
+//                admin deleting the branch fixes it; re-running never will.
+//   failed       a transient error (outage / rate limit / lag) — re-running the
+//                action retries just the repos still missing a PR.
+export type OpenAllOutcome =
+  "created" | "existed" | "unsupported" | "blocked" | "failed"
+
+export type OpenAllProgress = {
+  done: number
+  total: number
+}
+
+// Per-repo result kept for the summary's detail lists.
+export type OpenAllRepoResult = {
+  repo: string
+  outcome: OpenAllOutcome
+  // Present for the non-success outcomes: the reason to show the teacher.
+  reason?: string
+}
+
+export type OpenAllFeedbackPrsSummary = {
+  total: number
+  created: number
+  existed: number
+  unsupported: OpenAllRepoResult[]
+  blocked: OpenAllRepoResult[]
+  failed: OpenAllRepoResult[]
+  results: OpenAllRepoResult[]
+}
+
+// Open a Feedback PR on EVERY assignment repo in one teacher action (issue
+// #347): a bounded-concurrency fan-out of repairFeedbackPullRequest over
+// `repos`. Idempotent by construction — a repo that already has a PR (any
+// state) short-circuits as "existed", so re-running is safe and only fills the
+// gaps. A single repo's failure is caught and recorded, never aborting the
+// batch (repairFeedbackPullRequest doesn't throw; the try/catch guards an
+// unexpected throw so mapWithConcurrency's all-or-nothing reject can't sink the
+// whole run). `onProgress` fires after each repo settles so the UI can show a
+// live count.
+export async function openAllFeedbackPullRequests(params: {
+  client: GitHubClient
+  org: string
+  repos: string[]
+  mode: AssignmentMode
+  onProgress?: (progress: OpenAllProgress) => void
+  signal?: AbortSignal
+}): Promise<OpenAllFeedbackPrsSummary> {
+  const { client, org, repos, mode, onProgress, signal } = params
+  const total = repos.length
+  let done = 0
+
+  const results = await mapWithConcurrency(
+    repos,
+    REPO_READ_CONCURRENCY,
+    async (repo): Promise<OpenAllRepoResult> => {
+      if (signal?.aborted) return { repo, outcome: "failed", reason: "aborted" }
+      let result: OpenAllRepoResult
+      try {
+        const r = await repairFeedbackPullRequest({ client, org, repo, mode })
+        if (r.ok) {
+          result = { repo, outcome: r.created ? "created" : "existed" }
+        } else if ("unsupported" in r) {
+          result = { repo, outcome: "unsupported", reason: r.reason }
+        } else if (r.code === "base-mismatch") {
+          // Never-retryable: an org admin must delete the mis-frozen branch.
+          // Keep it out of `failed` so the "re-run to retry" copy stays honest.
+          result = { repo, outcome: "blocked", reason: r.reason }
+        } else {
+          result = { repo, outcome: "failed", reason: r.reason }
+        }
+      } catch (err) {
+        result = {
+          repo,
+          outcome: "failed",
+          reason: err instanceof Error ? err.message : String(err),
+        }
+      }
+      done++
+      onProgress?.({ done, total })
+      return result
+    },
+  )
+
+  return {
+    total,
+    created: results.filter((r) => r.outcome === "created").length,
+    existed: results.filter((r) => r.outcome === "existed").length,
+    unsupported: results.filter((r) => r.outcome === "unsupported"),
+    blocked: results.filter((r) => r.outcome === "blocked"),
+    failed: results.filter((r) => r.outcome === "failed"),
+    results,
+  }
 }

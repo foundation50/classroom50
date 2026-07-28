@@ -2,12 +2,11 @@ import {
   ChevronRight,
   GitCommitHorizontal,
   Inbox,
-  MessageCircle,
   RefreshCw,
   ScrollText,
   SearchX,
 } from "lucide-react"
-import { Fragment, useId, useMemo, useRef, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import GitHub from "@/assets/github.svg?react"
@@ -24,8 +23,6 @@ import {
   Badge,
   Button,
   EmphasisLtr,
-  Modal,
-  MonoLtr,
   Spinner,
   TablePagination,
   rtlFlip,
@@ -55,7 +52,7 @@ import { ConfirmModal } from "@/components/modals"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
-import useGetFeedbackPr from "@/hooks/useGetFeedbackPr"
+import { ReviewButton } from "@/pages/submissions/ReviewButton"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import type { Student } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
@@ -122,102 +119,13 @@ const HistoryLink = ({
     </span>
   )
 
-// Review action: links to the open Feedback PR (opened by the autograde
-// workflow) when one exists, else opens an info modal. The PR is the source of
-// truth. The /pulls lookup is deferred until Review is clicked (an eager per-row
-// query would fan out to one request per repo on mount); on click we refetch.
-const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
-  const { t } = useTranslation()
-  const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const titleId = useId()
-  const [resolving, setResolving] = useState(false)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  // enabled: false — driven by refetch() on click, never on mount.
-  const { refetch } = useGetFeedbackPr(org, repo, false)
-
-  const handleReview = async () => {
-    setResolving(true)
-    try {
-      // getOpenPullRequests maps 404 -> [], so a non-404 failure surfaces as
-      // `error`; show it rather than the misleading "no PR yet" message.
-      const { data: pr, error } = await refetch()
-      if (error) {
-        setErrorMsg(error instanceof Error ? error.message : String(error))
-        dialogRef.current?.showModal()
-      } else if (pr) {
-        window.open(pr.html_url, "_blank", "noopener,noreferrer")
-      } else {
-        setErrorMsg(null)
-        dialogRef.current?.showModal()
-      }
-    } finally {
-      setResolving(false)
-    }
-  }
-
-  return (
-    <>
-      <Button
-        variant="ghost"
-        size="sm"
-        shape="square"
-        className="text-base-content/70 disabled:opacity-60"
-        disabled={resolving}
-        loading={resolving}
-        loadingLabel={t("submissions.table.review")}
-        onClick={handleReview}
-        aria-label={t("submissions.table.reviewAria")}
-        title={t("submissions.table.review")}
-      >
-        {!resolving && <MessageCircle aria-hidden="true" className="size-4" />}
-      </Button>
-      <Modal
-        dialogRef={dialogRef}
-        size="md"
-        hideCloseButton
-        aria-labelledby={titleId}
-      >
-        {errorMsg ? (
-          <>
-            <h3 id={titleId} className="text-lg font-bold">
-              {t("submissions.reviewModal.errorTitle")}
-            </h3>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
-              {errorMsg}
-            </p>
-          </>
-        ) : (
-          <>
-            <h3 id={titleId} className="text-lg font-bold">
-              {t("submissions.reviewModal.emptyTitle")}
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-base-content/70">
-              <Trans
-                i18nKey="submissions.reviewModal.emptyBody"
-                values={{ repo }}
-                components={{ repo: <MonoLtr /> }}
-              />
-            </p>
-          </>
-        )}
-        <div className="modal-action">
-          <a
-            className="btn btn-ghost btn-sm"
-            href={`https://github.com/${org}/${repo}/pulls`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("submissions.reviewModal.openRepoPrs")}
-          </a>
-          <Button size="sm" onClick={() => dialogRef.current?.close()}>
-            {t("common.close")}
-          </Button>
-        </div>
-      </Modal>
-    </>
-  )
-}
-
+// Review action: links to the open Feedback PR (opened at accept time, or by
+// the autograde runner) when one exists; when none does, offers a teacher-side
+// Repair that re-runs the same idempotent ensure flow with the teacher's token
+// (issue #347 — recovers a PR a student's accept-time attempt failed to open).
+// The PR is the source of truth. The /pulls lookup is deferred until Review is
+// clicked (an eager per-row query would fan out to one request per repo on
+// mount); on click we refetch.
 // Per-row regrade: dispatches regrade.yaml scoped to one owner, tracked via
 // useTriggerRegrade (icon shows progress; disabled while any regrade is in
 // flight). Only kicks off grading — the gradebook refreshes on the next collect.
@@ -710,7 +618,11 @@ const SubmissionsTable = ({
               />
               {!emptyRepo && (
                 <>
-                  <ReviewButton org={org} repo={repo} />
+                  <ReviewButton
+                    org={org}
+                    repo={repo}
+                    mode={isGroup ? "group" : "individual"}
+                  />
                   <ActionIconLink
                     href={safeHttpUrl(rest.release)}
                     icon={ScrollText}

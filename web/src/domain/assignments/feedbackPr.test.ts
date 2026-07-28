@@ -7,6 +7,8 @@ import {
   feedbackLabelForMode,
   feedbackPrBody,
   ensureFeedbackPullRequest,
+  repairFeedbackPullRequest,
+  openAllFeedbackPullRequests,
 } from "./feedbackPr"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import type { GitHubClient } from "@/github-core/client"
@@ -356,7 +358,12 @@ describe("ensureFeedbackPullRequest", () => {
       mode: "individual",
     })
     expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.reason).toContain("student-chosen-sha")
+    if (!result.ok) {
+      expect(result.reason).toContain("student-chosen-sha")
+      // The stable code is what lets the bulk flow classify this as blocked
+      // (never-retryable) rather than a retryable failure.
+      expect(result.code).toBe("base-mismatch")
+    }
     expect(
       calls.filter((c) => c.url === "/repos/o/r/pulls" && c.method === "POST"),
     ).toHaveLength(0)
@@ -428,5 +435,273 @@ describe("ensureFeedbackPullRequest", () => {
     expect(list?.url).toContain(`base=${FEEDBACK_BASE_BRANCH}`)
     // Owner-qualified by the helper, so callers pass a bare branch name.
     expect(list?.url).toContain("head=o%3Amain")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Teacher-side repair (issue #347). It resolves its own branch (repo default)
+// and baseline SHA (.classroom50.yaml marker) before delegating to the SAME
+// ensureFeedbackPullRequest, so these scenarios focus on that resolution and
+// the unsupported verdicts; the ensure behavior itself is covered above.
+// ---------------------------------------------------------------------------
+
+// Extends the fakeClient's routes with the two reads repair adds:
+// GET /repos/o/r (repo object -> default_branch) and the marker commit history.
+function fakeRepairClient(opts: {
+  repoMissing?: boolean
+  defaultBranch?: string
+  markerCommits?: string[] // oldest resolves to markerCommits[last]
+  existingPr?: { number: number; state: string }
+}) {
+  const calls: Call[] = []
+  let refPatched = false
+
+  const request = vi.fn(
+    async (url: string, init?: { method?: string; body?: unknown }) => {
+      const method = init?.method ?? "GET"
+      calls.push({ url, method, body: init?.body })
+
+      if (url === "/repos/o/r") {
+        if (opts.repoMissing) throw apiError(404, "Not Found")
+        return { default_branch: opts.defaultBranch ?? "main" }
+      }
+      if (url.startsWith("/repos/o/r/commits?path=")) {
+        // getOldestCommitShaForPath returns newest-first; it takes the last.
+        return (opts.markerCommits ?? []).map((sha) => ({ sha }))
+      }
+      if (url.startsWith("/repos/o/r/pulls?")) {
+        return opts.existingPr ? [opts.existingPr] : []
+      }
+      const head = opts.defaultBranch ?? "main"
+      if (url === "/repos/o/r/pulls" && method === "POST") {
+        if (!refPatched) {
+          throw validationError(`No commits between feedback and ${head}`)
+        }
+        return {
+          number: 1,
+          state: "open",
+          html_url: "https://github.com/o/r/pull/1",
+        }
+      }
+      if (url === "/repos/o/r/git/refs" && method === "POST") return {}
+      if (url === `/repos/o/r/git/ref/heads/${head}`) {
+        return { object: { sha: "accept-sha" } }
+      }
+      if (url === "/repos/o/r/git/commits/accept-sha") {
+        return { sha: "accept-sha", tree: { sha: "tree-sha" } }
+      }
+      if (url === "/repos/o/r/git/commits" && method === "POST") {
+        return { sha: "empty-sha" }
+      }
+      if (url === `/repos/o/r/git/refs/heads/${head}` && method === "PATCH") {
+        refPatched = true
+        return {}
+      }
+      if (url === "/repos/o/r/labels" && method === "POST") return {}
+      if (url === "/repos/o/r/issues/1/labels" && method === "POST") return []
+      throw new Error(`unexpected request: ${method} ${url}`)
+    },
+  )
+
+  const client = { request } as unknown as GitHubClient
+  return { client, calls }
+}
+
+describe("repairFeedbackPullRequest", () => {
+  it("resolves the baseline from the marker and opens the PR against the repo default branch", async () => {
+    const { client, calls } = fakeRepairClient({
+      defaultBranch: "master",
+      markerCommits: ["newer-sha", "accept-sha"],
+    })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+    })
+    expect(result).toEqual({ ok: true, created: true })
+
+    // Base frozen at the OLDEST marker commit (not the newest), the same rule
+    // as accept and the runner.
+    const refCreate = calls.find(
+      (c) => c.url === "/repos/o/r/git/refs" && c.method === "POST",
+    )
+    expect(refCreate?.body).toEqual({
+      ref: `refs/heads/${FEEDBACK_BASE_BRANCH}`,
+      sha: "accept-sha",
+    })
+    // Head is the repo's settled default branch, not a guessed "main".
+    const pr = calls
+      .filter((c) => c.url === "/repos/o/r/pulls" && c.method === "POST")
+      .at(-1)?.body as Record<string, string>
+    expect(pr.head).toBe("master")
+  })
+
+  it("is read-only when a Feedback PR already exists", async () => {
+    const { client, calls } = fakeRepairClient({
+      markerCommits: ["accept-sha"],
+      existingPr: { number: 7, state: "open" },
+    })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+    })
+    expect(result).toEqual({ ok: true, created: false })
+    expect(writeCalls(calls)).toHaveLength(0)
+  })
+
+  it("reports unsupported when the repo has no baseline marker (e.g. empty_repo)", async () => {
+    const { client, calls } = fakeRepairClient({ markerCommits: [] })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+    })
+    expect(result).toEqual({
+      ok: false,
+      reason: "no-baseline",
+      unsupported: true,
+    })
+    // Never attempts any write when there's nothing to anchor the base on.
+    expect(writeCalls(calls)).toHaveLength(0)
+  })
+
+  it("reports unsupported (repo-not-found) when the repo doesn't exist", async () => {
+    const { client } = fakeRepairClient({ repoMissing: true })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+    })
+    expect(result).toEqual({
+      ok: false,
+      reason: "repo-not-found",
+      unsupported: true,
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bulk open (issue #347). A per-repo scriptable client drives each repo to a
+// distinct outcome so the summary classification and progress reporting are
+// exercised end to end over repairFeedbackPullRequest.
+// ---------------------------------------------------------------------------
+
+// The repo name is the 2nd path segment: /repos/o/<repo>/...
+const repoOf = (url: string) => url.split("/")[3]
+
+// Behaviors keyed by repo name:
+//  - "created-*": has a marker + diff, no existing PR -> creates.
+//  - "existed-*": an existing PR short-circuits -> existed.
+//  - "nomarker-*": the marker commit history is empty -> unsupported.
+//  - "missing-*": GET /repos 404s -> unsupported (repo-not-found).
+//  - "blocked-*": the feedback ref already exists at a NON-baseline SHA (a
+//    student pre-created it) -> base-mismatch -> blocked (never retryable).
+//  - "fail-*": the PR create hard-fails -> failed.
+function fakeBatchClient() {
+  const request = vi.fn(
+    async (url: string, init?: { method?: string; body?: unknown }) => {
+      const method = init?.method ?? "GET"
+      const repo = repoOf(url)
+      const base = `/repos/o/${repo}`
+
+      if (url === base) {
+        if (repo.startsWith("missing")) throw apiError(404, "Not Found")
+        return { default_branch: "main" }
+      }
+      if (url.startsWith(`${base}/commits?path=`)) {
+        // Empty history for the no-marker repos; one baseline commit otherwise.
+        return repo.startsWith("nomarker") ? [] : [{ sha: "accept-sha" }]
+      }
+      if (url.startsWith(`${base}/pulls?`)) {
+        return repo.startsWith("existed") ? [{ number: 7, state: "open" }] : []
+      }
+      if (url === `${base}/pulls` && method === "POST") {
+        if (repo.startsWith("fail")) {
+          throw apiError(403, "Resource not accessible by integration")
+        }
+        // A diff exists (headHasDiff) so no empty commit is needed.
+        return { number: 1, state: "open", html_url: `https://x/${repo}/1` }
+      }
+      if (url === `${base}/git/refs` && method === "POST") {
+        // A student pre-created the branch: ref create 422s already-exists.
+        if (repo.startsWith("blocked")) {
+          throw validationError("Reference already exists")
+        }
+        return {}
+      }
+      if (url === `${base}/git/ref/heads/${FEEDBACK_BASE_BRANCH}`) {
+        // Read-back after an already-exists: blocked repos point at a
+        // student-chosen SHA (mismatch); others 404 (fresh create path).
+        if (repo.startsWith("blocked")) {
+          return { object: { sha: "student-chosen-sha" } }
+        }
+        throw apiError(404, "Not Found")
+      }
+      if (url === `${base}/labels` && method === "POST") return {}
+      if (url === `${base}/issues/1/labels` && method === "POST") return []
+      throw new Error(`unexpected request: ${method} ${url}`)
+    },
+  )
+  return { client: { request } as unknown as GitHubClient }
+}
+
+describe("openAllFeedbackPullRequests", () => {
+  it("classifies each repo and reports progress to completion", async () => {
+    const { client } = fakeBatchClient()
+    const repos = [
+      "created-a",
+      "created-b",
+      "existed-a",
+      "nomarker-a",
+      "missing-a",
+      "blocked-a",
+      "fail-a",
+    ]
+    const progress: number[] = []
+
+    const summary = await openAllFeedbackPullRequests({
+      client,
+      org: "o",
+      repos,
+      mode: "individual",
+      onProgress: (p) => progress.push(p.done),
+    })
+
+    expect(summary.total).toBe(7)
+    expect(summary.created).toBe(2)
+    expect(summary.existed).toBe(1)
+    expect(summary.unsupported.map((r) => r.repo).toSorted()).toEqual([
+      "missing-a",
+      "nomarker-a",
+    ])
+    // The never-retryable base-mismatch is a distinct bucket, NOT `failed`, so
+    // the modal's "re-run to retry" copy can't cover it.
+    expect(summary.blocked.map((r) => r.repo)).toEqual(["blocked-a"])
+    expect(summary.failed.map((r) => r.repo)).toEqual(["fail-a"])
+    // Progress fires once per repo and reaches the total.
+    expect(progress).toHaveLength(7)
+    expect(Math.max(...progress)).toBe(7)
+  })
+
+  it("handles an empty repo list without any requests", async () => {
+    const { client } = fakeBatchClient()
+    const summary = await openAllFeedbackPullRequests({
+      client,
+      org: "o",
+      repos: [],
+      mode: "individual",
+    })
+    expect(summary).toMatchObject({
+      total: 0,
+      created: 0,
+      existed: 0,
+    })
+    expect(summary.failed).toEqual([])
+    expect(client.request).not.toHaveBeenCalled()
   })
 })

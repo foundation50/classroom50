@@ -51,6 +51,14 @@ export {
 } from "./assignments/permissions"
 export { acceptAssignment } from "./assignments/accept"
 export {
+  repairFeedbackPullRequest,
+  openAllFeedbackPullRequests,
+  type RepairFeedbackPrResult,
+  type OpenAllFeedbackPrsSummary,
+  type OpenAllRepoResult,
+  type OpenAllProgress,
+} from "./assignments/feedbackPr"
+export {
   submitAssignment,
   normalizeRepoPath,
   isReservedUploadPath,

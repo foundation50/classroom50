@@ -12,10 +12,12 @@ import type { GitHubRepo } from "@/github-core/types"
 import {
   getBranchRefRepo,
   getCommitByRepo,
-  getOldestCommitShaForPath,
   withFreshRepoRetry,
 } from "@/github-core/queries"
-import { ensureFeedbackPullRequest } from "./feedbackPr"
+import {
+  ensureFeedbackPullRequest,
+  resolveFeedbackBaselineSha,
+} from "./feedbackPr"
 import { fetchAssignmentFromPages } from "../queries/assignments"
 import { getAuthenticatedUser } from "../queries/users"
 import { acceptAndVerifyOrgMembership } from "../users"
@@ -282,12 +284,7 @@ async function resolveFeedbackBaseSha(params: {
   committedSha: string | null
 }): Promise<string | null> {
   const { client, org, repo, committedSha } = params
-  const oldest = await getOldestCommitShaForPath(
-    client,
-    org,
-    repo,
-    ".classroom50.yaml",
-  ).catch(() => null)
+  const oldest = await resolveFeedbackBaselineSha(client, org, repo)
   return oldest ?? committedSha
 }
 

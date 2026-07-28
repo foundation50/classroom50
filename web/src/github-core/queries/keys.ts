@@ -66,8 +66,11 @@ export const githubKeys = {
   collaborators: (org: string, repo: string) =>
     [...githubKeys.all, "collaborators", org, repo] as const,
 
+  // Prefix for every repo's open-pulls entry: a bulk action invalidates all of
+  // them at once.
+  openPullsAll: () => [...githubKeys.all, "open-pulls"] as const,
   openPulls: (owner: string, repo: string) =>
-    [...githubKeys.all, "open-pulls", owner, repo] as const,
+    [...githubKeys.openPullsAll(), owner, repo] as const,
 
   branchRef: (org: string) => [...githubKeys.all, "branchRef", org] as const,
   commitTree: (org: string, branchSha: string) =>
