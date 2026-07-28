@@ -62,12 +62,11 @@ func isFeedbackPRRetryable(err error) bool {
 // token and the teacher CLI's client (which has no Patch verb — PATCH goes
 // through Request). Keep behavior in lockstep with that file and the runner's
 // ensure_feedback_pr.py.
-func ensureFeedbackPullRequest(client githubapi.Client, org, repoName, mode string) error {
-	branch, err := defaultBranch(client, org, repoName)
-	if err != nil {
-		return err
-	}
-
+//
+// branch is the repo's settled default branch (the head the PR opens against),
+// resolved once by the caller from the same repo-object read that gates
+// not-accepted-yet, so this never re-fetches it.
+func ensureFeedbackPullRequest(client githubapi.Client, org, repoName, branch, mode string) error {
 	acceptSHA := memoizeSHA(func() (string, error) { return acceptCommitSHA(client, org, repoName) })
 
 	var lastErr error
@@ -138,10 +137,7 @@ func tryEnsureFeedbackPullRequest(client githubapi.Client, org, repoName, branch
 
 	// Label best-effort: the PR is in place, so a label failure never fails
 	// the step (mirrors the runner's check=False label step).
-	if err := labelFeedbackPR(client, org, repoName, prNumber, mode); err != nil {
-		// Non-fatal; the PR exists. Swallow — the summary reports the open.
-		_ = err
-	}
+	_ = labelFeedbackPR(client, org, repoName, prNumber, mode)
 	return nil
 }
 
@@ -155,22 +151,6 @@ func feedbackPRRaceOr(client githubapi.Client, org, repoName, branch string, cre
 		return errAlreadyExists
 	}
 	return createErr
-}
-
-// defaultBranch reads the repo's settled default branch (the branch the accept
-// commit actually landed on — may be `master`, not a pre-guessed `main`).
-func defaultBranch(client githubapi.Client, org, repoName string) (string, error) {
-	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(repoName))
-	var repo struct {
-		DefaultBranch string `json:"default_branch"`
-	}
-	if err := client.Get(path, &repo); err != nil {
-		return "", fmt.Errorf("GET %s: %w", path, err)
-	}
-	if repo.DefaultBranch == "" {
-		return "main", nil
-	}
-	return repo.DefaultBranch, nil
 }
 
 // acceptCommitSHA recovers the accept commit — the earliest commit touching the

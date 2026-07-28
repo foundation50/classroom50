@@ -164,13 +164,17 @@ func run(client githubapi.Client, out, errOut io.Writer, p runParams) error {
 
 	var results []repoResult
 	for _, repo := range repos {
-		exists, err := repoExistsOnOrg(client, p.org, repo)
+		// One repo-object read serves both purposes: distinguish
+		// not-accepted-yet (404) from a real error, and hand the ensure the
+		// settled default branch it needs (the branch the accept commit landed
+		// on — may be `master`). Folding the two avoids a second identical GET.
+		branch, notFound, err := defaultBranch(client, p.org, repo)
 		if err != nil {
 			results = append(results, repoResult{repo: repo, outcome: outcomeFailed, reason: err.Error()})
 			_, _ = fmt.Fprintf(errOut, "%s: probe failed: %v\n", repo, err)
 			continue
 		}
-		if !exists {
+		if notFound {
 			// Enrolled but not accepted yet (or a group teammate who joined a
 			// founder's repo and owns none). Not a failure — nothing to open.
 			// On the explicit --user path the teacher named this one repo, so a
@@ -183,7 +187,7 @@ func run(client githubapi.Client, out, errOut io.Writer, p runParams) error {
 			continue
 		}
 
-		res := ensureOne(client, p.org, repo, entry.Mode)
+		res := ensureOne(client, p.org, repo, branch, entry.Mode)
 		results = append(results, res)
 		reportRepo(out, res, p.quiet, p.verbose)
 	}
@@ -193,12 +197,10 @@ func run(client githubapi.Client, out, errOut io.Writer, p runParams) error {
 
 // ensureOne runs the idempotent ensure flow for one repo and classifies the
 // result into a summary bucket.
-func ensureOne(client githubapi.Client, org, repo, mode string) repoResult {
-	err := ensureFeedbackPullRequest(client, org, repo, mode)
+func ensureOne(client githubapi.Client, org, repo, branch, mode string) repoResult {
+	err := ensureFeedbackPullRequest(client, org, repo, branch, mode)
 	switch {
 	case err == nil:
-		// created vs existed is threaded out of the ensure via a sentinel so
-		// the summary can distinguish an opened PR from an idempotent no-op.
 		return repoResult{repo: repo, outcome: outcomeCreated}
 	case isAlreadyExists(err):
 		return repoResult{repo: repo, outcome: outcomeExisted}
@@ -242,18 +244,27 @@ func findAssignment(assignments assignment.AssignmentsJSON, slug string) (assign
 	return assignment.AssignmentEntry{}, false
 }
 
-// repoExistsOnOrg returns true iff GET /repos/{org}/{repo} returns 200. 404 ->
-// false. Other errors propagate so a network/auth failure isn't silently
-// treated as "not accepted".
-func repoExistsOnOrg(client githubapi.Client, org, repo string) (bool, error) {
-	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(repo))
-	if err := client.Get(path, nil); err != nil {
-		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return false, nil
-		}
-		return false, fmt.Errorf("GET %s: %w", path, err)
+// defaultBranch reads the repo's settled default branch (the branch the accept
+// commit landed on — may be `master`, not a pre-guessed `main`), and reports
+// whether the repo is missing. A 404 -> notFound=true (enrolled but not
+// accepted yet), so this one read both gates the skip and hands the ensure the
+// head branch it needs. Any other error propagates so a network/auth failure
+// isn't mistaken for "not accepted".
+func defaultBranch(client githubapi.Client, org, repoName string) (branch string, notFound bool, err error) {
+	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(repoName))
+	var repo struct {
+		DefaultBranch string `json:"default_branch"`
 	}
-	return true, nil
+	if err := client.Get(path, &repo); err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return "", true, nil
+		}
+		return "", false, fmt.Errorf("GET %s: %w", path, err)
+	}
+	if repo.DefaultBranch == "" {
+		return "main", false, nil
+	}
+	return repo.DefaultBranch, false, nil
 }
 
 // reportRepo prints one repo's per-line outcome on the human channel.
