@@ -3,9 +3,9 @@ import { useTranslation } from "react-i18next"
 import { CopyableCode } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 
-// The command-line alternative to the web Upload button: clone the repo, then
-// `gh student submit` (which snapshots the branch and pushes; the autograder
-// then tags submit/* and publishes the release the submission page reads).
+// How a student submits from a terminal: clone the repo, then `gh student
+// submit` (which snapshots the branch and pushes; the autograder then tags
+// submit/* and publishes the release the submission page reads).
 export function SubmitGuidance({ repoHtmlUrl }: { repoHtmlUrl: string }) {
   const { t } = useTranslation()
   const cloneUrl = `${repoHtmlUrl}.git`
@@ -21,7 +21,7 @@ export function SubmitGuidance({ repoHtmlUrl }: { repoHtmlUrl: string }) {
   )
 
   return (
-    <details className="group mt-4 rounded-box border border-base-200 p-4">
+    <details open className="group mt-4 rounded-box border border-base-200 p-4">
       <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold marker:content-none">
         <span className="transition-transform group-open:rotate-90">▶</span>
         {t("submissions.student.submitGuide.title")}

@@ -27,7 +27,6 @@ import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Alert, Badge, Button, Card, Markdown } from "@/components/ui"
 import SubmitGuidance from "@/components/SubmitGuidance"
-import SubmitUpload from "@/components/SubmitUpload"
 
 // Strips the `submit/` tag prefix for a friendlier label, falling back to the
 // release name when present.
@@ -190,12 +189,11 @@ const SubmissionBody = ({
         <Alert tone="info">
           <div>{t("submissions.student.noGradedYet")}</div>
         </Alert>
+        {/* Upload submission intentionally hidden — it does a destructive
+            replace-all of the student's repo and has no per-assignment or
+            classroom opt-out yet. See
+            https://github.com/foundation50/classroom50/issues/428 */}
         <div className="flex flex-wrap items-center gap-2">
-          <SubmitUpload
-            org={org}
-            repo={studentRepo.name}
-            assignment={assignment}
-          />
           <Button
             as="a"
             variant="outline"
@@ -219,12 +217,9 @@ const SubmissionBody = ({
         <p className="text-sm text-base-content/70">
           {t("submissions.student.releasesIntro")}
         </p>
+        {/* Upload submission intentionally hidden — see issue #428
+            (https://github.com/foundation50/classroom50/issues/428). */}
         <div className="flex flex-wrap items-center gap-2">
-          <SubmitUpload
-            org={org}
-            repo={studentRepo.name}
-            assignment={assignment}
-          />
           <Button
             as="a"
             variant="outline"
