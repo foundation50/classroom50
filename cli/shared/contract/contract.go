@@ -63,6 +63,24 @@ const (
 	RosterFilename       = "roster.csv"
 	LegacyRosterFilename = "students.csv"
 
+	// ServiceTokenSecretName is the repo-level Actions secret on the config repo
+	// holding the fine-grained PAT that collect-scores.yaml / regrade.yaml
+	// consume. Hand-mirrored with NO compile-time link in the collect-scores /
+	// regrade workflow YAML, the gh-teacher servicetoken package (SecretName),
+	// and the web GUI (web/src/github-core/queries/releaseRunReads.ts
+	// SERVICE_TOKEN_SECRET_NAME) — keep byte-identical; contract_test.go pins
+	// the Go half.
+	ServiceTokenSecretName = "CLASSROOM50_SERVICE_TOKEN"
+
+	// ServiceTokenExpiresAtVar is the repo-level Actions VARIABLE (readable,
+	// unlike the secret) recording the service token's expected expiry as an
+	// RFC 3339 timestamp. Written by whichever client rotates the token so the
+	// web GUI can show an expiry countdown and warn before the nightly collect
+	// breaks. Advisory only: it records the teacher's chosen `expires_in`, which
+	// GitHub does not echo back for a fine-grained PAT. Hand-mirrored (no
+	// compile-time link) in the web GUI — keep byte-identical.
+	ServiceTokenExpiresAtVar = "CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT"
+
 	// SecretPattern is the anchored regex a per-classroom capability-URL secret
 	// must match: 4-64 lowercase-alphanumeric chars (one safe URL path segment
 	// for `<classroom>/<secret>/...`). Single-sourced because the rule is a

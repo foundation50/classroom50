@@ -96,6 +96,7 @@ export {
   encryptSecret,
   validateServiceToken,
   putRepoSecret,
+  putRepoVariable,
 } from "./mutations/secrets"
 export {
   triggerScoreCollection,

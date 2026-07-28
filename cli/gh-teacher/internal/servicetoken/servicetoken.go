@@ -22,6 +22,7 @@ import (
 	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/term"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/classroom50-cli-shared/ghauth"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
@@ -35,12 +36,14 @@ func readHiddenLine(f *os.File) (string, error) {
 }
 
 // SecretName: the repo-level Actions secret collect-scores.yaml consumes.
-// Hardcoded because it appears verbatim in the workflow YAML.
-const SecretName = "CLASSROOM50_SERVICE_TOKEN"
+// Sourced from the shared contract (mirrored byte-for-byte in the workflow YAML
+// and the web GUI). Kept as a package-local alias so existing call sites and
+// the workflow's verbatim reference stay in lockstep with one source.
+const SecretName = contract.ServiceTokenSecretName
 
 // EnvServiceToken: env var carrying the token. No --token flag is offered;
 // flag values leak via shell history, process listings, and CI logs.
-const EnvServiceToken = "CLASSROOM50_SERVICE_TOKEN"
+const EnvServiceToken = contract.ServiceTokenSecretName
 
 // ReadToken returns the token from env or stdin:
 //   - env set: use it (CI/scripted)

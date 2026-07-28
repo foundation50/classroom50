@@ -113,12 +113,30 @@ type RepositorySecret = {
   updated_at: string
 }
 export const SERVICE_TOKEN_SECRET_NAME = "CLASSROOM50_SERVICE_TOKEN"
+
+// The repo-level Actions VARIABLE (readable, unlike the secret) recording the
+// service token's expected expiry as an RFC 3339 date. Mirrors the shared
+// contract's ServiceTokenExpiresAtVar and the CLI — keep byte-identical.
+export const SERVICE_TOKEN_EXPIRES_AT_VAR =
+  "CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT"
+
+// How many days before expiry the token is flagged "expiring soon".
+export const SERVICE_TOKEN_EXPIRY_WARN_DAYS = 14
+
+type RepositoryVariable = {
+  name: string
+  value: string
+}
+
 export type ServiceTokenStatus =
   | {
       status: "present"
       secretName: typeof SERVICE_TOKEN_SECRET_NAME
       createdAt: string
       updatedAt: string
+      // The teacher's recorded expected expiry (RFC 3339), when the expiry
+      // variable is set. Absent for tokens rotated before this was tracked.
+      expiresAt?: string
       message: string
     }
   | {
@@ -133,6 +151,41 @@ export type ServiceTokenStatus =
       message: string
     }
 
+// Classification of a token's expiry, derived from `expiresAt` + now. `unknown`
+// means no expiry was recorded (older token); `expiringSoon` fires inside the
+// warn window; `expired` once the recorded instant has passed.
+export type ServiceTokenExpiry = "unknown" | "ok" | "expiringSoon" | "expired"
+
+export function classifyServiceTokenExpiry(
+  expiresAt: string | undefined,
+  now: number = Date.now(),
+  warnDays: number = SERVICE_TOKEN_EXPIRY_WARN_DAYS,
+): ServiceTokenExpiry {
+  if (!expiresAt) return "unknown"
+  const at = new Date(expiresAt).getTime()
+  if (Number.isNaN(at)) return "unknown"
+  if (at <= now) return "expired"
+  const warnMs = warnDays * 24 * 60 * 60 * 1000
+  return at - now <= warnMs ? "expiringSoon" : "ok"
+}
+
+// Reads the expiry variable off the config repo. Absent (404) or unreadable
+// resolves to undefined — the expiry is advisory metadata, so a missing/blocked
+// read must never void the token's present/missing verdict.
+async function readServiceTokenExpiry(
+  client: GitHubClient,
+  org: string,
+): Promise<string | undefined> {
+  try {
+    const variable = await client.request<RepositoryVariable>(
+      `/repos/${org}/${CONFIG_REPO}/actions/variables/${SERVICE_TOKEN_EXPIRES_AT_VAR}`,
+    )
+    return variable.value || undefined
+  } catch {
+    return undefined
+  }
+}
+
 export async function getServiceTokenStatus(
   client: GitHubClient,
   org: string,
@@ -142,11 +195,14 @@ export async function getServiceTokenStatus(
       `/repos/${org}/${CONFIG_REPO}/actions/secrets/${SERVICE_TOKEN_SECRET_NAME}`,
     )
 
+    const expiresAt = await readServiceTokenExpiry(client, org)
+
     return {
       status: "present",
       secretName: SERVICE_TOKEN_SECRET_NAME,
       createdAt: secret.created_at,
       updatedAt: secret.updated_at,
+      expiresAt,
       message: `Service token is set on the ${CONFIG_REPO} config repo. Last updated ${new Date(
         secret.updated_at,
       ).toLocaleString()}.`,

@@ -187,3 +187,36 @@ export async function putRepoSecret(
     },
   })
 }
+
+// Upserts a repo-level Actions VARIABLE (plaintext, readable back — unlike a
+// secret). GitHub has no PUT for variables: create is POST /variables, update
+// is PATCH /variables/{name}. We PATCH first (rotation is the common case) and
+// fall back to POST on 404 (first-ever write). The value here is non-secret
+// metadata (an expiry date), so — unlike putRepoSecret — it is not sealed.
+export async function putRepoVariable(
+  client: GitHubClient,
+  owner: string | undefined,
+  repo: string,
+  name: string,
+  value: string,
+) {
+  if (!owner) throw new Error("org must be specified to write a repo variable")
+
+  logSetup.info("writing repo Actions variable", { owner, repo, name, value })
+
+  try {
+    await client.request(`/repos/${owner}/${repo}/actions/variables/${name}`, {
+      method: "PATCH",
+      body: { name, value },
+    })
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.status === 404) {
+      await client.request(`/repos/${owner}/${repo}/actions/variables`, {
+        method: "POST",
+        body: { name, value },
+      })
+      return
+    }
+    throw err
+  }
+}
