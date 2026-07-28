@@ -100,8 +100,17 @@ export function feedbackPrBody(head: string, releaseUrl: string): string {
   ].join("\n")
 }
 
+// A stable, non-message reason for an ensure/repair failure, so callers can
+// classify without parsing English:
+//   base-mismatch  the `feedback` branch is frozen at the wrong SHA — NEVER
+//                  retryable; only an org admin deleting the branch fixes it.
+//   transient      anything else (a GitHub outage, rate limit, or git-data
+//                  lag) — retryable, so re-running can recover it.
+export type FeedbackPrFailureCode = "base-mismatch" | "transient"
+
 export type EnsureFeedbackPrResult =
-  { ok: true; created: boolean } | { ok: false; reason: string }
+  | { ok: true; created: boolean }
+  | { ok: false; reason: string; code: FeedbackPrFailureCode }
 
 // The frozen base doesn't point where it must. Never retried: unlike git-data
 // lag this can't resolve itself, and only an org admin deleting the branch fixes
@@ -168,6 +177,10 @@ export async function ensureFeedbackPullRequest(
     return {
       ok: false,
       reason: err instanceof Error ? err.message : "Unexpected error",
+      code:
+        err instanceof FeedbackBaseMismatchError
+          ? "base-mismatch"
+          : "transient",
     }
   }
 }
@@ -418,19 +431,27 @@ export async function repairFeedbackPullRequest(params: {
   })
 }
 
-// The outcome of one repo in a bulk open, classified for the summary.
-export type OpenAllOutcome = "created" | "existed" | "unsupported" | "failed"
+// The outcome of one repo in a bulk open, classified for the summary. The
+// three failure shapes are deliberately distinct because their remedies are:
+//   unsupported  no Feedback PR is possible for this repo (no baseline marker /
+//                repo missing) — nothing to retry.
+//   blocked      the `feedback` branch is frozen at the wrong SHA — only an org
+//                admin deleting the branch fixes it; re-running never will.
+//   failed       a transient error (outage / rate limit / lag) — re-running the
+//                action retries just the repos still missing a PR.
+export type OpenAllOutcome =
+  "created" | "existed" | "unsupported" | "blocked" | "failed"
 
 export type OpenAllProgress = {
   done: number
   total: number
 }
 
-// Per-repo result kept for the summary's failure/unsupported detail lists.
+// Per-repo result kept for the summary's detail lists.
 export type OpenAllRepoResult = {
   repo: string
   outcome: OpenAllOutcome
-  // Present for "failed"/"unsupported": the reason to show the teacher.
+  // Present for the non-success outcomes: the reason to show the teacher.
   reason?: string
 }
 
@@ -439,6 +460,7 @@ export type OpenAllFeedbackPrsSummary = {
   created: number
   existed: number
   unsupported: OpenAllRepoResult[]
+  blocked: OpenAllRepoResult[]
   failed: OpenAllRepoResult[]
   results: OpenAllRepoResult[]
 }
@@ -476,6 +498,10 @@ export async function openAllFeedbackPullRequests(params: {
           result = { repo, outcome: r.created ? "created" : "existed" }
         } else if ("unsupported" in r) {
           result = { repo, outcome: "unsupported", reason: r.reason }
+        } else if (r.code === "base-mismatch") {
+          // Never-retryable: an org admin must delete the mis-frozen branch.
+          // Keep it out of `failed` so the "re-run to retry" copy stays honest.
+          result = { repo, outcome: "blocked", reason: r.reason }
         } else {
           result = { repo, outcome: "failed", reason: r.reason }
         }
@@ -497,6 +523,7 @@ export async function openAllFeedbackPullRequests(params: {
     created: results.filter((r) => r.outcome === "created").length,
     existed: results.filter((r) => r.outcome === "existed").length,
     unsupported: results.filter((r) => r.outcome === "unsupported"),
+    blocked: results.filter((r) => r.outcome === "blocked"),
     failed: results.filter((r) => r.outcome === "failed"),
     results,
   }

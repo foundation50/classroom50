@@ -94,6 +94,13 @@ export function OpenAllFeedbackPrsModal({
                 })}
               </li>
             )}
+            {summary.blocked.length > 0 && (
+              <li className="text-warning">
+                {t("submissions.openAllPrs.summaryBlocked", {
+                  count: summary.blocked.length,
+                })}
+              </li>
+            )}
             {summary.failed.length > 0 && (
               <li className="text-error">
                 {t("submissions.openAllPrs.summaryFailed", {
@@ -102,6 +109,25 @@ export function OpenAllFeedbackPrsModal({
               </li>
             )}
           </ul>
+          {summary.blocked.length > 0 && (
+            <Alert tone="warning">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">
+                  {t("submissions.openAllPrs.blockedTitle")}
+                </p>
+                <ul className="max-h-40 overflow-y-auto text-xs">
+                  {summary.blocked.map((b) => (
+                    <li key={b.repo} className="font-mono">
+                      {b.repo}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-base-content/70">
+                  {t("submissions.openAllPrs.blockedHint")}
+                </p>
+              </div>
+            </Alert>
+          )}
           {summary.failed.length > 0 && (
             <Alert tone="warning">
               <div className="space-y-1">

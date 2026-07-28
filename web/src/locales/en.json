@@ -1944,6 +1944,7 @@
       "alreadyExists": "A Feedback PR already exists for {{repo}}.",
       "noBaseline": "This repository has no assignment baseline, so a Feedback PR can't be opened for it (for example, an empty-repo assignment). Nothing to repair.",
       "repoNotFound": "Couldn't find the repository {{repo}} — the student may not have accepted yet.",
+      "baseMismatch": "The feedback branch on this repository points at the wrong commit, so opening the PR here would show an empty diff. An org admin must delete the feedback branch before it can be re-created correctly. Re-running won't fix this.",
       "failed": "Couldn't open the Feedback PR: {{reason}}"
     },
     "openAllPrs": {
@@ -1963,10 +1964,14 @@
       "summaryExisted_other": "{{count}} repositories already had one",
       "summaryUnsupported_one": "{{count}} repository skipped (no assignment baseline)",
       "summaryUnsupported_other": "{{count}} repositories skipped (no assignment baseline)",
+      "summaryBlocked_one": "{{count}} repository blocked (needs an org admin)",
+      "summaryBlocked_other": "{{count}} repositories blocked (need an org admin)",
       "summaryFailed_one": "{{count}} repository failed",
       "summaryFailed_other": "{{count}} repositories failed",
       "failedTitle": "These repositories couldn't be processed:",
-      "failedHint": "This is often a transient GitHub error — run the action again to retry only the repositories still missing a PR."
+      "failedHint": "This is often a transient GitHub error — run the action again to retry only the repositories still missing a PR.",
+      "blockedTitle": "These repositories need an org admin:",
+      "blockedHint": "Their feedback branch points at the wrong commit, so opening the PR would show an empty diff. An org admin must delete each feedback branch before re-running this action — retrying alone won't fix them."
     },
     "rowRegrade": {
       "title": "Regrade this submission",

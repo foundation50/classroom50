@@ -2,12 +2,11 @@ import {
   ChevronRight,
   GitCommitHorizontal,
   Inbox,
-  MessageCircle,
   RefreshCw,
   ScrollText,
   SearchX,
 } from "lucide-react"
-import { Fragment, useId, useMemo, useRef, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import GitHub from "@/assets/github.svg?react"
@@ -24,8 +23,6 @@ import {
   Badge,
   Button,
   EmphasisLtr,
-  Modal,
-  MonoLtr,
   Spinner,
   TablePagination,
   rtlFlip,
@@ -55,11 +52,9 @@ import { ConfirmModal } from "@/components/modals"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
-import useGetFeedbackPr from "@/hooks/useGetFeedbackPr"
-import useRepairFeedbackPr from "@/hooks/mutations/useRepairFeedbackPr"
+import { ReviewButton } from "@/pages/submissions/ReviewButton"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
-import { useToast } from "@/context/notifications/NotificationProvider"
-import type { AssignmentMode, Student } from "@/types/classroom"
+import type { Student } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 
 const formatDateTime = (datetime: string) =>
@@ -131,164 +126,6 @@ const HistoryLink = ({
 // The PR is the source of truth. The /pulls lookup is deferred until Review is
 // clicked (an eager per-row query would fan out to one request per repo on
 // mount); on click we refetch.
-const ReviewButton = ({
-  org,
-  repo,
-  mode,
-}: {
-  org: string
-  repo: string
-  mode: AssignmentMode
-}) => {
-  const { t } = useTranslation()
-  const { notify } = useToast()
-  const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const titleId = useId()
-  const [resolving, setResolving] = useState(false)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  // enabled: false — driven by refetch() on click, never on mount.
-  const { refetch } = useGetFeedbackPr(org, repo, false)
-  const repair = useRepairFeedbackPr()
-
-  const handleReview = async () => {
-    setResolving(true)
-    try {
-      // getOpenPullRequests maps 404 -> [], so a non-404 failure surfaces as
-      // `error`; show it rather than the misleading "no PR yet" message.
-      const { data: pr, error } = await refetch()
-      if (error) {
-        setErrorMsg(error instanceof Error ? error.message : String(error))
-        dialogRef.current?.showModal()
-      } else if (pr) {
-        window.open(pr.html_url, "_blank", "noopener,noreferrer")
-      } else {
-        setErrorMsg(null)
-        dialogRef.current?.showModal()
-      }
-    } finally {
-      setResolving(false)
-    }
-  }
-
-  // Map the domain's reason code to friendly copy. A `no-baseline` /
-  // `repo-not-found` verdict is structural (no Feedback PR is possible for this
-  // repo), so it stays in the modal rather than as a retryable toast.
-  const repairReasonMessage = (reason: string) =>
-    reason === "no-baseline"
-      ? t("submissions.repairPr.noBaseline")
-      : reason === "repo-not-found"
-        ? t("submissions.repairPr.repoNotFound", { repo })
-        : t("submissions.repairPr.failed", { reason })
-
-  const handleRepair = () => {
-    repair.mutate(
-      { org, repo, mode },
-      {
-        onSuccess: async (result) => {
-          if (result.ok) {
-            notify({
-              tone: "success",
-              durationMs: 5000,
-              message: result.created
-                ? t("submissions.repairPr.created", { repo })
-                : t("submissions.repairPr.alreadyExists", { repo }),
-            })
-            dialogRef.current?.close()
-            // The PR now exists (created or adopted): resolve and open it.
-            const { data: pr } = await refetch()
-            if (pr) window.open(pr.html_url, "_blank", "noopener,noreferrer")
-            return
-          }
-          setErrorMsg(repairReasonMessage(result.reason))
-        },
-        onError: (err) => {
-          setErrorMsg(err instanceof Error ? err.message : String(err))
-        },
-      },
-    )
-  }
-
-  return (
-    <>
-      <Button
-        variant="ghost"
-        size="sm"
-        shape="square"
-        className="text-base-content/70 disabled:opacity-60"
-        disabled={resolving}
-        loading={resolving}
-        loadingLabel={t("submissions.table.review")}
-        onClick={handleReview}
-        aria-label={t("submissions.table.reviewAria")}
-        title={t("submissions.table.review")}
-      >
-        {!resolving && <MessageCircle aria-hidden="true" className="size-4" />}
-      </Button>
-      <Modal
-        dialogRef={dialogRef}
-        size="md"
-        hideCloseButton
-        aria-labelledby={titleId}
-      >
-        {errorMsg ? (
-          <>
-            <h3 id={titleId} className="text-lg font-bold">
-              {t("submissions.reviewModal.errorTitle")}
-            </h3>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
-              {errorMsg}
-            </p>
-          </>
-        ) : (
-          <>
-            <h3 id={titleId} className="text-lg font-bold">
-              {t("submissions.reviewModal.emptyTitle")}
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-base-content/70">
-              <Trans
-                i18nKey="submissions.reviewModal.emptyBody"
-                values={{ repo }}
-                components={{ repo: <MonoLtr /> }}
-              />
-            </p>
-            <p className="mt-3 text-sm leading-6 text-base-content/70">
-              {t("submissions.repairPr.hint")}
-            </p>
-          </>
-        )}
-        <div className="modal-action">
-          <a
-            className="btn btn-ghost btn-sm"
-            href={`https://github.com/${org}/${repo}/pulls`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("submissions.reviewModal.openRepoPrs")}
-          </a>
-          {!errorMsg && (
-            <Button
-              size="sm"
-              loading={repair.isPending}
-              loadingLabel={t("submissions.repairPr.repairing")}
-              onClick={handleRepair}
-            >
-              {t("submissions.repairPr.repair")}
-            </Button>
-          )}
-          <Button
-            variant={errorMsg ? undefined : "ghost"}
-            size="sm"
-            disabled={repair.isPending}
-            onClick={() => dialogRef.current?.close()}
-          >
-            {t("common.close")}
-          </Button>
-        </div>
-      </Modal>
-    </>
-  )
-}
-
 // Per-row regrade: dispatches regrade.yaml scoped to one owner, tracked via
 // useTriggerRegrade (icon shows progress; disabled while any regrade is in
 // flight). Only kicks off grading — the gradebook refreshes on the next collect.

@@ -30,6 +30,7 @@ const summary = (
   created: 1,
   existed: 0,
   unsupported: [],
+  blocked: [],
   failed: [],
   results: [],
   ...over,

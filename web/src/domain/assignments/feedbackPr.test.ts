@@ -358,7 +358,12 @@ describe("ensureFeedbackPullRequest", () => {
       mode: "individual",
     })
     expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.reason).toContain("student-chosen-sha")
+    if (!result.ok) {
+      expect(result.reason).toContain("student-chosen-sha")
+      // The stable code is what lets the bulk flow classify this as blocked
+      // (never-retryable) rather than a retryable failure.
+      expect(result.code).toBe("base-mismatch")
+    }
     expect(
       calls.filter((c) => c.url === "/repos/o/r/pulls" && c.method === "POST"),
     ).toHaveLength(0)
@@ -594,6 +599,8 @@ const repoOf = (url: string) => url.split("/")[3]
 //  - "existed-*": an existing PR short-circuits -> existed.
 //  - "nomarker-*": the marker commit history is empty -> unsupported.
 //  - "missing-*": GET /repos 404s -> unsupported (repo-not-found).
+//  - "blocked-*": the feedback ref already exists at a NON-baseline SHA (a
+//    student pre-created it) -> base-mismatch -> blocked (never retryable).
 //  - "fail-*": the PR create hard-fails -> failed.
 function fakeBatchClient() {
   const request = vi.fn(
@@ -620,8 +627,19 @@ function fakeBatchClient() {
         // A diff exists (headHasDiff) so no empty commit is needed.
         return { number: 1, state: "open", html_url: `https://x/${repo}/1` }
       }
-      if (url === `${base}/git/refs` && method === "POST") return {}
+      if (url === `${base}/git/refs` && method === "POST") {
+        // A student pre-created the branch: ref create 422s already-exists.
+        if (repo.startsWith("blocked")) {
+          throw validationError("Reference already exists")
+        }
+        return {}
+      }
       if (url === `${base}/git/ref/heads/${FEEDBACK_BASE_BRANCH}`) {
+        // Read-back after an already-exists: blocked repos point at a
+        // student-chosen SHA (mismatch); others 404 (fresh create path).
+        if (repo.startsWith("blocked")) {
+          return { object: { sha: "student-chosen-sha" } }
+        }
         throw apiError(404, "Not Found")
       }
       if (url === `${base}/labels` && method === "POST") return {}
@@ -641,6 +659,7 @@ describe("openAllFeedbackPullRequests", () => {
       "existed-a",
       "nomarker-a",
       "missing-a",
+      "blocked-a",
       "fail-a",
     ]
     const progress: number[] = []
@@ -653,17 +672,20 @@ describe("openAllFeedbackPullRequests", () => {
       onProgress: (p) => progress.push(p.done),
     })
 
-    expect(summary.total).toBe(6)
+    expect(summary.total).toBe(7)
     expect(summary.created).toBe(2)
     expect(summary.existed).toBe(1)
     expect(summary.unsupported.map((r) => r.repo).toSorted()).toEqual([
       "missing-a",
       "nomarker-a",
     ])
+    // The never-retryable base-mismatch is a distinct bucket, NOT `failed`, so
+    // the modal's "re-run to retry" copy can't cover it.
+    expect(summary.blocked.map((r) => r.repo)).toEqual(["blocked-a"])
     expect(summary.failed.map((r) => r.repo)).toEqual(["fail-a"])
     // Progress fires once per repo and reaches the total.
-    expect(progress).toHaveLength(6)
-    expect(Math.max(...progress)).toBe(6)
+    expect(progress).toHaveLength(7)
+    expect(Math.max(...progress)).toBe(7)
   })
 
   it("handles an empty repo list without any requests", async () => {
