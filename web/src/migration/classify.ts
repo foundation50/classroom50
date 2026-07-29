@@ -126,7 +126,19 @@ export async function classifyAssignment(
   try {
     srcIsTemplate = await sourceIsTemplate(client, src.owner, src.repo)
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.isNotFound) {
+    if (err instanceof GitHubAPIError && (err.isForbidden || err.isNotFound)) {
+      // Can't read the starter. When the source repo lives in a DIFFERENT org
+      // than the target, this is almost always the OAuth app not being approved
+      // for the source org — a fixable authorization gap, surfaced as a
+      // preflight blocker (not a per-item skip) by buildPreflight. Carry the
+      // source org so the blocker can link the grant page.
+      const crossOrg = src.owner.toLowerCase() !== targetOrg.toLowerCase()
+      if (crossOrg) {
+        return skip({
+          key: "migration.reason.sourceOrgAccess",
+          params: { org: src.owner },
+        })
+      }
       return skip({
         key: "migration.reason.sourceNotAccessible",
         params: { fullName: starter.full_name },

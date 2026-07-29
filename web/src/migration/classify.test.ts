@@ -119,6 +119,15 @@ describe("classifyAssignment", () => {
   it("skip when the source is not accessible", async () => {
     const { client } = makeClient({ sourceMissing: true })
     const item = await classifyAssignment(client, "dst", "", assignment())
+    // src/hw1 is a different org than the target "dst" -> org-access reason.
+    expect(item.reason?.key).toBe("migration.reason.sourceOrgAccess")
+    expect(item.reason?.params?.org).toBe("src")
+  })
+
+  it("uses sourceNotAccessible when the source is in the SAME org as target", async () => {
+    const { client } = makeClient({ sourceMissing: true })
+    // Target org "src" matches the starter's org, so it's not an app-grant gap.
+    const item = await classifyAssignment(client, "src", "", assignment())
     expect(item.reason?.key).toBe("migration.reason.sourceNotAccessible")
   })
 

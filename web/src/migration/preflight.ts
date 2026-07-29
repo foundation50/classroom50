@@ -44,6 +44,26 @@ async function targetOrgIsClassroom50(
   }
 }
 
+// Whether the OAuth app can act on the SOURCE org. A revoked/unapproved app
+// still reads a PUBLIC template repo fine (so the per-assignment probe can't see
+// the problem), but reading the viewer's own org membership is grant-gated: a
+// 403 here means the app isn't authorized for that org. Returns true when the
+// membership read succeeds, false on a 403 (authorization gap). Other errors
+// (404 non-member, transient) are treated as "can't prove a problem" -> true, so
+// a valid import is never false-positive-blocked.
+async function sourceOrgAuthorized(
+  client: GitHubClient,
+  org: string,
+): Promise<boolean> {
+  try {
+    await client.request(`/user/memberships/orgs/${encodeURIComponent(org)}`)
+    return true
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.status === 403) return false
+    return true
+  }
+}
+
 // True when `<shortName>/` already exists in the config repo (via a contents
 // read of the classroom.json). A 404 -> false.
 export async function classroomDirExists(
@@ -95,6 +115,29 @@ export async function buildPreflight(
   } else if (await classroomDirExists(client, input.targetOrg, shortName)) {
     // Only meaningful once we know the config repo exists.
     blockers.push({ kind: "dir_exists", params: { shortName } })
+  }
+
+  // If any assignment's starter couldn't be read because the app isn't approved
+  // for its (cross-)org, that's a fixable authorization gap affecting every
+  // assignment from that org — surface it as a blocker with grant links rather
+  // than leaving the teacher to decode per-item skips. Dedup by org.
+  const accessOrgs = new Set(
+    items
+      .filter((i) => i.reason?.key === "migration.reason.sourceOrgAccess")
+      .map((i) => i.reason?.params?.org)
+      .filter((org): org is string => Boolean(org)),
+  )
+  // Public starter repos read fine even when the app's org access is revoked, so
+  // the per-item probe above misses that case. Independently verify the source
+  // classroom's org is authorized (a grant-gated membership read) and add the
+  // same blocker when it isn't — this is the case that only failed at generate
+  // time before.
+  const sourceOrgLogin = classroom.organization.login
+  if (!(await sourceOrgAuthorized(client, sourceOrgLogin))) {
+    accessOrgs.add(sourceOrgLogin)
+  }
+  for (const org of accessOrgs) {
+    blockers.push({ kind: "source_org_access", params: { org } })
   }
 
   const counts = {

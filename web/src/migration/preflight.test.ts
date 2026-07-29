@@ -29,6 +29,8 @@ function makeClient(opts: {
   configRepo?: boolean
   dirExists?: boolean
   targetHw1Exists?: boolean
+  sourceForbidden?: boolean
+  sourceOrgUnauthorized?: boolean
 }): GitHubClient {
   const request = vi.fn(async (url: string) => {
     // Source classroom + assignments
@@ -95,7 +97,17 @@ function makeClient(opts: {
         starter_code_repository: null,
       }
     // Source template reads
-    if (url === "/repos/src/hw1") return { is_template: true }
+    if (url === "/repos/src/hw1") {
+      if (opts.sourceForbidden)
+        throw new GitHubAPIError({
+          status: 403,
+          url,
+          message: "Resource not accessible by integration",
+          body: null,
+          rateLimit: emptyRateLimit,
+        })
+      return { is_template: true }
+    }
     if (url === "/repos/src/hw2") return { is_template: false }
     // Target template probes (with or without a suffix)
     if (/^\/repos\/dst\/hw1(-|$)/.test(url)) {
@@ -104,6 +116,18 @@ function makeClient(opts: {
       throw notFound(url)
     }
     if (/^\/repos\/dst\/hw2(-|$)/.test(url)) throw notFound(url)
+    // Source org authorization probe (grant-gated membership read)
+    if (url.startsWith("/user/memberships/orgs/")) {
+      if (opts.sourceOrgUnauthorized)
+        throw new GitHubAPIError({
+          status: 403,
+          url,
+          message: "Resource not accessible by integration",
+          body: null,
+          rateLimit: emptyRateLimit,
+        })
+      return { state: "active", role: "admin" }
+    }
     // Config repo existence
     if (url === "/repos/dst/classroom50") {
       if (opts.configRepo === false) throw notFound(url)
@@ -171,6 +195,30 @@ describe("buildPreflight", () => {
     expect(plan.blockers).toEqual([
       { kind: "dir_exists", params: { shortName: "cs-50" } },
     ])
+  })
+
+  it("blocks with source_org_access when the app can't read the source org", async () => {
+    const plan = await buildPreflight(makeClient({ sourceForbidden: true }), {
+      source: "1",
+      targetOrg: "dst",
+    })
+    expect(
+      plan.blockers.some(
+        (b) => b.kind === "source_org_access" && b.params?.org === "src",
+      ),
+    ).toBe(true)
+  })
+
+  it("blocks with source_org_access when the app's org authorization is revoked (public starter still reads)", async () => {
+    const plan = await buildPreflight(
+      makeClient({ sourceOrgUnauthorized: true }),
+      { source: "1", targetOrg: "dst" },
+    )
+    expect(
+      plan.blockers.some(
+        (b) => b.kind === "source_org_access" && b.params?.org === "src-org",
+      ),
+    ).toBe(true)
   })
 
   it("honors an explicit short-name and template-suffix", async () => {

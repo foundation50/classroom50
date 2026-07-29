@@ -2,8 +2,18 @@
 import { describe, expect, it, vi } from "vitest"
 
 import type { GitHubClient } from "@/github-core/client"
+import { GitHubAPIError } from "@/github-core/errors"
 import { copyOneTemplate } from "./templateCopy"
 import type { ClassroomAssignmentDetail, MigrationItem } from "./types"
+
+const emptyRateLimit = {
+  limit: null,
+  remaining: null,
+  reset: null,
+  used: null,
+  resource: null,
+  retryAfter: null,
+}
 
 const assignment: ClassroomAssignmentDetail = {
   id: 5,
@@ -75,6 +85,25 @@ describe("copyOneTemplate — import", () => {
     const client = { request } as unknown as GitHubClient
     await expect(copyOneTemplate(client, "dst", 1, importItem)).rejects.toThrow(
       /boom/,
+    )
+  })
+
+  it("gives an actionable cross-org message on a 403 from the source", async () => {
+    const request = vi.fn(async (url: string) => {
+      if (url.endsWith("/generate"))
+        throw new GitHubAPIError({
+          status: 403,
+          url,
+          message: "Resource not accessible by integration",
+          body: null,
+          rateLimit: emptyRateLimit,
+        })
+      throw new Error(`unexpected ${url}`)
+    })
+    const client = { request } as unknown as GitHubClient
+    // importItem's source is src/hw1 (org "src"), target org "dst" — cross-org.
+    await expect(copyOneTemplate(client, "dst", 1, importItem)).rejects.toThrow(
+      /approve the Classroom 50 app for the "src" organization/,
     )
   })
 

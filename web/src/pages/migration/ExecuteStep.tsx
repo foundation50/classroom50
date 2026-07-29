@@ -74,7 +74,9 @@ export const ExecuteStep = ({
         <Card.Title>
           {done
             ? t("migration.execute.doneTitle")
-            : t("migration.execute.runningTitle")}
+            : mutation.isError
+              ? t("migration.execute.failedTitle")
+              : t("migration.execute.runningTitle")}
         </Card.Title>
 
         {!done && !mutation.isError && (
@@ -85,10 +87,15 @@ export const ExecuteStep = ({
         )}
 
         {mutation.isError && (
-          <Alert tone="error" className="mt-2">
-            {mutation.error instanceof Error
-              ? mutation.error.message
-              : t("migration.execute.error")}
+          <Alert tone="error" className="mt-2 items-start">
+            <div>
+              <p className="font-medium">{t("migration.execute.error")}</p>
+              <p className="mt-1 text-sm">
+                {mutation.error instanceof Error
+                  ? mutation.error.message
+                  : String(mutation.error)}
+              </p>
+            </div>
           </Alert>
         )}
 

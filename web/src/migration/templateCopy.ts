@@ -4,8 +4,12 @@
 // wait for the new branch to stabilize. Mirrors the CLI's migrate_template.go.
 
 import type { GitHubClient } from "@/github-core/client"
+import { GitHubAPIError } from "@/github-core/errors"
 import { withFreshRepoRetry } from "@/github-core/queries"
+import { logger } from "@/lib/logger"
 import type { MigrationItem } from "./types"
+
+const log = logger.scope("migration:templateCopy")
 
 // The resolved target template ref plus its visibility, for the entry write and
 // the private-template grant decision.
@@ -122,14 +126,46 @@ export async function copyOneTemplate(
   }
   const [srcOwner, srcRepo] = starter.full_name.split("/")
 
-  const branch = await generateFromTemplate(client, {
-    srcOwner,
-    srcRepo,
-    targetOwner: targetOrg,
-    targetName: item.targetName,
-    description: `Migrated from GitHub Classroom (classroom ${classroomId}, assignment ${item.assignment.id})`,
+  log.info("migration: generating template", {
+    slug: item.assignment.slug,
+    source: starter.full_name,
+    target: `${targetOrg}/${item.targetName}`,
     private: starter.private,
   })
+
+  let branch: string
+  try {
+    branch = await generateFromTemplate(client, {
+      srcOwner,
+      srcRepo,
+      targetOwner: targetOrg,
+      targetName: item.targetName,
+      description: `Migrated from GitHub Classroom (classroom ${classroomId}, assignment ${item.assignment.id})`,
+      private: starter.private,
+    })
+  } catch (err) {
+    // Surface the GitHub status + message so the skip reason is actionable.
+    // A 403/404 generating from a template in a DIFFERENT org than the target
+    // usually means the OAuth app isn't approved for the source org — call that
+    // out specifically; otherwise relay the status + message.
+    if (err instanceof GitHubAPIError) {
+      log.warn("migration: generate failed", {
+        source: starter.full_name,
+        target: `${targetOrg}/${item.targetName}`,
+        status: err.status,
+        message: err.message,
+      })
+      const crossOrg = srcOwner.toLowerCase() !== targetOrg.toLowerCase()
+      if ((err.isForbidden || err.isNotFound) && crossOrg) {
+        throw new TemplateSourceAccessError(srcOwner, starter.full_name, err)
+      }
+      throw new Error(
+        `${err.status} generating ${targetOrg}/${item.targetName} from ${starter.full_name}: ${err.message}`,
+        { cause: err },
+      )
+    }
+    throw err
+  }
 
   await markAsTemplate(client, targetOrg, item.targetName)
   await waitForBranch(client, targetOrg, item.targetName, branch)
@@ -139,5 +175,20 @@ export async function copyOneTemplate(
     repo: item.targetName,
     branch,
     private: starter.private,
+  }
+}
+
+// A generate that failed because the source template lives in a different org
+// the OAuth app can't read (the common cross-org migration 403/404). The
+// message names the source org and the fix so the skip line is actionable.
+export class TemplateSourceAccessError extends Error {
+  sourceOrg: string
+  constructor(sourceOrg: string, fullName: string, cause: GitHubAPIError) {
+    super(
+      `Can't read the starter repository "${fullName}" — approve the Classroom 50 app for the "${sourceOrg}" organization (Settings → Applications → Authorized OAuth Apps → Classroom 50 → Grant), then retry. (GitHub: ${cause.status} ${cause.message})`,
+      { cause },
+    )
+    this.name = "TemplateSourceAccessError"
+    this.sourceOrg = sourceOrg
   }
 }

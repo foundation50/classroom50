@@ -99,7 +99,8 @@ export type MigrationItem = {
 }
 
 // A blocker that disables the whole import until resolved.
-export type MigrationBlockerKind = "needs_org_setup" | "dir_exists"
+export type MigrationBlockerKind =
+  "needs_org_setup" | "dir_exists" | "source_org_access"
 export type MigrationBlocker = {
   kind: MigrationBlockerKind
   params?: Record<string, string>

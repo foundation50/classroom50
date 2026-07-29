@@ -7,9 +7,10 @@
 import { useState } from "react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { Trans, useTranslation } from "react-i18next"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, ExternalLink } from "lucide-react"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { githubOAuthGrantUrl, githubOrgOAuthPolicyUrl } from "@/auth/constants"
 import {
   Alert,
   Button,
@@ -101,6 +102,13 @@ export const ConfirmStep = ({
 
   const blocked = (plan?.blockers.length ?? 0) > 0
 
+  // A source-org authorization gap is a HARD prerequisite: until the app can
+  // read the source org, nothing else (name, preview, other blockers) is
+  // actionable. When present, render only the dedicated grant-access screen.
+  const orgAccessBlocker = plan?.blockers.find(
+    (b) => b.kind === "source_org_access",
+  )
+
   // The effective plan reflects the teacher's selection: any importable/reusable
   // item they unchecked becomes a skip (with a "deselected" reason) so execute
   // skips it and the counts + summary stay truthful. Skip items are untouched.
@@ -142,6 +150,109 @@ export const ConfirmStep = ({
     !isFetching &&
     !pendingEdit &&
     selectedCount > 0
+
+  // Hard prerequisite failed: dedicated grant-access screen, no preview.
+  if (orgAccessBlocker) {
+    const accessOrg = orgAccessBlocker.params?.org ?? source.orgLogin
+    return (
+      <Card>
+        <Card.Body>
+          <div className="flex items-start justify-between gap-4">
+            <Card.Title>{t("migration.access.title")}</Card.Title>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onBack}
+              className="shrink-0"
+            >
+              {t("migration.confirm.back")}
+            </Button>
+          </div>
+
+          <Alert tone="error" className="mt-3 items-start">
+            <AlertTriangle aria-hidden="true" className="size-5 shrink-0" />
+            <div>
+              <p className="font-medium">
+                {t("migration.access.headline", { org: accessOrg })}
+              </p>
+              <p className="mt-1 text-sm">
+                {t("migration.access.explain", { org: accessOrg })}
+              </p>
+            </div>
+          </Alert>
+
+          {/* Primary path: grant from the user's own authorized-apps page. */}
+          <ol className="mt-5 grid gap-4">
+            <li className="rounded-xl border border-base-300 bg-base-100 p-4">
+              <div className="flex items-start gap-3">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                  1
+                </span>
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    {t("migration.access.step1Title")}
+                  </p>
+                  <p className="mt-1 text-sm text-base-content/70">
+                    {t("migration.access.step1Body", { org: accessOrg })}
+                  </p>
+                  <a
+                    href={githubOAuthGrantUrl()}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-primary btn-sm mt-3"
+                  >
+                    {t("migration.access.step1Button")}
+                    <ExternalLink aria-hidden="true" className="size-4" />
+                  </a>
+                </div>
+              </div>
+            </li>
+
+            {/* Fallback: the org's OAuth policy page (request/approve). */}
+            <li className="rounded-xl border border-base-300 bg-base-100 p-4">
+              <div className="flex items-start gap-3">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-base-300 text-sm font-semibold text-base-content/70">
+                  2
+                </span>
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    {t("migration.access.step2Title")}
+                  </p>
+                  <p className="mt-1 text-sm text-base-content/70">
+                    {t("migration.access.step2Body", { org: accessOrg })}
+                  </p>
+                  <a
+                    href={githubOrgOAuthPolicyUrl(accessOrg)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-ghost btn-sm mt-3"
+                  >
+                    {t("migration.access.step2Button", { org: accessOrg })}
+                    <ExternalLink aria-hidden="true" className="size-4" />
+                  </a>
+                </div>
+              </div>
+            </li>
+          </ol>
+
+          <div className="mt-5 flex items-center gap-3">
+            <Button
+              variant="primary"
+              onClick={() => refetch()}
+              loading={isFetching}
+              loadingLabel={t("migration.access.rechecking")}
+              disabled={isFetching}
+            >
+              {t("migration.access.recheck")}
+            </Button>
+            <span className="text-sm text-base-content/60">
+              {t("migration.access.recheckHint")}
+            </span>
+          </div>
+        </Card.Body>
+      </Card>
+    )
+  }
 
   return (
     <Card>

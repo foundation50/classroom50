@@ -129,7 +129,8 @@
       "runningTitle": "Importing…",
       "runningBody": "Creating repositories and the class. This can take a minute — please keep this tab open.",
       "doneTitle": "Import finished",
-      "error": "The import failed.",
+      "failedTitle": "Import failed",
+      "error": "The import couldn't be completed.",
       "summaryComplete": "Import complete.",
       "summaryPartial": "Import finished with some assignments skipped.",
       "summaryCounts": "{{generated}} generated, {{reused}} reused, {{skipped}} skipped.",
@@ -170,13 +171,29 @@
     },
     "blocker": {
       "needs_org_setup": "\"{{org}}\" isn't set up for Classroom 50 yet — run organization setup first, then retry.",
-      "dir_exists": "A class named \"{{shortName}}\" already exists in this organization. Pick a different short name to continue."
+      "dir_exists": "A class named \"{{shortName}}\" already exists in this organization. Pick a different short name to continue.",
+      "source_org_access": "Classroom 50 can't read the starter repositories in \"{{org}}\" — the app hasn't been granted access to that organization."
+    },
+    "access": {
+      "title": "Grant access to continue",
+      "headline": "Classroom 50 needs access to \"{{org}}\"",
+      "explain": "The assignments you're importing come from the \"{{org}}\" organization on GitHub, but Classroom 50 isn't authorized to read its repositories yet. Grant access below, then re-check — nothing can be imported until this is resolved.",
+      "step1Title": "Grant access on your authorized apps page",
+      "step1Body": "Open the Classroom 50 app in your GitHub settings and grant it access to the \"{{org}}\" organization. This is usually all that's needed.",
+      "step1Button": "Open Classroom 50 app settings",
+      "step2Title": "If that doesn't work, use the organization's policy page",
+      "step2Body": "If you previously denied access, or your organization requires owner approval, request or approve access from the \"{{org}}\" organization's third-party application policy. An organization owner may need to approve it.",
+      "step2Button": "Open \"{{org}}\" application policy",
+      "recheck": "Re-check access",
+      "rechecking": "Re-checking…",
+      "recheckHint": "Click after granting access to continue."
     },
     "reason": {
       "invalidSlug": "The assignment slug \"{{slug}}\" isn't a valid repo name.",
       "invalidMode": "Unsupported assignment type \"{{type}}\".",
       "badStarter": "The starter repository \"{{fullName}}\" has an unexpected name.",
       "sourceNotAccessible": "The starter repository \"{{fullName}}\" isn't accessible to your account.",
+      "sourceOrgAccess": "Classroom 50 isn't authorized for the \"{{org}}\" organization, so its starter repository can't be copied.",
       "sourceNotTemplate": "The starter repository \"{{fullName}}\" isn't a template — enable \"Template repository\" on it and retry.",
       "targetCollision": "A repository named \"{{name}}\" already exists in {{org}} and isn't a template. Set a template suffix to avoid the collision.",
       "deselected": "Unchecked — won't be imported.",
