@@ -23,6 +23,19 @@ export type GitHubClient = {
   ) => Promise<T>
 
   requestRaw: (path: string, options?: GitHubRequestOptions) => Promise<string>
+
+  requestBinary: (
+    path: string,
+    options?: GitHubRequestOptions,
+  ) => Promise<GitHubBinaryResponse>
+}
+
+// A binary response body plus the filename GitHub advertised for it (parsed
+// from Content-Disposition). Used for archive downloads (zipball/tarball),
+// which the JSON/text paths can't carry.
+export type GitHubBinaryResponse = {
+  bytes: ArrayBuffer
+  filename?: string
 }
 
 export type GitHubRequestOptions = {
@@ -56,7 +69,8 @@ export function createGitHubClient(args: {
     options: GitHubRequestOptions = { method: "GET" },
   ): Promise<Response> {
     // Count every outbound call at the single choke point (covers request +
-    // requestRaw) — before the fetch, so a thrown/timed-out call still counts.
+    // requestRaw + requestBinary) — before the fetch, so a thrown/timed-out
+    // call still counts.
     countApiCall()
 
     const url = path.startsWith("http")
@@ -213,5 +227,37 @@ export function createGitHubClient(args: {
 
       return await res.text()
     },
+
+    async requestBinary(path: string, options?: GitHubRequestOptions) {
+      const res = await requestInternal(path, {
+        method: options?.method ?? "GET",
+        ...options,
+        accept: options?.accept ?? "application/vnd.github+json",
+      })
+
+      const bytes = await res.arrayBuffer()
+      const filename = parseContentDispositionFilename(
+        res.headers.get("content-disposition"),
+      )
+
+      return { bytes, filename }
+    },
+  }
+}
+
+// Pull the `filename` out of a Content-Disposition header (e.g.
+// `attachment; filename=owner-repo-sha.zip`), stripping optional quotes. GitHub
+// sends this on archive downloads so we can name the saved file sensibly.
+// Returns undefined when the header is absent or carries no filename.
+function parseContentDispositionFilename(
+  header: string | null,
+): string | undefined {
+  if (!header) return undefined
+  const match = /filename\*?=(?:UTF-8''|")?([^";]+)"?/i.exec(header)
+  if (!match) return undefined
+  try {
+    return decodeURIComponent(match[1].trim())
+  } catch {
+    return match[1].trim()
   }
 }

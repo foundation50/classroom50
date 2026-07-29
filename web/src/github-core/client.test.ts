@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { DEFAULT_REQUEST_TIMEOUT_MS, createGitHubClient } from "./client"
+import { getApiCallCount } from "@/lib/diagnostics/rateLimit"
 
 // Drive aborts with REAL short timeouts, not vitest fake timers: @sinonjs
 // fake-timers doesn't mock AbortSignal.timeout, so advancing would never abort.
@@ -218,5 +219,67 @@ describe("createGitHubClient non-JSON response (GitHub-outage shape)", () => {
     expect((err as { requestId: string | null }).requestId).toBe("ABCD:1234:EF")
     // The raw HTML body is still dropped.
     expect((err as Error).message).not.toContain("proxy error")
+  })
+})
+
+describe("createGitHubClient requestBinary (archive downloads)", () => {
+  function stubBinaryFetch(
+    status: number,
+    body: BodyInit,
+    headers: Record<string, string> = {},
+  ): void {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(new Response(body, { status, headers })),
+    )
+  }
+
+  it("returns the response body as an ArrayBuffer for a 200", async () => {
+    const payload = new Uint8Array([80, 75, 3, 4]) // "PK\x03\x04" (zip magic)
+    stubBinaryFetch(200, payload, {
+      "content-type": "application/zip",
+    })
+    const client = createGitHubClient({ token: "t" })
+
+    const { bytes } = await client.requestBinary("/repos/o/r/zipball")
+    expect(bytes).toBeInstanceOf(ArrayBuffer)
+    expect(new Uint8Array(bytes)).toEqual(payload)
+  })
+
+  it("extracts filename from Content-Disposition", async () => {
+    stubBinaryFetch(200, new Uint8Array([1]), {
+      "content-disposition": "attachment; filename=owner-repo-abc123.zip",
+    })
+    const client = createGitHubClient({ token: "t" })
+
+    const { filename } = await client.requestBinary("/repos/o/r/zipball")
+    expect(filename).toBe("owner-repo-abc123.zip")
+  })
+
+  it("returns undefined filename when Content-Disposition is absent", async () => {
+    stubBinaryFetch(200, new Uint8Array([1]))
+    const client = createGitHubClient({ token: "t" })
+
+    const { filename } = await client.requestBinary("/repos/o/r/zipball")
+    expect(filename).toBeUndefined()
+  })
+
+  it("throws a GitHubAPIError on a non-2xx", async () => {
+    stubBinaryFetch(404, JSON.stringify({ message: "Not Found" }), {
+      "content-type": "application/json",
+    })
+    const client = createGitHubClient({ token: "t" })
+
+    await expect(
+      client.requestBinary("/repos/o/missing/zipball"),
+    ).rejects.toMatchObject({ name: "GitHubAPIError", status: 404 })
+  })
+
+  it("counts the call exactly once", async () => {
+    stubBinaryFetch(200, new Uint8Array([1]))
+    const client = createGitHubClient({ token: "t" })
+
+    const before = getApiCallCount()
+    await client.requestBinary("/repos/o/r/zipball")
+    expect(getApiCallCount()).toBe(before + 1)
   })
 })
