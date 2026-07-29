@@ -74,10 +74,13 @@ const (
 
 	// ServiceTokenExpiresAtVar is the repo-level Actions VARIABLE (readable,
 	// unlike the secret) recording the service token's expected expiry as an
-	// RFC 3339 timestamp. Written by whichever client rotates the token so the
-	// web GUI can show an expiry countdown and warn before the nightly collect
-	// breaks. Advisory only: it records the teacher's chosen `expires_in`, which
-	// GitHub does not echo back for a fine-grained PAT. Hand-mirrored (no
+	// RFC 3339 timestamp, so the web GUI can show an expiry countdown and warn
+	// before the nightly collect breaks. Advisory only: it records the teacher's
+	// chosen `expires_in`, which GitHub does not echo back for a fine-grained
+	// PAT. Currently WRITTEN ONLY BY THE WEB GUI on save/rotate; the CLI
+	// rotate/init path provisions the secret without it, so a CLI-provisioned
+	// token reads back with no recorded expiry (the web health chip then shows
+	// "expiry not tracked", not a false "healthy"). Hand-mirrored (no
 	// compile-time link) in the web GUI — keep byte-identical.
 	ServiceTokenExpiresAtVar = "CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT"
 
@@ -85,7 +88,8 @@ const (
 	// service token's display NAME. GitHub does not expose a fine-grained PAT's
 	// name via the API, so this is the label Classroom 50 shows for the token
 	// (prefilled into the token-creation form and renamable afterward). Advisory
-	// only. Hand-mirrored (no compile-time link) in the web GUI — keep
+	// only, and — like ServiceTokenExpiresAtVar — currently written only by the
+	// web GUI. Hand-mirrored (no compile-time link) in the web GUI — keep
 	// byte-identical.
 	ServiceTokenNameVar = "CLASSROOM50_SERVICE_TOKEN_NAME"
 

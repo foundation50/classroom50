@@ -39,11 +39,26 @@ const HEALTH_CHIP: Record<
     Icon: TriangleAlert,
     labelKey: "serviceTokenHealth.chip.collectFailing",
   },
+  expiryUntracked: {
+    tone: "neutral",
+    Icon: Clock,
+    labelKey: "serviceTokenHealth.chip.expiryUntracked",
+  },
   unknown: {
     tone: "neutral",
     Icon: CircleHelp,
     labelKey: "serviceTokenHealth.chip.unknown",
   },
+}
+
+// Whether TokenHealthChip will render anything for an entry — false only for a
+// resolved, healthy "ok" token (which renders null). Callers gate the chip's
+// wrapper on this so a healthy org doesn't leave an empty spacer.
+export function tokenChipVisible(entry: {
+  health: OrgServiceTokenHealth
+  loading?: boolean
+}): boolean {
+  return (entry.loading ?? false) || entry.health !== "ok"
 }
 
 // A per-org service-token health chip. Rendered only for owned orgs on the home

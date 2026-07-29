@@ -12,9 +12,13 @@ import useGetOrgs, { usePendingOrgInvites } from "@/hooks/useGetOrgs"
 import useOrgDisplayName from "@/hooks/useOrgDisplayName"
 import useOrgLastModified from "@/hooks/useOrgLastModified"
 import { useOrgServiceTokenHealth } from "@/hooks/useOrgServiceTokenHealth"
+import { isOwnedReadyOrg } from "@/hooks/useOrgServiceTokenHealth"
 import type { OrgTokenHealthEntry } from "@/hooks/useOrgServiceTokenHealth"
 import { needsAttention } from "@/util/serviceTokenHealth"
-import { TokenHealthChip } from "@/components/status/TokenHealthChip"
+import {
+  TokenHealthChip,
+  tokenChipVisible,
+} from "@/components/status/TokenHealthChip"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
@@ -328,6 +332,7 @@ function OrgCard({
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
   const displayName = useOrgDisplayName(org.login)
   const heading = displayName ?? org.login
+  const showTokenChip = tokenHealth ? tokenChipVisible(tokenHealth) : false
 
   return (
     <Card
@@ -360,10 +365,10 @@ function OrgCard({
               </p>
             )}
 
-            {(showNoAccessBadge || tokenHealth) && (
+            {(showNoAccessBadge || showTokenChip) && (
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {showNoAccessBadge && <NoAccessBadge />}
-                {tokenHealth && (
+                {showTokenChip && tokenHealth && (
                   <TokenHealthChip
                     org={org.login}
                     health={tokenHealth.health}
@@ -396,6 +401,7 @@ function OrgRow({
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
   const displayName = useOrgDisplayName(org.login)
   const heading = displayName ?? org.login
+  const showTokenChip = tokenHealth ? tokenChipVisible(tokenHealth) : false
 
   return (
     <PresenceCardDiv className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -413,7 +419,7 @@ function OrgRow({
                 <NoAccessBadge />
               </span>
             )}
-            {tokenHealth && (
+            {showTokenChip && tokenHealth && (
               <span className="hidden sm:inline-flex">
                 <TokenHealthChip
                   org={org.login}
@@ -517,14 +523,7 @@ const OrgsPage = () => {
   // read). Reuses the per-org token/collect caches shared with the single-org
   // panes. Drives the per-card chip and the "N of M need attention" summary.
   const ownedReadyLogins = useMemo(
-    () =>
-      filtered
-        .filter(
-          (summary) =>
-            isOwnerGitHubOrgRole(summary.membership.role) &&
-            summary.classroom50.status === "ready",
-        )
-        .map((summary) => summary.org.login),
+    () => filtered.filter(isOwnedReadyOrg).map((summary) => summary.org.login),
     [filtered],
   )
   const { byOrg: tokenHealthByOrg } = useOrgServiceTokenHealth(
@@ -644,7 +643,6 @@ const OrgsPage = () => {
                 <span>
                   {t("serviceTokenHealth.summary", {
                     count: attentionCount,
-                    total: ownedReadyLogins.length,
                   })}
                 </span>
               </Alert>

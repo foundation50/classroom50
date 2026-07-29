@@ -2,13 +2,14 @@ import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useHiddenOrgs } from "@/context/hiddenOrgs/HiddenOrgsProvider"
-import { Button, Card } from "@/components/ui"
+import { Button, Card, RouterButton } from "@/components/ui"
 import { useTranslation } from "react-i18next"
 import { useMemo } from "react"
-import { Link } from "@tanstack/react-router"
-import { isOwnerGitHubOrgRole } from "@/authz"
 import useGetOrgs from "@/hooks/useGetOrgs"
-import { useOrgServiceTokenHealth } from "@/hooks/useOrgServiceTokenHealth"
+import {
+  isOwnedReadyOrg,
+  useOrgServiceTokenHealth,
+} from "@/hooks/useOrgServiceTokenHealth"
 import { TokenHealthChip } from "@/components/status/TokenHealthChip"
 
 // Owned + Classroom 50-ready orgs are the only ones with a manageable service
@@ -21,11 +22,7 @@ function ServiceTokensSection() {
   const ownedReady = useMemo(
     () =>
       orgs
-        .filter(
-          (summary) =>
-            isOwnerGitHubOrgRole(summary.membership.role) &&
-            summary.classroom50.status === "ready",
-        )
+        .filter(isOwnedReadyOrg)
         .map((summary) => summary.org.login)
         .sort((a, b) => a.localeCompare(b)),
     [orgs],
@@ -86,14 +83,16 @@ function ServiceTokensSection() {
                       )}
                     </div>
                   </div>
-                  <Link
+                  <RouterButton
                     to="/$org/settings"
                     params={{ org: login }}
                     search={{ focus: "serviceToken" }}
-                    className="btn btn-outline btn-sm shrink-0"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
                   >
                     {t("settings.serviceTokens.manage")}
-                  </Link>
+                  </RouterButton>
                 </li>
               )
             })}

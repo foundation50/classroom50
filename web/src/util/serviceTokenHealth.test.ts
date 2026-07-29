@@ -57,14 +57,46 @@ describe("deriveOrgServiceTokenHealth", () => {
     ).toBe("expiringSoon")
   })
 
-  it("is ok when present, not expiring, collect healthy (unknown expiry counts as ok)", () => {
+  it("reports expiryUntracked (not a false ok) for a present token with no recorded expiry", () => {
     expect(
       deriveOrgServiceTokenHealth({
         tokenStatus: "present",
         expiry: "unknown",
         lastCollectFailing: false,
       }),
+    ).toBe("expiryUntracked")
+  })
+
+  it("reports expiryUntracked (not a false ok) when the collect-run read was inconclusive", () => {
+    // An errored run read must never certify a card healthy — it degrades to
+    // expiryUntracked, never "ok".
+    expect(
+      deriveOrgServiceTokenHealth({
+        tokenStatus: "present",
+        expiry: "ok",
+        lastCollectFailing: "unknown",
+      }),
+    ).toBe("expiryUntracked")
+  })
+
+  it("is ok only when present, expiry recorded and not near, collect confirmed healthy", () => {
+    expect(
+      deriveOrgServiceTokenHealth({
+        tokenStatus: "present",
+        expiry: "ok",
+        lastCollectFailing: false,
+      }),
     ).toBe("ok")
+  })
+
+  it("ranks a real expiry above an inconclusive collect read", () => {
+    expect(
+      deriveOrgServiceTokenHealth({
+        tokenStatus: "present",
+        expiry: "expired",
+        lastCollectFailing: "unknown",
+      }),
+    ).toBe("expired")
   })
 })
 
@@ -87,6 +119,7 @@ describe("needsAttention", () => {
     ["missing", true],
     ["expiringSoon", true],
     ["collectFailing", true],
+    ["expiryUntracked", true],
     ["ok", false],
     ["unknown", false],
   ] as const)("%s -> %s", (health, expected) => {

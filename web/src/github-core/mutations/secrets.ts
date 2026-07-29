@@ -202,7 +202,10 @@ export async function putRepoVariable(
 ) {
   if (!owner) throw new Error("org must be specified to write a repo variable")
 
-  logSetup.info("writing repo Actions variable", { owner, repo, name, value })
+  // Log the write, never the value: putRepoVariable is a generic repo-variable
+  // writer, so mirror putRepoSecret and omit the value rather than assume every
+  // caller's value is non-secret.
+  logSetup.info("writing repo Actions variable", { owner, repo, name })
 
   try {
     await client.request(`/repos/${owner}/${repo}/actions/variables/${name}`, {

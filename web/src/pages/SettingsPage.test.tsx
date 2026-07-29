@@ -31,6 +31,22 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   }
 })
 
+// RouterButton -> a plain anchor too (it wraps createLink, which needs a
+// RouterProvider we don't mount here). The Manage affordance is a RouterButton.
+vi.mock("@/components/ui", async (importActual) => {
+  const actual = await importActual<typeof import("@/components/ui")>()
+  return {
+    ...actual,
+    RouterButton: ({
+      children,
+      params,
+    }: {
+      children: React.ReactNode
+      params?: { org?: string }
+    }) => <a href={`/${params?.org ?? ""}/settings`}>{children}</a>,
+  }
+})
+
 type OrgSummary = {
   org: { login: string; id: number }
   membership: { role: "admin" | "member" }
@@ -44,9 +60,14 @@ vi.mock("@/hooks/useGetOrgs", () => ({ default: () => orgsData }))
 
 import type { OrgTokenHealthEntry } from "@/hooks/useOrgServiceTokenHealth"
 const healthByOrg: Record<string, OrgTokenHealthEntry> = {}
-vi.mock("@/hooks/useOrgServiceTokenHealth", () => ({
-  useOrgServiceTokenHealth: () => ({ byOrg: healthByOrg, anyLoading: false }),
-}))
+vi.mock("@/hooks/useOrgServiceTokenHealth", async (importActual) => {
+  const actual =
+    await importActual<typeof import("@/hooks/useOrgServiceTokenHealth")>()
+  return {
+    ...actual,
+    useOrgServiceTokenHealth: () => ({ byOrg: healthByOrg, anyLoading: false }),
+  }
+})
 
 function installLocalStorage() {
   const store = new Map<string, string>()

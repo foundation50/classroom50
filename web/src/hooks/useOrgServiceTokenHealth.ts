@@ -1,6 +1,6 @@
 import { useQueries } from "@tanstack/react-query"
-import { useMemo } from "react"
 
+import { isOwnerGitHubOrgRole } from "@/authz"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import {
   classifyServiceTokenExpiry,
@@ -9,11 +9,25 @@ import {
   githubKeys,
   type ServiceTokenStatus,
 } from "@/github-core/queries"
+import type { Classroom50OrgSummary } from "@/github-core/queries"
 import {
   deriveOrgServiceTokenHealth,
   isCollectRunFailing,
   type OrgServiceTokenHealth,
 } from "@/util/serviceTokenHealth"
+
+// The single predicate for "an org whose service token this viewer can manage":
+// only an owner of a Classroom 50-ready org can read/set the token (a
+// non-owner 403s on the owner-only secret read). Both the org home and the
+// global Settings list derive their token-health set from this, and
+// useOrgAffordances' per-card `canManageToken` mirrors it — one source so the
+// three surfaces can't disagree.
+export function isOwnedReadyOrg(summary: Classroom50OrgSummary): boolean {
+  return (
+    isOwnerGitHubOrgRole(summary.membership.role) &&
+    summary.classroom50.status === "ready"
+  )
+}
 
 export type OrgTokenHealthEntry = {
   org: string
@@ -43,13 +57,20 @@ export function useOrgServiceTokenHealth(
 ): { byOrg: Record<string, OrgTokenHealthEntry>; anyLoading: boolean } {
   const client = useGitHubClient()
 
-  const results = useQueries({
+  // `combine` builds the derived map directly off the query cache, so it
+  // memoizes on the underlying results (no hand-synced signature string, no
+  // eslint-disabled deps). `retry: false` keeps a GitHub outage from turning a
+  // multi-org fan-out (2N reads) into a retry storm — a transient failure just
+  // yields "unknown"/inconclusive for one card until the next staleTime
+  // refetch, matching the sibling releasesQuery.
+  return useQueries({
     queries: ownedOrgs.flatMap((org) => [
       {
         queryKey: githubKeys.serviceToken(org),
         queryFn: () => getServiceTokenStatus(client, org),
         enabled: enabled && Boolean(org),
         staleTime: 10 * 60 * 1000,
+        retry: false,
       },
       {
         queryKey: githubKeys.lastCollectScoresRun(org),
@@ -57,65 +78,53 @@ export function useOrgServiceTokenHealth(
           getLastCollectScoresRun(client, org, signal),
         enabled: enabled && Boolean(org),
         staleTime: 10 * 60 * 1000,
+        retry: false,
       },
     ]),
+    combine: (results) => {
+      const byOrg: Record<string, OrgTokenHealthEntry> = {}
+      let anyLoading = false
+
+      // results are laid out as [tokenStatus, lastRun] per org, in ownedOrgs
+      // order.
+      ownedOrgs.forEach((org, i) => {
+        const statusResult = results[i * 2]
+        const runResult = results[i * 2 + 1]
+        const status = statusResult?.data as ServiceTokenStatus | undefined
+        const run = runResult?.data as { conclusion: string | null } | null
+        const loading =
+          (statusResult?.isLoading ?? false) || (runResult?.isLoading ?? false)
+        if (loading) anyLoading = true
+
+        const tokenStatus = status?.status ?? "unknown"
+        const expiresAt =
+          status?.status === "present" ? status.expiresAt : undefined
+        const tokenName =
+          status?.status === "present" ? status.tokenName : undefined
+
+        // An errored run read is inconclusive, NOT a clean "not failing" — pass
+        // "unknown" so a transient run-read failure can't certify a card "ok"
+        // (and thereby hide a real collectFailing).
+        const lastCollectFailing = runResult?.isError
+          ? "unknown"
+          : isCollectRunFailing(run?.conclusion ?? null)
+
+        byOrg[org] = {
+          org,
+          expiresAt,
+          tokenName,
+          loading,
+          health: deriveOrgServiceTokenHealth({
+            tokenStatus,
+            expiry: classifyServiceTokenExpiry(expiresAt),
+            lastCollectFailing,
+          }),
+        }
+      })
+
+      return { byOrg, anyLoading }
+    },
   })
-
-  // results are laid out as [tokenStatus, lastRun] per org, in ownedOrgs order.
-  const signature = ownedOrgs
-    .map((org, i) => {
-      const status = results[i * 2]?.data as ServiceTokenStatus | undefined
-      const run = results[i * 2 + 1]?.data as {
-        conclusion: string | null
-      } | null
-      const loading =
-        (results[i * 2]?.isLoading ?? false) ||
-        (results[i * 2 + 1]?.isLoading ?? false)
-      const expiresAt =
-        status?.status === "present" ? status.expiresAt : undefined
-      const tokenName =
-        status?.status === "present" ? status.tokenName : undefined
-      return `${org}=${status?.status ?? "?"}:${expiresAt ?? "-"}:${
-        tokenName ?? "-"
-      }:${run?.conclusion ?? "-"}:${loading ? "L" : "R"}`
-    })
-    .join("\n")
-
-  return useMemo(() => {
-    const byOrg: Record<string, OrgTokenHealthEntry> = {}
-    let anyLoading = false
-
-    ownedOrgs.forEach((org, i) => {
-      const status = results[i * 2]?.data as ServiceTokenStatus | undefined
-      const run = results[i * 2 + 1]?.data as {
-        conclusion: string | null
-      } | null
-      const loading =
-        (results[i * 2]?.isLoading ?? false) ||
-        (results[i * 2 + 1]?.isLoading ?? false)
-      if (loading) anyLoading = true
-
-      const tokenStatus = status?.status ?? "unknown"
-      const expiresAt =
-        status?.status === "present" ? status.expiresAt : undefined
-      const tokenName =
-        status?.status === "present" ? status.tokenName : undefined
-
-      byOrg[org] = {
-        org,
-        expiresAt,
-        tokenName,
-        loading,
-        health: deriveOrgServiceTokenHealth({
-          tokenStatus,
-          expiry: classifyServiceTokenExpiry(expiresAt),
-          lastCollectFailing: isCollectRunFailing(run?.conclusion ?? null),
-        }),
-      }
-    })
-
-    return { byOrg, anyLoading }
-  }, [signature]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 export default useOrgServiceTokenHealth

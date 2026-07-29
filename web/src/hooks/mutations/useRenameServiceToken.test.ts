@@ -60,4 +60,20 @@ describe("useRenameServiceToken", () => {
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(putRepoVariable).not.toHaveBeenCalled()
   })
+
+  it("invalidates this org's service-token status and the org list so the new label reads back", async () => {
+    const { githubKeys } = await import("@/github-core/queries")
+    const queryClient = freshClient()
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries")
+    const { result } = renderHook(() => useRenameServiceToken(ORG), {
+      wrapper: wrapperWith(queryClient),
+    })
+
+    result.current.mutate("classroom50-token-42-ab12")
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    const keys = invalidate.mock.calls.map((c) => c[0]?.queryKey)
+    expect(keys).toContainEqual(githubKeys.serviceToken(ORG))
+    expect(keys).toContainEqual(["orgs"])
+  })
 })

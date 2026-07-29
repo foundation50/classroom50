@@ -4,7 +4,7 @@ import { Button, HelpTooltip, Input, Modal, cx } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import { useParams, useSearch } from "@tanstack/react-router"
+import { useParams, useSearch, useNavigate } from "@tanstack/react-router"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useSaveServiceToken } from "@/hooks/mutations/useSaveServiceToken"
 import { useRenameServiceToken } from "@/hooks/mutations/useRenameServiceToken"
@@ -203,10 +203,19 @@ function SetTokenModal({
   )
 
   // On return from GitHub's token page (tab/window regains focus), drop the
-  // cursor straight into the paste field. Only while the modal is open.
+  // cursor into the paste field — but only if it's still empty AND focus isn't
+  // already inside the modal, so a user mid-editing the expiry field (or who
+  // alt-tabbed away and back) isn't yanked out of what they were typing.
   useEffect(() => {
     if (!open) return
-    const focusInput = () => inputRef.current?.focus()
+    const focusInput = () => {
+      const input = inputRef.current
+      if (!input) return
+      if (input.value) return
+      const active = document.activeElement
+      if (active && active !== document.body && active !== input) return
+      input.focus()
+    }
     window.addEventListener("focus", focusInput)
     return () => window.removeEventListener("focus", focusInput)
   }, [open])
@@ -307,12 +316,16 @@ function SetTokenModal({
         className="mt-4 flex flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault()
-          if (saveMutation.isPending || !token.trim()) return
+          // Require a valid expiry as well as a token: saving with an invalid
+          // expiry would pass `expiresInDays: undefined` and leave the PREVIOUS
+          // token's expiry variable in place, so the health chip would then
+          // describe the newly-rotated token with a stale date.
+          if (saveMutation.isPending || !token.trim() || !expiryValid) return
           void runPat(() =>
             saveMutation.mutateAsync(
               {
                 serviceToken: token,
-                expiresInDays: expiryValid ? parsedExpiry : undefined,
+                expiresInDays: parsedExpiry,
                 tokenName: tokenName || undefined,
               },
               { onSuccess: onClose },
@@ -365,7 +378,7 @@ function SetTokenModal({
             type="submit"
             loading={saveMutation.isPending}
             loadingLabel={t("orgSettings.serviceToken.validating")}
-            disabled={saveMutation.isPending || !token.trim()}
+            disabled={saveMutation.isPending || !token.trim() || !expiryValid}
           >
             {t("orgSettings.serviceToken.saveButton")}
           </Button>
@@ -379,6 +392,7 @@ export const OrgSettingsPane = () => {
   const { t } = useTranslation()
   const { org } = useParams({ strict: false })
   const search = useSearch({ strict: false }) as { focus?: string }
+  const navigate = useNavigate()
   const { notify } = useToast()
 
   const { data: tokenStatus, isLoading: tokenStatusLoading } =
@@ -409,7 +423,10 @@ export const OrgSettingsPane = () => {
 
   // Deep-link from the org list's token-health chip (`?focus=serviceToken`):
   // scroll the section into view, highlight it, and open the set-token modal so
-  // a multi-org teacher lands directly on the rotate flow. Runs once on mount.
+  // a multi-org teacher lands directly on the rotate flow. Runs once on mount,
+  // then strips the param (replace) so the one-shot link is consumed exactly
+  // once — a later remount (navigate away and back, refresh) or a dismissal
+  // won't re-pop the modal or leave a stale ?focus in history.
   const focusServiceToken = search?.focus === "serviceToken"
   const [highlight, setHighlight] = useState(false)
   useEffect(() => {
@@ -419,9 +436,14 @@ export const OrgSettingsPane = () => {
     document
       .getElementById("service-token-section")
       ?.scrollIntoView({ behavior: "smooth", block: "start" })
+    void navigate({
+      to: ".",
+      search: (prev) => ({ ...prev, focus: undefined }),
+      replace: true,
+    })
     const id = window.setTimeout(() => setHighlight(false), 2000)
     return () => window.clearTimeout(id)
-  }, [focusServiceToken])
+  }, [focusServiceToken, navigate])
 
   const openModal = () => {
     saveMutation.reset()
@@ -431,7 +453,21 @@ export const OrgSettingsPane = () => {
   const closeModal = () => {
     setModalOpen(false)
     if (saveMutation.isSuccess) {
-      notify({ tone: "success", message: t("orgSettings.serviceToken.saved") })
+      // A successful token save whose advisory expiry/name write failed is still
+      // a real save, but the expiry/name won't read back — say so rather than a
+      // clean "saved", so the teacher isn't misled by a later "expiry not
+      // tracked" chip.
+      if (saveMutation.data && saveMutation.data.metadataRecorded === false) {
+        notify({
+          tone: "warning",
+          message: t("orgSettings.serviceToken.savedNoMetadata"),
+        })
+      } else {
+        notify({
+          tone: "success",
+          message: t("orgSettings.serviceToken.saved"),
+        })
+      }
     }
   }
 
@@ -495,6 +531,10 @@ export const OrgSettingsPane = () => {
       )}
 
       <SetTokenModal
+        // Remount on every open/close so the modal's internal state resets: the
+        // paste field, the chosen expiry, and the frozen `now` clock (used for
+        // the max-expiry bound). Without the key those would persist a stale
+        // value across a second open.
         key={modalOpen ? "open" : "closed"}
         open={modalOpen}
         onClose={closeModal}

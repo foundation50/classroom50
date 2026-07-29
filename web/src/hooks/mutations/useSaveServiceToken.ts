@@ -62,7 +62,9 @@ export function useSaveServiceToken(org: string | undefined) {
       )
       // The expiry/name variables are advisory metadata; a failure writing them
       // must not fail the rotation (the token itself is already stored). Record
-      // them best effort and swallow write errors.
+      // them best effort, but report whether they landed so the caller can warn
+      // that the expiry/name won't read back rather than claim a clean save.
+      let metadataRecorded = true
       if (expiresInDays && Number.isFinite(expiresInDays)) {
         try {
           await putRepoVariable(
@@ -73,7 +75,7 @@ export function useSaveServiceToken(org: string | undefined) {
             serviceTokenExpiryFromDays(expiresInDays),
           )
         } catch {
-          // best effort — keep the successful token save
+          metadataRecorded = false
         }
       }
       if (tokenName && tokenName.trim()) {
@@ -86,9 +88,10 @@ export function useSaveServiceToken(org: string | undefined) {
             tokenName.trim(),
           )
         } catch {
-          // best effort — keep the successful token save
+          metadataRecorded = false
         }
       }
+      return { metadataRecorded }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orgs"] })

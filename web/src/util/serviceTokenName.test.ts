@@ -22,6 +22,15 @@ describe("serviceTokenName", () => {
     const name = serviceTokenName("999999999999", "abcd")
     expect(name.length).toBeLessThanOrEqual(GITHUB_TOKEN_NAME_MAX)
   })
+
+  it("keeps the module worst-case name within the cap (guards the load-time throw)", () => {
+    // Mirrors the WORST_CASE_NAME guard in serviceTokenName.ts: the widest name
+    // we could ever generate (a 15-digit id + a full 4-char hash) must still fit
+    // GitHub's cap. If a future prefix/hash-length edit shrinks the margin past
+    // the cap, this fails here rather than only at module load.
+    const worstCase = serviceTokenName("9".repeat(15), "z".repeat(4))
+    expect(worstCase.length).toBeLessThanOrEqual(GITHUB_TOKEN_NAME_MAX)
+  })
 })
 
 describe("randomTokenHash", () => {
