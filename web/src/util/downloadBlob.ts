@@ -9,5 +9,8 @@ export function downloadBlob(blob: Blob, filename: string): void {
   link.download = filename
   link.click()
 
-  URL.revokeObjectURL(url)
+  // Defer the revoke: click() starts the download asynchronously, and revoking
+  // the object URL synchronously can cancel a large download in some browsers
+  // before it latches the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }

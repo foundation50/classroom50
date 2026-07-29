@@ -56,6 +56,7 @@ import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
 import { ReviewButton } from "@/pages/submissions/ReviewButton"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import useDownloadSubmission from "@/hooks/mutations/useDownloadSubmission"
+import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Student } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 
@@ -256,6 +257,7 @@ const DownloadButton = ({
   owner: string
 }) => {
   const { t } = useTranslation()
+  const { notify } = useToast()
   const download = useDownloadSubmission()
 
   return (
@@ -269,7 +271,24 @@ const DownloadButton = ({
       loadingLabel={t("submissions.rowDownload.title")}
       onClick={() => {
         if (download.isPending) return
-        download.mutate({ org, classroom, assignment, owner })
+        download.mutate(
+          { org, classroom, assignment, owner },
+          {
+            onError: (err) => {
+              // fetchRepoArchive resolves a missing/never-pushed repo to null,
+              // and the hook throws "no-submission" for it — surface that as a
+              // benign "nothing to download" rather than a hard error.
+              const nothing =
+                err instanceof Error && err.message === "no-submission"
+              notify({
+                tone: nothing ? "info" : "error",
+                message: nothing
+                  ? t("submissions.rowDownload.nothingToDownload", { owner })
+                  : t("submissions.rowDownload.error", { owner }),
+              })
+            },
+          },
+        )
       }}
       aria-label={t("submissions.rowDownload.aria", { owner })}
       title={t("submissions.rowDownload.title")}

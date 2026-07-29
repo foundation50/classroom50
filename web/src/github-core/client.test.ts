@@ -312,6 +312,32 @@ describe("createGitHubClient fetchArchive (archive proxy)", () => {
     )
   })
 
+  it("refuses to send the token to a non-https proxy", async () => {
+    const client = createGitHubClient({
+      token: "t",
+      archiveBaseUrl: "http://evil.example",
+    })
+    await expect(client.fetchArchive("o", "r")).rejects.toThrow(/https/i)
+  })
+
+  it("allows an http localhost proxy for dev", async () => {
+    const fetchSpy =
+      vi.fn<(url: string, init?: RequestInit) => Promise<Response>>()
+    fetchSpy.mockResolvedValue(
+      new Response(new Uint8Array([1]), { status: 200 }),
+    )
+    vi.stubGlobal("fetch", fetchSpy)
+    const client = createGitHubClient({
+      token: "t",
+      archiveBaseUrl: "http://localhost:8787",
+    })
+
+    await client.fetchArchive("o", "r")
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      "http://localhost:8787/repos/o/r/zipball",
+    )
+  })
+
   it("counts the call exactly once", async () => {
     stubBinaryFetch(200, new Uint8Array([1]))
     const client = createGitHubClient({ token: "t", archiveBaseUrl: BASE })

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import JSZip from "jszip"
 
-import { downloadAllSubmissions } from "./downloadSubmissions"
+import { downloadAllSubmissions, ZipAssemblyError } from "./downloadSubmissions"
 import { fetchRepoArchive } from "@/github-core/repoArchiveReads"
 import type { GitHubClient } from "@/github-core/client"
 
@@ -103,6 +104,34 @@ describe("downloadAllSubmissions", () => {
     )
 
     await run(["Alice"])
-    expect(mockedFetch).toHaveBeenCalledWith(client, "org", "cs101-hw1-alice")
+    expect(mockedFetch).toHaveBeenCalledWith(
+      client,
+      "org",
+      "cs101-hw1-alice",
+      expect.objectContaining({ signal: undefined }),
+    )
+  })
+
+  it("dedupes owners case-insensitively so entries aren't duplicated", async () => {
+    mockedFetch.mockImplementation((_c, _org, repo) =>
+      Promise.resolve(archive(repo)),
+    )
+
+    const { summary } = await run(["alice", "Alice", "bob"])
+    expect(summary.total).toBe(2)
+    expect(summary.fetched).toBe(2)
+    expect(mockedFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it("throws ZipAssemblyError when the combined zip can't be built", async () => {
+    mockedFetch.mockImplementation((_c, _org, repo) =>
+      Promise.resolve(archive(repo)),
+    )
+    const spy = vi
+      .spyOn(JSZip.prototype, "generateAsync")
+      .mockRejectedValueOnce(new Error("oom"))
+
+    await expect(run(["alice"])).rejects.toBeInstanceOf(ZipAssemblyError)
+    spy.mockRestore()
   })
 })

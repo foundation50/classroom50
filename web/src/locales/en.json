@@ -2050,9 +2050,13 @@
       "confirmBody_one": "This downloads the latest submission for the <b>{{count}}</b> student who has submitted <b>{{name}}</b>, bundled into a single zip.",
       "confirmBody_other": "This downloads the latest submissions for the <b>{{count}}</b> students who have submitted <b>{{name}}</b>, bundled into a single zip.",
       "confirmHint": "It runs from your browser, one repository at a time, so it may take a while for a large class. Keep this tab open until it finishes.",
+      "largeClassWarning": "This will download {{count}} submissions and build the combined zip in your browser, which can use a lot of memory and may be slow or fail for a very large class. Consider filtering by section first.",
       "confirmLabel_one": "Download submission",
       "confirmLabel_other": "Download submissions",
       "running": "Downloading… {{done}} of {{total}}",
+      "nothingDownloaded": "No file was downloaded — none of the selected students had a submission to fetch.",
+      "assemblyError": "Downloaded every submission, but the combined zip was too large to assemble in the browser. Try filtering by section and downloading in smaller batches.",
+      "runError": "The download couldn't be completed. Please try again.",
       "summaryLead": "Finished processing <b>{{total}}</b> submissions.",
       "summaryDownloaded_one": "{{count}} submission downloaded",
       "summaryDownloaded_other": "{{count}} submissions downloaded",
@@ -2080,7 +2084,9 @@
     },
     "rowDownload": {
       "title": "Download this submission",
-      "aria": "Download {{owner}}'s submission"
+      "aria": "Download {{owner}}'s submission",
+      "nothingToDownload": "{{owner}} has no submission to download yet.",
+      "error": "Couldn't download {{owner}}'s submission. Please try again."
     },
     "student": {
       "submittedAt": "Submitted {{date}}",

@@ -130,7 +130,32 @@ describe("useDownloadAllSubmissions", () => {
         assignment: "hw1",
         owners: ["alice", "bob"],
         onProgress: expect.any(Function),
+        signal: expect.any(AbortSignal),
       }),
     )
+  })
+
+  it("exposes a cancel that aborts the in-flight run's signal", async () => {
+    let captured: AbortSignal | undefined
+    downloadAllSubmissions.mockImplementation(async (...args: unknown[]) => {
+      captured = (args[0] as { signal?: AbortSignal }).signal
+      return result()
+    })
+    const queryClient = freshClient()
+    const { result: hook } = renderHook(() => useDownloadAllSubmissions(), {
+      wrapper: wrapperWith(queryClient),
+    })
+
+    hook.current.mutate({
+      org: ORG,
+      classroom: "cs101",
+      assignment: "hw1",
+      owners: ["alice"],
+    })
+    await waitFor(() => expect(hook.current.isSuccess).toBe(true))
+    expect(captured?.aborted).toBe(false)
+
+    hook.current.cancel()
+    expect(captured?.aborted).toBe(true)
   })
 })

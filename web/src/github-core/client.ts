@@ -247,13 +247,33 @@ export function createGitHubClient(args: {
         throw new Error("archive proxy is not configured")
       }
 
+      // Guard before attaching the token: only send the OAuth bearer to an
+      // https origin (or localhost for dev). A misconfigured archiveBaseUrl
+      // (http://, or a wrong host from a bad env) would otherwise exfiltrate a
+      // broadly-scoped token. Fail closed rather than send.
+      const base = new URL(args.archiveBaseUrl)
+      const isLocalhost =
+        base.hostname === "localhost" ||
+        base.hostname === "127.0.0.1" ||
+        base.hostname === "[::1]"
+      if (base.protocol !== "https:" && !isLocalhost) {
+        throw new Error("archive proxy must be an https origin")
+      }
+
       // Count against the diagnostics overlay like any other GitHub call, even
       // though this one hops through the proxy.
       countApiCall()
 
+      // Encode each path segment (defense-in-depth): owners are GitHub logins
+      // and repo is computed today, but a future ref caller could carry `/`,
+      // `..`, or query chars. `ref` legitimately contains `/`, so encode its
+      // segments individually.
+      const encodedRef = options?.ref
+        ? options.ref.split("/").map(encodeURIComponent).join("/")
+        : ""
       const path =
-        `/repos/${owner}/${repo}/zipball` +
-        (options?.ref ? `/${options.ref}` : "")
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/zipball` +
+        (encodedRef ? `/${encodedRef}` : "")
       const url = `${args.archiveBaseUrl.replace(/\/$/, "")}${path}`
 
       // Archives are larger than API responses; default to a generous timeout.
@@ -315,19 +335,35 @@ export function createGitHubClient(args: {
   }
 }
 
-// Pull the `filename` out of a Content-Disposition header (e.g.
-// `attachment; filename=owner-repo-sha.zip`), stripping optional quotes. GitHub
-// sends this on archive downloads so we can name the saved file sensibly.
-// Returns undefined when the header is absent or carries no filename.
+// Pull the `filename` out of a Content-Disposition header, preferring the
+// RFC 5987 `filename*=charset'lang'value` form (which wins per RFC 6266) over a
+// plain `filename="value"`, stripping optional quotes and the charset/lang
+// prefix. GitHub sends this on archive downloads so we can name the saved file
+// sensibly. Returns undefined when the header is absent or carries no filename.
 function parseContentDispositionFilename(
   header: string | null,
 ): string | undefined {
   if (!header) return undefined
-  const match = /filename\*?=(?:UTF-8''|")?([^";]+)"?/i.exec(header)
-  if (!match) return undefined
+
+  // Prefer filename* (extended, may carry non-ASCII); fall back to filename.
+  const ext = /filename\*=\s*(?:([\w-]+)'[^']*')?"?([^";]+?)"?\s*(?:;|$)/i.exec(
+    header,
+  )
+  if (ext) {
+    const value = ext[2].trim()
+    try {
+      return decodeURIComponent(value)
+    } catch {
+      return value
+    }
+  }
+
+  const plain = /filename=\s*"?([^";]+?)"?\s*(?:;|$)/i.exec(header)
+  if (!plain) return undefined
+  const value = plain[1].trim()
   try {
-    return decodeURIComponent(match[1].trim())
+    return decodeURIComponent(value)
   } catch {
-    return match[1].trim()
+    return value
   }
 }

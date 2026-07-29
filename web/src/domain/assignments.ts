@@ -71,6 +71,8 @@ export {
 } from "./assignments/submit"
 export {
   downloadAllSubmissions,
+  ZipAssemblyError,
+  BULK_DOWNLOAD_WARN_THRESHOLD,
   type DownloadAllProgress,
   type DownloadAllResult,
   type DownloadAllSummary,

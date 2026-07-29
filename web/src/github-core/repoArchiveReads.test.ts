@@ -54,7 +54,11 @@ describe("fetchRepoArchive", () => {
     )
 
     await fetchRepoArchive(client, "org", "cs101-hw1-alice")
-    expect(client.fetchArchive).toHaveBeenCalledWith("org", "cs101-hw1-alice")
+    expect(client.fetchArchive).toHaveBeenCalledWith(
+      "org",
+      "cs101-hw1-alice",
+      expect.objectContaining({ signal: undefined }),
+    )
   })
 
   it("returns null when the repo 404s (missing/empty)", async () => {

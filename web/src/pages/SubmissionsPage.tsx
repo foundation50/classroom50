@@ -502,14 +502,6 @@ const SubmissionsPageContent = () => {
     ],
   )
 
-  // Owners (student login or group founder) that actually pushed a submission —
-  // the set the bulk download fetches. Derived from the graded snapshot's rows,
-  // so never-accepted / accepted-no-push students are excluded (nothing to zip).
-  const downloadableOwners = useMemo(
-    () => scoresInfo.map((row) => row.owner),
-    [scoresInfo],
-  )
-
   // Group repos that exist but have no submission yet: for group assignments the
   // repo is named after the founder (not each member), so acceptance can't be
   // derived per student — instead surface every group repo from the org list
@@ -542,6 +534,15 @@ const SubmissionsPageContent = () => {
             rowInSection(row, sectionFilter, sectionByUsername),
           ),
     [scoresInfo, sectionFilter, sectionByUsername],
+  )
+
+  // Owners (student login or group founder) that actually pushed a submission —
+  // the set the bulk download fetches. Derived from the section-scoped rows so
+  // "Download all" matches the filtered view the teacher sees; never-accepted /
+  // accepted-no-push students are already excluded (they have no score row).
+  const downloadableOwners = useMemo(
+    () => scopedScores.map((row) => row.owner),
+    [scopedScores],
   )
   const scopedNonSubmitters = useMemo(
     () =>

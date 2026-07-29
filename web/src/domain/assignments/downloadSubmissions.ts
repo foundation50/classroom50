@@ -34,6 +34,24 @@ export type DownloadAllResult = {
   summary: DownloadAllSummary
 }
 
+// Soft ceiling on how many submissions one bulk run packages. The whole
+// combined zip is built in browser memory (every archive buffered, then a
+// second full copy from generateAsync), so a very large class can exhaust the
+// tab. The UI warns past this in the confirm step; it's advisory, not enforced
+// here — a teacher who accepts the warning still gets the full run.
+export const BULK_DOWNLOAD_WARN_THRESHOLD = 100
+
+// Thrown when the combined zip can't be assembled (typically an allocation
+// failure because the class is too large to hold in memory). Distinct from a
+// per-repo network failure so the UI can tell the teacher the class is too big
+// rather than showing a generic error after every archive already downloaded.
+export class ZipAssemblyError extends Error {
+  constructor(cause: unknown) {
+    super("Failed to assemble the combined submissions archive", { cause })
+    this.name = "ZipAssemblyError"
+  }
+}
+
 // Download EVERY submitting owner's latest submission into one combined zip
 // (single teacher action). A bounded fan-out (REPO_READ_CONCURRENCY) fetches
 // each repo's archive; each fetched archive is stored — not re-inflated — as a
@@ -50,8 +68,16 @@ export async function downloadAllSubmissions(params: {
   onProgress?: (progress: DownloadAllProgress) => void
   signal?: AbortSignal
 }): Promise<DownloadAllResult> {
-  const { client, org, classroom, assignment, owners, onProgress, signal } =
-    params
+  const { client, org, classroom, assignment, onProgress, signal } = params
+  // Dedupe (case-insensitively, matching the lowercased repo name) so a
+  // duplicated owner can't add two identical entries to the combined zip.
+  const seen = new Set<string>()
+  const owners = params.owners.filter((owner) => {
+    const key = owner.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
   const total = owners.length
   let done = 0
 
@@ -63,11 +89,11 @@ export async function downloadAllSubmissions(params: {
     async (owner): Promise<DownloadRepoResult> => {
       let result: DownloadRepoResult
       if (signal?.aborted) {
-        result = { owner, outcome: "failed", reason: "aborted" }
+        result = { owner, outcome: "empty", reason: "cancelled" }
       } else {
         try {
           const repo = studentRepoName(classroom, assignment, owner)
-          const archive = await fetchRepoArchive(client, org, repo)
+          const archive = await fetchRepoArchive(client, org, repo, { signal })
           result = archive
             ? { owner, outcome: "fetched" }
             : { owner, outcome: "empty" }
@@ -75,10 +101,19 @@ export async function downloadAllSubmissions(params: {
             zip.file(`${owner}.zip`, archive.bytes)
           }
         } catch (err) {
+          // A user cancel (abort) is not a repo failure — classify it so the
+          // summary doesn't report cancelled repos as failures.
+          const aborted =
+            signal?.aborted ||
+            (err instanceof DOMException && err.name === "AbortError")
           result = {
             owner,
-            outcome: "failed",
-            reason: err instanceof Error ? err.message : String(err),
+            outcome: aborted ? "empty" : "failed",
+            reason: aborted
+              ? "cancelled"
+              : err instanceof Error
+                ? err.message
+                : String(err),
           }
         }
       }
@@ -88,7 +123,14 @@ export async function downloadAllSubmissions(params: {
     },
   )
 
-  const blob = await zip.generateAsync({ type: "blob" })
+  let blob: Blob
+  try {
+    blob = await zip.generateAsync({ type: "blob" })
+  } catch (err) {
+    // Every archive already downloaded; the failure is assembling them (most
+    // likely an out-of-memory allocation for a very large class).
+    throw new ZipAssemblyError(err)
+  }
 
   return {
     blob,

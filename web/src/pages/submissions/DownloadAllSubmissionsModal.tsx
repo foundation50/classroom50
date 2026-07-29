@@ -4,6 +4,10 @@ import { FileArchive } from "lucide-react"
 
 import { Alert, Button, Modal, Spinner } from "@/components/ui"
 import useDownloadAllSubmissions from "@/hooks/mutations/useDownloadAllSubmissions"
+import {
+  BULK_DOWNLOAD_WARN_THRESHOLD,
+  ZipAssemblyError,
+} from "@/domain/assignments"
 import type { DownloadRepoResult } from "@/domain/assignments"
 
 // A warning Alert listing the owners in one non-fetched bucket (empty /
@@ -65,15 +69,22 @@ export function DownloadAllSubmissionsModal({
     mutate,
     isPending,
     data: summary,
+    error,
     progress,
+    cancel,
     reset,
   } = useDownloadAllSubmissions()
 
   const count = owners.length
   const running = isPending
+  // Assembly (out-of-memory) failure is distinct from a per-repo failure: every
+  // archive downloaded but the combined zip couldn't be built. Anything else is
+  // an unexpected batch-level error.
+  const assemblyError = error instanceof ZipAssemblyError
 
   const handleClose = () => {
-    if (running) return
+    // Closing mid-run cancels the in-flight batch rather than trapping the user.
+    if (running) cancel()
     onClose()
     reset()
   }
@@ -87,7 +98,6 @@ export function DownloadAllSubmissionsModal({
       open={open}
       onClose={handleClose}
       size="md"
-      closeDisabled={running}
       aria-labelledby={titleId}
     >
       <h3 id={titleId} className="flex items-center gap-2 text-lg font-bold">
@@ -95,7 +105,15 @@ export function DownloadAllSubmissionsModal({
         {t("submissions.downloadAll.title")}
       </h3>
 
-      {summary ? (
+      {error ? (
+        <div className="mt-3 space-y-3">
+          <Alert tone="error">
+            {assemblyError
+              ? t("submissions.downloadAll.assemblyError")
+              : t("submissions.downloadAll.runError")}
+          </Alert>
+        </div>
+      ) : summary ? (
         <div className="mt-3 space-y-3">
           <p className="text-sm leading-6 text-base-content/70">
             <Trans
@@ -104,6 +122,11 @@ export function DownloadAllSubmissionsModal({
               components={{ b: <span className="font-semibold" /> }}
             />
           </p>
+          {summary.fetched === 0 && (
+            <Alert tone="warning">
+              {t("submissions.downloadAll.nothingDownloaded")}
+            </Alert>
+          )}
           <ul className="space-y-1 text-sm">
             <li>
               {t("submissions.downloadAll.summaryDownloaded", {
@@ -168,33 +191,32 @@ export function DownloadAllSubmissionsModal({
             />
           </p>
           <p>{t("submissions.downloadAll.confirmHint")}</p>
+          {count > BULK_DOWNLOAD_WARN_THRESHOLD && (
+            <Alert tone="warning">
+              {t("submissions.downloadAll.largeClassWarning", { count })}
+            </Alert>
+          )}
         </div>
       )}
 
       <div className="modal-action">
-        {summary ? (
+        {summary || error ? (
           <Button size="sm" onClick={handleClose}>
             {t("common.close")}
           </Button>
+        ) : running ? (
+          <Button variant="ghost" size="sm" onClick={handleClose}>
+            {t("common.cancel")}
+          </Button>
         ) : (
           <>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={running}
-              onClick={handleClose}
-            >
+            <Button variant="ghost" size="sm" onClick={handleClose}>
               {t("common.cancel")}
             </Button>
             <Button
               variant="primary"
               size="sm"
-              loading={running}
-              loadingLabel={t("submissions.downloadAll.running", {
-                done: progress?.done ?? 0,
-                total: progress?.total ?? count,
-              })}
-              disabled={running || count === 0}
+              disabled={count === 0}
               onClick={handleRun}
             >
               {t("submissions.downloadAll.confirmLabel", { count })}

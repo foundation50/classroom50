@@ -202,12 +202,15 @@ describe("SubmissionsTable per-row download", () => {
     )
     const btn = screen.getByTitle("submissions.rowDownload.title")
     btn.click()
-    expect(downloadSubmission).toHaveBeenCalledWith({
-      org: "acme",
-      classroom: "cs101",
-      assignment: "hw1",
-      owner: "alice",
-    })
+    expect(downloadSubmission).toHaveBeenCalledWith(
+      {
+        org: "acme",
+        classroom: "cs101",
+        assignment: "hw1",
+        owner: "alice",
+      },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    )
   })
 
   it("renders the download button even for an empty_repo assignment", () => {
