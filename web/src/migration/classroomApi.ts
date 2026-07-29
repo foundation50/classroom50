@@ -37,7 +37,7 @@ export async function getClassroom(
     return await client.request<ClassroomDetail>(`/classrooms/${id}`)
   } catch (err) {
     if (err instanceof GitHubAPIError && err.isNotFound) {
-      throw new GitHubClassroomAccessError(id)
+      throw new GitHubClassroomAccessError(id, { cause: err })
     }
     throw err
   }
@@ -50,7 +50,8 @@ export function listClassroomAssignments(
 ): Promise<ClassroomAssignmentListItem[]> {
   return paginateAll<ClassroomAssignmentListItem>(
     client,
-    (page) => `/classrooms/${classroomId}/assignments?per_page=100&page=${page}`,
+    (page) =>
+      `/classrooms/${classroomId}/assignments?per_page=100&page=${page}`,
   )
 }
 
@@ -67,6 +68,7 @@ export async function getClassroomAssignment(
     if (err instanceof GitHubAPIError && err.isNotFound) {
       throw new Error(
         `Assignment ${assignmentId} is not accessible — you must administer its GitHub Classroom.`,
+        { cause: err },
       )
     }
     throw err
@@ -168,9 +170,10 @@ export async function resolveSource(
 // A source classroom the viewer cannot administer (GitHub Classroom 404).
 export class GitHubClassroomAccessError extends Error {
   classroomId: number
-  constructor(classroomId: number) {
+  constructor(classroomId: number, options?: ErrorOptions) {
     super(
       `Classroom ${classroomId} is not accessible to your account — you must be a GitHub Classroom admin for it.`,
+      options,
     )
     this.name = "GitHubClassroomAccessError"
     this.classroomId = classroomId

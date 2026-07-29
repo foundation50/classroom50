@@ -59,9 +59,7 @@ export function classroomMigratedFrom(
 export function deriveShortName(rawName: string): string {
   const lowered = rawName.trim().toLowerCase()
   if (!lowered) {
-    throw new Error(
-      "Classroom name is empty — enter a short name explicitly.",
-    )
+    throw new Error("Classroom name is empty — enter a short name explicitly.")
   }
   let slug = lowered.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
   if (slug.length > 39) {
@@ -73,7 +71,10 @@ export function deriveShortName(rawName: string): string {
 
 // Validate a short-name (derived or user-supplied) for both the schema pattern
 // and the team-slug canonical form. Throws an actionable error otherwise.
-export function assertValidShortName(shortName: string, rawName?: string): void {
+export function assertValidShortName(
+  shortName: string,
+  rawName?: string,
+): void {
   if (!SHORT_NAME_PATTERN.test(shortName)) {
     const from = rawName ? ` from "${rawName}"` : ""
     throw new Error(
@@ -106,7 +107,11 @@ export function migratedDueFields(
   if (Number.isNaN(parsed.getTime())) return null
 
   const offsetMatch = /(Z|[+-]\d{2}:?\d{2})$/.exec(trimmed)
-  const offset = offsetMatch ? (offsetMatch[1] === "Z" ? "+00:00" : normalizeOffset(offsetMatch[1])) : "+00:00"
+  const offset = offsetMatch
+    ? offsetMatch[1] === "Z"
+      ? "+00:00"
+      : normalizeOffset(offsetMatch[1])
+    : "+00:00"
 
   return {
     due: parsed.toISOString().replace(/\.\d{3}Z$/, "Z"),
@@ -179,7 +184,9 @@ export function assignmentToEntry(
     // migration never fails on a missing/odd value (the teacher tightens later).
     const maxTeams = detail.max_teams
     entry.max_group_size =
-      maxTeams != null && maxTeams >= GROUP_SIZE_MIN && maxTeams <= GROUP_SIZE_MAX
+      maxTeams != null &&
+      maxTeams >= GROUP_SIZE_MIN &&
+      maxTeams <= GROUP_SIZE_MAX
         ? maxTeams
         : GROUP_SIZE_MAX
   }

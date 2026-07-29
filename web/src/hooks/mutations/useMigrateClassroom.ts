@@ -22,8 +22,7 @@ export function useMigrateClassroom(targetOrg: string) {
   const queryClient = useQueryClient()
 
   return useMutation<MigrationResult, Error, UseMigrateClassroomVars>({
-    mutationFn: ({ plan, options }) =>
-      migrateClassroom(client, plan, options),
+    mutationFn: ({ plan, options }) => migrateClassroom(client, plan, options),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(targetOrg, CONFIG_REPO),

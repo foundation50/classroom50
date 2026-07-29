@@ -40,7 +40,13 @@ describe("getClassroom", () => {
   it("returns detail with the organization block", async () => {
     const client = clientFrom((url) => {
       if (url === "/classrooms/42")
-        return { id: 42, name: "CS", archived: false, url: "u", organization: { id: 1, login: "acme" } }
+        return {
+          id: 42,
+          name: "CS",
+          archived: false,
+          url: "u",
+          organization: { id: 1, login: "acme" },
+        }
       throw notFound(url)
     })
     const detail = await getClassroom(client, 42)
@@ -109,9 +115,29 @@ describe("fetchAssignmentsForClassroom", () => {
           { id: 11, title: "B", slug: "b", type: "group" },
         ]
       if (url === "/assignments/10")
-        return { id: 10, slug: "a", title: "A", type: "individual", deadline: null, max_teams: null, starter_code_repository: null, invite_link: "", public_repo: true }
+        return {
+          id: 10,
+          slug: "a",
+          title: "A",
+          type: "individual",
+          deadline: null,
+          max_teams: null,
+          starter_code_repository: null,
+          invite_link: "",
+          public_repo: true,
+        }
       if (url === "/assignments/11")
-        return { id: 11, slug: "b", title: "B", type: "group", deadline: null, max_teams: 3, starter_code_repository: null, invite_link: "", public_repo: true }
+        return {
+          id: 11,
+          slug: "b",
+          title: "B",
+          type: "group",
+          deadline: null,
+          max_teams: 3,
+          starter_code_repository: null,
+          invite_link: "",
+          public_repo: true,
+        }
       throw notFound(url)
     })
     const details = await fetchAssignmentsForClassroom(client, 1)
@@ -123,7 +149,13 @@ describe("resolveSource", () => {
   it("resolves a numeric id directly", async () => {
     const client = clientFrom((url) => {
       if (url === "/classrooms/99")
-        return { id: 99, name: "N", archived: false, url: "u", organization: { id: 1, login: "acme" } }
+        return {
+          id: 99,
+          name: "N",
+          archived: false,
+          url: "u",
+          organization: { id: 1, login: "acme" },
+        }
       throw notFound(url)
     })
     const detail = await resolveSource(client, "99")
@@ -135,7 +167,13 @@ describe("resolveSource", () => {
       if (url.startsWith("/classrooms?"))
         return [{ id: 1, name: "One", archived: false, url: "u" }]
       if (url === "/classrooms/1")
-        return { id: 1, name: "One", archived: false, url: "u", organization: { id: 1, login: "acme" } }
+        return {
+          id: 1,
+          name: "One",
+          archived: false,
+          url: "u",
+          organization: { id: 1, login: "acme" },
+        }
       throw notFound(url)
     })
     const detail = await resolveSource(client, "ACME")
@@ -150,12 +188,26 @@ describe("resolveSource", () => {
           { id: 2, name: "Two", archived: false, url: "u" },
         ]
       if (url === "/classrooms/1")
-        return { id: 1, name: "One", archived: false, url: "u", organization: { login: "acme" } }
+        return {
+          id: 1,
+          name: "One",
+          archived: false,
+          url: "u",
+          organization: { login: "acme" },
+        }
       if (url === "/classrooms/2")
-        return { id: 2, name: "Two", archived: false, url: "u", organization: { login: "acme" } }
+        return {
+          id: 2,
+          name: "Two",
+          archived: false,
+          url: "u",
+          organization: { login: "acme" },
+        }
       throw notFound(url)
     })
-    await expect(resolveSource(client, "acme")).rejects.toThrow(/1 \(One\).*2 \(Two\)/s)
+    await expect(resolveSource(client, "acme")).rejects.toThrow(
+      /1 \(One\).*2 \(Two\)/s,
+    )
   })
 
   it("errors when no classroom matches the org", async () => {
@@ -163,10 +215,18 @@ describe("resolveSource", () => {
       if (url.startsWith("/classrooms?"))
         return [{ id: 1, name: "One", archived: false, url: "u" }]
       if (url === "/classrooms/1")
-        return { id: 1, name: "One", archived: false, url: "u", organization: { login: "other" } }
+        return {
+          id: 1,
+          name: "One",
+          archived: false,
+          url: "u",
+          organization: { login: "other" },
+        }
       throw notFound(url)
     })
-    await expect(resolveSource(client, "acme")).rejects.toThrow(/No classroom found/)
+    await expect(resolveSource(client, "acme")).rejects.toThrow(
+      /No classroom found/,
+    )
   })
 })
 
@@ -179,7 +239,13 @@ describe("listClassroomsWithOrg", () => {
           { id: 2, name: "Old", archived: true, url: "u" },
         ]
       if (url === "/classrooms/1")
-        return { id: 1, name: "Live", archived: false, url: "u", organization: { login: "acme" } }
+        return {
+          id: 1,
+          name: "Live",
+          archived: false,
+          url: "u",
+          organization: { login: "acme" },
+        }
       throw notFound(url)
     })
     const rows = await listClassroomsWithOrg(client)

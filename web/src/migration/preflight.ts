@@ -81,7 +81,9 @@ export async function buildPreflight(
   const assignments = await fetchAssignmentsForClassroom(client, classroom.id)
   const items: MigrationItem[] = []
   for (const a of assignments) {
-    items.push(await classifyAssignment(client, input.targetOrg, templateSuffix, a))
+    items.push(
+      await classifyAssignment(client, input.targetOrg, templateSuffix, a),
+    )
   }
 
   const blockers: MigrationBlocker[] = []

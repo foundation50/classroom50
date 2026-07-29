@@ -15,7 +15,13 @@ const emptyRateLimit = {
   retryAfter: null,
 }
 const notFound = (url: string) =>
-  new GitHubAPIError({ status: 404, url, message: "Not Found", body: null, rateLimit: emptyRateLimit })
+  new GitHubAPIError({
+    status: 404,
+    url,
+    message: "Not Found",
+    body: null,
+    rateLimit: emptyRateLimit,
+  })
 
 const assignment = (
   over: Partial<ClassroomAssignmentDetail> = {},

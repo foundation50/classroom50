@@ -21,7 +21,13 @@ const emptyRateLimit = {
   retryAfter: null,
 }
 const notFound = (url: string) =>
-  new GitHubAPIError({ status: 404, url, message: "Not Found", body: null, rateLimit: emptyRateLimit })
+  new GitHubAPIError({
+    status: 404,
+    url,
+    message: "Not Found",
+    body: null,
+    rateLimit: emptyRateLimit,
+  })
 
 const classroom: ClassroomDetail = {
   id: 1,
@@ -96,70 +102,75 @@ function makeClient(opts: {
   const grants: string[] = []
   let committedTree: Record<string, string> = {}
 
-  const request = vi.fn(async (url: string, init?: { method?: string; body?: unknown }) => {
-    const method = init?.method ?? "GET"
+  const request = vi.fn(
+    async (url: string, init?: { method?: string; body?: unknown }) => {
+      const method = init?.method ?? "GET"
 
-    // Pre-write dir existence check
-    if (url.includes(`/${"classroom50"}/contents/`)) {
-      if (opts.dirExistsAtStart) return { type: "file" }
-      throw notFound(url)
-    }
-    // generate
-    if (url.endsWith("/generate")) {
-      const slug = url.match(/\/repos\/src\/([^/]+)\/generate/)?.[1]
-      if (slug && opts.failGenerateFor === slug) throw new Error("generate boom")
-      return { default_branch: "main" }
-    }
-    // mark as template (PATCH /repos/dst/<name>)
-    if (method === "PATCH" && /^\/repos\/dst\/[^/]+$/.test(url)) return {}
-    // config repo default branch
-    if (/^\/repos\/dst\/classroom50$/.test(url)) return { default_branch: "main" }
-    // config-repo ref/commit reads for the scaffold commit (checked before the
-    // generic template branch-wait route below)
-    if (url.includes("/classroom50/git/ref/heads/main"))
-      return { object: { sha: "parent" } }
-    if (url.includes("/classroom50/git/commits/")) return { tree: { sha: "basetree" } }
-    // template branch-wait ref read (any non-config repo)
-    if (url.includes("/git/ref/heads/")) return { object: { sha: "s" } }
-    // team create/adopt
-    if (method === "POST" && /\/orgs\/dst\/teams$/.test(url)) {
-      const name = (init?.body as { name: string }).name
-      return { id: name.length, slug: name }
-    }
-    if (method === "GET" && /\/orgs\/dst\/teams\/[^/]+$/.test(url)) {
-      const slug = url.split("/").pop() as string
-      return { id: slug.length, slug, privacy: "secret" }
-    }
-    // config-repo grant PUT to config repo (ensureStaffTeams) or template grant
-    if (method === "PUT" && /\/orgs\/dst\/teams\/[^/]+\/repos\//.test(url)) {
-      grants.push(url)
-      return {}
-    }
-    // membership add/remove
-    if (/\/memberships\//.test(url)) return {}
-    // blob/tree/commit writes
-    if (url.endsWith("/git/blobs")) {
-      const body = init?.body as { content: string }
-      // stash blob content by a synthetic sha we can map in the tree write
-      const sha = `blob${Object.keys(committedTree).length}`
-      committedTree[sha] = body.content
-      return { sha }
-    }
-    if (url.endsWith("/git/trees")) {
-      const body = init?.body as {
-        tree: Array<{ path: string; sha: string }>
+      // Pre-write dir existence check
+      if (url.includes(`/${"classroom50"}/contents/`)) {
+        if (opts.dirExistsAtStart) return { type: "file" }
+        throw notFound(url)
       }
-      const mapped: Record<string, string> = {}
-      for (const t of body.tree) mapped[t.path] = committedTree[t.sha]
-      committedTree = { ...committedTree, __paths: JSON.stringify(mapped) }
-      return { sha: "newtree" }
-    }
-    if (url.endsWith("/git/commits")) return { sha: "newcommit" }
-    if (method === "PATCH" && url.includes("/git/refs/heads/main"))
-      return { object: { sha: "newcommit" } }
+      // generate
+      if (url.endsWith("/generate")) {
+        const slug = url.match(/\/repos\/src\/([^/]+)\/generate/)?.[1]
+        if (slug && opts.failGenerateFor === slug)
+          throw new Error("generate boom")
+        return { default_branch: "main" }
+      }
+      // mark as template (PATCH /repos/dst/<name>)
+      if (method === "PATCH" && /^\/repos\/dst\/[^/]+$/.test(url)) return {}
+      // config repo default branch
+      if (/^\/repos\/dst\/classroom50$/.test(url))
+        return { default_branch: "main" }
+      // config-repo ref/commit reads for the scaffold commit (checked before the
+      // generic template branch-wait route below)
+      if (url.includes("/classroom50/git/ref/heads/main"))
+        return { object: { sha: "parent" } }
+      if (url.includes("/classroom50/git/commits/"))
+        return { tree: { sha: "basetree" } }
+      // template branch-wait ref read (any non-config repo)
+      if (url.includes("/git/ref/heads/")) return { object: { sha: "s" } }
+      // team create/adopt
+      if (method === "POST" && /\/orgs\/dst\/teams$/.test(url)) {
+        const name = (init?.body as { name: string }).name
+        return { id: name.length, slug: name }
+      }
+      if (method === "GET" && /\/orgs\/dst\/teams\/[^/]+$/.test(url)) {
+        const slug = url.split("/").pop() as string
+        return { id: slug.length, slug, privacy: "secret" }
+      }
+      // config-repo grant PUT to config repo (ensureStaffTeams) or template grant
+      if (method === "PUT" && /\/orgs\/dst\/teams\/[^/]+\/repos\//.test(url)) {
+        grants.push(url)
+        return {}
+      }
+      // membership add/remove
+      if (/\/memberships\//.test(url)) return {}
+      // blob/tree/commit writes
+      if (url.endsWith("/git/blobs")) {
+        const body = init?.body as { content: string }
+        // stash blob content by a synthetic sha we can map in the tree write
+        const sha = `blob${Object.keys(committedTree).length}`
+        committedTree[sha] = body.content
+        return { sha }
+      }
+      if (url.endsWith("/git/trees")) {
+        const body = init?.body as {
+          tree: Array<{ path: string; sha: string }>
+        }
+        const mapped: Record<string, string> = {}
+        for (const t of body.tree) mapped[t.path] = committedTree[t.sha]
+        committedTree = { ...committedTree, __paths: JSON.stringify(mapped) }
+        return { sha: "newtree" }
+      }
+      if (url.endsWith("/git/commits")) return { sha: "newcommit" }
+      if (method === "PATCH" && url.includes("/git/refs/heads/main"))
+        return { object: { sha: "newcommit" } }
 
-    throw new Error(`unexpected: ${method} ${url}`)
-  })
+      throw new Error(`unexpected: ${method} ${url}`)
+    },
+  )
 
   return {
     client: { request } as unknown as GitHubClient,
@@ -192,7 +203,9 @@ describe("migrateClassroom", () => {
       classroom_id: 1,
     })
     expect(classroomJson.term).toBe("Fall-2026")
-    const assignmentsJson = JSON.parse(paths["cs-50/assignments.json"] as string)
+    const assignmentsJson = JSON.parse(
+      paths["cs-50/assignments.json"] as string,
+    )
     expect(assignmentsJson.assignments).toHaveLength(1)
     expect(assignmentsJson.assignments[0].autograder).toBe("default")
 
@@ -215,9 +228,9 @@ describe("migrateClassroom", () => {
     const assignmentsJson = JSON.parse(
       committed()["cs-50/assignments.json"] as string,
     )
-    expect(assignmentsJson.assignments.map((a: { slug: string }) => a.slug)).toEqual([
-      "hw1",
-    ])
+    expect(
+      assignmentsJson.assignments.map((a: { slug: string }) => a.slug),
+    ).toEqual(["hw1"])
   })
 
   it("refuses to overwrite when the dir appeared before the write", async () => {
@@ -232,13 +245,20 @@ describe("migrateClassroom", () => {
     await migrateClassroom(client, plan([importItem("hw1")]), {})
     // At least the student team gets a pull grant on the private template repo.
     expect(
-      grants().some((g) => /\/teams\/classroom50-cs-50\/repos\/dst\/hw1$/.test(g)),
+      grants().some((g) =>
+        /\/teams\/classroom50-cs-50\/repos\/dst\/hw1$/.test(g),
+      ),
     ).toBe(true)
   })
 
   it("throws when the plan still has blockers", async () => {
     const { client } = makeClient({})
-    const blocked = { ...plan([importItem("hw1")]), blockers: [{ kind: "dir_exists" as const }] }
-    await expect(migrateClassroom(client, blocked, {})).rejects.toThrow(/blockers/)
+    const blocked = {
+      ...plan([importItem("hw1")]),
+      blockers: [{ kind: "dir_exists" as const }],
+    }
+    await expect(migrateClassroom(client, blocked, {})).rejects.toThrow(
+      /blockers/,
+    )
   })
 })

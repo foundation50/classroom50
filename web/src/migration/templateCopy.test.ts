@@ -33,24 +33,36 @@ const importItem: MigrationItem = {
 describe("copyOneTemplate — import", () => {
   it("generates, marks as template, waits, and returns the ref", async () => {
     const calls: string[] = []
-    const request = vi.fn(async (url: string, init?: { method?: string; body?: unknown }) => {
-      calls.push(`${init?.method ?? "GET"} ${url}`)
-      if (url === "/repos/src/hw1/generate") {
-        expect((init?.body as { include_all_branches: boolean }).include_all_branches).toBe(true)
-        expect((init?.body as { private: boolean }).private).toBe(true)
-        return { default_branch: "main" }
-      }
-      if (init?.method === "PATCH" && url === "/repos/dst/hw1") {
-        expect((init?.body as { is_template: boolean }).is_template).toBe(true)
-        return {}
-      }
-      if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
-      throw new Error(`unexpected: ${init?.method} ${url}`)
-    })
+    const request = vi.fn(
+      async (url: string, init?: { method?: string; body?: unknown }) => {
+        calls.push(`${init?.method ?? "GET"} ${url}`)
+        if (url === "/repos/src/hw1/generate") {
+          expect(
+            (init?.body as { include_all_branches: boolean })
+              .include_all_branches,
+          ).toBe(true)
+          expect((init?.body as { private: boolean }).private).toBe(true)
+          return { default_branch: "main" }
+        }
+        if (init?.method === "PATCH" && url === "/repos/dst/hw1") {
+          expect((init?.body as { is_template: boolean }).is_template).toBe(
+            true,
+          )
+          return {}
+        }
+        if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
+        throw new Error(`unexpected: ${init?.method} ${url}`)
+      },
+    )
     const client = { request } as unknown as GitHubClient
 
     const res = await copyOneTemplate(client, "dst", 42, importItem)
-    expect(res).toEqual({ owner: "dst", repo: "hw1", branch: "main", private: true })
+    expect(res).toEqual({
+      owner: "dst",
+      repo: "hw1",
+      branch: "main",
+      private: true,
+    })
     expect(calls).toContain("POST /repos/src/hw1/generate")
     expect(calls).toContain("PATCH /repos/dst/hw1")
   })
@@ -61,7 +73,9 @@ describe("copyOneTemplate — import", () => {
       throw new Error(`unexpected ${url}`)
     })
     const client = { request } as unknown as GitHubClient
-    await expect(copyOneTemplate(client, "dst", 1, importItem)).rejects.toThrow(/boom/)
+    await expect(copyOneTemplate(client, "dst", 1, importItem)).rejects.toThrow(
+      /boom/,
+    )
   })
 
   it("succeeds once the branch ref resolves", async () => {
@@ -91,7 +105,12 @@ describe("copyOneTemplate — reuse", () => {
       targetPrivate: false,
     }
     const res = await copyOneTemplate(client, "dst", 1, reuse)
-    expect(res).toEqual({ owner: "dst", repo: "hw1", branch: "trunk", private: false })
+    expect(res).toEqual({
+      owner: "dst",
+      repo: "hw1",
+      branch: "trunk",
+      private: false,
+    })
     expect(request).not.toHaveBeenCalled()
   })
 })

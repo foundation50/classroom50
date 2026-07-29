@@ -95,7 +95,9 @@ export async function copyOneTemplate(
   item: MigrationItem,
 ): Promise<CopiedTemplate> {
   if (item.action === "skip") {
-    throw new Error(`copyOneTemplate called on a skipped item (${item.assignment.slug})`)
+    throw new Error(
+      `copyOneTemplate called on a skipped item (${item.assignment.slug})`,
+    )
   }
 
   if (item.action === "reuse") {

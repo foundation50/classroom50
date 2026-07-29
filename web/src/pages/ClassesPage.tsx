@@ -45,6 +45,15 @@ const CreateClassroomPane = ({ org }: { org: string }) => {
             <Plus aria-hidden="true" className="size-4" />
             {t("classes.empty.createButton")}
           </Link>
+          {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
+          <Link
+            to="/$org/import"
+            params={{ org }}
+            type="button"
+            className="btn btn-ghost"
+          >
+            {t("migration.entryButton")}
+          </Link>
         </Card.Actions>
       </Card.Body>
     </Card>
@@ -149,6 +158,14 @@ const ClassesPage = () => {
         loading={roleLoading}
         title={isStaff ? t("classes.myClasses") : t("classes.myAssignments")}
         subtitle={<p className="max-w-2xl">{t("classes.manageSubtitle")}</p>}
+        action={
+          isStaff && classes.length > 0 ? (
+            /* FEATURE: github-classroom-migration — removable entry point (#312) */
+            <Link to="/$org/import" params={{ org }} className="btn btn-ghost">
+              {t("migration.entryButton")}
+            </Link>
+          ) : undefined
+        }
       />
 
       {isNonStaff && !isMember && !loadingMembership && (

@@ -14,7 +14,13 @@ const emptyRateLimit = {
   retryAfter: null,
 }
 const notFound = (url: string) =>
-  new GitHubAPIError({ status: 404, url, message: "Not Found", body: null, rateLimit: emptyRateLimit })
+  new GitHubAPIError({
+    status: 404,
+    url,
+    message: "Not Found",
+    body: null,
+    rateLimit: emptyRateLimit,
+  })
 
 // Build a route-table client for a source classroom (id 1, org "src-org",
 // name "CS 50") with two assignments: hw1 (importable) and hw2 (source not a
@@ -27,16 +33,54 @@ function makeClient(opts: {
   const request = vi.fn(async (url: string) => {
     // Source classroom + assignments
     if (url === "/classrooms/1")
-      return { id: 1, name: "CS 50", archived: false, url: "u", organization: { login: "src-org" } }
+      return {
+        id: 1,
+        name: "CS 50",
+        archived: false,
+        url: "u",
+        organization: { login: "src-org" },
+      }
     if (url.startsWith("/classrooms/1/assignments"))
       return [
         { id: 10, title: "HW1", slug: "hw1", type: "individual" },
         { id: 11, title: "HW2", slug: "hw2", type: "individual" },
       ]
     if (url === "/assignments/10")
-      return { id: 10, slug: "hw1", title: "HW1", type: "individual", deadline: null, max_teams: null, invite_link: "", public_repo: true, starter_code_repository: { full_name: "src/hw1", private: false, default_branch: "main", id: 1, name: "hw1" } }
+      return {
+        id: 10,
+        slug: "hw1",
+        title: "HW1",
+        type: "individual",
+        deadline: null,
+        max_teams: null,
+        invite_link: "",
+        public_repo: true,
+        starter_code_repository: {
+          full_name: "src/hw1",
+          private: false,
+          default_branch: "main",
+          id: 1,
+          name: "hw1",
+        },
+      }
     if (url === "/assignments/11")
-      return { id: 11, slug: "hw2", title: "HW2", type: "individual", deadline: null, max_teams: null, invite_link: "", public_repo: true, starter_code_repository: { full_name: "src/hw2", private: false, default_branch: "main", id: 2, name: "hw2" } }
+      return {
+        id: 11,
+        slug: "hw2",
+        title: "HW2",
+        type: "individual",
+        deadline: null,
+        max_teams: null,
+        invite_link: "",
+        public_repo: true,
+        starter_code_repository: {
+          full_name: "src/hw2",
+          private: false,
+          default_branch: "main",
+          id: 2,
+          name: "hw2",
+        },
+      }
     // Source template reads
     if (url === "/repos/src/hw1") return { is_template: true }
     if (url === "/repos/src/hw2") return { is_template: false }

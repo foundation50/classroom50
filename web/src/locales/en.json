@@ -67,6 +67,89 @@
   "missingParams": {
     "message": "This page is missing a required parameter."
   },
+  "migration": {
+    "documentTitle": "Import from GitHub Classroom",
+    "title": "Import from GitHub Classroom",
+    "subtitle": "Bring an existing GitHub Classroom — its assignments and starter repositories — into this organization as a new class. You'll review and confirm everything before anything is created.",
+    "entryButton": "Import from GitHub Classroom",
+    "missingOrg": "This page needs an organization in the URL.",
+    "gate": {
+      "title": "Set up this organization first",
+      "body": "\"{{org}}\" isn't a Classroom 50 organization yet. Run the one-time setup, then come back to import.",
+      "setupButton": "Go to organization setup",
+      "checking": "Checking the organization…",
+      "checkError": "Couldn't check the organization's setup status.",
+      "checkOrgAccess": "Review app access for this organization"
+    },
+    "select": {
+      "title": "Choose a GitHub Classroom to import",
+      "body": "These are the GitHub Classrooms your account can administer.",
+      "showArchived": "Show archived classrooms",
+      "loading": "Loading your GitHub Classrooms…",
+      "loadError": "Couldn't load your GitHub Classrooms.",
+      "retry": "Retry",
+      "empty": "No GitHub Classrooms are accessible to your account. Confirm you administer one at classroom.github.com.",
+      "orgLine": "Organization: {{org}}",
+      "archivedTag": "archived"
+    },
+    "confirm": {
+      "title": "Review what will be imported",
+      "body": "Importing \"{{name}}\" (from {{org}}). Review each assignment below, then confirm. Nothing is created until you do.",
+      "shortName": "Class short name",
+      "term": "Term",
+      "termPlaceholder": "e.g. Fall-2026",
+      "suffix": "Template repo suffix",
+      "suffixPlaceholder": "optional",
+      "preflightError": "Couldn't build the import preview.",
+      "countImport": "{{n}} to import",
+      "countReuse": "{{n}} to reuse",
+      "countSkip": "{{n}} to skip",
+      "warningTitle": "This step is hard to undo",
+      "warningBody": "Confirming will create {{count}} new repository(ies) in {{org}}, create GitHub teams, and commit a new class. Review the list above before continuing.",
+      "typeToConfirm": "Type the class short name \"{{shortName}}\" to confirm",
+      "back": "Back",
+      "importButton": "Import"
+    },
+    "execute": {
+      "runningTitle": "Importing…",
+      "runningBody": "Creating repositories and the class. This can take a minute — please keep this tab open.",
+      "doneTitle": "Import finished",
+      "error": "The import failed.",
+      "summaryComplete": "Import complete.",
+      "summaryPartial": "Import finished with some assignments skipped.",
+      "summaryCounts": "{{generated}} generated, {{reused}} reused, {{skipped}} skipped.",
+      "viewClass": "Open the new class"
+    },
+    "item": {
+      "target": "Target repo: {{name}}",
+      "private": "private",
+      "public": "public"
+    },
+    "status": {
+      "willImport": "Will import",
+      "willReuse": "Will reuse",
+      "willSkip": "Will skip",
+      "pending": "Pending",
+      "running": "Working…",
+      "generated": "Imported",
+      "reused": "Reused",
+      "skipped": "Skipped"
+    },
+    "blocker": {
+      "needs_org_setup": "\"{{org}}\" isn't set up for Classroom 50 yet — run organization setup first, then retry.",
+      "dir_exists": "A class named \"{{shortName}}\" already exists in this organization. Pick a different short name to continue."
+    },
+    "reason": {
+      "invalidSlug": "The assignment slug \"{{slug}}\" isn't a valid repo name.",
+      "invalidMode": "Unsupported assignment type \"{{type}}\".",
+      "noStarter": "This assignment has no starter repository to copy.",
+      "badStarter": "The starter repository \"{{fullName}}\" has an unexpected name.",
+      "sourceNotAccessible": "The starter repository \"{{fullName}}\" isn't accessible to your account.",
+      "sourceNotTemplate": "The starter repository \"{{fullName}}\" isn't a template — enable \"Template repository\" on it and retry.",
+      "targetCollision": "A repository named \"{{name}}\" already exists in {{org}} and isn't a template. Set a template suffix to avoid the collision.",
+      "copyFailed": "Couldn't copy the template: {{message}}"
+    }
+  },
   "nav": {
     "appName": "Classroom 50",
     "openMenu": "Open menu",

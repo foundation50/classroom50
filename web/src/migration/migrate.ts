@@ -99,7 +99,12 @@ export async function migrateClassroom(
     })
 
     try {
-      const copied = await copyOneTemplate(client, targetOrg, plan.classroom.id, item)
+      const copied = await copyOneTemplate(
+        client,
+        targetOrg,
+        plan.classroom.id,
+        item,
+      )
       const entry = assignmentToEntry(
         item.assignment,
         plan.classroom.id,
@@ -107,7 +112,8 @@ export async function migrateClassroom(
         migratedAt,
       )
       entries.push(entry)
-      if (copied.private) privateTemplates.push({ owner: copied.owner, repo: copied.repo })
+      if (copied.private)
+        privateTemplates.push({ owner: copied.owner, repo: copied.repo })
       if (item.action === "import") generated++
       else reused++
       options.onItem?.({
@@ -192,14 +198,25 @@ export async function migrateClassroom(
     const scoresJson = { schema: "classroom50/scores/v1", assignments: {} }
 
     const files: Array<{ path: string; content: string }> = [
-      { path: `${shortName}/classroom.json`, content: JSON.stringify(classroomJson, null, 2) },
-      { path: `${shortName}/assignments.json`, content: JSON.stringify(assignmentsJson, null, 2) },
+      {
+        path: `${shortName}/classroom.json`,
+        content: JSON.stringify(classroomJson, null, 2),
+      },
+      {
+        path: `${shortName}/assignments.json`,
+        content: JSON.stringify(assignmentsJson, null, 2),
+      },
       { path: `${shortName}/roster.csv`, content: STUDENTS_CSV_HEADER },
-      { path: `${shortName}/scores.json`, content: JSON.stringify(scoresJson, null, 2) },
+      {
+        path: `${shortName}/scores.json`,
+        content: JSON.stringify(scoresJson, null, 2),
+      },
     ]
 
     const blobs = await Promise.all(
-      files.map((f) => createBlob(client, { org: targetOrg, content: f.content })),
+      files.map((f) =>
+        createBlob(client, { org: targetOrg, content: f.content }),
+      ),
     )
     const tree = await createTreeFromEntries(client, {
       org: targetOrg,

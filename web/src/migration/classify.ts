@@ -90,10 +90,16 @@ export async function classifyAssignment(
 
   // Validate the shape a downstream entry needs BEFORE any network call.
   if (!SHORT_NAME_PATTERN.test(assignment.slug)) {
-    return skip({ key: "migration.reason.invalidSlug", params: { slug: assignment.slug } })
+    return skip({
+      key: "migration.reason.invalidSlug",
+      params: { slug: assignment.slug },
+    })
   }
   if (assignment.type !== "individual" && assignment.type !== "group") {
-    return skip({ key: "migration.reason.invalidMode", params: { type: assignment.type } })
+    return skip({
+      key: "migration.reason.invalidMode",
+      params: { type: assignment.type },
+    })
   }
 
   const starter = assignment.starter_code_repository
@@ -102,7 +108,10 @@ export async function classifyAssignment(
   }
   const src = splitFullName(starter.full_name)
   if (!src) {
-    return skip({ key: "migration.reason.badStarter", params: { fullName: starter.full_name } })
+    return skip({
+      key: "migration.reason.badStarter",
+      params: { fullName: starter.full_name },
+    })
   }
 
   let srcIsTemplate: boolean
@@ -110,12 +119,18 @@ export async function classifyAssignment(
     srcIsTemplate = await sourceIsTemplate(client, src.owner, src.repo)
   } catch (err) {
     if (err instanceof GitHubAPIError && err.isNotFound) {
-      return skip({ key: "migration.reason.sourceNotAccessible", params: { fullName: starter.full_name } })
+      return skip({
+        key: "migration.reason.sourceNotAccessible",
+        params: { fullName: starter.full_name },
+      })
     }
     throw err
   }
   if (!srcIsTemplate) {
-    return skip({ key: "migration.reason.sourceNotTemplate", params: { fullName: starter.full_name } })
+    return skip({
+      key: "migration.reason.sourceNotTemplate",
+      params: { fullName: starter.full_name },
+    })
   }
 
   const probe = await probeTargetRepo(client, targetOrg, targetName)
