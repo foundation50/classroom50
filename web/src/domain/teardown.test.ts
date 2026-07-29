@@ -217,6 +217,7 @@ function makeClient(opts: Opts) {
   const client: GitHubClient = {
     request: request as unknown as GitHubClient["request"],
     requestRaw: requestRaw as unknown as GitHubClient["requestRaw"],
+    fetchArchive: vi.fn() as unknown as GitHubClient["fetchArchive"],
   }
   return { client, deletes, teamDeletes }
 }
@@ -372,6 +373,7 @@ describe("executeTeardown", () => {
     const client: GitHubClient = {
       request: request as unknown as GitHubClient["request"],
       requestRaw: requestRaw as unknown as GitHubClient["requestRaw"],
+      fetchArchive: vi.fn() as unknown as GitHubClient["fetchArchive"],
     }
     const plan = await planTeardown(client, "acme")
     expect(plan.repoNames).not.toContain("cs101-hw1-late")
@@ -422,6 +424,7 @@ describe("executeTeardown", () => {
     const client: GitHubClient = {
       request: request as unknown as GitHubClient["request"],
       requestRaw: requestRaw as unknown as GitHubClient["requestRaw"],
+      fetchArchive: vi.fn() as unknown as GitHubClient["fetchArchive"],
     }
     const plan = await planTeardown(client, "acme")
     const result = await executeTeardown(client, plan)

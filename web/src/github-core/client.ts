@@ -23,6 +23,22 @@ export type GitHubClient = {
   ) => Promise<T>
 
   requestRaw: (path: string, options?: GitHubRequestOptions) => Promise<string>
+
+  // Fetch a repo zip via the archive-proxy Worker: the GitHub archive endpoint
+  // 302s to codeload (no CORS header), so the Worker follows the redirect
+  // server-side with this token and streams bytes back with CORS. Throws if no
+  // proxy is configured.
+  fetchArchive: (
+    owner: string,
+    repo: string,
+    options?: { ref?: string; signal?: AbortSignal; timeoutMs?: number },
+  ) => Promise<GitHubBinaryResponse>
+}
+
+// Binary body plus the filename GitHub advertised (from Content-Disposition).
+export type GitHubBinaryResponse = {
+  bytes: ArrayBuffer
+  filename?: string
 }
 
 export type GitHubRequestOptions = {
@@ -47,6 +63,9 @@ export type GitHubResponseSignal = {
 export function createGitHubClient(args: {
   token: string
   apiBaseUrl?: string
+  // Base URL of the archive-proxy Worker (see fetchArchive). When omitted,
+  // fetchArchive throws — archive download is unavailable without the proxy.
+  archiveBaseUrl?: string
   onResponse?: (signal: GitHubResponseSignal) => void
 }): GitHubClient {
   const apiBaseUrl = args.apiBaseUrl ?? "https://api.github.com"
@@ -56,7 +75,8 @@ export function createGitHubClient(args: {
     options: GitHubRequestOptions = { method: "GET" },
   ): Promise<Response> {
     // Count every outbound call at the single choke point (covers request +
-    // requestRaw) — before the fetch, so a thrown/timed-out call still counts.
+    // requestRaw; fetchArchive counts itself since it bypasses this proxy) —
+    // before the fetch, so a thrown/timed-out call still counts.
     countApiCall()
 
     const url = path.startsWith("http")
@@ -76,13 +96,7 @@ export function createGitHubClient(args: {
 
     // Abort on whichever fires first: the caller's signal or the timeout. A
     // timeout surfaces as a rejected fetch, handled like any other rejection.
-    const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
-    const timeoutSignal =
-      timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined
-    const signal =
-      options.signal && timeoutSignal
-        ? AbortSignal.any([options.signal, timeoutSignal])
-        : (options.signal ?? timeoutSignal)
+    const signal = composeAbortSignal(options.signal, options.timeoutMs)
 
     const method = options.method ?? "GET"
     log.debug("request", { method, path })
@@ -126,22 +140,10 @@ export function createGitHubClient(args: {
     publishRateLimit(rateLimit)
 
     if (!res.ok) {
-      let body: unknown
-      const text = await res.text()
-
-      try {
-        body = text ? JSON.parse(text) : null
-      } catch {
-        body = text
-      }
-
-      const message =
-        typeof body === "object" &&
-        body !== null &&
-        "message" in body &&
-        typeof body.message === "string"
-          ? body.message
-          : `GitHub API request failed with ${res.status}`
+      const { body, message } = await parseErrorResponse(
+        res,
+        `GitHub API request failed with ${res.status}`,
+      )
 
       // Non-sensitive fields only — never the whole body, which can carry IP
       // allow lists or SAML detail. A 422 also gets its validation reasons (see
@@ -213,5 +215,145 @@ export function createGitHubClient(args: {
 
       return await res.text()
     },
+
+    async fetchArchive(
+      owner: string,
+      repo: string,
+      options?: { ref?: string; signal?: AbortSignal; timeoutMs?: number },
+    ) {
+      if (!args.archiveBaseUrl) {
+        throw new Error("archive proxy is not configured")
+      }
+
+      // Fail closed rather than send the bearer to a non-https origin: a
+      // misconfigured base (http / wrong host) could exfiltrate the token.
+      const base = new URL(args.archiveBaseUrl)
+      const isLocalhost =
+        base.hostname === "localhost" ||
+        base.hostname === "127.0.0.1" ||
+        base.hostname === "[::1]"
+      if (base.protocol !== "https:" && !isLocalhost) {
+        throw new Error("archive proxy must be an https origin")
+      }
+
+      // Count against the diagnostics overlay like any other GitHub call, even
+      // though this one hops through the proxy.
+      countApiCall()
+
+      // Encode each segment (defense-in-depth for a future ref caller); encode
+      // ref per-segment since a ref legitimately contains `/`.
+      const encodedRef = options?.ref
+        ? options.ref.split("/").map(encodeURIComponent).join("/")
+        : ""
+      const path =
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/zipball` +
+        (encodedRef ? `/${encodedRef}` : "")
+      const url = `${args.archiveBaseUrl.replace(/\/$/, "")}${path}`
+
+      // Archives are larger than API responses; default to a generous timeout.
+      const signal = composeAbortSignal(
+        options?.signal,
+        options?.timeoutMs,
+        60000,
+      )
+
+      log.debug("archive request", { owner, repo, ref: options?.ref })
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${args.token}` },
+        signal,
+      })
+
+      // Report token liveness like requestInternal so a revoked token still
+      // tears the session down when the proxy relays a 401.
+      args.onResponse?.({
+        status: res.status,
+        scopes: res.headers.get("x-oauth-scopes"),
+      })
+
+      if (!res.ok) {
+        const { body, message } = await parseErrorResponse(
+          res,
+          `Archive request failed with ${res.status}`,
+        )
+        throw new GitHubAPIError({
+          status: res.status,
+          url,
+          message,
+          body,
+          rateLimit: readGitHubRateLimitHeaders(res),
+          requestId: res.headers.get("x-github-request-id"),
+        })
+      }
+
+      const bytes = await res.arrayBuffer()
+      const filename = parseContentDispositionFilename(
+        res.headers.get("content-disposition"),
+      )
+
+      return { bytes, filename }
+    },
   }
+}
+
+// Compose the caller's abort signal with a timeout signal, aborting on whichever
+// fires first. `timeoutMs` 0 opts out of the timeout.
+function composeAbortSignal(
+  callerSignal: AbortSignal | undefined,
+  timeoutMs: number | undefined,
+  defaultMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+): AbortSignal | undefined {
+  const ms = timeoutMs ?? defaultMs
+  const timeoutSignal = ms > 0 ? AbortSignal.timeout(ms) : undefined
+  return callerSignal && timeoutSignal
+    ? AbortSignal.any([callerSignal, timeoutSignal])
+    : (callerSignal ?? timeoutSignal)
+}
+
+// Parse a non-OK response body as JSON (falling back to raw text) and derive
+// the error message from its `message` field, else `fallback`.
+async function parseErrorResponse(
+  res: Response,
+  fallback: string,
+): Promise<{ body: unknown; message: string }> {
+  const text = await res.text()
+  let body: unknown
+  try {
+    body = text ? JSON.parse(text) : null
+  } catch {
+    body = text
+  }
+  const message =
+    typeof body === "object" &&
+    body !== null &&
+    "message" in body &&
+    typeof body.message === "string"
+      ? body.message
+      : fallback
+  return { body, message }
+}
+
+// Extract the filename from Content-Disposition, preferring RFC 5987
+// `filename*` over plain `filename` (RFC 6266). undefined if absent.
+function parseContentDispositionFilename(
+  header: string | null,
+): string | undefined {
+  if (!header) return undefined
+
+  const safeDecode = (value: string) => {
+    try {
+      return decodeURIComponent(value)
+    } catch {
+      return value
+    }
+  }
+
+  const ext = /filename\*=\s*(?:([\w-]+)'[^']*')?"?([^";]+?)"?\s*(?:;|$)/i.exec(
+    header,
+  )
+  if (ext) return safeDecode(ext[2].trim())
+
+  const plain = /filename=\s*"?([^";]+?)"?\s*(?:;|$)/i.exec(header)
+  return plain ? safeDecode(plain[1].trim()) : undefined
 }

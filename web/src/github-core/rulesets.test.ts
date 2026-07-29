@@ -34,6 +34,7 @@ function makeClient(existing: Array<{ id: number; name: string }>) {
   const client: GitHubClient = {
     request: request as unknown as GitHubClient["request"],
     requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
   }
   return { client, calls }
 }
@@ -123,6 +124,7 @@ describe("repairRulesets", () => {
     const client: GitHubClient = {
       request: request as unknown as GitHubClient["request"],
       requestRaw: () => Promise.reject(new Error("x")),
+      fetchArchive: () => Promise.reject(new Error("x")),
     }
     const result = await repairRulesets(client, "acme")
     expect(result.status).toBe("warning")

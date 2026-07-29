@@ -64,6 +64,7 @@ function makeClient(routes: Record<string, unknown>): GitHubClient {
       return Promise.reject(new Error(`unexpected request: ${path}`))
     },
     requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
   }
 }
 
@@ -239,6 +240,7 @@ describe("checkBranchProtection", () => {
         return Promise.reject(new Error(`unexpected request: ${path}`))
       },
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     expect((await checkBranchProtection(client, "acme")).state).toBe("enforced")
     expect(
@@ -260,6 +262,7 @@ describe("checkBranchProtection", () => {
         return Promise.reject(new Error(`unexpected request: ${path}`))
       },
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     expect(
       (await checkBranchProtection(client, "acme", "classroom50", "develop"))

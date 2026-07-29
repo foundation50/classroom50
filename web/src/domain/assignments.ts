@@ -69,3 +69,14 @@ export {
   type UploadFile,
   type SubmitAssignmentResult,
 } from "./assignments/submit"
+export {
+  downloadAllSubmissions,
+  streamSubmissionsToDirectory,
+  ZipAssemblyError,
+  BULK_DOWNLOAD_WARN_THRESHOLD,
+  type DownloadAllProgress,
+  type DownloadAllResult,
+  type DownloadAllSummary,
+  type DownloadRepoResult,
+  type DownloadOutcome,
+} from "./assignments/downloadSubmissions"

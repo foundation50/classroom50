@@ -17,6 +17,7 @@ import { SubmissionsActionsMenu } from "@/pages/submissions/SubmissionsActionsMe
 import { AcceptLinkModal } from "@/pages/submissions/AcceptLinkModal"
 import { MetricsModal } from "@/pages/submissions/MetricsModal"
 import { OpenAllFeedbackPrsModal } from "@/pages/submissions/OpenAllFeedbackPrsModal"
+import { DownloadAllSubmissionsModal } from "@/pages/submissions/DownloadAllSubmissionsModal"
 import { DataFreshness } from "@/pages/submissions/DataFreshness"
 import { ConfirmModal } from "@/components/modals"
 import {
@@ -57,6 +58,7 @@ import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { getName, sortStudentsByName } from "@/util/students"
 import { studentRepoName } from "@/util/studentRepo"
+import { downloadBlob } from "@/util/downloadBlob"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
@@ -253,6 +255,7 @@ const SubmissionsPageContent = () => {
   const [metricsOpen, setMetricsOpen] = useState(false)
   const [acceptOpen, setAcceptOpen] = useState(false)
   const [openAllPrsOpen, setOpenAllPrsOpen] = useState(false)
+  const [downloadAllOpen, setDownloadAllOpen] = useState(false)
 
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
   // Gate on a resolved roster so a transient load/permission failure falls back
@@ -532,6 +535,15 @@ const SubmissionsPageContent = () => {
           ),
     [scoresInfo, sectionFilter, sectionByUsername],
   )
+
+  // Owners (student login or group founder) that actually pushed a submission —
+  // the set the bulk download fetches. Derived from the section-scoped rows so
+  // "Download all" matches the filtered view the teacher sees; never-accepted /
+  // accepted-no-push students are already excluded (they have no score row).
+  const downloadableOwners = useMemo(
+    () => scopedScores.map((row) => row.owner),
+    [scopedScores],
+  )
   const scopedNonSubmitters = useMemo(
     () =>
       sectionFilter === "all"
@@ -774,14 +786,7 @@ const SubmissionsPageContent = () => {
       type: "text/csv;charset=utf-8;",
     })
 
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-
-    link.href = url
-    link.download = `${classroom}-${assignment}-scores.csv`
-    link.click()
-
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, `${classroom}-${assignment}-scores.csv`)
   }
 
   if (!org || !classroom || !assignment) {
@@ -1017,6 +1022,8 @@ const SubmissionsPageContent = () => {
             viewLabel={viewLabel}
             onDownloadCsv={downloadScoresCsv}
             downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
+            onDownloadAll={() => setDownloadAllOpen(true)}
+            downloadAllDisabled={downloadableOwners.length === 0}
             locked={isLockedAssignment}
             lockPending={setLock.isPending}
             // Lock/unlock is an authoring-tier action (teacher|hta), same gate
@@ -1158,6 +1165,15 @@ const SubmissionsPageContent = () => {
         assignmentName={assignmentInfo?.name ?? assignment}
         mode={isGroupAssignment ? "group" : "individual"}
         repos={allAssignmentRepos}
+      />
+      <DownloadAllSubmissionsModal
+        open={downloadAllOpen}
+        onClose={() => setDownloadAllOpen(false)}
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+        assignmentName={assignmentInfo?.name ?? assignment}
+        owners={downloadableOwners}
       />
     </PageShell>
   )

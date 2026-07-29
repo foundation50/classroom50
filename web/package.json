@@ -25,6 +25,7 @@
     "@tanstack/react-router": "^1.170.18",
     "canvas-confetti": "^1.9.4",
     "i18next": "^26.3.6",
+    "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.4",
     "lucide-react": "^1.25.0",
     "motion": "^12.42.2",

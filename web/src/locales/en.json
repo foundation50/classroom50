@@ -2043,6 +2043,34 @@
       "blockedTitle": "These repositories need an org admin:",
       "blockedHint": "Their feedback branch points at the wrong commit, so opening the PR would show an empty diff. An org admin must delete each feedback branch before re-running this action — retrying alone won't fix them."
     },
+    "downloadAll": {
+      "menuLabel": "Download all submissions",
+      "title": "Download every student's latest submission",
+      "titleDisabled": "No submissions to download yet",
+      "confirmBody_one": "This downloads the latest submission for the <b>{{count}}</b> student who has submitted <b>{{name}}</b>, bundled into a single zip.",
+      "confirmBody_other": "This downloads the latest submissions for the <b>{{count}}</b> students who have submitted <b>{{name}}</b>, bundled into a single zip.",
+      "confirmHint": "It runs from your browser, one repository at a time, so it may take a while for a large class. Keep this tab open until it finishes.",
+      "largeClassWarning": "This will download {{count}} submissions and build the combined zip in your browser, which can use a lot of memory and may be slow or fail for a very large class. Consider filtering by section first.",
+      "confirmLabel_one": "Download submission",
+      "confirmLabel_other": "Download submissions",
+      "running": "Downloading… {{done}} of {{total}}",
+      "nothingDownloaded": "No file was downloaded — none of the selected students had a submission to fetch.",
+      "assemblyError": "Downloaded every submission, but the combined zip was too large to assemble in the browser. Try filtering by section and downloading in smaller batches.",
+      "runError": "The download couldn't be completed. Please try again.",
+      "summaryLead": "Finished processing <b>{{total}}</b> submissions.",
+      "summaryDownloaded_one": "{{count}} submission downloaded",
+      "summaryDownloaded_other": "{{count}} submissions downloaded",
+      "summarySaved_one": "{{count}} submission saved to the folder you chose",
+      "summarySaved_other": "{{count}} submissions saved to the folder you chose",
+      "summaryEmpty_one": "{{count}} repository was empty (skipped)",
+      "summaryEmpty_other": "{{count}} repositories were empty (skipped)",
+      "summaryFailed_one": "{{count}} submission failed",
+      "summaryFailed_other": "{{count}} submissions failed",
+      "emptyTitle": "These repositories had nothing to download:",
+      "emptyHint": "The student accepted the assignment but hasn't pushed any work yet, so there's no submission to include.",
+      "failedTitle": "These submissions couldn't be downloaded:",
+      "failedHint": "This is often a transient GitHub error — run the action again to retry."
+    },
     "rowRegrade": {
       "title": "Regrade this submission",
       "titleInFlight": "Regrade in progress…",
@@ -2055,6 +2083,12 @@
       "confirmBody1WithLogin": "This re-runs the autograder on <name>{{name}}</name> (<owner>{{owner}}</owner>)'s latest commit for this assignment. Their submission time doesn't change.",
       "confirmBody2": "Grading runs in the background and can take a few minutes; use <collectLabel>{{collectLabel}}</collectLabel> afterward to pull the new score.",
       "confirmLabel": "Regrade"
+    },
+    "rowDownload": {
+      "title": "Download this submission",
+      "aria": "Download {{owner}}'s submission",
+      "nothingToDownload": "{{owner}} has no submission to download yet.",
+      "error": "Couldn't download {{owner}}'s submission. Please try again."
     },
     "student": {
       "submittedAt": "Submitted {{date}}",
