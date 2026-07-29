@@ -118,6 +118,7 @@
       "noneSelected": "No assignments selected — check at least one to import, or go back.",
       "back": "Back",
       "importButton": "Import {{count}} assignment(s)",
+      "importing": "Starting import…",
       "modalTitle": "This step is hard to undo",
       "modalSummary_one": "This will create the class \"{{shortName}}\" in {{org}}, add a GitHub team, and copy 1 assignment repository.",
       "modalSummary_other": "This will create the class \"{{shortName}}\" in {{org}}, add GitHub teams, and copy {{count}} assignment repositories.",
@@ -130,10 +131,6 @@
       "modalConfirm": "Yes, import"
     },
     "execute": {
-      "runningTitle": "Importing…",
-      "runningBody": "Creating repositories and the class. This can take a minute — please keep this tab open.",
-      "doneTitle": "Import finished",
-      "failedTitle": "Import failed",
       "error": "The import couldn't be completed.",
       "summaryComplete": "Import complete.",
       "summaryPartial": "Import finished with some assignments skipped.",

@@ -1,13 +1,15 @@
 // FEATURE: github-classroom-migration — removable once GitHub Classroom shuts
-// down (see foundation50/classroom50#312). Phase 2: the safety gate. Show
-// exactly what will happen (read-only preflight), let the teacher tune the
-// short-name/term/suffix (re-running preflight), and require typing the short
-// name to confirm before the irreversible write.
+// down (see foundation50/classroom50#312). Phase 2+3 combined: review the
+// read-only preflight, tune the class name/short-name/term/suffix, and — after
+// an explicit confirmation modal — run the import IN PLACE. The Import button
+// stays put and shows a loading state while the migration runs; per-item cards
+// update live and a truthful summary replaces the button on completion.
 
 import { useState } from "react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
+import { Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
-import { AlertTriangle, ExternalLink } from "lucide-react"
+import { AlertTriangle, CheckCircle, ExternalLink } from "lucide-react"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { githubOAuthGrantUrl, githubOrgOAuthPolicyUrl } from "@/auth/constants"
@@ -21,23 +23,32 @@ import {
   Spinner,
 } from "@/components/ui"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
+import { useGitHubViewer } from "@/hooks/useGitHubResources"
+import { useMigrateClassroom } from "@/hooks/mutations/useMigrateClassroom"
 import { buildPreflight } from "@/migration/preflight"
-import type { ClassroomWithOrg, MigrationPreflight } from "@/migration/types"
-import { MigrationItemCard } from "./migrationItemCard"
+import type {
+  ClassroomWithOrg,
+  MigrationItemStatus,
+  MigrationPreflight,
+} from "@/migration/types"
+import { MigrationItemCard, type ItemVisualStatus } from "./migrationItemCard"
 
 export const ConfirmStep = ({
   source,
   targetOrg,
   onBack,
-  onConfirm,
+  onComplete,
 }: {
   source: ClassroomWithOrg
   targetOrg: string
   onBack: () => void
-  onConfirm: (plan: MigrationPreflight) => void
+  // Fired once the import succeeds (drives the wizard's final-step checkmark).
+  onComplete: () => void
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
+  const { data: viewer } = useGitHubViewer()
+  const mutation = useMigrateClassroom(targetOrg)
 
   // Tunables. `shortName` and `templateSuffix` change the PLAN (target repo
   // names, collision checks), so they key the preflight query. `name` and
@@ -52,6 +63,14 @@ export const ConfirmStep = ({
   const [deselected, setDeselected] = useState<Set<number>>(new Set())
   // The irreversibility confirmation modal, opened by the Import button.
   const [showConfirm, setShowConfirm] = useState(false)
+  // Live per-item status while the import runs (keyed by slug).
+  const [statuses, setStatuses] = useState<Record<string, MigrationItemStatus>>(
+    {},
+  )
+
+  const running = mutation.isPending
+  const done = mutation.isSuccess
+  const result = mutation.data
 
   const toggleItem = (assignmentId: number) =>
     setDeselected((prev) => {
@@ -93,29 +112,27 @@ export const ConfirmStep = ({
     placeholderData: keepPreviousData,
     staleTime: 0,
     retry: false,
+    // Once the import is underway or finished, freeze the preview — no more
+    // refetches (the plan the run used is authoritative).
+    enabled: !running && !done,
   })
 
-  // True while the debounce timer hasn't caught up to the latest input, so the
-  // preview shown is for a stale short-name/suffix.
+  // True while the debounce timer hasn't caught up to the latest input.
   const pendingEdit =
     debouncedShortName !== shortName || debouncedSuffix !== templateSuffix
 
   const blocked = (plan?.blockers.length ?? 0) > 0
 
-  // A source-org authorization gap is a HARD prerequisite: until the app can
-  // read the source org, nothing else (name, preview, other blockers) is
-  // actionable. When present, render only the dedicated grant-access screen.
   const orgAccessBlocker = plan?.blockers.find(
     (b) => b.kind === "source_org_access",
   )
 
   // The effective plan reflects the teacher's selection: any importable/reusable
-  // item they unchecked becomes a skip (with a "deselected" reason) so execute
-  // skips it and the counts + summary stay truthful. Skip items are untouched.
+  // item they unchecked becomes a skip (with a "deselected" reason). Skip items
+  // are untouched.
   const effectivePlan: MigrationPreflight | undefined = plan
     ? {
         ...plan,
-        // Display-only overrides applied without refetching the preflight.
         name: name?.trim() ? name.trim() : plan.name,
         term: term !== undefined ? term.trim() : plan.term,
         items: plan.items.map((item) =>
@@ -149,7 +166,44 @@ export const ConfirmStep = ({
     !isLoading &&
     !isFetching &&
     !pendingEdit &&
+    !running &&
+    !done &&
     selectedCount > 0
+
+  // Fire the migration from the confirmation modal. Streams per-item status into
+  // `statuses`; on success signals the wizard so the final step checks off.
+  const startImport = () => {
+    if (!effectivePlan) return
+    setShowConfirm(false)
+    // Seed statuses so cards flip to pending/skipped immediately.
+    setStatuses(
+      Object.fromEntries(
+        effectivePlan.items.map((i) => [
+          i.assignment.slug,
+          {
+            slug: i.assignment.slug,
+            targetName: i.targetName,
+            status: i.action === "skip" ? "skipped" : "pending",
+            reason: i.reason,
+          } satisfies MigrationItemStatus,
+        ]),
+      ),
+    )
+    mutation.mutate(
+      {
+        plan: effectivePlan,
+        options: {
+          creator: viewer?.login,
+          onItem: (s) => setStatuses((prev) => ({ ...prev, [s.slug]: s })),
+        },
+      },
+      { onSuccess: () => onComplete() },
+    )
+  }
+
+  const hadSkips = (result?.skipped.length ?? 0) > 0
+  // Once the run starts, inputs and selection are frozen.
+  const controlsDisabled = running || done
 
   // Hard prerequisite failed: dedicated grant-access screen, no preview.
   if (orgAccessBlocker) {
@@ -181,7 +235,6 @@ export const ConfirmStep = ({
             </div>
           </Alert>
 
-          {/* Primary path: grant from the user's own authorized-apps page. */}
           <ol className="mt-5 grid gap-4">
             <li className="rounded-xl border border-base-300 bg-base-100 p-4">
               <div className="flex items-start gap-3">
@@ -208,7 +261,6 @@ export const ConfirmStep = ({
               </div>
             </li>
 
-            {/* Fallback: the org's OAuth policy page (request/approve). */}
             <li className="rounded-xl border border-base-300 bg-base-100 p-4">
               <div className="flex items-start gap-3">
                 <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-base-300 text-sm font-semibold text-base-content/70">
@@ -259,14 +311,17 @@ export const ConfirmStep = ({
       <Card.Body>
         <div className="flex items-start justify-between gap-4">
           <Card.Title>{t("migration.confirm.title")}</Card.Title>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={onBack}
-            className="shrink-0"
-          >
-            {t("migration.confirm.back")}
-          </Button>
+          {!done && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={onBack}
+              disabled={controlsDisabled}
+              className="shrink-0"
+            >
+              {t("migration.confirm.back")}
+            </Button>
+          )}
         </div>
         <p className="text-base-content/70">
           <Trans
@@ -285,8 +340,6 @@ export const ConfirmStep = ({
           />
         </p>
 
-        {/* Initial load: don't show empty inputs that populate later — show a
-            loading state until the first preflight resolves. */}
         {isLoading && !plan && (
           <div className="mt-6 flex items-center gap-2 text-base-content/70">
             <Spinner size="sm" />
@@ -307,7 +360,7 @@ export const ConfirmStep = ({
           </Alert>
         )}
 
-        {plan && (
+        {effectivePlan && (
           <>
             <div className="mt-4 grid gap-4">
               <FormField
@@ -318,8 +371,9 @@ export const ConfirmStep = ({
                 {({ id }) => (
                   <Input
                     id={id}
-                    value={name ?? plan.name}
-                    placeholder={plan.name}
+                    value={name ?? effectivePlan.name}
+                    placeholder={effectivePlan.name}
+                    disabled={controlsDisabled}
                     onChange={(e) => setName(e.target.value)}
                   />
                 )}
@@ -334,8 +388,9 @@ export const ConfirmStep = ({
                   {({ id }) => (
                     <Input
                       id={id}
-                      value={shortName ?? plan.shortName}
-                      placeholder={plan.shortName}
+                      value={shortName ?? effectivePlan.shortName}
+                      placeholder={effectivePlan.shortName}
+                      disabled={controlsDisabled}
                       onChange={(e) => setShortName(e.target.value)}
                     />
                   )}
@@ -348,8 +403,9 @@ export const ConfirmStep = ({
                   {({ id }) => (
                     <Input
                       id={id}
-                      value={term ?? plan.term}
+                      value={term ?? effectivePlan.term}
                       placeholder={t("migration.confirm.termPlaceholder")}
+                      disabled={controlsDisabled}
                       onChange={(e) => setTerm(e.target.value)}
                     />
                   )}
@@ -364,6 +420,7 @@ export const ConfirmStep = ({
                       id={id}
                       value={templateSuffix}
                       placeholder={t("migration.confirm.suffixPlaceholder")}
+                      disabled={controlsDisabled}
                       onChange={(e) => setTemplateSuffix(e.target.value)}
                     />
                   )}
@@ -371,26 +428,28 @@ export const ConfirmStep = ({
               </div>
             </div>
 
-            {isError && (
+            {mutation.isError && (
               <Alert tone="error" className="mt-4 items-start">
-                <span className="text-sm">
-                  {error instanceof Error
-                    ? error.message
-                    : t("migration.confirm.preflightError")}
-                </span>
-                <Button variant="ghost" size="sm" onClick={() => refetch()}>
-                  {t("migration.select.retry")}
-                </Button>
+                <div>
+                  <p className="font-medium">{t("migration.execute.error")}</p>
+                  <p className="mt-1 text-sm">
+                    {mutation.error instanceof Error
+                      ? mutation.error.message
+                      : String(mutation.error)}
+                  </p>
+                </div>
               </Alert>
             )}
 
-            {plan.blockers.map((b) => (
-              <Alert key={b.kind} tone="error" className="mt-4">
-                {t(`migration.blocker.${b.kind}`, b.params)}
-              </Alert>
-            ))}
+            {/* Non-org-access blockers (e.g. the class name already exists). */}
+            {!controlsDisabled &&
+              effectivePlan.blockers.map((b) => (
+                <Alert key={b.kind} tone="error" className="mt-4">
+                  {t(`migration.blocker.${b.kind}`, b.params)}
+                </Alert>
+              ))}
 
-            {(isFetching || pendingEdit) && (
+            {(isFetching || pendingEdit) && !controlsDisabled && (
               <div className="mt-4 flex items-center gap-1 text-sm text-base-content/50">
                 <Spinner size="xs" />
                 {t("migration.confirm.updating")}
@@ -405,19 +464,20 @@ export const ConfirmStep = ({
             </div>
 
             <ul className="mt-1 grid gap-2">
-              {plan.items.map((item) => {
-                // Hard skips (invalid source, collision) can't be imported, so
-                // they show no checkbox. Import/reuse items are selectable and
-                // default to checked.
-                const selectable = item.action !== "skip"
+              {effectivePlan.items.map((item) => {
+                // Before the run: checkboxes on importable/reusable items. During
+                // and after: read live status, no toggles.
+                const live = statuses[item.assignment.slug]
+                const selectable = !controlsDisabled && item.action !== "skip"
                 const selected =
-                  selectable && !deselected.has(item.assignment.id)
+                  item.action !== "skip" && !deselected.has(item.assignment.id)
+                const status = (live?.status ?? item.action) as ItemVisualStatus
                 return (
                   <li key={item.assignment.id}>
                     <MigrationItemCard
                       assignment={item.assignment}
-                      status={item.action}
-                      reason={item.reason}
+                      status={status}
+                      reason={live?.reason ?? item.reason}
                       targetName={item.targetName}
                       targetOrg={targetOrg}
                       targetBranch={item.branch}
@@ -431,23 +491,75 @@ export const ConfirmStep = ({
               })}
             </ul>
 
-            {!blocked && selectedCount === 0 && (
+            {!blocked && !controlsDisabled && selectedCount === 0 && (
               <Alert tone="info" className="mt-4">
                 {t("migration.confirm.noneSelected")}
               </Alert>
             )}
 
-            {!blocked && (
-              <Button
-                variant="primary"
-                className="mt-6 w-full"
-                disabled={!canImport}
-                onClick={() => setShowConfirm(true)}
+            {/* Result summary replaces the Import button on completion. */}
+            {done && result && (
+              <Alert
+                tone={hadSkips ? "warning" : "success"}
+                className="mt-6 items-start"
               >
-                {t("migration.confirm.importButton", {
-                  count: selectedCount,
-                })}
-              </Button>
+                {!hadSkips && (
+                  <CheckCircle aria-hidden="true" className="size-5 shrink-0" />
+                )}
+                <div>
+                  <p className="font-medium">
+                    {hadSkips
+                      ? t("migration.execute.summaryPartial")
+                      : t("migration.execute.summaryComplete")}
+                  </p>
+                  <p className="mt-1 text-sm">
+                    {t("migration.execute.summaryCounts", {
+                      generated: result.generated,
+                      reused: result.reused,
+                      skipped: result.skipped.length,
+                    })}
+                  </p>
+                  {hadSkips && (
+                    <ul className="mt-2 list-disc ps-5 text-sm">
+                      {result.skipped.map((s) => (
+                        <li key={s.slug}>
+                          <span className="font-mono">{s.slug}</span>
+                          {s.reason
+                            ? ` — ${t(s.reason.key, s.reason.params)}`
+                            : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </Alert>
+            )}
+
+            {done && result ? (
+              <Card.Actions className="mt-4 justify-end">
+                <Link
+                  to="/$org/$classroom"
+                  params={{ org: targetOrg, classroom: result.shortName }}
+                  className="btn btn-primary"
+                >
+                  {t("migration.execute.viewClass")}
+                </Link>
+              </Card.Actions>
+            ) : (
+              !blocked && (
+                <Button
+                  variant="primary"
+                  className="mt-6 w-full"
+                  disabled={!canImport}
+                  loading={running}
+                  loadingLabel={t("migration.confirm.importing")}
+                  onClick={() => setShowConfirm(true)}
+                >
+                  {t("migration.confirm.importButton", {
+                    count: selectedCount,
+                  })}
+                </Button>
+              )
             )}
           </>
         )}
@@ -492,14 +604,7 @@ export const ConfirmStep = ({
           <Button variant="ghost" onClick={() => setShowConfirm(false)}>
             {t("migration.confirm.modalCancel")}
           </Button>
-          <Button
-            variant="primary"
-            disabled={!canImport}
-            onClick={() => {
-              setShowConfirm(false)
-              if (effectivePlan) onConfirm(effectivePlan)
-            }}
-          >
+          <Button variant="primary" disabled={!canImport} onClick={startImport}>
             {t("migration.confirm.modalConfirm")}
           </Button>
         </div>

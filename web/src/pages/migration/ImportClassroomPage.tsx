@@ -1,7 +1,7 @@
 // FEATURE: github-classroom-migration — removable once GitHub Classroom shuts
 // down (see foundation50/classroom50#312). The Import-from-GitHub-Classroom
-// wizard shell: an org-readiness gate then a Select -> Confirm -> Execute state
-// machine. The write boundary sits between Confirm and Execute.
+// wizard shell: an org-readiness gate then a Select -> Review-and-import state
+// machine. The review step runs the import in place after confirmation.
 
 import { useState } from "react"
 import { Link, useParams } from "@tanstack/react-router"
@@ -15,15 +15,11 @@ import { Alert, Button, Card, Spinner, cx } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useOrgClassroom50Status } from "@/hooks/useOrgClassroom50Status"
 import { githubOrgOAuthPolicyUrl } from "@/auth/constants"
-import type { ClassroomWithOrg, MigrationPreflight } from "@/migration/types"
+import type { ClassroomWithOrg } from "@/migration/types"
 import { SelectSourceStep } from "./SelectSourceStep"
 import { ConfirmStep } from "./ConfirmStep"
-import { ExecuteStep } from "./ExecuteStep"
 
-type Phase =
-  | { name: "select" }
-  | { name: "confirm"; source: ClassroomWithOrg }
-  | { name: "execute"; plan: MigrationPreflight }
+type Phase = { name: "select" } | { name: "confirm"; source: ClassroomWithOrg }
 
 const STEP_ORDER = ["select", "confirm", "execute"] as const
 type StepName = (typeof STEP_ORDER)[number]
@@ -146,7 +142,10 @@ export const ImportClassroomPage = () => {
 
       {status.data === "ready" && (
         <>
-          <MigrationSteps current={phase.name} complete={imported} />
+          <MigrationSteps
+            current={imported ? "execute" : phase.name}
+            complete={imported}
+          />
           {phase.name === "select" && (
             <SelectSourceStep
               onPick={(source) => setPhase({ name: "confirm", source })}
@@ -157,14 +156,7 @@ export const ImportClassroomPage = () => {
               source={phase.source}
               targetOrg={org}
               onBack={() => setPhase({ name: "select" })}
-              onConfirm={(plan) => setPhase({ name: "execute", plan })}
-            />
-          )}
-          {phase.name === "execute" && (
-            <ExecuteStep
-              plan={phase.plan}
-              targetOrg={org}
-              onDone={() => setImported(true)}
+              onComplete={() => setImported(true)}
             />
           )}
         </>
