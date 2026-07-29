@@ -158,7 +158,7 @@ func runAssignmentLock(client githubapi.Client, out, errOut io.Writer, org, clas
 	// Unlock: re-grant the student team (and, per that path, the staff teams)
 	// read on the private template so students can accept again.
 	return grantClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, template.Owner, template.Repo,
-		grantContext{verb: "unlocked", classroomNoun: "classroom", rerunHint: ", then re-run `gh teacher assignment unlock`"})
+		grantContext{verb: "unlocked", classroomNoun: "classroom", rerunHint: ", then re-run `gh teacher assignment lock ... --unlock`"})
 }
 
 // revokeClassroomTeamTemplateRead removes ONLY the classroom student team's

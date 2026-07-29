@@ -88,10 +88,11 @@ func assignmentAddCmd() *cobra.Command {
 			"runs against — in <org>/classroom50/<classroom>/assignments.json.\n\n" +
 			"`<slug>` must match ^[a-z0-9][a-z0-9-]{1,38}$ (the same shape as\n" +
 			"classroom short-names) because student repos are named\n" +
-			"`<classroom>-<slug>-<username>`. Required flags: --name and\n" +
-			"--template. If the assignment slug already exists in\n" +
-			"assignments.json, this command replaces the entry in place\n" +
-			"(idempotent for repeated edits to the same assignment).\n\n" +
+			"`<classroom>-<slug>-<username>`. Only --name is required;\n" +
+			"--template is optional (omit it for a template-less assignment).\n" +
+			"If the assignment slug already exists in assignments.json, this\n" +
+			"command replaces the entry in place (idempotent for repeated\n" +
+			"edits to the same assignment).\n\n" +
 			"--empty-repo creates truly bare student repos: no README, no\n" +
 			".classroom50.yaml marker, no autograde workflow — for assignments\n" +
 			"where students build everything (including their own GitHub\n" +
@@ -776,7 +777,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		}
 	}
 	if resolved != nil && templatePrivate && inOrg && committedLocked {
-		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the classroom student team was NOT granted read on the private template %s/%s — unlock it with `gh teacher assignment unlock %s %s %s` when you want students to accept again.\n",
+		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the classroom student team was NOT granted read on the private template %s/%s — unlock it with `gh teacher assignment lock %s %s %s --unlock` when you want students to accept again.\n",
 			slug, resolved.Owner, resolved.Repo, org, classroom, slug)
 	}
 	if droppedTests > 0 {

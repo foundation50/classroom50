@@ -33,12 +33,13 @@ func NewCmd() *cobra.Command {
 			"the permission).\n\n" +
 			"When run from inside a group-assignment repo (one with a\n" +
 			".classroom50.yaml for a `mode: group` assignment), invite checks the\n" +
-			"assignment's --max-group-size (read from the teacher's published\n" +
-			"assignments.json) and refuses to add a new teammate once the group is\n" +
-			"full. This is an advisory guardrail for the honest case — it can be\n" +
-			"bypassed (e.g., via the GitHub UI), and the authoritative size/credit\n" +
-			"boundary is collection time. Run outside such a repo (or for an\n" +
-			"individual assignment / a TA invite), it just adds the collaborator.",
+			"assignment's configured maximum group size (read from the teacher's\n" +
+			"published assignments.json) and refuses to add a new teammate once the\n" +
+			"group is full. This is an advisory guardrail for the honest case — it\n" +
+			"can be bypassed (e.g., via the GitHub UI), and the authoritative\n" +
+			"size/credit boundary is collection time. Run outside such a repo (or\n" +
+			"for an individual assignment / a TA invite), it just adds the\n" +
+			"collaborator.",
 		Example: "  gh student invite cs50/cs50-fall-2026-hello-alice cs50-duck\n",
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
