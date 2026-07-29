@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ReactNode } from "react"
 
-import { Card } from "@/components/ui"
+import { Card, SectionAnchorHeading, cx } from "@/components/ui"
 
 // Standardized wrapper for each Org Settings group (Service Token, Organization
 // Policy, Re-run Setup, Danger Zone) so the page reads as consistent sections.
@@ -45,14 +45,26 @@ const SettingsSection = ({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2
-              className={[
-                "text-lg font-semibold",
-                isDanger ? "text-error" : "",
-              ].join(" ")}
-            >
-              {title}
-            </h2>
+            {id ? (
+              <SectionAnchorHeading
+                anchorId={id}
+                className={cx(
+                  "text-lg font-semibold",
+                  isDanger ? "text-error" : "",
+                )}
+              >
+                {title}
+              </SectionAnchorHeading>
+            ) : (
+              <h2
+                className={[
+                  "text-lg font-semibold",
+                  isDanger ? "text-error" : "",
+                ].join(" ")}
+              >
+                {title}
+              </h2>
+            )}
             {titleAdornment}
           </div>
           {description && (

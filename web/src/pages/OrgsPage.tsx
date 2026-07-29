@@ -255,7 +255,7 @@ function HideOrgMenu({
               <Link
                 to="/$org/settings"
                 params={{ org: org.login }}
-                search={{ focus: "serviceToken" }}
+                hash="service-token"
                 onClick={closeMenu}
               >
                 <KeyRound aria-hidden="true" className="size-4" />

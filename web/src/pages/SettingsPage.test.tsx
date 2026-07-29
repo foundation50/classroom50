@@ -24,10 +24,20 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     Link: ({
       children,
       params,
+      hash,
     }: {
       children: React.ReactNode
       params?: { org?: string }
-    }) => <a href={`/${params?.org ?? ""}/settings`}>{children}</a>,
+      hash?: string
+    }) => (
+      <a href={`/${params?.org ?? ""}/settings${hash ? `#${hash}` : ""}`}>
+        {children}
+      </a>
+    ),
+    // The page calls useHashSectionHighlight, which reads router state; stub it
+    // out here so the section renders without a RouterProvider.
+    useRouterState: () => "",
+    useNavigate: () => () => Promise.resolve(),
   }
 })
 
@@ -40,10 +50,16 @@ vi.mock("@/components/ui", async (importActual) => {
     RouterButton: ({
       children,
       params,
+      hash,
     }: {
       children: React.ReactNode
       params?: { org?: string }
-    }) => <a href={`/${params?.org ?? ""}/settings`}>{children}</a>,
+      hash?: string
+    }) => (
+      <a href={`/${params?.org ?? ""}/settings${hash ? `#${hash}` : ""}`}>
+        {children}
+      </a>
+    ),
   }
 })
 
@@ -171,6 +187,8 @@ describe("SettingsPage service tokens", () => {
     expect(screen.getByText("cs50")).toBeTruthy()
     expect(screen.getByText("classroom50-token-42-ab12")).toBeTruthy()
     const manage = screen.getByText("settings.serviceTokens.manage")
-    expect(manage.closest("a")?.getAttribute("href")).toBe("/cs50/settings")
+    expect(manage.closest("a")?.getAttribute("href")).toBe(
+      "/cs50/settings#service-token",
+    )
   })
 })

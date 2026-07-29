@@ -4,12 +4,16 @@ import { Button, HelpTooltip, Input, Modal, cx } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import { useParams, useSearch, useNavigate } from "@tanstack/react-router"
+import { useParams } from "@tanstack/react-router"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useSaveServiceToken } from "@/hooks/mutations/useSaveServiceToken"
 import { useRenameServiceToken } from "@/hooks/mutations/useRenameServiceToken"
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
+import {
+  useHashSectionHighlight,
+  sectionHighlightClass,
+} from "@/hooks/useHashSectionHighlight"
 import { serviceTokenName, randomTokenHash } from "@/util/serviceTokenName"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import RequireRole from "@/components/RequireRole"
@@ -388,11 +392,9 @@ function SetTokenModal({
   )
 }
 
-export const OrgSettingsPane = () => {
+export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
   const { t } = useTranslation()
   const { org } = useParams({ strict: false })
-  const search = useSearch({ strict: false }) as { focus?: string }
-  const navigate = useNavigate()
   const { notify } = useToast()
 
   const { data: tokenStatus, isLoading: tokenStatusLoading } =
@@ -423,30 +425,6 @@ export const OrgSettingsPane = () => {
 
   const [modalOpen, setModalOpen] = useState(false)
 
-  // Deep-link from the org list's token-health chip (`?focus=serviceToken`):
-  // scroll the section into view, highlight it, and open the set-token modal so
-  // a multi-org teacher lands directly on the rotate flow. Runs once on mount,
-  // then strips the param (replace) so the one-shot link is consumed exactly
-  // once — a later remount (navigate away and back, refresh) or a dismissal
-  // won't re-pop the modal or leave a stale ?focus in history.
-  const focusServiceToken = search?.focus === "serviceToken"
-  const [highlight, setHighlight] = useState(false)
-  useEffect(() => {
-    if (!focusServiceToken) return
-    setHighlight(true)
-    setModalOpen(true)
-    document
-      .getElementById("service-token-section")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" })
-    void navigate({
-      to: ".",
-      search: (prev) => ({ ...prev, focus: undefined }),
-      replace: true,
-    })
-    const id = window.setTimeout(() => setHighlight(false), 2000)
-    return () => window.clearTimeout(id)
-  }, [focusServiceToken, navigate])
-
   const openModal = () => {
     saveMutation.reset()
     setModalOpen(true)
@@ -475,14 +453,10 @@ export const OrgSettingsPane = () => {
 
   return (
     <SettingsSection
-      id="service-token-section"
+      id="service-token"
       title={t("orgSettings.serviceToken.title")}
       titleAdornment={<HelpTooltip help={t("orgSettings.serviceToken.help")} />}
-      className={
-        highlight
-          ? "ring-2 ring-primary ring-offset-2 ring-offset-base-100 transition-shadow"
-          : "transition-shadow"
-      }
+      className={sectionHighlightClass(highlighted ?? false)}
     >
       {tokenStatusLoading ? (
         <p className="text-sm text-base-content/60">
@@ -552,6 +526,7 @@ const OrgSettingsPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.organizationSettings"))
   const { org } = useParams({ strict: false })
+  const highlightedId = useHashSectionHighlight()
 
   return (
     <PageShell page="classes" settings selected="settings">
@@ -575,11 +550,23 @@ const OrgSettingsPage = () => {
           }
         />
         <div className="mt-8 space-y-8">
-          <OrgSettingsPane />
-          {org && <OrgActionsSection key={`actions-${org}`} org={org} />}
-          {org && <OrgPolicyAuditPane key={org} org={org} />}
-          {org && <RerunOrgSetup org={org} />}
-          {org && <TeardownSection org={org} />}
+          <OrgSettingsPane highlighted={highlightedId === "service-token"} />
+          {org && (
+            <OrgActionsSection
+              key={`actions-${org}`}
+              org={org}
+              highlightedId={highlightedId}
+            />
+          )}
+          {org && (
+            <OrgPolicyAuditPane
+              key={org}
+              org={org}
+              highlightedId={highlightedId}
+            />
+          )}
+          {org && <RerunOrgSetup org={org} highlightedId={highlightedId} />}
+          {org && <TeardownSection org={org} highlightedId={highlightedId} />}
         </div>
       </RequireRole>
     </PageShell>

@@ -2,7 +2,13 @@ import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useHiddenOrgs } from "@/context/hiddenOrgs/HiddenOrgsProvider"
-import { Button, Card, RouterButton } from "@/components/ui"
+import {
+  Button,
+  Card,
+  RouterButton,
+  SectionAnchorHeading,
+  cx,
+} from "@/components/ui"
 import { useTranslation } from "react-i18next"
 import { useMemo } from "react"
 import useGetOrgs from "@/hooks/useGetOrgs"
@@ -10,12 +16,16 @@ import {
   isOwnedReadyOrg,
   useOrgServiceTokenHealth,
 } from "@/hooks/useOrgServiceTokenHealth"
+import {
+  useHashSectionHighlight,
+  sectionHighlightClass,
+} from "@/hooks/useHashSectionHighlight"
 import { TokenHealthChip } from "@/components/status/TokenHealthChip"
 
 // Owned + Classroom 50-ready orgs are the only ones with a manageable service
 // token (a non-owner can't read/set it). The section reads token health for
 // exactly this set.
-function ServiceTokensSection() {
+function ServiceTokensSection({ highlighted }: { highlighted?: boolean }) {
   const { t } = useTranslation()
   const { data: orgs = [], isLoading } = useGetOrgs()
 
@@ -31,9 +41,19 @@ function ServiceTokensSection() {
   const { byOrg } = useOrgServiceTokenHealth(ownedReady, !isLoading)
 
   return (
-    <Card radius="xl" shadow={false}>
+    <Card
+      id="service-tokens"
+      radius="xl"
+      shadow={false}
+      className={cx(
+        "scroll-mt-24",
+        sectionHighlightClass(highlighted ?? false),
+      )}
+    >
       <Card.Body>
-        <Card.Title>{t("settings.serviceTokens.heading")}</Card.Title>
+        <SectionAnchorHeading anchorId="service-tokens" className="card-title">
+          {t("settings.serviceTokens.heading")}
+        </SectionAnchorHeading>
         <p className="text-sm text-base-content/70">
           {t("settings.serviceTokens.subheading")}
         </p>
@@ -86,7 +106,7 @@ function ServiceTokensSection() {
                   <RouterButton
                     to="/$org/settings"
                     params={{ org: login }}
-                    search={{ focus: "serviceToken" }}
+                    hash="service-token"
                     variant="outline"
                     size="sm"
                     className="shrink-0"
@@ -111,6 +131,7 @@ const SettingsPage = () => {
   useDocumentTitle(t("documentTitle.settings"))
   const { hidden, unhide } = useHiddenOrgs()
   const hiddenLogins = [...hidden].sort((a, b) => a.localeCompare(b))
+  const highlightedId = useHashSectionHighlight()
 
   return (
     <PageShell page="orgs" selected="settings">
@@ -119,11 +140,21 @@ const SettingsPage = () => {
         subtitle={t("settings.page.subheading")}
       />
 
-      <ServiceTokensSection />
+      <ServiceTokensSection highlighted={highlightedId === "service-tokens"} />
 
-      <Card radius="xl" shadow={false}>
+      <Card
+        id="hidden-orgs"
+        radius="xl"
+        shadow={false}
+        className={cx(
+          "scroll-mt-24",
+          sectionHighlightClass(highlightedId === "hidden-orgs"),
+        )}
+      >
         <Card.Body>
-          <Card.Title>{t("settings.hiddenOrgs.heading")}</Card.Title>
+          <SectionAnchorHeading anchorId="hidden-orgs" className="card-title">
+            {t("settings.hiddenOrgs.heading")}
+          </SectionAnchorHeading>
           <p className="text-sm text-base-content/70">
             {t("settings.hiddenOrgs.subheading")}
           </p>

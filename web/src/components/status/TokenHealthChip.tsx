@@ -63,7 +63,7 @@ export function tokenChipVisible(entry: {
 
 // A per-org service-token health chip. Rendered only for owned orgs on the home
 // page; clicking deep-links into that org's Service Token settings pane
-// (?focus=serviceToken) so a multi-org teacher rotates without hunting.
+// (#service-token) so a multi-org teacher rotates without hunting.
 //
 // A healthy ("ok") token renders NOTHING — re-emphasizing "all good" is noise;
 // the absence of a chip is itself the healthy signal. "unknown" stays visible
@@ -111,7 +111,7 @@ export function TokenHealthChip({
     <Link
       to="/$org/settings"
       params={{ org }}
-      search={{ focus: "serviceToken" }}
+      hash="service-token"
       aria-label={t("serviceTokenHealth.chip.rotateAria", { org })}
       className="no-underline"
     >

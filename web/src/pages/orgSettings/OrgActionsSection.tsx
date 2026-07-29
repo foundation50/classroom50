@@ -15,6 +15,7 @@ import useGetOrgActionsUsage from "@/hooks/useGetOrgActionsUsage"
 import useGetOrgActionsBudget from "@/hooks/useGetOrgActionsBudget"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useSetOrgActionsMode } from "@/hooks/mutations/useSetOrgActionsMode"
+import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
 import SettingsSection from "./SettingsSection"
 
 const ACTIONS_ANCHOR = "github-actions"
@@ -119,7 +120,13 @@ const ActionsUsagePanel = ({ org }: { org: string }) => {
 // paid minutes it would bill) while the config repo's own workflows keep
 // running. A live-derived toggle: it reflects whatever the org policy reports,
 // with no separate stored state.
-const OrgActionsSection = ({ org }: { org: string }) => {
+const OrgActionsSection = ({
+  org,
+  highlightedId,
+}: {
+  org: string
+  highlightedId?: string | null
+}) => {
   const { t } = useTranslation()
   const { notify } = useToast()
   const runToggle = useSafeSubmit()
@@ -156,6 +163,7 @@ const OrgActionsSection = ({ org }: { org: string }) => {
   return (
     <SettingsSection
       id={ACTIONS_ANCHOR}
+      className={sectionHighlightClass(highlightedId === ACTIONS_ANCHOR)}
       title={t("orgSettings.actions.title")}
       description={t("orgSettings.actions.description")}
       titleAdornment={

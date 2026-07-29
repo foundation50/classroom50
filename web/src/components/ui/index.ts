@@ -12,6 +12,8 @@ export type {
 
 export { RouterButton } from "./RouterButton"
 
+export { SectionAnchorHeading } from "./SectionAnchorHeading"
+
 export { Card, CardBody, CardTitle, CardActions } from "./Card"
 export type { CardProps } from "./Card"
 
