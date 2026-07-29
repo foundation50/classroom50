@@ -7,7 +7,10 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useParams, useSearch } from "@tanstack/react-router"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useSaveServiceToken } from "@/hooks/mutations/useSaveServiceToken"
+import { useRenameServiceToken } from "@/hooks/mutations/useRenameServiceToken"
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
+import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
+import { serviceTokenName, randomTokenHash } from "@/util/serviceTokenName"
 import RequireRole from "@/components/RequireRole"
 import OrgPolicyAuditPane from "@/pages/orgSettings/OrgPolicyAuditPane"
 import OrgActionsSection from "@/pages/orgSettings/OrgActionsSection"
@@ -22,26 +25,13 @@ import {
   ChevronRight,
   ChevronUp,
   ExternalLink,
+  Pencil,
+  Tag,
   TriangleAlert,
 } from "lucide-react"
 
 const DEFAULT_EXPIRY_DAYS = 120
 const MIN_EXPIRY_DAYS = 1
-
-// GitHub rejects a fine-grained PAT *name* over 40 chars, so the prefill must
-// fit. We don't interpolate the org (most slugs overflow) — the prefilled
-// target_name and description identify the org instead.
-const GITHUB_TOKEN_NAME_MAX = 40
-
-// Guarded at module load so a future edit overflowing the 40-char limit fails
-// fast in dev/CI instead of shipping a name GitHub's form rejects.
-const SERVICE_TOKEN_NAME = "Classroom 50 Actions Token"
-if (SERVICE_TOKEN_NAME.length > GITHUB_TOKEN_NAME_MAX) {
-  throw new Error(
-    `Service token name "${SERVICE_TOKEN_NAME}" is ${SERVICE_TOKEN_NAME.length} chars; ` +
-      `GitHub rejects PAT names longer than ${GITHUB_TOKEN_NAME_MAX}.`,
-  )
-}
 
 // GitHub caps a token at one calendar year, so max days is 366 across a leap
 // day, else 365. `from` proxies the token's start (GitHub's clock starts at
@@ -141,6 +131,114 @@ export function ServiceTokenInfo() {
   )
 }
 
+// The stored-name row shown when a token is set: displays Classroom 50's label
+// for the token and an inline rename (label-only — it does not rename the actual
+// GitHub PAT, whose name isn't API-writable).
+function ServiceTokenNameRow({
+  org,
+  storedName,
+  renameMutation,
+}: {
+  org: string | undefined
+  storedName: string | undefined
+  renameMutation: ReturnType<typeof useRenameServiceToken>
+}) {
+  const { t } = useTranslation()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
+
+  const beginEdit = () => {
+    setDraft(storedName ?? "")
+    renameMutation.reset()
+    setEditing(true)
+  }
+
+  if (!org) return null
+
+  return (
+    <div className="mt-4 rounded-xl border border-base-300 bg-base-200/40 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Tag
+          aria-hidden="true"
+          className="size-4 shrink-0 text-base-content/60"
+        />
+        <span className="text-sm font-semibold text-base-content">
+          {t("orgSettings.serviceToken.nameRowLabel")}
+        </span>
+        {!editing && (
+          <span className="font-mono text-sm text-base-content/80">
+            {storedName ?? t("orgSettings.serviceToken.nameUnknown")}
+          </span>
+        )}
+        {!editing && (
+          <Button
+            variant="ghost"
+            size="xs"
+            className="gap-1"
+            onClick={beginEdit}
+          >
+            <Pencil aria-hidden="true" className="size-3" />
+            {t("orgSettings.serviceToken.rename")}
+          </Button>
+        )}
+      </div>
+
+      {editing && (
+        <form
+          className="mt-2 flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (renameMutation.isPending) return
+            renameMutation.mutate(draft, {
+              onSuccess: () => setEditing(false),
+            })
+          }}
+        >
+          <Input
+            className="w-full max-w-md font-mono"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            spellCheck={false}
+            autoComplete="off"
+            aria-label={t("orgSettings.serviceToken.nameRowLabel")}
+          />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              type="submit"
+              loading={renameMutation.isPending}
+              disabled={renameMutation.isPending || !draft.trim()}
+            >
+              {t("orgSettings.serviceToken.saveName")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              type="button"
+              onClick={() => setEditing(false)}
+            >
+              {t("orgSettings.serviceToken.cancelRename")}
+            </Button>
+          </div>
+        </form>
+      )}
+
+      <p className="mt-2 text-xs text-base-content/60">
+        {t("orgSettings.serviceToken.nameRowHint")}
+      </p>
+
+      {renameMutation.isError && (
+        <p className="mt-1 text-xs text-error">
+          {renameMutation.error instanceof Error
+            ? renameMutation.error.message
+            : t("orgSettings.serviceToken.saveError")}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export const OrgSettingsPane = () => {
   const { t } = useTranslation()
   const runPat = useSafeSubmit()
@@ -155,6 +253,24 @@ export const OrgSettingsPane = () => {
   const { data: tokenStatus, isLoading: tokenStatusLoading } =
     useGetServiceTokenStatus(org ?? "")
   const tokenAlreadySet = tokenStatus?.status === "present"
+  const storedName =
+    tokenStatus?.status === "present" ? tokenStatus.tokenName : undefined
+
+  // The org's numeric id anchors the default token name (stable, unlike the
+  // renamable slug). The random 4-char hash is drawn once per pane mount (a
+  // stable useState init, not a render-time call) so the default name doesn't
+  // churn on every render. No useMemo: the value is cheap and the React
+  // Compiler handles memoization.
+  const { data: orgDetails } = useGetOrgPlanDetails(org)
+  const [nameHash] = useState(() => randomTokenHash())
+  const defaultTokenName = orgDetails?.id
+    ? serviceTokenName(orgDetails.id, nameHash)
+    : ""
+  // The name to prefill/save. Seeded from the generated default; the user can
+  // edit it before generating. `null` means "follow the default" until they
+  // type, so a late-arriving org id still populates the field.
+  const [tokenNameDraft, setTokenNameDraft] = useState<string | null>(null)
+  const tokenName = tokenNameDraft ?? defaultTokenName
 
   // When a token is set, collapse the config fields by default; when
   // missing/unknown they stay expanded. `manualOpen` lets the user override
@@ -195,7 +311,7 @@ export const OrgSettingsPane = () => {
   const serviceTokenUrl =
     "https://github.com/settings/personal-access-tokens/new?" +
     new URLSearchParams({
-      name: SERVICE_TOKEN_NAME,
+      name: tokenName || "classroom50-token",
       description: t("orgSettings.serviceToken.patDescription", { org }),
       target_name: org ?? "",
       expires_in: String(expiryValid ? parsedExpiry : DEFAULT_EXPIRY_DAYS),
@@ -213,6 +329,7 @@ export const OrgSettingsPane = () => {
     }).toString()
 
   const patMutation = useSaveServiceToken(org)
+  const renameMutation = useRenameServiceToken(org)
 
   return (
     <SettingsSection
@@ -258,6 +375,14 @@ export const OrgSettingsPane = () => {
         })()}
 
       {tokenAlreadySet && (
+        <ServiceTokenNameRow
+          org={org}
+          storedName={storedName}
+          renameMutation={renameMutation}
+        />
+      )}
+
+      {tokenAlreadySet && (
         <Button
           variant="ghost"
           size="sm"
@@ -278,6 +403,23 @@ export const OrgSettingsPane = () => {
 
       {configOpen && (
         <>
+          <div className="mt-5">
+            <label htmlFor="token-name" className="block text-sm font-semibold">
+              {t("orgSettings.serviceToken.nameLabel")}
+            </label>
+            <Input
+              id="token-name"
+              className="mt-2 w-full max-w-md font-mono"
+              value={tokenName}
+              onChange={(e) => setTokenNameDraft(e.target.value)}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <p className="mt-2 text-xs text-base-content/70">
+              {t("orgSettings.serviceToken.nameHint")}
+            </p>
+          </div>
+
           <div className="mt-5">
             <label
               htmlFor="token-expiry"
@@ -408,6 +550,7 @@ export const OrgSettingsPane = () => {
                     {
                       serviceToken,
                       expiresInDays: expiryValid ? parsedExpiry : undefined,
+                      tokenName: tokenName || undefined,
                     },
                     {
                       onSuccess: () => {

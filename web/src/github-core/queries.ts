@@ -109,6 +109,7 @@ export {
   getLastCollectScoresRun,
   SERVICE_TOKEN_SECRET_NAME,
   SERVICE_TOKEN_EXPIRES_AT_VAR,
+  SERVICE_TOKEN_NAME_VAR,
   SERVICE_TOKEN_EXPIRY_WARN_DAYS,
   classifyServiceTokenExpiry,
   type ServiceTokenStatus,

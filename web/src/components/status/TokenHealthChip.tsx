@@ -1,27 +1,24 @@
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
-import { CheckCircle2, CircleHelp, Clock, TriangleAlert } from "lucide-react"
+import { CircleHelp, Clock, TriangleAlert } from "lucide-react"
 import type { ComponentType } from "react"
 
 import { Badge, cx } from "@/components/ui"
 import type { BadgeTone } from "@/types/badgeTone"
 import type { OrgServiceTokenHealth } from "@/util/serviceTokenHealth"
 
-// One source mapping a service-token health verdict to its chip tone, icon, and
-// i18n label key — shared by the org card and row so they never drift.
+// One source mapping an attention-worthy health verdict to its chip tone, icon,
+// and i18n label key — shared by the org card and row so they never drift. The
+// healthy "ok" verdict is intentionally absent: a token in good standing needs
+// no chip (see below), so it never renders.
 const HEALTH_CHIP: Record<
-  OrgServiceTokenHealth,
+  Exclude<OrgServiceTokenHealth, "ok">,
   {
     tone: BadgeTone
     Icon: ComponentType<{ className?: string }>
     labelKey: string
   }
 > = {
-  ok: {
-    tone: "success",
-    Icon: CheckCircle2,
-    labelKey: "serviceTokenHealth.chip.ok",
-  },
   expiringSoon: {
     tone: "warning",
     Icon: Clock,
@@ -52,7 +49,10 @@ const HEALTH_CHIP: Record<
 // A per-org service-token health chip. Rendered only for owned orgs on the home
 // page; clicking deep-links into that org's Service Token settings pane
 // (?focus=serviceToken) so a multi-org teacher rotates without hunting.
-// "unknown" and (optionally) "ok" are visually quiet and non-actionable.
+//
+// A healthy ("ok") token renders NOTHING — re-emphasizing "all good" is noise;
+// the absence of a chip is itself the healthy signal. "unknown" stays visible
+// (we genuinely can't judge) but is quiet and non-actionable.
 export function TokenHealthChip({
   org,
   health,
@@ -74,12 +74,14 @@ export function TokenHealthChip({
     )
   }
 
+  if (health === "ok") return null
+
   const { tone, Icon, labelKey } = HEALTH_CHIP[health]
   const label = t(labelKey)
 
-  // The chip links to the rotate flow. "ok"/"unknown" aren't actionable, so
-  // render a static chip; the rest are clickable to rotate.
-  const actionable = health !== "ok" && health !== "unknown"
+  // The chip links to the rotate flow. "unknown" isn't actionable, so render a
+  // static chip; the rest are clickable to rotate.
+  const actionable = health !== "unknown"
 
   const chip = (
     <Badge tone={tone} size="sm" className={cx("gap-1", className)}>

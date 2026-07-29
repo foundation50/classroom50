@@ -48,6 +48,11 @@ func TestContractLiterals(t *testing.T) {
 			ServiceTokenExpiresAtVar,
 			"CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT",
 		},
+		{
+			"ServiceTokenNameVar",
+			ServiceTokenNameVar,
+			"CLASSROOM50_SERVICE_TOKEN_NAME",
+		},
 		// SecretPattern / SecretPatternDescription are mirrored, with NO
 		// compile-time link, in: cli/gh-teacher/skeleton/dotgithub/scripts/runner.py
 		// (re.fullmatch r"[a-z0-9]{4,64}"), autograde-runner.yaml (_SECRET),

@@ -20,6 +20,8 @@ export type OrgTokenHealthEntry = {
   health: OrgServiceTokenHealth
   // The recorded expiry (RFC 3339), when known — lets the UI show a date.
   expiresAt?: string
+  // The token's stored display name, when known.
+  tokenName?: string
   // True until both per-org reads resolve, so the chip can show a placeholder
   // rather than flashing a wrong verdict.
   loading: boolean
@@ -71,9 +73,11 @@ export function useOrgServiceTokenHealth(
         (results[i * 2 + 1]?.isLoading ?? false)
       const expiresAt =
         status?.status === "present" ? status.expiresAt : undefined
+      const tokenName =
+        status?.status === "present" ? status.tokenName : undefined
       return `${org}=${status?.status ?? "?"}:${expiresAt ?? "-"}:${
-        run?.conclusion ?? "-"
-      }:${loading ? "L" : "R"}`
+        tokenName ?? "-"
+      }:${run?.conclusion ?? "-"}:${loading ? "L" : "R"}`
     })
     .join("\n")
 
@@ -94,10 +98,13 @@ export function useOrgServiceTokenHealth(
       const tokenStatus = status?.status ?? "unknown"
       const expiresAt =
         status?.status === "present" ? status.expiresAt : undefined
+      const tokenName =
+        status?.status === "present" ? status.tokenName : undefined
 
       byOrg[org] = {
         org,
         expiresAt,
+        tokenName,
         loading,
         health: deriveOrgServiceTokenHealth({
           tokenStatus,

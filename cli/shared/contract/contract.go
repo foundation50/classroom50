@@ -81,6 +81,14 @@ const (
 	// compile-time link) in the web GUI — keep byte-identical.
 	ServiceTokenExpiresAtVar = "CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT"
 
+	// ServiceTokenNameVar is the repo-level Actions VARIABLE recording the
+	// service token's display NAME. GitHub does not expose a fine-grained PAT's
+	// name via the API, so this is the label Classroom 50 shows for the token
+	// (prefilled into the token-creation form and renamable afterward). Advisory
+	// only. Hand-mirrored (no compile-time link) in the web GUI — keep
+	// byte-identical.
+	ServiceTokenNameVar = "CLASSROOM50_SERVICE_TOKEN_NAME"
+
 	// SecretPattern is the anchored regex a per-classroom capability-URL secret
 	// must match: 4-64 lowercase-alphanumeric chars (one safe URL path segment
 	// for `<classroom>/<secret>/...`). Single-sourced because the rule is a

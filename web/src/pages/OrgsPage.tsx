@@ -22,6 +22,7 @@ import {
   EllipsisVertical,
   EyeOff,
   Info,
+  KeyRound,
   Lock,
   MailOpen,
   Plus,
@@ -187,6 +188,9 @@ function useOrgAffordances(summary: Classroom50OrgSummary) {
     // Teachers open ready orgs; students open any org they're an active member
     // of (their assignment repos live there even without classroom50 access).
     canOpen: isAdmin ? isReady : isActiveMember,
+    // Only an owner of a Classroom 50-ready org can set/rotate the service
+    // token, so only they get the "Manage token" affordance.
+    canManageToken: isAdmin && isReady,
   }
 }
 
@@ -198,7 +202,7 @@ function HideOrgMenu({
   className?: string
 }) {
   const { t } = useTranslation()
-  const { org } = useOrgAffordances(summary)
+  const { org, canManageToken } = useOrgAffordances(summary)
   const { hide, unhide } = useHiddenOrgs()
   const { notify } = useToast()
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -240,6 +244,19 @@ function HideOrgMenu({
           tabIndex={0}
           className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
         >
+          {canManageToken && (
+            <li>
+              <Link
+                to="/$org/settings"
+                params={{ org: org.login }}
+                search={{ focus: "serviceToken" }}
+                onClick={closeMenu}
+              >
+                <KeyRound aria-hidden="true" className="size-4" />
+                {t("orgs.card.manageToken")}
+              </Link>
+            </li>
+          )}
           <li>
             <button
               type="button"

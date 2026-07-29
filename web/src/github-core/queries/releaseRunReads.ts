@@ -120,6 +120,11 @@ export const SERVICE_TOKEN_SECRET_NAME = "CLASSROOM50_SERVICE_TOKEN"
 export const SERVICE_TOKEN_EXPIRES_AT_VAR =
   "CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT"
 
+// The repo-level Actions VARIABLE recording the token's display NAME (GitHub
+// does not expose a fine-grained PAT's name via the API). Mirrors the shared
+// contract's ServiceTokenNameVar — keep byte-identical.
+export const SERVICE_TOKEN_NAME_VAR = "CLASSROOM50_SERVICE_TOKEN_NAME"
+
 // How many days before expiry the token is flagged "expiring soon".
 export const SERVICE_TOKEN_EXPIRY_WARN_DAYS = 14
 
@@ -137,6 +142,9 @@ export type ServiceTokenStatus =
       // The teacher's recorded expected expiry (RFC 3339), when the expiry
       // variable is set. Absent for tokens rotated before this was tracked.
       expiresAt?: string
+      // The token's stored display name, when the name variable is set. Absent
+      // for tokens rotated before this was tracked, or renamed away.
+      tokenName?: string
       message: string
     }
   | {
@@ -169,16 +177,17 @@ export function classifyServiceTokenExpiry(
   return at - now <= warnMs ? "expiringSoon" : "ok"
 }
 
-// Reads the expiry variable off the config repo. Absent (404) or unreadable
-// resolves to undefined — the expiry is advisory metadata, so a missing/blocked
-// read must never void the token's present/missing verdict.
-async function readServiceTokenExpiry(
+// Reads a service-token metadata variable off the config repo. Absent (404) or
+// unreadable resolves to undefined — these variables are advisory metadata, so
+// a missing/blocked read must never void the token's present/missing verdict.
+async function readServiceTokenVariable(
   client: GitHubClient,
   org: string,
+  name: string,
 ): Promise<string | undefined> {
   try {
     const variable = await client.request<RepositoryVariable>(
-      `/repos/${org}/${CONFIG_REPO}/actions/variables/${SERVICE_TOKEN_EXPIRES_AT_VAR}`,
+      `/repos/${org}/${CONFIG_REPO}/actions/variables/${name}`,
     )
     return variable.value || undefined
   } catch {
@@ -195,7 +204,10 @@ export async function getServiceTokenStatus(
       `/repos/${org}/${CONFIG_REPO}/actions/secrets/${SERVICE_TOKEN_SECRET_NAME}`,
     )
 
-    const expiresAt = await readServiceTokenExpiry(client, org)
+    const [expiresAt, tokenName] = await Promise.all([
+      readServiceTokenVariable(client, org, SERVICE_TOKEN_EXPIRES_AT_VAR),
+      readServiceTokenVariable(client, org, SERVICE_TOKEN_NAME_VAR),
+    ])
 
     return {
       status: "present",
@@ -203,6 +215,7 @@ export async function getServiceTokenStatus(
       createdAt: secret.created_at,
       updatedAt: secret.updated_at,
       expiresAt,
+      tokenName,
       message: `Service token is set on the ${CONFIG_REPO} config repo. Last updated ${new Date(
         secret.updated_at,
       ).toLocaleString()}.`,

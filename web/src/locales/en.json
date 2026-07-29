@@ -643,7 +643,8 @@
       "hide": "Hide from home",
       "hidden": "Hid {{org}} from your home page.",
       "undoHide": "Undo",
-      "details": "Details"
+      "details": "Details",
+      "manageToken": "Manage token"
     },
     "detailsModal": {
       "displayName": "Display name",
@@ -696,6 +697,14 @@
       "subheading": "Organizations you've hidden from your home page. Unhide one to show it again.",
       "unhide": "Unhide",
       "empty": "You haven't hidden any organizations."
+    },
+    "serviceTokens": {
+      "heading": "Manage Service Tokens",
+      "subheading": "Service-token status across every organization you own. Rotate a token before it expires so nightly score collection keeps running.",
+      "loading": "Checking your organizations…",
+      "empty": "No organizations with Classroom 50 set up yet.",
+      "expires": "Expires {{date}}",
+      "manage": "Manage"
     }
   },
   "assignments": {
@@ -1189,11 +1198,10 @@
     "summary_other": "{{count}} of {{total}} organizations need a service-token check.",
     "chip": {
       "checking": "Checking token…",
-      "ok": "Token OK",
       "expiringSoon": "Token expiring soon",
       "expired": "Token expired",
       "missing": "No service token",
-      "collectFailing": "Collection failing",
+      "collectFailing": "Last collection failed",
       "unknown": "Token status unknown",
       "rotateAria": "Review the service token for {{org}}"
     }
@@ -1235,7 +1243,15 @@
       "savedNew": "Service token checked and saved.",
       "validating": "Validating…",
       "updateButton": "Update service token",
-      "saveButton": "Save service token"
+      "saveButton": "Save service token",
+      "nameLabel": "Token name",
+      "nameHint": "Classroom 50 pre-fills this name on GitHub’s token form and stores it so it can label the token here. Includes your organization’s id so it’s easy to tell apart from other tokens. You can change it before generating.",
+      "nameRowLabel": "Name",
+      "nameRowHint": "This is how Classroom 50 labels the token; it may differ from the token’s actual name on GitHub. Renaming updates only this label.",
+      "nameUnknown": "Not recorded",
+      "rename": "Rename",
+      "saveName": "Save name",
+      "cancelRename": "Cancel"
     },
     "audit": {
       "detail": {

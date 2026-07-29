@@ -87,16 +87,34 @@ describe("useSaveServiceToken", () => {
     result.current.mutate({ serviceToken: "ghp_token", expiresInDays: 120 })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(putRepoVariable).toHaveBeenCalledTimes(1)
-    const call = putRepoVariable.mock.calls[0]
-    // (client, org, repo, name, value) — assert the variable name and an
-    // ISO-date value.
-    expect(call[3]).toBe("CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT")
-    expect(typeof call[4]).toBe("string")
-    expect(Number.isNaN(Date.parse(call[4] as string))).toBe(false)
+    const expiryCall = putRepoVariable.mock.calls.find(
+      (c) => c[3] === "CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT",
+    )
+    expect(expiryCall).toBeDefined()
+    expect(typeof expiryCall?.[4]).toBe("string")
+    expect(Number.isNaN(Date.parse(expiryCall?.[4] as string))).toBe(false)
   })
 
-  it("skips the expiry variable when no window is given", async () => {
+  it("records the name variable when a token name is given", async () => {
+    const queryClient = freshClient()
+    const { result } = renderHook(() => useSaveServiceToken(ORG), {
+      wrapper: wrapperWith(queryClient),
+    })
+
+    result.current.mutate({
+      serviceToken: "ghp_token",
+      tokenName: "classroom50-token-42-ab12",
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    const nameCall = putRepoVariable.mock.calls.find(
+      (c) => c[3] === "CLASSROOM50_SERVICE_TOKEN_NAME",
+    )
+    expect(nameCall).toBeDefined()
+    expect(nameCall?.[4]).toBe("classroom50-token-42-ab12")
+  })
+
+  it("skips the metadata variables when neither is given", async () => {
     const queryClient = freshClient()
     const { result } = renderHook(() => useSaveServiceToken(ORG), {
       wrapper: wrapperWith(queryClient),
