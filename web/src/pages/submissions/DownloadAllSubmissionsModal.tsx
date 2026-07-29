@@ -1,4 +1,4 @@
-import { useId } from "react"
+import { useEffect, useId } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { FileArchive } from "lucide-react"
 
@@ -68,7 +68,7 @@ export function DownloadAllSubmissionsModal({
   const {
     mutate,
     isPending,
-    data: summary,
+    data: outcome,
     error,
     progress,
     cancel,
@@ -77,10 +77,22 @@ export function DownloadAllSubmissionsModal({
 
   const count = owners.length
   const running = isPending
+  // The run finished with a real result (not a picker cancel).
+  const summary = outcome?.status === "done" ? outcome.summary : null
+  const toDirectory = outcome?.status === "done" && outcome.toDirectory
   // Assembly (out-of-memory) failure is distinct from a per-repo failure: every
   // archive downloaded but the combined zip couldn't be built. Anything else is
   // an unexpected batch-level error.
   const assemblyError = error instanceof ZipAssemblyError
+
+  // The user dismissed the directory picker before anything ran — close quietly
+  // rather than showing an empty summary.
+  useEffect(() => {
+    if (outcome?.status === "cancelled") {
+      onClose()
+      reset()
+    }
+  }, [outcome, onClose, reset])
 
   const handleClose = () => {
     // Closing mid-run cancels the in-flight batch rather than trapping the user.
@@ -129,9 +141,12 @@ export function DownloadAllSubmissionsModal({
           )}
           <ul className="space-y-1 text-sm">
             <li>
-              {t("submissions.downloadAll.summaryDownloaded", {
-                count: summary.fetched,
-              })}
+              {t(
+                toDirectory
+                  ? "submissions.downloadAll.summarySaved"
+                  : "submissions.downloadAll.summaryDownloaded",
+                { count: summary.fetched },
+              )}
             </li>
             {summary.empty.length > 0 && (
               <li className="text-warning">

@@ -11,17 +11,27 @@ const downloadAllSubmissions =
   vi.fn<
     (...args: unknown[]) => Promise<{ blob: Blob; summary: DownloadAllSummary }>
   >()
+const streamSubmissionsToDirectory =
+  vi.fn<(...args: unknown[]) => Promise<DownloadAllSummary>>()
 const downloadBlob = vi.fn<(blob: Blob, filename: string) => void>()
+const supportsDirectoryPicker = vi.fn<() => boolean>()
+const pickDirectory = vi.fn<() => Promise<FileSystemDirectoryHandle | null>>()
 
 vi.mock("@/domain/assignments", () => ({
   downloadAllSubmissions: (...args: unknown[]) =>
     downloadAllSubmissions(...args),
+  streamSubmissionsToDirectory: (...args: unknown[]) =>
+    streamSubmissionsToDirectory(...args),
 }))
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({ request: vi.fn() }),
 }))
 vi.mock("@/util/downloadBlob", () => ({
   downloadBlob: (blob: Blob, filename: string) => downloadBlob(blob, filename),
+}))
+vi.mock("@/util/fileSystemAccess", () => ({
+  supportsDirectoryPicker: () => supportsDirectoryPicker(),
+  pickDirectory: () => pickDirectory(),
 }))
 
 import { useDownloadAllSubmissions } from "./useDownloadAllSubmissions"
@@ -55,6 +65,8 @@ function freshClient() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Default: no File System Access API — the combined-zip fallback path.
+  supportsDirectoryPicker.mockReturnValue(false)
 })
 
 describe("useDownloadAllSubmissions", () => {
@@ -157,5 +169,60 @@ describe("useDownloadAllSubmissions", () => {
 
     hook.current.cancel()
     expect(captured?.aborted).toBe(true)
+  })
+
+  it("streams to the picked directory when the API is supported", async () => {
+    supportsDirectoryPicker.mockReturnValue(true)
+    const dir = {} as FileSystemDirectoryHandle
+    pickDirectory.mockResolvedValue(dir)
+    streamSubmissionsToDirectory.mockResolvedValue(summary())
+    const queryClient = freshClient()
+    const { result: hook } = renderHook(() => useDownloadAllSubmissions(), {
+      wrapper: wrapperWith(queryClient),
+    })
+
+    hook.current.mutate({
+      org: ORG,
+      classroom: "cs101",
+      assignment: "hw1",
+      owners: ["alice", "bob"],
+    })
+    await waitFor(() => expect(hook.current.isSuccess).toBe(true))
+
+    expect(streamSubmissionsToDirectory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        directory: dir,
+        signal: expect.any(AbortSignal),
+      }),
+    )
+    // Directory path streams to disk — no combined zip, no auto-download.
+    expect(downloadAllSubmissions).not.toHaveBeenCalled()
+    expect(downloadBlob).not.toHaveBeenCalled()
+    expect(hook.current.data).toEqual({
+      status: "done",
+      summary: summary(),
+      toDirectory: true,
+    })
+  })
+
+  it("returns cancelled (and does nothing) when the directory picker is dismissed", async () => {
+    supportsDirectoryPicker.mockReturnValue(true)
+    pickDirectory.mockResolvedValue(null)
+    const queryClient = freshClient()
+    const { result: hook } = renderHook(() => useDownloadAllSubmissions(), {
+      wrapper: wrapperWith(queryClient),
+    })
+
+    hook.current.mutate({
+      org: ORG,
+      classroom: "cs101",
+      assignment: "hw1",
+      owners: ["alice"],
+    })
+    await waitFor(() => expect(hook.current.isSuccess).toBe(true))
+
+    expect(hook.current.data).toEqual({ status: "cancelled" })
+    expect(streamSubmissionsToDirectory).not.toHaveBeenCalled()
+    expect(downloadAllSubmissions).not.toHaveBeenCalled()
   })
 })

@@ -2060,6 +2060,8 @@
       "summaryLead": "Finished processing <b>{{total}}</b> submissions.",
       "summaryDownloaded_one": "{{count}} submission downloaded",
       "summaryDownloaded_other": "{{count}} submissions downloaded",
+      "summarySaved_one": "{{count}} submission saved to the folder you chose",
+      "summarySaved_other": "{{count}} submissions saved to the folder you chose",
       "summaryEmpty_one": "{{count}} repository was empty (skipped)",
       "summaryEmpty_other": "{{count}} repositories were empty (skipped)",
       "summaryFailed_one": "{{count}} submission failed",
