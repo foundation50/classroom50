@@ -183,7 +183,7 @@ export async function migrateClassroom(
       ...createClassroomMetadata(
         targetOrg,
         shortName,
-        plan.classroom.name,
+        plan.name || plan.classroom.name,
         plan.term,
         { id: team.id, slug: team.slug },
         undefined,

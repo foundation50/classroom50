@@ -113,10 +113,20 @@ describe("buildPreflight", () => {
       targetOrg: "dst",
     })
     expect(plan.shortName).toBe("cs-50")
+    expect(plan.name).toBe("CS 50")
     expect(plan.counts).toEqual({ import: 1, reuse: 0, skip: 1 })
     expect(plan.blockers).toHaveLength(0)
     const skip = plan.items.find((i) => i.action === "skip")
     expect(skip?.reason?.key).toBe("migration.reason.sourceNotTemplate")
+  })
+
+  it("honors an overridden class name", async () => {
+    const plan = await buildPreflight(makeClient({}), {
+      source: "1",
+      targetOrg: "dst",
+      name: "My Class",
+    })
+    expect(plan.name).toBe("My Class")
   })
 
   it("reuse when the target template already exists", async () => {

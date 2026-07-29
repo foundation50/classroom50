@@ -76,6 +76,7 @@ function plan(items: MigrationItem[]): MigrationPreflight {
   return {
     classroom,
     targetOrg: "dst",
+    name: "CS 50",
     shortName: "cs-50",
     term: "Fall-2026",
     templateSuffix: "",
@@ -203,6 +204,7 @@ describe("migrateClassroom", () => {
       classroom_id: 1,
     })
     expect(classroomJson.term).toBe("Fall-2026")
+    expect(classroomJson.name).toBe("CS 50")
     const assignmentsJson = JSON.parse(
       paths["cs-50/assignments.json"] as string,
     )
@@ -211,6 +213,19 @@ describe("migrateClassroom", () => {
 
     // onItem streamed running -> generated
     expect(statuses.map((s) => s.status)).toEqual(["running", "generated"])
+  })
+
+  it("uses an overridden class name in classroom.json", async () => {
+    const { client, committed } = makeClient({})
+    await migrateClassroom(
+      client,
+      { ...plan([importItem("hw1")]), name: "Intro to CS (Fall)" },
+      {},
+    )
+    const classroomJson = JSON.parse(
+      committed()["cs-50/classroom.json"] as string,
+    )
+    expect(classroomJson.name).toBe("Intro to CS (Fall)")
   })
 
   it("downgrades a failed copy to skipped but still commits the rest", async () => {

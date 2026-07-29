@@ -30,6 +30,7 @@ export const ConfirmStep = ({
   const client = useGitHubClient()
 
   // Tunables that re-run preflight when they settle.
+  const [name, setName] = useState<string | undefined>(undefined)
   const [shortName, setShortName] = useState<string | undefined>(undefined)
   const [term, setTerm] = useState("")
   const [templateSuffix, setTemplateSuffix] = useState("")
@@ -47,6 +48,7 @@ export const ConfirmStep = ({
       "preflight",
       source.id,
       targetOrg,
+      name ?? "",
       shortName ?? "",
       term,
       templateSuffix,
@@ -55,6 +57,7 @@ export const ConfirmStep = ({
       buildPreflight(client, {
         source: String(source.id),
         targetOrg,
+        name,
         shortName,
         term,
         templateSuffix,
@@ -94,49 +97,66 @@ export const ConfirmStep = ({
           </span>
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div className="mt-4 grid gap-4">
           <FormField
-            label={t("migration.confirm.shortName")}
-            htmlFor="mig-short"
-            help={t("migration.confirm.shortNameHelp")}
+            label={t("migration.confirm.name")}
+            htmlFor="mig-name"
+            help={t("migration.confirm.nameHelp")}
           >
             {({ id }) => (
               <Input
                 id={id}
-                value={shortName ?? plan?.shortName ?? ""}
-                placeholder={plan?.shortName ?? ""}
-                onChange={(e) => setShortName(e.target.value)}
+                value={name ?? plan?.name ?? ""}
+                placeholder={plan?.name ?? source.name}
+                onChange={(e) => setName(e.target.value)}
               />
             )}
           </FormField>
-          <FormField
-            label={t("migration.confirm.term")}
-            htmlFor="mig-term"
-            help={t("migration.confirm.termHelp")}
-          >
-            {({ id }) => (
-              <Input
-                id={id}
-                value={term}
-                placeholder={t("migration.confirm.termPlaceholder")}
-                onChange={(e) => setTerm(e.target.value)}
-              />
-            )}
-          </FormField>
-          <FormField
-            label={t("migration.confirm.suffix")}
-            htmlFor="mig-suffix"
-            help={t("migration.confirm.suffixHelp")}
-          >
-            {({ id }) => (
-              <Input
-                id={id}
-                value={templateSuffix}
-                placeholder={t("migration.confirm.suffixPlaceholder")}
-                onChange={(e) => setTemplateSuffix(e.target.value)}
-              />
-            )}
-          </FormField>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <FormField
+              label={t("migration.confirm.shortName")}
+              htmlFor="mig-short"
+              help={t("migration.confirm.shortNameHelp")}
+            >
+              {({ id }) => (
+                <Input
+                  id={id}
+                  value={shortName ?? plan?.shortName ?? ""}
+                  placeholder={plan?.shortName ?? ""}
+                  onChange={(e) => setShortName(e.target.value)}
+                />
+              )}
+            </FormField>
+            <FormField
+              label={t("migration.confirm.term")}
+              htmlFor="mig-term"
+              help={t("migration.confirm.termHelp")}
+            >
+              {({ id }) => (
+                <Input
+                  id={id}
+                  value={term}
+                  placeholder={t("migration.confirm.termPlaceholder")}
+                  onChange={(e) => setTerm(e.target.value)}
+                />
+              )}
+            </FormField>
+            <FormField
+              label={t("migration.confirm.suffix")}
+              htmlFor="mig-suffix"
+              help={t("migration.confirm.suffixHelp")}
+            >
+              {({ id }) => (
+                <Input
+                  id={id}
+                  value={templateSuffix}
+                  placeholder={t("migration.confirm.suffixPlaceholder")}
+                  onChange={(e) => setTemplateSuffix(e.target.value)}
+                />
+              )}
+            </FormField>
+          </div>
         </div>
 
         {isError && (

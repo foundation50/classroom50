@@ -100,6 +100,9 @@ export type MigrationBlocker = {
 export type MigrationPreflight = {
   classroom: ClassroomDetail
   targetOrg: string
+  // The target class display name (classroom.json.name). Defaults to the source
+  // classroom name; the teacher may override it on the confirm screen.
+  name: string
   shortName: string
   term: string
   templateSuffix: string

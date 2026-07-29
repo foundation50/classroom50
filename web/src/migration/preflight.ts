@@ -21,6 +21,8 @@ export type BuildPreflightInput = {
   // Numeric classroom id or source org login.
   source: string
   targetOrg: string
+  // Target class display name; defaults to the source classroom name.
+  name?: string
   shortName?: string
   term?: string
   templateSuffix?: string
@@ -77,6 +79,7 @@ export async function buildPreflight(
   assertValidShortName(shortName)
 
   const term = (input.term ?? "").trim()
+  const name = input.name?.trim() ? input.name.trim() : classroom.name
 
   const assignments = await fetchAssignmentsForClassroom(client, classroom.id)
   const items: MigrationItem[] = []
@@ -103,6 +106,7 @@ export async function buildPreflight(
   return {
     classroom,
     targetOrg: input.targetOrg,
+    name,
     shortName,
     term,
     templateSuffix,
