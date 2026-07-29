@@ -284,16 +284,26 @@ export type StaleSkeletonFile = SkeletonFile & { exists: boolean }
 // advances the tip during the (possibly long) overwrite-confirm pause.
 const SKELETON_COMMIT_ATTEMPTS = 3
 
-// A ref PATCH with force:false that loses a race returns 422 "Update is not a
-// fast forward". Treat that (and only that) as retryable; everything else is a
-// real error the caller should see. Exported so withGitConflictRetry treats a
-// lost force:false race as retryable too (not just a 409) — the roster mutation
-// family relies on that retry for concurrency safety.
+// A ref PATCH with force:false that loses a race returns a 422 — GitHub phrases
+// it as "Update is not a fast forward" OR "Reference cannot be updated" (both
+// mean the tip moved between our read and the update). Treat those (and only
+// those) as retryable; everything else is a real error the caller should see.
+// Exported so withGitConflictRetry treats a lost force:false race as retryable
+// too (not just a 409) — the roster and migration mutation families rely on
+// that retry for concurrency safety.
 export function isNonFastForward(err: unknown): boolean {
   if (!(err instanceof GitHubAPIError) || err.status !== 422) return false
-  const message =
-    err.message + " " + (typeof err.body === "string" ? err.body : "")
-  return /fast forward|fast-forward/i.test(message)
+  const bodyText =
+    typeof err.body === "string"
+      ? err.body
+      : err.body &&
+          typeof err.body === "object" &&
+          "message" in err.body &&
+          typeof (err.body as { message?: unknown }).message === "string"
+        ? (err.body as { message: string }).message
+        : ""
+  const message = err.message + " " + bodyText
+  return /fast forward|fast-forward|reference cannot be updated/i.test(message)
 }
 
 // Skeleton files whose repo content is missing OR differs from the bundled

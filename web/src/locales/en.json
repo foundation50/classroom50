@@ -73,6 +73,11 @@
     "subtitle": "Bring an existing GitHub Classroom — its assignments and starter repositories — into this organization as a new class. You'll review and confirm everything before anything is created.",
     "entryButton": "Import from GitHub Classroom",
     "missingOrg": "This page needs an organization in the URL.",
+    "steps": {
+      "select": "Choose classroom",
+      "confirm": "Review",
+      "execute": "Import"
+    },
     "gate": {
       "title": "Set up this organization first",
       "body": "\"{{org}}\" isn't a Classroom 50 organization yet. Run the one-time setup, then come back to import.",
@@ -85,7 +90,6 @@
       "title": "Choose a GitHub Classroom to import",
       "body": "These are the GitHub Classrooms your account can administer.",
       "showArchived": "Show archived classrooms",
-      "loading": "Loading your GitHub Classrooms…",
       "loadError": "Couldn't load your GitHub Classrooms.",
       "retry": "Retry",
       "empty": "No GitHub Classrooms are accessible to your account. Confirm you administer one at classroom.github.com.",

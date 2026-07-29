@@ -6,11 +6,12 @@
 import { useState } from "react"
 import { Link, useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
+import { Check } from "lucide-react"
 
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import MissingParams from "@/components/MissingParams"
-import { Alert, Button, Card, Spinner } from "@/components/ui"
+import { Alert, Button, Card, Spinner, cx } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useOrgClassroom50Status } from "@/hooks/useOrgClassroom50Status"
 import { githubOrgOAuthPolicyUrl } from "@/auth/constants"
@@ -23,6 +24,60 @@ type Phase =
   | { name: "select" }
   | { name: "confirm"; source: ClassroomWithOrg }
   | { name: "execute"; plan: MigrationPreflight }
+
+const STEP_ORDER = ["select", "confirm", "execute"] as const
+type StepName = (typeof STEP_ORDER)[number]
+
+// A lightweight 3-step progress header (Choose -> Review -> Import) so the
+// multi-phase wizard reads clearly. Mirrors the app's step-indicator styling.
+// `complete` marks the CURRENT step done too (e.g. after the import finishes).
+const MigrationSteps = ({
+  current,
+  complete = false,
+}: {
+  current: StepName
+  complete?: boolean
+}) => {
+  const { t } = useTranslation()
+  const currentIndex = STEP_ORDER.indexOf(current)
+  return (
+    <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+      {STEP_ORDER.map((step, i) => {
+        const done = i < currentIndex || (i === currentIndex && complete)
+        const active = i === currentIndex && !complete
+        return (
+          <li key={step} className="flex items-center gap-2">
+            <span
+              className={cx(
+                "flex size-6 items-center justify-center rounded-full text-xs font-semibold",
+                done && "bg-primary text-primary-content",
+                active && "bg-primary/15 text-primary ring-2 ring-primary/30",
+                !done && !active && "bg-base-300 text-base-content/50",
+              )}
+            >
+              {done ? <Check aria-hidden="true" className="size-3.5" /> : i + 1}
+            </span>
+            <span
+              className={cx(
+                active
+                  ? "font-medium text-base-content"
+                  : "text-base-content/60",
+              )}
+            >
+              {t(`migration.steps.${step}`)}
+            </span>
+            {i < STEP_ORDER.length - 1 && (
+              <span
+                aria-hidden="true"
+                className="mx-1 hidden h-px w-8 bg-base-300 sm:block"
+              />
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
 
 const OrgSetupGate = ({ org }: { org: string }) => {
   const { t } = useTranslation()
@@ -49,6 +104,8 @@ export const ImportClassroomPage = () => {
   const { org } = useParams({ strict: false })
   const status = useOrgClassroom50Status(org)
   const [phase, setPhase] = useState<Phase>({ name: "select" })
+  // Set once the execute phase reports success, so the final step gets a check.
+  const [imported, setImported] = useState(false)
 
   if (!org) {
     return <MissingParams message={t("migration.missingOrg")} />
@@ -89,6 +146,7 @@ export const ImportClassroomPage = () => {
 
       {status.data === "ready" && (
         <>
+          <MigrationSteps current={phase.name} complete={imported} />
           {phase.name === "select" && (
             <SelectSourceStep
               onPick={(source) => setPhase({ name: "confirm", source })}
@@ -103,7 +161,11 @@ export const ImportClassroomPage = () => {
             />
           )}
           {phase.name === "execute" && (
-            <ExecuteStep plan={phase.plan} targetOrg={org} />
+            <ExecuteStep
+              plan={phase.plan}
+              targetOrg={org}
+              onDone={() => setImported(true)}
+            />
           )}
         </>
       )}

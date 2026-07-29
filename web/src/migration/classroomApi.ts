@@ -89,7 +89,11 @@ export async function listClassroomsWithOrg(
     if (row.archived && !options.includeArchived) continue
     try {
       const detail = await getClassroom(client, row.id)
-      out.push({ ...row, orgLogin: detail.organization.login })
+      out.push({
+        ...row,
+        orgLogin: detail.organization.login,
+        orgAvatarUrl: detail.organization.avatar_url,
+      })
     } catch {
       // Stale listing row or mid-loop access loss: skip, don't fail the list.
     }

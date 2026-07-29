@@ -68,7 +68,10 @@ export type ClassroomAssignmentDetail = {
 }
 
 // A source classroom paired with its resolved org login, for the picker.
-export type ClassroomWithOrg = ClassroomListItem & { orgLogin: string }
+export type ClassroomWithOrg = ClassroomListItem & {
+  orgLogin: string
+  orgAvatarUrl?: string
+}
 
 // --- Preflight / execute plan shapes ---
 

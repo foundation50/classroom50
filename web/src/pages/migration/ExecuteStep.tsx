@@ -2,7 +2,7 @@
 // down (see foundation50/classroom50#312). Phase 3: run the migration with live
 // per-item progress and a truthful summary (partial is never shown as full).
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { CheckCircle } from "lucide-react"
@@ -46,11 +46,13 @@ export const ExecuteStep = ({
       ),
   )
 
-  // Kick the migration exactly once on mount.
-  const startedRef = useRef(false)
+  // Kick the migration once. Guard on the mutation's own idle state rather than
+  // a mount ref: under React StrictMode's mount→unmount→remount, a ref survives
+  // the remount but the mutation state resets, which would leave a ref-guarded
+  // effect skipping the fire on the live instance and hang on "Importing…".
+  // isIdle is false the moment mutate() is called, so it fires exactly once.
   useEffect(() => {
-    if (startedRef.current) return
-    startedRef.current = true
+    if (!mutation.isIdle) return
     mutation.mutate(
       {
         plan,
@@ -62,7 +64,7 @@ export const ExecuteStep = ({
       { onSuccess: (result) => onDone?.(result) },
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [mutation.isIdle])
 
   const result = mutation.data
   const done = mutation.isSuccess
