@@ -69,3 +69,11 @@ export {
   type UploadFile,
   type SubmitAssignmentResult,
 } from "./assignments/submit"
+export {
+  downloadAllSubmissions,
+  type DownloadAllProgress,
+  type DownloadAllResult,
+  type DownloadAllSummary,
+  type DownloadRepoResult,
+  type DownloadOutcome,
+} from "./assignments/downloadSubmissions"
