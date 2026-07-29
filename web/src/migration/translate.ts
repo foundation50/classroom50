@@ -5,6 +5,7 @@
 
 import type { Assignment, DueMeta, MigratedFrom } from "@/types/classroom"
 import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
+import { localizedError } from "@/types/localizedMessage"
 import type { ClassroomAssignmentDetail, ClassroomDetail } from "./types"
 
 // The only migrated_from.source value today.
@@ -13,6 +14,19 @@ export const MIGRATE_SOURCE_GITHUB_CLASSROOM = "github_classroom"
 // The universal autograde shim name — every migrated assignment gets this;
 // autograding config is never migrated.
 export const DEFAULT_AUTOGRADER_NAME = "default"
+
+// Clamp a source `max_teams` into a valid Classroom 50 group size. A sane
+// source value (GROUP_SIZE_MIN..MAX) is kept; anything missing/odd/out-of-range
+// falls back to the cap so migration never fails on it (the teacher tightens
+// later). Shared by the written entry and the confirm preview so the two can't
+// drift.
+export function clampMigratedGroupSize(maxTeams: number | null): number {
+  return maxTeams != null &&
+    maxTeams >= GROUP_SIZE_MIN &&
+    maxTeams <= GROUP_SIZE_MAX
+    ? maxTeams
+    : GROUP_SIZE_MAX
+}
 
 // classroom short-names and assignment slugs both flow into repo/team names.
 // Byte-mirror of the CLI's validate.ShortNamePattern.
@@ -59,7 +73,7 @@ export function classroomMigratedFrom(
 export function deriveShortName(rawName: string): string {
   const lowered = rawName.trim().toLowerCase()
   if (!lowered) {
-    throw new Error("Classroom name is empty — enter a short name explicitly.")
+    throw localizedError({ key: "migration.error.classroomNameEmpty" })
   }
   let slug = lowered.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
   if (slug.length > 39) {
@@ -76,15 +90,22 @@ export function assertValidShortName(
   rawName?: string,
 ): void {
   if (!SHORT_NAME_PATTERN.test(shortName)) {
-    const from = rawName ? ` from "${rawName}"` : ""
-    throw new Error(
-      `Could not derive a valid short name${from} (got "${shortName}") — must be ${SHORT_NAME_PATTERN_DESCRIPTION}. Enter one explicitly.`,
-    )
+    throw localizedError({
+      key: rawName
+        ? "migration.error.shortNameInvalidFrom"
+        : "migration.error.shortNameInvalid",
+      params: {
+        shortName,
+        rawName: rawName ?? "",
+        description: SHORT_NAME_PATTERN_DESCRIPTION,
+      },
+    })
   }
   if (!isCanonicalTeamShortName(shortName)) {
-    throw new Error(
-      `Short name "${shortName}" can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants).`,
-    )
+    throw localizedError({
+      key: "migration.error.shortNameNotCanonical",
+      params: { shortName },
+    })
   }
 }
 
@@ -175,10 +196,13 @@ export function assignmentToEntry(
     migrated_from: migratedFrom,
   }
 
-  // Carry the source's Feedback PR setting. Classroom 50 defaults feedback_pr
-  // ON when absent, so only write it explicitly when the source DISABLED it —
-  // preserving the teacher's choice without churning the common (enabled) case.
-  // A template-less/empty assignment can't have a feedback PR, so skip it there.
+  // Feedback PR: an absent `feedback_pr` reads as OFF (accept.ts checks `===
+  // true`, matching the schema), so migrated assignments start with the Feedback
+  // PR disabled — the teacher re-enables it in the assignment editor. This
+  // mirrors the Go CLI migrate, which likewise never enables it. We still write
+  // an explicit `false` when the source disabled it, to record the source's
+  // intent in the entry; the enabled/absent cases both read OFF, so they're left
+  // unwritten. A template-less/empty assignment can't have a feedback PR either.
   if (targetTemplate && detail.feedback_pull_requests_enabled === false) {
     entry.feedback_pr = false
   }
@@ -192,13 +216,7 @@ export function assignmentToEntry(
   if (detail.type === "group") {
     // Use the source max_teams when sane (2..cap); else fall back to the cap so
     // migration never fails on a missing/odd value (the teacher tightens later).
-    const maxTeams = detail.max_teams
-    entry.max_group_size =
-      maxTeams != null &&
-      maxTeams >= GROUP_SIZE_MIN &&
-      maxTeams <= GROUP_SIZE_MAX
-        ? maxTeams
-        : GROUP_SIZE_MAX
+    entry.max_group_size = clampMigratedGroupSize(detail.max_teams)
   }
 
   return entry

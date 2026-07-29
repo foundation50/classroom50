@@ -6,6 +6,7 @@
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import { paginateAll } from "@/github-core/paginate"
+import { localizedError, type LocalizedMessage } from "@/types/localizedMessage"
 import type {
   ClassroomAssignmentDetail,
   ClassroomAssignmentListItem,
@@ -66,10 +67,10 @@ export async function getClassroomAssignment(
     )
   } catch (err) {
     if (err instanceof GitHubAPIError && err.isNotFound) {
-      throw new Error(
-        `Assignment ${assignmentId} is not accessible — you must administer its GitHub Classroom.`,
-        { cause: err },
-      )
+      throw localizedError({
+        key: "migration.error.assignmentInaccessible",
+        params: { id: assignmentId },
+      })
     }
     throw err
   }
@@ -125,9 +126,7 @@ export async function resolveSource(
 ): Promise<ClassroomDetail> {
   const trimmed = source.trim()
   if (!trimmed) {
-    throw new Error(
-      "Source must not be empty — pass a numeric classroom id or an org login.",
-    )
+    throw localizedError({ key: "migration.error.sourceEmpty" })
   }
 
   if (ALL_DIGITS.test(trimmed)) {
@@ -136,9 +135,7 @@ export async function resolveSource(
 
   const listing = await listClassrooms(client)
   if (listing.length === 0) {
-    throw new Error(
-      "No classrooms are accessible to your account — confirm you administer a GitHub Classroom.",
-    )
+    throw localizedError({ key: "migration.error.noClassrooms" })
   }
 
   const want = trimmed.toLowerCase()
@@ -156,17 +153,19 @@ export async function resolveSource(
   }
 
   if (matches.length === 0) {
-    throw new Error(
-      `No classroom found in org "${trimmed}"${
-        options.includeArchived ? "" : " (archived classrooms are hidden)"
-      } — confirm you administer one there.`,
-    )
+    throw localizedError({
+      key: options.includeArchived
+        ? "migration.error.noClassroomInOrg"
+        : "migration.error.noClassroomInOrgHidden",
+      params: { org: trimmed },
+    })
   }
   if (matches.length > 1) {
     const ids = matches.map((m) => `${m.id} (${m.name})`).join(", ")
-    throw new Error(
-      `Multiple classrooms found in org "${trimmed}" — pick one by id: ${ids}.`,
-    )
+    throw localizedError({
+      key: "migration.error.multipleClassrooms",
+      params: { org: trimmed, ids },
+    })
   }
   return matches[0]
 }
@@ -174,12 +173,18 @@ export async function resolveSource(
 // A source classroom the viewer cannot administer (GitHub Classroom 404).
 export class GitHubClassroomAccessError extends Error {
   classroomId: number
+  localized: LocalizedMessage
   constructor(classroomId: number, options?: ErrorOptions) {
+    const localized: LocalizedMessage = {
+      key: "migration.error.classroomInaccessible",
+      params: { id: classroomId },
+    }
     super(
       `Classroom ${classroomId} is not accessible to your account — you must be a GitHub Classroom admin for it.`,
       options,
     )
     this.name = "GitHubClassroomAccessError"
     this.classroomId = classroomId
+    this.localized = localized
   }
 }

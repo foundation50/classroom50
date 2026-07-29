@@ -73,7 +73,43 @@ export async function migrateClassroom(
     )
   }
 
-  // --- Phase A: copy templates (best-effort per item) ---
+  // --- Phase A: ensure teams FIRST (mirror createClassroomFiles) ---
+  // Done before any template copy so a hard team-ensure failure aborts with
+  // zero orphaned repos, rather than leaving generated-but-uncommitted repos
+  // behind (best-effort copy can't undo a real GitHub write).
+  const { ...team } = await ensureClassroomTeam(client, targetOrg, shortName)
+  const { teams } = await ensureStaffTeams(client, targetOrg, shortName)
+
+  if (options.creator && teams.teacher) {
+    try {
+      await addUserToTeam(client, {
+        org: targetOrg,
+        teamSlug: teams.teacher.slug,
+        username: options.creator,
+        role: "maintainer",
+      })
+    } catch {
+      // Non-fatal; an owner can re-add via the roster UI.
+    }
+  }
+  if (options.creator) {
+    const dropSlugs = [team.slug, teams.hta?.slug, teams.ta?.slug].filter(
+      (s): s is string => Boolean(s),
+    )
+    for (const teamSlug of dropSlugs) {
+      try {
+        await removeUserFromTeam(client, {
+          org: targetOrg,
+          teamSlug,
+          username: options.creator,
+        })
+      } catch {
+        // Non-fatal.
+      }
+    }
+  }
+
+  // --- Phase B: copy templates (best-effort per item) ---
   const entries: Assignment[] = []
   const privateTemplates: Array<{ owner: string; repo: string }> = []
   const skipped: MigrationResult["skipped"] = []
@@ -142,44 +178,22 @@ export async function migrateClassroom(
     }
   }
 
-  // --- Phase B: teams (mirror createClassroomFiles) ---
-  const { ...team } = await ensureClassroomTeam(client, targetOrg, shortName)
-  const { teams } = await ensureStaffTeams(client, targetOrg, shortName)
-
-  if (options.creator && teams.teacher) {
-    try {
-      await addUserToTeam(client, {
-        org: targetOrg,
-        teamSlug: teams.teacher.slug,
-        username: options.creator,
-        role: "maintainer",
-      })
-    } catch {
-      // Non-fatal; an owner can re-add via the roster UI.
-    }
-  }
-  if (options.creator) {
-    const dropSlugs = [team.slug, teams.hta?.slug, teams.ta?.slug].filter(
-      (s): s is string => Boolean(s),
-    )
-    for (const teamSlug of dropSlugs) {
-      try {
-        await removeUserFromTeam(client, {
-          org: targetOrg,
-          teamSlug,
-          username: options.creator,
-        })
-      } catch {
-        // Non-fatal.
-      }
-    }
-  }
-
   // --- Phase C: commit the four-file scaffold (with entries + migrated_from) ---
   const commitSha = await withGitConflictRetry(async () => {
     const branch = await getConfigRepoBranch(client, targetOrg)
     const ref = await getBranchRef(client, targetOrg, branch)
     const commit = await getCommit(client, targetOrg, ref.object.sha)
+
+    // Re-assert the collision guard against the freshly-read tip each attempt:
+    // the pre-write check above ran once, but a concurrent import of the same
+    // short-name could have committed its scaffold since. Without this, a lost
+    // fast-forward race would retry and clobber the winner's classroom.json
+    // (last-writer-wins). Fail closed instead.
+    if (await classroomDirExists(client, targetOrg, shortName)) {
+      throw new Error(
+        `Classroom "${shortName}" already exists in ${targetOrg}/${CONFIG_REPO} — refusing to overwrite.`,
+      )
+    }
 
     const classroomJson = {
       ...createClassroomMetadata(

@@ -225,7 +225,7 @@ describe("resolveSource", () => {
       throw notFound(url)
     })
     await expect(resolveSource(client, "acme")).rejects.toThrow(
-      /No classroom found/,
+      /noClassroomInOrg/,
     )
   })
 })

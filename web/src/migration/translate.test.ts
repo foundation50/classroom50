@@ -40,14 +40,14 @@ describe("deriveShortName", () => {
   })
 
   it("throws on an empty name", () => {
-    expect(() => deriveShortName("   ")).toThrow(/empty/i)
+    expect(() => deriveShortName("   ")).toThrow(/classroomNameEmpty/)
   })
 
   it("rejects a name that slugifies to a non-canonical team short-name", () => {
     // Leading punctuation collapses so this is fine; use a value that would
     // trail a hyphen after truncation to hit the canonical guard indirectly —
     // here a single char is below the 2-char minimum instead.
-    expect(() => deriveShortName("A")).toThrow(/valid short name/i)
+    expect(() => deriveShortName("A")).toThrow(/shortNameInvalid/)
   })
 })
 
@@ -136,7 +136,7 @@ describe("assignmentToEntry", () => {
     expect(entry.feedback_pr).toBe(false)
   })
 
-  it("leaves feedback_pr unset when the source enabled feedback PRs (default on)", () => {
+  it("leaves feedback_pr unset when the source enabled feedback PRs (reads OFF; teacher re-enables)", () => {
     const entry = assignmentToEntry(
       detail({ feedback_pull_requests_enabled: true }),
       1,

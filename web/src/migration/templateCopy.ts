@@ -7,6 +7,7 @@ import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import { withFreshRepoRetry } from "@/github-core/queries"
 import { logger } from "@/lib/logger"
+import type { LocalizedMessage } from "@/types/localizedMessage"
 import type { MigrationItem } from "./types"
 
 const log = logger.scope("migration:templateCopy")
@@ -159,6 +160,31 @@ export async function copyOneTemplate(
       if ((err.isForbidden || err.isNotFound) && crossOrg) {
         throw new TemplateSourceAccessError(srcOwner, starter.full_name, err)
       }
+      // TOCTOU: the target name was free when classify probed (404 -> import)
+      // but has since been created (another import, a manual create, or a retry
+      // of this one), so generate 422s on the name collision. Re-probe: if it's
+      // now a usable template, reuse it instead of dropping the assignment;
+      // otherwise raise a distinct, actionable collision error.
+      if (err.status === 422) {
+        const now = await client
+          .request<{
+            is_template: boolean
+            default_branch: string
+            private: boolean
+          }>(`/repos/${targetOrg}/${item.targetName}`)
+          .catch(() => null)
+        if (now) {
+          if (now.is_template) {
+            return {
+              owner: targetOrg,
+              repo: item.targetName,
+              branch: now.default_branch,
+              private: now.private,
+            }
+          }
+          throw new TargetRepoCollisionError(targetOrg, item.targetName, err)
+        }
+      }
       throw new Error(
         `${err.status} generating ${targetOrg}/${item.targetName} from ${starter.full_name}: ${err.message}`,
         { cause: err },
@@ -183,6 +209,7 @@ export async function copyOneTemplate(
 // message names the source org and the fix so the skip line is actionable.
 export class TemplateSourceAccessError extends Error {
   sourceOrg: string
+  localized: LocalizedMessage
   constructor(sourceOrg: string, fullName: string, cause: GitHubAPIError) {
     super(
       `Can't read the starter repository "${fullName}" — approve the Classroom 50 app for the "${sourceOrg}" organization (Settings → Applications → Authorized OAuth Apps → Classroom 50 → Grant), then retry. (GitHub: ${cause.status} ${cause.message})`,
@@ -190,5 +217,43 @@ export class TemplateSourceAccessError extends Error {
     )
     this.name = "TemplateSourceAccessError"
     this.sourceOrg = sourceOrg
+    this.localized = {
+      key: "migration.error.templateSourceAccess",
+      params: {
+        fullName,
+        org: sourceOrg,
+        detail: {
+          key: "migration.error.githubSaid",
+          params: { status: cause.status, message: cause.message },
+        },
+      },
+    }
+  }
+}
+
+// A generate that 422'd on the target name because a NON-template repo already
+// occupies it (a TOCTOU collision since classify's 404 probe). Distinct from a
+// generic copy failure so the skip line tells the teacher to rename via the
+// template suffix rather than implying the source was unreadable.
+export class TargetRepoCollisionError extends Error {
+  targetName: string
+  localized: LocalizedMessage
+  constructor(targetOrg: string, targetName: string, cause: GitHubAPIError) {
+    super(
+      `A repository named "${targetOrg}/${targetName}" already exists and is not a template — choose a different template suffix and retry. (GitHub: ${cause.status} ${cause.message})`,
+      { cause },
+    )
+    this.name = "TargetRepoCollisionError"
+    this.targetName = targetName
+    this.localized = {
+      key: "migration.error.targetRepoCollision",
+      params: {
+        repo: `${targetOrg}/${targetName}`,
+        detail: {
+          key: "migration.error.githubSaid",
+          params: { status: cause.status, message: cause.message },
+        },
+      },
+    }
   }
 }

@@ -199,6 +199,22 @@
       "targetCollision": "A repository named \"{{name}}\" already exists in {{org}} and isn't a template. Set a template suffix to avoid the collision.",
       "deselected": "Unchecked — won't be imported.",
       "copyFailed": "Couldn't copy the template: {{message}}"
+    },
+    "error": {
+      "githubSaid": "(GitHub: {{status}} {{message}})",
+      "sourceEmpty": "Enter a numeric classroom id or an organization login to import from.",
+      "noClassrooms": "No GitHub Classrooms are accessible to your account — confirm you administer one.",
+      "noClassroomInOrg": "No classroom found in the \"{{org}}\" organization — confirm you administer one there.",
+      "noClassroomInOrgHidden": "No classroom found in the \"{{org}}\" organization (archived classrooms are hidden) — confirm you administer one there.",
+      "multipleClassrooms": "Multiple classrooms found in the \"{{org}}\" organization — pick one by id: {{ids}}.",
+      "classroomInaccessible": "Classroom {{id}} isn't accessible to your account — you must be a GitHub Classroom admin for it.",
+      "assignmentInaccessible": "Assignment {{id}} isn't accessible — you must administer its GitHub Classroom.",
+      "classroomNameEmpty": "The classroom name is empty — enter a short name explicitly.",
+      "shortNameInvalid": "\"{{shortName}}\" isn't a valid short name — it must be {{description}}. Enter one explicitly.",
+      "shortNameInvalidFrom": "Couldn't derive a valid short name from \"{{rawName}}\" (got \"{{shortName}}\") — it must be {{description}}. Enter one explicitly.",
+      "shortNameNotCanonical": "The short name \"{{shortName}}\" can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants).",
+      "templateSourceAccess": "Can't read the starter repository \"{{fullName}}\" — approve the Classroom 50 app for the \"{{org}}\" organization, then retry. {{detail}}",
+      "targetRepoCollision": "A repository named \"{{repo}}\" already exists and isn't a template — choose a different template suffix and retry. {{detail}}"
     }
   },
   "nav": {

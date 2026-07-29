@@ -9,6 +9,7 @@ import { AlertCircle, ArrowRight, CheckCircle, MinusCircle } from "lucide-react"
 
 import { Badge, Spinner, rtlFlip, type BadgeTone } from "@/components/ui"
 import { formatDueDateTime } from "@/util/formatDate"
+import { clampMigratedGroupSize } from "@/migration/translate"
 import type {
   ClassroomAssignmentDetail,
   MigrationItemAction,
@@ -170,14 +171,11 @@ export const MigrationItemCard = ({
         ? t("migration.item.typeIndividual")
         : assignment.type
 
-  // Group size the target will use (source max_teams, clamped later by translate).
+  // Group size the target will use: the same clamp translate applies to the
+  // written entry, so the preview never drifts from what migrate writes.
   const targetGroupSize =
     assignment.type === "group"
-      ? String(
-          assignment.max_teams && assignment.max_teams >= 2
-            ? assignment.max_teams
-            : 100,
-        )
+      ? String(clampMigratedGroupSize(assignment.max_teams))
       : dash
   const sourceGroupSize =
     assignment.type === "group"
@@ -186,18 +184,16 @@ export const MigrationItemCard = ({
         : dash
       : dash
 
-  // Feedback PR: template-less assignments can't have one on the target.
+  // Feedback PR: migrated assignments start with the Feedback PR OFF (an absent
+  // feedback_pr reads as disabled, matching translate + the Go CLI); the teacher
+  // re-enables it in the editor afterward. So the target always previews "no".
   const sourceFeedback =
     assignment.feedback_pull_requests_enabled === undefined
       ? dash
       : assignment.feedback_pull_requests_enabled
         ? yes
         : no
-  const targetFeedback = templateLess
-    ? no
-    : assignment.feedback_pull_requests_enabled === false
-      ? no
-      : yes
+  const targetFeedback = no
 
   const deadlineText = assignment.deadline
     ? formatDueDateTime(assignment.deadline)

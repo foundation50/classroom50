@@ -23,6 +23,10 @@ import {
   Spinner,
 } from "@/components/ui"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
+import {
+  localizedMessageOf,
+  resolveLocalizedMessage,
+} from "@/types/localizedMessage"
 import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import { useMigrateClassroom } from "@/hooks/mutations/useMigrateClassroom"
 import { buildPreflight } from "@/migration/preflight"
@@ -49,6 +53,14 @@ export const ConfirmStep = ({
   const client = useGitHubClient()
   const { data: viewer } = useGitHubViewer()
   const mutation = useMigrateClassroom(targetOrg)
+
+  // Prefer a translatable { key, params } payload the migration layer attached
+  // over a raw English Error.message (which is a diagnostic fallback only).
+  const renderError = (err: unknown, fallbackKey: string): string => {
+    const localized = localizedMessageOf(err)
+    if (localized) return resolveLocalizedMessage(t, localized)
+    return err instanceof Error ? err.message : t(fallbackKey)
+  }
 
   // Tunables. `shortName` and `templateSuffix` change the PLAN (target repo
   // names, collision checks), so they key the preflight query. `name` and
@@ -112,9 +124,12 @@ export const ConfirmStep = ({
     placeholderData: keepPreviousData,
     staleTime: 0,
     retry: false,
-    // Once the import is underway or finished, freeze the preview — no more
-    // refetches (the plan the run used is authoritative).
-    enabled: !running && !done,
+    // Once the import is underway, finished, OR failed, freeze the preview — no
+    // more refetches. On mutation error `running` flips back to false, so
+    // without the `!mutation.isError` guard the query would re-enable and swap
+    // out the plan the failed run used while its error banner and per-item
+    // statuses are still shown, letting a retry run an unconfirmed plan.
+    enabled: !running && !done && !mutation.isError,
   })
 
   // True while the debounce timer hasn't caught up to the latest input.
@@ -350,9 +365,7 @@ export const ConfirmStep = ({
         {isError && !plan && (
           <Alert tone="error" className="mt-4 items-start">
             <span className="text-sm">
-              {error instanceof Error
-                ? error.message
-                : t("migration.confirm.preflightError")}
+              {renderError(error, "migration.confirm.preflightError")}
             </span>
             <Button variant="ghost" size="sm" onClick={() => refetch()}>
               {t("migration.select.retry")}
@@ -433,9 +446,7 @@ export const ConfirmStep = ({
                 <div>
                   <p className="font-medium">{t("migration.execute.error")}</p>
                   <p className="mt-1 text-sm">
-                    {mutation.error instanceof Error
-                      ? mutation.error.message
-                      : String(mutation.error)}
+                    {renderError(mutation.error, "migration.execute.error")}
                   </p>
                 </div>
               </Alert>
