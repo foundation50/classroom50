@@ -17,6 +17,16 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.20.0](https://github.com/foundation50/classroom50/compare/web-v1.19.0...web-v1.20.0) (2026-07-29)
+
+
+### Features
+
+* **web:** add teacher download of student submissions (single + bulk) ([#446](https://github.com/foundation50/classroom50/issues/446)) ([b83e04e](https://github.com/foundation50/classroom50/commit/b83e04ec3f3b5ad3eb38fd434f9725792c06eeb8))
+* **web:** drop collectFailing badge and warn on untracked token expiry ([#448](https://github.com/foundation50/classroom50/issues/448)) ([b6137fc](https://github.com/foundation50/classroom50/commit/b6137fc12b4f2965f0d2daec13caf280327eb728))
+* **web:** make settings section headings linkable via URL hash ([#445](https://github.com/foundation50/classroom50/issues/445)) ([f5c2cfb](https://github.com/foundation50/classroom50/commit/f5c2cfb513333b86bebbd50811e0501c49da9672))
+* **web:** manage service tokens across organizations ([#443](https://github.com/foundation50/classroom50/issues/443)) ([549d34a](https://github.com/foundation50/classroom50/commit/549d34aab497dc1a3050111f4bfbd8cbf974479d))
+
 ## [1.19.0](https://github.com/foundation50/classroom50/compare/web-v1.18.1...web-v1.19.0) (2026-07-28)
 
 
