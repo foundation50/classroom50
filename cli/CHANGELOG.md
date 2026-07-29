@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.20.0](https://github.com/foundation50/classroom50/compare/cli-v1.19.0...cli-v1.20.0) (2026-07-29)
+
+
+### Features
+
+* **web:** manage service tokens across organizations ([#443](https://github.com/foundation50/classroom50/issues/443)) ([549d34a](https://github.com/foundation50/classroom50/commit/549d34aab497dc1a3050111f4bfbd8cbf974479d))
+
 ## [1.19.0](https://github.com/foundation50/classroom50/compare/cli-v1.18.1...cli-v1.19.0) (2026-07-28)
 
 
