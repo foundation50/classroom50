@@ -1,15 +1,22 @@
-import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { Link } from "@tanstack/react-router"
+import { useNavigate } from "@tanstack/react-router"
 
-// A section heading that doubles as its own anchor: the heading text itself is a
-// link that sets the URL hash to `anchorId`, which useHashSectionHighlight picks
-// up to scroll + highlight the section — and the hash stays in the URL so the
-// position is shareable/bookmarkable. A hover underline is the only affordance,
-// so the row stays as tight as a plain heading (no extra icon pushing an
-// adjacent tooltip away).
+// Monotonic per-session counter so every click stamps a distinct scrollNonce —
+// unlike Date.now(), which can repeat within a millisecond and let the hook's
+// dedupe guard swallow a legitimate re-click.
+let scrollSeq = 0
+
+// A section heading that doubles as its own anchor: the heading text is a link
+// that updates the URL hash to `anchorId` (shareable/bookmarkable). The actual
+// smooth scroll + highlight is owned solely by useHashSectionHighlight, keyed on
+// the hash change — so there is exactly one scroll per click and no competing
+// animations.
 //
-// `to="."` keeps the current path (and search); only the hash changes.
+// preventDefault blocks the browser's instant fragment jump; a `scrollNonce` in
+// history state makes an identical-hash re-click still register as a change the
+// hook reacts to (TanStack #3437 otherwise no-ops a same-hash navigation).
+// `replace: true` keeps repeated in-page section clicks from piling up
+// back-button history entries.
 export function SectionAnchorHeading({
   anchorId,
   children,
@@ -17,26 +24,31 @@ export function SectionAnchorHeading({
   as: Tag = "h2",
 }: {
   anchorId: string
-  children: ReactNode
+  children: string
   className?: string
   as?: "h2" | "h3"
 }) {
   const { t } = useTranslation()
-  const label =
-    typeof children === "string"
-      ? t("common.linkToSection", { section: children })
-      : t("common.linkToSectionGeneric")
+  const navigate = useNavigate()
 
   return (
     <Tag className={className}>
-      <Link
-        to="."
-        hash={anchorId}
-        aria-label={label}
+      <a
+        href={`#${anchorId}`}
+        aria-label={t("common.linkToSection", { section: children })}
         className="no-underline hover:underline"
+        onClick={(e) => {
+          e.preventDefault()
+          void navigate({
+            to: ".",
+            hash: anchorId,
+            replace: true,
+            state: (prev) => ({ ...prev, scrollNonce: ++scrollSeq }),
+          })
+        }}
       >
         {children}
-      </Link>
+      </a>
     </Tag>
   )
 }

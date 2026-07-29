@@ -39,7 +39,6 @@
     "openOrgOnGitHub": "Open {{org}} on GitHub",
     "dismissNotification": "Dismiss notification",
     "linkToSection": "Link to {{section}}",
-    "linkToSectionGeneric": "Link to this section",
     "pagination": {
       "show": "Show",
       "entries": "entries",

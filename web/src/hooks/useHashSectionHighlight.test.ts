@@ -1,18 +1,20 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { act, renderHook } from "@testing-library/react"
+import { act, cleanup, renderHook } from "@testing-library/react"
 
 let hashValue = ""
+let scrollNonce: number | undefined
 
 vi.mock("@tanstack/react-router", () => ({
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
-    select({ location: { hash: hashValue } }),
+    select({ location: { hash: hashValue, state: { scrollNonce } } }),
 }))
 
 import { useHashSectionHighlight } from "./useHashSectionHighlight"
 
 beforeEach(() => {
   vi.useFakeTimers()
+  scrollNonce = undefined
   hashValue = ""
   document.body.innerHTML = ""
   // rAF isn't provided by fake timers; make it synchronous so the scroll retry
@@ -25,6 +27,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  cleanup()
   vi.runOnlyPendingTimers()
   vi.useRealTimers()
   vi.unstubAllGlobals()
@@ -73,5 +76,27 @@ describe("useHashSectionHighlight", () => {
     hashValue = "not-mounted-yet"
     const { result } = renderHook(() => useHashSectionHighlight())
     expect(result.current).toBe("not-mounted-yet")
+  })
+
+  it("re-scrolls on a bumped scrollNonce even when the hash is unchanged", () => {
+    const scrollIntoView = vi.fn()
+    const el = document.createElement("section")
+    el.id = "service-token"
+    el.scrollIntoView = scrollIntoView
+    document.body.appendChild(el)
+
+    hashValue = "service-token"
+    scrollNonce = 1
+    const { rerender } = renderHook(() => useHashSectionHighlight())
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+
+    // Same hash, new nonce (an identical-hash re-click) re-fires the scroll.
+    scrollNonce = 2
+    rerender()
+    expect(scrollIntoView).toHaveBeenCalledTimes(2)
+
+    // A re-render with no nonce change does NOT scroll again.
+    rerender()
+    expect(scrollIntoView).toHaveBeenCalledTimes(2)
   })
 })
