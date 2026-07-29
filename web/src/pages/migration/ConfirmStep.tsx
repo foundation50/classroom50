@@ -6,8 +6,8 @@
 
 import { useState } from "react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import { useTranslation } from "react-i18next"
-import { AlertTriangle, ArrowRight } from "lucide-react"
+import { Trans, useTranslation } from "react-i18next"
+import { AlertTriangle } from "lucide-react"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import {
@@ -16,8 +16,8 @@ import {
   Card,
   FormField,
   Input,
+  Modal,
   Spinner,
-  rtlFlip,
 } from "@/components/ui"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { buildPreflight } from "@/migration/preflight"
@@ -47,9 +47,10 @@ export const ConfirmStep = ({
   const [shortName, setShortName] = useState<string | undefined>(undefined)
   const [term, setTerm] = useState<string | undefined>(undefined)
   const [templateSuffix, setTemplateSuffix] = useState("")
-  const [confirmText, setConfirmText] = useState("")
   // Assignment ids the teacher unchecked (importable items default to checked).
   const [deselected, setDeselected] = useState<Set<number>>(new Set())
+  // The irreversibility confirmation modal, opened by the Import button.
+  const [showConfirm, setShowConfirm] = useState(false)
 
   const toggleItem = (assignmentId: number) =>
     setDeselected((prev) => {
@@ -134,12 +135,9 @@ export const ConfirmStep = ({
 
   const selectedCount =
     (effectivePlan?.counts.import ?? 0) + (effectivePlan?.counts.reuse ?? 0)
-  const confirmValue = plan?.shortName ?? ""
-  const confirmed = confirmText.trim() === confirmValue && confirmValue !== ""
   const canImport =
     Boolean(effectivePlan) &&
     !blocked &&
-    confirmed &&
     !isLoading &&
     !isFetching &&
     !pendingEdit &&
@@ -148,28 +146,33 @@ export const ConfirmStep = ({
   return (
     <Card>
       <Card.Body>
-        <Card.Title>{t("migration.confirm.title")}</Card.Title>
-        <p className="text-base-content/70">{t("migration.confirm.body")}</p>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-          <span className="rounded-lg border border-base-300 bg-base-200 px-2 py-1">
-            <span className="text-base-content/50">
-              {t("migration.confirm.sourceLabel")}{" "}
-            </span>
-            <span className="font-medium">{source.name}</span>
-            <span className="text-base-content/50"> ({source.orgLogin})</span>
-          </span>
-          <ArrowRight
-            aria-hidden="true"
-            className={`size-4 text-base-content/40 ${rtlFlip}`}
-          />
-          <span className="rounded-lg border border-base-300 bg-base-200 px-2 py-1">
-            <span className="text-base-content/50">
-              {t("migration.confirm.targetLabel")}{" "}
-            </span>
-            <span className="font-medium">{targetOrg}</span>
-          </span>
+        <div className="flex items-start justify-between gap-4">
+          <Card.Title>{t("migration.confirm.title")}</Card.Title>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={onBack}
+            className="shrink-0"
+          >
+            {t("migration.confirm.back")}
+          </Button>
         </div>
+        <p className="text-base-content/70">
+          <Trans
+            i18nKey={
+              source.name && source.name !== source.orgLogin
+                ? "migration.confirm.fromLine"
+                : "migration.confirm.fromLineNoName"
+            }
+            values={{
+              source: source.name || source.orgLogin,
+              org: source.orgLogin,
+            }}
+            components={{
+              b: <span className="font-medium text-base-content" />,
+            }}
+          />
+        </p>
 
         {/* Initial load: don't show empty inputs that populate later — show a
             loading state until the first preflight resolves. */}
@@ -276,29 +279,12 @@ export const ConfirmStep = ({
               </Alert>
             ))}
 
-            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-base-content/70">
-              <span>
-                {t("migration.confirm.countImport", {
-                  n: effectivePlan?.counts.import ?? 0,
-                })}
-              </span>
-              <span>
-                {t("migration.confirm.countReuse", {
-                  n: effectivePlan?.counts.reuse ?? 0,
-                })}
-              </span>
-              <span>
-                {t("migration.confirm.countSkip", {
-                  n: effectivePlan?.counts.skip ?? 0,
-                })}
-              </span>
-              {(isFetching || pendingEdit) && (
-                <span className="flex items-center gap-1 text-base-content/50">
-                  <Spinner size="xs" />
-                  {t("migration.confirm.updating")}
-                </span>
-              )}
-            </div>
+            {(isFetching || pendingEdit) && (
+              <div className="mt-4 flex items-center gap-1 text-sm text-base-content/50">
+                <Spinner size="xs" />
+                {t("migration.confirm.updating")}
+              </div>
+            )}
 
             {/* Two-column labels above the source -> target rows. */}
             <div className="mt-3 hidden grid-cols-[1fr_auto_1fr] gap-3 px-1 text-xs font-medium uppercase tracking-wide text-base-content/50 sm:grid">
@@ -334,23 +320,6 @@ export const ConfirmStep = ({
               })}
             </ul>
 
-            {!blocked && (
-              <Alert tone="warning" className="mt-6 items-start">
-                <AlertTriangle aria-hidden="true" className="size-5 shrink-0" />
-                <div>
-                  <p className="font-medium">
-                    {t("migration.confirm.warningTitle")}
-                  </p>
-                  <p className="mt-1 text-sm">
-                    {t("migration.confirm.warningBody", {
-                      count: selectedCount,
-                      org: targetOrg,
-                    })}
-                  </p>
-                </div>
-              </Alert>
-            )}
-
             {!blocked && selectedCount === 0 && (
               <Alert tone="info" className="mt-4">
                 {t("migration.confirm.noneSelected")}
@@ -358,41 +327,72 @@ export const ConfirmStep = ({
             )}
 
             {!blocked && (
-              <div className="mt-4">
-                <FormField
-                  label={t("migration.confirm.typeToConfirm", {
-                    shortName: plan.shortName,
-                  })}
-                  htmlFor="mig-confirm"
-                >
-                  {({ id }) => (
-                    <Input
-                      id={id}
-                      className="font-mono"
-                      value={confirmText}
-                      placeholder={plan.shortName}
-                      onChange={(e) => setConfirmText(e.target.value)}
-                    />
-                  )}
-                </FormField>
-              </div>
+              <Button
+                variant="primary"
+                className="mt-6 w-full"
+                disabled={!canImport}
+                onClick={() => setShowConfirm(true)}
+              >
+                {t("migration.confirm.importButton", {
+                  count: selectedCount,
+                })}
+              </Button>
             )}
           </>
         )}
+      </Card.Body>
 
-        <Card.Actions className="mt-6 justify-between">
-          <Button variant="ghost" onClick={onBack}>
-            {t("migration.confirm.back")}
+      {/* Final irreversibility gate: the warning lives here, not inline. */}
+      <Modal
+        open={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        size="md"
+        aria-label={t("migration.confirm.modalTitle")}
+      >
+        <h3 className="flex items-center gap-2 text-lg font-bold">
+          <AlertTriangle aria-hidden="true" className="size-5 text-warning" />
+          {t("migration.confirm.modalTitle")}
+        </h3>
+        <p className="mt-2 text-sm text-base-content/80">
+          {t("migration.confirm.modalSummary", {
+            count: selectedCount,
+            shortName: effectivePlan?.shortName ?? "",
+            org: targetOrg,
+          })}
+        </p>
+        {(effectivePlan?.counts.reuse ?? 0) > 0 && (
+          <p className="mt-2 text-sm text-base-content/70">
+            {t("migration.confirm.modalReuseNote", {
+              count: effectivePlan!.counts.reuse,
+            })}
+          </p>
+        )}
+        {(effectivePlan?.counts.skip ?? 0) > 0 && (
+          <p className="mt-2 text-sm text-base-content/70">
+            {t("migration.confirm.modalSkipNote", {
+              count: effectivePlan!.counts.skip,
+            })}
+          </p>
+        )}
+        <p className="mt-3 text-sm font-medium text-base-content/80">
+          {t("migration.confirm.modalConfirmQuestion")}
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setShowConfirm(false)}>
+            {t("migration.confirm.modalCancel")}
           </Button>
           <Button
             variant="primary"
             disabled={!canImport}
-            onClick={() => effectivePlan && onConfirm(effectivePlan)}
+            onClick={() => {
+              setShowConfirm(false)
+              if (effectivePlan) onConfirm(effectivePlan)
+            }}
           >
-            {t("migration.confirm.importButton")}
+            {t("migration.confirm.modalConfirm")}
           </Button>
-        </Card.Actions>
-      </Card.Body>
+        </div>
+      </Modal>
     </Card>
   )
 }
