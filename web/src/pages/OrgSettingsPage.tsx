@@ -409,12 +409,14 @@ export const OrgSettingsPane = () => {
   // is drawn once per mount so the prefilled name is stable across renders.
   const { data: orgDetails } = useGetOrgPlanDetails(org)
   const [nameHash] = useState(() => randomTokenHash())
-  const defaultTokenName = orgDetails?.id
+  // Always prefill a FRESH unique name (org id + a new random hash), even when
+  // rotating: GitHub rejects a new fine-grained PAT whose name collides with an
+  // existing one on the same account, and a rotation is a brand-new PAT while
+  // the old one is (usually) still listed. The stored name stays the rename
+  // default (TokenNameRow), but the generate flow must not reuse it.
+  const prefillName = orgDetails?.id
     ? serviceTokenName(orgDetails.id, nameHash)
     : ""
-  // When rotating an existing token, reuse its stored name so the prefill (and
-  // the GitHub list) stays consistent; otherwise use the fresh default.
-  const prefillName = storedName ?? defaultTokenName
 
   const saveMutation = useSaveServiceToken(org)
   const renameMutation = useRenameServiceToken(org)
