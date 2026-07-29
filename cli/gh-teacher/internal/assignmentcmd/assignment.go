@@ -777,7 +777,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		}
 	}
 	if resolved != nil && templatePrivate && inOrg && committedLocked {
-		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the classroom student team was NOT granted read on the private template %s/%s — unlock it with `gh teacher assignment unlock %s %s %s` when you want students to accept again.\n",
+		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the classroom student team was NOT granted read on the private template %s/%s — unlock it with `gh teacher assignment lock %s %s %s --unlock` when you want students to accept again.\n",
 			slug, resolved.Owner, resolved.Repo, org, classroom, slug)
 	}
 	if droppedTests > 0 {
