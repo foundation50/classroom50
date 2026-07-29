@@ -43,6 +43,16 @@ export const ConfirmStep = ({
   const [term, setTerm] = useState("")
   const [templateSuffix, setTemplateSuffix] = useState("")
   const [confirmText, setConfirmText] = useState("")
+  // Assignment ids the teacher unchecked (importable items default to checked).
+  const [deselected, setDeselected] = useState<Set<number>>(new Set())
+
+  const toggleItem = (assignmentId: number) =>
+    setDeselected((prev) => {
+      const next = new Set(prev)
+      if (next.has(assignmentId)) next.delete(assignmentId)
+      else next.add(assignmentId)
+      return next
+    })
 
   const {
     data: plan,
@@ -76,9 +86,46 @@ export const ConfirmStep = ({
   })
 
   const blocked = (plan?.blockers.length ?? 0) > 0
+
+  // The effective plan reflects the teacher's selection: any importable/reusable
+  // item they unchecked becomes a skip (with a "deselected" reason) so execute
+  // skips it and the counts + summary stay truthful. Skip items are untouched.
+  const effectivePlan: MigrationPreflight | undefined = plan
+    ? {
+        ...plan,
+        items: plan.items.map((item) =>
+          item.action !== "skip" && deselected.has(item.assignment.id)
+            ? {
+                ...item,
+                action: "skip" as const,
+                reason: { key: "migration.reason.deselected" },
+              }
+            : item,
+        ),
+        counts: {
+          import: plan.items.filter(
+            (i) => i.action === "import" && !deselected.has(i.assignment.id),
+          ).length,
+          reuse: plan.items.filter(
+            (i) => i.action === "reuse" && !deselected.has(i.assignment.id),
+          ).length,
+          skip: plan.items.filter(
+            (i) => i.action === "skip" || deselected.has(i.assignment.id),
+          ).length,
+        },
+      }
+    : undefined
+
+  const selectedCount =
+    (effectivePlan?.counts.import ?? 0) + (effectivePlan?.counts.reuse ?? 0)
   const confirmValue = plan?.shortName ?? ""
   const confirmed = confirmText.trim() === confirmValue && confirmValue !== ""
-  const canImport = Boolean(plan) && !blocked && confirmed && !isLoading
+  const canImport =
+    Boolean(effectivePlan) &&
+    !blocked &&
+    confirmed &&
+    !isLoading &&
+    selectedCount > 0
 
   return (
     <Card>
@@ -213,13 +260,19 @@ export const ConfirmStep = ({
 
             <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-base-content/70">
               <span>
-                {t("migration.confirm.countImport", { n: plan.counts.import })}
+                {t("migration.confirm.countImport", {
+                  n: effectivePlan?.counts.import ?? 0,
+                })}
               </span>
               <span>
-                {t("migration.confirm.countReuse", { n: plan.counts.reuse })}
+                {t("migration.confirm.countReuse", {
+                  n: effectivePlan?.counts.reuse ?? 0,
+                })}
               </span>
               <span>
-                {t("migration.confirm.countSkip", { n: plan.counts.skip })}
+                {t("migration.confirm.countSkip", {
+                  n: effectivePlan?.counts.skip ?? 0,
+                })}
               </span>
               {isFetching && (
                 <span className="flex items-center gap-1 text-base-content/50">
@@ -237,19 +290,30 @@ export const ConfirmStep = ({
             </div>
 
             <ul className="mt-1 grid gap-2">
-              {plan.items.map((item) => (
-                <li key={item.assignment.id}>
-                  <MigrationItemCard
-                    assignment={item.assignment}
-                    status={item.action}
-                    reason={item.reason}
-                    targetName={item.targetName}
-                    targetOrg={targetOrg}
-                    targetBranch={item.branch}
-                    templateLess={item.templateLess}
-                  />
-                </li>
-              ))}
+              {plan.items.map((item) => {
+                // Hard skips (invalid source, collision) can't be imported, so
+                // they show no checkbox. Import/reuse items are selectable and
+                // default to checked.
+                const selectable = item.action !== "skip"
+                const selected =
+                  selectable && !deselected.has(item.assignment.id)
+                return (
+                  <li key={item.assignment.id}>
+                    <MigrationItemCard
+                      assignment={item.assignment}
+                      status={item.action}
+                      reason={item.reason}
+                      targetName={item.targetName}
+                      targetOrg={targetOrg}
+                      targetBranch={item.branch}
+                      templateLess={item.templateLess}
+                      selectable={selectable}
+                      selected={selected}
+                      onToggle={() => toggleItem(item.assignment.id)}
+                    />
+                  </li>
+                )
+              })}
             </ul>
 
             {!blocked && (
@@ -261,11 +325,17 @@ export const ConfirmStep = ({
                   </p>
                   <p className="mt-1 text-sm">
                     {t("migration.confirm.warningBody", {
-                      count: plan.counts.import,
+                      count: selectedCount,
                       org: targetOrg,
                     })}
                   </p>
                 </div>
+              </Alert>
+            )}
+
+            {!blocked && selectedCount === 0 && (
+              <Alert tone="info" className="mt-4">
+                {t("migration.confirm.noneSelected")}
               </Alert>
             )}
 
@@ -299,7 +369,7 @@ export const ConfirmStep = ({
           <Button
             variant="primary"
             disabled={!canImport}
-            onClick={() => plan && onConfirm(plan)}
+            onClick={() => effectivePlan && onConfirm(effectivePlan)}
           >
             {t("migration.confirm.importButton")}
           </Button>

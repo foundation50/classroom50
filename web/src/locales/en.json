@@ -115,6 +115,7 @@
       "countSkip": "{{n}} to skip",
       "columnSource": "Source (GitHub Classroom)",
       "columnTarget": "Target (Classroom 50)",
+      "noneSelected": "No assignments selected — check at least one to import, or go back.",
       "warningTitle": "This step is hard to undo",
       "warningBody": "Confirming will create {{count}} new repository(ies) in {{org}}, create GitHub teams, and commit a new class. Review the list above before continuing.",
       "typeToConfirm": "Type the class short name \"{{shortName}}\" to confirm",
@@ -132,6 +133,9 @@
       "viewClass": "Open the new class"
     },
     "item": {
+      "assignmentBadge": "Assignment",
+      "willImport": "Import",
+      "willSkip": "Skip",
       "sourcePanel": "Source (GitHub Classroom)",
       "targetPanel": "Target (Classroom 50)",
       "repoLabel": "Repo",
@@ -172,6 +176,7 @@
       "sourceNotAccessible": "The starter repository \"{{fullName}}\" isn't accessible to your account.",
       "sourceNotTemplate": "The starter repository \"{{fullName}}\" isn't a template — enable \"Template repository\" on it and retry.",
       "targetCollision": "A repository named \"{{name}}\" already exists in {{org}} and isn't a template. Set a template suffix to avoid the collision.",
+      "deselected": "Unchecked — won't be imported.",
       "copyFailed": "Couldn't copy the template: {{message}}"
     }
   },

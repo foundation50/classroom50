@@ -86,6 +86,7 @@ type MetaRow = { labelKey: string; source: string; target: string }
 
 // A metadata panel: a header (mobile only) + the aligned key/value rows. The
 // same MetaRow[] feeds both panels so the source and target line up row-for-row.
+// Source and target use distinct accent colors so they're easy to tell apart.
 const MetaPanel = ({
   headerKey,
   rows,
@@ -96,9 +97,16 @@ const MetaPanel = ({
   side: "source" | "target"
 }) => {
   const { t } = useTranslation()
+  const panelClass =
+    side === "source"
+      ? "border-info/30 bg-info/5"
+      : "border-success/30 bg-success/5"
+  const headerClass = side === "source" ? "text-info" : "text-success"
   return (
-    <div className="rounded-lg border border-base-200 bg-base-200/40 p-3">
-      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-base-content/50 sm:hidden">
+    <div className={`rounded-lg border p-3 ${panelClass}`}>
+      <div
+        className={`mb-1 text-xs font-medium uppercase tracking-wide sm:hidden ${headerClass}`}
+      >
         {t(headerKey)}
       </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-sm">
@@ -123,6 +131,9 @@ export const MigrationItemCard = ({
   targetOrg,
   targetBranch,
   templateLess,
+  selectable = false,
+  selected = false,
+  onToggle,
 }: {
   // The full source assignment detail — drives the source column and, since the
   // migration carries these settings across, the target column too.
@@ -136,6 +147,11 @@ export const MigrationItemCard = ({
   targetBranch?: string
   // No starter repo: imported as a template-less (empty) assignment.
   templateLess?: boolean
+  // When true, the outcome is a checkbox (checked = import, unchecked = skip)
+  // instead of a static status badge. Only the confirm screen sets this.
+  selectable?: boolean
+  selected?: boolean
+  onToggle?: () => void
 }) => {
   const { t } = useTranslation()
   const meta = STATUS_BADGE[status]
@@ -248,20 +264,45 @@ export const MigrationItemCard = ({
   ]
 
   return (
-    <div className="rounded-xl border border-base-300 bg-base-100 p-4">
+    <div
+      className={`rounded-xl border border-base-300 bg-base-100 p-4 ${
+        selectable && !selected ? "opacity-60" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 font-semibold">
-          {assignment.title || assignment.slug}
+        <div className="flex min-w-0 items-center gap-2">
+          <Badge tone="neutral" size="sm" soft className="shrink-0">
+            {t("migration.item.assignmentBadge")}
+          </Badge>
+          <span className="min-w-0 truncate font-semibold">
+            {assignment.title || assignment.slug}
+          </span>
         </div>
-        <Badge
-          tone={meta.tone}
-          size="md"
-          soft={false}
-          className="shrink-0 gap-1"
-        >
-          <StatusIcon icon={meta.icon} />
-          {t(meta.labelKey)}
-        </Badge>
+        {selectable ? (
+          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm checkbox-primary"
+              checked={selected}
+              onChange={() => onToggle?.()}
+            />
+            <span className={selected ? "font-medium" : "text-base-content/50"}>
+              {selected
+                ? t("migration.item.willImport")
+                : t("migration.item.willSkip")}
+            </span>
+          </label>
+        ) : (
+          <Badge
+            tone={meta.tone}
+            size="md"
+            soft={false}
+            className="shrink-0 gap-1"
+          >
+            <StatusIcon icon={meta.icon} />
+            {t(meta.labelKey)}
+          </Badge>
+        )}
       </div>
 
       <div className="mt-3 grid items-stretch gap-2 sm:grid-cols-[1fr_auto_1fr] sm:gap-3">
@@ -283,7 +324,7 @@ export const MigrationItemCard = ({
         />
       </div>
 
-      {reason && (
+      {reason && !(selectable && !selected) && (
         <p className="mt-2 text-sm text-warning-content/80">
           {t(reason.key, reason.params)}
         </p>
