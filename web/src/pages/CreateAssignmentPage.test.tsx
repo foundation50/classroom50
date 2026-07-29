@@ -34,11 +34,21 @@ vi.mock("@/pages/assignments/CreateAssignmentForm", () => ({
   default: ({
     onSubmit,
   }: {
-    onSubmit: (values: { slug: string; release_assets: string }) => void
+    onSubmit: (values: {
+      slug: string
+      setup_timeout: number
+      release_assets: string
+    }) => void
   }) => (
     <button
       type="button"
-      onClick={() => onSubmit({ slug: "hw1", release_assets: "report.pdf" })}
+      onClick={() =>
+        onSubmit({
+          slug: "hw1",
+          setup_timeout: 300,
+          release_assets: "report.pdf",
+        })
+      }
     >
       submit
     </button>
@@ -147,11 +157,14 @@ beforeEach(() => {
   vi.stubGlobal("scrollTo", vi.fn())
 })
 
-it("passes release_assets through the create boundary", () => {
+it("passes grading form fields through the create boundary", () => {
   render(<CreateAssignmentPage />)
   submit()
   expect(mutateAsync).toHaveBeenCalledWith(
-    expect.objectContaining({ release_assets: "report.pdf" }),
+    expect.objectContaining({
+      setup_timeout: 300,
+      release_assets: "report.pdf",
+    }),
     expect.any(Object),
   )
 })

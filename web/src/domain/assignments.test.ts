@@ -372,6 +372,21 @@ describe("editAssignment (preserved-entry integration)", () => {
   const ORG = "acme"
   const CLASSROOM = "cs50"
   const SLUG = "hw1"
+  const notFound = (url: string) =>
+    new GitHubAPIError({
+      status: 404,
+      url,
+      message: "Not Found",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
 
   // The CLI-authored entry the GUI is about to edit: carries a CLI-only
   // migrated_from block (the form never manages it) and a managed `due` the edit
@@ -410,6 +425,18 @@ describe("editAssignment (preserved-entry integration)", () => {
 
     const request = vi.fn(async (url: string, init?: { method?: string }) => {
       const method = init?.method ?? "GET"
+      if (
+        method === "GET" &&
+        url.endsWith("/contents/.github/scripts/materialize_tests.py")
+      ) {
+        return { type: "file" }
+      }
+      if (
+        method === "GET" &&
+        url.endsWith(`/contents/${CLASSROOM}/autograders/${SLUG}/autograder.py`)
+      ) {
+        throw notFound(url)
+      }
       if (method === "GET" && /\/repos\/[^/]+\/classroom50$/.test(url)) {
         return { default_branch: "main" }
       }
@@ -515,6 +542,61 @@ describe("editAssignment (preserved-entry integration)", () => {
     expect(written.assignments).toHaveLength(1)
     expect(written.assignments[0].slug).toBe(SLUG)
     expect(written.assignments[0].name).toBe("Homework 1 (edited)")
+  })
+
+  it.each([
+    ["omitted", undefined, undefined],
+    ["zero", 0, undefined],
+    ["positive", 600, 600],
+  ] as const)(
+    "serializes a %s setup timeout through the existing test contract",
+    async (_label, setupTimeout, expectedTimeout) => {
+      const { client, committedContent } = makeClient()
+      const overrides: Record<string, unknown> = {
+        setup_command: "python3 -m pip install -e .",
+      }
+      if (setupTimeout !== undefined) {
+        overrides.setup_timeout = setupTimeout
+      }
+
+      await editAssignment(client, editInput(overrides))
+
+      const written = JSON.parse(committedContent()) as {
+        assignments: Assignment[]
+      }
+      expect(written.assignments[0].tests?.[0]).toEqual({
+        name: "setup",
+        type: "run",
+        run: "python3 -m pip install -e .",
+        points: 0,
+        ...(expectedTimeout === undefined ? {} : { timeout: expectedTimeout }),
+      })
+    },
+  )
+
+  it("rejects an invalid setup timeout at the write boundary", async () => {
+    const { client } = makeClient()
+
+    await expect(
+      editAssignment(
+        client,
+        editInput({ setup_command: "make", setup_timeout: 601 }),
+      ),
+    ).rejects.toThrow(/setup_timeout/)
+  })
+
+  it("ignores setup timeout when the command is blank", async () => {
+    const { client, committedContent } = makeClient()
+
+    await editAssignment(
+      client,
+      editInput({ setup_command: "  ", setup_timeout: 601 }),
+    )
+
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    expect(written.assignments[0].tests).toBeUndefined()
   })
 
   it("writes ordered exact release paths and omits blank input", async () => {
@@ -826,7 +908,7 @@ describe("editAssignment (preserved-entry integration)", () => {
     }
     const cases: [Record<string, unknown>, RegExp][] = [
       [{ template_repo: "acme/starter" }, /can't use a template/],
-      [{ setup_command: "make" }, /never autogrades/],
+      [{ setup_command: "make", setup_timeout: 601 }, /never autogrades/],
       [{ feedback_pr: true }, /no baseline commit/],
       [{ allowed_files: "*.py" }, /restrict allowed files/],
       [{ release_assets: "report.pdf" }, /release/],

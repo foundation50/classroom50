@@ -14,7 +14,11 @@ import {
   Textarea,
 } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
-import { emptyTestDraft, validateTestDraft } from "@/util/assignmentTests"
+import {
+  emptyTestDraft,
+  TEST_TIMEOUT_MAX_SECONDS,
+  validateTestDraft,
+} from "@/util/assignmentTests"
 import type { AssignmentTestComparison } from "@/types/classroom"
 
 const TYPE_OPTIONS = [
@@ -313,7 +317,7 @@ const AutogradingTestModal = ({
               className="w-32"
               type="number"
               min={0}
-              max={600}
+              max={TEST_TIMEOUT_MAX_SECONDS}
               step={1}
               value={draft.timeout}
               onChange={(e) =>

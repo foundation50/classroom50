@@ -3,8 +3,11 @@ import type { TFunction } from "i18next"
 import { slugify } from "@/util/slug"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
+  DEFAULT_SETUP_TIMEOUT_SECONDS,
+  TEST_TIMEOUT_MAX_SECONDS,
   testToDraft,
   validateTestDrafts,
+  validateTestTimeout,
   isSetupTest,
 } from "@/util/assignmentTests"
 import {
@@ -82,6 +85,7 @@ export type CreateAssignmentFormValues = {
   // Raw text (comma/space-separated); parsed to string[] on save.
   runtime_apt: string
   setup_command: string
+  setup_timeout: number
   // Raw textarea text; parsed to string[] on save, joined back on read.
   allowed_files: string
   // Raw textarea text (exact workspace-relative paths, one per line).
@@ -143,6 +147,16 @@ export function validateAssignmentForm(
   // Mirror gh-teacher's write-time validation so a bad test is caught in the
   // form, not by a failed commit or an unparseable file.
   Object.assign(errors, validateTestDrafts(value.tests))
+
+  if (!value.empty_repo && value.setup_command.trim()) {
+    const setupTimeoutError = validateTestTimeout(value.setup_timeout)
+    if (setupTimeoutError) {
+      errors.setup_timeout = t(
+        "assignments.form.validation.setupTimeoutRange",
+        { max: TEST_TIMEOUT_MAX_SECONDS },
+      )
+    }
+  }
 
   // Mirror the CLI's cap/shape rules so a bad value can't reach the file.
   const allowedFilesError = validateAllowedFiles(
@@ -314,6 +328,7 @@ export function toSubmitValues(
     runtime_rust: value.runtime_rust.trim(),
     runtime_apt: isContainer ? "" : value.runtime_apt.trim(),
     setup_command: isEmptyRepo ? "" : value.setup_command.trim(),
+    setup_timeout: isEmptyRepo ? 0 : value.setup_timeout,
     allowed_files: isEmptyRepo ? "" : value.allowed_files,
     release_assets: isEmptyRepo ? "" : value.release_assets,
     pass_threshold_enabled: isEmptyRepo ? false : value.pass_threshold_enabled,
@@ -353,6 +368,8 @@ export const useAssignmentForm = (
       runtime_rust: defaultValues?.runtime_rust || "",
       runtime_apt: defaultValues?.runtime_apt || "",
       setup_command: defaultValues?.setup_command || "",
+      setup_timeout:
+        defaultValues?.setup_timeout ?? DEFAULT_SETUP_TIMEOUT_SECONDS,
       allowed_files: defaultValues?.allowed_files || "",
       release_assets: defaultValues?.release_assets || "",
       pass_threshold_enabled: defaultValues?.pass_threshold_enabled ?? false,
@@ -389,6 +406,9 @@ export const assignmentToFormValues = (
   const head = allTests[0]
   const setupIsLeading = head !== undefined && isSetupTest(head)
   const setupCommand = setupIsLeading ? head.run : ""
+  const setupTimeout = setupIsLeading
+    ? (head?.timeout ?? 0)
+    : DEFAULT_SETUP_TIMEOUT_SECONDS
   const tests = setupIsLeading ? allTests.slice(1) : allTests
 
   return {
@@ -424,6 +444,7 @@ export const assignmentToFormValues = (
       ? ""
       : aptPackagesToText(assignment.runtime?.apt),
     setup_command: setupCommand,
+    setup_timeout: setupTimeout,
     pass_threshold_enabled: typeof assignment.pass_threshold === "number",
     pass_threshold: assignment.pass_threshold ?? DEFAULT_PASS_THRESHOLD,
     allowed_files: allowedFilesToText(assignment.allowed_files),
