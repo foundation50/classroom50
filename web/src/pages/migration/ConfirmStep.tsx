@@ -7,10 +7,10 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, ArrowRight } from "lucide-react"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { Alert, Button, Card, FormField, Input } from "@/components/ui"
+import { Alert, Button, Card, FormField, Input, rtlFlip } from "@/components/ui"
 import { buildPreflight } from "@/migration/preflight"
 import type { ClassroomWithOrg, MigrationPreflight } from "@/migration/types"
 import { MigrationItemCard } from "./migrationItemCard"
@@ -72,12 +72,27 @@ export const ConfirmStep = ({
     <Card>
       <Card.Body>
         <Card.Title>{t("migration.confirm.title")}</Card.Title>
-        <p className="text-base-content/70">
-          {t("migration.confirm.body", {
-            name: source.name,
-            org: source.orgLogin,
-          })}
-        </p>
+        <p className="text-base-content/70">{t("migration.confirm.body")}</p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="rounded-lg border border-base-300 bg-base-200 px-2 py-1">
+            <span className="text-base-content/50">
+              {t("migration.confirm.sourceLabel")}{" "}
+            </span>
+            <span className="font-medium">{source.name}</span>
+            <span className="text-base-content/50"> ({source.orgLogin})</span>
+          </span>
+          <ArrowRight
+            aria-hidden="true"
+            className={`size-4 text-base-content/40 ${rtlFlip}`}
+          />
+          <span className="rounded-lg border border-base-300 bg-base-200 px-2 py-1">
+            <span className="text-base-content/50">
+              {t("migration.confirm.targetLabel")}{" "}
+            </span>
+            <span className="font-medium">{targetOrg}</span>
+          </span>
+        </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <FormField
@@ -160,18 +175,17 @@ export const ConfirmStep = ({
             <ul className="mt-3 grid gap-2">
               {plan.items.map((item) => {
                 const starterRepo = item.assignment.starter_code_repository
-                const starter = starterRepo
-                  ? `${starterRepo.full_name} (${starterRepo.private ? t("migration.item.private") : t("migration.item.public")})`
-                  : undefined
                 return (
                   <li key={item.assignment.id}>
                     <MigrationItemCard
                       title={item.assignment.title}
                       slug={item.assignment.slug}
                       targetName={item.targetName}
+                      targetOrg={targetOrg}
                       status={item.action}
                       reason={item.reason}
-                      starter={starter}
+                      sourceRepo={starterRepo?.full_name}
+                      sourcePrivate={starterRepo?.private}
                     />
                   </li>
                 )

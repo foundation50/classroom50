@@ -101,8 +101,12 @@ export const ExecuteStep = ({
                   title={item.assignment.title}
                   slug={item.assignment.slug}
                   targetName={item.targetName}
+                  targetOrg={targetOrg}
                   status={(s?.status ?? "pending") as ItemVisualStatus}
                   reason={s?.reason}
+                  sourceRepo={
+                    item.assignment.starter_code_repository?.full_name
+                  }
                 />
               </li>
             )

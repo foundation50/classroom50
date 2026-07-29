@@ -94,7 +94,9 @@
     },
     "confirm": {
       "title": "Review what will be imported",
-      "body": "Importing \"{{name}}\" (from {{org}}). Review each assignment below, then confirm. Nothing is created until you do.",
+      "body": "Copying the assignments and starter repositories from the GitHub Classroom on the left into your Classroom 50 organization on the right. Review each assignment below, then confirm — nothing is created until you do.",
+      "sourceLabel": "Source (GitHub Classroom)",
+      "targetLabel": "Target (Classroom 50 org)",
       "shortName": "Class short name",
       "shortNameHelp": "The URL-safe id for the new class in this organization (e.g. cs50-fall). It becomes the config folder and GitHub team names, and prefixes every student repo. Auto-filled from the source classroom name; edit it if you prefer a different id.",
       "term": "Term",
@@ -124,7 +126,8 @@
       "viewClass": "Open the new class"
     },
     "item": {
-      "target": "Target repo: {{name}}",
+      "fromLabel": "From",
+      "toLabel": "To",
       "private": "private",
       "public": "public"
     },
