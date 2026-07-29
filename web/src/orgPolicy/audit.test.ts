@@ -116,6 +116,7 @@ function makeClient(overrides: Routes = {}): GitHubClient {
       return Promise.reject(new Error(`unexpected: ${path}`)) as Promise<T>
     },
     requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    requestBinary: () => Promise.reject(new Error("unexpected requestBinary")),
   }
 }
 
@@ -247,6 +248,8 @@ describe("buildOrgAuditReport", () => {
           return Promise.reject(new Error(`unexpected: ${path}`)) as Promise<T>
         },
         requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+        requestBinary: () =>
+          Promise.reject(new Error("unexpected requestBinary")),
       },
       "acme",
       "team",
@@ -424,6 +427,8 @@ describe("buildOrgAuditReport", () => {
           return Promise.reject(new Error(`unexpected: ${path}`)) as Promise<T>
         },
         requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+        requestBinary: () =>
+          Promise.reject(new Error("unexpected requestBinary")),
       },
       "acme",
       "team",
@@ -468,6 +473,8 @@ describe("buildOrgAuditReport", () => {
           return Promise.reject(new Error(`unexpected: ${path}`)) as Promise<T>
         },
         requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+        requestBinary: () =>
+          Promise.reject(new Error("unexpected requestBinary")),
       },
       "acme",
       "team",

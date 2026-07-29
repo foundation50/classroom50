@@ -274,7 +274,9 @@ const DownloadButton = ({
       aria-label={t("submissions.rowDownload.aria", { owner })}
       title={t("submissions.rowDownload.title")}
     >
-      {!download.isPending && <Download aria-hidden="true" className="size-4" />}
+      {!download.isPending && (
+        <Download aria-hidden="true" className="size-4" />
+      )}
     </Button>
   )
 }

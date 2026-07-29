@@ -8,11 +8,14 @@ import { createElement } from "react"
 import type { DownloadAllSummary } from "@/domain/assignments"
 
 const downloadAllSubmissions =
-  vi.fn<(...args: unknown[]) => Promise<{ blob: Blob; summary: DownloadAllSummary }>>()
+  vi.fn<
+    (...args: unknown[]) => Promise<{ blob: Blob; summary: DownloadAllSummary }>
+  >()
 const downloadBlob = vi.fn<(blob: Blob, filename: string) => void>()
 
 vi.mock("@/domain/assignments", () => ({
-  downloadAllSubmissions: (...args: unknown[]) => downloadAllSubmissions(...args),
+  downloadAllSubmissions: (...args: unknown[]) =>
+    downloadAllSubmissions(...args),
 }))
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({ request: vi.fn() }),
@@ -25,7 +28,9 @@ import { useDownloadAllSubmissions } from "./useDownloadAllSubmissions"
 
 const ORG = "cs50"
 
-const summary = (over: Partial<DownloadAllSummary> = {}): DownloadAllSummary => ({
+const summary = (
+  over: Partial<DownloadAllSummary> = {},
+): DownloadAllSummary => ({
   total: 2,
   fetched: 2,
   empty: [],
@@ -81,7 +86,11 @@ describe("useDownloadAllSubmissions", () => {
 
   it("does not download when nothing was fetched", async () => {
     downloadAllSubmissions.mockResolvedValue(
-      result({ total: 1, fetched: 0, empty: [{ owner: "a", outcome: "empty" }] }),
+      result({
+        total: 1,
+        fetched: 0,
+        empty: [{ owner: "a", outcome: "empty" }],
+      }),
     )
     const queryClient = freshClient()
     const { result: hook } = renderHook(() => useDownloadAllSubmissions(), {

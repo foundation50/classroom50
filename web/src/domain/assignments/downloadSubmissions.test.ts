@@ -47,7 +47,9 @@ describe("downloadAllSubmissions", () => {
 
   it("records an empty (missing) repo and excludes it, without aborting", async () => {
     mockedFetch.mockImplementation((_c, _org, repo) =>
-      repo.includes("bob") ? Promise.resolve(null) : Promise.resolve(archive(repo)),
+      repo.includes("bob")
+        ? Promise.resolve(null)
+        : Promise.resolve(archive(repo)),
     )
 
     const { summary } = await run(["alice", "bob"])
