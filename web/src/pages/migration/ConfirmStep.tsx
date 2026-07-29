@@ -83,6 +83,7 @@ export const ConfirmStep = ({
           <FormField
             label={t("migration.confirm.shortName")}
             htmlFor="mig-short"
+            help={t("migration.confirm.shortNameHelp")}
           >
             {({ id }) => (
               <Input
@@ -93,7 +94,11 @@ export const ConfirmStep = ({
               />
             )}
           </FormField>
-          <FormField label={t("migration.confirm.term")} htmlFor="mig-term">
+          <FormField
+            label={t("migration.confirm.term")}
+            htmlFor="mig-term"
+            help={t("migration.confirm.termHelp")}
+          >
             {({ id }) => (
               <Input
                 id={id}
@@ -103,7 +108,11 @@ export const ConfirmStep = ({
               />
             )}
           </FormField>
-          <FormField label={t("migration.confirm.suffix")} htmlFor="mig-suffix">
+          <FormField
+            label={t("migration.confirm.suffix")}
+            htmlFor="mig-suffix"
+            help={t("migration.confirm.suffixHelp")}
+          >
             {({ id }) => (
               <Input
                 id={id}
