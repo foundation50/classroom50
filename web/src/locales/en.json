@@ -38,6 +38,7 @@
     "skipToMainContent": "Skip to main content",
     "openOrgOnGitHub": "Open {{org}} on GitHub",
     "dismissNotification": "Dismiss notification",
+    "linkToSection": "Link to {{section}}",
     "pagination": {
       "show": "Show",
       "entries": "entries",

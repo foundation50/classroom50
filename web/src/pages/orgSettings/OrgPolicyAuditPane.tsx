@@ -36,6 +36,7 @@ import { REPAIRABLE_CONCERNS } from "@/orgPolicy/repair"
 import type { RepairResult } from "@/orgPolicy/repair"
 import { mergeUnresolved, readUnresolved } from "@/orgPolicy/unresolvedStore"
 import type { CheckState } from "@/github-core/orgChecks"
+import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
 import SettingsSection from "./SettingsSection"
 import { UnenforcedDefaultsList } from "./UnenforcedDefaultsList"
 import {
@@ -49,6 +50,9 @@ import { CalloutDiv } from "@/lib/motionComponents"
 // the API-less manual steps. Each drifted, API-repairable concern gets an
 // owner-gated "Fix it"; Re-run Setup is the "repair everything" alternative.
 // Mirrors the service-token pane's banner shape.
+
+// DOM anchor for this section, used as its SettingsSection id + hash deep-link.
+const ORG_POLICY_ANCHOR = "org-policy"
 
 const VERDICT_BANNER: Record<
   AuditVerdict,
@@ -469,7 +473,13 @@ function AuditBody({
   )
 }
 
-const OrgPolicyAuditPane = ({ org }: { org: string }) => {
+const OrgPolicyAuditPane = ({
+  org,
+  highlighted,
+}: {
+  org: string
+  highlighted?: boolean
+}) => {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const runFix = useSafeSubmit()
@@ -557,6 +567,8 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
 
   return (
     <SettingsSection
+      id={ORG_POLICY_ANCHOR}
+      className={sectionHighlightClass(highlighted ?? false)}
       title={t("orgSettings.audit.title")}
       titleAdornment={
         <PlanBadge

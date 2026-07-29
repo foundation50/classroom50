@@ -15,6 +15,7 @@ import {
   initialInitSteps,
 } from "./initStepBoard"
 import SettingsSection from "./SettingsSection"
+import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
 import { CalloutDiv } from "@/lib/motionComponents"
 import {
   SkeletonOverwriteModal,
@@ -57,7 +58,13 @@ const RERUN_ORG_SETUP_ANCHOR = "rerun-org-setup"
 // by the page's <RequireRole allow="owner"> (see TeardownSection); shows the
 // wizard's badge board. The "repair everything" path complementing the
 // per-concern audit (U5/U6).
-const RerunOrgSetup = ({ org }: { org: string }) => {
+const RerunOrgSetup = ({
+  org,
+  highlighted,
+}: {
+  org: string
+  highlighted?: boolean
+}) => {
   const { t } = useTranslation()
   const runRerun = useSafeSubmit()
 
@@ -146,6 +153,7 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
   return (
     <SettingsSection
       id={RERUN_ORG_SETUP_ANCHOR}
+      className={sectionHighlightClass(highlighted ?? false)}
       title={t("orgSettings.rerun.title")}
       description={t("orgSettings.rerun.description")}
       action={

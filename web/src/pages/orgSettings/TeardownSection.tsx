@@ -14,18 +14,28 @@ import {
 } from "@/domain/teardown"
 import { usePlanTeardown } from "@/hooks/mutations/usePlanTeardown"
 import { useExecuteTeardown } from "@/hooks/mutations/useExecuteTeardown"
+import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
 import SettingsSection from "./SettingsSection"
 import { CalloutDiv, CalloutText } from "@/lib/motionComponents"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("orgSettings:TeardownSection")
 
+// DOM anchor for this section, used as its SettingsSection id + hash deep-link.
+const DANGER_ZONE_ANCHOR = "danger-zone"
+
 // Teardown / org reset: deletes ALL repos in the org (mirroring the CLI's
 // `gh teacher teardown`), marker-gated and behind a typed-org-name confirmation.
 // Owner-gated by the page's <RequireRole allow="owner"> (RequireOwner renders
 // children only for a resolved owner, with its own spinner/retry surface), so no
 // inline owner re-check is needed here.
-const TeardownSection = ({ org }: { org: string }) => {
+const TeardownSection = ({
+  org,
+  highlighted,
+}: {
+  org: string
+  highlighted?: boolean
+}) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
 
@@ -57,6 +67,8 @@ const TeardownSection = ({ org }: { org: string }) => {
   return (
     <SettingsSection
       tone="danger"
+      id={DANGER_ZONE_ANCHOR}
+      className={sectionHighlightClass(highlighted ?? false)}
       title={t("orgSettings.teardown.title")}
       titleAdornment={
         <TriangleAlert aria-hidden="true" className="size-5 text-error" />
