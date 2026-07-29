@@ -57,6 +57,7 @@ import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { getName, sortStudentsByName } from "@/util/students"
 import { studentRepoName } from "@/util/studentRepo"
+import { downloadBlob } from "@/util/downloadBlob"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
@@ -774,14 +775,7 @@ const SubmissionsPageContent = () => {
       type: "text/csv;charset=utf-8;",
     })
 
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-
-    link.href = url
-    link.download = `${classroom}-${assignment}-scores.csv`
-    link.click()
-
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, `${classroom}-${assignment}-scores.csv`)
   }
 
   if (!org || !classroom || !assignment) {
