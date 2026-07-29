@@ -659,12 +659,6 @@ const SubmissionsTable = ({
                 emptyLabel={t("submissions.table.noCommit")}
                 emptyTitle={t("submissions.table.noCommit")}
               />
-              <DownloadButton
-                org={org}
-                classroom={classroom}
-                assignment={assignment}
-                owner={rest.owner}
-              />
               {!emptyRepo && (
                 <>
                   <ReviewButton
@@ -693,6 +687,12 @@ const SubmissionsTable = ({
                   />
                 </>
               )}
+              <DownloadButton
+                org={org}
+                classroom={classroom}
+                assignment={assignment}
+                owner={rest.owner}
+              />
             </div>
           </td>
         </tr>
