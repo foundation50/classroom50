@@ -85,19 +85,26 @@ async function waitForBranch(
 }
 
 // Perform the copy for one classified item. `reuse` returns the existing ref
-// without writing; `import` generates + marks-as-template + waits. `skip` items
-// must not reach here. Throws on a generate/mark failure so the caller can
-// downgrade the item to skip (best-effort execute).
+// without writing; `import` generates + marks-as-template + waits. A
+// template-less import returns null (nothing is copied). `skip` items must not
+// reach here. Throws on a generate/mark failure so the caller can downgrade the
+// item to skip (best-effort execute).
 export async function copyOneTemplate(
   client: GitHubClient,
   targetOrg: string,
   classroomId: number,
   item: MigrationItem,
-): Promise<CopiedTemplate> {
+): Promise<CopiedTemplate | null> {
   if (item.action === "skip") {
     throw new Error(
       `copyOneTemplate called on a skipped item (${item.assignment.slug})`,
     )
+  }
+
+  // Template-less import: no starter repo to copy; the entry is written with no
+  // template and students get an empty repo on accept.
+  if (item.templateLess) {
+    return null
   }
 
   if (item.action === "reuse") {

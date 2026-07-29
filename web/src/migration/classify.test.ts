@@ -98,7 +98,7 @@ describe("classifyAssignment", () => {
     expect(item.reason?.key).toBe("migration.reason.targetCollision")
   })
 
-  it("skip when there is no starter repo", async () => {
+  it("imports as template-less when there is no starter repo", async () => {
     const { client } = makeClient({})
     const item = await classifyAssignment(
       client,
@@ -106,7 +106,8 @@ describe("classifyAssignment", () => {
       "",
       assignment({ starter_code_repository: null }),
     )
-    expect(item.reason?.key).toBe("migration.reason.noStarter")
+    expect(item.action).toBe("import")
+    expect(item.templateLess).toBe(true)
   })
 
   it("skip when the source is not a template", async () => {

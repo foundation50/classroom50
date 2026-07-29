@@ -108,11 +108,13 @@ export async function migrateClassroom(
       const entry = assignmentToEntry(
         item.assignment,
         plan.classroom.id,
-        { owner: copied.owner, repo: copied.repo, branch: copied.branch },
+        copied
+          ? { owner: copied.owner, repo: copied.repo, branch: copied.branch }
+          : null,
         migratedAt,
       )
       entries.push(entry)
-      if (copied.private)
+      if (copied?.private)
         privateTemplates.push({ owner: copied.owner, repo: copied.repo })
       if (item.action === "import") generated++
       else reused++

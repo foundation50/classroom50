@@ -56,9 +56,14 @@ export type ClassroomAssignmentDetail = {
   title: string
   type: string
   invite_link: string
+  invitations_enabled?: boolean
   slug: string
+  students_are_repo_admins?: boolean
+  feedback_pull_requests_enabled?: boolean
   deadline: string | null
   max_teams: number | null
+  max_members?: number | null
+  editor?: string
   starter_code_repository: ClassroomStarterCodeRepo | null
 }
 
@@ -80,6 +85,9 @@ export type MigrationReason = {
 // The per-assignment preflight outcome shown on the confirm screen and reused
 // to drive execute. `targetName` is the repo name in the target org; `branch`/
 // `targetPrivate` are set for a reuse of an existing target template.
+// `templateLess` marks an import with no starter repo — no template is copied
+// and the Classroom 50 assignment is created template-less (students get an
+// empty repo with just the autograde shim on accept).
 export type MigrationItem = {
   assignment: ClassroomAssignmentDetail
   action: MigrationItemAction
@@ -87,6 +95,7 @@ export type MigrationItem = {
   targetName: string
   branch?: string
   targetPrivate?: boolean
+  templateLess?: boolean
 }
 
 // A blocker that disables the whole import until resolved.

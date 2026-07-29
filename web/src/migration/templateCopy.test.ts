@@ -87,7 +87,7 @@ describe("copyOneTemplate — import", () => {
     })
     const client = { request } as unknown as GitHubClient
     const res = await copyOneTemplate(client, "dst", 1, importItem)
-    expect(res.branch).toBe("main")
+    expect(res?.branch).toBe("main")
   })
 })
 
@@ -111,6 +111,24 @@ describe("copyOneTemplate — reuse", () => {
       branch: "trunk",
       private: false,
     })
+    expect(request).not.toHaveBeenCalled()
+  })
+})
+
+describe("copyOneTemplate — template-less", () => {
+  it("returns null and makes no network calls", async () => {
+    const request = vi.fn(async () => {
+      throw new Error("no network expected for template-less")
+    })
+    const client = { request } as unknown as GitHubClient
+    const item: MigrationItem = {
+      assignment: { ...assignment, starter_code_repository: null },
+      action: "import",
+      targetName: "test",
+      templateLess: true,
+    }
+    const res = await copyOneTemplate(client, "dst", 1, item)
+    expect(res).toBeNull()
     expect(request).not.toHaveBeenCalled()
   })
 })

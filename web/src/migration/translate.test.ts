@@ -126,6 +126,26 @@ describe("assignmentToEntry", () => {
     expect(entry.due_meta?.source).toBe("migrated")
   })
 
+  it("carries feedback_pr:false when the source disabled feedback PRs", () => {
+    const entry = assignmentToEntry(
+      detail({ feedback_pull_requests_enabled: false }),
+      1,
+      target,
+      AT,
+    )
+    expect(entry.feedback_pr).toBe(false)
+  })
+
+  it("leaves feedback_pr unset when the source enabled feedback PRs (default on)", () => {
+    const entry = assignmentToEntry(
+      detail({ feedback_pull_requests_enabled: true }),
+      1,
+      target,
+      AT,
+    )
+    expect(entry.feedback_pr).toBeUndefined()
+  })
+
   it("throws on an unknown type", () => {
     expect(() =>
       assignmentToEntry(detail({ type: "weird" }), 1, target, AT),
@@ -136,6 +156,18 @@ describe("assignmentToEntry", () => {
     expect(() =>
       assignmentToEntry(detail({ slug: "Bad Slug" }), 1, target, AT),
     ).toThrow(/invalid/i)
+  })
+
+  it("omits template for a template-less import (null target)", () => {
+    const entry = assignmentToEntry(
+      detail({ starter_code_repository: null }),
+      1,
+      null,
+      AT,
+    )
+    expect(entry.template).toBeUndefined()
+    expect(entry.migrated_from?.starter_repo).toBeUndefined()
+    expect(entry.autograder).toBe("default")
   })
 })
 

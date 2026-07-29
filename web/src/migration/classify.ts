@@ -104,7 +104,15 @@ export async function classifyAssignment(
 
   const starter = assignment.starter_code_repository
   if (!starter || !starter.full_name) {
-    return skip({ key: "migration.reason.noStarter" })
+    // No starter repo -> import as a TEMPLATE-LESS assignment. Classroom 50
+    // supports these: on accept, students get an empty repo with just the
+    // autograde shim. No template copy happens.
+    return {
+      assignment,
+      action: "import",
+      targetName,
+      templateLess: true,
+    }
   }
   const src = splitFullName(starter.full_name)
   if (!src) {

@@ -98,15 +98,13 @@ export const ExecuteStep = ({
             return (
               <li key={item.assignment.id}>
                 <MigrationItemCard
-                  title={item.assignment.title}
-                  slug={item.assignment.slug}
-                  targetName={item.targetName}
-                  targetOrg={targetOrg}
+                  assignment={item.assignment}
                   status={(s?.status ?? "pending") as ItemVisualStatus}
                   reason={s?.reason}
-                  sourceRepo={
-                    item.assignment.starter_code_repository?.full_name
-                  }
+                  targetName={item.targetName}
+                  targetOrg={targetOrg}
+                  targetBranch={item.branch}
+                  templateLess={item.templateLess}
                 />
               </li>
             )

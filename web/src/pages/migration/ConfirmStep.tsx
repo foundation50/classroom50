@@ -10,7 +10,15 @@ import { useTranslation } from "react-i18next"
 import { AlertTriangle, ArrowRight } from "lucide-react"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { Alert, Button, Card, FormField, Input, rtlFlip } from "@/components/ui"
+import {
+  Alert,
+  Button,
+  Card,
+  FormField,
+  Input,
+  Spinner,
+  rtlFlip,
+} from "@/components/ui"
 import { buildPreflight } from "@/migration/preflight"
 import type { ClassroomWithOrg, MigrationPreflight } from "@/migration/types"
 import { MigrationItemCard } from "./migrationItemCard"
@@ -39,6 +47,7 @@ export const ConfirmStep = ({
   const {
     data: plan,
     isLoading,
+    isFetching,
     isError,
     error,
     refetch,
@@ -97,69 +106,16 @@ export const ConfirmStep = ({
           </span>
         </div>
 
-        <div className="mt-4 grid gap-4">
-          <FormField
-            label={t("migration.confirm.name")}
-            htmlFor="mig-name"
-            help={t("migration.confirm.nameHelp")}
-          >
-            {({ id }) => (
-              <Input
-                id={id}
-                value={name ?? plan?.name ?? ""}
-                placeholder={plan?.name ?? source.name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            )}
-          </FormField>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            <FormField
-              label={t("migration.confirm.shortName")}
-              htmlFor="mig-short"
-              help={t("migration.confirm.shortNameHelp")}
-            >
-              {({ id }) => (
-                <Input
-                  id={id}
-                  value={shortName ?? plan?.shortName ?? ""}
-                  placeholder={plan?.shortName ?? ""}
-                  onChange={(e) => setShortName(e.target.value)}
-                />
-              )}
-            </FormField>
-            <FormField
-              label={t("migration.confirm.term")}
-              htmlFor="mig-term"
-              help={t("migration.confirm.termHelp")}
-            >
-              {({ id }) => (
-                <Input
-                  id={id}
-                  value={term}
-                  placeholder={t("migration.confirm.termPlaceholder")}
-                  onChange={(e) => setTerm(e.target.value)}
-                />
-              )}
-            </FormField>
-            <FormField
-              label={t("migration.confirm.suffix")}
-              htmlFor="mig-suffix"
-              help={t("migration.confirm.suffixHelp")}
-            >
-              {({ id }) => (
-                <Input
-                  id={id}
-                  value={templateSuffix}
-                  placeholder={t("migration.confirm.suffixPlaceholder")}
-                  onChange={(e) => setTemplateSuffix(e.target.value)}
-                />
-              )}
-            </FormField>
+        {/* Initial load: don't show empty inputs that populate later — show a
+            loading state until the first preflight resolves. */}
+        {isLoading && !plan && (
+          <div className="mt-6 flex items-center gap-2 text-base-content/70">
+            <Spinner size="sm" />
+            {t("migration.confirm.loading")}
           </div>
-        </div>
+        )}
 
-        {isError && (
+        {isError && !plan && (
           <Alert tone="error" className="mt-4 items-start">
             <span className="text-sm">
               {error instanceof Error
@@ -174,13 +130,88 @@ export const ConfirmStep = ({
 
         {plan && (
           <>
+            <div className="mt-4 grid gap-4">
+              <FormField
+                label={t("migration.confirm.name")}
+                htmlFor="mig-name"
+                help={t("migration.confirm.nameHelp")}
+              >
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    value={name ?? plan.name}
+                    placeholder={plan.name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                )}
+              </FormField>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <FormField
+                  label={t("migration.confirm.shortName")}
+                  htmlFor="mig-short"
+                  help={t("migration.confirm.shortNameHelp")}
+                >
+                  {({ id }) => (
+                    <Input
+                      id={id}
+                      value={shortName ?? plan.shortName}
+                      placeholder={plan.shortName}
+                      onChange={(e) => setShortName(e.target.value)}
+                    />
+                  )}
+                </FormField>
+                <FormField
+                  label={t("migration.confirm.term")}
+                  htmlFor="mig-term"
+                  help={t("migration.confirm.termHelp")}
+                >
+                  {({ id }) => (
+                    <Input
+                      id={id}
+                      value={term}
+                      placeholder={t("migration.confirm.termPlaceholder")}
+                      onChange={(e) => setTerm(e.target.value)}
+                    />
+                  )}
+                </FormField>
+                <FormField
+                  label={t("migration.confirm.suffix")}
+                  htmlFor="mig-suffix"
+                  help={t("migration.confirm.suffixHelp")}
+                >
+                  {({ id }) => (
+                    <Input
+                      id={id}
+                      value={templateSuffix}
+                      placeholder={t("migration.confirm.suffixPlaceholder")}
+                      onChange={(e) => setTemplateSuffix(e.target.value)}
+                    />
+                  )}
+                </FormField>
+              </div>
+            </div>
+
+            {isError && (
+              <Alert tone="error" className="mt-4 items-start">
+                <span className="text-sm">
+                  {error instanceof Error
+                    ? error.message
+                    : t("migration.confirm.preflightError")}
+                </span>
+                <Button variant="ghost" size="sm" onClick={() => refetch()}>
+                  {t("migration.select.retry")}
+                </Button>
+              </Alert>
+            )}
+
             {plan.blockers.map((b) => (
               <Alert key={b.kind} tone="error" className="mt-4">
                 {t(`migration.blocker.${b.kind}`, b.params)}
               </Alert>
             ))}
 
-            <div className="mt-4 flex flex-wrap gap-3 text-sm text-base-content/70">
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-base-content/70">
               <span>
                 {t("migration.confirm.countImport", { n: plan.counts.import })}
               </span>
@@ -190,26 +221,35 @@ export const ConfirmStep = ({
               <span>
                 {t("migration.confirm.countSkip", { n: plan.counts.skip })}
               </span>
+              {isFetching && (
+                <span className="flex items-center gap-1 text-base-content/50">
+                  <Spinner size="xs" />
+                  {t("migration.confirm.updating")}
+                </span>
+              )}
             </div>
 
-            <ul className="mt-3 grid gap-2">
-              {plan.items.map((item) => {
-                const starterRepo = item.assignment.starter_code_repository
-                return (
-                  <li key={item.assignment.id}>
-                    <MigrationItemCard
-                      title={item.assignment.title}
-                      slug={item.assignment.slug}
-                      targetName={item.targetName}
-                      targetOrg={targetOrg}
-                      status={item.action}
-                      reason={item.reason}
-                      sourceRepo={starterRepo?.full_name}
-                      sourcePrivate={starterRepo?.private}
-                    />
-                  </li>
-                )
-              })}
+            {/* Two-column labels above the source -> target rows. */}
+            <div className="mt-3 hidden grid-cols-[1fr_auto_1fr] gap-3 px-1 text-xs font-medium uppercase tracking-wide text-base-content/50 sm:grid">
+              <span>{t("migration.confirm.columnSource")}</span>
+              <span aria-hidden="true" />
+              <span>{t("migration.confirm.columnTarget")}</span>
+            </div>
+
+            <ul className="mt-1 grid gap-2">
+              {plan.items.map((item) => (
+                <li key={item.assignment.id}>
+                  <MigrationItemCard
+                    assignment={item.assignment}
+                    status={item.action}
+                    reason={item.reason}
+                    targetName={item.targetName}
+                    targetOrg={targetOrg}
+                    targetBranch={item.branch}
+                    templateLess={item.templateLess}
+                  />
+                </li>
+              ))}
             </ul>
 
             {!blocked && (

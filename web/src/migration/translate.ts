@@ -130,13 +130,15 @@ function normalizeOffset(raw: string): string {
 }
 
 // Map a source assignment + resolved target template into an on-disk Assignment
-// entry with migrated_from provenance. `targetTemplate` is the post-copy repo;
-// the original source starter lives in migrated_from.starter_repo. Throws on an
-// invalid slug/mode (the caller skips those before generating any repo).
+// entry with migrated_from provenance. `targetTemplate` is the post-copy repo,
+// or null for a template-less import (the entry omits `template`, and students
+// get an empty repo with just the autograde shim on accept). The original
+// source starter lives in migrated_from.starter_repo. Throws on an invalid
+// slug/mode (the caller skips those before generating any repo).
 export function assignmentToEntry(
   detail: ClassroomAssignmentDetail,
   classroomId: number,
-  targetTemplate: { owner: string; repo: string; branch: string },
+  targetTemplate: { owner: string; repo: string; branch: string } | null,
   migratedAt: Date,
 ): Assignment {
   if (!detail.slug) {
@@ -167,10 +169,18 @@ export function assignmentToEntry(
   const entry: Assignment = {
     slug: detail.slug,
     name: detail.title,
-    template: targetTemplate,
+    ...(targetTemplate ? { template: targetTemplate } : {}),
     mode: detail.type,
     autograder: DEFAULT_AUTOGRADER_NAME,
     migrated_from: migratedFrom,
+  }
+
+  // Carry the source's Feedback PR setting. Classroom 50 defaults feedback_pr
+  // ON when absent, so only write it explicitly when the source DISABLED it —
+  // preserving the teacher's choice without churning the common (enabled) case.
+  // A template-less/empty assignment can't have a feedback PR, so skip it there.
+  if (targetTemplate && detail.feedback_pull_requests_enabled === false) {
+    entry.feedback_pr = false
   }
 
   const due = migratedDueFields(detail.deadline)

@@ -44,6 +44,7 @@ function makeClient(opts: {
       return [
         { id: 10, title: "HW1", slug: "hw1", type: "individual" },
         { id: 11, title: "HW2", slug: "hw2", type: "individual" },
+        { id: 12, title: "Essay", slug: "essay", type: "individual" },
       ]
     if (url === "/assignments/10")
       return {
@@ -81,6 +82,18 @@ function makeClient(opts: {
           name: "hw2",
         },
       }
+    if (url === "/assignments/12")
+      return {
+        id: 12,
+        slug: "essay",
+        title: "Essay",
+        type: "individual",
+        deadline: null,
+        max_teams: null,
+        invite_link: "",
+        public_repo: true,
+        starter_code_repository: null,
+      }
     // Source template reads
     if (url === "/repos/src/hw1") return { is_template: true }
     if (url === "/repos/src/hw2") return { is_template: false }
@@ -114,10 +127,13 @@ describe("buildPreflight", () => {
     })
     expect(plan.shortName).toBe("cs-50")
     expect(plan.name).toBe("CS 50")
-    expect(plan.counts).toEqual({ import: 1, reuse: 0, skip: 1 })
+    expect(plan.counts).toEqual({ import: 2, reuse: 0, skip: 1 })
     expect(plan.blockers).toHaveLength(0)
     const skip = plan.items.find((i) => i.action === "skip")
     expect(skip?.reason?.key).toBe("migration.reason.sourceNotTemplate")
+    const templateLess = plan.items.find((i) => i.templateLess)
+    expect(templateLess?.action).toBe("import")
+    expect(templateLess?.assignment.slug).toBe("essay")
   })
 
   it("honors an overridden class name", async () => {

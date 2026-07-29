@@ -215,6 +215,30 @@ describe("migrateClassroom", () => {
     expect(statuses.map((s) => s.status)).toEqual(["running", "generated"])
   })
 
+  it("imports a template-less assignment with no template and no generate call", async () => {
+    const { client, committed } = makeClient({})
+    const templateLessItem: MigrationItem = {
+      assignment: assignment({
+        slug: "essay",
+        id: 20,
+        starter_code_repository: null,
+      }),
+      action: "import",
+      targetName: "essay",
+      templateLess: true,
+    }
+    const result = await migrateClassroom(client, plan([templateLessItem]), {})
+    expect(result.generated).toBe(1)
+    expect(result.skipped).toHaveLength(0)
+
+    const assignmentsJson = JSON.parse(
+      committed()["cs-50/assignments.json"] as string,
+    )
+    expect(assignmentsJson.assignments).toHaveLength(1)
+    expect(assignmentsJson.assignments[0].slug).toBe("essay")
+    expect(assignmentsJson.assignments[0].template).toBeUndefined()
+  })
+
   it("uses an overridden class name in classroom.json", async () => {
     const { client, committed } = makeClient({})
     await migrateClassroom(
