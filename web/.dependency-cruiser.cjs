@@ -35,26 +35,36 @@ module.exports = {
       to: { path: "^src/(pages|components|hooks|context|routes)/" },
     },
     {
+      // FEATURE: github-classroom-migration — removable once GitHub Classroom
+      // shuts down (#312). migration/ is a below-view orchestration layer.
+      name: "migration-not-to-view",
+      severity: "error",
+      comment:
+        "migration/ must not import view-layer code (pages/components/hooks/context/routes). It depends downward on github-core/domain/util/types only.",
+      from: { path: "^src/migration/", pathNot: "\\.test\\.(ts|tsx)$" },
+      to: { path: "^src/(pages|components|hooks|context|routes)/" },
+    },
+    {
       name: "github-core-not-up",
       severity: "error",
       comment:
         "github-core/ is the lowest data layer: no import of domain or view code (type-only edges aren't tracked — tsPreCompilationDeps is off).",
       from: { path: "^src/github-core/", pathNot: "\\.test\\.(ts|tsx)$" },
       to: {
-        path: "^src/(domain|pages|components|hooks|context|routes)/",
+        path: "^src/(domain|migration|pages|components|hooks|context|routes)/",
       },
     },
     {
       name: "leaf-not-up",
       severity: "error",
       comment:
-        "util/lib/types/eslint are leaf layers: no import of view or orchestration code (pages/components/hooks/context/routes/domain/orgPolicy/skeleton). Move any shared type into types/. Value edges only here (tsPreCompilationDeps off); the eslint boundaries rule also blocks type edges.",
+        "util/lib/types/eslint are leaf layers: no import of view or orchestration code (pages/components/hooks/context/routes/domain/migration/orgPolicy/skeleton). Move any shared type into types/. Value edges only here (tsPreCompilationDeps off); the eslint boundaries rule also blocks type edges.",
       from: {
         path: "^src/(util|lib|types|eslint)/",
         pathNot: "\\.test\\.(ts|tsx)$",
       },
       to: {
-        path: "^src/(pages|components|hooks|context|routes|domain|orgPolicy|skeleton)/",
+        path: "^src/(pages|components|hooks|context|routes|domain|migration|orgPolicy|skeleton)/",
       },
     },
   ],

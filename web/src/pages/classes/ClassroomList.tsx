@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router"
-import { Plus, Search } from "lucide-react"
+import { ChevronDown, Plus, Search } from "lucide-react"
+import GitHub from "@/assets/github.svg?react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -233,15 +234,40 @@ const ClassroomList = ({
 
         <div className="mx-1 hidden h-6 w-px self-center bg-base-300 sm:block" />
 
-        <Link
-          to="/$org/classes/new"
-          params={{ org }}
-          type="button"
-          className="btn btn-primary btn-sm"
-        >
-          <Plus aria-hidden="true" className="size-4" />
-          {t("classes.newClass")}
-        </Link>
+        <div className="join">
+          <Link
+            to="/$org/classes/new"
+            params={{ org }}
+            type="button"
+            className="btn btn-primary btn-sm join-item"
+          >
+            <Plus aria-hidden="true" className="size-4" />
+            {t("classes.newClass")}
+          </Link>
+          <div className="dropdown dropdown-end join-item">
+            <Button
+              variant="primary"
+              size="sm"
+              tabIndex={0}
+              className="join-item h-full border-s border-primary-content/20 px-1.5"
+              aria-label={t("classes.newButton.moreOptions")}
+            >
+              <ChevronDown aria-hidden="true" className="size-4" />
+            </Button>
+            <ul
+              tabIndex={0}
+              className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+            >
+              {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
+              <li>
+                <Link to="/$org/import" params={{ org }}>
+                  <GitHub aria-hidden="true" className="size-4" />
+                  {t("migration.entryButton")}
+                </Link>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
 
       {noResults ? (

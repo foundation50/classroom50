@@ -1,15 +1,6 @@
-import { useEffect, useState } from "react"
-
-export function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value)
-
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delayMs)
-    return () => clearTimeout(id)
-  }, [value, delayMs])
-
-  return debounced
-}
+// Re-exported from the shared hooks location so existing imports here keep
+// working; the canonical definition lives in hooks/useDebouncedValue.
+export { useDebouncedValue } from "@/hooks/useDebouncedValue"
 
 // Minimal subset of a TanStack form field for a string-valued input.
 export type StringField = {

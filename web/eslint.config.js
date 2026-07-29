@@ -272,6 +272,10 @@ export default defineConfig([
         { type: "hooks", pattern: "src/hooks/**", partialMatch: false },
         { type: "auth", pattern: "src/auth/**", partialMatch: false },
         { type: "domain", pattern: "src/domain/**", partialMatch: false },
+        // FEATURE: github-classroom-migration — removable once GitHub Classroom
+        // shuts down (#312). A below-view orchestration layer (peer of domain/):
+        // depends downward on github-core/util/types, consumed by hooks/pages.
+        { type: "migration", pattern: "src/migration/**", partialMatch: false },
         { type: "authz", pattern: "src/authz/**", partialMatch: false },
         { type: "orgPolicy", pattern: "src/orgPolicy/**", partialMatch: false },
         {
@@ -324,6 +328,22 @@ export default defineConfig([
                 "domain/ must not import view-layer code (pages/components/hooks/context/routes). Domain depends downward on github-core/util/types only.",
             },
             {
+              // FEATURE: github-classroom-migration — removable once GitHub
+              // Classroom shuts down (#312). migration/ is a below-view
+              // orchestration layer (peer of domain/): same downward-only rule.
+              from: { element: { type: "migration" } },
+              disallow: {
+                to: {
+                  element: {
+                    type: ["pages", "components", "hooks", "context", "routes"],
+                  },
+                },
+                dependency: { kind: "value" },
+              },
+              message:
+                "migration/ must not import view-layer code (pages/components/hooks/context/routes). It depends downward on github-core/domain/util/types only.",
+            },
+            {
               // github-core is the lowest data layer; it must not reach up into
               // domain or any view layer at runtime (type-only input edges are
               // left alone via dependency.kind: value).
@@ -333,6 +353,7 @@ export default defineConfig([
                   element: {
                     type: [
                       "domain",
+                      "migration",
                       "pages",
                       "components",
                       "hooks",
@@ -369,6 +390,7 @@ export default defineConfig([
                       "context",
                       "routes",
                       "domain",
+                      "migration",
                       "orgPolicy",
                       "skeleton",
                     ],
