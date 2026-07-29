@@ -3,6 +3,7 @@ import {
   ChevronDown,
   DownloadCloud,
   ExternalLink,
+  FileArchive,
   FileDown,
   GitPullRequest,
   Lock,
@@ -34,6 +35,8 @@ export function SubmissionsActionsMenu({
   viewLabel,
   onDownloadCsv,
   downloadDisabled,
+  onDownloadAll,
+  downloadAllDisabled,
   locked = false,
   lockPending = false,
   onLockToggle,
@@ -63,6 +66,11 @@ export function SubmissionsActionsMenu({
   viewLabel: string
   onDownloadCsv: () => void
   downloadDisabled: boolean
+  // Opens the "Download all submissions" modal. Read-only (any viewer), so
+  // unlike Open-all-PRs it isn't owner-gated; hidden only when there's nothing
+  // to fetch (empty roster / no submissions), signalled via downloadAllDisabled.
+  onDownloadAll: () => void
+  downloadAllDisabled: boolean
   // Current locked state, for the Lock/Unlock item's label and icon.
   locked?: boolean
   // Whether a lock/unlock is mid-flight, to disable the item and show progress.
@@ -269,6 +277,25 @@ export function SubmissionsActionsMenu({
           >
             <FileDown aria-hidden="true" className="size-4" />
             {t("submissions.downloadCsv")}
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            disabled={downloadAllDisabled}
+            title={
+              downloadAllDisabled
+                ? t("submissions.downloadAll.titleDisabled")
+                : t("submissions.downloadAll.title")
+            }
+            onClick={() => {
+              closeMenu()
+              if (downloadAllDisabled) return
+              onDownloadAll()
+            }}
+          >
+            <FileArchive aria-hidden="true" className="size-4" />
+            {t("submissions.downloadAll.menuLabel")}
           </button>
         </li>
       </ul>

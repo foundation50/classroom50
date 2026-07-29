@@ -19,6 +19,8 @@ const baseProps = {
   viewLabel: "submissions.menu.viewWorkflow",
   onDownloadCsv: () => {},
   downloadDisabled: false,
+  onDownloadAll: () => {},
+  downloadAllDisabled: false,
 }
 
 afterEach(() => cleanup())
@@ -77,6 +79,28 @@ describe("SubmissionsActionsMenu — Open all Feedback PRs item", () => {
     )
     // The whole !emptyRepo block (incl. this item) is gone for empty_repo.
     expect(screen.queryByText("submissions.openAllPrs.menuLabel")).toBeNull()
+  })
+})
+
+describe("SubmissionsActionsMenu — Download all submissions item", () => {
+  it("always shows the item (read-only, not owner-gated) and enables it when there are submissions", () => {
+    render(<SubmissionsActionsMenu {...baseProps} />)
+    const item = screen.getByText("submissions.downloadAll.menuLabel")
+    expect(item).not.toBeNull()
+    expect((item.closest("button") as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it("disables the item when there is nothing to download", () => {
+    render(<SubmissionsActionsMenu {...baseProps} downloadAllDisabled />)
+    const item = screen.getByText("submissions.downloadAll.menuLabel")
+    expect((item.closest("button") as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("stays visible for an empty_repo assignment (unlike Open all PRs)", () => {
+    render(<SubmissionsActionsMenu {...baseProps} emptyRepo />)
+    expect(
+      screen.queryByText("submissions.downloadAll.menuLabel"),
+    ).not.toBeNull()
   })
 })
 

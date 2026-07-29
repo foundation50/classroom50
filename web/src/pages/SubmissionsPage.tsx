@@ -17,6 +17,7 @@ import { SubmissionsActionsMenu } from "@/pages/submissions/SubmissionsActionsMe
 import { AcceptLinkModal } from "@/pages/submissions/AcceptLinkModal"
 import { MetricsModal } from "@/pages/submissions/MetricsModal"
 import { OpenAllFeedbackPrsModal } from "@/pages/submissions/OpenAllFeedbackPrsModal"
+import { DownloadAllSubmissionsModal } from "@/pages/submissions/DownloadAllSubmissionsModal"
 import { DataFreshness } from "@/pages/submissions/DataFreshness"
 import { ConfirmModal } from "@/components/modals"
 import {
@@ -254,6 +255,7 @@ const SubmissionsPageContent = () => {
   const [metricsOpen, setMetricsOpen] = useState(false)
   const [acceptOpen, setAcceptOpen] = useState(false)
   const [openAllPrsOpen, setOpenAllPrsOpen] = useState(false)
+  const [downloadAllOpen, setDownloadAllOpen] = useState(false)
 
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
   // Gate on a resolved roster so a transient load/permission failure falls back
@@ -498,6 +500,14 @@ const SubmissionsPageContent = () => {
       students,
       siblingSlugs,
     ],
+  )
+
+  // Owners (student login or group founder) that actually pushed a submission —
+  // the set the bulk download fetches. Derived from the graded snapshot's rows,
+  // so never-accepted / accepted-no-push students are excluded (nothing to zip).
+  const downloadableOwners = useMemo(
+    () => scoresInfo.map((row) => row.owner),
+    [scoresInfo],
   )
 
   // Group repos that exist but have no submission yet: for group assignments the
@@ -1011,6 +1021,8 @@ const SubmissionsPageContent = () => {
             viewLabel={viewLabel}
             onDownloadCsv={downloadScoresCsv}
             downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
+            onDownloadAll={() => setDownloadAllOpen(true)}
+            downloadAllDisabled={downloadableOwners.length === 0}
             locked={isLockedAssignment}
             lockPending={setLock.isPending}
             // Lock/unlock is an authoring-tier action (teacher|hta), same gate
@@ -1152,6 +1164,15 @@ const SubmissionsPageContent = () => {
         assignmentName={assignmentInfo?.name ?? assignment}
         mode={isGroupAssignment ? "group" : "individual"}
         repos={allAssignmentRepos}
+      />
+      <DownloadAllSubmissionsModal
+        open={downloadAllOpen}
+        onClose={() => setDownloadAllOpen(false)}
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+        assignmentName={assignmentInfo?.name ?? assignment}
+        owners={downloadableOwners}
       />
     </PageShell>
   )

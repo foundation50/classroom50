@@ -2043,6 +2043,28 @@
       "blockedTitle": "These repositories need an org admin:",
       "blockedHint": "Their feedback branch points at the wrong commit, so opening the PR would show an empty diff. An org admin must delete each feedback branch before re-running this action — retrying alone won't fix them."
     },
+    "downloadAll": {
+      "menuLabel": "Download all submissions",
+      "title": "Download every student's latest submission",
+      "titleDisabled": "No submissions to download yet",
+      "confirmBody_one": "This downloads the latest submission for the <b>{{count}}</b> student who has submitted <b>{{name}}</b>, bundled into a single zip.",
+      "confirmBody_other": "This downloads the latest submissions for the <b>{{count}}</b> students who have submitted <b>{{name}}</b>, bundled into a single zip.",
+      "confirmHint": "It runs from your browser, one repository at a time, so it may take a while for a large class. Keep this tab open until it finishes.",
+      "confirmLabel_one": "Download submission",
+      "confirmLabel_other": "Download submissions",
+      "running": "Downloading… {{done}} of {{total}}",
+      "summaryLead": "Finished processing <b>{{total}}</b> submissions.",
+      "summaryDownloaded_one": "{{count}} submission downloaded",
+      "summaryDownloaded_other": "{{count}} submissions downloaded",
+      "summaryEmpty_one": "{{count}} repository was empty (skipped)",
+      "summaryEmpty_other": "{{count}} repositories were empty (skipped)",
+      "summaryFailed_one": "{{count}} submission failed",
+      "summaryFailed_other": "{{count}} submissions failed",
+      "emptyTitle": "These repositories had nothing to download:",
+      "emptyHint": "The student accepted the assignment but hasn't pushed any work yet, so there's no submission to include.",
+      "failedTitle": "These submissions couldn't be downloaded:",
+      "failedHint": "This is often a transient GitHub error — run the action again to retry."
+    },
     "rowRegrade": {
       "title": "Regrade this submission",
       "titleInFlight": "Regrade in progress…",
