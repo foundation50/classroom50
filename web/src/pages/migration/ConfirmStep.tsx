@@ -5,7 +5,7 @@
 // name to confirm before the irreversible write.
 
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, ArrowRight } from "lucide-react"
 
@@ -19,6 +19,7 @@ import {
   Spinner,
   rtlFlip,
 } from "@/components/ui"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { buildPreflight } from "@/migration/preflight"
 import type { ClassroomWithOrg, MigrationPreflight } from "@/migration/types"
 import { MigrationItemCard } from "./migrationItemCard"
@@ -37,10 +38,14 @@ export const ConfirmStep = ({
   const { t } = useTranslation()
   const client = useGitHubClient()
 
-  // Tunables that re-run preflight when they settle.
+  // Tunables. `shortName` and `templateSuffix` change the PLAN (target repo
+  // names, collision checks), so they key the preflight query. `name` and
+  // `term` are display-only — they don't affect any API call, so they're kept
+  // out of the query key and applied to the effective plan, avoiding a full
+  // preflight refetch on every keystroke.
   const [name, setName] = useState<string | undefined>(undefined)
   const [shortName, setShortName] = useState<string | undefined>(undefined)
-  const [term, setTerm] = useState("")
+  const [term, setTerm] = useState<string | undefined>(undefined)
   const [templateSuffix, setTemplateSuffix] = useState("")
   const [confirmText, setConfirmText] = useState("")
   // Assignment ids the teacher unchecked (importable items default to checked).
@@ -53,6 +58,12 @@ export const ConfirmStep = ({
       else next.add(assignmentId)
       return next
     })
+
+  // Plan-affecting inputs are debounced so preflight re-runs once typing pauses,
+  // not on every keystroke; keepPreviousData keeps the current preview rendered
+  // during the background refetch (no reload flash — the "Updating…" hint shows).
+  const debouncedShortName = useDebouncedValue(shortName, 500)
+  const debouncedSuffix = useDebouncedValue(templateSuffix, 500)
 
   const {
     data: plan,
@@ -67,23 +78,25 @@ export const ConfirmStep = ({
       "preflight",
       source.id,
       targetOrg,
-      name ?? "",
-      shortName ?? "",
-      term,
-      templateSuffix,
+      debouncedShortName ?? "",
+      debouncedSuffix,
     ],
     queryFn: () =>
       buildPreflight(client, {
         source: String(source.id),
         targetOrg,
-        name,
-        shortName,
-        term,
-        templateSuffix,
+        shortName: debouncedShortName,
+        templateSuffix: debouncedSuffix,
       }),
+    placeholderData: keepPreviousData,
     staleTime: 0,
     retry: false,
   })
+
+  // True while the debounce timer hasn't caught up to the latest input, so the
+  // preview shown is for a stale short-name/suffix.
+  const pendingEdit =
+    debouncedShortName !== shortName || debouncedSuffix !== templateSuffix
 
   const blocked = (plan?.blockers.length ?? 0) > 0
 
@@ -93,6 +106,9 @@ export const ConfirmStep = ({
   const effectivePlan: MigrationPreflight | undefined = plan
     ? {
         ...plan,
+        // Display-only overrides applied without refetching the preflight.
+        name: name?.trim() ? name.trim() : plan.name,
+        term: term !== undefined ? term.trim() : plan.term,
         items: plan.items.map((item) =>
           item.action !== "skip" && deselected.has(item.assignment.id)
             ? {
@@ -125,6 +141,8 @@ export const ConfirmStep = ({
     !blocked &&
     confirmed &&
     !isLoading &&
+    !isFetching &&
+    !pendingEdit &&
     selectedCount > 0
 
   return (
@@ -216,7 +234,7 @@ export const ConfirmStep = ({
                   {({ id }) => (
                     <Input
                       id={id}
-                      value={term}
+                      value={term ?? plan.term}
                       placeholder={t("migration.confirm.termPlaceholder")}
                       onChange={(e) => setTerm(e.target.value)}
                     />
@@ -274,7 +292,7 @@ export const ConfirmStep = ({
                   n: effectivePlan?.counts.skip ?? 0,
                 })}
               </span>
-              {isFetching && (
+              {(isFetching || pendingEdit) && (
                 <span className="flex items-center gap-1 text-base-content/50">
                   <Spinner size="xs" />
                   {t("migration.confirm.updating")}
