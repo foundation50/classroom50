@@ -9,25 +9,21 @@
 // self-identifying in a multi-org teacher's PAT list; the hash disambiguates a
 // regenerated token from a prior same-org one.
 
+import { generateSecret } from "@/util/secret"
+
 // GitHub rejects a fine-grained PAT name over 40 chars. The prefix is 18 chars
 // ("classroom50-token-"), so with a 4-char hash and a hyphen the org id has 17
 // chars of headroom — far beyond any real numeric id.
 export const GITHUB_TOKEN_NAME_MAX = 40
 
 const NAME_PREFIX = "classroom50-token-"
-const HASH_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
 const HASH_LENGTH = 4
 
-// A random 4-char [a-z0-9] suffix. Uses crypto.getRandomValues so it's not a
-// predictable Math.random sequence (defense-in-depth; the name isn't a secret).
+// A random 4-char [a-z0-9] suffix. Reuses the crypto random-string generator
+// (same [a-z0-9] alphabet, rejection-sampled to avoid modulo bias); the name
+// isn't a secret, so this is just anti-collision friction.
 export function randomTokenHash(length: number = HASH_LENGTH): string {
-  const bytes = new Uint8Array(length)
-  crypto.getRandomValues(bytes)
-  let out = ""
-  for (let i = 0; i < length; i++) {
-    out += HASH_ALPHABET[bytes[i] % HASH_ALPHABET.length]
-  }
-  return out
+  return generateSecret(length)
 }
 
 // Build the default token name for an org. `hash` is injectable for

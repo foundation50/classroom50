@@ -1,4 +1,6 @@
+import { useCallback } from "react"
 import { useQueries } from "@tanstack/react-query"
+import type { QueryObserverResult } from "@tanstack/react-query"
 
 import { isOwnerGitHubOrgRole } from "@/authz"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -57,31 +59,12 @@ export function useOrgServiceTokenHealth(
 ): { byOrg: Record<string, OrgTokenHealthEntry>; anyLoading: boolean } {
   const client = useGitHubClient()
 
-  // `combine` builds the derived map directly off the query cache, so it
-  // memoizes on the underlying results (no hand-synced signature string, no
-  // eslint-disabled deps). `retry: false` keeps a GitHub outage from turning a
-  // multi-org fan-out (2N reads) into a retry storm — a transient failure just
-  // yields "unknown"/inconclusive for one card until the next staleTime
-  // refetch, matching the sibling releasesQuery.
-  return useQueries({
-    queries: ownedOrgs.flatMap((org) => [
-      {
-        queryKey: githubKeys.serviceToken(org),
-        queryFn: () => getServiceTokenStatus(client, org),
-        enabled: enabled && Boolean(org),
-        staleTime: 10 * 60 * 1000,
-        retry: false,
-      },
-      {
-        queryKey: githubKeys.lastCollectScoresRun(org),
-        queryFn: ({ signal }: { signal?: AbortSignal }) =>
-          getLastCollectScoresRun(client, org, signal),
-        enabled: enabled && Boolean(org),
-        staleTime: 10 * 60 * 1000,
-        retry: false,
-      },
-    ]),
-    combine: (results) => {
+  // `combine` runs on every render; react-query only memoizes its result when
+  // the callback identity is stable, so wrap it in useCallback keyed on
+  // `ownedOrgs` — otherwise a fresh `byOrg` is re-derived on unrelated
+  // re-renders (e.g. every keystroke in the org search box).
+  const combine = useCallback(
+    (results: QueryObserverResult[]) => {
       const byOrg: Record<string, OrgTokenHealthEntry> = {}
       let anyLoading = false
 
@@ -124,6 +107,34 @@ export function useOrgServiceTokenHealth(
 
       return { byOrg, anyLoading }
     },
+    [ownedOrgs],
+  )
+
+  // `combine` builds the derived map directly off the query cache, so it
+  // memoizes on the underlying results (no hand-synced signature string, no
+  // eslint-disabled deps). `retry: false` keeps a GitHub outage from turning a
+  // multi-org fan-out (2N reads) into a retry storm — a transient failure just
+  // yields "unknown"/inconclusive for one card until the next staleTime
+  // refetch, matching the sibling releasesQuery.
+  return useQueries({
+    queries: ownedOrgs.flatMap((org) => [
+      {
+        queryKey: githubKeys.serviceToken(org),
+        queryFn: () => getServiceTokenStatus(client, org),
+        enabled: enabled && Boolean(org),
+        staleTime: 10 * 60 * 1000,
+        retry: false,
+      },
+      {
+        queryKey: githubKeys.lastCollectScoresRun(org),
+        queryFn: ({ signal }: { signal?: AbortSignal }) =>
+          getLastCollectScoresRun(client, org, signal),
+        enabled: enabled && Boolean(org),
+        staleTime: 10 * 60 * 1000,
+        retry: false,
+      },
+    ]),
+    combine,
   })
 }
 

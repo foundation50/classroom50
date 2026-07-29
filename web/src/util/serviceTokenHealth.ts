@@ -30,13 +30,7 @@ export type OrgServiceTokenHealth =
 // `expiryUntracked` counts: the token IS ours and IS set, we just can't see its
 // expiry, which is exactly the blind spot this feature exists to close.
 export function needsAttention(health: OrgServiceTokenHealth): boolean {
-  return (
-    health === "expired" ||
-    health === "missing" ||
-    health === "expiringSoon" ||
-    health === "collectFailing" ||
-    health === "expiryUntracked"
-  )
+  return health !== "ok" && health !== "unknown"
 }
 
 // A completed workflow run's conclusion is "failing" for our purposes when it
@@ -63,7 +57,6 @@ export function deriveOrgServiceTokenHealth(input: {
   if (input.tokenStatus === "missing") return "missing"
   if (input.tokenStatus === "unknown") return "unknown"
 
-  // present
   if (input.expiry === "expired") return "expired"
   if (input.lastCollectFailing === true) return "collectFailing"
   if (input.expiry === "expiringSoon") return "expiringSoon"

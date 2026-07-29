@@ -11,9 +11,11 @@ import type { GitHubOrgMembership } from "@/github-core/types"
 import useGetOrgs, { usePendingOrgInvites } from "@/hooks/useGetOrgs"
 import useOrgDisplayName from "@/hooks/useOrgDisplayName"
 import useOrgLastModified from "@/hooks/useOrgLastModified"
-import { useOrgServiceTokenHealth } from "@/hooks/useOrgServiceTokenHealth"
-import { isOwnedReadyOrg } from "@/hooks/useOrgServiceTokenHealth"
-import type { OrgTokenHealthEntry } from "@/hooks/useOrgServiceTokenHealth"
+import {
+  useOrgServiceTokenHealth,
+  isOwnedReadyOrg,
+  type OrgTokenHealthEntry,
+} from "@/hooks/useOrgServiceTokenHealth"
 import { needsAttention } from "@/util/serviceTokenHealth"
 import {
   TokenHealthChip,
