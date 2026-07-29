@@ -38,7 +38,3 @@ const GITHUB_OAUTH_APPS_URL =
 // client id (self-hosted/dev builds) only the app list is knowable.
 export const githubOAuthGrantUrl = (clientId = GITHUB_OAUTH_CLIENT_ID) =>
   clientId ? `${GITHUB_OAUTH_APPS_URL}/${clientId}` : GITHUB_OAUTH_APPS_URL
-
-export const GITHUB_OAUTH_WORKER_BASE =
-  import.meta.env.VITE_GITHUB_OAUTH_WORKER_BASE ??
-  "https://tiny-bonus-7dc1.fifty-foundation.workers.dev"

@@ -173,6 +173,8 @@ jobs:
       - run: npm run build
         env:
           VITE_GITHUB_CLIENT_ID: ${{ vars.VITE_GITHUB_CLIENT_ID }}
+          # GitHub proxy base; falls back to the baked-in default when unset.
+          VITE_GITHUB_PROXY_BASE: ${{ vars.VITE_GITHUB_PROXY_BASE }}
           # Tag name (web-vX.Y.Z); vite.config.ts strips the web-v prefix.
           VITE_APP_VERSION: ${{ needs.release-please.outputs.web_tag }}
           VITE_APP_COMMIT: ${{ steps.sha.outputs.value }}

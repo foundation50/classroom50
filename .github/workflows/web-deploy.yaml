@@ -68,6 +68,8 @@ jobs:
           # (Settings -> Secrets and variables -> Actions -> Variables)
           # is sufficient; no secret needed.
           VITE_GITHUB_CLIENT_ID: ${{ vars.VITE_GITHUB_CLIENT_ID }}
+          # GitHub proxy base; falls back to the baked-in default when unset.
+          VITE_GITHUB_PROXY_BASE: ${{ vars.VITE_GITHUB_PROXY_BASE }}
           # Release identity stamped into the build (see web/vite.config.ts).
           # A `web-v*` ref names the version; anything else (branch/SHA redeploy)
           # falls back to web/package.json. Commit + date give a precise build
