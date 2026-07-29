@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { Button, HelpTooltip, Input, Modal, cx } from "@/components/ui"
 import PageShell from "@/components/PageShell"
@@ -169,6 +169,34 @@ function TokenNameRow({
   )
 }
 
+// A numbered step in the modal's two-step flow (generate on GitHub, then paste
+// back). The circled index plus label gives the sequence an explicit order so
+// the generate button and paste field don't read as unrelated peers.
+function Step({
+  index,
+  label,
+  children,
+}: {
+  index: number
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div className="flex gap-3">
+      <span
+        aria-hidden="true"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary"
+      >
+        {index}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold">{label}</p>
+        <div className="mt-2">{children}</div>
+      </div>
+    </div>
+  )
+}
+
 // The set/rotate modal: paste a token plus a "Generate new access token" button
 // that opens the prefilled GitHub form. Re-focusing the tab (after the user
 // returns from generating on GitHub) auto-focuses the paste field.
@@ -228,96 +256,21 @@ function SetTokenModal({
     <Modal
       open={open}
       onClose={onClose}
-      size="lg"
+      size="2xl"
       aria-label={t("orgSettings.serviceToken.setModalTitle")}
       closeDisabled={saveMutation.isPending}
     >
-      <h3 className="text-lg font-semibold">
-        {t("orgSettings.serviceToken.setModalTitle")}
-      </h3>
-
-      <div className="mt-4">
-        <label htmlFor="token-expiry" className="label pb-1 font-semibold">
-          {t("orgSettings.serviceToken.expiryLabel")}
-        </label>
-        <div className="flex flex-wrap items-center gap-2">
-          <label
-            className={cx(
-              "input input-bordered flex w-32 items-center gap-2",
-              expiryValid ? "" : "input-error",
-            )}
-          >
-            <input
-              id="token-expiry"
-              type="number"
-              inputMode="numeric"
-              min={MIN_EXPIRY_DAYS}
-              max={maxExpiry}
-              value={expiryDays}
-              onChange={(e) => setExpiryDays(e.target.value)}
-              className="w-full [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-            />
-            <span className="text-sm text-base-content/60">
-              {t("orgSettings.serviceToken.days")}
-            </span>
-          </label>
-          {expiryValid ? (
-            <span className="text-xs text-base-content/60">
-              {t("orgSettings.serviceToken.expiresOn", {
-                date: new Date(
-                  now + parsedExpiry * 24 * 60 * 60 * 1000,
-                ).toLocaleDateString(),
-              })}
-            </span>
-          ) : (
-            <span className="text-xs text-error">
-              {t("orgSettings.serviceToken.expiryRange", {
-                min: MIN_EXPIRY_DAYS,
-                max: maxExpiry,
-              })}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <div className="flex items-center gap-1.5">
-          <a
-            className={cx(
-              "btn btn-outline btn-sm gap-1",
-              expiryValid ? "" : "btn-disabled",
-            )}
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            aria-disabled={!expiryValid}
-            onClick={(e) => {
-              // aria-disabled is visual only; also block activation so an
-              // invalid expiry can't open GitHub's form with the silent default.
-              if (!expiryValid) e.preventDefault()
-            }}
-          >
-            <ExternalLink aria-hidden="true" className="size-4" />
-            {t("orgSettings.serviceToken.generateOnGitHub")}
-          </a>
-          <HelpTooltip
-            help={t("orgSettings.serviceToken.generateHelp")}
-            position="top"
-          />
-        </div>
-        <a
-          className="link link-primary inline-flex items-center gap-1 text-sm"
-          href={`${WIKI_URL}/GitHub-Integration#4-fine-grained-pat-for-score-collection`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {t("orgSettings.serviceToken.learnMore")}
-          <ExternalLink aria-hidden="true" className="size-3.5" />
-        </a>
+      <div className="pe-8">
+        <h3 className="text-lg font-semibold">
+          {t("orgSettings.serviceToken.setModalTitle")}
+        </h3>
+        <p className="mt-1 text-sm text-base-content/70">
+          {t("orgSettings.serviceToken.setModalSubtitle")}
+        </p>
       </div>
 
       <form
-        className="mt-4 flex flex-col gap-2"
+        className="mt-6 flex flex-col gap-6"
         onSubmit={(e) => {
           e.preventDefault()
           // Require a valid expiry as well as a token: saving with an invalid
@@ -337,55 +290,142 @@ function SetTokenModal({
           )
         }}
       >
-        <div className="flex items-center gap-1.5">
-          <label htmlFor="service-token" className="label font-semibold">
-            {t("orgSettings.serviceToken.pasteLabel")}
-          </label>
-          <HelpTooltip
-            help={t("orgSettings.serviceToken.pasteHelp")}
-            position="right"
-          />
-        </div>
-        <Input
-          id="service-token"
-          ref={inputRef}
-          type="password"
-          placeholder={t("orgSettings.serviceToken.placeholder")}
-          autoComplete="off"
-          value={token}
-          onChange={(e) => {
-            setToken(e.target.value)
-            if (saveMutation.isError) saveMutation.reset()
-          }}
-        />
+        <Step index={1} label={t("orgSettings.serviceToken.step1Label")}>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label
+                htmlFor="token-expiry"
+                className="label pb-1 text-sm text-base-content/70"
+              >
+                {t("orgSettings.serviceToken.expiryLabel")}
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <label
+                  className={cx(
+                    "input input-bordered flex w-32 items-center gap-2",
+                    expiryValid ? "" : "input-error",
+                  )}
+                >
+                  <input
+                    id="token-expiry"
+                    type="number"
+                    inputMode="numeric"
+                    min={MIN_EXPIRY_DAYS}
+                    max={maxExpiry}
+                    value={expiryDays}
+                    onChange={(e) => setExpiryDays(e.target.value)}
+                    className="w-full [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="text-sm text-base-content/60">
+                    {t("orgSettings.serviceToken.days")}
+                  </span>
+                </label>
+                {expiryValid ? (
+                  <span className="text-xs text-base-content/60">
+                    {t("orgSettings.serviceToken.expiresOn", {
+                      date: new Date(
+                        now + parsedExpiry * 24 * 60 * 60 * 1000,
+                      ).toLocaleDateString(),
+                    })}
+                  </span>
+                ) : (
+                  <span className="text-xs text-error">
+                    {t("orgSettings.serviceToken.expiryRange", {
+                      min: MIN_EXPIRY_DAYS,
+                      max: maxExpiry,
+                    })}
+                  </span>
+                )}
+              </div>
+            </div>
 
-        {saveMutation.isError && (
-          <p className="flex items-start gap-2 text-sm text-error">
-            <TriangleAlert
-              aria-hidden="true"
-              className="mt-0.5 size-4 shrink-0"
+            <div className="flex items-center gap-1.5">
+              <a
+                className={cx(
+                  "btn btn-primary btn-sm gap-1",
+                  expiryValid ? "" : "btn-disabled",
+                )}
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                aria-disabled={!expiryValid}
+                onClick={(e) => {
+                  // aria-disabled is visual only; also block activation so an
+                  // invalid expiry can't open GitHub's form with the silent
+                  // default.
+                  if (!expiryValid) e.preventDefault()
+                }}
+              >
+                <ExternalLink aria-hidden="true" className="size-4" />
+                {t("orgSettings.serviceToken.generateOnGitHub")}
+              </a>
+              <HelpTooltip
+                help={t("orgSettings.serviceToken.generateHelp")}
+                position="top"
+              />
+            </div>
+          </div>
+        </Step>
+
+        <Step index={2} label={t("orgSettings.serviceToken.step2Label")}>
+          <div className="flex flex-col gap-1.5">
+            <Input
+              id="service-token"
+              ref={inputRef}
+              type="password"
+              placeholder={t("orgSettings.serviceToken.placeholder")}
+              autoComplete="off"
+              aria-label={t("orgSettings.serviceToken.pasteLabel")}
+              value={token}
+              onChange={(e) => {
+                setToken(e.target.value)
+                if (saveMutation.isError) saveMutation.reset()
+              }}
             />
-            <span>
-              {saveMutation.error instanceof Error
-                ? saveMutation.error.message
-                : t("orgSettings.serviceToken.saveError")}
-            </span>
-          </p>
-        )}
+            <p className="text-sm text-base-content/70">
+              {t("orgSettings.serviceToken.pasteHelp")}
+            </p>
 
-        <div className="mt-2 flex justify-end gap-2">
-          <Button variant="ghost" type="button" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant="primary"
-            type="submit"
-            loading={saveMutation.isPending}
-            loadingLabel={t("orgSettings.serviceToken.validating")}
-            disabled={saveMutation.isPending || !token.trim() || !expiryValid}
+            {saveMutation.isError && (
+              <p className="flex items-start gap-2 text-sm text-error">
+                <TriangleAlert
+                  aria-hidden="true"
+                  className="mt-0.5 size-4 shrink-0"
+                />
+                <span>
+                  {saveMutation.error instanceof Error
+                    ? saveMutation.error.message
+                    : t("orgSettings.serviceToken.saveError")}
+                </span>
+              </p>
+            )}
+          </div>
+        </Step>
+
+        <div className="flex items-center justify-between gap-2 border-t border-base-content/10 pt-4">
+          <a
+            className="link inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content"
+            href={`${WIKI_URL}/GitHub-Integration#4-fine-grained-pat-for-score-collection`}
+            target="_blank"
+            rel="noreferrer"
           >
-            {t("orgSettings.serviceToken.saveButton")}
-          </Button>
+            {t("orgSettings.serviceToken.learnMore")}
+            <ExternalLink aria-hidden="true" className="size-3.5" />
+          </a>
+          <div className="flex gap-2">
+            <Button variant="ghost" type="button" onClick={onClose}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              type="submit"
+              loading={saveMutation.isPending}
+              loadingLabel={t("orgSettings.serviceToken.validating")}
+              disabled={saveMutation.isPending || !token.trim() || !expiryValid}
+            >
+              {t("orgSettings.serviceToken.saveButton")}
+            </Button>
+          </div>
         </div>
       </form>
     </Modal>
@@ -496,6 +536,13 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
               {t("orgSettings.serviceToken.rotateButton")}
             </Button>
           </div>
+
+          {!expiresDate && (
+            <span className="inline-flex items-center gap-2 text-sm text-warning">
+              <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+              {t("orgSettings.serviceToken.expiryUntrackedHint")}
+            </span>
+          )}
 
           {storedName && (
             <TokenNameRow

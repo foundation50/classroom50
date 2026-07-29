@@ -9,11 +9,9 @@ import type { ServiceTokenStatus } from "@/github-core/queries"
 
 const getServiceTokenStatus =
   vi.fn<(...args: unknown[]) => Promise<ServiceTokenStatus>>()
-const getLastCollectScoresRun =
-  vi.fn<(...args: unknown[]) => Promise<{ conclusion: string | null } | null>>()
 
-// Keep the real classify/derive/keys; only the two network reads are mocked so
-// we can drive each org's (status, run) pair deterministically.
+// Keep the real classify/derive/keys; only the network read is mocked so we can
+// drive each org's status deterministically.
 vi.mock("@/github-core/queries", async () => {
   const actual = await vi.importActual<typeof import("@/github-core/queries")>(
     "@/github-core/queries",
@@ -22,8 +20,6 @@ vi.mock("@/github-core/queries", async () => {
     ...actual,
     getServiceTokenStatus: (...args: unknown[]) =>
       getServiceTokenStatus(...args),
-    getLastCollectScoresRun: (...args: unknown[]) =>
-      getLastCollectScoresRun(...args),
   }
 })
 vi.mock("@/context/github/GitHubProvider", () => ({
@@ -58,19 +54,15 @@ beforeEach(() => {
 })
 
 describe("useOrgServiceTokenHealth", () => {
-  it("pairs each org with its own (status, run) and derives per-org verdicts", async () => {
-    // orgA: present, healthy, recorded far-future expiry, collect success -> ok
-    // orgB: present, collect failure -> collectFailing (regardless of order)
+  it("derives each org's verdict from its own status read", async () => {
+    // orgA: present, healthy, recorded far-future expiry -> ok
+    // orgB: present, expired -> expired
     getServiceTokenStatus.mockImplementation((_client: unknown, org: unknown) =>
       Promise.resolve(
         org === "orgA"
           ? present({ expiresAt: "2027-01-01T00:00:00Z" })
-          : present({ expiresAt: "2027-01-01T00:00:00Z" }),
+          : present({ expiresAt: "2020-01-01T00:00:00Z" }),
       ),
-    )
-    getLastCollectScoresRun.mockImplementation(
-      (_client: unknown, org: unknown) =>
-        Promise.resolve({ conclusion: org === "orgB" ? "failure" : "success" }),
     )
 
     const { result } = renderHook(
@@ -79,9 +71,7 @@ describe("useOrgServiceTokenHealth", () => {
     )
 
     await waitFor(() => expect(result.current.byOrg.orgA?.health).toBe("ok"))
-    expect(result.current.byOrg.orgB?.health).toBe("collectFailing")
-    // The run read is bound to the right org (B failing, not A).
-    expect(result.current.byOrg.orgA?.health).not.toBe("collectFailing")
+    expect(result.current.byOrg.orgB?.health).toBe("expired")
   })
 
   it("resolves an owner-blocked (unknown) status to health 'unknown', never a false 'missing'", async () => {
@@ -91,7 +81,6 @@ describe("useOrgServiceTokenHealth", () => {
       reason: "permission_denied",
       message: "",
     } as ServiceTokenStatus)
-    getLastCollectScoresRun.mockResolvedValue(null)
 
     const { result } = renderHook(
       () => useOrgServiceTokenHealth(["orgA"], true),
@@ -105,7 +94,6 @@ describe("useOrgServiceTokenHealth", () => {
 
   it("reports expiryUntracked for a present token with no recorded expiry (not a false ok)", async () => {
     getServiceTokenStatus.mockResolvedValue(present())
-    getLastCollectScoresRun.mockResolvedValue({ conclusion: "success" })
 
     const { result } = renderHook(
       () => useOrgServiceTokenHealth(["orgA"], true),
@@ -117,33 +105,13 @@ describe("useOrgServiceTokenHealth", () => {
     )
   })
 
-  it("does not certify 'ok' when the collect-run read errors (inconclusive, not clean)", async () => {
-    getServiceTokenStatus.mockResolvedValue(
-      present({ expiresAt: "2027-01-01T00:00:00Z" }),
-    )
-    getLastCollectScoresRun.mockRejectedValue(new Error("boom"))
-
-    const { result } = renderHook(
-      () => useOrgServiceTokenHealth(["orgA"], true),
-      { wrapper: wrapper(freshClient()) },
-    )
-
-    // Token status is present + healthy expiry, but the run read failed, so the
-    // card must not assert "ok".
-    await waitFor(() => expect(result.current.byOrg.orgA?.loading).toBe(false))
-    expect(result.current.byOrg.orgA?.health).toBe("expiryUntracked")
-    expect(result.current.byOrg.orgA?.health).not.toBe("ok")
-  })
-
   it("is gated off when disabled", () => {
     getServiceTokenStatus.mockResolvedValue(present())
-    getLastCollectScoresRun.mockResolvedValue(null)
 
     renderHook(() => useOrgServiceTokenHealth(["orgA"], false), {
       wrapper: wrapper(freshClient()),
     })
 
     expect(getServiceTokenStatus).not.toHaveBeenCalled()
-    expect(getLastCollectScoresRun).not.toHaveBeenCalled()
   })
 })
