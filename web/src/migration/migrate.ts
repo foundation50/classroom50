@@ -253,8 +253,7 @@ export async function migrateClassroom(
         `Migrate ${shortName} from GitHub Classroom ${plan.classroom.id}`,
       ),
     })
-    const moved = await updateRef(client, targetOrg, newCommit.sha, branch)
-    void moved
+    await updateRef(client, targetOrg, newCommit.sha, branch)
     return newCommit.sha
   })
 

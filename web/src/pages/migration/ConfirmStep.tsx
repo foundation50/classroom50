@@ -5,7 +5,7 @@
 // stays put and shows a loading state while the migration runs; per-item cards
 // update live and a truthful summary replaces the button on completion.
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
@@ -144,34 +144,33 @@ export const ConfirmStep = ({
 
   // The effective plan reflects the teacher's selection: any importable/reusable
   // item they unchecked becomes a skip (with a "deselected" reason). Skip items
-  // are untouched.
-  const effectivePlan: MigrationPreflight | undefined = plan
-    ? {
-        ...plan,
-        name: name?.trim() ? name.trim() : plan.name,
-        term: term !== undefined ? term.trim() : plan.term,
-        items: plan.items.map((item) =>
-          item.action !== "skip" && deselected.has(item.assignment.id)
-            ? {
-                ...item,
-                action: "skip" as const,
-                reason: { key: "migration.reason.deselected" },
-              }
-            : item,
-        ),
-        counts: {
-          import: plan.items.filter(
-            (i) => i.action === "import" && !deselected.has(i.assignment.id),
-          ).length,
-          reuse: plan.items.filter(
-            (i) => i.action === "reuse" && !deselected.has(i.assignment.id),
-          ).length,
-          skip: plan.items.filter(
-            (i) => i.action === "skip" || deselected.has(i.assignment.id),
-          ).length,
-        },
+  // are untouched. Memoized so name/term typing and the live per-item status
+  // stream (neither of which feeds it) don't rebuild it every render.
+  const effectivePlan: MigrationPreflight | undefined = useMemo(() => {
+    if (!plan) return undefined
+    const counts = { import: 0, reuse: 0, skip: 0 }
+    const items = plan.items.map((item) => {
+      const deselect =
+        item.action !== "skip" && deselected.has(item.assignment.id)
+      if (deselect) {
+        counts.skip += 1
+        return {
+          ...item,
+          action: "skip" as const,
+          reason: { key: "migration.reason.deselected" },
+        }
       }
-    : undefined
+      counts[item.action] += 1
+      return item
+    })
+    return {
+      ...plan,
+      name: name?.trim() ? name.trim() : plan.name,
+      term: term !== undefined ? term.trim() : plan.term,
+      items,
+      counts,
+    }
+  }, [plan, name, term, deselected])
 
   const selectedCount =
     (effectivePlan?.counts.import ?? 0) + (effectivePlan?.counts.reuse ?? 0)

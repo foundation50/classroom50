@@ -6,7 +6,9 @@
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import { paginateAll } from "@/github-core/paginate"
+import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
 import { localizedError, type LocalizedMessage } from "@/types/localizedMessage"
+import { mapWithConcurrency } from "@/util/concurrency"
 import type {
   ClassroomAssignmentDetail,
   ClassroomAssignmentListItem,
@@ -85,21 +87,27 @@ export async function listClassroomsWithOrg(
   options: { includeArchived?: boolean } = {},
 ): Promise<ClassroomWithOrg[]> {
   const listing = await listClassrooms(client)
-  const out: ClassroomWithOrg[] = []
-  for (const row of listing) {
-    if (row.archived && !options.includeArchived) continue
-    try {
-      const detail = await getClassroom(client, row.id)
-      out.push({
-        ...row,
-        orgLogin: detail.organization.login,
-        orgAvatarUrl: detail.organization.avatar_url,
-      })
-    } catch {
-      // Stale listing row or mid-loop access loss: skip, don't fail the list.
-    }
-  }
-  return out
+  const visible = listing.filter(
+    (row) => !row.archived || options.includeArchived,
+  )
+  const resolved = await mapWithConcurrency(
+    visible,
+    REPO_READ_CONCURRENCY,
+    async (row): Promise<ClassroomWithOrg | null> => {
+      try {
+        const detail = await getClassroom(client, row.id)
+        return {
+          ...row,
+          orgLogin: detail.organization.login,
+          orgAvatarUrl: detail.organization.avatar_url,
+        }
+      } catch {
+        // Stale listing row or mid-loop access loss: skip, don't fail the list.
+        return null
+      }
+    },
+  )
+  return resolved.filter((row): row is ClassroomWithOrg => row !== null)
 }
 
 // Fetch every assignment's detail for a classroom, in listing order (so output
@@ -109,11 +117,9 @@ export async function fetchAssignmentsForClassroom(
   classroomId: number,
 ): Promise<ClassroomAssignmentDetail[]> {
   const listing = await listClassroomAssignments(client, classroomId)
-  const out: ClassroomAssignmentDetail[] = []
-  for (const row of listing) {
-    out.push(await getClassroomAssignment(client, row.id))
-  }
-  return out
+  return mapWithConcurrency(listing, REPO_READ_CONCURRENCY, (row) =>
+    getClassroomAssignment(client, row.id),
+  )
 }
 
 // Resolve a --source value (numeric id or org login) to a single classroom.
@@ -139,18 +145,25 @@ export async function resolveSource(
   }
 
   const want = trimmed.toLowerCase()
-  const matches: ClassroomDetail[] = []
-  for (const row of listing) {
-    if (row.archived && !options.includeArchived) continue
-    try {
-      const detail = await getClassroom(client, row.id)
-      if (detail.organization.login.toLowerCase() === want) {
-        matches.push(detail)
+  const visible = listing.filter(
+    (row) => !row.archived || options.includeArchived,
+  )
+  const resolved = await mapWithConcurrency(
+    visible,
+    REPO_READ_CONCURRENCY,
+    async (row): Promise<ClassroomDetail | null> => {
+      try {
+        const detail = await getClassroom(client, row.id)
+        return detail.organization.login.toLowerCase() === want ? detail : null
+      } catch {
+        // Skip a row we lost access to mid-resolution.
+        return null
       }
-    } catch {
-      // Skip a row we lost access to mid-resolution.
-    }
-  }
+    },
+  )
+  const matches = resolved.filter(
+    (detail): detail is ClassroomDetail => detail !== null,
+  )
 
   if (matches.length === 0) {
     throw localizedError({
