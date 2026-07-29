@@ -66,9 +66,8 @@ export function SubmissionsActionsMenu({
   viewLabel: string
   onDownloadCsv: () => void
   downloadDisabled: boolean
-  // Opens the "Download all submissions" modal. Read-only (any viewer), so
-  // unlike Open-all-PRs it isn't owner-gated; hidden only when there's nothing
-  // to fetch (empty roster / no submissions), signalled via downloadAllDisabled.
+  // Read-only (any viewer), so not owner-gated like Open-all-PRs; hidden only
+  // when there's nothing to fetch (via downloadAllDisabled).
   onDownloadAll: () => void
   downloadAllDisabled: boolean
   // Current locked state, for the Lock/Unlock item's label and icon.

@@ -35,18 +35,12 @@ export type DownloadAllResult = {
   summary: DownloadAllSummary
 }
 
-// Soft ceiling on how many submissions one bulk run packages. The whole
-// combined zip is built in browser memory (every archive buffered, then a
-// second full copy from generateAsync), so a very large class can exhaust the
-// tab. The UI warns past this in the confirm step; it's advisory, not enforced
-// here — a teacher who accepts the warning still gets the full run. The
-// directory-extract path streams to disk and isn't subject to this limit.
+// Advisory confirm-step threshold: past this, the combined zip is large enough
+// to risk exhausting the tab (whole archive built in memory). Not enforced.
 export const BULK_DOWNLOAD_WARN_THRESHOLD = 100
 
-// Thrown when the combined zip can't be assembled (typically an allocation
-// failure because the class is too large to hold in memory). Distinct from a
-// per-repo network failure so the UI can tell the teacher the class is too big
-// rather than showing a generic error after every archive already downloaded.
+// Combined-zip assembly failed (usually OOM on a large class). Distinct from a
+// per-repo failure so the UI can say "too big" instead of a generic error.
 export class ZipAssemblyError extends Error {
   constructor(cause: unknown) {
     super("Failed to assemble the combined submissions archive", { cause })
@@ -54,8 +48,8 @@ export class ZipAssemblyError extends Error {
   }
 }
 
-// Case-insensitive dedupe (matching the lowercased repo name) so a duplicated
-// owner can't produce two identical entries.
+// Case-insensitive dedupe (GitHub logins aren't case-sensitive) so a repeated
+// owner can't yield two identical entries.
 function dedupeOwners(owners: string[]): string[] {
   const seen = new Set<string>()
   return owners.filter((owner) => {
@@ -99,10 +93,9 @@ function summarize(
   }
 }
 
-// Shared fan-out: fetch every owner's latest archive at bounded concurrency,
-// invoking `onArchive` with the bytes for each fetched repo (to zip or write to
-// disk), reporting progress, and never letting one repo's failure abort the
-// batch.
+// Shared fan-out: fetch each owner's archive at bounded concurrency, invoking
+// `onArchive` with each fetched repo's bytes; one repo's failure is recorded,
+// never aborting the batch.
 async function fanOutArchives(params: {
   client: GitHubClient
   org: string
@@ -147,12 +140,8 @@ async function fanOutArchives(params: {
   )
 }
 
-// Download EVERY submitting owner's latest submission into ONE combined zip
-// (the fallback path where the File System Access API is unavailable). A
-// bounded fan-out fetches each repo's archive; each fetched archive is stored —
-// not re-inflated — as a nested `<owner>.zip` entry, so it stays lossless. A
-// missing/empty repo is skipped and a single repo's failure is recorded rather
-// than aborting the batch. `onProgress` fires after each repo settles.
+// Fallback path (no File System Access API): fetch every submission and store
+// each losslessly as a nested `<owner>.zip` in one combined in-memory zip.
 export async function downloadAllSubmissions(params: {
   client: GitHubClient
   org: string
@@ -185,11 +174,8 @@ export async function downloadAllSubmissions(params: {
   return { blob, summary: summarize(owners, results) }
 }
 
-// Download EVERY submitting owner's latest submission directly into a
-// teacher-chosen directory (Chromium File System Access path). Each fetched
-// archive is streamed to `<owner>.zip` in the picked folder as it arrives, so
-// nothing accumulates in memory — no combined-zip ceiling, no OOM risk. Same
-// skip/failure semantics and progress reporting as the combined-zip path.
+// Chromium path: stream each submission straight to `<owner>.zip` in the picked
+// folder as it arrives — nothing buffered, so no combined-zip ceiling.
 export async function streamSubmissionsToDirectory(params: {
   client: GitHubClient
   org: string

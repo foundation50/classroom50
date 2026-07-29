@@ -7,17 +7,12 @@ export type RepoArchive = {
   filename: string
 }
 
-// Fetch a repo's latest source as a zip archive. No ref means GitHub archives
-// the default-branch HEAD — for an assignment repo that is the student's latest
-// push, i.e. their latest submission. A missing or empty repo 404s, which we
-// tolerate as `null` so a bulk download can skip it rather than aborting the
-// whole batch. `filename` falls back to `<repo>.zip` when GitHub omits the
-// Content-Disposition header.
-//
-// Routed through the shared read slot + rate-limit retry so a bulk fan-out
-// shares the one global per-repo budget (archives are heavier than JSON reads,
-// so bursting past it trips GitHub's secondary limits) and backs off once on a
-// throttle instead of dropping the repo into `failed`.
+// Fetch a repo's latest source zip. No ref → default-branch HEAD, i.e. the
+// student's latest push. Missing/empty repo 404s → null, so a bulk run skips it
+// instead of aborting. Routed through the shared read slot + rate-limit retry
+// so a fan-out shares the one per-repo budget (archives are heavy) and backs
+// off once on a throttle rather than dropping the repo to `failed`. `filename`
+// defaults to `<repo>.zip` when Content-Disposition is absent.
 export async function fetchRepoArchive(
   client: GitHubClient,
   owner: string,

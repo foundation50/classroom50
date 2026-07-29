@@ -41,10 +41,8 @@ function OwnerListAlert({
   )
 }
 
-// Bulk "Download all submissions" for an assignment. Three states in one
-// dialog: confirm (owner count), running (live X/N progress, dismissal
-// blocked), and summary (downloaded / empty / failed). The combined zip is
-// handed to the browser when the run finishes with at least one fetched repo.
+// Bulk "Download all submissions": confirm → running (live X/N, cancellable) →
+// summary (downloaded / empty / failed), or an error state.
 export function DownloadAllSubmissionsModal({
   open,
   onClose,
@@ -80,13 +78,11 @@ export function DownloadAllSubmissionsModal({
   // The run finished with a real result (not a picker cancel).
   const summary = outcome?.status === "done" ? outcome.summary : null
   const toDirectory = outcome?.status === "done" && outcome.toDirectory
-  // Assembly (out-of-memory) failure is distinct from a per-repo failure: every
-  // archive downloaded but the combined zip couldn't be built. Anything else is
-  // an unexpected batch-level error.
+  // Every archive downloaded but the combined zip couldn't be built (OOM);
+  // anything else is an unexpected batch error.
   const assemblyError = error instanceof ZipAssemblyError
 
-  // The user dismissed the directory picker before anything ran — close quietly
-  // rather than showing an empty summary.
+  // Picker dismissed before anything ran — close quietly, no empty summary.
   useEffect(() => {
     if (outcome?.status === "cancelled") {
       onClose()

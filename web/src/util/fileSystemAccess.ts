@@ -1,14 +1,9 @@
-// File System Access API helpers (Chromium-only). Where supported, these let
-// the teacher choose exactly where a download lands — a single file's path via
-// the save picker, or a folder to extract many submissions into — instead of
-// everything dropping into the browser's default Downloads folder. Callers must
-// feature-detect first and fall back to util/downloadBlob elsewhere (Firefox
-// and Safari do not implement these APIs).
+// File System Access API helpers (Chromium-only): let the teacher choose where
+// a download lands. Callers must feature-detect and fall back to
+// util/downloadBlob elsewhere.
 //
-// The picker calls must run inside a user gesture (a click handler), and must
-// be invoked before any long `await` so the gesture's transient activation is
-// still valid — call pickSaveFile / pickDirectory first, then fetch, then
-// write.
+// Pickers require a user gesture, so call pickSaveFile / pickDirectory BEFORE
+// any long `await` (fetch, write) — the transient activation must still be live.
 
 // The DOM lib in this TS version ships the handle interfaces but not the
 // window entry points, so declare just what we use.
@@ -33,15 +28,13 @@ export function supportsDirectoryPicker(): boolean {
   return typeof window !== "undefined" && "showDirectoryPicker" in window
 }
 
-// A user cancelling a picker rejects with an AbortError; callers treat that as
-// a benign no-op rather than an error.
-export function isPickerAbort(err: unknown): boolean {
+// A cancelled picker rejects with an AbortError; callers treat that as a benign
+// no-op rather than an error.
+function isPickerAbort(err: unknown): boolean {
   return err instanceof DOMException && err.name === "AbortError"
 }
 
-// Open the save-file picker for a `.zip`. Returns the handle, or null if the
-// user cancelled. Throws only on a genuine (non-abort) failure. Caller must
-// have checked supportsSaveFilePicker().
+// Save-file picker for a `.zip`. Returns the handle, or null if cancelled.
 export async function pickSaveFile(
   suggestedName: string,
 ): Promise<FileSystemFileHandle | null> {
@@ -61,8 +54,7 @@ export async function pickSaveFile(
   }
 }
 
-// Open the directory picker (readwrite). Returns the handle, or null if the
-// user cancelled. Caller must have checked supportsDirectoryPicker().
+// Directory picker (readwrite). Returns the handle, or null if cancelled.
 export async function pickDirectory(): Promise<FileSystemDirectoryHandle | null> {
   try {
     return await window.showDirectoryPicker!({ mode: "readwrite" })
@@ -85,8 +77,8 @@ export async function writeToFileHandle(
   }
 }
 
-// Write a file directly into a picked directory, streaming to disk so nothing
-// accumulates in memory. Overwrites an existing same-named entry.
+// Write a file into a picked directory, streaming to disk. Overwrites any
+// same-named entry.
 export async function writeFileToDirectory(
   dir: FileSystemDirectoryHandle,
   name: string,

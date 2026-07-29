@@ -24,12 +24,10 @@ export type GitHubClient = {
 
   requestRaw: (path: string, options?: GitHubRequestOptions) => Promise<string>
 
-  // Fetch a repo archive (zip) through the archive proxy Worker rather than
-  // api.github.com directly: the archive endpoint 302-redirects to
-  // codeload.github.com, which sends no CORS header, so a browser fetch of the
-  // bytes is blocked. The Worker follows the redirect server-side with this
-  // client's token and streams the bytes back with CORS. Returns null when the
-  // proxy is not configured.
+  // Fetch a repo zip via the archive-proxy Worker: the GitHub archive endpoint
+  // 302s to codeload (no CORS header), so the Worker follows the redirect
+  // server-side with this token and streams bytes back with CORS. Throws if no
+  // proxy is configured.
   fetchArchive: (
     owner: string,
     repo: string,
@@ -37,9 +35,7 @@ export type GitHubClient = {
   ) => Promise<GitHubBinaryResponse>
 }
 
-// A binary response body plus the filename GitHub advertised for it (parsed
-// from Content-Disposition). Used for archive downloads (zipball/tarball),
-// which the JSON/text paths can't carry.
+// Binary body plus the filename GitHub advertised (from Content-Disposition).
 export type GitHubBinaryResponse = {
   bytes: ArrayBuffer
   filename?: string
@@ -100,13 +96,7 @@ export function createGitHubClient(args: {
 
     // Abort on whichever fires first: the caller's signal or the timeout. A
     // timeout surfaces as a rejected fetch, handled like any other rejection.
-    const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
-    const timeoutSignal =
-      timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined
-    const signal =
-      options.signal && timeoutSignal
-        ? AbortSignal.any([options.signal, timeoutSignal])
-        : (options.signal ?? timeoutSignal)
+    const signal = composeAbortSignal(options.signal, options.timeoutMs)
 
     const method = options.method ?? "GET"
     log.debug("request", { method, path })
@@ -150,22 +140,10 @@ export function createGitHubClient(args: {
     publishRateLimit(rateLimit)
 
     if (!res.ok) {
-      let body: unknown
-      const text = await res.text()
-
-      try {
-        body = text ? JSON.parse(text) : null
-      } catch {
-        body = text
-      }
-
-      const message =
-        typeof body === "object" &&
-        body !== null &&
-        "message" in body &&
-        typeof body.message === "string"
-          ? body.message
-          : `GitHub API request failed with ${res.status}`
+      const { body, message } = await parseErrorResponse(
+        res,
+        `GitHub API request failed with ${res.status}`,
+      )
 
       // Non-sensitive fields only — never the whole body, which can carry IP
       // allow lists or SAML detail. A 422 also gets its validation reasons (see
@@ -247,10 +225,8 @@ export function createGitHubClient(args: {
         throw new Error("archive proxy is not configured")
       }
 
-      // Guard before attaching the token: only send the OAuth bearer to an
-      // https origin (or localhost for dev). A misconfigured archiveBaseUrl
-      // (http://, or a wrong host from a bad env) would otherwise exfiltrate a
-      // broadly-scoped token. Fail closed rather than send.
+      // Fail closed rather than send the bearer to a non-https origin: a
+      // misconfigured base (http / wrong host) could exfiltrate the token.
       const base = new URL(args.archiveBaseUrl)
       const isLocalhost =
         base.hostname === "localhost" ||
@@ -264,10 +240,8 @@ export function createGitHubClient(args: {
       // though this one hops through the proxy.
       countApiCall()
 
-      // Encode each path segment (defense-in-depth): owners are GitHub logins
-      // and repo is computed today, but a future ref caller could carry `/`,
-      // `..`, or query chars. `ref` legitimately contains `/`, so encode its
-      // segments individually.
+      // Encode each segment (defense-in-depth for a future ref caller); encode
+      // ref per-segment since a ref legitimately contains `/`.
       const encodedRef = options?.ref
         ? options.ref.split("/").map(encodeURIComponent).join("/")
         : ""
@@ -277,13 +251,11 @@ export function createGitHubClient(args: {
       const url = `${args.archiveBaseUrl.replace(/\/$/, "")}${path}`
 
       // Archives are larger than API responses; default to a generous timeout.
-      const timeoutMs = options?.timeoutMs ?? 60000
-      const timeoutSignal =
-        timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined
-      const signal =
-        options?.signal && timeoutSignal
-          ? AbortSignal.any([options.signal, timeoutSignal])
-          : (options?.signal ?? timeoutSignal)
+      const signal = composeAbortSignal(
+        options?.signal,
+        options?.timeoutMs,
+        60000,
+      )
 
       log.debug("archive request", { owner, repo, ref: options?.ref })
 
@@ -301,20 +273,10 @@ export function createGitHubClient(args: {
       })
 
       if (!res.ok) {
-        const text = await res.text()
-        let body: unknown
-        try {
-          body = text ? JSON.parse(text) : null
-        } catch {
-          body = text
-        }
-        const message =
-          typeof body === "object" &&
-          body !== null &&
-          "message" in body &&
-          typeof body.message === "string"
-            ? body.message
-            : `Archive request failed with ${res.status}`
+        const { body, message } = await parseErrorResponse(
+          res,
+          `Archive request failed with ${res.status}`,
+        )
         throw new GitHubAPIError({
           status: res.status,
           url,
@@ -335,22 +297,51 @@ export function createGitHubClient(args: {
   }
 }
 
-// Pull the `filename` out of a Content-Disposition header, preferring the
-// RFC 5987 `filename*=charset'lang'value` form (which wins per RFC 6266) over a
-// plain `filename="value"`, stripping optional quotes and the charset/lang
-// prefix. GitHub sends this on archive downloads so we can name the saved file
-// sensibly. Returns undefined when the header is absent or carries no filename.
+// Compose the caller's abort signal with a timeout signal, aborting on whichever
+// fires first. `timeoutMs` 0 opts out of the timeout.
+function composeAbortSignal(
+  callerSignal: AbortSignal | undefined,
+  timeoutMs: number | undefined,
+  defaultMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+): AbortSignal | undefined {
+  const ms = timeoutMs ?? defaultMs
+  const timeoutSignal = ms > 0 ? AbortSignal.timeout(ms) : undefined
+  return callerSignal && timeoutSignal
+    ? AbortSignal.any([callerSignal, timeoutSignal])
+    : (callerSignal ?? timeoutSignal)
+}
+
+// Parse a non-OK response body as JSON (falling back to raw text) and derive
+// the error message from its `message` field, else `fallback`.
+async function parseErrorResponse(
+  res: Response,
+  fallback: string,
+): Promise<{ body: unknown; message: string }> {
+  const text = await res.text()
+  let body: unknown
+  try {
+    body = text ? JSON.parse(text) : null
+  } catch {
+    body = text
+  }
+  const message =
+    typeof body === "object" &&
+    body !== null &&
+    "message" in body &&
+    typeof body.message === "string"
+      ? body.message
+      : fallback
+  return { body, message }
+}
+
+// Extract the filename from Content-Disposition, preferring RFC 5987
+// `filename*` over plain `filename` (RFC 6266). undefined if absent.
 function parseContentDispositionFilename(
   header: string | null,
 ): string | undefined {
   if (!header) return undefined
 
-  // Prefer filename* (extended, may carry non-ASCII); fall back to filename.
-  const ext = /filename\*=\s*(?:([\w-]+)'[^']*')?"?([^";]+?)"?\s*(?:;|$)/i.exec(
-    header,
-  )
-  if (ext) {
-    const value = ext[2].trim()
+  const safeDecode = (value: string) => {
     try {
       return decodeURIComponent(value)
     } catch {
@@ -358,12 +349,11 @@ function parseContentDispositionFilename(
     }
   }
 
+  const ext = /filename\*=\s*(?:([\w-]+)'[^']*')?"?([^";]+?)"?\s*(?:;|$)/i.exec(
+    header,
+  )
+  if (ext) return safeDecode(ext[2].trim())
+
   const plain = /filename=\s*"?([^";]+?)"?\s*(?:;|$)/i.exec(header)
-  if (!plain) return undefined
-  const value = plain[1].trim()
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return value
-  }
+  return plain ? safeDecode(plain[1].trim()) : undefined
 }

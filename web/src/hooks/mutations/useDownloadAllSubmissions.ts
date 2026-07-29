@@ -20,20 +20,14 @@ export type DownloadAllSubmissionsInput = {
   owners: string[]
 }
 
-// Distinct from a null summary: the run never started because the user
-// dismissed the directory picker. Lets the modal reset quietly instead of
-// showing an empty summary.
+// User dismissed the directory picker before the run started — reset quietly.
 export type DownloadAllOutcome =
   | { status: "cancelled" }
   | { status: "done"; summary: DownloadAllSummary; toDirectory: boolean }
 
-// Download EVERY submitting owner's latest submission. Where the File System
-// Access API is available (Chromium), the teacher picks a destination folder
-// and each submission is streamed straight into it as `<owner>.zip` — no
-// in-memory combined zip, so a large class can't exhaust the tab. Elsewhere it
-// falls back to building one combined `<classroom>-<assignment>-submissions.zip`
-// and auto-downloading it. `progress` drives the live "X of N" bar; `cancel`
-// aborts an in-flight run (and its in-flight fetches).
+// Bulk download: Chromium streams each submission into a picked folder; other
+// browsers get one combined auto-downloaded zip. `progress` drives the bar;
+// `cancel` aborts the run and its in-flight fetches.
 export function useDownloadAllSubmissions() {
   const client = useGitHubClient()
   const [progress, setProgress] = useState<DownloadAllProgress | null>(null)
@@ -45,8 +39,8 @@ export function useDownloadAllSubmissions() {
     DownloadAllSubmissionsInput
   >({
     mutationFn: async ({ org, classroom, assignment, owners }) => {
-      // Pick the directory first, inside the click's transient activation,
-      // before any fetch. A null handle means the user cancelled the picker.
+      // Pick the directory first, inside the click's activation, before any
+      // fetch. Null means cancelled.
       const useDirectory = supportsDirectoryPicker()
       const directory = useDirectory ? await pickDirectory() : null
       if (useDirectory && !directory) {

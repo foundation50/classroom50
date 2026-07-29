@@ -241,10 +241,8 @@ const RegradeButton = ({
   )
 }
 
-// Per-row submission download: fetches the student's latest submission (their
-// assignment repo, zipped by GitHub) and hands it to the browser. Icon-only to
-// match the row's other actions; shows a spinner while fetching. Kept a button
-// (not a link) because it triggers an authenticated API fetch, not a navigation.
+// Per-row submission download. A button, not a link, because it triggers an
+// authenticated fetch, not a navigation.
 const DownloadButton = ({
   org,
   classroom,
@@ -275,9 +273,8 @@ const DownloadButton = ({
           { org, classroom, assignment, owner },
           {
             onError: (err) => {
-              // fetchRepoArchive resolves a missing/never-pushed repo to null,
-              // and the hook throws "no-submission" for it — surface that as a
-              // benign "nothing to download" rather than a hard error.
+              // "no-submission" (missing/never-pushed repo) is benign info,
+              // not an error.
               const nothing =
                 err instanceof Error && err.message === "no-submission"
               notify({

@@ -17,13 +17,10 @@ export type DownloadSubmissionInput = {
   owner: string
 }
 
-// Download one student's latest submission (their assignment repo's default
-// branch, zipped by GitHub). Where the File System Access API is available
-// (Chromium), the teacher first picks the save location; elsewhere it falls
-// back to an automatic download into the browser's Downloads folder. Either way
-// the file is `<classroom>-<assignment>-<owner>.zip`. A missing/empty repo
-// resolves to a null archive; the mutation errors so the caller can surface
-// "nothing to download". A cancelled save picker is a benign no-op.
+// Download one student's latest submission. Chromium lets the teacher pick the
+// save location (picked first, inside the click's activation); other browsers
+// auto-download. A missing/empty repo → null archive → throws "no-submission"
+// so the caller can say "nothing to download". A cancelled picker is a no-op.
 export function useDownloadSubmission() {
   const client = useGitHubClient()
 
@@ -36,9 +33,8 @@ export function useDownloadSubmission() {
     }: DownloadSubmissionInput) => {
       const filename = `${classroom}-${assignment}-${owner}.zip`
 
-      // Open the picker first, inside the click's transient activation, before
-      // the archive fetch — otherwise the gesture would have expired by the
-      // time we call it. Null means the user cancelled the picker.
+      // Open the picker first, inside the click's activation, before the fetch
+      // — else the gesture would have expired. Null means cancelled.
       const usePicker = supportsSaveFilePicker()
       const handle = usePicker ? await pickSaveFile(filename) : null
       if (usePicker && !handle) return
