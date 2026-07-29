@@ -31,6 +31,10 @@ vi.mock("@/context/notifications/NotificationProvider", () => ({
 vi.mock("@/hooks/useTriggerRegrade", () => ({
   default: () => ({ regrade: vi.fn(), phase: "idle", anyRegrading: false }),
 }))
+const downloadSubmission = vi.fn()
+vi.mock("@/hooks/mutations/useDownloadSubmission", () => ({
+  default: () => ({ mutate: downloadSubmission, isPending: false }),
+}))
 vi.mock("@/components/modals/GroupCollaboratorsModal", () => ({
   GroupCollaboratorsModal: () => null,
 }))
@@ -71,6 +75,7 @@ const scoreRow = (over: Partial<SubmissionRow> = {}): SubmissionRow => ({
 beforeEach(() => {
   collaborators.mockReset()
   collaborators.mockReturnValue({ data: undefined })
+  downloadSubmission.mockReset()
 })
 
 afterEach(cleanup)
@@ -183,5 +188,48 @@ describe("SubmissionsTable empty_repo score cell", () => {
       />,
     )
     expect(screen.queryByTitle("submissions.table.noGradingTitle")).toBeNull()
+  })
+})
+
+describe("SubmissionsTable per-row download", () => {
+  it("renders a download button for a submitter row and fires the hook on click", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    const btn = screen.getByTitle("submissions.rowDownload.title")
+    btn.click()
+    expect(downloadSubmission).toHaveBeenCalledWith({
+      org: "acme",
+      classroom: "cs101",
+      assignment: "hw1",
+      owner: "alice",
+    })
+  })
+
+  it("renders the download button even for an empty_repo assignment", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+        emptyRepo
+      />,
+    )
+    expect(screen.getByTitle("submissions.rowDownload.title")).toBeTruthy()
+  })
+
+  it("shows no download button for a non-submitter row", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        nonSubmitters={[student()]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    expect(screen.queryByTitle("submissions.rowDownload.title")).toBeNull()
   })
 })

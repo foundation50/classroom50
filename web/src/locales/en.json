@@ -2056,6 +2056,10 @@
       "confirmBody2": "Grading runs in the background and can take a few minutes; use <collectLabel>{{collectLabel}}</collectLabel> afterward to pull the new score.",
       "confirmLabel": "Regrade"
     },
+    "rowDownload": {
+      "title": "Download this submission",
+      "aria": "Download {{owner}}'s submission"
+    },
     "student": {
       "submittedAt": "Submitted {{date}}",
       "descriptionLabel": "Assignment details",

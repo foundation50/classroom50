@@ -1,5 +1,6 @@
 import {
   ChevronRight,
+  Download,
   GitCommitHorizontal,
   Inbox,
   RefreshCw,
@@ -54,6 +55,7 @@ import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
 import { ReviewButton } from "@/pages/submissions/ReviewButton"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
+import useDownloadSubmission from "@/hooks/mutations/useDownloadSubmission"
 import type { Student } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 
@@ -235,6 +237,45 @@ const RegradeButton = ({
         onClose={() => setConfirmOpen(false)}
       />
     </>
+  )
+}
+
+// Per-row submission download: fetches the student's latest submission (their
+// assignment repo, zipped by GitHub) and hands it to the browser. Icon-only to
+// match the row's other actions; shows a spinner while fetching. Kept a button
+// (not a link) because it triggers an authenticated API fetch, not a navigation.
+const DownloadButton = ({
+  org,
+  classroom,
+  assignment,
+  owner,
+}: {
+  org: string
+  classroom: string
+  assignment: string
+  owner: string
+}) => {
+  const { t } = useTranslation()
+  const download = useDownloadSubmission()
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      shape="square"
+      className="text-base-content/70 disabled:opacity-60"
+      disabled={download.isPending}
+      loading={download.isPending}
+      loadingLabel={t("submissions.rowDownload.title")}
+      onClick={() => {
+        if (download.isPending) return
+        download.mutate({ org, classroom, assignment, owner })
+      }}
+      aria-label={t("submissions.rowDownload.aria", { owner })}
+      title={t("submissions.rowDownload.title")}
+    >
+      {!download.isPending && <Download aria-hidden="true" className="size-4" />}
+    </Button>
   )
 }
 
@@ -615,6 +656,12 @@ const SubmissionsTable = ({
                 title={t("submissions.table.commit")}
                 emptyLabel={t("submissions.table.noCommit")}
                 emptyTitle={t("submissions.table.noCommit")}
+              />
+              <DownloadButton
+                org={org}
+                classroom={classroom}
+                assignment={assignment}
+                owner={rest.owner}
               />
               {!emptyRepo && (
                 <>
