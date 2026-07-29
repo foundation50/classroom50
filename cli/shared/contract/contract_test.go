@@ -37,6 +37,23 @@ func TestContractLiterals(t *testing.T) {
 		// lockstep on change.
 		{"RosterFilename", RosterFilename, "roster.csv"},
 		{"LegacyRosterFilename", LegacyRosterFilename, "students.csv"},
+		// ServiceTokenSecretName / ServiceTokenExpiresAtVar / ServiceTokenNameVar
+		// are mirrored, with NO compile-time link, in the collect-scores /
+		// regrade workflow YAML, the gh-teacher servicetoken package
+		// (SecretName), and the web GUI
+		// (web/src/github-core/queries/releaseRunReads.ts). Update every copy in
+		// lockstep on change.
+		{"ServiceTokenSecretName", ServiceTokenSecretName, "CLASSROOM50_SERVICE_TOKEN"},
+		{
+			"ServiceTokenExpiresAtVar",
+			ServiceTokenExpiresAtVar,
+			"CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT",
+		},
+		{
+			"ServiceTokenNameVar",
+			ServiceTokenNameVar,
+			"CLASSROOM50_SERVICE_TOKEN_NAME",
+		},
 		// SecretPattern / SecretPatternDescription are mirrored, with NO
 		// compile-time link, in: cli/gh-teacher/skeleton/dotgithub/scripts/runner.py
 		// (re.fullmatch r"[a-z0-9]{4,64}"), autograde-runner.yaml (_SECRET),

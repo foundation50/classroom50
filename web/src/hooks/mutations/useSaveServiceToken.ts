@@ -1,31 +1,97 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { putRepoSecret, validateServiceToken } from "@/github-core/mutations"
+import {
+  putRepoSecret,
+  putRepoVariable,
+  validateServiceToken,
+} from "@/github-core/mutations"
 import {
   githubKeys,
   SERVICE_TOKEN_SECRET_NAME,
+  SERVICE_TOKEN_EXPIRES_AT_VAR,
+  SERVICE_TOKEN_NAME_VAR,
   type ServiceTokenStatus,
 } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { CONFIG_REPO } from "@/util/configRepo"
 
+// Compute the RFC 3339 expiry instant we record for the token, from the
+// teacher's chosen `expires_in` (days) at save time. Advisory: it mirrors the
+// value prefilled into GitHub's PAT-creation form, which GitHub does not echo
+// back for a fine-grained PAT.
+export function serviceTokenExpiryFromDays(
+  expiresInDays: number,
+  now: number = Date.now(),
+): string {
+  return new Date(now + expiresInDays * 24 * 60 * 60 * 1000).toISOString()
+}
+
+type SaveServiceTokenInput = {
+  serviceToken: string
+  // The teacher's chosen expiry window in days (the same value prefilled into
+  // GitHub's token form). Omitted when unknown — then no expiry is recorded.
+  expiresInDays?: number
+  // The token's display name (the value prefilled into GitHub's token form).
+  // Recorded so the app can show and manage it; omitted leaves it untouched.
+  tokenName?: string
+}
+
 // Validate a service PAT and store it as the config repo's
-// CLASSROOM50_SERVICE_TOKEN secret. Hook seeds + invalidates the org list and
-// this org's service-token status; the field-clear/saved-kind UI effects (and
-// the useSafeSubmit composition) stay at the call site (see ./README.md).
+// CLASSROOM50_SERVICE_TOKEN secret. When an expiry window and/or name is
+// supplied, also record them as readable repo variables so the org list and
+// settings surfaces can show a countdown, warn before the nightly collect
+// breaks, and label the token. Hook seeds + invalidates the org list and this
+// org's service-token status; the field-clear/saved-kind UI effects (and the
+// useSafeSubmit composition) stay at the call site (see ./README.md).
 export function useSaveServiceToken(org: string | undefined) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (serviceToken: string) => {
+    mutationFn: async ({
+      serviceToken,
+      expiresInDays,
+      tokenName,
+    }: SaveServiceTokenInput) => {
       await validateServiceToken(serviceToken, org)
-      return putRepoSecret(
+      await putRepoSecret(
         client,
         org,
         CONFIG_REPO,
-        "CLASSROOM50_SERVICE_TOKEN",
+        SERVICE_TOKEN_SECRET_NAME,
         serviceToken,
       )
+      // The expiry/name variables are advisory metadata; a failure writing them
+      // must not fail the rotation (the token itself is already stored). Record
+      // them best effort, but report whether they landed so the caller can warn
+      // that the expiry/name won't read back rather than claim a clean save.
+      let metadataRecorded = true
+      if (expiresInDays && Number.isFinite(expiresInDays)) {
+        try {
+          await putRepoVariable(
+            client,
+            org,
+            CONFIG_REPO,
+            SERVICE_TOKEN_EXPIRES_AT_VAR,
+            serviceTokenExpiryFromDays(expiresInDays),
+          )
+        } catch {
+          metadataRecorded = false
+        }
+      }
+      if (tokenName && tokenName.trim()) {
+        try {
+          await putRepoVariable(
+            client,
+            org,
+            CONFIG_REPO,
+            SERVICE_TOKEN_NAME_VAR,
+            tokenName.trim(),
+          )
+        } catch {
+          metadataRecorded = false
+        }
+      }
+      return { metadataRecorded }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orgs"] })

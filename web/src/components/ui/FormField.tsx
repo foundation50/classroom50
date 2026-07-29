@@ -6,11 +6,27 @@ import { cx } from "./cx"
 
 // A question-mark help affordance: a focusable button carrying detailed
 // guidance as its accessible name, wrapped in a theme-aware DaisyUI tooltip.
-// The single source for the help-icon markup + a11y contract.
-export function HelpTooltip({ help }: { help: string }) {
+// The single source for the help-icon markup + a11y contract. `position`
+// controls which side the tooltip opens on (default bottom); use `right`/`top`
+// inside a narrow container like a modal so the bubble isn't clipped.
+export function HelpTooltip({
+  help,
+  position = "bottom",
+}: {
+  help: string
+  position?: "top" | "bottom" | "left" | "right"
+}) {
   return (
     <span
-      className="tooltip tooltip-bottom before:max-w-xs before:whitespace-normal before:text-start"
+      className={cx(
+        "tooltip align-middle before:max-w-xs before:whitespace-normal before:text-start",
+        {
+          top: "tooltip-top",
+          bottom: "tooltip-bottom",
+          left: "tooltip-left",
+          right: "tooltip-right",
+        }[position],
+      )}
       data-tip={help}
     >
       <Button

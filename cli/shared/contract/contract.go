@@ -63,6 +63,36 @@ const (
 	RosterFilename       = "roster.csv"
 	LegacyRosterFilename = "students.csv"
 
+	// ServiceTokenSecretName is the repo-level Actions secret on the config repo
+	// holding the fine-grained PAT that collect-scores.yaml / regrade.yaml
+	// consume. Hand-mirrored with NO compile-time link in the collect-scores /
+	// regrade workflow YAML, the gh-teacher servicetoken package (SecretName),
+	// and the web GUI (web/src/github-core/queries/releaseRunReads.ts
+	// SERVICE_TOKEN_SECRET_NAME) — keep byte-identical; contract_test.go pins
+	// the Go half.
+	ServiceTokenSecretName = "CLASSROOM50_SERVICE_TOKEN"
+
+	// ServiceTokenExpiresAtVar is the repo-level Actions VARIABLE (readable,
+	// unlike the secret) recording the service token's expected expiry as an
+	// RFC 3339 timestamp, so the web GUI can show an expiry countdown and warn
+	// before the nightly collect breaks. Advisory only: it records the teacher's
+	// chosen `expires_in`, which GitHub does not echo back for a fine-grained
+	// PAT. Currently WRITTEN ONLY BY THE WEB GUI on save/rotate; the CLI
+	// rotate/init path provisions the secret without it, so a CLI-provisioned
+	// token reads back with no recorded expiry (the web health chip then shows
+	// "expiry not tracked", not a false "healthy"). Hand-mirrored (no
+	// compile-time link) in the web GUI — keep byte-identical.
+	ServiceTokenExpiresAtVar = "CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT"
+
+	// ServiceTokenNameVar is the repo-level Actions VARIABLE recording the
+	// service token's display NAME. GitHub does not expose a fine-grained PAT's
+	// name via the API, so this is the label Classroom 50 shows for the token
+	// (prefilled into the token-creation form and renamable afterward). Advisory
+	// only, and — like ServiceTokenExpiresAtVar — currently written only by the
+	// web GUI. Hand-mirrored (no compile-time link) in the web GUI — keep
+	// byte-identical.
+	ServiceTokenNameVar = "CLASSROOM50_SERVICE_TOKEN_NAME"
+
 	// SecretPattern is the anchored regex a per-classroom capability-URL secret
 	// must match: 4-64 lowercase-alphanumeric chars (one safe URL path segment
 	// for `<classroom>/<secret>/...`). Single-sourced because the rule is a

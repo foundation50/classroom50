@@ -11,6 +11,16 @@ import type { GitHubOrgMembership } from "@/github-core/types"
 import useGetOrgs, { usePendingOrgInvites } from "@/hooks/useGetOrgs"
 import useOrgDisplayName from "@/hooks/useOrgDisplayName"
 import useOrgLastModified from "@/hooks/useOrgLastModified"
+import {
+  useOrgServiceTokenHealth,
+  isOwnedReadyOrg,
+  type OrgTokenHealthEntry,
+} from "@/hooks/useOrgServiceTokenHealth"
+import { needsAttention } from "@/util/serviceTokenHealth"
+import {
+  TokenHealthChip,
+  tokenChipVisible,
+} from "@/components/status/TokenHealthChip"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
@@ -18,10 +28,12 @@ import {
   EllipsisVertical,
   EyeOff,
   Info,
+  KeyRound,
   Lock,
   MailOpen,
   Plus,
   ShieldCheck,
+  TriangleAlert,
   User,
 } from "lucide-react"
 import OrgDetailsModal from "@/components/modals/OrgDetailsModal"
@@ -29,7 +41,7 @@ import { AnimatePresence } from "motion/react"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
-import { Badge, Button, Card, Toolbar, cx } from "@/components/ui"
+import { Alert, Badge, Button, Card, Toolbar, cx } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
@@ -182,6 +194,9 @@ function useOrgAffordances(summary: Classroom50OrgSummary) {
     // Teachers open ready orgs; students open any org they're an active member
     // of (their assignment repos live there even without classroom50 access).
     canOpen: isAdmin ? isReady : isActiveMember,
+    // Only an owner of a Classroom 50-ready org can set/rotate the service
+    // token, so only they get the "Manage token" affordance.
+    canManageToken: isAdmin && isReady,
   }
 }
 
@@ -193,7 +208,7 @@ function HideOrgMenu({
   className?: string
 }) {
   const { t } = useTranslation()
-  const { org } = useOrgAffordances(summary)
+  const { org, canManageToken } = useOrgAffordances(summary)
   const { hide, unhide } = useHiddenOrgs()
   const { notify } = useToast()
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -235,6 +250,19 @@ function HideOrgMenu({
           tabIndex={0}
           className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
         >
+          {canManageToken && (
+            <li>
+              <Link
+                to="/$org/settings"
+                params={{ org: org.login }}
+                search={{ focus: "serviceToken" }}
+                onClick={closeMenu}
+              >
+                <KeyRound aria-hidden="true" className="size-4" />
+                {t("orgs.card.manageToken")}
+              </Link>
+            </li>
+          )}
           <li>
             <button
               type="button"
@@ -296,14 +324,17 @@ function NoAccessBadge() {
 function OrgCard({
   summary,
   updatedAgo,
+  tokenHealth,
 }: {
   summary: Classroom50OrgSummary
   updatedAgo?: string
+  tokenHealth?: OrgTokenHealthEntry
 }) {
   const { t } = useTranslation()
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
   const displayName = useOrgDisplayName(org.login)
   const heading = displayName ?? org.login
+  const showTokenChip = tokenHealth ? tokenChipVisible(tokenHealth) : false
 
   return (
     <Card
@@ -336,9 +367,16 @@ function OrgCard({
               </p>
             )}
 
-            {showNoAccessBadge && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <NoAccessBadge />
+            {(showNoAccessBadge || showTokenChip) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {showNoAccessBadge && <NoAccessBadge />}
+                {showTokenChip && tokenHealth && (
+                  <TokenHealthChip
+                    org={org.login}
+                    health={tokenHealth.health}
+                    loading={tokenHealth.loading}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -355,14 +393,17 @@ function OrgCard({
 function OrgRow({
   summary,
   updatedAgo,
+  tokenHealth,
 }: {
   summary: Classroom50OrgSummary
   updatedAgo?: string
+  tokenHealth?: OrgTokenHealthEntry
 }) {
   const { t } = useTranslation()
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
   const displayName = useOrgDisplayName(org.login)
   const heading = displayName ?? org.login
+  const showTokenChip = tokenHealth ? tokenChipVisible(tokenHealth) : false
 
   return (
     <PresenceCardDiv className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -378,6 +419,15 @@ function OrgRow({
             {showNoAccessBadge && (
               <span className="hidden sm:inline-flex">
                 <NoAccessBadge />
+              </span>
+            )}
+            {showTokenChip && tokenHealth && (
+              <span className="hidden sm:inline-flex">
+                <TokenHealthChip
+                  org={org.login}
+                  health={tokenHealth.health}
+                  loading={tokenHealth.loading}
+                />
               </span>
             )}
           </div>
@@ -469,6 +519,27 @@ const OrgsPage = () => {
     [filtered],
   )
   const lastModified = useOrgLastModified(shownLogins, true)
+
+  // Cross-org service-token health, only for orgs the viewer owns and that are
+  // Classroom 50-ready (student/member orgs would 403 on the owner-only secret
+  // read). Reuses the per-org token/collect caches shared with the single-org
+  // panes. Drives the per-card chip and the "N of M need attention" summary.
+  const ownedReadyLogins = useMemo(
+    () => filtered.filter(isOwnedReadyOrg).map((summary) => summary.org.login),
+    [filtered],
+  )
+  const { byOrg: tokenHealthByOrg } = useOrgServiceTokenHealth(
+    ownedReadyLogins,
+    true,
+  )
+  const attentionCount = useMemo(
+    () =>
+      ownedReadyLogins.filter((login) => {
+        const entry = tokenHealthByOrg[login]
+        return entry && !entry.loading && needsAttention(entry.health)
+      }).length,
+    [ownedReadyLogins, tokenHealthByOrg],
+  )
 
   const sorted = useMemo(() => {
     const byName = (a: Classroom50OrgSummary, b: Classroom50OrgSummary) =>
@@ -568,6 +639,17 @@ const OrgsPage = () => {
               </Toolbar>
             )}
 
+            {attentionCount > 0 && (
+              <Alert tone="warning" role="status" className="text-sm">
+                <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+                <span>
+                  {t("serviceTokenHealth.summary", {
+                    count: attentionCount,
+                  })}
+                </span>
+              </Alert>
+            )}
+
             {noSearchResults ? (
               <NoSearchResults
                 title={t("orgs.noResults.title")}
@@ -588,12 +670,14 @@ const OrgsPage = () => {
                         key={summary.org.id}
                         summary={summary}
                         updatedAgo={updatedAgo}
+                        tokenHealth={tokenHealthByOrg[summary.org.login]}
                       />
                     ) : (
                       <OrgRow
                         key={summary.org.id}
                         summary={summary}
                         updatedAgo={updatedAgo}
+                        tokenHealth={tokenHealthByOrg[summary.org.login]}
                       />
                     )
                   })}

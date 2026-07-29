@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 import {
+  classifyServiceTokenExpiry,
   getServiceTokenStatus,
   latestSubmitReleaseAndCount,
   latestSubmitReleaseWithAssets,
@@ -68,6 +69,95 @@ describe("getServiceTokenStatus", () => {
         "org",
       ),
     ).rejects.toThrow()
+  })
+
+  it("resolves 'present' with the expiry and name from the variables, and tolerates missing variables", async () => {
+    // Secret resolves; the two variable reads (expiry, name) resolve their
+    // values. Order of the two variable reads isn't guaranteed (Promise.all), so
+    // resolve by URL rather than call order.
+    const withVars = {
+      request: vi.fn((path: string) => {
+        if (path.includes("/actions/secrets/")) {
+          return Promise.resolve({
+            name: "CLASSROOM50_SERVICE_TOKEN",
+            created_at: "2026-01-01T00:00:00Z",
+            updated_at: "2026-06-01T00:00:00Z",
+          })
+        }
+        if (path.endsWith("CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT")) {
+          return Promise.resolve({
+            name: "CLASSROOM50_SERVICE_TOKEN_EXPIRES_AT",
+            value: "2026-10-01T00:00:00Z",
+          })
+        }
+        return Promise.resolve({
+          name: "CLASSROOM50_SERVICE_TOKEN_NAME",
+          value: "classroom50-token-42-ab12",
+        })
+      }),
+    } as unknown as GitHubClient
+    const present = await getServiceTokenStatus(withVars, "org")
+    expect(present.status).toBe("present")
+    expect(present.status === "present" && present.expiresAt).toBe(
+      "2026-10-01T00:00:00Z",
+    )
+    expect(present.status === "present" && present.tokenName).toBe(
+      "classroom50-token-42-ab12",
+    )
+
+    // A 404 on both variables must not void the present verdict.
+    const noVars = {
+      request: vi.fn((path: string) => {
+        if (path.includes("/actions/secrets/")) {
+          return Promise.resolve({
+            name: "CLASSROOM50_SERVICE_TOKEN",
+            created_at: "2026-01-01T00:00:00Z",
+            updated_at: "2026-06-01T00:00:00Z",
+          })
+        }
+        return Promise.reject(apiError(404))
+      }),
+    } as unknown as GitHubClient
+    const stillPresent = await getServiceTokenStatus(noVars, "org")
+    expect(stillPresent.status).toBe("present")
+    expect(stillPresent.status === "present" && stillPresent.expiresAt).toBe(
+      undefined,
+    )
+    expect(stillPresent.status === "present" && stillPresent.tokenName).toBe(
+      undefined,
+    )
+  })
+})
+
+describe("classifyServiceTokenExpiry", () => {
+  const now = Date.parse("2026-07-01T00:00:00Z")
+  const days = (n: number) => n * 24 * 60 * 60 * 1000
+
+  it("returns 'unknown' with no/invalid expiry", () => {
+    expect(classifyServiceTokenExpiry(undefined, now)).toBe("unknown")
+    expect(classifyServiceTokenExpiry("not-a-date", now)).toBe("unknown")
+  })
+
+  it("returns 'expired' at or past the instant", () => {
+    expect(classifyServiceTokenExpiry(new Date(now).toISOString(), now)).toBe(
+      "expired",
+    )
+    expect(
+      classifyServiceTokenExpiry(new Date(now - days(1)).toISOString(), now),
+    ).toBe("expired")
+  })
+
+  it("returns 'expiringSoon' inside the warn window and 'ok' beyond it", () => {
+    expect(
+      classifyServiceTokenExpiry(new Date(now + days(10)).toISOString(), now),
+    ).toBe("expiringSoon")
+    // Boundary: exactly the 14-day default warn window is still "soon".
+    expect(
+      classifyServiceTokenExpiry(new Date(now + days(14)).toISOString(), now),
+    ).toBe("expiringSoon")
+    expect(
+      classifyServiceTokenExpiry(new Date(now + days(30)).toISOString(), now),
+    ).toBe("ok")
   })
 })
 

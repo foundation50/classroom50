@@ -643,7 +643,8 @@
       "hide": "Hide from home",
       "hidden": "Hid {{org}} from your home page.",
       "undoHide": "Undo",
-      "details": "Details"
+      "details": "Details",
+      "manageToken": "Manage token"
     },
     "detailsModal": {
       "displayName": "Display name",
@@ -696,6 +697,14 @@
       "subheading": "Organizations you've hidden from your home page. Unhide one to show it again.",
       "unhide": "Unhide",
       "empty": "You haven't hidden any organizations."
+    },
+    "serviceTokens": {
+      "heading": "Manage Service Tokens",
+      "subheading": "Service-token status across every organization you own. Rotate a token before it expires so nightly score collection keeps running.",
+      "loading": "Checking your organizations…",
+      "empty": "No organizations with Classroom 50 set up yet.",
+      "expires": "Expires {{date}}",
+      "manage": "Manage"
     }
   },
   "assignments": {
@@ -1184,6 +1193,20 @@
     "collaboratorsHint_other": "Add or remove collaborators for this assignment repository. This assignment allows up to <count>{{count}}</count> students in addition to the group owner.",
     "manageCollaborators": "Manage collaborators"
   },
+  "serviceTokenHealth": {
+    "summary_one": "{{count}} organization needs a service-token check.",
+    "summary_other": "{{count}} organizations need a service-token check.",
+    "chip": {
+      "checking": "Checking token…",
+      "expiringSoon": "Token expiring soon",
+      "expired": "Token expired",
+      "missing": "No service token",
+      "collectFailing": "Last collection failed",
+      "expiryUntracked": "Expiry not tracked",
+      "unknown": "Token status unknown",
+      "rotateAria": "Review the service token for {{org}}"
+    }
+  },
   "orgSettings": {
     "page": {
       "heading": "Settings",
@@ -1191,37 +1214,34 @@
     },
     "serviceToken": {
       "title": "Service token",
-      "infoAria": "What is the service token?",
-      "info": "Classroom 50 needs a service token, a fine-grained Personal Access Token (PAT) with read and write access to the repositories in your classroom’s GitHub organization. It is stored as the <secret>CLASSROOM50_SERVICE_TOKEN</secret> secret on your <repo>classroom50</repo> config repo, where the score-collection workflow uses it to read student submissions and the regrade workflow uses it to re-run student autograde workflows.",
-      "statusPresent": "A service token is already set",
-      "statusMissing": "No service token set yet",
-      "statusUnknown": "Couldn’t check the service token",
-      "replaceNote": "Saving below will replace the existing token (an update). The old token is overwritten in place.",
-      "hideConfig": "Hide token configuration",
-      "updateOrReplace": "Update or replace token",
+      "help": "A fine-grained GitHub token that lets Classroom 50 collect scores and regrade across your student repositories. Stored as a secret on your classroom50 config repo.",
+      "checking": "Checking…",
+      "statusPresent": "Token set",
+      "statusMissing": "No service token set",
+      "expiresOn": "Expires {{date}}",
+      "nameRowLabel": "Name:",
+      "nameHelp": "The name should match how this token appears in your GitHub personal access tokens list. Classroom 50 uses it only as a label; renaming here does not rename the token on GitHub.",
+      "rename": "Rename token",
+      "saveName": "Save name",
+      "cancelRename": "Cancel",
+      "setButton": "Set a token",
+      "rotateButton": "Set a new token",
+      "setModalTitle": "Set a service token",
       "expiryLabel": "Token expiry",
       "days": "days",
-      "expiresOn": "Expires {{date}}",
-      "enterRange": "Enter {{min}}–{{max}} days",
-      "validRange": "Valid range is {{min}}–{{max}} days (GitHub’s maximum).",
-      "patDescription": "Service token for Classroom 50 score collection and regrading. Contents: Read and write + Actions: Read and write + Administration: Read and write + Members: Read on the {{org}} organization",
-      "generateOnGitHub": "Generate token on GitHub",
-      "generateHint": "Opens GitHub’s token form with the name, resource owner, expiry, and <permissions>Contents: Read and write + Actions: Read and write + Administration: Read and write + Members: Read</permissions> permissions pre-filled.",
-      "beforeGenerating": "On the GitHub page, before generating the token:",
-      "repoAccess": "Set <field>Repository access</field> to <value>All repositories</value>. <note>“Only select repositories” will miss student repos created later and break score collection.</note>",
-      "permissions": "Under <field>Permissions</field>, confirm <perm>Contents: Read and write</perm>, <perm>Actions: Read and write</perm>, <perm>Administration: Read and write</perm> and <perm>Members: Read</perm> (Metadata: Read is included automatically.) <note>Members: Read is an Organization permission, a separate section shown once the org is the resource owner.</note> <note>Read collects scores; write lets the regrade workflow re-run student autograde workflows; Members: Read lets collection list the classroom team.</note>",
-      "rotateNote": "The token expires after the period you set above. When it expires, the score-collection and regrade workflows will fail until you generate a new token and save it here again, so set a reminder to rotate it before then.",
-      "pasteBelow": "After generating the token on GitHub, copy it and paste it below.",
-      "enterNewLabel": "Enter new service token",
-      "enterLabel": "Enter service token",
-      "placeholder": "Enter token (e.g., github_pat_123...)",
-      "validateHint": "We’ll check the token is valid before saving. Double-check you chose <value>All repositories</value> when creating it.",
-      "saveError": "Could not validate or save the token.",
-      "savedUpdated": "Service token checked and updated.",
-      "savedNew": "Service token checked and saved.",
+      "expiryRange": "Enter {{min}}\u2013{{max}} days",
+      "generateOnGitHub": "Generate new access token",
+      "generateHelp": "Opens GitHub's token form with the name, expiry, and required scopes pre-filled. Set Repository access to All repositories.",
+      "learnMore": "Service token setup",
+      "patDescription": "Service token for Classroom 50 score collection and regrading on the {{org}} organization",
+      "pasteLabel": "Paste token",
+      "pasteHelp": "Paste the token you generated on GitHub. Classroom 50 validates it before saving.",
+      "placeholder": "github_pat_…",
       "validating": "Validating…",
-      "updateButton": "Update service token",
-      "saveButton": "Save service token"
+      "saveButton": "Save token",
+      "saveError": "Could not validate or save the token.",
+      "saved": "Service token saved.",
+      "savedNoMetadata": "Service token saved, but its expiry and name couldn't be recorded — the health chip may show \u201Cexpiry not tracked\u201D until you save again."
     },
     "audit": {
       "detail": {

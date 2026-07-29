@@ -16,6 +16,59 @@ vi.mock("react-i18next", async (importActual) => {
   return { ...actual, useTranslation: () => ({ t: (k: string) => k }) }
 })
 
+// Router Link -> a plain anchor so the section renders without a RouterProvider.
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-router")>()
+  return {
+    ...actual,
+    Link: ({
+      children,
+      params,
+    }: {
+      children: React.ReactNode
+      params?: { org?: string }
+    }) => <a href={`/${params?.org ?? ""}/settings`}>{children}</a>,
+  }
+})
+
+// RouterButton -> a plain anchor too (it wraps createLink, which needs a
+// RouterProvider we don't mount here). The Manage affordance is a RouterButton.
+vi.mock("@/components/ui", async (importActual) => {
+  const actual = await importActual<typeof import("@/components/ui")>()
+  return {
+    ...actual,
+    RouterButton: ({
+      children,
+      params,
+    }: {
+      children: React.ReactNode
+      params?: { org?: string }
+    }) => <a href={`/${params?.org ?? ""}/settings`}>{children}</a>,
+  }
+})
+
+type OrgSummary = {
+  org: { login: string; id: number }
+  membership: { role: "admin" | "member" }
+  classroom50: { status: string }
+}
+const orgsData: { data: OrgSummary[]; isLoading: boolean } = {
+  data: [],
+  isLoading: false,
+}
+vi.mock("@/hooks/useGetOrgs", () => ({ default: () => orgsData }))
+
+import type { OrgTokenHealthEntry } from "@/hooks/useOrgServiceTokenHealth"
+const healthByOrg: Record<string, OrgTokenHealthEntry> = {}
+vi.mock("@/hooks/useOrgServiceTokenHealth", async (importActual) => {
+  const actual =
+    await importActual<typeof import("@/hooks/useOrgServiceTokenHealth")>()
+  return {
+    ...actual,
+    useOrgServiceTokenHealth: () => ({ byOrg: healthByOrg, anyLoading: false }),
+  }
+})
+
 function installLocalStorage() {
   const store = new Map<string, string>()
   Object.defineProperty(window, "localStorage", {
@@ -46,6 +99,9 @@ beforeEach(installLocalStorage)
 afterEach(() => {
   cleanup()
   window.localStorage.clear()
+  orgsData.data = []
+  orgsData.isLoading = false
+  for (const k of Object.keys(healthByOrg)) delete healthByOrg[k]
 })
 
 describe("SettingsPage hidden organizations", () => {
@@ -74,5 +130,47 @@ describe("SettingsPage hidden organizations", () => {
     await userEvent.click(screen.getByText("settings.hiddenOrgs.unhide"))
     expect(screen.queryByText("acme")).toBeNull()
     expect(screen.getByText("settings.hiddenOrgs.empty")).toBeTruthy()
+  })
+})
+
+describe("SettingsPage service tokens", () => {
+  it("shows the empty state when no owned+ready orgs exist", () => {
+    orgsData.data = [
+      // a member (non-owner) org and a needs-setup org are both excluded
+      {
+        org: { login: "member-org", id: 1 },
+        membership: { role: "member" },
+        classroom50: { status: "ready" },
+      },
+      {
+        org: { login: "setup-org", id: 2 },
+        membership: { role: "admin" },
+        classroom50: { status: "needs_setup" },
+      },
+    ]
+    renderPage()
+    expect(screen.getByText("settings.serviceTokens.empty")).toBeTruthy()
+  })
+
+  it("lists owned+ready orgs with their stored name and a Manage link", () => {
+    orgsData.data = [
+      {
+        org: { login: "cs50", id: 42 },
+        membership: { role: "admin" },
+        classroom50: { status: "ready" },
+      },
+    ]
+    healthByOrg["cs50"] = {
+      org: "cs50",
+      health: "expiringSoon",
+      tokenName: "classroom50-token-42-ab12",
+      expiresAt: "2026-10-01T00:00:00Z",
+      loading: false,
+    }
+    renderPage()
+    expect(screen.getByText("cs50")).toBeTruthy()
+    expect(screen.getByText("classroom50-token-42-ab12")).toBeTruthy()
+    const manage = screen.getByText("settings.serviceTokens.manage")
+    expect(manage.closest("a")?.getAttribute("href")).toBe("/cs50/settings")
   })
 })
