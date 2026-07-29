@@ -72,6 +72,8 @@ jobs:
           # Reuses the production client id — ensure preview.classroom50.org is
           # an allowed callback on that OAuth app.
           VITE_GITHUB_CLIENT_ID: ${{ vars.VITE_GITHUB_CLIENT_ID }}
+          # GitHub proxy base; falls back to the baked-in default when unset.
+          VITE_GITHUB_PROXY_BASE: ${{ vars.VITE_GITHUB_PROXY_BASE }}
 
       # GitHub Pages has no SPA rewrites; serve the app for unknown deep links.
       - name: Add SPA fallback

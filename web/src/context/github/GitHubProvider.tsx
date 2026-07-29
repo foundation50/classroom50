@@ -13,7 +13,7 @@ import {
 } from "@/github-core/client"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { missingScopes } from "@/auth/scopes"
-import { GITHUB_OAUTH_WORKER_BASE } from "@/auth/constants"
+import { GITHUB_PROXY_BASE } from "@/github-core/workerProxy"
 import { observeResponse } from "@/lib/diagnostics/observed"
 import { logger } from "@/lib/logger"
 
@@ -74,7 +74,7 @@ export function GitHubProvider({
     log.debug("creating GitHub client for new token")
     return createGitHubClient({
       token,
-      archiveBaseUrl: GITHUB_OAUTH_WORKER_BASE,
+      archiveBaseUrl: GITHUB_PROXY_BASE,
       onResponse,
     })
   }, [token, onResponse])

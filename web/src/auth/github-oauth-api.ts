@@ -1,4 +1,8 @@
-import { GITHUB_OAUTH_WORKER_BASE } from "./constants"
+import {
+  GITHUB_PROXY_BASE,
+  PROXY_ROUTES,
+  proxyUrl,
+} from "@/github-core/workerProxy"
 import type { GithubDeviceCodeResponse, GithubTokenResponse } from "./types"
 
 // Must exactly match the OAuth App's registered callback URL (.../login).
@@ -60,7 +64,7 @@ export async function exchangeWebCode(input: {
   code: string
   verifier: string
 }) {
-  const res = await fetch(`${GITHUB_OAUTH_WORKER_BASE}/web/token`, {
+  const res = await fetch(proxyUrl(GITHUB_PROXY_BASE, PROXY_ROUTES.webToken), {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -83,17 +87,20 @@ export async function requestDeviceCode(input: {
   clientId: string
   scope: string
 }) {
-  const res = await fetch(`${GITHUB_OAUTH_WORKER_BASE}/device/code`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
+  const res = await fetch(
+    proxyUrl(GITHUB_PROXY_BASE, PROXY_ROUTES.deviceCode),
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: input.clientId,
+        scope: input.scope,
+      }),
     },
-    body: JSON.stringify({
-      client_id: input.clientId,
-      scope: input.scope,
-    }),
-  })
+  )
 
   const data = await readJsonResponse<GithubDeviceCodeResponse>(res)
 
@@ -118,19 +125,22 @@ export async function pollDeviceToken(input: {
   deviceCode: string
   signal?: AbortSignal
 }) {
-  const res = await fetch(`${GITHUB_OAUTH_WORKER_BASE}/device/token`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
+  const res = await fetch(
+    proxyUrl(GITHUB_PROXY_BASE, PROXY_ROUTES.deviceToken),
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      signal: input.signal,
+      body: JSON.stringify({
+        client_id: input.clientId,
+        device_code: input.deviceCode,
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+      }),
     },
-    signal: input.signal,
-    body: JSON.stringify({
-      client_id: input.clientId,
-      device_code: input.deviceCode,
-      grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-    }),
-  })
+  )
 
   return readJsonResponse<GithubTokenResponse>(res)
 }

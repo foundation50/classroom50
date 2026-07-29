@@ -7,6 +7,7 @@ import {
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_CLIENT } from "@/lib/logScopes"
 import { countApiCall, publishRateLimit } from "@/lib/diagnostics/rateLimit"
+import { archivePath, assertSafeProxyBase, proxyUrl } from "./workerProxy"
 
 const log = logger.scope(LOG_SCOPE_GITHUB_CLIENT)
 
@@ -24,8 +25,8 @@ export type GitHubClient = {
 
   requestRaw: (path: string, options?: GitHubRequestOptions) => Promise<string>
 
-  // Fetch a repo zip via the archive-proxy Worker: the GitHub archive endpoint
-  // 302s to codeload (no CORS header), so the Worker follows the redirect
+  // Fetch a repo zip via the archive-proxy route: the GitHub archive endpoint
+  // 302s to codeload (no CORS header), so the proxy follows the redirect
   // server-side with this token and streams bytes back with CORS. Throws if no
   // proxy is configured.
   fetchArchive: (
@@ -63,7 +64,7 @@ export type GitHubResponseSignal = {
 export function createGitHubClient(args: {
   token: string
   apiBaseUrl?: string
-  // Base URL of the archive-proxy Worker (see fetchArchive). When omitted,
+  // Base URL of the archive proxy (see fetchArchive). When omitted,
   // fetchArchive throws — archive download is unavailable without the proxy.
   archiveBaseUrl?: string
   onResponse?: (signal: GitHubResponseSignal) => void
@@ -224,31 +225,15 @@ export function createGitHubClient(args: {
       if (!args.archiveBaseUrl) {
         throw new Error("archive proxy is not configured")
       }
+      assertSafeProxyBase(args.archiveBaseUrl)
 
-      // Fail closed rather than send the bearer to a non-https origin: a
-      // misconfigured base (http / wrong host) could exfiltrate the token.
-      const base = new URL(args.archiveBaseUrl)
-      const isLocalhost =
-        base.hostname === "localhost" ||
-        base.hostname === "127.0.0.1" ||
-        base.hostname === "[::1]"
-      if (base.protocol !== "https:" && !isLocalhost) {
-        throw new Error("archive proxy must be an https origin")
-      }
-
-      // Count against the diagnostics overlay like any other GitHub call, even
-      // though this one hops through the proxy.
+      // Count like any other GitHub call, even though this one hops the proxy.
       countApiCall()
 
-      // Encode each segment (defense-in-depth for a future ref caller); encode
-      // ref per-segment since a ref legitimately contains `/`.
-      const encodedRef = options?.ref
-        ? options.ref.split("/").map(encodeURIComponent).join("/")
-        : ""
-      const path =
-        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/zipball` +
-        (encodedRef ? `/${encodedRef}` : "")
-      const url = `${args.archiveBaseUrl.replace(/\/$/, "")}${path}`
+      const url = proxyUrl(
+        args.archiveBaseUrl,
+        archivePath(owner, repo, options?.ref),
+      )
 
       // Archives are larger than API responses; default to a generous timeout.
       const signal = composeAbortSignal(
