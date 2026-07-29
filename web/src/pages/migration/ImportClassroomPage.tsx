@@ -4,7 +4,12 @@
 // machine. The review step runs the import in place after confirmation.
 
 import { useState } from "react"
-import { Link, useParams } from "@tanstack/react-router"
+import {
+  Link,
+  getRouteApi,
+  useNavigate,
+  useParams,
+} from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { Check } from "lucide-react"
 
@@ -94,14 +99,29 @@ const OrgSetupGate = ({ org }: { org: string }) => {
   )
 }
 
+const routeApi = getRouteApi("/_authed/$org/import/")
+
 export const ImportClassroomPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("migration.documentTitle"))
   const { org } = useParams({ strict: false })
+  const { from } = routeApi.useSearch()
+  const navigate = useNavigate()
   const status = useOrgClassroom50Status(org)
   const [phase, setPhase] = useState<Phase>({ name: "select" })
-  // Set once the execute phase reports success, so the final step gets a check.
+  // Set once the import reports success, so the final step gets a check.
   const [imported, setImported] = useState(false)
+
+  // Keep the `?from=<org-slug>` deep link in sync with the selected source, so
+  // the URL is shareable/refreshable and reflects the current step.
+  const setFrom = (orgLogin: string | undefined) => {
+    void navigate({
+      to: "/$org/import",
+      params: { org: org ?? "" },
+      search: orgLogin ? { from: orgLogin } : {},
+      replace: true,
+    })
+  }
 
   if (!org) {
     return <MissingParams message={t("migration.missingOrg")} />
@@ -148,14 +168,21 @@ export const ImportClassroomPage = () => {
           />
           {phase.name === "select" && (
             <SelectSourceStep
-              onPick={(source) => setPhase({ name: "confirm", source })}
+              preselectOrg={from}
+              onPick={(source) => {
+                setFrom(source.orgLogin)
+                setPhase({ name: "confirm", source })
+              }}
             />
           )}
           {phase.name === "confirm" && (
             <ConfirmStep
               source={phase.source}
               targetOrg={org}
-              onBack={() => setPhase({ name: "select" })}
+              onBack={() => {
+                setFrom(undefined)
+                setPhase({ name: "select" })
+              }}
               onComplete={() => setImported(true)}
             />
           )}
