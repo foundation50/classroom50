@@ -1202,7 +1202,6 @@
       "expiringSoon": "Token expiring soon",
       "expired": "Token expired",
       "missing": "No service token",
-      "collectFailing": "Last collection failed",
       "expiryUntracked": "Expiry not tracked",
       "unknown": "Token status unknown",
       "rotateAria": "Review the service token for {{org}}"
@@ -1220,6 +1219,7 @@
       "statusPresent": "Token set",
       "statusMissing": "No service token set",
       "expiresOn": "Expires {{date}}",
+      "expiryUntrackedHint": "This token's expiry isn't tracked. Set a new token so Classroom 50 can warn you before it expires.",
       "nameRowLabel": "Name:",
       "nameHelp": "The name should match how this token appears in your GitHub personal access tokens list. Classroom 50 uses it only as a label; renaming here does not rename the token on GitHub.",
       "rename": "Rename token",

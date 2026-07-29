@@ -34,13 +34,8 @@ const HEALTH_CHIP: Record<
     Icon: TriangleAlert,
     labelKey: "serviceTokenHealth.chip.missing",
   },
-  collectFailing: {
-    tone: "error",
-    Icon: TriangleAlert,
-    labelKey: "serviceTokenHealth.chip.collectFailing",
-  },
   expiryUntracked: {
-    tone: "neutral",
+    tone: "warning",
     Icon: Clock,
     labelKey: "serviceTokenHealth.chip.expiryUntracked",
   },

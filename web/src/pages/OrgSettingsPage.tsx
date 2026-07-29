@@ -497,6 +497,13 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
             </Button>
           </div>
 
+          {!expiresDate && (
+            <span className="inline-flex items-center gap-2 text-sm text-warning">
+              <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+              {t("orgSettings.serviceToken.expiryUntrackedHint")}
+            </span>
+          )}
+
           {storedName && (
             <TokenNameRow
               storedName={storedName}
