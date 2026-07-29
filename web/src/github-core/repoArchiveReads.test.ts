@@ -23,8 +23,11 @@ const apiError = (status: number) =>
   })
 
 const clientWith = (
-  impl: (path: string) => Promise<{ bytes: ArrayBuffer; filename?: string }>,
-): GitHubClient => ({ requestBinary: vi.fn(impl) }) as unknown as GitHubClient
+  impl: (
+    owner: string,
+    repo: string,
+  ) => Promise<{ bytes: ArrayBuffer; filename?: string }>,
+): GitHubClient => ({ fetchArchive: vi.fn(impl) }) as unknown as GitHubClient
 
 describe("fetchRepoArchive", () => {
   it("returns bytes and the header filename on success", async () => {
@@ -45,16 +48,13 @@ describe("fetchRepoArchive", () => {
     expect(result?.filename).toBe("cs101-hw1-alice.zip")
   })
 
-  it("hits the zipball endpoint for the given owner/repo", async () => {
+  it("fetches the archive for the given owner/repo", async () => {
     const client = clientWith(() =>
       Promise.resolve({ bytes: new Uint8Array([1]).buffer }),
     )
 
     await fetchRepoArchive(client, "org", "cs101-hw1-alice")
-    expect(client.requestBinary).toHaveBeenCalledWith(
-      "/repos/org/cs101-hw1-alice/zipball",
-      expect.objectContaining({ method: "GET" }),
-    )
+    expect(client.fetchArchive).toHaveBeenCalledWith("org", "cs101-hw1-alice")
   })
 
   it("returns null when the repo 404s (missing/empty)", async () => {

@@ -2116,8 +2116,7 @@ describe("createAssignmentRepo", () => {
         return Promise.reject(new Error(`unexpected: ${path}`))
       },
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
-      requestBinary: () =>
-        Promise.reject(new Error("unexpected requestBinary")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
 
     const result = await createAssignmentRepo({
@@ -2161,8 +2160,7 @@ describe("createAssignmentRepo", () => {
         } as T)
       },
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
-      requestBinary: () =>
-        Promise.reject(new Error("unexpected requestBinary")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
 
     const result = await createAssignmentRepo({
@@ -2337,8 +2335,7 @@ describe("createAssignmentRepo destination-org refusal (#413)", () => {
         } as T)
       },
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
-      requestBinary: () =>
-        Promise.reject(new Error("unexpected requestBinary")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }) as GitHubClient
 
   const generatePath = "/repos/tpl/starter/generate"

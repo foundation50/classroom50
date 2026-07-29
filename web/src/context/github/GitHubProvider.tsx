@@ -13,6 +13,7 @@ import {
 } from "@/github-core/client"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { missingScopes } from "@/auth/scopes"
+import { GITHUB_OAUTH_WORKER_BASE } from "@/auth/constants"
 import { observeResponse } from "@/lib/diagnostics/observed"
 import { logger } from "@/lib/logger"
 
@@ -71,7 +72,11 @@ export function GitHubProvider({
   const client = useMemo(() => {
     if (!token) return null
     log.debug("creating GitHub client for new token")
-    return createGitHubClient({ token, onResponse })
+    return createGitHubClient({
+      token,
+      archiveBaseUrl: GITHUB_OAUTH_WORKER_BASE,
+      onResponse,
+    })
   }, [token, onResponse])
 
   // Only surface the observation when it matches the live token.

@@ -18,11 +18,7 @@ export async function fetchRepoArchive(
   repo: string,
 ): Promise<RepoArchive | null> {
   return tolerateGitHubError(async () => {
-    const { bytes, filename } = await client.requestBinary(
-      `/repos/${owner}/${repo}/zipball`,
-      // Archives are larger than API responses; give the fetch more headroom.
-      { method: "GET", timeoutMs: 60000 },
-    )
+    const { bytes, filename } = await client.fetchArchive(owner, repo)
     return { bytes, filename: filename ?? `${repo}.zip` }
   }, null)
 }

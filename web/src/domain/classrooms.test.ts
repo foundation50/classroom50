@@ -34,14 +34,14 @@ const apiError = (status: number, rateLimit: Partial<GitHubRateLimit> = {}) =>
 const clientReturning = (body: unknown): GitHubClient => ({
   request: vi.fn(),
   requestRaw: vi.fn().mockResolvedValue(JSON.stringify(body)),
-  requestBinary: vi.fn(),
+  fetchArchive: vi.fn(),
 })
 
 // A client whose requestRaw rejects on every call with the given error.
 const clientRejecting = (err: unknown): GitHubClient => ({
   request: vi.fn(),
   requestRaw: vi.fn().mockRejectedValue(err),
-  requestBinary: vi.fn(),
+  fetchArchive: vi.fn(),
 })
 
 describe("assertClassroomNotArchived", () => {
@@ -94,7 +94,7 @@ describe("assertClassroomNotArchived", () => {
     const client: GitHubClient = {
       request: vi.fn(),
       requestRaw,
-      requestBinary: vi.fn(),
+      fetchArchive: vi.fn(),
     }
     await expect(
       assertClassroomNotArchived(client, "acme", "cs101"),

@@ -71,8 +71,7 @@ function makeClient(configRepoBranch = "main"): {
     client: {
       request: request as unknown as GitHubClient["request"],
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
-      requestBinary: () =>
-        Promise.reject(new Error("unexpected requestBinary")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     },
     calls,
   }
@@ -104,8 +103,7 @@ describe("repairConcern", () => {
         })
       }) as unknown as GitHubClient["request"],
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
-      requestBinary: () =>
-        Promise.reject(new Error("unexpected requestBinary")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     const result = await repairConcern(client, "acme", "orgActions", "team")
     expect(result.unresolved).toBeUndefined()
@@ -122,8 +120,7 @@ describe("repairConcern", () => {
         return Promise.reject(httpError(403))
       }) as unknown as GitHubClient["request"],
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
-      requestBinary: () =>
-        Promise.reject(new Error("unexpected requestBinary")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     const result = await repairConcern(client, "acme", "orgActions", "team")
     expect(result.unresolved?.transient).toBe(false)
@@ -155,8 +152,7 @@ describe("repairConcern", () => {
         return Promise.reject(rateLimited)
       }) as unknown as GitHubClient["request"],
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
-      requestBinary: () =>
-        Promise.reject(new Error("unexpected requestBinary")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     const result = await repairConcern(client, "acme", "orgActions", "team")
     expect(result.unresolved?.transient).toBe(true)
@@ -215,7 +211,7 @@ describe("repairConcern", () => {
     const client: GitHubClient = {
       request: request as unknown as GitHubClient["request"],
       requestRaw: () => Promise.reject(new Error("x")),
-      requestBinary: () => Promise.reject(new Error("x")),
+      fetchArchive: () => Promise.reject(new Error("x")),
     }
     const result = await repairConcern(
       client,
@@ -243,7 +239,7 @@ describe("repairConcern", () => {
     const client: GitHubClient = {
       request: request as unknown as GitHubClient["request"],
       requestRaw: () => Promise.reject(new Error("x")),
-      requestBinary: () => Promise.reject(new Error("x")),
+      fetchArchive: () => Promise.reject(new Error("x")),
     }
     const result = await repairConcern(
       client,
@@ -312,7 +308,7 @@ describe("repairConcern", () => {
     const client: GitHubClient = {
       request: request as unknown as GitHubClient["request"],
       requestRaw: () => Promise.reject(new Error("x")),
-      requestBinary: () => Promise.reject(new Error("x")),
+      fetchArchive: () => Promise.reject(new Error("x")),
     }
     const result = await repairConcern(client, "acme", "rulesets", "team")
     expect(result.unresolved).toBeDefined()

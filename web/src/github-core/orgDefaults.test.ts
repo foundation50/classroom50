@@ -110,7 +110,7 @@ function makeClient(opts: ClientOpts) {
   const client: GitHubClient = {
     request: request as unknown as GitHubClient["request"],
     requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
-    requestBinary: () => Promise.reject(new Error("unexpected requestBinary")),
+    fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
   }
   return { client, patchBodies, getPatchCount: () => patchCount }
 }
@@ -300,7 +300,7 @@ describe("repairOrgDefaults", () => {
           return Promise.reject(httpError(500)) // read-back fails
         }) as unknown as GitHubClient["request"],
       requestRaw: () => Promise.reject(new Error("x")),
-      requestBinary: () => Promise.reject(new Error("x")),
+      fetchArchive: () => Promise.reject(new Error("x")),
     }
     const result = await repairOrgDefaults(client, "acme", "team")
     // A failed read-back must NOT be reported as a completed lockdown: it is

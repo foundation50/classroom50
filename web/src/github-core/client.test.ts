@@ -222,7 +222,9 @@ describe("createGitHubClient non-JSON response (GitHub-outage shape)", () => {
   })
 })
 
-describe("createGitHubClient requestBinary (archive downloads)", () => {
+describe("createGitHubClient fetchArchive (archive proxy)", () => {
+  const BASE = "https://worker.example"
+
   function stubBinaryFetch(
     status: number,
     body: BodyInit,
@@ -235,31 +237,59 @@ describe("createGitHubClient requestBinary (archive downloads)", () => {
 
   it("returns the response body as an ArrayBuffer for a 200", async () => {
     const payload = new Uint8Array([80, 75, 3, 4]) // "PK\x03\x04" (zip magic)
-    stubBinaryFetch(200, payload, {
-      "content-type": "application/zip",
-    })
-    const client = createGitHubClient({ token: "t" })
+    stubBinaryFetch(200, payload, { "content-type": "application/zip" })
+    const client = createGitHubClient({ token: "t", archiveBaseUrl: BASE })
 
-    const { bytes } = await client.requestBinary("/repos/o/r/zipball")
+    const { bytes } = await client.fetchArchive("o", "r")
     expect(bytes).toBeInstanceOf(ArrayBuffer)
     expect(new Uint8Array(bytes)).toEqual(payload)
+  })
+
+  it("requests the proxy's zipball path with a Bearer token", async () => {
+    const fetchSpy =
+      vi.fn<(url: string, init?: RequestInit) => Promise<Response>>()
+    fetchSpy.mockResolvedValue(
+      new Response(new Uint8Array([1]), { status: 200 }),
+    )
+    vi.stubGlobal("fetch", fetchSpy)
+    const client = createGitHubClient({ token: "secret", archiveBaseUrl: BASE })
+
+    await client.fetchArchive("o", "r")
+    const [url, init] = fetchSpy.mock.calls[0]
+    expect(url).toBe(`${BASE}/repos/o/r/zipball`)
+    expect((init?.headers as Record<string, string>).Authorization).toBe(
+      "Bearer secret",
+    )
+  })
+
+  it("appends the ref when provided", async () => {
+    const fetchSpy =
+      vi.fn<(url: string, init?: RequestInit) => Promise<Response>>()
+    fetchSpy.mockResolvedValue(
+      new Response(new Uint8Array([1]), { status: 200 }),
+    )
+    vi.stubGlobal("fetch", fetchSpy)
+    const client = createGitHubClient({ token: "t", archiveBaseUrl: BASE })
+
+    await client.fetchArchive("o", "r", { ref: "main" })
+    expect(fetchSpy.mock.calls[0][0]).toBe(`${BASE}/repos/o/r/zipball/main`)
   })
 
   it("extracts filename from Content-Disposition", async () => {
     stubBinaryFetch(200, new Uint8Array([1]), {
       "content-disposition": "attachment; filename=owner-repo-abc123.zip",
     })
-    const client = createGitHubClient({ token: "t" })
+    const client = createGitHubClient({ token: "t", archiveBaseUrl: BASE })
 
-    const { filename } = await client.requestBinary("/repos/o/r/zipball")
+    const { filename } = await client.fetchArchive("o", "r")
     expect(filename).toBe("owner-repo-abc123.zip")
   })
 
   it("returns undefined filename when Content-Disposition is absent", async () => {
     stubBinaryFetch(200, new Uint8Array([1]))
-    const client = createGitHubClient({ token: "t" })
+    const client = createGitHubClient({ token: "t", archiveBaseUrl: BASE })
 
-    const { filename } = await client.requestBinary("/repos/o/r/zipball")
+    const { filename } = await client.fetchArchive("o", "r")
     expect(filename).toBeUndefined()
   })
 
@@ -267,19 +297,27 @@ describe("createGitHubClient requestBinary (archive downloads)", () => {
     stubBinaryFetch(404, JSON.stringify({ message: "Not Found" }), {
       "content-type": "application/json",
     })
-    const client = createGitHubClient({ token: "t" })
+    const client = createGitHubClient({ token: "t", archiveBaseUrl: BASE })
 
-    await expect(
-      client.requestBinary("/repos/o/missing/zipball"),
-    ).rejects.toMatchObject({ name: "GitHubAPIError", status: 404 })
+    await expect(client.fetchArchive("o", "missing")).rejects.toMatchObject({
+      name: "GitHubAPIError",
+      status: 404,
+    })
+  })
+
+  it("throws when no archive proxy is configured", async () => {
+    const client = createGitHubClient({ token: "t" })
+    await expect(client.fetchArchive("o", "r")).rejects.toThrow(
+      /archive proxy/i,
+    )
   })
 
   it("counts the call exactly once", async () => {
     stubBinaryFetch(200, new Uint8Array([1]))
-    const client = createGitHubClient({ token: "t" })
+    const client = createGitHubClient({ token: "t", archiveBaseUrl: BASE })
 
     const before = getApiCallCount()
-    await client.requestBinary("/repos/o/r/zipball")
+    await client.fetchArchive("o", "r")
     expect(getApiCallCount()).toBe(before + 1)
   })
 })

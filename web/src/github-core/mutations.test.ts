@@ -269,8 +269,7 @@ describe("ensurePages alignment with checkPages", () => {
         ) as Promise<T>
       },
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
-      requestBinary: () =>
-        Promise.reject(new Error("unexpected requestBinary")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
   }
 
@@ -332,8 +331,7 @@ describe("ensureWorkflowPermissions org-policy conflict", () => {
         ) as Promise<T>
       },
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
-      requestBinary: () =>
-        Promise.reject(new Error("unexpected requestBinary")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     return client
   }

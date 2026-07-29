@@ -24,9 +24,16 @@ export type GitHubClient = {
 
   requestRaw: (path: string, options?: GitHubRequestOptions) => Promise<string>
 
-  requestBinary: (
-    path: string,
-    options?: GitHubRequestOptions,
+  // Fetch a repo archive (zip) through the archive proxy Worker rather than
+  // api.github.com directly: the archive endpoint 302-redirects to
+  // codeload.github.com, which sends no CORS header, so a browser fetch of the
+  // bytes is blocked. The Worker follows the redirect server-side with this
+  // client's token and streams the bytes back with CORS. Returns null when the
+  // proxy is not configured.
+  fetchArchive: (
+    owner: string,
+    repo: string,
+    options?: { ref?: string; signal?: AbortSignal; timeoutMs?: number },
   ) => Promise<GitHubBinaryResponse>
 }
 
@@ -60,6 +67,9 @@ export type GitHubResponseSignal = {
 export function createGitHubClient(args: {
   token: string
   apiBaseUrl?: string
+  // Base URL of the archive-proxy Worker (see fetchArchive). When omitted,
+  // fetchArchive throws — archive download is unavailable without the proxy.
+  archiveBaseUrl?: string
   onResponse?: (signal: GitHubResponseSignal) => void
 }): GitHubClient {
   const apiBaseUrl = args.apiBaseUrl ?? "https://api.github.com"
@@ -69,8 +79,8 @@ export function createGitHubClient(args: {
     options: GitHubRequestOptions = { method: "GET" },
   ): Promise<Response> {
     // Count every outbound call at the single choke point (covers request +
-    // requestRaw + requestBinary) — before the fetch, so a thrown/timed-out
-    // call still counts.
+    // requestRaw; fetchArchive counts itself since it bypasses this proxy) —
+    // before the fetch, so a thrown/timed-out call still counts.
     countApiCall()
 
     const url = path.startsWith("http")
@@ -228,12 +238,72 @@ export function createGitHubClient(args: {
       return await res.text()
     },
 
-    async requestBinary(path: string, options?: GitHubRequestOptions) {
-      const res = await requestInternal(path, {
-        method: options?.method ?? "GET",
-        ...options,
-        accept: options?.accept ?? "application/vnd.github+json",
+    async fetchArchive(
+      owner: string,
+      repo: string,
+      options?: { ref?: string; signal?: AbortSignal; timeoutMs?: number },
+    ) {
+      if (!args.archiveBaseUrl) {
+        throw new Error("archive proxy is not configured")
+      }
+
+      // Count against the diagnostics overlay like any other GitHub call, even
+      // though this one hops through the proxy.
+      countApiCall()
+
+      const path =
+        `/repos/${owner}/${repo}/zipball` +
+        (options?.ref ? `/${options.ref}` : "")
+      const url = `${args.archiveBaseUrl.replace(/\/$/, "")}${path}`
+
+      // Archives are larger than API responses; default to a generous timeout.
+      const timeoutMs = options?.timeoutMs ?? 60000
+      const timeoutSignal =
+        timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined
+      const signal =
+        options?.signal && timeoutSignal
+          ? AbortSignal.any([options.signal, timeoutSignal])
+          : (options?.signal ?? timeoutSignal)
+
+      log.debug("archive request", { owner, repo, ref: options?.ref })
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${args.token}` },
+        signal,
       })
+
+      // Report token liveness like requestInternal so a revoked token still
+      // tears the session down when the proxy relays a 401.
+      args.onResponse?.({
+        status: res.status,
+        scopes: res.headers.get("x-oauth-scopes"),
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        let body: unknown
+        try {
+          body = text ? JSON.parse(text) : null
+        } catch {
+          body = text
+        }
+        const message =
+          typeof body === "object" &&
+          body !== null &&
+          "message" in body &&
+          typeof body.message === "string"
+            ? body.message
+            : `Archive request failed with ${res.status}`
+        throw new GitHubAPIError({
+          status: res.status,
+          url,
+          message,
+          body,
+          rateLimit: readGitHubRateLimitHeaders(res),
+          requestId: res.headers.get("x-github-request-id"),
+        })
+      }
 
       const bytes = await res.arrayBuffer()
       const filename = parseContentDispositionFilename(
