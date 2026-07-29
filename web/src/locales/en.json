@@ -1668,6 +1668,9 @@
       "body": "Create your first classroom to start adding assignments, importing students, and managing submissions.",
       "createButton": "Create classroom"
     },
+    "newButton": {
+      "moreOptions": "More options"
+    },
     "join": {
       "title": "Join this classroom",
       "body": "You have a pending invitation to join <org>{{org}}</org>. Accept the invitation to access your classroom assignments.",

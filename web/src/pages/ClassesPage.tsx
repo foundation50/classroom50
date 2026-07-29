@@ -1,6 +1,7 @@
 import { useParams, Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
-import { Plus } from "lucide-react"
+import { ChevronDown, Plus } from "lucide-react"
+import GitHub from "@/assets/github.svg?react"
 
 import useGetClasses from "@/hooks/useGetClasses"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -20,6 +21,48 @@ import ClassroomList from "@/pages/classes/ClassroomList"
 import StudentClassroomList from "@/pages/classes/StudentClassroomList"
 import { useStudentClassroomSummaries } from "@/hooks/useStudentClassroomSummaries"
 
+// Split button: "New classroom" (primary) with a chevron dropdown whose only
+// item is "Import from GitHub Classroom". Mirrors the assignments-page new
+// button. The dropdown item is the removable migration entry point (#312) — the
+// primary Link and this whole control's shell stay if migration is dropped.
+const NewClassroomButton = ({ org }: { org: string }) => {
+  const { t } = useTranslation()
+  return (
+    <div className="join">
+      <Link
+        to="/$org/classes/new"
+        params={{ org }}
+        className="btn btn-primary join-item"
+      >
+        <Plus aria-hidden="true" className="size-4" />
+        {t("classes.empty.createButton")}
+      </Link>
+      <div className="dropdown dropdown-end join-item">
+        <Button
+          variant="primary"
+          tabIndex={0}
+          className="join-item h-full border-s border-primary-content/20 px-2"
+          aria-label={t("classes.newButton.moreOptions")}
+        >
+          <ChevronDown aria-hidden="true" className="size-4" />
+        </Button>
+        <ul
+          tabIndex={0}
+          className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+        >
+          {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
+          <li>
+            <Link to="/$org/import" params={{ org }}>
+              <GitHub aria-hidden="true" className="size-4" />
+              {t("migration.entryButton")}
+            </Link>
+          </li>
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 const CreateClassroomPane = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   return (
@@ -36,24 +79,7 @@ const CreateClassroomPane = ({ org }: { org: string }) => {
         </p>
 
         <Card.Actions className="mt-4">
-          <Link
-            to="/$org/classes/new"
-            params={{ org }}
-            type="button"
-            className="btn btn-primary"
-          >
-            <Plus aria-hidden="true" className="size-4" />
-            {t("classes.empty.createButton")}
-          </Link>
-          {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
-          <Link
-            to="/$org/import"
-            params={{ org }}
-            type="button"
-            className="btn btn-ghost"
-          >
-            {t("migration.entryButton")}
-          </Link>
+          <NewClassroomButton org={org} />
         </Card.Actions>
       </Card.Body>
     </Card>
@@ -158,14 +184,6 @@ const ClassesPage = () => {
         loading={roleLoading}
         title={isStaff ? t("classes.myClasses") : t("classes.myAssignments")}
         subtitle={<p className="max-w-2xl">{t("classes.manageSubtitle")}</p>}
-        action={
-          isStaff && classes.length > 0 ? (
-            /* FEATURE: github-classroom-migration — removable entry point (#312) */
-            <Link to="/$org/import" params={{ org }} className="btn btn-ghost">
-              {t("migration.entryButton")}
-            </Link>
-          ) : undefined
-        }
       />
 
       {isNonStaff && !isMember && !loadingMembership && (
