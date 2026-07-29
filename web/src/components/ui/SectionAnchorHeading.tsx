@@ -6,17 +6,15 @@ import { useNavigate } from "@tanstack/react-router"
 // dedupe guard swallow a legitimate re-click.
 let scrollSeq = 0
 
-// A section heading that doubles as its own anchor: the heading text is a link
-// that updates the URL hash to `anchorId` (shareable/bookmarkable). The actual
-// smooth scroll + highlight is owned solely by useHashSectionHighlight, keyed on
-// the hash change — so there is exactly one scroll per click and no competing
-// animations.
+// A section heading whose text is a link that sets the URL hash to `anchorId`
+// (shareable/bookmarkable). useHashSectionHighlight owns the resulting scroll +
+// highlight, so there is exactly one scroll per click.
 //
 // preventDefault blocks the browser's instant fragment jump; a `scrollNonce` in
 // history state makes an identical-hash re-click still register as a change the
-// hook reacts to (TanStack #3437 otherwise no-ops a same-hash navigation).
-// `replace: true` keeps repeated in-page section clicks from piling up
-// back-button history entries.
+// hook reacts to (TanStack otherwise no-ops a same-hash navigation).
+// `replace: true` keeps repeated in-page section clicks off the back-button
+// history.
 export function SectionAnchorHeading({
   anchorId,
   children,

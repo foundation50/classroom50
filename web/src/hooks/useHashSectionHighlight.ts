@@ -12,25 +12,22 @@ export function sectionHighlightClass(active: boolean): string {
     : "transition-shadow"
 }
 
-// Generic hash-fragment deep-link for Settings section headings: when the URL
-// carries `#service-token` (etc.) — whether from a cross-page link or a click on
-// the section's own anchor heading — scroll the matching `id` into view and
-// briefly highlight it. Returns the currently-highlighted id so a section can
-// gate its ring on `id === highlightedId`.
+// Scrolls the `#id` section into view and briefly highlights it on a hash
+// deep-link (from a cross-page link or a click on the section's own anchor
+// heading). Returns the highlighted id so a section can gate its ring.
 //
 // This is the single owner of the deep-link scroll, so a click never competes
-// with a second scroll. The hash is left in the URL so it stays shareable. The
-// scroll retries on a rAF because a section can mount after its data loads, so
-// the element may not exist on the tick the hash first arrives.
-//
-// `scrollNonce` (from history state, bumped by SectionAnchorHeading on click)
-// makes an identical-hash re-click still re-fire the effect, since TanStack
-// otherwise no-ops a same-hash navigation and the `hash` dep wouldn't change.
+// with a second scroll; the hash is left in the URL so it stays shareable. The
+// scroll retries on a rAF because a section can mount after its data loads.
+// `scrollNonce` (history state, bumped by SectionAnchorHeading) lets an
+// identical-hash re-click re-fire, since TanStack no-ops a same-hash navigation.
 export function useHashSectionHighlight(): string | null {
-  const hash = useRouterState({ select: (s) => s.location.hash })
-  const scrollNonce = useRouterState({
-    select: (s) =>
-      (s.location.state as { scrollNonce?: number } | undefined)?.scrollNonce,
+  const { hash, scrollNonce } = useRouterState({
+    select: (s) => ({
+      hash: s.location.hash,
+      scrollNonce: (s.location.state as { scrollNonce?: number } | undefined)
+        ?.scrollNonce,
+    }),
   })
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
   // The (hash, nonce) we last acted on, so a re-render (e.g. the highlight

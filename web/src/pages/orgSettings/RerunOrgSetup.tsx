@@ -60,10 +60,10 @@ const RERUN_ORG_SETUP_ANCHOR = "rerun-org-setup"
 // per-concern audit (U5/U6).
 const RerunOrgSetup = ({
   org,
-  highlightedId,
+  highlighted,
 }: {
   org: string
-  highlightedId?: string | null
+  highlighted?: boolean
 }) => {
   const { t } = useTranslation()
   const runRerun = useSafeSubmit()
@@ -153,9 +153,7 @@ const RerunOrgSetup = ({
   return (
     <SettingsSection
       id={RERUN_ORG_SETUP_ANCHOR}
-      className={sectionHighlightClass(
-        highlightedId === RERUN_ORG_SETUP_ANCHOR,
-      )}
+      className={sectionHighlightClass(highlighted ?? false)}
       title={t("orgSettings.rerun.title")}
       description={t("orgSettings.rerun.description")}
       action={

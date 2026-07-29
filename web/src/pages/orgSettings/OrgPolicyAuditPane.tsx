@@ -475,10 +475,10 @@ function AuditBody({
 
 const OrgPolicyAuditPane = ({
   org,
-  highlightedId,
+  highlighted,
 }: {
   org: string
-  highlightedId?: string | null
+  highlighted?: boolean
 }) => {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -568,7 +568,7 @@ const OrgPolicyAuditPane = ({
   return (
     <SettingsSection
       id={ORG_POLICY_ANCHOR}
-      className={sectionHighlightClass(highlightedId === ORG_POLICY_ANCHOR)}
+      className={sectionHighlightClass(highlighted ?? false)}
       title={t("orgSettings.audit.title")}
       titleAdornment={
         <PlanBadge

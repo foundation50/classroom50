@@ -555,18 +555,28 @@ const OrgSettingsPage = () => {
             <OrgActionsSection
               key={`actions-${org}`}
               org={org}
-              highlightedId={highlightedId}
+              highlighted={highlightedId === "github-actions"}
             />
           )}
           {org && (
             <OrgPolicyAuditPane
               key={org}
               org={org}
-              highlightedId={highlightedId}
+              highlighted={highlightedId === "org-policy"}
             />
           )}
-          {org && <RerunOrgSetup org={org} highlightedId={highlightedId} />}
-          {org && <TeardownSection org={org} highlightedId={highlightedId} />}
+          {org && (
+            <RerunOrgSetup
+              org={org}
+              highlighted={highlightedId === "rerun-org-setup"}
+            />
+          )}
+          {org && (
+            <TeardownSection
+              org={org}
+              highlighted={highlightedId === "danger-zone"}
+            />
+          )}
         </div>
       </RequireRole>
     </PageShell>

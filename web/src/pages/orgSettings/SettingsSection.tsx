@@ -35,12 +35,12 @@ const SettingsSection = ({
       radius="2xl"
       shadow={false}
       bordered={!isDanger}
-      className={[
+      className={cx(
         isDanger
           ? "scroll-mt-24 border border-error/30 bg-error/5 p-6"
           : "scroll-mt-24 p-6",
-        className ?? "",
-      ].join(" ")}
+        className,
+      )}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -57,10 +57,10 @@ const SettingsSection = ({
               </SectionAnchorHeading>
             ) : (
               <h2
-                className={[
+                className={cx(
                   "text-lg font-semibold",
-                  isDanger ? "text-error" : "",
-                ].join(" ")}
+                  isDanger && "text-error",
+                )}
               >
                 {title}
               </h2>

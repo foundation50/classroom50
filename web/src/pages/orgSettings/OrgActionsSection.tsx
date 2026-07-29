@@ -122,10 +122,10 @@ const ActionsUsagePanel = ({ org }: { org: string }) => {
 // with no separate stored state.
 const OrgActionsSection = ({
   org,
-  highlightedId,
+  highlighted,
 }: {
   org: string
-  highlightedId?: string | null
+  highlighted?: boolean
 }) => {
   const { t } = useTranslation()
   const { notify } = useToast()
@@ -163,7 +163,7 @@ const OrgActionsSection = ({
   return (
     <SettingsSection
       id={ACTIONS_ANCHOR}
-      className={sectionHighlightClass(highlightedId === ACTIONS_ANCHOR)}
+      className={sectionHighlightClass(highlighted ?? false)}
       title={t("orgSettings.actions.title")}
       description={t("orgSettings.actions.description")}
       titleAdornment={

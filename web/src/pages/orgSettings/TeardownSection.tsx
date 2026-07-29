@@ -31,10 +31,10 @@ const DANGER_ZONE_ANCHOR = "danger-zone"
 // inline owner re-check is needed here.
 const TeardownSection = ({
   org,
-  highlightedId,
+  highlighted,
 }: {
   org: string
-  highlightedId?: string | null
+  highlighted?: boolean
 }) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -68,7 +68,7 @@ const TeardownSection = ({
     <SettingsSection
       tone="danger"
       id={DANGER_ZONE_ANCHOR}
-      className={sectionHighlightClass(highlightedId === DANGER_ZONE_ANCHOR)}
+      className={sectionHighlightClass(highlighted ?? false)}
       title={t("orgSettings.teardown.title")}
       titleAdornment={
         <TriangleAlert aria-hidden="true" className="size-5 text-error" />
