@@ -2511,6 +2511,19 @@ def test_valid_assignment_slugs_excludes_empty_repo():
     assert cs.valid_assignment_slugs(assignments) == ["hello", "world"]
 
 
+def test_valid_assignment_slugs_includes_autograde_off():
+    # autograde: false is NOT empty_repo — the repo has a real shim and a
+    # teacher who flips it back on expects regrade/collect to work, so it stays
+    # collectable. The runner grade-job gate is the only "off" lever.
+    assignments = {
+        "assignments": [
+            {"slug": "hello"},
+            {"slug": "graded-elsewhere", "autograde": False},
+        ]
+    }
+    assert cs.valid_assignment_slugs(assignments) == ["hello", "graded-elsewhere"]
+
+
 def test_is_empty_repo_is_strict_boolean_true():
     # The wire contract is a JSON boolean (Go decodes a strict bool; TS uses
     # === true). is_empty_repo must agree: only the literal True is empty_repo,

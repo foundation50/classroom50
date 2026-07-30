@@ -41,6 +41,7 @@ const base: CreateAssignmentFormValues = {
   available_from_date: "",
   max_group_size: 2,
   feedback_pr: true,
+  autograde: true,
   empty_repo: false,
   runtime_env: "hosted",
   runs_on: "",
@@ -274,6 +275,38 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.allowed_files).toBe("")
     expect(out.pass_threshold_enabled).toBe(false)
     expect(out.tests).toEqual([])
+    // Autograde is moot for a bare repo; forced on so nothing is written.
+    expect(out.autograde).toBe(true)
+  })
+})
+
+describe("autograde toggle", () => {
+  it("passes an off toggle through toSubmitValues", () => {
+    expect(toSubmitValues({ ...base, autograde: false }).autograde).toBe(false)
+    expect(toSubmitValues({ ...base, autograde: true }).autograde).toBe(true)
+  })
+
+  it("maps a stored autograde:false to a toggle-off form state", () => {
+    expect(
+      assignmentToFormValues({
+        slug: "hw1",
+        name: "HW1",
+        mode: "individual",
+        autograder: "default",
+        autograde: false,
+      }).autograde,
+    ).toBe(false)
+  })
+
+  it("maps an absent autograde to toggle-on (default)", () => {
+    expect(
+      assignmentToFormValues({
+        slug: "hw1",
+        name: "HW1",
+        mode: "individual",
+        autograder: "default",
+      }).autograde,
+    ).toBe(true)
   })
 })
 

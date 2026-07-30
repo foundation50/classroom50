@@ -118,6 +118,16 @@ export type Assignment = {
   autograder: string
   max_group_size?: number
   feedback_pr?: boolean
+  // Turn autograding on or off. Product default is ON: an ABSENT field reads as
+  // `true` (autograding runs) — the INVERSE of feedback_pr/empty_repo/locked,
+  // whose absent reads as false. When `false`, the autograde runner's grade job
+  // is skipped for this assignment. Test "does it autograde" with
+  // `autograde !== false` (absent = on), NOT `=== true`. Coexists with a
+  // configured autograder/tests (unlike empty_repo) and is EDITABLE after
+  // creation. On the wire it collapses toward the default: writers OMIT it when
+  // on and write `false` to disable (an explicit `true` normalizes to omission);
+  // readers accept an explicit `true` but treat absent as `true`.
+  autograde?: boolean
   // Truly bare student repos: accept creates the repo with no initial commit
   // and NO control files (no .classroom50.yaml, no autograde workflow), so the
   // assignment never autogrades and the Feedback PR is off. Mutually exclusive

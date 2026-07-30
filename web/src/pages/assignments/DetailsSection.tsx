@@ -325,6 +325,37 @@ export const DetailsSection = ({
               )}
             </form.Subscribe>
 
+            {/* An empty repo never grades, so autograde is structurally off:
+                render locked-off (not hidden) so the state stays visible.
+                Otherwise it is a normal, editable toggle (default on). */}
+            <form.Subscribe selector={(state) => state.values.empty_repo}>
+              {(emptyRepo) => (
+                <form.Field name="autograde">
+                  {(field) => (
+                    <div
+                      className={
+                        emptyRepo ? "pointer-events-none opacity-50" : ""
+                      }
+                      aria-disabled={emptyRepo}
+                    >
+                      <ToggleRow
+                        id={field.name}
+                        checked={emptyRepo ? false : field.state.value}
+                        onChange={(checked) => field.handleChange(checked)}
+                        onBlur={field.handleBlur}
+                        label={t("assignments.form.autograde")}
+                        help={
+                          emptyRepo
+                            ? t("assignments.form.autogradeEmptyRepoHelp")
+                            : t("assignments.form.autogradeHelp")
+                        }
+                      />
+                    </div>
+                  )}
+                </form.Field>
+              )}
+            </form.Subscribe>
+
             {/* Immutable after creation: locked in edit mode. */}
             <form.Field name="empty_repo">
               {(field) => (

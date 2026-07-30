@@ -96,6 +96,10 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   autograder: "managed",
   max_group_size: "managed",
   feedback_pr: "managed",
+  // Managed (rebuilt from input) and MUTABLE: an edit may freely flip it on or
+  // off. Unlike empty_repo there is no retrofit — the shim exists in every repo
+  // and the runner reads the published manifest each run.
+  autograde: "managed",
   // Managed (rebuilt from input) but IMMUTABLE: editAssignment rejects an edit
   // whose empty_repo differs from the stored entry, so the rebuild can only
   // ever re-write the same value. The edit form shows it read-only.
@@ -410,6 +414,12 @@ async function buildAssignmentEntry(
   // Written only when true, matching the CLI's omitempty.
   if (input.empty_repo) {
     entry.empty_repo = true
+  }
+  // Autograde: written to the wire only when OFF (canonical form — absent = on,
+  // matching the CLI's autogradeFromFlag and EncodeAssignments collapse). An
+  // empty repo never grades, so the toggle is moot there and stays omitted.
+  if (!input.empty_repo && input.autograde === false) {
+    entry.autograde = false
   }
   // Omit the template block entirely for a template-less assignment, matching
   // the CLI's nil TemplateRef.

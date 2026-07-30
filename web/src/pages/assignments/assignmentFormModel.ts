@@ -59,6 +59,11 @@ export type CreateAssignmentFormValues = {
   available_from_date: string
   max_group_size: number
   feedback_pr: boolean
+  // Run autograding for this assignment. Default ON. When off, the autograde
+  // runner's grade job is skipped. Unlike empty_repo it coexists with a
+  // configured autograder/tests and is editable after creation. On submit it is
+  // written to the wire only when off (autograde: false); on reads absent = on.
+  autograde: boolean
   // Truly bare student repos: no starter content, no control files, autograding
   // and the Feedback PR off. Immutable after creation (the edit form renders it
   // locked). While checked, the template/autograding/advanced grading sections
@@ -302,6 +307,9 @@ export function toSubmitValues(
     available_from_date: value.available_from_date.trim(),
     max_group_size: value.max_group_size,
     feedback_pr: isEmptyRepo ? false : value.feedback_pr,
+    // Autograde is meaningless for a bare repo (never grades); force on
+    // otherwise the toggle passes through. Written to the wire only when off.
+    autograde: isEmptyRepo ? true : value.autograde,
     empty_repo: isEmptyRepo,
     runtime_env: value.runtime_env,
     runs_on: value.runs_on.trim(),
@@ -341,6 +349,7 @@ export const useAssignmentForm = (
       ),
       max_group_size: defaultValues?.max_group_size || 2,
       feedback_pr: defaultValues?.feedback_pr ?? true,
+      autograde: defaultValues?.autograde ?? true,
       empty_repo: defaultValues?.empty_repo ?? false,
       runtime_env: defaultValues?.runtime_env || "hosted",
       runs_on: defaultValues?.runs_on || "",
@@ -403,6 +412,8 @@ export const assignmentToFormValues = (
     available_from_date: utcIsoToDatetimeLocalValue(assignment.available_from),
     max_group_size: assignment.max_group_size ?? 2,
     feedback_pr: assignment.feedback_pr ?? true,
+    // Absent reads as on (inverse of feedback_pr's absent-is-false).
+    autograde: assignment.autograde !== false,
     empty_repo: assignment.empty_repo ?? false,
     // A stored container block means the assignment was configured in container
     // mode; otherwise it's the hosted runner (the default).

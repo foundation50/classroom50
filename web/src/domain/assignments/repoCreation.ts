@@ -247,6 +247,11 @@ export type CreateAssignmentInput = {
   org: string
   max_group_size: number
   feedback_pr?: boolean
+  // Run autograding for this assignment (default on). When false, the runner's
+  // grade job is skipped. Unlike empty_repo it coexists with a configured
+  // autograder/tests and is editable after creation. Written to the wire only
+  // when off. Mirrors the CLI's --autograde.
+  autograde?: boolean
   // Truly bare student repos (no auto-init, no control files, autograding and
   // Feedback PR off). Mutually exclusive with template/tests/feedback_pr/
   // allowed_files/release_assets/pass_threshold; immutable after creation

@@ -843,6 +843,32 @@ def test_load_roster_empty_repo_false_proceeds(monkeypatch, tmp_path):
     assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok") == ["alice"]
 
 
+def test_load_roster_autograde_off_proceeds(monkeypatch, tmp_path):
+    # autograde: false is NOT a regrade skip (contrast empty_repo): the repo
+    # has a real autograde shim, so a teacher who turns grading back on must be
+    # able to regrade prior submissions. The runner gate is the only off lever.
+    cdir = tmp_path / "cs50"
+    cdir.mkdir()
+    (cdir / "assignments.json").write_text(
+        json.dumps(
+            {
+                "schema": rr.ASSIGNMENTS_SCHEMA_V1,
+                "assignments": [
+                    {
+                        "slug": "hello",
+                        "name": "Hello",
+                        "mode": "individual",
+                        "autograder": "default",
+                        "autograde": False,
+                    }
+                ],
+            }
+        )
+    )
+    monkeypatch.setattr(rr, "list_team_member_logins", lambda *a, **k: ["alice"])
+    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok") == ["alice"]
+
+
 def test_main_empty_repo_assignment_is_successful_noop(monkeypatch, capsys):
     # main() converts the sentinel into exit 0 with an explanatory line — a
     # manual regrade.yaml dispatch against an empty_repo assignment must not
