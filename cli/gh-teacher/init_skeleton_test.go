@@ -217,6 +217,10 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		// a dropped output would make every gate below read empty and
 		// re-grade the acceptance commit.
 		"is-acceptance",
+		// no-autograder gates the skip-when-nothing-configured path; a
+		// dropped output would read empty and grade every submission,
+		// re-spending Actions minutes on assignments with no autograder.
+		"no-autograder",
 	} {
 		if _, ok := outputsMap[out]; !ok {
 			t.Errorf("setup.outputs missing %q", out)
@@ -233,9 +237,13 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// exactly what this guard exists to prevent.
 	//
 	// grade is gated at the job level (set-latest needs grade, so it skips
-	// transitively).
-	if got, _ := nested(doc, "jobs", "grade", "if"); got != "needs.setup.outputs.is-acceptance != 'true'" {
-		t.Errorf("grade.if = %v, want \"needs.setup.outputs.is-acceptance != 'true'\" (acceptance-commit skip)", got)
+	// transitively). The gate also carries the no-autograder skip: an
+	// assignment with no declarative tests, no per-assignment bundle, and no
+	// classroom-default autograder.py has nothing to grade, so setup emits
+	// no-autograder=true and the grade job skips (fail-open — any probe error
+	// emits false and grades).
+	if got, _ := nested(doc, "jobs", "grade", "if"); got != "needs.setup.outputs.is-acceptance != 'true' && needs.setup.outputs.no-autograder != 'true'" {
+		t.Errorf("grade.if = %v, want the acceptance-commit + no-autograder skip gate", got)
 	}
 	// The setup checkout must use full history: _baseline_scan walks back
 	// to the commit that added .classroom50.yaml, and a shallow clone
