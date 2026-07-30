@@ -349,6 +349,119 @@ func TestParseAssignments_FeedbackPRRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseAssignments_AutogradeRoundTrip(t *testing.T) {
+	// autograde has INVERSE default semantics vs feedback_pr: absent reads as
+	// ON (nil). Only `false` is written; an explicit `true` collapses to
+	// omission on encode (KTD2 canonical wire form). It coexists with a
+	// configured autograder (unlike empty_repo).
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "off",
+      "name": "Off",
+      "template": { "owner": "cs50", "repo": "t", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default",
+      "autograde": false,
+      "tests": [ { "name": "t", "type": "run", "run": "true", "points": 1 } ]
+    },
+    {
+      "slug": "on-explicit",
+      "name": "On explicit",
+      "template": { "owner": "cs50", "repo": "t", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default",
+      "autograde": true
+    },
+    {
+      "slug": "on-absent",
+      "name": "On absent",
+      "template": { "owner": "cs50", "repo": "t", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default"
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	if file.Assignments[0].Autograde == nil || *file.Assignments[0].Autograde {
+		t.Errorf("off.Autograde = %v, want non-nil false", file.Assignments[0].Autograde)
+	}
+	if file.Assignments[1].Autograde == nil || !*file.Assignments[1].Autograde {
+		t.Errorf("on-explicit.Autograde = %v, want non-nil true on parse", file.Assignments[1].Autograde)
+	}
+	if file.Assignments[2].Autograde != nil {
+		t.Errorf("on-absent.Autograde = %v, want nil (absent)", file.Assignments[2].Autograde)
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	// Only false is written; explicit true and absent both omit.
+	if !strings.Contains(string(encoded), `"autograde": false`) {
+		t.Errorf("encoded missing autograde:false:\n%s", encoded)
+	}
+	if strings.Contains(string(encoded), `"autograde": true`) {
+		t.Errorf("autograde:true should collapse to omission, not serialize:\n%s", encoded)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if again.Assignments[0].Autograde == nil || *again.Assignments[0].Autograde {
+		t.Errorf("off.Autograde not stable across round-trip: %#v", again.Assignments[0].Autograde)
+	}
+	if again.Assignments[1].Autograde != nil {
+		t.Errorf("on-explicit collapsed to nil on encode, want nil after re-parse: %#v", again.Assignments[1].Autograde)
+	}
+}
+
+func TestValidateAutograde_NoExclusivityOrImmutability(t *testing.T) {
+	// autograde: false coexists with tests + template (no exclusivity), and
+	// is editable in either direction (no immutability guard).
+	off := false
+	on := true
+	entry := AssignmentEntry{
+		Slug:       "hw",
+		Name:       "HW",
+		Mode:       "individual",
+		Autograder: "default",
+		Autograde:  &off,
+		Template:   &TemplateRef{Owner: "o", Repo: "t", Branch: "main"},
+		Tests:      []TestSpec{{Name: "t", Type: "run", Run: "true", Points: 1}},
+	}
+	if err := ValidateAssignmentEntry(entry); err != nil {
+		t.Errorf("autograde:false with tests+template should validate, got: %v", err)
+	}
+	entry.Autograde = &on
+	if err := ValidateAssignmentEntry(entry); err != nil {
+		t.Errorf("autograde:true should validate, got: %v", err)
+	}
+}
+
+func TestParseAssignments_RejectsNonBoolAutograde(t *testing.T) {
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "hello",
+      "name": "Hello",
+      "template": { "owner": "o", "repo": "t", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default",
+      "autograde": "yes"
+    }
+  ]
+}`)
+	if _, err := ParseAssignments(in); err == nil {
+		t.Fatal("expected parse error for non-bool autograde, got nil")
+	}
+}
+
 func TestParseAssignments_LockedRoundTrip(t *testing.T) {
 	// locked=true parses onto the struct (not Extra), survives a
 	// re-encode/re-parse, and an entry without the field defaults to false.

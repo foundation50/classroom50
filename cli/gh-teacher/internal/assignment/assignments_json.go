@@ -101,6 +101,18 @@ type AssignmentsJSON struct {
 // enforceable boundary is that locking a PRIVATE in-org template also removes
 // the STUDENT team's read on it (staff teams untouched), and unlocking
 // re-grants it. Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
+//
+// Autograde turns autograding on/off for the assignment. It is a *bool for a
+// tri-state: nil means "absent → on" (the product default), &false means off.
+// A pointer (like PassThreshold) rather than a plain bool because the default
+// is ON — the INVERSE of FeedbackPR/EmptyRepo/Locked — so absent must stay
+// distinct from an explicit value. Canonical wire form collapses toward the
+// default: only false is ever written; an explicit true normalizes to nil
+// (omitted) on encode. When false, the autograde runner skips the grade job.
+// UNLIKE EmptyRepo it is NOT mutually exclusive with grading-adjacent fields
+// and is EDITABLE after creation (the shim exists in every repo; the runner
+// reads the published manifest each run). Score collection and regrade still
+// process the assignment; only the runner grade job is gated.
 type AssignmentEntry struct {
 	Slug              string           `json:"slug"`
 	Name              string           `json:"name"`
@@ -117,6 +129,7 @@ type AssignmentEntry struct {
 	Tests             []TestSpec       `json:"tests,omitempty"`
 	FeedbackPR        bool             `json:"feedback_pr,omitempty"`
 	EmptyRepo         bool             `json:"empty_repo,omitempty"`
+	Autograde         *bool            `json:"autograde,omitempty"`
 	Locked            bool             `json:"locked,omitempty"`
 	AllowedFiles      []string         `json:"allowed_files,omitempty"`
 	ReleaseAssets     []string         `json:"release_assets,omitempty"`
@@ -137,6 +150,7 @@ var knownEntryKeys = map[string]struct{}{
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
 	"locked": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
+	"autograde": {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then strictly
@@ -624,6 +638,13 @@ func EncodeAssignments(file AssignmentsJSON) ([]byte, error) {
 		for i := range out.Assignments {
 			if out.Assignments[i].Autograder == "" {
 				out.Assignments[i].Autograder = contract.DefaultAutograderName
+			}
+			// Canonical wire form for autograde: only `false` is ever written.
+			// An explicit `true` is the default (on), so collapse it to nil so
+			// the manifest never carries `autograde: true` noise and every
+			// writer (CLI, web) produces one on-the-wire shape.
+			if out.Assignments[i].Autograde != nil && *out.Assignments[i].Autograde {
+				out.Assignments[i].Autograde = nil
 			}
 		}
 	}
