@@ -393,6 +393,31 @@ class TestEmptyRepo:
         assert _errors(_manifest(self._bare_entry(pass_threshold=70))) != []
 
 
+class TestAutograde:
+    def test_autograde_false_with_tests_accepted(self):
+        # autograde: false coexists with a configured autograder (unlike
+        # empty_repo) — it only gates whether grading runs.
+        entry = _entry(
+            autograde=False,
+            tests=[{"name": "t", "type": "run", "run": "true", "points": 1}],
+        )
+        assert _errors(_manifest(entry)) == []
+
+    def test_autograde_true_accepted(self):
+        assert _errors(_manifest(_entry(autograde=True))) == []
+
+    def test_autograde_absent_accepted(self):
+        # Absent reads as on (the product default); the schema must accept it.
+        assert _errors(_manifest(_entry())) == []
+
+    def test_autograde_must_be_boolean(self):
+        assert _errors(_manifest(_entry(autograde="no"))) != []
+
+    def test_autograde_false_with_template_accepted(self):
+        # Not mutually exclusive with a template (contrast empty_repo).
+        assert _errors(_manifest(_entry(autograde=False))) == []
+
+
 def _release_assets_errors(value):
     return _errors(_manifest(_entry(release_assets=value)))
 
