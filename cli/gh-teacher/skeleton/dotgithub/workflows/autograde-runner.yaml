@@ -57,6 +57,10 @@ jobs:
       mode:           ${{ steps.read.outputs.mode }}
       allowed-files:  ${{ steps.read.outputs.allowed-files }}
       release-assets: ${{ steps.read.outputs.release-assets }}
+      # 'true' -> no autograder configured (no declarative tests, no
+      # per-assignment bundle, no classroom-default autograder.py), so grade +
+      # set-latest skip. Fails OPEN: any probe error emits 'false' and grades.
+      no-autograder:  ${{ steps.read.outputs.no-autograder }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -564,6 +568,43 @@ jobs:
               if not submission_tag.startswith("submit/"):
                   fail(f"submission tag {submission_tag!r} does not match submit/*")
 
+          # === No-autograder detection ===
+          # Skip grade + set-latest when nothing is configured to grade,
+          # inverting resolve_entrypoint's fall-through: no declarative tests
+          # AND no per-assignment bundle AND no classroom-default autograder.py.
+          # runner.py's no_autograder() stays the fail-open backstop. FAIL OPEN
+          # here too — a probe that can't prove absence must grade — so any
+          # non-404 / network error falls open to grading.
+          # The bundle + classroom-default URL shapes mirror runner.py's
+          # bundle_url / classroom_default_autograder_url (pinned by
+          # contract_test.go); segment left un-quoted to match classroom_segment
+          # (both parts are regex-validated upstream).
+          # Non-retrying: the outcome is only ever acted on for a confirmed 404,
+          # so a transient 5xx falls open to grading anyway — no point spending
+          # get()'s retry ladder on a result we'd discard.
+          def probe_absent(url):
+              try:
+                  req = urllib.request.Request(url, headers={"User-Agent": "classroom50-autograde-runner"})
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      resp.read(1)
+                  return False
+              except urllib.error.HTTPError as exc:
+                  if exc.code == 404:
+                      return True
+                  print(f"::warning::autograder probe GET {url}: HTTP {exc.code}; grading proceeds")
+                  return False
+              except urllib.error.URLError as exc:
+                  print(f"::warning::autograder probe GET {url}: {exc.reason}; grading proceeds")
+                  return False
+
+          has_tests = isinstance(tests, list) and len(tests) > 0
+          no_autograder = False
+          if not has_tests:
+              seg = classroom_segment(classroom, secret)
+              bundle = f"{base_url}/{seg}/autograders/{assignment}.tar.gz"
+              default_py = f"{base_url}/{seg}/autograder.py"
+              no_autograder = probe_absent(bundle) and probe_absent(default_py)
+
           emit("submission-tag", submission_tag)
           emit("runs-on", runs_on_json)
           emit("container", container_json)
@@ -581,11 +622,31 @@ jobs:
           emit("mode", mode)
           emit("allowed-files", allowed_files_json)
           emit("release-assets", release_assets_json)
+          emit("no-autograder", "true" if no_autograder else "false")
+
+      # === Autograde-skipped commit status ===
+      # Parallel to the acceptance-skip status: post an explicit
+      # classroom50/autograde success so a status-polling client can tell
+      # "skipped — no autograder configured" from "hasn't run yet".
+      # Best-effort; never fails the job.
+      - name: Autograde-skipped commit status
+        if: steps.read.outputs.no-autograder == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="success" \
+            -f context="classroom50/autograde" \
+            -f description="no autograder configured — autograding skipped" \
+            -f target_url="$RUN_URL" >/dev/null 2>&1 || true
 
   grade:
     needs: setup
-    # Skip for the acceptance commit (set-latest needs grade, so it skips too).
-    if: needs.setup.outputs.is-acceptance != 'true'
+    # Skip the acceptance commit and the no-autograder case (set-latest needs
+    # grade, so it skips too).
+    if: needs.setup.outputs.is-acceptance != 'true' && needs.setup.outputs.no-autograder != 'true'
     runs-on:   ${{ fromJSON(needs.setup.outputs.runs-on) }}
     container: ${{ fromJSON(needs.setup.outputs.container) }}
     timeout-minutes: 15
@@ -860,7 +921,9 @@ jobs:
   # reclaiming latest.
   set-latest:
     needs: [setup, grade]
-    if: needs.grade.result == 'success' && (needs.grade.outputs.status == 'success' || needs.grade.outputs.status == 'failure')
+    # Explicit no-autograder guard, defensive against a future change to
+    # grade's result semantics.
+    if: needs.setup.outputs.no-autograder != 'true' && needs.grade.result == 'success' && (needs.grade.outputs.status == 'success' || needs.grade.outputs.status == 'failure')
     runs-on: ubuntu-latest
     concurrency:
       group: classroom50-set-latest-${{ github.repository }}

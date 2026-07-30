@@ -58,6 +58,8 @@ def _run_validator(
     manifest: dict | None,
     submission_tag: str = "submit/2026-06-01T14-32-05Z-a1b2c3d",
     extra_env: dict | None = None,
+    pages_files: dict[str, bytes] | None = None,
+    probe_error: str | None = None,
 ) -> tuple[int, str, str, dict]:
     """Run the inline validator with hand-crafted env + fixtures.
 
@@ -65,6 +67,13 @@ def _run_validator(
     pointing at the local manifest fixture instead of GitHub Pages.
     Manifest=None → no file written, simulating a 404 (validator should fail
     gracefully).
+
+    pages_files: extra classroom-relative files to publish (e.g.
+    {"autograder.py": b"..."}) so the no-autograder probe finds them.
+
+    probe_error: raise for the no-autograder probe URLs (autograder.py /
+    *.tar.gz) to exercise fail-open. "urlerror" → URLError; "http503" → a
+    non-404 HTTPError. The manifest fetch is unaffected.
 
     Returns (exit_code, stdout, stderr, parsed-GITHUB_OUTPUT-as-dict).
     """
@@ -78,6 +87,10 @@ def _run_validator(
     classroom_dir.mkdir()
     if manifest is not None:
         (classroom_dir / "assignments.json").write_text(json.dumps(manifest))
+    for rel, content in (pages_files or {}).items():
+        target = classroom_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
 
     script_path = tmp_path / "validator.py"
     script_path.write_text(inline_script)
@@ -90,6 +103,7 @@ def _run_validator(
     # rather than intercept that, a tiny wrapper monkey-patches urlopen before
     # exec'ing the validator to serve the URL from the pages_root fixture.
 
+    probe_error_repr = repr(probe_error)
     wrapper = textwrap.dedent(f"""
     import urllib.request
     import urllib.error
@@ -97,6 +111,7 @@ def _run_validator(
     from pathlib import Path
 
     _PAGES_ROOT = Path({str(pages_root)!r})
+    _PROBE_ERROR = {probe_error_repr}
 
     _real_urlopen = urllib.request.urlopen
 
@@ -104,6 +119,12 @@ def _run_validator(
         url = req.full_url if hasattr(req, "full_url") else str(req)
         if url.startswith("https://test-org.github.io/classroom50/"):
             rel = url.removeprefix("https://test-org.github.io/classroom50/")
+            is_probe = rel.endswith("/autograder.py") or rel.endswith(".tar.gz")
+            if _PROBE_ERROR and is_probe:
+                if _PROBE_ERROR == "urlerror":
+                    raise urllib.error.URLError("simulated network failure")
+                if _PROBE_ERROR == "http503":
+                    raise urllib.error.HTTPError(url, 503, "Server Error", {{}}, None)
             target = _PAGES_ROOT / rel
             if not target.is_file():
                 raise urllib.error.HTTPError(url, 404, "Not Found", {{}}, None)
@@ -727,3 +748,106 @@ class TestReleaseAssetsValidation:
         )
         assert rc != 0
         assert "must not contain Unicode surrogates" in stderr
+
+
+# ---------------------------------------------------------------------------
+# No-autograder detection — emits no-autograder so grade/set-latest skip
+# when no autograder is configured.
+# ---------------------------------------------------------------------------
+
+
+class TestNoAutograderDetection:
+    def test_no_tests_no_autograders_skips(self, inline_script, tmp_path):
+        # No tests and neither Pages source published: both probes 404.
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(),
+        )
+        assert rc == 0
+        assert outputs["no-autograder"] == "true"
+
+    def test_declarative_tests_present_grades(self, inline_script, tmp_path):
+        # A non-empty tests array means there's something to grade.
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(tests=[
+                {"name": "t1", "type": "run", "run": "true", "points": 1},
+            ]),
+        )
+        assert rc == 0
+        assert outputs["no-autograder"] == "false"
+
+    def test_per_assignment_bundle_present_grades(self, inline_script, tmp_path):
+        # A published autograders/<slug>.tar.gz is a per-assignment override.
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(),
+            pages_files={"autograders/hello.tar.gz": b"\x1f\x8b bundle"},
+        )
+        assert rc == 0
+        assert outputs["no-autograder"] == "false"
+
+    def test_classroom_default_present_grades(self, inline_script, tmp_path):
+        # No bundle but a classroom-default autograder.py exists.
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(),
+            pages_files={"autograder.py": b"print('hi')\n"},
+        )
+        assert rc == 0
+        assert outputs["no-autograder"] == "false"
+
+    def test_probe_network_error_fails_open(self, inline_script, tmp_path):
+        # A URLError can't prove absence → grade (fail open).
+        rc, stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(),
+            probe_error="urlerror",
+        )
+        assert rc == 0
+        assert outputs["no-autograder"] == "false"
+        assert "grading proceeds" in stdout
+
+    def test_probe_5xx_fails_open(self, inline_script, tmp_path):
+        # A non-404 status can't prove absence → grade (fail open).
+        rc, stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(),
+            probe_error="http503",
+        )
+        assert rc == 0
+        assert outputs["no-autograder"] == "false"
+        assert "grading proceeds" in stdout
+
+    def test_secret_classroom_still_detects(self, inline_script, tmp_path):
+        # A secret shifts the Pages segment to <classroom>/<secret>; the probe
+        # (and manifest) URLs must follow it. Nothing published there → 404s.
+        secret = "abcd1234"
+        manifest = _manifest()
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=f"classroom: cs-test\nassignment: hello\nsecret: {secret}\n",
+            manifest=None,
+            pages_files={f"{secret}/assignments.json": json.dumps(manifest).encode()},
+        )
+        assert rc == 0
+        assert outputs["no-autograder"] == "true"
+
+    def test_empty_repo_hard_stops_before_detection(self, inline_script, tmp_path):
+        # empty_repo fails the read step before detection runs.
+        manifest = _manifest()
+        manifest["assignments"][0]["empty_repo"] = True
+        rc, _stdout, stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=manifest,
+        )
+        assert rc != 0
+        assert "empty-repository assignment" in stderr
+        assert "no-autograder" not in outputs
