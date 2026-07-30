@@ -241,9 +241,11 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// assignment with no declarative tests, no per-assignment bundle, and no
 	// classroom-default autograder.py has nothing to grade, so setup emits
 	// no-autograder=true and the grade job skips (fail-open — any probe error
-	// emits false and grades).
-	if got, _ := nested(doc, "jobs", "grade", "if"); got != "needs.setup.outputs.is-acceptance != 'true' && needs.setup.outputs.no-autograder != 'true'" {
-		t.Errorf("grade.if = %v, want the acceptance-commit + no-autograder skip gate", got)
+	// emits false and grades). It further carries the autograde-off skip: a
+	// teacher who set autograde: false turns grading off for the assignment,
+	// so setup emits autograde-off=true and the grade job skips.
+	if got, _ := nested(doc, "jobs", "grade", "if"); got != "needs.setup.outputs.is-acceptance != 'true' && needs.setup.outputs.no-autograder != 'true' && needs.setup.outputs.autograde-off != 'true'" {
+		t.Errorf("grade.if = %v, want the acceptance-commit + no-autograder + autograde-off skip gate", got)
 	}
 	// The setup checkout must use full history: _baseline_scan walks back
 	// to the commit that added .classroom50.yaml, and a shallow clone

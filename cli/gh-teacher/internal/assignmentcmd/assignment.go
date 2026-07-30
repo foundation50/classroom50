@@ -77,6 +77,7 @@ func assignmentAddCmd() *cobra.Command {
 		testsFile     string
 		feedbackPR    bool
 		emptyRepo     bool
+		autograde     bool
 		allowedFiles  []string
 		passThreshold int
 	)
@@ -195,6 +196,7 @@ func assignmentAddCmd() *cobra.Command {
 			// passed, so an omitted flag stays nil (off) while an explicit
 			// --pass-threshold 0 is a real 0% threshold.
 			passThresholdPtr := passThresholdFromFlag(cmd.Flags().Changed("pass-threshold"), passThreshold)
+			autogradePtr := autogradeFromFlag(cmd.Flags().Changed("autograde"), autograde)
 			if err := autograderseam.ValidateName(autograderVal); err != nil {
 				return err
 			}
@@ -251,6 +253,7 @@ func assignmentAddCmd() *cobra.Command {
 					EmptyRepo:         emptyRepo,
 					AllowedFiles:      allowedFiles,
 					PassThreshold:     passThresholdPtr,
+					Autograde:         autogradePtr,
 				})
 		},
 	}
@@ -269,6 +272,7 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&emptyRepo, "empty-repo", false, "Create truly bare student repos: no README/initial commit, no .classroom50.yaml marker, no autograde workflow — for assignments where students build the repo (including their own GitHub Actions) from scratch. Autograding and the Feedback PR are disabled and cannot be enabled later (the setting is immutable after creation). Mutually exclusive with --template, --tests, --feedback-pr, --allowed-files, and --pass-threshold.")
 	cmd.Flags().StringArrayVar(&allowedFiles, "allowed-files", nil, "Ordered .gitignore-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. Pass `--allowed-files '*' --allowed-files '!hello.py'` to allow only hello.py. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file.")
 	cmd.Flags().IntVar(&passThreshold, "pass-threshold", 0, "Opt-in passing bar as a percentage of max score (0–100): at/above it a gradebook client shows a submission as passing. Advisory/display-only — it does not change a student's score. Omit to leave it off (no passing concept); pass --pass-threshold 0 for an explicit 0%.")
+	cmd.Flags().BoolVar(&autograde, "autograde", true, "Run autograding for this assignment. Default on; pass --autograde=false to turn autograding off (the grade job is skipped, no Actions minutes) while keeping the assignment otherwise normal — useful when you grade elsewhere or want it on for some assignments but not others. Editable later, and NOT mutually exclusive with a configured autograder/tests (unlike --empty-repo). Alongside --empty-repo it is a harmless no-op (a bare repo never grades regardless).")
 	return cmd
 }
 
@@ -517,6 +521,19 @@ func passThresholdFromFlag(changed bool, value int) *int {
 	return &v
 }
 
+// autogradeFromFlag maps --autograde to the optional *bool with the canonical
+// wire form: only the off case is recorded. The default (untouched flag) and an
+// explicit --autograde=true both stay nil (absent = on); only --autograde=false
+// yields *bool(false). EncodeAssignments also collapses an explicit true to nil,
+// but returning nil here keeps the built entry canonical from the start.
+func autogradeFromFlag(changed bool, value bool) *bool {
+	if !changed || value {
+		return nil
+	}
+	v := value // false
+	return &v
+}
+
 // addAssignmentParams carries runAssignmentAdd's inputs as named fields. Many
 // share types (strings, pointers, slices), so positional passing made arg
 // transposition a compile-clean footgun; field names keep call sites
@@ -541,6 +558,7 @@ type addAssignmentParams struct {
 	EmptyRepo         bool
 	AllowedFiles      []string
 	PassThreshold     *int
+	Autograde         *bool
 }
 
 // runAssignmentAdd validates template visibility and entry shape before the
@@ -614,6 +632,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		EmptyRepo:         p.EmptyRepo,
 		AllowedFiles:      allowedFiles,
 		PassThreshold:     passThreshold,
+		Autograde:         p.Autograde,
 	}
 	if err := assignment.ValidateAssignmentEntry(entry); err != nil {
 		return err

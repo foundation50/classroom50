@@ -450,3 +450,36 @@ func TestValidateEmptyRepoFlags(t *testing.T) {
 		})
 	}
 }
+
+func TestAutogradeFromFlag(t *testing.T) {
+	// Canonical wire form: only --autograde=false records a value; the
+	// untouched default and an explicit --autograde=true both stay nil (on).
+	cases := []struct {
+		name    string
+		changed bool
+		value   bool
+		wantNil bool
+		wantVal bool
+	}{
+		{name: "untouched default is nil (on)", changed: false, value: true, wantNil: true},
+		{name: "explicit true collapses to nil (on)", changed: true, value: true, wantNil: true},
+		{name: "explicit false records false (off)", changed: true, value: false, wantNil: false, wantVal: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := autogradeFromFlag(tc.changed, tc.value)
+			if tc.wantNil {
+				if got != nil {
+					t.Errorf("autogradeFromFlag(%v, %v) = %v, want nil", tc.changed, tc.value, *got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("autogradeFromFlag(%v, %v) = nil, want non-nil %v", tc.changed, tc.value, tc.wantVal)
+			}
+			if *got != tc.wantVal {
+				t.Errorf("*autogradeFromFlag(%v, %v) = %v, want %v", tc.changed, tc.value, *got, tc.wantVal)
+			}
+		})
+	}
+}
