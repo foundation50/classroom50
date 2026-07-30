@@ -2546,6 +2546,27 @@ def test_runner_empty_repo_guard_uses_strict_predicate():
     assert "autograding is disabled for it" in runner
 
 
+def test_runner_autograde_off_guard_uses_strict_predicate():
+    # The per-assignment autograde toggle: the runner must recognize only the
+    # literal boolean false as "off" (strict, matching Go's *bool / TS !== false
+    # semantics), and gate BOTH the grade and set-latest jobs on autograde-off.
+    runner = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "skeleton"
+        / "dotgithub"
+        / "workflows"
+        / "autograde-runner.yaml"
+    ).read_text()
+    assert 'entry.get("autograde") is False' in runner, (
+        "runner autograde guard must use the strict `is False` predicate "
+        "(only the literal false disables; anything else fails open and grades)"
+    )
+    # Both the grade job and the set-latest job must skip when off.
+    assert runner.count("autograde-off != 'true'") >= 2, (
+        "both grade and set-latest jobs must gate on autograde-off"
+    )
+
+
 def test_collect_classroom_skips_empty_repo_assignment(monkeypatch, capsys):
     # An empty_repo assignment is skipped with a log line: its bare repos are
     # never polled for releases, so no dead gradebook rows are produced.

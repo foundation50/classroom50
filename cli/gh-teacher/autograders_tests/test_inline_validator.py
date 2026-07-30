@@ -851,3 +851,58 @@ class TestNoAutograderDetection:
         assert rc != 0
         assert "empty-repository assignment" in stderr
         assert "no-autograder" not in outputs
+
+
+class TestAutogradeOff:
+    """The per-assignment autograde toggle: autograde: false emits
+    autograde-off=true (the grade job's `if` then skips grading). Strict
+    boolean predicate, fail-open, isolated from no-autograder."""
+
+    def _manifest_with_autograde(self, value: object) -> dict:
+        # A configured autograder (tests present) so no-autograder is false and
+        # autograde-off is the only skip signal under test.
+        m = _manifest(tests=[{"name": "t", "type": "run", "run": "true",
+                              "points": 1}])
+        m["assignments"][0]["autograde"] = value
+        return m
+
+    def test_autograde_false_emits_off(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=self._manifest_with_autograde(False),
+        )
+        assert rc == 0
+        assert outputs["autograde-off"] == "true"
+        # Other outputs still emit — the job `if`, not the read step, skips.
+        assert outputs["no-autograder"] == "false"
+
+    def test_autograde_true_emits_not_off(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=self._manifest_with_autograde(True),
+        )
+        assert rc == 0
+        assert outputs["autograde-off"] == "false"
+
+    def test_autograde_absent_emits_not_off(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(tests=[{"name": "t", "type": "run",
+                                       "run": "true", "points": 1}]),
+        )
+        assert rc == 0
+        assert outputs["autograde-off"] == "false"
+
+    def test_non_boolean_autograde_fails_open(self, inline_script, tmp_path):
+        # A hand-edited non-boolean is NOT off — grading proceeds (parity with
+        # the empty_repo `is True` strict rule).
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=self._manifest_with_autograde("off"),
+        )
+        assert rc == 0
+        assert outputs["autograde-off"] == "false"

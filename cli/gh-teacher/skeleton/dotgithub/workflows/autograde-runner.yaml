@@ -61,6 +61,10 @@ jobs:
       # per-assignment bundle, no classroom-default autograder.py), so grade +
       # set-latest skip. Fails OPEN: any probe error emits 'false' and grades.
       no-autograder:  ${{ steps.read.outputs.no-autograder }}
+      # 'true' -> autograde is explicitly turned off for this assignment
+      # (autograde: false in the manifest), so grade + set-latest skip. Fails
+      # OPEN: only the literal boolean false disables; anything else grades.
+      autograde-off:  ${{ steps.read.outputs.autograde-off }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -605,6 +609,12 @@ jobs:
               default_py = f"{base_url}/{seg}/autograder.py"
               no_autograder = probe_absent(bundle) and probe_absent(default_py)
 
+          # autograde: false turns grading off for this assignment even when an
+          # autograder IS configured. Strict predicate (only the literal boolean
+          # false disables) matching the empty_repo `is True` rule, so Go / TS /
+          # Python agree and a hand-edited non-boolean fails open and grades.
+          autograde_off = entry.get("autograde") is False
+
           emit("submission-tag", submission_tag)
           emit("runs-on", runs_on_json)
           emit("container", container_json)
@@ -623,6 +633,7 @@ jobs:
           emit("allowed-files", allowed_files_json)
           emit("release-assets", release_assets_json)
           emit("no-autograder", "true" if no_autograder else "false")
+          emit("autograde-off", "true" if autograde_off else "false")
 
       # === Autograde-skipped commit status ===
       # Parallel to the acceptance-skip status: post an explicit
@@ -642,11 +653,28 @@ jobs:
             -f description="no autograder configured — autograding skipped" \
             -f target_url="$RUN_URL" >/dev/null 2>&1 || true
 
+      # === Autograde-off commit status ===
+      # Teacher turned autograding off for this assignment (autograde: false).
+      # Post an explicit classroom50/autograde success so a status-polling
+      # client can tell "off by teacher" from "hasn't run yet". Best-effort.
+      - name: Autograde-off commit status
+        if: steps.read.outputs.autograde-off == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="success" \
+            -f context="classroom50/autograde" \
+            -f description="autograding turned off for this assignment — no grade run" \
+            -f target_url="$RUN_URL" >/dev/null 2>&1 || true
+
   grade:
     needs: setup
     # Skip the acceptance commit and the no-autograder case (set-latest needs
     # grade, so it skips too).
-    if: needs.setup.outputs.is-acceptance != 'true' && needs.setup.outputs.no-autograder != 'true'
+    if: needs.setup.outputs.is-acceptance != 'true' && needs.setup.outputs.no-autograder != 'true' && needs.setup.outputs.autograde-off != 'true'
     runs-on:   ${{ fromJSON(needs.setup.outputs.runs-on) }}
     container: ${{ fromJSON(needs.setup.outputs.container) }}
     timeout-minutes: 15
@@ -923,7 +951,7 @@ jobs:
     needs: [setup, grade]
     # Explicit no-autograder guard, defensive against a future change to
     # grade's result semantics.
-    if: needs.setup.outputs.no-autograder != 'true' && needs.grade.result == 'success' && (needs.grade.outputs.status == 'success' || needs.grade.outputs.status == 'failure')
+    if: needs.setup.outputs.no-autograder != 'true' && needs.setup.outputs.autograde-off != 'true' && needs.grade.result == 'success' && (needs.grade.outputs.status == 'success' || needs.grade.outputs.status == 'failure')
     runs-on: ubuntu-latest
     concurrency:
       group: classroom50-set-latest-${{ github.repository }}
