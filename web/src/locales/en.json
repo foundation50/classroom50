@@ -1957,8 +1957,7 @@
     },
     "errors": {
       "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template, which isn't valid. Ask your teacher to re-run assignment setup.",
-      "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup.",
-      "founderAccessMismatch": "Your repository {{owner}}/{{repo}} was created, but GitHub reports your access as \"{{effective}}\" (role \"{{role}}\") instead of \"{{permission}}\". Ask your teacher to set {{username}}'s access to \"{{permission}}\"."
+      "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup."
     },
     "progress": {
       "error": "Setup failed — review the steps",
