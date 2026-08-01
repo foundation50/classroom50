@@ -2246,6 +2246,24 @@
       "failedTitle": "These submissions couldn't be downloaded:",
       "failedHint": "This is often a transient GitHub error — run the action again to retry."
     },
+    "bulkAccess": {
+      "menuLabel": "Set student repo access",
+      "menuTitle": "Change every student's role on their own repository",
+      "titleEmptyRoster": "No students have accepted yet",
+      "title": "Set student repository access",
+      "subtitle_one": "Applies to {{count}} student who has accepted this assignment.",
+      "subtitle_other": "Applies to {{count}} students who have accepted this assignment.",
+      "noRepos": "No students have accepted this assignment yet, so there are no repositories to change.",
+      "roleLabel": "Repository role",
+      "warning_one": "This sets {{count}} student's role on their own repository to {{level}}. Admin lets them change repository settings and, on a private repo, its visibility. Existing collaborators are not otherwise affected.",
+      "warning_other": "This sets {{count}} students' roles on their own repositories to {{level}}. Admin lets them change repository settings and, on a private repo, its visibility. Existing collaborators are not otherwise affected.",
+      "apply": "Apply to all",
+      "working": "Updating repositories",
+      "progress": "Updated {{processed}} of {{total}}",
+      "resultHeadline": "Set {{count}} of {{total}} students to {{level}}.",
+      "failedSection_one": "{{count}} repository could not be updated",
+      "failedSection_other": "{{count}} repositories could not be updated"
+    },
     "rowRegrade": {
       "title": "Regrade this submission",
       "titleInFlight": "Regrade in progress…",

@@ -18,6 +18,7 @@ import { AcceptLinkModal } from "@/pages/submissions/AcceptLinkModal"
 import { MetricsModal } from "@/pages/submissions/MetricsModal"
 import { OpenAllFeedbackPrsModal } from "@/pages/submissions/OpenAllFeedbackPrsModal"
 import { DownloadAllSubmissionsModal } from "@/pages/submissions/DownloadAllSubmissionsModal"
+import { BulkRepoAccessModal } from "@/components/modals/BulkRepoAccessModal"
 import { DataFreshness } from "@/pages/submissions/DataFreshness"
 import { ConfirmModal } from "@/components/modals"
 import {
@@ -256,6 +257,7 @@ const SubmissionsPageContent = () => {
   const [acceptOpen, setAcceptOpen] = useState(false)
   const [openAllPrsOpen, setOpenAllPrsOpen] = useState(false)
   const [downloadAllOpen, setDownloadAllOpen] = useState(false)
+  const [bulkAccessOpen, setBulkAccessOpen] = useState(false)
 
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
   // Gate on a resolved roster so a transient load/permission failure falls back
@@ -1024,6 +1026,17 @@ const SubmissionsPageContent = () => {
             downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
             onDownloadAll={() => setDownloadAllOpen(true)}
             downloadAllDisabled={downloadableOwners.length === 0}
+            // Bulk set student repo access: owner-only (needs admin on every
+            // repo), individual assignments only (a group repo's membership is
+            // founder-managed), never empty_repo, and only when repos exist.
+            onBulkAccess={
+              isOwner &&
+              !isGroupAssignment &&
+              !isEmptyRepoAssignment &&
+              acceptedSet.size > 0
+                ? () => setBulkAccessOpen(true)
+                : undefined
+            }
             locked={isLockedAssignment}
             lockPending={setLock.isPending}
             // Lock/unlock is an authoring-tier action (teacher|hta), same gate
@@ -1174,6 +1187,15 @@ const SubmissionsPageContent = () => {
         assignment={assignment}
         assignmentName={assignmentInfo?.name ?? assignment}
         owners={downloadableOwners}
+      />
+      <BulkRepoAccessModal
+        open={bulkAccessOpen}
+        onClose={() => setBulkAccessOpen(false)}
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+        owners={[...acceptedSet]}
+        students={students}
       />
     </PageShell>
   )
