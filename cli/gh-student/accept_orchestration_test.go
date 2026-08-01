@@ -207,6 +207,61 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 			t.Fatalf("err = %v, want the cross-org 'not accessible' message", err)
 		}
 	})
+
+	// Issue #468: an in-org fork template whose cross-org upstream org has revoked
+	// the app. The generate 403's body names the upstream org, and the follow-up
+	// fork read is ALSO blocked — so the parent org is recovered from the message.
+	t.Run("403 on generate → names the fork's upstream org from the 403 body", func(t *testing.T) {
+		inOrgTmpl := assignments.TemplateRef{Owner: "o", Repo: "hello-fork", Branch: "main"}
+		restriction := "Although you appear to have the correct authorization credentials, the `upstream-org` organization has enabled OAuth App access restrictions, meaning that data access to third-parties is limited."
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/hello-fork/generate", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]string{"message": restriction})
+		})
+		// The follow-up fork read is blocked by the same restriction.
+		mux.HandleFunc("/repos/o/hello-fork", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]string{"message": restriction})
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		client := newTestRESTClient(t, server)
+
+		var out bytes.Buffer
+		_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", inOrgTmpl)
+		if err == nil || !strings.Contains(err.Error(), "`upstream-org`") || !strings.Contains(err.Error(), "fork") {
+			t.Fatalf("err = %v, want a fork-upstream message naming `upstream-org`", err)
+		}
+	})
+
+	// When the 403 body doesn't name an org, the fork probe recovers the parent.
+	t.Run("403 on generate → names the parent via the fork probe fallback", func(t *testing.T) {
+		inOrgTmpl := assignments.TemplateRef{Owner: "o", Repo: "hello-fork", Branch: "main"}
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/hello-fork/generate", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"Must have admin rights to Repository."}`))
+		})
+		mux.HandleFunc("/repos/o/hello-fork", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"fork":   true,
+				"parent": map[string]any{"full_name": "upstream-org/hello-fork"},
+			})
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		client := newTestRESTClient(t, server)
+
+		var out bytes.Buffer
+		_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", inOrgTmpl)
+		if err == nil || !strings.Contains(err.Error(), "`upstream-org`") {
+			t.Fatalf("err = %v, want a fork-upstream message naming `upstream-org`", err)
+		}
+	})
 }
 
 func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {

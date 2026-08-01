@@ -517,7 +517,7 @@ function renderTemplateVerdict({
                 owner: verification.owner,
                 repo: verification.repo,
               })}
-              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              <ul className="mt-1 list-disc space-y-0.5 ps-4">
                 <li>
                   {t("assignments.template.restrictedItemApprove", {
                     owner: verification.owner,

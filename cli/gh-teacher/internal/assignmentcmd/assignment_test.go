@@ -2,11 +2,15 @@ package assignmentcmd
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/foundation50/gh-teacher/internal/assignment"
+	"github.com/foundation50/gh-teacher/internal/githubapi"
+	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
 
 func TestParseTemplateRef_HappyPaths(t *testing.T) {
@@ -449,4 +453,69 @@ func TestValidateEmptyRepoFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A cross-org fork template must validate successfully but report the upstream
+// org so `add` can warn that accept depends on that org keeping the app
+// approved (issue #468). A same-org fork (or non-fork) reports no parent.
+func TestValidateTemplateRepo_CrossOrgFork(t *testing.T) {
+	newClient := func(t *testing.T, repo map[string]any) githubapi.Client {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/tmpl", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(repo)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		return githubtest.NewTestClient(t, server)
+	}
+
+	t.Run("cross-org fork reports the parent org", func(t *testing.T) {
+		client := newClient(t, map[string]any{
+			"is_template":    true,
+			"default_branch": "main",
+			"private":        true,
+			"fork":           true,
+			"parent":         map[string]any{"full_name": "upstream-org/tmpl"},
+		})
+		_, _, parent, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		if err != nil {
+			t.Fatalf("validateTemplateRepo: %v", err)
+		}
+		if parent != "upstream-org" {
+			t.Errorf("crossOrgForkParent = %q, want %q", parent, "upstream-org")
+		}
+	})
+
+	t.Run("same-org fork reports no parent", func(t *testing.T) {
+		client := newClient(t, map[string]any{
+			"is_template":    true,
+			"default_branch": "main",
+			"private":        true,
+			"fork":           true,
+			"parent":         map[string]any{"full_name": "o/upstream"},
+		})
+		_, _, parent, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		if err != nil {
+			t.Fatalf("validateTemplateRepo: %v", err)
+		}
+		if parent != "" {
+			t.Errorf("crossOrgForkParent = %q, want empty for a same-org fork", parent)
+		}
+	})
+
+	t.Run("non-fork reports no parent", func(t *testing.T) {
+		client := newClient(t, map[string]any{
+			"is_template":    true,
+			"default_branch": "main",
+			"private":        true,
+			"fork":           false,
+		})
+		_, _, parent, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		if err != nil {
+			t.Fatalf("validateTemplateRepo: %v", err)
+		}
+		if parent != "" {
+			t.Errorf("crossOrgForkParent = %q, want empty for a non-fork", parent)
+		}
+	})
 }
