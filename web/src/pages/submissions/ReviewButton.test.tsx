@@ -42,7 +42,9 @@ const REPO = "cs101-hw1-alice"
 // Open the empty-PR modal: no open PR -> Review shows the modal with Repair.
 async function openRepairModal(user: ReturnType<typeof userEvent.setup>) {
   refetch.mockResolvedValueOnce({ data: null, error: null })
-  await user.click(screen.getByTitle("submissions.table.review"))
+  await user.click(
+    screen.getByRole("button", { name: "submissions.table.reviewAria" }),
+  )
   await screen.findByText("submissions.reviewModal.emptyTitle")
 }
 

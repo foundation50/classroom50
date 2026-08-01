@@ -49,6 +49,7 @@ import {
   IndividualRowHeader,
   RepoRowActions,
 } from "@/pages/submissions/SubmissionsRowActions"
+import { ManageSubmissionModal } from "@/pages/submissions/ManageSubmissionModal"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
@@ -89,6 +90,21 @@ const ScoreBadge = ({
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
+// The row context the submission hub (ManageSubmissionModal) renders from,
+// captured when the row's Manage control is clicked. `title`/`subtitle` are the
+// identity to show; the rest gate and target the per-action rows.
+type ManageSubmissionContext = {
+  owner: string
+  isGroup: boolean
+  title: string
+  subtitle?: string
+  repo: string
+  repoHref: string
+  hasRepo: boolean
+  commit?: string | null
+  release?: string | null
+  displayName?: string
+}
 // Inline commit/details link in the expanded history row: external link when a
 // URL is present, else dimmed non-clickable text (label shown beside the icon,
 // unlike the icon-only row-action above).
@@ -278,6 +294,12 @@ const SubmissionsTable = ({
 
   // The owner (group founder) whose collaborators modal is open, or null.
   const [manageOwner, setManageOwner] = useState<string | null>(null)
+
+  // The submission whose hub (ManageSubmissionModal) is open, or null. Carries
+  // the row's context so the hub can render identity, repo, and the per-action
+  // gating without re-deriving it.
+  const [manageSubmission, setManageSubmission] =
+    useState<ManageSubmissionContext | null>(null)
 
   // The individual student whose repo-access modal is open, or null.
   const [accessOwner, setAccessOwner] = useState<string | null>(null)
@@ -476,37 +498,26 @@ const SubmissionsTable = ({
             <div className="flex items-center gap-1">
               {isGroup ? (
                 <RepoRowActions
-                  mode="group"
-                  org={org}
-                  classroom={classroom}
-                  assignment={assignment}
                   owner={rest.owner}
-                  repo={repo}
-                  hasRepo
-                  commit={rest.commit}
-                  release={rest.release}
-                  emptyRepo={emptyRepo}
                   header={
-                    <GroupActionControls
-                      repo={repo}
-                      repoHref={repoHref}
-                      onManage={() => setManageOwner(rest.owner)}
-                    />
+                    <GroupActionControls repo={repo} repoHref={repoHref} />
+                  }
+                  onManage={() =>
+                    setManageSubmission({
+                      owner: rest.owner,
+                      isGroup: true,
+                      title: repo,
+                      repo,
+                      repoHref,
+                      hasRepo: true,
+                      commit: rest.commit,
+                      release: rest.release,
+                    })
                   }
                 />
               ) : (
                 <RepoRowActions
-                  mode="individual"
-                  org={org}
-                  classroom={classroom}
-                  assignment={assignment}
                   owner={rest.owner}
-                  repo={repo}
-                  hasRepo
-                  commit={rest.commit}
-                  release={rest.release}
-                  emptyRepo={emptyRepo}
-                  displayName={getName(rest.owner, students) || undefined}
                   header={
                     <IndividualRowHeader
                       repo={repo}
@@ -514,7 +525,24 @@ const SubmissionsTable = ({
                       hasRepo
                     />
                   }
-                  onManageAccess={() => setAccessOwner(rest.owner)}
+                  onManage={() =>
+                    setManageSubmission({
+                      owner: rest.owner,
+                      isGroup: false,
+                      title: getName(rest.owner, students) || rest.owner,
+                      subtitle: identitySubtitle(
+                        getName(rest.owner, students),
+                        rest.owner,
+                        getSection(rest.owner, students),
+                      ),
+                      repo,
+                      repoHref,
+                      hasRepo: true,
+                      commit: rest.commit,
+                      release: rest.release,
+                      displayName: getName(rest.owner, students) || undefined,
+                    })
+                  }
                 />
               )}
             </div>
@@ -655,17 +683,7 @@ const SubmissionsTable = ({
                   const accepted = hasAccepted(student.username, showActions)
                   actions = (
                     <RepoRowActions
-                      mode="individual"
-                      org={org}
-                      classroom={classroom}
-                      assignment={assignment}
                       owner={student.username}
-                      repo={repoName}
-                      hasRepo={accepted}
-                      emptyRepo={emptyRepo}
-                      displayName={
-                        getName(student.username, students) || undefined
-                      }
                       header={
                         <IndividualRowHeader
                           repo={repoName}
@@ -673,7 +691,25 @@ const SubmissionsTable = ({
                           hasRepo={accepted}
                         />
                       }
-                      onManageAccess={() => setAccessOwner(student.username)}
+                      onManage={() =>
+                        setManageSubmission({
+                          owner: student.username,
+                          isGroup: false,
+                          title:
+                            getName(student.username, students) ||
+                            student.username,
+                          subtitle: identitySubtitle(
+                            getName(student.username, students),
+                            student.username,
+                            student.section,
+                          ),
+                          repo: repoName,
+                          repoHref,
+                          hasRepo: accepted,
+                          displayName:
+                            getName(student.username, students) || undefined,
+                        })
+                      }
                     />
                   )
                 }
@@ -690,6 +726,12 @@ const SubmissionsTable = ({
                 )
               }
               const { owner, repoName } = item.repo
+              const groupRepoHref = studentRepoUrl(
+                org,
+                classroom,
+                assignment,
+                owner,
+              )
               return (
                 <GroupRepoRow
                   key={`group-${repoName}`}
@@ -699,7 +741,27 @@ const SubmissionsTable = ({
                   owner={owner}
                   repoName={repoName}
                   students={students}
-                  onManage={() => setManageOwner(owner)}
+                  actions={
+                    <RepoRowActions
+                      owner={owner}
+                      header={
+                        <GroupActionControls
+                          repo={repoName}
+                          repoHref={groupRepoHref}
+                        />
+                      }
+                      onManage={() =>
+                        setManageSubmission({
+                          owner,
+                          isGroup: true,
+                          title: repoName,
+                          repo: repoName,
+                          repoHref: groupRepoHref,
+                          hasRepo: true,
+                        })
+                      }
+                    />
+                  }
                 />
               )
             })}
@@ -734,6 +796,41 @@ const SubmissionsTable = ({
           />
         )}
       </EnterDiv>
+
+      {manageSubmission && (
+        <ManageSubmissionModal
+          key={`manage-${manageSubmission.owner}`}
+          onClose={() => setManageSubmission(null)}
+          title={manageSubmission.title}
+          subtitle={manageSubmission.subtitle}
+          repo={manageSubmission.repo}
+          repoHref={
+            manageSubmission.hasRepo ? manageSubmission.repoHref : undefined
+          }
+          isGroup={manageSubmission.isGroup}
+          onManageMembers={
+            manageSubmission.isGroup
+              ? () => setManageOwner(manageSubmission.owner)
+              : undefined
+          }
+          action={{
+            mode: manageSubmission.isGroup ? "group" : "individual",
+            org,
+            classroom,
+            assignment,
+            owner: manageSubmission.owner,
+            repo: manageSubmission.repo,
+            hasRepo: manageSubmission.hasRepo,
+            commit: manageSubmission.commit,
+            release: manageSubmission.release,
+            emptyRepo,
+            displayName: manageSubmission.displayName,
+            onManageAccess: manageSubmission.isGroup
+              ? undefined
+              : () => setAccessOwner(manageSubmission.owner),
+          }}
+        />
+      )}
 
       {isGroup && manageOwner && (
         <GroupCollaboratorsModal
