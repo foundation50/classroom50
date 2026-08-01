@@ -41,3 +41,41 @@ export const InlineCode = ({ children }: { children?: ReactNode }) => (
     {children}
   </code>
 )
+
+// Matches bare http(s) URLs so GitHub's own error text (which embeds docs links
+// like ".../restricting-access-to-your-organization-s-data/") renders them as
+// clickable anchors. A trailing sentence period is a common false positive, so
+// it (and other trailing punctuation) is trimmed back out of the match.
+const URL_PATTERN = /(https?:\/\/[^\s]+)/g
+const TRAILING_PUNCTUATION = /[.,;:)\]}>'"]+$/
+
+// Render `text` with any embedded http(s) URLs turned into anchors. Used for
+// relayed third-party (GitHub) messages we don't control, so a docs link in the
+// text is clickable rather than plain italic. Non-URL segments pass through
+// verbatim.
+export const AutoLinkText = ({ text }: { text: string }) => {
+  const parts = text.split(URL_PATTERN)
+  return (
+    <>
+      {parts.map((part, i) => {
+        // Odd indices are the capture-group URL segments.
+        if (i % 2 === 0) return part
+        const trailing = part.match(TRAILING_PUNCTUATION)?.[0] ?? ""
+        const href = trailing ? part.slice(0, -trailing.length) : part
+        return (
+          <span key={i}>
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              {href}
+            </a>
+            {trailing}
+          </span>
+        )
+      })}
+    </>
+  )
+}

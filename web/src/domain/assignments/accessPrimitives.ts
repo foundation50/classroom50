@@ -288,23 +288,6 @@ export function classifyPrivateFork(
   }
 }
 
-// Hard-block error thrown at create/edit/reuse for a cross-org (or
-// unknown-parent) private fork. `parent` is the upstream's full_name when
-// GitHub reported it. Shared so every write path emits identical guidance.
-export function crossOrgPrivateForkError(
-  owner: string,
-  repo: string,
-  org: string,
-  parent: string | undefined,
-): Error {
-  const parentDesc = parent
-    ? `a private fork of ${parent} in another org`
-    : `a private fork of a private upstream`
-  return new Error(
-    `Template "${owner}/${repo}" is ${parentDesc} — copying it would fail because the private upstream isn't accessible to Classroom 50. Create a fresh (non-fork) template repo in ${org} and copy the fork's contents into it, then reference that.`,
-  )
-}
-
 export async function verifyTemplateAccess(
   client: GitHubClient,
   org: string,
@@ -468,15 +451,13 @@ export async function resolveTemplate(
     )
   }
 
-  // Block a private fork whose upstream parent is private and cross-org (or
-  // unknown): generate reaches into the private upstream, which Classroom 50
-  // can't access across orgs, so accept would fail. In-org private forks are
-  // allowed (upstream reachable). Mirrors the "private-fork" verdict; a public
-  // parent generates fine.
-  const fork = classifyPrivateFork(repo, org)
-  if (fork.isRiskyPrivateFork && !fork.parentInOrg) {
-    throw crossOrgPrivateForkError(parsed.owner, parsed.repo, org, fork.parent)
-  }
+  // A cross-org private fork is NOT blocked: `generate` copies the fork's own
+  // objects and does not need access to the private upstream (verified against
+  // GitHub — a student with no parent-org access still generates successfully).
+  // The one real failure is the parent org's OAuth-App-access restriction
+  // gating our token, which no create-time check can pre-empt. The pre-flight
+  // `private-fork` verdict warns about it; accept surfaces it with an
+  // actionable, parent-org-named error (see forkParentRestrictedError).
 
   return {
     template: { owner: parsed.owner, repo: parsed.repo, branch },

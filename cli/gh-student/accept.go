@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -837,6 +838,67 @@ func orgRepoCreationDeniedError(org string, cause error) error {
 		"then run accept again: %w", org, cause)
 }
 
+// oauthRestrictionOrg matches the org GitHub names in its OAuth-App-restriction
+// 403 body: "...the `some-org` organization has enabled OAuth App access
+// restrictions...". For a cross-org fork template the restriction is anchored to
+// the fork's UPSTREAM org, so the named org is the parent — and this signal
+// survives even when a follow-up repo read is itself blocked (issue #468).
+var oauthRestrictionOrg = regexp.MustCompile("(?i)`([^`]+)`\\s+organization has enabled OAuth App")
+
+// forkParentOwnerFromRestriction returns the org named in GitHub's OAuth-App
+// restriction 403, when it differs from the classroom org (a match with the
+// classroom org is an ordinary same-org restriction, not the cross-org-fork
+// case). Empty string when the body doesn't carry the pattern.
+func forkParentOwnerFromRestriction(err error, classroomOrg string) string {
+	httpErr, ok := errors.AsType[*githubapi.HTTPError](err)
+	if !ok {
+		return ""
+	}
+	m := oauthRestrictionOrg.FindStringSubmatch(httpErr.Message)
+	if m == nil {
+		return ""
+	}
+	named := m[1]
+	if strings.EqualFold(named, classroomOrg) {
+		return ""
+	}
+	return named
+}
+
+// crossOrgForkParentOwner probes the template repo for a cross-org fork parent
+// as a fallback when GitHub's 403 body didn't name the org. Best-effort: any
+// read failure (including the same restriction re-blocking this read) yields "".
+func crossOrgForkParentOwner(client githubapi.Client, owner, repo, classroomOrg string) string {
+	var resp struct {
+		Fork   bool `json:"fork"`
+		Parent struct {
+			FullName string `json:"full_name"`
+		} `json:"parent"`
+	}
+	if err := client.Get(fmt.Sprintf("repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo)), &resp); err != nil {
+		return ""
+	}
+	if !resp.Fork {
+		return ""
+	}
+	parentOwner, _, found := strings.Cut(resp.Parent.FullName, "/")
+	if !found || parentOwner == "" || strings.EqualFold(parentOwner, classroomOrg) {
+		return ""
+	}
+	return parentOwner
+}
+
+// forkParentRestrictedError is the student-facing remedy for a cross-org fork
+// template blocked by its upstream org's OAuth-App restriction (issue #468).
+// Names the PARENT org, mirroring the web accept.templateErrors.forkParentRestricted
+// copy: "re-run setup" (the ordinary in-org remedy) can never fix this.
+func forkParentRestrictedError(parentOwner string, tmpl assignments.TemplateRef, cause error) error {
+	return fmt.Errorf("couldn't copy the template `%s/%s`: it is a fork of a repository in the `%s` "+
+		"organization, and copying a fork is governed by that organization's third-party app "+
+		"restrictions. Ask your teacher to approve the Classroom 50 app for `%s` (or use a "+
+		"non-fork template), then accept again: %w", tmpl.Owner, tmpl.Repo, parentOwner, parentOwner, cause)
+}
+
 // reportAccepted writes the success header + clone instructions on stdout
 // (machine-stable, scriptable). The per-step spinners already rendered
 // human-channel progress, so this doesn't duplicate the headline onto stderr.
@@ -942,6 +1004,18 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 					return created.HTMLURL, created.FullName, defaultBranchOrMain(created.DefaultBranch), true, nil
 				}
 			case http.StatusNotFound:
+				// An in-org fork template whose cross-org upstream restricts the
+				// app 403s here (or 404s), not because the student lacks access.
+				// Name the parent org when we can identify it; else fall back to
+				// the generic visibility message.
+				if strings.EqualFold(tmpl.Owner, org) {
+					if parent := forkParentOwnerFromRestriction(err, org); parent != "" {
+						return "", "", "", false, forkParentRestrictedError(parent, tmpl, err)
+					}
+					if parent := crossOrgForkParentOwner(client, tmpl.Owner, tmpl.Repo, org); parent != "" {
+						return "", "", "", false, forkParentRestrictedError(parent, tmpl, err)
+					}
+				}
 				return "", "", "", false, fmt.Errorf("template `%s/%s` is not accessible to you — ask your teacher to make it public or grant your account access",
 					tmpl.Owner, tmpl.Repo)
 			case http.StatusForbidden:
@@ -949,6 +1023,17 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 				// it is classified here rather than blamed on `tmpl`.
 				if is403OrgRepoCreationDenied(err) {
 					return "", "", "", false, orgRepoCreationDeniedError(org, err)
+				}
+				// An in-org fork template whose cross-org upstream org has revoked
+				// the app 403s here; name the parent org from GitHub's body (which
+				// survives the blocked follow-up read), else probe the fork.
+				if strings.EqualFold(tmpl.Owner, org) {
+					if parent := forkParentOwnerFromRestriction(err, org); parent != "" {
+						return "", "", "", false, forkParentRestrictedError(parent, tmpl, err)
+					}
+					if parent := crossOrgForkParentOwner(client, tmpl.Owner, tmpl.Repo, org); parent != "" {
+						return "", "", "", false, forkParentRestrictedError(parent, tmpl, err)
+					}
 				}
 			}
 		}

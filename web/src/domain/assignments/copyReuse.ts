@@ -18,11 +18,7 @@ import {
   type AssignmentsFile,
 } from "../queries/assignments"
 import { withGitConflictRetry, assertClassroomNotArchived } from "../classrooms"
-import {
-  log,
-  classifyPrivateFork,
-  crossOrgPrivateForkError,
-} from "./accessPrimitives"
+import { log } from "./accessPrimitives"
 import { resolveTemplateGrant, type CreateAssignmentResult } from "./createEdit"
 
 export type CopyAssignmentInput = {
@@ -189,19 +185,11 @@ export async function copyAssignmentToClassroom(
       }
       needsTeamGrant = true
     }
-    // Same cross-org private-fork guard as resolveTemplate (create/edit): a
-    // private fork whose private upstream lives in another org can't be reached
-    // by generate, so accept would fail. Enforce here so reuse can't smuggle in
-    // a template create/edit would reject.
-    const fork = classifyPrivateFork(repo, org)
-    if (fork.isRiskyPrivateFork && !fork.parentInOrg) {
-      throw crossOrgPrivateForkError(
-        entry.template.owner,
-        entry.template.repo,
-        org,
-        fork.parent,
-      )
-    }
+    // A cross-org private fork is allowed here too (mirrors resolveTemplate):
+    // generate copies the fork's own objects without needing the private
+    // upstream, so reuse must not reject what create/edit now accepts. The
+    // parent org's OAuth-App restriction is the only real risk, surfaced at
+    // accept with a parent-org-named error, not blocked here.
   }
 
   const commit = await getCommit(client, org, ref.object.sha)
