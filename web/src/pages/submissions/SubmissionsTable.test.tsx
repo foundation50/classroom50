@@ -225,7 +225,7 @@ describe("SubmissionsTable per-row download", () => {
     expect(screen.getByTitle("submissions.rowDownload.title")).toBeTruthy()
   })
 
-  it("shows no download button for a non-submitter row", () => {
+  it("shows the download button for an accepted-not-submitted non-submitter", () => {
     render(
       <SubmissionsTable
         {...baseProps}
@@ -233,6 +233,124 @@ describe("SubmissionsTable per-row download", () => {
         acceptedUsernames={new Set(["alice"])}
       />,
     )
+    // The full per-repo action cluster now renders for non-submitters; an
+    // accepted student has a repo, so Download is enabled.
+    const btn = screen.getByTitle("submissions.rowDownload.title")
+    expect(btn.hasAttribute("disabled")).toBe(false)
+  })
+
+  it("disables the download button for a never-accepted non-submitter", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        nonSubmitters={[student()]}
+        acceptedUsernames={new Set()}
+      />,
+    )
+    // No repo exists, so Download shows but is disabled (via titleNoRepo).
+    const btn = screen.getByTitle("submissions.rowDownload.titleNoRepo")
+    expect(btn.hasAttribute("disabled")).toBe(true)
+  })
+})
+
+describe("SubmissionsTable non-submitter action cluster", () => {
+  it("shows the repo-scoped actions (Review, Manage access, Regrade) for a non-submitter", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        nonSubmitters={[student()]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    expect(screen.getByTitle("submissions.table.review")).toBeTruthy()
+    expect(screen.getByTitle("submissions.table.manageAccess")).toBeTruthy()
+    expect(screen.getByTitle("submissions.rowRegrade.title")).toBeTruthy()
+  })
+
+  it("disables the repo-scoped actions for a never-accepted non-submitter", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        nonSubmitters={[student()]}
+        acceptedUsernames={new Set()}
+      />,
+    )
+    expect(
+      screen
+        .getByTitle("submissions.table.reviewNoRepo")
+        .hasAttribute("disabled"),
+    ).toBe(true)
+    expect(
+      screen
+        .getByTitle("submissions.table.manageAccessNoRepo")
+        .hasAttribute("disabled"),
+    ).toBe(true)
+    expect(
+      screen
+        .getByTitle("submissions.rowRegrade.titleNoRepo")
+        .hasAttribute("disabled"),
+    ).toBe(true)
+  })
+
+  it("hides grading actions for an empty_repo non-submitter but keeps repo + download", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        nonSubmitters={[student()]}
+        acceptedUsernames={new Set(["alice"])}
+        emptyRepo
+      />,
+    )
+    // empty_repo never autogrades: Review/Manage access/Regrade are hidden,
+    // but Open repo and Download stay.
+    expect(screen.queryByTitle("submissions.table.review")).toBeNull()
+    expect(screen.queryByTitle("submissions.rowRegrade.title")).toBeNull()
+    expect(
+      screen.getByRole("link", {
+        name: "submissions.table.openRepoLabel:cs101-hw1-alice",
+      }),
+    ).toBeTruthy()
+    expect(screen.getByTitle("submissions.rowDownload.title")).toBeTruthy()
+    // Manage access is one of the grading-tier actions hidden for empty_repo.
+    expect(screen.queryByTitle("submissions.table.manageAccess")).toBeNull()
+  })
+
+  it("shows an em-dash (no actions) while acceptance data is still loading", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        nonSubmitters={[student()]}
+        acceptedUsernames={undefined}
+      />,
+    )
+    // acceptedUsernames === undefined means acceptance is unknown (org repo list
+    // not loaded): the row must not assert "hasn't accepted" with a disabled
+    // cluster, so no action controls render at all.
+    expect(screen.queryByTitle("submissions.table.review")).toBeNull()
+    expect(screen.queryByTitle("submissions.table.reviewNoRepo")).toBeNull()
     expect(screen.queryByTitle("submissions.rowDownload.title")).toBeNull()
+    expect(
+      screen.queryByTitle("submissions.rowDownload.titleNoRepo"),
+    ).toBeNull()
+  })
+
+  it("renders the shared action cluster for a group submitter row", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        isGroup
+        scores={[scoreRow({ owner: "team-rocket", usernames: ["alice"] })]}
+      />,
+    )
+    // Group rows go through the same RepoRowActions as individual rows, so the
+    // Review/Regrade/Download tail must be present (parity with the individual
+    // submitter row, which shares the component).
+    expect(screen.getByTitle("submissions.table.review")).toBeTruthy()
+    expect(screen.getByTitle("submissions.rowRegrade.title")).toBeTruthy()
+    expect(screen.getByTitle("submissions.rowDownload.title")).toBeTruthy()
+    // Members button (group header) is present; the per-student Manage-access
+    // button is not (group access is managed via the Members modal).
+    expect(screen.getByTitle("submissions.table.members")).toBeTruthy()
+    expect(screen.queryByTitle("submissions.table.manageAccess")).toBeNull()
   })
 })

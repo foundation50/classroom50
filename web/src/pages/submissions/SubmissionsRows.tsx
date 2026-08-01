@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 
 import GitHub from "@/assets/github.svg?react"
 import { getName, getInitials } from "@/util/students"
-import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
+import { studentRepoUrl } from "@/util/studentRepo"
 import Avatar from "@/components/avatar"
 import { Badge, Button } from "@/components/ui"
 import { nonSubmitterStatus } from "@/pages/submissions/dashboard"
@@ -237,40 +237,26 @@ export const GroupActionControls = ({
   )
 }
 
-// A roster student with no submission row: identity + status badge, plus a repo
-// link when they accepted an individual assignment (a repo exists to open).
+// A roster student with no submission row: identity + status badge. For an
+// individual assignment the caller passes the full per-repo action cluster
+// (`actions`) so a non-submitter shows the same affordances as a submitter,
+// disabled where inapplicable; a group non-submitter (no per-student repo)
+// falls back to an em-dash.
 export const NonSubmitterRow = ({
   student,
   students,
   isGroup,
   acceptedUsernames,
-  org,
-  classroom,
-  assignment,
   onProfile,
+  actions,
 }: {
   student: Student
   students: Student[]
   isGroup: boolean
   acceptedUsernames?: Set<string>
-  org: string
-  classroom: string
-  assignment: string
   onProfile: (username: string) => void
+  actions?: React.ReactNode
 }) => {
-  const { t } = useTranslation()
-  const accepted =
-    !isGroup &&
-    Boolean(
-      student.username &&
-      acceptedUsernames?.has(student.username.toLowerCase()),
-    )
-  const repo = accepted
-    ? studentRepoName(classroom, assignment, student.username)
-    : null
-  const repoHref = accepted
-    ? studentRepoUrl(org, classroom, assignment, student.username)
-    : null
   return (
     <tr>
       <td>
@@ -298,15 +284,8 @@ export const NonSubmitterRow = ({
       <td>—</td>
       <td>—</td>
       <td>
-        {repo && repoHref ? (
-          <ActionIconLink
-            href={repoHref}
-            icon={GitHub}
-            label={t("submissions.table.openRepoLabel", { repo })}
-            title={t("submissions.table.viewRepo")}
-            emptyLabel={t("submissions.table.openRepoLabel", { repo })}
-            emptyTitle={t("submissions.table.viewRepo")}
-          />
+        {actions ? (
+          <div className="flex items-center gap-1">{actions}</div>
         ) : (
           "—"
         )}

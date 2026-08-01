@@ -19,10 +19,14 @@ export const ReviewButton = ({
   org,
   repo,
   mode,
+  noRepo = false,
 }: {
   org: string
   repo: string
   mode: AssignmentMode
+  // No assignment repo exists yet (never-accepted non-submitter): there can be
+  // no Feedback PR to review or repair, so render the button disabled.
+  noRepo?: boolean
 }) => {
   const { t } = useTranslation()
   const { notify } = useToast()
@@ -35,6 +39,7 @@ export const ReviewButton = ({
   const repair = useRepairFeedbackPr()
 
   const handleReview = async () => {
+    if (noRepo) return
     setResolving(true)
     try {
       // getOpenPullRequests maps 404 -> [], so a non-404 failure surfaces as
@@ -111,12 +116,16 @@ export const ReviewButton = ({
         size="sm"
         shape="square"
         className="text-base-content/70 disabled:opacity-60"
-        disabled={resolving}
+        disabled={noRepo || resolving}
         loading={resolving}
         loadingLabel={t("submissions.table.review")}
         onClick={handleReview}
         aria-label={t("submissions.table.reviewAria")}
-        title={t("submissions.table.review")}
+        title={
+          noRepo
+            ? t("submissions.table.reviewNoRepo")
+            : t("submissions.table.review")
+        }
       >
         {!resolving && <MessageCircle aria-hidden="true" className="size-4" />}
       </Button>

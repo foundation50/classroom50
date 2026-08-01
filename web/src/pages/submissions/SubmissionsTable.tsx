@@ -1,17 +1,13 @@
 import {
   ChevronRight,
-  Download,
   GitCommitHorizontal,
   Inbox,
-  RefreshCw,
   ScrollText,
   SearchX,
-  ShieldCheck,
 } from "lucide-react"
 import { Fragment, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
-import GitHub from "@/assets/github.svg?react"
 import {
   getName,
   getInitials,
@@ -24,7 +20,6 @@ import Avatar from "@/components/avatar"
 import {
   Badge,
   Button,
-  EmphasisLtr,
   Spinner,
   TablePagination,
   rtlFlip,
@@ -37,28 +32,27 @@ import {
   buildGroupDisplayItems,
   buildGroupRosterDisplayItems,
   buildSortedDisplayItems,
+  hasAccepted,
   pageBounds,
   paginateDisplayItems,
   paginationRange,
   PAGE_SIZE_OPTIONS,
 } from "@/pages/submissions/dashboard"
 import {
-  ActionIconLink,
   GroupActionControls,
   GroupMembers,
   GroupRepoRow,
   NonSubmitterRow,
   identitySubtitle,
 } from "@/pages/submissions/SubmissionsRows"
-import { ConfirmModal } from "@/components/modals"
+import {
+  IndividualRowHeader,
+  RepoRowActions,
+} from "@/pages/submissions/SubmissionsRowActions"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
-import { ReviewButton } from "@/pages/submissions/ReviewButton"
-import useTriggerRegrade from "@/hooks/useTriggerRegrade"
-import useDownloadSubmission from "@/hooks/mutations/useDownloadSubmission"
-import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Student } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 
@@ -123,181 +117,6 @@ const HistoryLink = ({
       {label}
     </span>
   )
-
-// Review action: links to the open Feedback PR (opened at accept time, or by
-// the autograde runner) when one exists; when none does, offers a teacher-side
-// Repair that re-runs the same idempotent ensure flow with the teacher's token
-// (issue #347 — recovers a PR a student's accept-time attempt failed to open).
-// The PR is the source of truth. The /pulls lookup is deferred until Review is
-// clicked (an eager per-row query would fan out to one request per repo on
-// mount); on click we refetch.
-// Per-row regrade: dispatches regrade.yaml scoped to one owner, tracked via
-// useTriggerRegrade (icon shows progress; disabled while any regrade is in
-// flight). Only kicks off grading — the gradebook refreshes on the next collect.
-const RegradeButton = ({
-  org,
-  classroom,
-  assignment,
-  owner,
-  displayName,
-}: {
-  org: string
-  classroom: string
-  assignment: string
-  owner: string
-  // The student's display name (individual assignments) when known; falls back
-  // to `owner`. Omitted for group repos (owner is the founder/group).
-  displayName?: string
-}) => {
-  const { t } = useTranslation()
-  const { regrade, phase, anyRegrading } = useTriggerRegrade({
-    org,
-    classroom,
-    assignment,
-    owner,
-  })
-  const inFlight = phase === "dispatching" || phase === "running"
-  // Disable while ANY regrade (this row, another, or "Regrade all") is in flight:
-  // trackers share one regrade.yaml run list and bind by monotonic id, so a
-  // single outstanding dispatch keeps the binding unambiguous.
-  const blocked = anyRegrading && !inFlight
-  const [confirmOpen, setConfirmOpen] = useState(false)
-
-  const title = inFlight
-    ? t("submissions.rowRegrade.titleInFlight")
-    : blocked
-      ? t("submissions.rowRegrade.titleBlocked")
-      : phase === "completed"
-        ? t("submissions.rowRegrade.titleCompleted")
-        : phase === "failed"
-          ? t("submissions.rowRegrade.titleFailed")
-          : t("submissions.rowRegrade.title")
-
-  const handleClick = () => {
-    if (inFlight || blocked) return
-    setConfirmOpen(true)
-  }
-
-  return (
-    <>
-      <Button
-        variant="ghost"
-        size="sm"
-        shape="square"
-        className="text-base-content/70 disabled:opacity-60"
-        disabled={inFlight || blocked}
-        loading={inFlight}
-        loadingLabel={t("submissions.rowRegrade.title")}
-        onClick={handleClick}
-        aria-label={t("submissions.rowRegrade.aria", { owner })}
-        title={title}
-      >
-        {!inFlight && (
-          <RefreshCw
-            aria-hidden="true"
-            className={`size-4 ${phase === "completed" ? "text-success" : phase === "failed" ? "text-error" : ""}`}
-          />
-        )}
-      </Button>
-      <ConfirmModal
-        open={confirmOpen}
-        title={t("submissions.rowRegrade.confirmTitle", {
-          name: displayName || owner,
-        })}
-        description={
-          <>
-            <Trans
-              i18nKey={
-                displayName
-                  ? "submissions.rowRegrade.confirmBody1WithLogin"
-                  : "submissions.rowRegrade.confirmBody1"
-              }
-              values={{ name: displayName || owner, owner }}
-              components={{
-                name: <span className="font-semibold text-base-content" />,
-                owner: <EmphasisLtr className="font-normal" />,
-              }}
-            />
-            <br />
-            <br />
-            <Trans
-              i18nKey="submissions.rowRegrade.confirmBody2"
-              values={{ collectLabel: t("submissions.collect.label") }}
-              components={{
-                collectLabel: <span className="font-semibold" />,
-              }}
-            />
-          </>
-        }
-        confirmText="regrade"
-        confirmLabel={t("submissions.rowRegrade.confirmLabel")}
-        cancelLabel={t("common.cancel")}
-        dangerous={false}
-        needsConfirm={false}
-        onConfirm={async () => {
-          regrade()
-        }}
-        onClose={() => setConfirmOpen(false)}
-      />
-    </>
-  )
-}
-
-// Per-row submission download. A button, not a link, because it triggers an
-// authenticated fetch, not a navigation.
-const DownloadButton = ({
-  org,
-  classroom,
-  assignment,
-  owner,
-}: {
-  org: string
-  classroom: string
-  assignment: string
-  owner: string
-}) => {
-  const { t } = useTranslation()
-  const { notify } = useToast()
-  const download = useDownloadSubmission()
-
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      shape="square"
-      className="text-base-content/70 disabled:opacity-60"
-      disabled={download.isPending}
-      loading={download.isPending}
-      loadingLabel={t("submissions.rowDownload.title")}
-      onClick={() => {
-        if (download.isPending) return
-        download.mutate(
-          { org, classroom, assignment, owner },
-          {
-            onError: (err) => {
-              // "no-submission" (missing/never-pushed repo) is benign info,
-              // not an error.
-              const nothing =
-                err instanceof Error && err.message === "no-submission"
-              notify({
-                tone: nothing ? "info" : "error",
-                message: nothing
-                  ? t("submissions.rowDownload.nothingToDownload", { owner })
-                  : t("submissions.rowDownload.error", { owner }),
-              })
-            },
-          },
-        )
-      }}
-      aria-label={t("submissions.rowDownload.aria", { owner })}
-      title={t("submissions.rowDownload.title")}
-    >
-      {!download.isPending && (
-        <Download aria-hidden="true" className="size-4" />
-      )}
-    </Button>
-  )
-}
 
 // Expanded per-row history: every submission for a repo, newest first.
 const SubmissionHistory = ({
@@ -655,80 +474,49 @@ const SubmissionsTable = ({
           </td>
           <td>
             <div className="flex items-center gap-1">
-              {isGroup && (
-                <GroupActionControls
+              {isGroup ? (
+                <RepoRowActions
+                  mode="group"
+                  org={org}
+                  classroom={classroom}
+                  assignment={assignment}
+                  owner={rest.owner}
                   repo={repo}
-                  repoHref={repoHref}
-                  onManage={() => setManageOwner(rest.owner)}
+                  hasRepo
+                  commit={rest.commit}
+                  release={rest.release}
+                  emptyRepo={emptyRepo}
+                  header={
+                    <GroupActionControls
+                      repo={repo}
+                      repoHref={repoHref}
+                      onManage={() => setManageOwner(rest.owner)}
+                    />
+                  }
+                />
+              ) : (
+                <RepoRowActions
+                  mode="individual"
+                  org={org}
+                  classroom={classroom}
+                  assignment={assignment}
+                  owner={rest.owner}
+                  repo={repo}
+                  hasRepo
+                  commit={rest.commit}
+                  release={rest.release}
+                  emptyRepo={emptyRepo}
+                  displayName={getName(rest.owner, students) || undefined}
+                  header={
+                    <IndividualRowHeader
+                      repo={repo}
+                      repoHref={repoHref}
+                      hasRepo
+                    />
+                  }
+                  onManageAccess={() => setAccessOwner(rest.owner)}
                 />
               )}
-              {!isGroup && (
-                <ActionIconLink
-                  href={repoHref}
-                  icon={GitHub}
-                  label={t("submissions.table.openRepoLabel", { repo })}
-                  title={t("submissions.table.viewRepo")}
-                  emptyLabel={t("submissions.table.openRepoLabel", { repo })}
-                  emptyTitle={t("submissions.table.viewRepo")}
-                />
-              )}
-              <ActionIconLink
-                href={safeHttpUrl(rest.commit)}
-                icon={GitCommitHorizontal}
-                label={t("submissions.table.viewCommit")}
-                title={t("submissions.table.commit")}
-                emptyLabel={t("submissions.table.noCommit")}
-                emptyTitle={t("submissions.table.noCommit")}
-              />
-              {!emptyRepo && (
-                <>
-                  <ReviewButton
-                    org={org}
-                    repo={repo}
-                    mode={isGroup ? "group" : "individual"}
-                  />
-                  {!isGroup && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      shape="square"
-                      className="text-base-content/70"
-                      aria-label={t("submissions.table.manageAccessAria", {
-                        owner: rest.owner,
-                      })}
-                      title={t("submissions.table.manageAccess")}
-                      onClick={() => setAccessOwner(rest.owner)}
-                    >
-                      <ShieldCheck aria-hidden="true" className="size-4" />
-                    </Button>
-                  )}
-                  <ActionIconLink
-                    href={safeHttpUrl(rest.release)}
-                    icon={ScrollText}
-                    label={t("submissions.table.viewDetails")}
-                    title={t("submissions.table.details")}
-                    emptyLabel={t("submissions.table.noDetailsLabel")}
-                    emptyTitle={t("submissions.table.noDetails")}
-                  />
-                  <RegradeButton
-                    org={org}
-                    classroom={classroom}
-                    assignment={assignment}
-                    owner={rest.owner}
-                    displayName={
-                      isGroup
-                        ? undefined
-                        : getName(rest.owner, students) || undefined
-                    }
-                  />
-                </>
-              )}
-              <DownloadButton
-                org={org}
-                classroom={classroom}
-                assignment={assignment}
-                owner={rest.owner}
-              />
             </div>
           </td>
         </tr>
@@ -837,6 +625,58 @@ const SubmissionsTable = ({
               if (item.kind === "row") return renderSubmitterRow(item.row)
               if (item.kind === "nonSubmitter") {
                 const student = item.student
+                // Individual non-submitter: show the same per-repo action
+                // cluster as a submitter, disabled where inapplicable. A repo
+                // exists only if they accepted; a never-accepted student's
+                // repo-scoped actions render disabled. A group non-submitter has
+                // no per-student repo, so no actions (the row shows an em-dash).
+                //
+                // Acceptance is a tri-state: `acceptedUsernames` is undefined
+                // until the org repo list loads. Treat undefined as "unknown"
+                // and fall back to the em-dash (like the neutral "Not submitted"
+                // badge does), so the row never asserts "hasn't accepted" with a
+                // disabled cluster while acceptance is still resolving.
+                const showActions =
+                  !isGroup && Boolean(student.username) && acceptedUsernames
+
+                let actions: React.ReactNode
+                if (showActions) {
+                  const repoName = studentRepoName(
+                    classroom,
+                    assignment,
+                    student.username,
+                  )
+                  const repoHref = studentRepoUrl(
+                    org,
+                    classroom,
+                    assignment,
+                    student.username,
+                  )
+                  const accepted = hasAccepted(student.username, showActions)
+                  actions = (
+                    <RepoRowActions
+                      mode="individual"
+                      org={org}
+                      classroom={classroom}
+                      assignment={assignment}
+                      owner={student.username}
+                      repo={repoName}
+                      hasRepo={accepted}
+                      emptyRepo={emptyRepo}
+                      displayName={
+                        getName(student.username, students) || undefined
+                      }
+                      header={
+                        <IndividualRowHeader
+                          repo={repoName}
+                          repoHref={repoHref}
+                          hasRepo={accepted}
+                        />
+                      }
+                      onManageAccess={() => setAccessOwner(student.username)}
+                    />
+                  )
+                }
                 return (
                   <NonSubmitterRow
                     key={`missing-${student.username || student.email || student.github_id}`}
@@ -844,10 +684,8 @@ const SubmissionsTable = ({
                     students={students}
                     isGroup={isGroup}
                     acceptedUsernames={acceptedUsernames}
-                    org={org}
-                    classroom={classroom}
-                    assignment={assignment}
                     onProfile={setProfileUsername}
+                    actions={actions}
                   />
                 )
               }
