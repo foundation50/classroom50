@@ -2152,6 +2152,7 @@
       "openRepoLabel": "Open repository {{repo}}",
       "viewRepo": "View repo",
       "manageAccess": "Manage repository access",
+      "manageAccessNoRepo": "No repository yet — the student hasn't accepted",
       "manageAccessAria": "Manage repository access for {{owner}}",
       "viewCommit": "View latest commit",
       "commit": "Commit",
@@ -2172,6 +2173,7 @@
       "noGroupTitle": "This student isn't credited on any submitting group's repo. Group membership is read from each repo's collaborators at collection time, so a student who never joined a group — or whose group's membership couldn't be read on the last collection — appears here. Open the group repos to confirm before grading.",
       "submittedBy": "by {{name}}",
       "review": "Review",
+      "reviewNoRepo": "No repository yet — the student hasn't accepted",
       "reviewAria": "Open feedback pull request",
       "fullHistory": "Open the <repoLink>repository</repoLink> for the full commit history."
     },
@@ -2270,6 +2272,7 @@
     },
     "rowRegrade": {
       "title": "Regrade this submission",
+      "titleNoRepo": "No repository yet — the student hasn't accepted",
       "titleInFlight": "Regrade in progress…",
       "titleBlocked": "Another regrade is in progress",
       "titleCompleted": "Regrade started — grading runs in the background; collect to see new scores",
@@ -2283,6 +2286,7 @@
     },
     "rowDownload": {
       "title": "Download this submission",
+      "titleNoRepo": "No repository yet — the student hasn't accepted",
       "aria": "Download {{owner}}'s submission",
       "nothingToDownload": "{{owner}} has no submission to download yet.",
       "error": "Couldn't download {{owner}}'s submission. Please try again."
