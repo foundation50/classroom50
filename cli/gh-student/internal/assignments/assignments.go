@@ -44,6 +44,11 @@ type Entry struct {
 	Autograder   string       `json:"autograder"`
 	AllowedFiles []string     `json:"allowed_files,omitempty"`
 
+	// StudentPermission is the accept-time role the student gets on their own
+	// repo (the assignment's optional student_permission). Empty means the mode
+	// default (push individual / admin group). See accept.go's founderPermission.
+	StudentPermission string `json:"student_permission,omitempty"`
+
 	// EmptyRepo marks a truly-bare assignment: accept creates the repo with
 	// no initial commit and lands NO control files (no .classroom50.yaml, no
 	// autograde shim), so the assignment never autogrades. Absent reads as

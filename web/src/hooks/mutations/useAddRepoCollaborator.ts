@@ -2,6 +2,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { githubKeys } from "@/github-core/queries"
 import { addRepoCollaborator } from "@/github-core/mutations"
+import type { RepoPermission } from "@/types/classroom"
 
 export function useAddRepoCollaborator() {
   const client = useGitHubClient()
@@ -12,7 +13,8 @@ export function useAddRepoCollaborator() {
       org: string
       repo: string
       username: string
-      permission?: "pull" | "triage" | "push" | "maintain" | "admin"
+      permission?: RepoPermission
+      verify?: boolean
     }) =>
       addRepoCollaborator({
         client,

@@ -1,11 +1,23 @@
 import type { Dispatch, SetStateAction } from "react"
 import { useTranslation } from "react-i18next"
+import { ExternalLink } from "lucide-react"
 import { slugify } from "@/util/slug"
-import { Card, FormField, Input, Textarea } from "@/components/ui"
+import { Card, FormField, Input, Select, Textarea } from "@/components/ui"
 import { TemplateField } from "./TemplateField"
 import { FieldLabel, ToggleRow } from "./AdvancedRuntimeFields"
-import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
+import {
+  GROUP_SIZE_MAX,
+  GROUP_SIZE_MIN,
+  REPO_PERMISSIONS,
+  defaultStudentPermission,
+} from "@/types/classroom"
 import type { AssignmentForm } from "./assignmentFormModel"
+
+// GitHub's own reference for the repo role ladder (read/triage/write/maintain/
+// admin), linked next to the Student repo access help so teachers can see what
+// each level grants.
+const REPO_ROLES_DOCS_URL =
+  "https://docs.github.com/en/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/repository-roles-for-an-organization#repository-roles-for-organizations"
 
 const FormErrors = ({ form }: { form: AssignmentForm }) => (
   <form.Subscribe selector={(state) => [state.errors]}>
@@ -291,6 +303,76 @@ export const DetailsSection = ({
                 )
               }
             </form.Subscribe>
+
+            {/* Student repo access sits directly under Assignment type: the
+                mode drives its default (push individual / admin group) and its
+                help text. */}
+            <form.Field name="student_permission">
+              {(field) => (
+                <form.Subscribe selector={(state) => state.values.mode}>
+                  {(modeValue) => {
+                    const mode = modeValue === "group" ? "group" : "individual"
+                    const defaultLevel = defaultStudentPermission(mode)
+                    return (
+                      <FormField
+                        htmlFor={field.name}
+                        label={t("assignments.form.studentPermission.label")}
+                        help={
+                          mode === "group"
+                            ? t("assignments.form.studentPermission.groupHelp")
+                            : t("assignments.form.studentPermission.help")
+                        }
+                        labelExtra={
+                          <a
+                            className="link inline-flex items-center gap-1 text-sm font-normal text-base-content/60 hover:text-base-content"
+                            href={REPO_ROLES_DOCS_URL}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {t("assignments.form.studentPermission.learnMore")}
+                            <ExternalLink
+                              aria-hidden="true"
+                              className="size-3.5"
+                            />
+                          </a>
+                        }
+                      >
+                        {({ id, describedById }) => (
+                          <Select
+                            id={id}
+                            name={field.name}
+                            className="w-full sm:max-w-xs"
+                            aria-describedby={describedById}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) =>
+                              field.handleChange(
+                                e.target.value as typeof field.state.value,
+                              )
+                            }
+                          >
+                            <option value="">
+                              {t("assignments.form.studentPermission.default", {
+                                level: t(
+                                  `assignments.form.studentPermission.levels.${defaultLevel}`,
+                                ),
+                              })}
+                            </option>
+                            {REPO_PERMISSIONS.map((level) => (
+                              <option key={level} value={level}>
+                                {t(
+                                  `assignments.form.studentPermission.levels.${level}`,
+                                )}
+                              </option>
+                            ))}
+                          </Select>
+                        )}
+                      </FormField>
+                    )
+                  }}
+                </form.Subscribe>
+              )}
+            </form.Field>
           </div>
 
           <div className="flex flex-col gap-4">

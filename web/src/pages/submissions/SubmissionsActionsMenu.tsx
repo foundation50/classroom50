@@ -9,6 +9,7 @@ import {
   Lock,
   LockOpen,
   RefreshCw,
+  ShieldCheck,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -37,6 +38,7 @@ export function SubmissionsActionsMenu({
   downloadDisabled,
   onDownloadAll,
   downloadAllDisabled,
+  onBulkAccess,
   locked = false,
   lockPending = false,
   onLockToggle,
@@ -70,6 +72,10 @@ export function SubmissionsActionsMenu({
   // when there's nothing to fetch (via downloadAllDisabled).
   onDownloadAll: () => void
   downloadAllDisabled: boolean
+  // Opens the whole-assignment "Set student repo access" modal. Omitted (item
+  // hidden) when the viewer can't write every repo (non-owner), for a group or
+  // empty_repo assignment, or when there are no accepted repos to target.
+  onBulkAccess?: () => void
   // Current locked state, for the Lock/Unlock item's label and icon.
   locked?: boolean
   // Whether a lock/unlock is mid-flight, to disable the item and show progress.
@@ -228,6 +234,35 @@ export function SubmissionsActionsMenu({
           className="my-1 border-t border-base-content/10"
           role="separator"
         />
+        {/* Update student repo access — an authoring-tier action, grouped with
+            Lock/Unlock above the CSV export. */}
+        {onBulkAccess && (
+          <>
+            <li>
+              <button
+                type="button"
+                disabled={disabledActions}
+                title={
+                  emptyRoster
+                    ? t("submissions.bulkAccess.titleEmptyRoster")
+                    : t("submissions.bulkAccess.menuTitle")
+                }
+                onClick={() => {
+                  closeMenu()
+                  if (disabledActions) return
+                  onBulkAccess()
+                }}
+              >
+                <ShieldCheck aria-hidden="true" className="size-4" />
+                {t("submissions.bulkAccess.menuLabel")}
+              </button>
+            </li>
+            <div
+              className="my-1 border-t border-base-content/10"
+              role="separator"
+            />
+          </>
+        )}
         {/* Lock / Unlock — an assignment-lifecycle action (teacher|hta), so the
             page omits onLockToggle for a viewer who can't author. Its own group,
             above the CSV export. */}

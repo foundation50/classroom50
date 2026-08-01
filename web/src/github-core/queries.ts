@@ -46,7 +46,6 @@ export {
   commitQuery,
   repoQuery,
   getOrgRepos,
-  getRepoPermissionForUser,
   getOpenPullRequests,
   listPullRequestsByBaseHead,
 } from "./queries/repoRefReads"

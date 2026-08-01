@@ -117,19 +117,6 @@ export async function getOrgRepos(client: GitHubClient, owner: string) {
   )
 }
 
-export async function getRepoPermissionForUser(params: {
-  client: GitHubClient
-  org: string
-  repo: string
-  username: string
-}): Promise<{ permission?: string; role_name?: string }> {
-  const { client, org, repo, username } = params
-
-  return client.request<{ permission?: string; role_name?: string }>(
-    `/repos/${org}/${repo}/collaborators/${username}/permission`,
-  )
-}
-
 // Open PRs on a student/group repo. The autograde workflow opens one Feedback
 // PR per repo, so the first open PR is that PR. 404 (repo not generated yet) ->
 // []. Tolerant so a missing repo reads as "no PR" rather than throwing.

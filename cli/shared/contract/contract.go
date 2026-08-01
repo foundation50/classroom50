@@ -44,6 +44,16 @@ const (
 	ModeIndividual = "individual"
 	ModeGroup      = "group"
 
+	// Repo collaborator permission levels, GitHub's low-to-high ladder. Used
+	// for an assignment's optional student_permission (the access the enrolled
+	// student gets on their own repo at accept time) and mirrored in the web
+	// RepoAccessPermission union and the assignments-v1 schema enum.
+	PermissionPull     = "pull"
+	PermissionTriage   = "triage"
+	PermissionPush     = "push"
+	PermissionMaintain = "maintain"
+	PermissionAdmin    = "admin"
+
 	// ResultFilename and ReleaseBodyFilename are the autograder's output
 	// artifacts in the student workspace: the required result.json (the grading
 	// payload collect-scores ingests) and the optional release-body.md. The
@@ -215,6 +225,34 @@ func FeedbackLabelForMode(mode string) (name, color string) {
 		return "Group Assignment", "5319E7"
 	}
 	return "Individual Assignment", "0E8A16"
+}
+
+// RepoPermissions is GitHub's collaborator permission ladder, low to high.
+// Single-sources the assignment student_permission allow-list; the web mirror
+// is RepoAccessPermission and the schema enum in assignments-v1.schema.json.
+var RepoPermissions = []string{
+	PermissionPull, PermissionTriage, PermissionPush, PermissionMaintain, PermissionAdmin,
+}
+
+// IsValidRepoPermission reports whether p is one of the RepoPermissions.
+func IsValidRepoPermission(p string) bool {
+	for _, allowed := range RepoPermissions {
+		if p == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// DefaultStudentPermission is the accept-time role a student gets on their own
+// repo when an assignment sets no student_permission: least-privilege push for
+// individual, admin for group (a group founder must manage collaborators).
+// Mirrors the web founderPermission default and gh-student's.
+func DefaultStudentPermission(mode string) string {
+	if strings.TrimSpace(strings.ToLower(mode)) == ModeGroup {
+		return PermissionAdmin
+	}
+	return PermissionPush
 }
 
 // FeedbackPRBody is the Feedback PR body, byte-identical with the output of

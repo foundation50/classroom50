@@ -1,5 +1,6 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubRepo } from "@/github-core/types"
+import type { RepoPermission } from "@/types/classroom"
 import { GitHubAPIError } from "@/github-core/errors"
 import { DEFAULT_BRANCH } from "@/util/configRepo"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
@@ -269,6 +270,10 @@ export type CreateAssignmentInput = {
   allowed_files?: string
   release_assets: string
   pass_threshold?: number
+  // Accept-time role for the enrolled student on their own repo. Undefined =
+  // the mode default (push individual / admin group). buildAssignmentEntry
+  // omits it when it equals the default and clamps group up to admin.
+  student_permission?: RepoPermission
   tests: AssignmentTestDraft[]
   // Whether the write path may attempt the owner-only template read-grant
   // (addRepositoryToTeam). Set from useCanAttemptTemplateGrant at the call site

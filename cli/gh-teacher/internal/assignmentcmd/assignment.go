@@ -79,6 +79,7 @@ func assignmentAddCmd() *cobra.Command {
 		emptyRepo     bool
 		allowedFiles  []string
 		passThreshold int
+		studentPerm   string
 	)
 
 	cmd := &cobra.Command{
@@ -195,6 +196,10 @@ func assignmentAddCmd() *cobra.Command {
 			// passed, so an omitted flag stays nil (off) while an explicit
 			// --pass-threshold 0 is a real 0% threshold.
 			passThresholdPtr := passThresholdFromFlag(cmd.Flags().Changed("pass-threshold"), passThreshold)
+			studentPermVal := strings.TrimSpace(studentPerm)
+			if err := assignment.ValidateStudentPermission(studentPermVal); err != nil {
+				return err
+			}
 			if err := autograderseam.ValidateName(autograderVal); err != nil {
 				return err
 			}
@@ -251,6 +256,7 @@ func assignmentAddCmd() *cobra.Command {
 					EmptyRepo:         emptyRepo,
 					AllowedFiles:      allowedFiles,
 					PassThreshold:     passThresholdPtr,
+					StudentPermission: studentPermVal,
 				})
 		},
 	}
@@ -269,6 +275,7 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&emptyRepo, "empty-repo", false, "Create truly bare student repos: no README/initial commit, no .classroom50.yaml marker, no autograde workflow — for assignments where students build the repo (including their own GitHub Actions) from scratch. Autograding and the Feedback PR are disabled and cannot be enabled later (the setting is immutable after creation). Mutually exclusive with --template, --tests, --feedback-pr, --allowed-files, and --pass-threshold.")
 	cmd.Flags().StringArrayVar(&allowedFiles, "allowed-files", nil, "Ordered .gitignore-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. Pass `--allowed-files '*' --allowed-files '!hello.py'` to allow only hello.py. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file.")
 	cmd.Flags().IntVar(&passThreshold, "pass-threshold", 0, "Opt-in passing bar as a percentage of max score (0–100): at/above it a gradebook client shows a submission as passing. Advisory/display-only — it does not change a student's score. Omit to leave it off (no passing concept); pass --pass-threshold 0 for an explicit 0%.")
+	cmd.Flags().StringVar(&studentPerm, "student-permission", "", "Optional collaborator role each student gets on their OWN assignment repo at accept time: one of pull, triage, push, maintain, admin. Omit for the default (push for individual, admin for group). Choose admin to let students manage repo settings and enable GitHub Pages. Applies to students who accept from now on; existing repos are unchanged. Caution: admin on a private repo also lets the student change its visibility.")
 	return cmd
 }
 
@@ -541,6 +548,7 @@ type addAssignmentParams struct {
 	EmptyRepo         bool
 	AllowedFiles      []string
 	PassThreshold     *int
+	StudentPermission string
 }
 
 // runAssignmentAdd validates template visibility and entry shape before the
@@ -614,6 +622,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		EmptyRepo:         p.EmptyRepo,
 		AllowedFiles:      allowedFiles,
 		PassThreshold:     passThreshold,
+		StudentPermission: p.StudentPermission,
 	}
 	if err := assignment.ValidateAssignmentEntry(entry); err != nil {
 		return err
@@ -626,6 +635,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		droppedTemplate      *assignment.TemplateRef
 		droppedAllowedCnt    int
 		droppedPassThreshold *int
+		droppedStudentPerm   string
 		// The locked state that actually landed (carried forward from a prior
 		// same-slug entry). Read after the commit to decide the template grant,
 		// since `entry` (rebuilt from flags) never carries Locked.
@@ -636,6 +646,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		droppedTemplate = nil
 		droppedAllowedCnt = 0
 		droppedPassThreshold = nil
+		droppedStudentPerm = ""
 		attemptEntry := entry
 		// Refuse on an archived classroom (active:false), mirroring the web.
 		// Checked at parentSHA so a concurrent unarchive is observed on retry.
@@ -710,6 +721,12 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// is a non-nil pointer (real 0% bar), not a drop.
 		if hasPrev && entry.PassThreshold == nil && file.Assignments[prevIdx].PassThreshold != nil {
 			droppedPassThreshold = file.Assignments[prevIdx].PassThreshold
+		}
+		// Same footgun for student_permission (often set in the gradebook GUI):
+		// re-running add without --student-permission drops a prior value back
+		// to the mode default. Empty = omitted (warn if the prior entry set one).
+		if hasPrev && entry.StudentPermission == "" && file.Assignments[prevIdx].StudentPermission != "" {
+			droppedStudentPerm = file.Assignments[prevIdx].StudentPermission
 		}
 		// The CLI has no release-assets authoring flag. Preserve this typed field and
 		// unknown Extra keys when a same-slug add rebuilds the rest from flags. This
@@ -800,6 +817,11 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		_, _ = fmt.Fprintf(errOut,
 			"Warning: replacing %q dropped its pass_threshold (%d%%) — `assignment add` rewrites the whole entry, and you re-ran it without --pass-threshold. The passing bar (often set in the gradebook GUI) is now off. Pass --pass-threshold %d to keep it.\n",
 			slug, *droppedPassThreshold, *droppedPassThreshold)
+	}
+	if droppedStudentPerm != "" {
+		_, _ = fmt.Fprintf(errOut,
+			"Warning: replacing %q dropped its student_permission (%s) — `assignment add` rewrites the whole entry, and you re-ran it without --student-permission. New accepters revert to the mode default. Pass --student-permission %s to keep it.\n",
+			slug, droppedStudentPerm, droppedStudentPerm)
 	}
 	// Heads-up if the encoded file nears GitHub's ~1 MiB contents-API limit
 	// (past which encoding flips to "none", wedging future reads/writes).

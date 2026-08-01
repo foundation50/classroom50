@@ -58,6 +58,7 @@ const base: CreateAssignmentFormValues = {
   release_assets: "",
   pass_threshold_enabled: false,
   pass_threshold: 80,
+  student_permission: "",
   tests: [],
 }
 

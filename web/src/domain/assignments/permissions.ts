@@ -1,23 +1,34 @@
 import type { GitHubClient } from "@/github-core/client"
-import type { AssignmentMode } from "@/types/classroom"
+import type { AssignmentMode, RepoPermission } from "@/types/classroom"
 import type { GitHubRepo } from "@/github-core/types"
-import { getRepoPermissionForUser } from "@/github-core/queries"
+import { defaultStudentPermission } from "@/types/classroom"
 import { localizedError } from "@/types/localizedMessage"
 
-// Grant the founder their repo role and verify it took: a repo creator holds
-// admin, so an individual self-downgrade GitHub silently ignores looks like
-// success. isOwner tolerates an unavoidable residual admin (an org owner can't
-// self-downgrade), since admin already covers push. CLI-aligned with
+// Grant the accepting student their role on their OWN repo. The student is the
+// repo creator (they ran POST /generate), so this PUT is a self-directed
+// collaborator change — including a self-downgrade below the default (a teacher
+// can set student_permission to e.g. `pull`). We trust the PUT: it is the
+// authenticated actor changing their own access, so a 2xx means it took.
+//
+// We deliberately do NOT read the effective permission back here. The
+// /repos/{org}/{repo}/collaborators/{self}/permission sub-resource lags the PUT
+// by a long, unbounded window right after a self-downgrade on a freshly
+// generated repo — it 404s ("no readable collaborator record yet") well past
+// any reasonable accept-run poll, even though the downgrade already applied. A
+// read-back therefore produces false accept failures for the exact legitimate
+// case it was meant to allow. The silently-ignored-downgrade guard belongs on
+// the TEACHER write paths (the per-repo / bulk gradebook modals), where a
+// DIFFERENT actor changes a student's role and a read-back can meaningfully
+// confirm it; see addRepoCollaborator's `verify`. CLI-aligned with
 // inviteFounder in gh-student's accept.go.
 export async function addFounderCollaborator(params: {
   client: GitHubClient
   owner: string
   repo: string
   username: string
-  permission: "push" | "admin"
-  isOwner?: boolean
+  permission: RepoPermission
 }) {
-  const { client, owner, repo, username, permission, isOwner = false } = params
+  const { client, owner, repo, username, permission } = params
 
   await client.request(`/repos/${owner}/${repo}/collaborators/${username}`, {
     method: "PUT",
@@ -25,63 +36,67 @@ export async function addFounderCollaborator(params: {
       permission,
     },
   })
-
-  const effective = await getRepoPermissionForUser({
-    client,
-    org: owner,
-    repo,
-    username,
-  })
-
-  if (
-    !permissionSatisfies(
-      effective.permission,
-      effective.role_name,
-      permission,
-      isOwner,
-    )
-  ) {
-    throw localizedError({
-      key: "accept.errors.founderAccessMismatch",
-      params: {
-        username,
-        permission,
-        owner,
-        repo,
-        effective: effective.permission ?? "none",
-        role: effective.role_name ?? "unknown",
-      },
-    })
-  }
 }
 
-// Whether the read-back matches the role we set. role_name is authoritative
-// when present: a push target accepts push/write but must reject the
-// more-privileged maintain/admin the legacy field would hide (GitHub collapses
-// maintain->write, admin->admin). isOwner relaxes a push want to also accept
-// admin: an org owner who created the repo can't self-downgrade (org policy
-// blocks it), and admin is a superset of push. Mirrors gh-student's
-// permissionSatisfies.
+// The permission ladder low-to-high, so a read-back can be ranked against the
+// role we wanted. GitHub's role_name reports the effective role (with maintain
+// and admin distinct), while the legacy `permission` field collapses maintain
+// into "write" and only distinguishes admin — so ranking on role_name is exact
+// and ranking on the legacy field can only prove push/write and admin.
+const PERMISSION_RANK: Record<string, number> = {
+  read: 0,
+  pull: 0,
+  triage: 1,
+  write: 2,
+  push: 2,
+  maintain: 3,
+  admin: 4,
+}
+
+// Whether the read-back is the role we set. role_name is authoritative when
+// present. isOwner picks the comparison, because it decides whether a HIGHER
+// read-back is benign or a real failure:
+//
+//   - Org OWNER (isOwner): compare ">=". An owner holds unavoidable inherited
+//     admin (and can't self-downgrade below it when they created the repo), so
+//     a residual above the wanted level is benign — GitHub is the real ceiling
+//     and the teacher's level is a floor we guarantee. Only a read-back BELOW
+//     the wanted role (a grant that didn't take) fails.
+//   - Non-owner MEMBER (!isOwner): compare "==". GitHub honors the direct
+//     collaborator grant for a plain member, so the effective role should land
+//     exactly on the target. A higher read-back means a requested downgrade was
+//     silently ignored (e.g. a lingering creator/team/base grant), and for a
+//     BELOW-default target (a teacher deliberately narrowing access) that
+//     residual is exactly the over-access we must catch — so it fails loudly.
+//
+// Mirrors gh-student's permissionSatisfies.
 export function permissionSatisfies(
   legacy: string | undefined,
   roleName: string | undefined,
-  want: "push" | "admin",
-  isOwner = false,
+  want: RepoPermission,
+  isOwner: boolean,
 ): boolean {
-  if (roleName) {
-    if (want === "admin") return roleName === "admin"
-    if (isOwner && roleName === "admin") return true
-    return roleName === "push" || roleName === "write"
-  }
-  if (want === "admin") return legacy === "admin"
-  if (isOwner && legacy === "admin") return true
-  return legacy === "write"
+  const wantRank = PERMISSION_RANK[want]
+  // role_name is exact (maintain/admin distinct); the legacy field collapses
+  // maintain into "write", so it can only prove push/write and admin — but the
+  // owner-vs-member comparison choice is the same for both.
+  const gotRank = PERMISSION_RANK[roleName || (legacy ?? "")]
+  if (gotRank === undefined) return false
+  return isOwner ? gotRank >= wantRank : gotRank === wantRank
 }
 
-// Maps assignment mode to the founder's repo role: least-privilege `push` for
-// individual, `admin` for group. Mirrors gh-student's founderPermission.
-export function founderPermission(mode: AssignmentMode): "push" | "admin" {
-  return mode === "group" ? "admin" : "push"
+// Maps an assignment to the founder's accept-time repo role: the configured
+// student_permission when set, else the mode default (least-privilege push for
+// individual, admin for group). A group founder must hold at least admin to add
+// teammates via `gh student invite`, so a group value below admin is clamped up.
+// Mirrors gh-student's founderPermission.
+export function founderPermission(
+  mode: AssignmentMode,
+  studentPermission?: RepoPermission,
+): RepoPermission {
+  const want = studentPermission ?? defaultStudentPermission(mode)
+  if (mode === "group" && want !== "admin") return "admin"
+  return want
 }
 
 // Rejects a group-shaped entry (max_group_size >= 2) whose mode isn't `group`:

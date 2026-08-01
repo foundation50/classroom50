@@ -5,7 +5,9 @@ import {
   GROUP_SIZE_MIN,
   PASS_THRESHOLD_MAX,
   PASS_THRESHOLD_MIN,
+  REPO_PERMISSIONS,
   assertAssignmentMode,
+  defaultStudentPermission,
 } from "@/types/classroom"
 import {
   getBranchRef,
@@ -112,6 +114,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   allowed_files: "managed",
   release_assets: "managed",
   pass_threshold: "managed",
+  student_permission: "managed",
   tests: "managed",
   // Written only by the CLI's `migrate`; the form never manages it, so it must
   // ride through a GUI edit untouched.
@@ -601,6 +604,27 @@ async function buildAssignmentEntry(
       )
     }
     entry.pass_threshold = threshold
+  }
+
+  // student_permission: opt-in accept-time role for the enrolled student on
+  // their own repo. Omit when it equals the mode default (absent = default
+  // everywhere downstream), and clamp a group assignment up to admin (a founder
+  // must manage members). Validate against the ladder so a bad value can't
+  // produce a file the CLI refuses to parse.
+  if (input.student_permission) {
+    if (!REPO_PERMISSIONS.includes(input.student_permission)) {
+      throw new Error(
+        `student_permission: must be one of ${REPO_PERMISSIONS.join(", ")} (got "${input.student_permission}").`,
+      )
+    }
+    const mode = assertAssignmentMode(input.mode)
+    const effective =
+      mode === "group" && input.student_permission !== "admin"
+        ? "admin"
+        : input.student_permission
+    if (effective !== defaultStudentPermission(mode)) {
+      entry.student_permission = effective
+    }
   }
 
   return { entry, needsTeamGrant }

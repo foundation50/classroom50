@@ -6,6 +6,7 @@ import {
   RefreshCw,
   ScrollText,
   SearchX,
+  ShieldCheck,
 } from "lucide-react"
 import { Fragment, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
@@ -51,6 +52,7 @@ import {
 } from "@/pages/submissions/SubmissionsRows"
 import { ConfirmModal } from "@/components/modals"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
+import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
 import { ReviewButton } from "@/pages/submissions/ReviewButton"
@@ -458,6 +460,9 @@ const SubmissionsTable = ({
   // The owner (group founder) whose collaborators modal is open, or null.
   const [manageOwner, setManageOwner] = useState<string | null>(null)
 
+  // The individual student whose repo-access modal is open, or null.
+  const [accessOwner, setAccessOwner] = useState<string | null>(null)
+
   // The student whose profile modal is open (resolved from a row's username), or
   // null. Resolves to a roster Student for the richer detail view.
   const [profileUsername, setProfileUsername] = useState<string | null>(null)
@@ -682,6 +687,21 @@ const SubmissionsTable = ({
                     repo={repo}
                     mode={isGroup ? "group" : "individual"}
                   />
+                  {!isGroup && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      shape="square"
+                      className="text-base-content/70"
+                      aria-label={t("submissions.table.manageAccessAria", {
+                        owner: rest.owner,
+                      })}
+                      title={t("submissions.table.manageAccess")}
+                      onClick={() => setAccessOwner(rest.owner)}
+                    >
+                      <ShieldCheck aria-hidden="true" className="size-4" />
+                    </Button>
+                  )}
                   <ActionIconLink
                     href={safeHttpUrl(rest.release)}
                     icon={ScrollText}
@@ -888,6 +908,20 @@ const SubmissionsTable = ({
           ownerLogin={manageOwner}
           assignmentName={assignmentName}
           maxGroupSize={maxGroupSize}
+          students={students}
+        />
+      )}
+
+      {accessOwner && (
+        <RepoAccessModal
+          key={accessOwner}
+          open
+          onClose={() => setAccessOwner(null)}
+          org={org}
+          repoName={studentRepoName(classroom, assignment, accessOwner)}
+          repoUrl={studentRepoUrl(org, classroom, assignment, accessOwner)}
+          ownerLogin={accessOwner}
+          assignmentName={assignmentName}
           students={students}
         />
       )}

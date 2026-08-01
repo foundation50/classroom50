@@ -33,13 +33,14 @@ import {
   validateLanguageVersion,
 } from "@/util/runtime"
 import { utcIsoToDatetimeLocalValue } from "./formFieldHelpers"
-import type { Assignment } from "@/types/classroom"
+import type { Assignment, RepoPermission } from "@/types/classroom"
 import {
   GROUP_SIZE_MAX,
   GROUP_SIZE_MIN,
   DEFAULT_PASS_THRESHOLD,
   PASS_THRESHOLD_MAX,
   PASS_THRESHOLD_MIN,
+  REPO_PERMISSIONS,
 } from "@/types/classroom"
 
 // Which runtime environment the Advanced Settings form is configuring. A UI-
@@ -94,6 +95,11 @@ export type CreateAssignmentFormValues = {
   // an integer percentage 0–100; when disabled, no passing concept is written.
   pass_threshold_enabled: boolean
   pass_threshold: number
+  // The accept-time collaborator role the enrolled student gets on their own
+  // repo. "" = the mode default (push individual / admin group); a real value
+  // pins it. buildAssignmentEntry omits it when it equals the default and
+  // clamps group up to admin.
+  student_permission: "" | RepoPermission
   tests: AssignmentTestDraft[]
 }
 
@@ -287,6 +293,17 @@ export function validateAssignmentForm(
     }
   }
 
+  // Guard the permission picker against a hand-tampered value; empty is valid
+  // (means the mode default).
+  if (
+    value.student_permission !== "" &&
+    !REPO_PERMISSIONS.includes(value.student_permission)
+  ) {
+    errors.student_permission = t(
+      "assignments.form.validation.studentPermissionInvalid",
+    )
+  }
+
   return errors
 }
 
@@ -333,6 +350,7 @@ export function toSubmitValues(
     release_assets: isEmptyRepo ? "" : value.release_assets,
     pass_threshold_enabled: isEmptyRepo ? false : value.pass_threshold_enabled,
     pass_threshold: Number(value.pass_threshold),
+    student_permission: value.student_permission,
     tests: isEmptyRepo ? [] : value.tests,
   }
 }
@@ -374,6 +392,7 @@ export const useAssignmentForm = (
       release_assets: defaultValues?.release_assets || "",
       pass_threshold_enabled: defaultValues?.pass_threshold_enabled ?? false,
       pass_threshold: defaultValues?.pass_threshold ?? DEFAULT_PASS_THRESHOLD,
+      student_permission: defaultValues?.student_permission ?? "",
       tests: defaultValues?.tests || [],
     } satisfies CreateAssignmentFormValues,
     validators: {
@@ -447,6 +466,9 @@ export const assignmentToFormValues = (
     setup_timeout: setupTimeout,
     pass_threshold_enabled: typeof assignment.pass_threshold === "number",
     pass_threshold: assignment.pass_threshold ?? DEFAULT_PASS_THRESHOLD,
+    // Absent means the mode default; the form shows "Default" and the submit
+    // path re-omits it. A stored value pins the picker to that level.
+    student_permission: assignment.student_permission ?? "",
     allowed_files: allowedFilesToText(assignment.allowed_files),
     release_assets: releaseAssetsToText(assignment.release_assets),
     tests,

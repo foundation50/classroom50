@@ -68,6 +68,7 @@ export function FormField({
   htmlFor,
   required = false,
   help,
+  labelExtra,
   error,
   hint,
   className,
@@ -79,6 +80,10 @@ export function FormField({
   htmlFor?: string
   required?: boolean
   help?: string
+  // Rendered in the label row immediately after the help tooltip — e.g. a
+  // "Learn more" link to external docs that the tooltip's plain-text bubble
+  // can't carry as a clickable element.
+  labelExtra?: ReactNode
   error?: ReactNode
   hint?: ReactNode
   className?: string
@@ -103,6 +108,7 @@ export function FormField({
           ) : null}
         </label>
         {help ? <HelpTooltip help={help} /> : null}
+        {labelExtra}
       </div>
 
       {children({ id, describedById, invalid })}

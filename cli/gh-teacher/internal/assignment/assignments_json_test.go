@@ -2,12 +2,54 @@ package assignment
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
 )
+
+// TestStudentPermissionEnumParity pins the student_permission allow-list across
+// its three hand-mirrored sources: the JSON schema enum (the declared source of
+// truth), the Go contract.RepoPermissions (what ValidateStudentPermission
+// enforces), and — via the shared list length — the ordered ladder. A one-sided
+// edit to any of them drifts the accept-time floor verification, so this fails
+// CI rather than surfacing as a CLI/GUI/schema disagreement. The web mirror
+// (REPO_PERMISSIONS) is pinned against the same schema enum by a vitest.
+func TestStudentPermissionEnumParity(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "schemas", "assignments-v1.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	var schema struct {
+		Defs struct {
+			Assignment struct {
+				Properties struct {
+					StudentPermission struct {
+						Enum []string `json:"enum"`
+					} `json:"student_permission"`
+				} `json:"properties"`
+			} `json:"assignment"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	schemaEnum := schema.Defs.Assignment.Properties.StudentPermission.Enum
+	if len(schemaEnum) == 0 {
+		t.Fatalf("schema student_permission.enum not found; did the $defs shape change?")
+	}
+	if !reflect.DeepEqual(schemaEnum, contract.RepoPermissions) {
+		t.Errorf("student_permission drift: schema enum %v != contract.RepoPermissions %v — update every mirror in lockstep (schema, Go contract, web REPO_PERMISSIONS)",
+			schemaEnum, contract.RepoPermissions)
+	}
+}
 
 func TestParseAssignments_Canonical(t *testing.T) {
 	in := []byte(`{
@@ -521,6 +563,80 @@ func TestParseAssignments_PassThresholdRoundTrip(t *testing.T) {
 	}
 	if again.Assignments[2].PassThreshold != nil {
 		t.Errorf("absent pass_threshold should round-trip nil, got %v", again.Assignments[2].PassThreshold)
+	}
+}
+
+func TestParseAssignments_StudentPermissionRoundTrip(t *testing.T) {
+	// student_permission parses, survives a re-encode/re-parse, and an entry
+	// without the field decodes to the empty string (means the mode default).
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "site",
+      "name": "Site",
+      "mode": "individual",
+      "autograder": "default",
+      "student_permission": "admin"
+    },
+    {
+      "slug": "off",
+      "name": "Off",
+      "mode": "individual",
+      "autograder": "default"
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	if got := file.Assignments[0].StudentPermission; got != "admin" {
+		t.Errorf("site.StudentPermission = %q, want admin", got)
+	}
+	if got := file.Assignments[1].StudentPermission; got != "" {
+		t.Errorf("off.StudentPermission = %q, want empty (field absent)", got)
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"student_permission": "admin"`) {
+		t.Errorf("encoded missing student_permission admin:\n%s", encoded)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if got := again.Assignments[0].StudentPermission; got != "admin" {
+		t.Errorf("student_permission not stable across round-trip: %q", got)
+	}
+	if got := again.Assignments[1].StudentPermission; got != "" {
+		t.Errorf("absent student_permission should round-trip empty, got %q", got)
+	}
+}
+
+func TestValidateStudentPermission(t *testing.T) {
+	cases := []struct {
+		in      string
+		wantErr bool
+	}{
+		{"", false}, // absent => mode default
+		{"pull", false},
+		{"triage", false},
+		{"push", false},
+		{"maintain", false},
+		{"admin", false},
+		{"owner", true},
+		{"Admin", true},
+		{"write", true},
+	}
+	for _, c := range cases {
+		err := ValidateStudentPermission(c.in)
+		if (err != nil) != c.wantErr {
+			t.Errorf("ValidateStudentPermission(%q) err = %v, wantErr %v", c.in, err, c.wantErr)
+		}
 	}
 }
 
