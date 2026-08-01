@@ -154,7 +154,7 @@ describe("ManageSubmissionModal", () => {
     expect(screen.getByText("@bob")).toBeTruthy()
   })
 
-  it("closes the hub, then opens the access editor when Manage access is chosen", async () => {
+  it("opens the access editor stacked on the hub, leaving the hub open", async () => {
     const user = userEvent.setup()
     const onManageAccess = vi.fn()
     const onClose = vi.fn()
@@ -174,10 +174,10 @@ describe("ManageSubmissionModal", () => {
         name: "submissions.table.manageAccessAria",
       }),
     )
-    // Hand-off, not a nested modal: the hub's onClose fires (dialog.close) and
-    // the dedicated editor callback runs.
+    // Stacked, not a hand-off: the editor opens (via the callback) while the hub
+    // stays open, so dismissing the editor returns here rather than closing all.
     expect(onManageAccess).toHaveBeenCalledOnce()
-    expect(onClose).toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it("offers the group members hand-off and omits per-student access", async () => {

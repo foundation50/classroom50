@@ -144,9 +144,9 @@ const SubmissionDetails = ({
 // The submission hub: one entry point that gathers every per-submission action
 // behind the row's Manage control. It shows the identity + repo it acts on,
 // read-only context (accept/push time, access, collaborators), then the action
-// list. The rich access/members editors are not nested here — they hand off
-// (this modal closes and the caller opens the dedicated modal), so a dialog
-// never stacks on the hub.
+// list. The rich access/members editors open stacked on top of the hub (native
+// <dialog> nesting) with the hub left open, so dismissing the editor returns
+// here rather than all the way back to the table.
 //
 // Mounted only while a row is selected (the caller gates + remounts via `key`),
 // so it opens once on mount; Esc/backdrop/X fire onClose to clear the selection.
@@ -199,15 +199,14 @@ export const ManageSubmissionModal = ({
     dialogRef.current?.showModal()
   }, [])
 
-  // Access/members editors are separate modals; close the hub first so only one
-  // dialog is ever open (no modal-on-modal).
+  // Open the access/members editor stacked on top of the hub (native <dialog>
+  // supports nesting). We intentionally leave the hub open so dismissing the
+  // editor returns here rather than all the way back to the table.
   const handleManageAccess = () => {
-    dialogRef.current?.close()
     action.onManageAccess?.()
   }
 
   const handleManageMembers = () => {
-    dialogRef.current?.close()
     onManageMembers?.()
   }
 
