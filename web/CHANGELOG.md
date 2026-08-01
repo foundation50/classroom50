@@ -17,6 +17,20 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.22.0](https://github.com/foundation50/classroom50/compare/web-v1.21.0...web-v1.22.0) (2026-08-01)
+
+
+### Features
+
+* configurable student assignment-repo access with per-repo and bulk controls ([#466](https://github.com/foundation50/classroom50/issues/466)) ([efb69f8](https://github.com/foundation50/classroom50/commit/efb69f8294512eadb7956bfff69e8e912bbd7ae5))
+* **web:** show all per-repo submission actions, disabling inapplicable ones ([#469](https://github.com/foundation50/classroom50/issues/469)) ([1d9e42b](https://github.com/foundation50/classroom50/commit/1d9e42b23cb15608c5dc3f3f6fb3d5952fe2ef07))
+
+
+### Bug Fixes
+
+* make assignment setup timeout configurable ([#455](https://github.com/foundation50/classroom50/issues/455)) ([0d2105e](https://github.com/foundation50/classroom50/commit/0d2105e1c474723c566def44c906502a06410fb6))
+* name the fork's upstream org for cross-org fork templates ([#468](https://github.com/foundation50/classroom50/issues/468)) ([#470](https://github.com/foundation50/classroom50/issues/470)) ([53785b8](https://github.com/foundation50/classroom50/commit/53785b807133023c418580f5b02fcd95a90b3c1f))
+
 ## [1.21.0](https://github.com/foundation50/classroom50/compare/web-v1.20.0...web-v1.21.0) (2026-07-29)
 
 
