@@ -537,7 +537,7 @@ const AssignmentsTable = ({
                 <td>
                   <Link
                     className="btn btn-circle btn-sm btn-ghost"
-                    to="/$org/$classroom/assignments/$assignment/edit"
+                    to="/$org/$classroom/assignments/$assignment/settings"
                     params={{
                       org,
                       classroom,

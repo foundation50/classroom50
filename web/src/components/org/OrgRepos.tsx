@@ -52,7 +52,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
     >
       {canManageGroup && classroom && assignment && (
         <Link
-          to="/$org/$classroom/assignments/$assignment/edit"
+          to="/$org/$classroom/assignments/$assignment/settings"
           params={{ org, classroom, assignment }}
           className="btn btn-ghost btn-sm btn-circle absolute end-3 top-3 z-10 text-base-content/70 hover:text-primary"
           aria-label={t("classes.repo.manageGroupAria", { assignment })}
