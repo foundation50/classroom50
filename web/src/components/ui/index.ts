@@ -30,6 +30,7 @@ export { Textarea } from "./Textarea"
 export type { TextareaProps } from "./Textarea"
 
 export { FormField, HelpTooltip } from "./FormField"
+export type { HelpTooltipPosition } from "./FormField"
 
 export { Modal } from "./Modal"
 export type { ModalProps, ModalSize } from "./Modal"

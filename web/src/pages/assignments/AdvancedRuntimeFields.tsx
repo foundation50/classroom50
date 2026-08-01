@@ -12,6 +12,7 @@ import {
 import { orgRunnersQuery } from "@/github-core/queries"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { Button, HelpTooltip, Input } from "@/components/ui"
+import type { HelpTooltipPosition } from "@/components/ui"
 import {
   isKnownHostedRunnerLabel,
   isRunnerLabelShapeValid,
@@ -46,11 +47,13 @@ export const FieldLabel = ({
   htmlFor,
   label,
   help,
+  helpPosition,
   required,
 }: {
   htmlFor?: string
   label: string
   help?: string
+  helpPosition?: HelpTooltipPosition
   required?: boolean
 }) => (
   <div className="mb-1.5 flex items-center gap-1.5">
@@ -58,7 +61,7 @@ export const FieldLabel = ({
       {label}
       {required ? <span className="text-error">*</span> : null}
     </label>
-    {help ? <HelpTooltip help={help} /> : null}
+    {help ? <HelpTooltip help={help} position={helpPosition} /> : null}
   </div>
 )
 

@@ -4,6 +4,10 @@ import { useId, type ReactNode } from "react"
 import { Button } from "./Button"
 import { cx } from "./cx"
 
+// The side a tooltip bubble opens toward. Exported so wrappers (e.g. FieldLabel)
+// forward the same set instead of re-declaring it and drifting.
+export type HelpTooltipPosition = "top" | "bottom" | "left" | "right"
+
 // A question-mark help affordance: a focusable button carrying detailed
 // guidance as its accessible name, wrapped in a theme-aware DaisyUI tooltip.
 // The single source for the help-icon markup + a11y contract. `position`
@@ -14,12 +18,15 @@ export function HelpTooltip({
   position = "bottom",
 }: {
   help: string
-  position?: "top" | "bottom" | "left" | "right"
+  position?: HelpTooltipPosition
 }) {
   return (
     <span
       className={cx(
-        "tooltip align-middle before:max-w-xs before:whitespace-normal before:text-start",
+        // before:max-w-[min(20rem,90vw)] keeps a wide bubble from overflowing the
+        // viewport near a container edge, which otherwise grows the page's
+        // horizontal scroll width and shifts the whole layout left.
+        "tooltip align-middle before:max-w-[min(20rem,90vw)] before:whitespace-normal before:text-start",
         {
           top: "tooltip-top",
           bottom: "tooltip-bottom",

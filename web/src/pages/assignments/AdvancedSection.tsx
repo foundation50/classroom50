@@ -187,6 +187,10 @@ export const AdvancedSection = ({
                                     default: DEFAULT_SETUP_TIMEOUT_SECONDS,
                                     max: TEST_TIMEOUT_MAX_SECONDS,
                                   })}
+                                  // Opens left: this field sits in the narrow
+                                  // right column, so a bottom bubble would spill
+                                  // past the form's right edge and shift the page.
+                                  helpPosition="left"
                                 />
                                 <Input
                                   id={field.name}
