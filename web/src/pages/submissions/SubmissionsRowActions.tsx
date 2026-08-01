@@ -275,6 +275,10 @@ export type SubmissionActionListProps = {
   repo: string
   hasRepo: boolean
   commit?: string | null
+  // The repo's true latest commit (default-branch tip). When present it links
+  // the "View latest commit" action, since `commit` is only the latest *graded*
+  // snapshot from scores.json and can lag a fresh push. Falls back to `commit`.
+  latestCommitHref?: string | null
   release?: string | null
   emptyRepo: boolean
   displayName?: string
@@ -292,13 +296,14 @@ export const SubmissionActionList = ({
   repo,
   hasRepo,
   commit,
+  latestCommitHref,
   release,
   emptyRepo,
   displayName,
   onManageAccess,
 }: SubmissionActionListProps) => {
   const { t } = useTranslation()
-  const commitHref = safeHttpUrl(commit)
+  const commitHref = latestCommitHref ?? safeHttpUrl(commit)
   const releaseHref = safeHttpUrl(release)
   return (
     <div className="flex flex-col">

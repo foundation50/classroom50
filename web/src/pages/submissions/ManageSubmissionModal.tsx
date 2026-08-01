@@ -16,6 +16,7 @@ import {
   type SubmissionActionListProps,
 } from "@/pages/submissions/SubmissionsRowActions"
 import { ActionListRow } from "@/pages/submissions/actionLayout"
+import type { GitHubRepo } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
 
 const formatDateTime = (iso: string) =>
@@ -26,8 +27,9 @@ const formatDateTime = (iso: string) =>
 
 // Read-only context above the action list: accept time (repo creation), last
 // push, the enrolled owner's effective access, and any extra collaborators.
-// Fetches lazily (only while the hub is open) — a closed hub costs no requests.
-// Collaborators beyond the owner are hidden when there are none, so an
+// Collaborators fetch lazily (only while the hub is open); the repo read is
+// lifted to the modal so its default-branch tip can also link the commit
+// action. Collaborators beyond the owner are hidden when there are none, so an
 // individual repo with just its student shows no collaborator line while a
 // group repo lists its members (one generalized case).
 const SubmissionDetails = ({
@@ -35,14 +37,17 @@ const SubmissionDetails = ({
   repo,
   owner,
   students,
+  repoData,
+  latestCommitHref,
 }: {
   org: string
   repo: string
   owner: string
   students: Student[]
+  repoData?: GitHubRepo
+  latestCommitHref?: string
 }) => {
   const { t } = useTranslation()
-  const { data: repoData } = useGetRepo(org, repo)
   const { data: collaborators } = useGetRepoCollaborators(org, repo)
 
   const ownerLogin = normalizeUsername(owner)
@@ -69,9 +74,23 @@ const SubmissionDetails = ({
     })
   }
   if (repoData?.pushed_at) {
+    const pushed = formatDateTime(repoData.pushed_at)
     rows.push({
       label: t("submissions.manageModal.lastPush"),
-      value: formatDateTime(repoData.pushed_at),
+      // Hyperlink to the latest commit when we can resolve it (somewhat
+      // redundant with the commit action, but a convenient jump from the time).
+      value: latestCommitHref ? (
+        <a
+          className="link link-hover"
+          href={latestCommitHref}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {pushed}
+        </a>
+      ) : (
+        pushed
+      ),
     })
   }
   if (ownerAccess) {
@@ -165,6 +184,17 @@ export const ManageSubmissionModal = ({
   const titleId = useId()
   const { t } = useTranslation()
 
+  // Lifted here (not in SubmissionDetails) so the repo's default-branch tip can
+  // link both the "Last push" row and the "View latest commit" action. Only
+  // fetched once the hub is open; skipped entirely when no repo exists yet.
+  const { data: repoData } = useGetRepo(action.org, repo, {
+    enabled: action.hasRepo,
+  })
+  const latestCommitHref =
+    repoData?.html_url && repoData.default_branch
+      ? `${repoData.html_url}/commit/${repoData.default_branch}`
+      : undefined
+
   useEffect(() => {
     dialogRef.current?.showModal()
   }, [])
@@ -220,12 +250,15 @@ export const ManageSubmissionModal = ({
           repo={repo}
           owner={action.owner}
           students={students}
+          repoData={repoData ?? undefined}
+          latestCommitHref={latestCommitHref}
         />
       ) : null}
 
       <div className="mt-4 divide-y divide-base-200">
         <SubmissionActionList
           {...action}
+          latestCommitHref={latestCommitHref}
           onManageAccess={
             action.onManageAccess ? handleManageAccess : undefined
           }

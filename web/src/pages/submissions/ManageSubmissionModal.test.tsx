@@ -67,6 +67,8 @@ describe("ManageSubmissionModal", () => {
       data: {
         created_at: "2026-06-01T09:00:00Z",
         pushed_at: "2026-06-20T10:00:00Z",
+        html_url: "https://github.com/acme/cs101-hw1-alice",
+        default_branch: "main",
       },
     })
     collaboratorsData.mockReturnValue({
@@ -103,6 +105,13 @@ describe("ManageSubmissionModal", () => {
     expect(
       screen.queryByText("submissions.manageModal.collaborators"),
     ).toBeNull()
+    // Both the commit action and the Last-push value link to the default-branch
+    // tip (the literal latest commit).
+    const latest = "https://github.com/acme/cs101-hw1-alice/commit/main"
+    const commitLinks = screen
+      .getAllByRole("link")
+      .filter((a) => a.getAttribute("href") === latest)
+    expect(commitLinks.length).toBe(2)
   })
 
   it("lists collaborators beyond the owner (e.g. a group repo)", () => {
