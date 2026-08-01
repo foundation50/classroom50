@@ -990,11 +990,11 @@ describe("editAssignment (preserved-entry integration)", () => {
     }
   }
 
-  it("re-validates an unchanged stored ref and blocks a now-cross-org private fork", async () => {
+  it("re-validates an unchanged stored ref and allows a cross-org private fork", async () => {
     // An assignment whose stored template is an in-org private fork of a private
-    // cross-org upstream (created before the fork guard shipped, or a parent
-    // that went private after create). Editing WITHOUT changing the ref must
-    // still trip the fork guard rather than trusting the stored block.
+    // cross-org upstream. Editing WITHOUT changing the ref re-validates live via
+    // resolveTemplate; since generate copies the fork's own objects, this is no
+    // longer blocked — the edit succeeds and re-affirms the team grant.
     const forkEntry: Assignment = {
       slug: SLUG,
       name: "Homework 1",
@@ -1008,8 +1008,15 @@ describe("editAssignment (preserved-entry integration)", () => {
       assignments: [forkEntry],
     }
     const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
+    const grants: string[] = []
 
-    const request = vi.fn(async (url: string) => {
+    const request = vi.fn(async (url: string, init?: { method?: string }) => {
+      const method = init?.method ?? "GET"
+      const grantMatch = url.match(/\/orgs\/[^/]+\/teams\/([^/]+)\/repos\//)
+      if (method === "PUT" && grantMatch) {
+        grants.push(grantMatch[1])
+        return {}
+      }
       if (/\/repos\/[^/]+\/classroom50$/.test(url))
         return { default_branch: "main" }
       if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
@@ -1021,6 +1028,9 @@ describe("editAssignment (preserved-entry integration)", () => {
           content: b64(JSON.stringify(assignmentsFile)),
         }
       }
+      if (url.endsWith("/git/trees")) return { sha: "newtree" }
+      if (url.endsWith("/git/commits")) return { sha: "newcommit" }
+      if (url.endsWith("/git/refs/heads/main")) return { object: { sha: "nc" } }
       // getRepo for the re-validated unchanged ref: an in-org private fork of a
       // private upstream in ANOTHER org.
       if (url.includes(`/repos/${ORG}/hw1-fork`)) {
@@ -1054,14 +1064,24 @@ describe("editAssignment (preserved-entry integration)", () => {
     })
     const client = { request, requestRaw } as unknown as GitHubClient
 
-    await expect(
-      // Same ref as stored (bare repo -> owner defaults to org, branch omitted
-      // -> unchanged), so the unchanged-ref short-circuit is exercised.
-      editAssignment(
-        client,
-        editInput({ slug: SLUG, template_repo: "hw1-fork" }),
-      ),
-    ).rejects.toThrow(/other-org\/secret-upstream in another org/)
+    // Same ref as stored (bare repo -> owner defaults to org, branch omitted
+    // -> unchanged), so the unchanged-ref short-circuit is exercised.
+    const result = await editAssignment(
+      client,
+      editInput({
+        slug: SLUG,
+        template_repo: "hw1-fork",
+        canGrantTemplateAccess: true,
+      }),
+    )
+
+    // The edit committed instead of throwing the old cross-org-fork block:
+    // resolveTemplate now allows the fork, so the write proceeded.
+    expect(result).toBeDefined()
+    expect(request).toHaveBeenCalledWith(
+      expect.stringContaining("/git/commits"),
+      expect.objectContaining({ method: "POST" }),
+    )
   })
 
   // buildAssignmentEntry's student_permission branch (clamp group up to admin,
@@ -1611,40 +1631,63 @@ describe("TEMPLATE_READ_STAFF_ROLES parity with Go TemplateReadStaffRoles", () =
   })
 })
 
-describe("copyAssignmentToClassroom (reuse fork guard)", () => {
+describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
   const ORG = "acme"
-  const emptyRateLimit = {
-    limit: null,
-    remaining: null,
-    used: null,
-    reset: null,
-    resource: null,
-    retryAfter: null,
-  }
 
-  // Answers the three pre-commit reads copyAssignmentToClassroom runs in
-  // parallel (archive guard via requestRaw 404, getRepo, getBranchRef). The fork
-  // guard throws before any commit, so no write routes are needed.
-  function makeClient(repo: unknown): GitHubClient {
-    const request = vi.fn(async (url: string) => {
+  // Answers the pre-commit reads plus the full write flow, since a cross-org
+  // fork is no longer blocked and reuse now proceeds to commit the entry. Also
+  // answers the team-grant PUT + classroom.json read for the in-org private
+  // fork case (the real #468 topology: an in-org fork of a cross-org parent).
+  function makeClient(repo: unknown): {
+    client: GitHubClient
+    grants: () => string[]
+  } {
+    const grants: string[] = []
+    const assignmentsFile = {
+      schema: "classroom50/assignments/v1",
+      assignments: [],
+    }
+    const classroomJson = {
+      schema: "classroom50/classroom/v1",
+      short_name: "cs51",
+      team: { id: 7, slug: "classroom50-cs51" },
+    }
+    const request = vi.fn(async (url: string, init?: { method?: string }) => {
+      const method = init?.method ?? "GET"
+      const grantMatch = url.match(/\/orgs\/[^/]+\/teams\/([^/]+)\/repos\//)
+      if (method === "PUT" && grantMatch) {
+        grants.push(grantMatch[1])
+        return {}
+      }
       if (/\/repos\/[^/]+\/classroom50$/.test(url))
         return { default_branch: "main" }
       if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
+      if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
+      if (url.includes("/contents/cs51/assignments.json")) {
+        return {
+          type: "file",
+          encoding: "base64",
+          content: btoa(JSON.stringify(assignmentsFile)),
+        }
+      }
+      if (url.endsWith("/git/trees")) return { sha: "newtree" }
+      if (url.endsWith("/git/commits")) return { sha: "newcommit" }
+      if (url.endsWith("/git/refs/heads/main")) return { object: { sha: "nc" } }
       if (url.includes("/repos/")) return repo
       throw new Error(`unexpected request: ${url}`)
     })
-    const requestRaw = vi.fn(async () => {
-      throw new GitHubAPIError({
-        status: 404,
-        url: "classroom.json",
-        message: "Not Found",
-        body: null,
-        rateLimit: emptyRateLimit,
-      })
-    })
-    return { request, requestRaw } as unknown as GitHubClient
+    // getClassroomJson + the archive guard both read classroom.json via
+    // requestRaw as a raw JSON string.
+    const requestRaw = vi.fn(async () => JSON.stringify(classroomJson))
+    return {
+      client: { request, requestRaw } as unknown as GitHubClient,
+      grants: () => grants,
+    }
   }
 
+  // The real #468 topology: an in-org private fork whose upstream is a private
+  // repo in ANOTHER org. Must reuse successfully (generate copies the fork's own
+  // objects) rather than being blocked.
   const forkSource: Assignment = {
     slug: "hw1",
     name: "Homework 1",
@@ -1654,8 +1697,8 @@ describe("copyAssignmentToClassroom (reuse fork guard)", () => {
     template: { owner: ORG, repo: "hw1-fork", branch: "main" },
   }
 
-  it("blocks reusing a cross-org private fork (parity with resolveTemplate)", async () => {
-    const client = makeClient({
+  it("allows reusing an in-org private fork of a cross-org parent (#468 shape)", async () => {
+    const { client } = makeClient({
       name: "hw1-fork",
       full_name: `${ORG}/hw1-fork`,
       private: true,
@@ -1665,17 +1708,18 @@ describe("copyAssignmentToClassroom (reuse fork guard)", () => {
       default_branch: "main",
     })
 
-    await expect(
-      copyAssignmentToClassroom(client, {
-        org: ORG,
-        source: forkSource,
-        targetClassroom: "cs51",
-      }),
-    ).rejects.toThrow(/other-org\/secret-upstream in another org/)
+    const result = await copyAssignmentToClassroom(client, {
+      org: ORG,
+      source: forkSource,
+      targetClassroom: "cs51",
+      canGrantTemplateAccess: true,
+    })
+
+    expect(result.newCommitSha).toBe("newcommit")
   })
 
-  it("blocks reusing a private fork with an unknown (absent) parent", async () => {
-    const client = makeClient({
+  it("allows reusing an in-org private fork with an unknown (absent) parent", async () => {
+    const { client } = makeClient({
       name: "hw1-fork",
       full_name: `${ORG}/hw1-fork`,
       private: true,
@@ -1684,13 +1728,14 @@ describe("copyAssignmentToClassroom (reuse fork guard)", () => {
       default_branch: "main",
     })
 
-    await expect(
-      copyAssignmentToClassroom(client, {
-        org: ORG,
-        source: forkSource,
-        targetClassroom: "cs51",
-      }),
-    ).rejects.toThrow(/private upstream isn't accessible/)
+    const result = await copyAssignmentToClassroom(client, {
+      org: ORG,
+      source: forkSource,
+      targetClassroom: "cs51",
+      canGrantTemplateAccess: true,
+    })
+
+    expect(result.newCommitSha).toBe("newcommit")
   })
 })
 
@@ -1979,7 +2024,10 @@ describe("resolveTemplate (create/edit blocking path)", () => {
     return { request } as unknown as GitHubClient
   }
 
-  it("blocks a cross-org private fork (private upstream in another org)", async () => {
+  it("allows a cross-org private fork (generate copies the fork's own objects)", async () => {
+    // Verified against GitHub: generate does NOT need parent access, so a
+    // cross-org private fork must no longer be blocked at save. The only real
+    // failure is the parent org's OAuth-App restriction, surfaced at accept.
     const client = clientReturning({
       name: "tmpl",
       full_name: `${ORG}/tmpl`,
@@ -1990,12 +2038,18 @@ describe("resolveTemplate (create/edit blocking path)", () => {
       default_branch: "main",
     })
 
-    await expect(
-      resolveTemplate(client, ORG, ref(ORG, "tmpl")),
-    ).rejects.toThrow(/other-org\/secret-upstream in another org/)
+    const result = await resolveTemplate(client, ORG, ref(ORG, "tmpl"))
+
+    expect(result.template).toEqual({
+      owner: ORG,
+      repo: "tmpl",
+      branch: "main",
+    })
+    // In-org private template (the fork lives in ORG) still needs a team grant.
+    expect(result.needsTeamGrant).toBe(true)
   })
 
-  it("blocks a private fork with an unknown (absent) parent", async () => {
+  it("allows a private fork with an unknown (absent) parent", async () => {
     const client = clientReturning({
       name: "tmpl",
       full_name: `${ORG}/tmpl`,
@@ -2005,9 +2059,10 @@ describe("resolveTemplate (create/edit blocking path)", () => {
       default_branch: "main",
     })
 
-    await expect(
-      resolveTemplate(client, ORG, ref(ORG, "tmpl")),
-    ).rejects.toThrow(/private upstream isn't accessible/)
+    const result = await resolveTemplate(client, ORG, ref(ORG, "tmpl"))
+
+    expect(result.template?.repo).toBe("tmpl")
+    expect(result.needsTeamGrant).toBe(true)
   })
 
   it("allows an in-org private fork (upstream reachable in the same org)", async () => {
@@ -2575,6 +2630,129 @@ describe("createAssignmentRepo destination-org refusal (#413)", () => {
         "cs50",
         forbidden(generatePath, "Must have admin rights"),
       ),
+    ).rejects.toMatchObject({
+      localized: { key: "accept.templateErrors.inOrg" },
+    })
+  })
+
+  // Issue #468: an in-org template that 403s on generate but is a fork of a repo
+  // in ANOTHER org is the parent org's OAuth-App restriction, not a missing team
+  // grant. Name the parent org and its approval, not the useless "re-run setup".
+  it("names the parent org for an in-org 403 on a cross-org fork template", async () => {
+    const genPath = "/repos/cs50/starter/generate"
+    const client = {
+      request: <T>(path: string, init?: { method?: string }) => {
+        if (path === genPath && (init?.method ?? "GET") === "POST") {
+          return Promise.reject(
+            forbidden(genPath, "OAuth App access restrictions"),
+          ) as Promise<T>
+        }
+        // The post-403 template probe: an in-org fork of a private cross-org
+        // parent.
+        return Promise.resolve({
+          name: "starter",
+          full_name: "cs50/starter",
+          fork: true,
+          parent: { full_name: "upstream-org/starter", private: true },
+          default_branch: "main",
+        } as T)
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
+    } as unknown as GitHubClient
+
+    await expect(
+      createAssignmentRepo({
+        client,
+        templateOwner: "cs50",
+        templateRepo: "starter",
+        owner: "cs50",
+        name: "hw1-alice",
+        fallbackBranch: "main",
+      }),
+    ).rejects.toMatchObject({
+      name: "TemplateAccessError",
+      localized: {
+        key: "accept.templateErrors.forkParentRestricted",
+        params: { parentOwner: "upstream-org", owner: "cs50", repo: "starter" },
+      },
+    })
+  })
+
+  // Issue #468, the real revoked-parent case: the fork read is ALSO blocked by
+  // the parent org's OAuth restriction, so the repo probe can't see the parent.
+  // GitHub's 403 body still names the restricting org in backticks, so the
+  // parent org is recovered from the message and named without a readable repo.
+  it("names the parent org from the 403 body when the fork read is also blocked", async () => {
+    const genPath = "/repos/cs50/starter/generate"
+    const restrictionMsg =
+      "Although you appear to have the correct authorization credentials, the `upstream-org` organization has enabled OAuth App access restrictions, meaning that data access to third-parties is limited."
+    const client = {
+      request: <T>(path: string, init?: { method?: string }) => {
+        if (path === genPath && (init?.method ?? "GET") === "POST") {
+          return Promise.reject(
+            forbidden(genPath, restrictionMsg),
+          ) as Promise<T>
+        }
+        // The follow-up fork read is blocked by the SAME upstream restriction.
+        return Promise.reject(
+          forbidden(`/repos/cs50/starter`, restrictionMsg),
+        ) as Promise<T>
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
+    } as unknown as GitHubClient
+
+    await expect(
+      createAssignmentRepo({
+        client,
+        templateOwner: "cs50",
+        templateRepo: "starter",
+        owner: "cs50",
+        name: "hw1-alice",
+        fallbackBranch: "main",
+      }),
+    ).rejects.toMatchObject({
+      name: "TemplateAccessError",
+      localized: {
+        key: "accept.templateErrors.forkParentRestricted",
+        params: { parentOwner: "upstream-org", owner: "cs50", repo: "starter" },
+      },
+    })
+  })
+
+  // A same-org fork (parent lives in the classroom org) is not the #468 case, so
+  // it stays the plain in-org message rather than naming a bogus parent org.
+  it("keeps the in-org message for a same-org fork template", async () => {
+    const genPath = "/repos/cs50/starter/generate"
+    const client = {
+      request: <T>(path: string, init?: { method?: string }) => {
+        if (path === genPath && (init?.method ?? "GET") === "POST") {
+          return Promise.reject(
+            forbidden(genPath, "Must have admin rights"),
+          ) as Promise<T>
+        }
+        return Promise.resolve({
+          name: "starter",
+          full_name: "cs50/starter",
+          fork: true,
+          parent: { full_name: "cs50/upstream", private: true },
+          default_branch: "main",
+        } as T)
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
+    } as unknown as GitHubClient
+
+    await expect(
+      createAssignmentRepo({
+        client,
+        templateOwner: "cs50",
+        templateRepo: "starter",
+        owner: "cs50",
+        name: "hw1-alice",
+        fallbackBranch: "main",
+      }),
     ).rejects.toMatchObject({
       localized: { key: "accept.templateErrors.inOrg" },
     })

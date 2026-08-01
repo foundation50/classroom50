@@ -2,9 +2,11 @@ import type { GitHubClient } from "@/github-core/client"
 import type { GitHubRepo } from "@/github-core/types"
 import type { RepoPermission } from "@/types/classroom"
 import { GitHubAPIError } from "@/github-core/errors"
+import { getRepo } from "@/github-core/repoReads"
 import { DEFAULT_BRANCH } from "@/util/configRepo"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
+  forkParentRestrictedError,
   inOrgTemplateError,
   isOrgRepoCreationDenied,
   orgRepoCreationDeniedError,
@@ -18,6 +20,56 @@ const extractTemplate = (template: string) => {
   if (!/\//.test(template)) return template
   return template.split("/")?.[1] ?? template
 }
+
+// Best-effort probe: return the fork's PARENT org login when `owner/repo` is a
+// fork of a repo owned by a DIFFERENT org than `classroomOrg`, else undefined.
+// Used only on an in-org template generate failure to tell a cross-org-fork 403
+// (parent org's OAuth-App restriction, issue #468) from a plain missing-team-
+// grant 403. getRepo is 404-tolerant (null), and any read error here is
+// swallowed so the caller falls back to the message-parse path below.
+//
+// NOTE: in the exact #468 case the parent org has revoked the app, so this read
+// is gated by that SAME restriction and 403s too — hence it can't be the only
+// signal (see parentOrgFromRestrictionMessage, which reads GitHub's 403 body
+// and works even when the fork read is blocked).
+async function crossOrgForkParentOwner(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  classroomOrg: string,
+): Promise<string | undefined> {
+  let templateRepo: GitHubRepo | null
+  try {
+    templateRepo = await getRepo(client, owner, repo)
+  } catch {
+    return undefined
+  }
+  if (!templateRepo?.fork) return undefined
+  const parentOwner = templateRepo.parent?.full_name?.split("/")[0]
+  if (!parentOwner) return undefined
+  if (parentOwner.toLowerCase() === classroomOrg.toLowerCase()) return undefined
+  return parentOwner
+}
+
+// GitHub's OAuth-App-restriction 403 body names the restricting org in
+// backticks: "...the `some-org` organization has enabled OAuth App access
+// restrictions...". For a cross-org fork template the restriction is anchored to
+// the fork's UPSTREAM org, so the named org is the parent — and this signal
+// survives even when a follow-up repo read is itself blocked (issue #468).
+// Returns the named org only when it differs from the classroom org (a match
+// means it's an ordinary same-org restriction, not the cross-org-fork case).
+const OAUTH_RESTRICTION_ORG = /`([^`]+)`\s+organization has enabled OAuth App/i
+
+function parentOrgFromRestrictionMessage(
+  message: string | undefined,
+  classroomOrg: string,
+): string | undefined {
+  const named = message?.match(OAUTH_RESTRICTION_ORG)?.[1]
+  if (!named) return undefined
+  if (named.toLowerCase() === classroomOrg.toLowerCase()) return undefined
+  return named
+}
+
 export async function createAssignmentRepo(params: {
   client: GitHubClient
   templateOwner?: string
@@ -94,6 +146,35 @@ export async function createAssignmentRepo(params: {
       }
       if (err.isForbidden || err.isNotFound) {
         const inOrg = templateOwner.toLowerCase() === owner.toLowerCase()
+        // An in-org template that still 403/404s on generate can be a fork of a
+        // repo in ANOTHER org: generate copies the fork's own objects fine, so
+        // the block is the PARENT org's OAuth-App restriction, not this org or a
+        // missing team grant (issue #468). "Re-run setup" can't fix that, so
+        // name the parent org and its approval as the remedy. Two signals, in
+        // order of reliability: GitHub's own 403 body names the restricting org
+        // (survives even when a follow-up read is blocked — the common case),
+        // then a repo probe for the fork's parent when the body didn't say. Only
+        // on the in-org branch — an out-of-org template already gets a
+        // parent-agnostic remedy.
+        if (inOrg) {
+          const parentOwner =
+            parentOrgFromRestrictionMessage(err.message, owner) ??
+            (await crossOrgForkParentOwner(
+              client,
+              templateOwner,
+              cleanTemplateRepo,
+              owner,
+            ))
+          if (parentOwner) {
+            throw forkParentRestrictedError(
+              parentOwner,
+              templateOwner,
+              cleanTemplateRepo,
+              err.status,
+              err.message,
+            )
+          }
+        }
         // Tripwire for GitHub rewording the destination-org 403: the match stops
         // firing, students silently get the template message again, and the tests
         // can't catch it (they assert our own fixture). A 404 is not evidence of

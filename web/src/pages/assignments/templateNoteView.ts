@@ -1,37 +1,21 @@
 import type { TemplateAccessVerification } from "@/domain/assignments"
 
-// Pure view-model for the two data-branched template verdicts (tone + i18n key),
-// so the decision is one testable source of truth (mirrors classifyMembershipError).
+// Pure view-model for the private-fork template verdict (the i18n key), so the
+// message decision is one testable source of truth (mirrors classifyMembershipError).
 
-export type NoteTone = "warning" | "error"
-
-// Private fork used as a template. In-org parent is usually reachable (advisory
-// amber); cross-org or unknown parent likely fails at generate (error red). Each
-// messageKey is one full <Trans> sentence carrying {{owner}}/{{repo}}/{{branch}}
-// (and {{parent}} when known) with the branch wrapped in a <branch> tag.
+// Private fork used as a template. Copying works if Classroom 50 is approved on
+// the fork's parent org (verified: generate copies the fork's own objects, no
+// parent access needed); the only failure is the parent org's OAuth-App
+// restriction, surfaced at accept. So the note is always advisory (an amber
+// warning) — in-org or cross-org — never a red "will fail" error, which is why
+// this returns only the message key and the caller fixes the warning tone.
 export function templateForkNoteView(
   verification: Extract<TemplateAccessVerification, { kind: "private-fork" }>,
-): { tone: NoteTone; messageKey: string } {
+): { messageKey: string } {
   const messageKey = verification.parent
     ? verification.parentInOrg
       ? "assignments.template.privateForkInOrg"
       : "assignments.template.privateForkCrossOrg"
     : "assignments.template.privateForkNoParent"
-  return {
-    tone: verification.parentInOrg ? "warning" : "error",
-    messageKey,
-  }
-}
-
-// A 403 read denial. A real token scope gap points at re-authorizing
-// (restrictedScope); any other 403 uses the org-restriction copy (restricted).
-// GitHub's own message + status is surfaced alongside via githubSaid.
-export function templateRestrictedNoteView(
-  verification: Extract<TemplateAccessVerification, { kind: "restricted" }>,
-): { messageKey: string } {
-  return {
-    messageKey: verification.scopeGap
-      ? "assignments.template.restrictedScope"
-      : "assignments.template.restricted",
-  }
+  return { messageKey }
 }

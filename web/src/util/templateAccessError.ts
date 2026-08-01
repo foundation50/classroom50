@@ -72,6 +72,38 @@ export function inOrgTemplateError(
   })
 }
 
+// In-org template that is a FORK of a repo in a DIFFERENT org. Generate copies
+// the fork's own objects fine, so the 403 isn't the classroom org or a missing
+// team grant — it's the PARENT org's OAuth-App-access restriction gating our
+// token (issue #468). "Re-run setup" (the inOrg remedy) can never fix this, so
+// name the parent org and its approval as the actual remedy. `localizedStep`
+// keeps the checklist row to one sentence (no detail clause) since only the
+// full `localized` remedy renders the GitHub detail.
+export function forkParentRestrictedError(
+  parentOwner: string,
+  templateOwner: string,
+  templateRepo: string,
+  status: number,
+  githubMessage?: string,
+): TemplateAccessError {
+  return new TemplateAccessError(
+    {
+      key: "accept.templateErrors.forkParentRestricted",
+      params: {
+        parentOwner,
+        owner: templateOwner,
+        repo: templateRepo,
+        status,
+        detail: githubSaid(githubMessage),
+      },
+    },
+    {
+      key: "accept.templateErrors.forkParentRestrictedStep",
+      params: { parentOwner, status },
+    },
+  )
+}
+
 // The one 403 message GitHub was observed to return when the *destination* org
 // refuses the create (issue #413). Matched as a substring, case-insensitively.
 const ORG_REPO_CREATION_DENIED_SIGNATURE = "admin access to the organization"

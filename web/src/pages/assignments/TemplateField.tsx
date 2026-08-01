@@ -9,6 +9,7 @@ import {
   HelpCircle,
   Info,
   Loader2,
+  RefreshCw,
 } from "lucide-react"
 import GitHub from "@/assets/github.svg?react"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
@@ -27,12 +28,13 @@ import {
   normalizeOnBlur,
   type StringField,
 } from "./formFieldHelpers"
-import { InlineNote, InlineCode as Code } from "@/components/InlineNote"
-import { Button, FormField, Input } from "@/components/ui"
 import {
-  templateForkNoteView,
-  templateRestrictedNoteView,
-} from "./templateNoteView"
+  InlineNote,
+  InlineCode as Code,
+  AutoLinkText,
+} from "@/components/InlineNote"
+import { Button, FormField, Input } from "@/components/ui"
+import { templateForkNoteView } from "./templateNoteView"
 
 // Advisory, non-blocking pre-flight for the Template Repository field: checks
 // the OAuth token can reach the typed repo and annotates without rewriting it.
@@ -165,6 +167,8 @@ export const TemplateField = ({
         pending={pending}
         org={org}
         teamHasAccess={teamHasAccess}
+        onRecheck={() => verificationQuery.refetch()}
+        isRechecking={verificationQuery.isFetching}
         reconcile={
           isOwner && slug && org && classroom && inOrgPrivateTemplate ? (
             <ReconcileTemplateAccessInline
@@ -236,6 +240,8 @@ const TemplateVerificationNote = ({
   pending,
   org,
   teamHasAccess,
+  onRecheck,
+  isRechecking,
   reconcile,
 }: {
   verification: TemplateAccessVerification | null
@@ -244,6 +250,10 @@ const TemplateVerificationNote = ({
   // For an in-org private template: true if the classroom team already has
   // read, false if granted on create, undefined if N/A or unresolved.
   teamHasAccess?: boolean
+  // Re-run the template verification (after the teacher fixes an upstream OAuth
+  // approval), and whether that refetch is in flight.
+  onRecheck?: () => void
+  isRechecking?: boolean
   // Inline recovery button, rendered inside the "no access yet" verdict (edit
   // form only). Undefined on create or when the verdict isn't in-org-private.
   reconcile?: ReactNode
@@ -285,6 +295,8 @@ const TemplateVerificationNote = ({
     fallbackOrg,
     teamHasAccess,
     reconcile,
+    onRecheck,
+    isRechecking,
     outageSuspected: suspected,
     statusDescription,
   })
@@ -304,6 +316,8 @@ function renderTemplateVerdict({
   fallbackOrg,
   teamHasAccess,
   reconcile,
+  onRecheck,
+  isRechecking,
   outageSuspected,
   statusDescription,
 }: {
@@ -312,6 +326,8 @@ function renderTemplateVerdict({
   fallbackOrg: string
   teamHasAccess?: boolean
   reconcile?: ReactNode
+  onRecheck?: () => void
+  isRechecking?: boolean
   // When the app suspects a GitHub outage, the inconclusive verdicts (unknown /
   // rate-limited) get an outage hint so a transient degradation doesn't read as
   // a broken template. No effect on definitive verdicts.
@@ -327,6 +343,32 @@ function renderTemplateVerdict({
         <GitHubStatusNote statusDescription={statusDescription} />
       </span>
     ) : null
+
+  // After the teacher fixes an upstream OAuth approval, they can re-run the
+  // verification in place instead of reloading or retyping the ref. Only shown
+  // when a refetch handler is wired (create/edit forms).
+  const recheckButton = onRecheck ? (
+    <button
+      type="button"
+      onClick={onRecheck}
+      disabled={isRechecking}
+      className="mt-1 flex cursor-pointer items-center gap-1 font-semibold underline disabled:cursor-default disabled:opacity-60"
+    >
+      {isRechecking ? (
+        <Loader2
+          aria-hidden="true"
+          className="size-3.5 shrink-0 animate-spin"
+        />
+      ) : (
+        <RefreshCw aria-hidden="true" className="size-3.5 shrink-0" />
+      )}
+      {t(
+        isRechecking
+          ? "assignments.template.recheckingAccess"
+          : "assignments.template.recheckAccess",
+      )}
+    </button>
+  ) : null
 
   switch (verification.kind) {
     case "ok": {
@@ -397,24 +439,34 @@ function renderTemplateVerdict({
 
     case "private-fork": {
       const view = templateForkNoteView(verification)
-      // tone/messageKey come from templateForkNoteView (tested source of
-      // truth). All three message keys share this interpolation set; the
-      // no-parent key simply has no {{parent}} placeholder.
+      // The org that owns the upstream (for "approve Classroom 50 on <org>"),
+      // distinct from `parent` (the full upstream repo name, for "fork of X").
+      const parentOrg = verification.parent?.split("/")[0]
       return (
-        <Note
-          tone={view.tone}
-          icon={view.tone === "warning" ? Info : AlertTriangle}
-        >
+        <Note tone="warning" icon={Info}>
           <Trans
             i18nKey={view.messageKey}
             values={{
               owner: verification.owner,
               repo: verification.repo,
               parent: verification.parent,
+              parentOrg,
               branch: verification.branch,
             }}
-            components={{ branch: <Code /> }}
+            components={{ branch: <Code />, important: <strong /> }}
           />
+          <a
+            href={`https://github.com/${verification.owner}/${verification.repo}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 flex items-center gap-1 font-semibold underline"
+          >
+            {t("assignments.template.viewTemplateRepo", {
+              owner: verification.owner,
+              repo: verification.repo,
+            })}
+            <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
+          </a>
         </Note>
       )
     }
@@ -447,25 +499,66 @@ function renderTemplateVerdict({
         </Note>
       )
 
-    case "restricted":
+    case "restricted": {
       return (
         <Note
           tone="error"
           icon={AlertTriangle}
           policy={{ owner: verification.owner, href: verification.policyUrl }}
         >
-          {t(templateRestrictedNoteView(verification).messageKey, {
-            owner: verification.owner,
-            repo: verification.repo,
-          })}
+          {verification.scopeGap ? (
+            t("assignments.template.restrictedScope", {
+              owner: verification.owner,
+              repo: verification.repo,
+            })
+          ) : (
+            <>
+              {t("assignments.template.restricted", {
+                owner: verification.owner,
+                repo: verification.repo,
+              })}
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                <li>
+                  {t("assignments.template.restrictedItemApprove", {
+                    owner: verification.owner,
+                  })}
+                </li>
+                <li>
+                  {t("assignments.template.restrictedItemFork", {
+                    repo: verification.repo,
+                  })}
+                </li>
+                <li>{t("assignments.template.restrictedItemOther")}</li>
+              </ul>
+              <a
+                href={`https://github.com/${verification.owner}/${verification.repo}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 flex items-center gap-1 font-semibold underline"
+              >
+                {t("assignments.template.viewTemplateRepo", {
+                  owner: verification.owner,
+                  repo: verification.repo,
+                })}
+                <ExternalLink
+                  aria-hidden="true"
+                  className="size-3.5 shrink-0"
+                />
+              </a>
+            </>
+          )}
           <span className="mt-1 block text-xs text-base-content/70">
             {t("assignments.template.githubSaid", {
               status: verification.httpStatus,
             })}{" "}
-            <span className="break-words italic">{verification.message}</span>
+            <span className="break-words italic">
+              <AutoLinkText text={verification.message} />
+            </span>
           </span>
+          {recheckButton}
         </Note>
       )
+    }
 
     case "unknown":
       return (
