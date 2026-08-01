@@ -1920,7 +1920,7 @@
       "assignment": "Looking up the assignment",
       "autograder": "Resolving the autograder",
       "repo": "Creating your repository",
-      "access": "Granting you access",
+      "access": "Setting your repository access",
       "setup": "Setting up autograding",
       "feedback": "Opening feedback pull request"
     },
@@ -1933,7 +1933,7 @@
       "repo": "Created {{org}}/{{repo}}",
       "repoExists": "Repository already exists: {{org}}/{{repo}}",
       "repoIncomplete": "Found incomplete setup: {{org}}/{{repo}}",
-      "access": "Granted you access to your repository",
+      "access": "Set your repository access",
       "setup": "Autograding configured",
       "setupSkippedEmptyRepo": "No setup needed: this assignment uses an empty repository",
       "feedback": "Feedback pull request ready",
@@ -1946,7 +1946,7 @@
       "assignment": "Couldn't load assignment \"{{assignmentSlug}}\" for {{org}}/{{classroom}}. Check the link, or ask your teacher to confirm the assignment is published.",
       "autograder": "Couldn't resolve the autograder for \"{{assignmentSlug}}\". Ask your teacher to confirm it's published, then accept again.",
       "repo": "Couldn't create {{org}}/{{repo}}. Confirm you're a member of {{org}} and ask your teacher to verify the assignment's template repository is configured correctly, then accept again.",
-      "access": "Your repository {{org}}/{{repo}} was created, but adding you ({{username}}) as a collaborator failed. This usually means your GitHub username changed or you left {{org}}. Confirm you're a member of {{org}}, then use \"Re-run setup\".",
+      "access": "Your repository {{org}}/{{repo}} was created, but setting your ({{username}}) access on it failed. This usually means your GitHub username changed or you left {{org}}. Confirm you're a member of {{org}}, then use \"Re-run setup\".",
       "setup": "Your repository {{org}}/{{repo}} exists, but writing the setup files to branch \"{{branch}}\" failed. It may still be initializing. Wait a minute, then use \"Re-run setup\"."
     },
     "stepErrors": {
