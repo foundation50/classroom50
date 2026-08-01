@@ -180,6 +180,25 @@ describe("ManageSubmissionModal", () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  it("hides its own box while a stacked sub-modal is open", () => {
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        subModalOpen
+        action={{ ...individualAction, onManageAccess: vi.fn() }}
+      />,
+    )
+    // The hub's dialog stays open (returns focus on editor close) but its box is
+    // hidden so the two modal boxes don't visibly layer.
+    const box = document.querySelector(".modal-box")
+    expect(box?.className).toContain("invisible")
+  })
+
   it("offers the group members hand-off and omits per-student access", async () => {
     const user = userEvent.setup()
     const onManageMembers = vi.fn()

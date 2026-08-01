@@ -145,8 +145,9 @@ const SubmissionDetails = ({
 // behind the row's Manage control. It shows the identity + repo it acts on,
 // read-only context (accept/push time, access, collaborators), then the action
 // list. The rich access/members editors open stacked on top of the hub (native
-// <dialog> nesting) with the hub left open, so dismissing the editor returns
-// here rather than all the way back to the table.
+// <dialog> nesting). The hub's <dialog> stays open so dismissing the editor
+// returns here rather than all the way back to the table, but its box is hidden
+// (`subModalOpen`) while the editor is up so the two boxes don't visibly stack.
 //
 // Mounted only while a row is selected (the caller gates + remounts via `key`),
 // so it opens once on mount; Esc/backdrop/X fire onClose to clear the selection.
@@ -158,6 +159,7 @@ export const ManageSubmissionModal = ({
   repoHref,
   isGroup,
   students,
+  subModalOpen = false,
   onManageMembers,
   action,
 }: {
@@ -171,11 +173,14 @@ export const ManageSubmissionModal = ({
   isGroup: boolean
   // Roster, for resolving collaborator display names in the details section.
   students: Student[]
-  // Group hand-off: closes the hub and opens the members modal. Individual
-  // access hand-off is carried on `action.onManageAccess`.
+  // True while a stacked editor (access/members) is presented. The hub stays
+  // open underneath (so closing the editor returns here) but hides its own box
+  // to avoid visibly layered modals.
+  subModalOpen?: boolean
+  // Opens the group members editor stacked on the hub.
   onManageMembers?: () => void
   // Everything SubmissionActionList needs, minus the access hand-off, which the
-  // hub wraps so it closes first (below).
+  // hub wraps (below).
   action: Omit<SubmissionActionListProps, "onManageAccess"> & {
     onManageAccess?: () => void
   }
@@ -215,6 +220,10 @@ export const ManageSubmissionModal = ({
       dialogRef={dialogRef}
       onClose={onClose}
       size="lg"
+      // Keep the dialog open but hide its box while a stacked editor is up, so
+      // the two modal boxes don't visibly layer. The editor renders its own
+      // backdrop on top; dismissing it un-hides this box.
+      boxClassName={subModalOpen ? "invisible" : undefined}
       aria-labelledby={titleId}
     >
       <h3 id={titleId} className="truncate pe-8 text-lg font-bold">

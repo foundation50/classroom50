@@ -809,6 +809,10 @@ const SubmissionsTable = ({
           }
           isGroup={manageSubmission.isGroup}
           students={students}
+          subModalOpen={
+            accessOwner === manageSubmission.owner ||
+            manageOwner === manageSubmission.owner
+          }
           onManageMembers={
             manageSubmission.isGroup
               ? () => setManageOwner(manageSubmission.owner)
