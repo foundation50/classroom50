@@ -15,7 +15,17 @@ vi.mock("react-i18next", async (importOriginal) => {
 })
 
 // Only the hub's own composition/hand-off is under test; the per-action hooks
-// are stubbed so no GitHub/provider wiring is needed.
+// and detail reads are stubbed so no GitHub/provider wiring is needed.
+const repoData = vi.fn(() => ({ data: undefined }) as { data: unknown })
+const collaboratorsData = vi.fn(
+  () => ({ data: undefined }) as { data: unknown },
+)
+vi.mock("@/hooks/useGetRepo", () => ({
+  default: () => repoData(),
+}))
+vi.mock("@/hooks/useGetRepoCollaborators", () => ({
+  default: () => collaboratorsData(),
+}))
 vi.mock("@/hooks/useGetFeedbackPr", () => ({
   default: () => ({ refetch: vi.fn() }),
 }))
@@ -45,9 +55,96 @@ const individualAction = {
   emptyRepo: false,
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  repoData.mockReturnValue({ data: undefined })
+  collaboratorsData.mockReturnValue({ data: undefined })
+})
 
 describe("ManageSubmissionModal", () => {
+  it("shows accept/push time, owner access, and hides collaborators when the owner is alone", () => {
+    repoData.mockReturnValue({
+      data: {
+        created_at: "2026-06-01T09:00:00Z",
+        pushed_at: "2026-06-20T10:00:00Z",
+      },
+    })
+    collaboratorsData.mockReturnValue({
+      data: [
+        {
+          login: "alice",
+          permissions: {
+            admin: false,
+            maintain: false,
+            push: true,
+            pull: true,
+          },
+        },
+      ],
+    })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{ ...individualAction, onManageAccess: vi.fn() }}
+      />,
+    )
+    expect(screen.getByText("submissions.manageModal.accepted")).toBeTruthy()
+    expect(screen.getByText("submissions.manageModal.lastPush")).toBeTruthy()
+    // Owner is push -> Write (push) level label.
+    expect(
+      screen.getByText("assignments.form.studentPermission.levels.push"),
+    ).toBeTruthy()
+    // Only the owner is a collaborator, so the collaborators line is hidden.
+    expect(
+      screen.queryByText("submissions.manageModal.collaborators"),
+    ).toBeNull()
+  })
+
+  it("lists collaborators beyond the owner (e.g. a group repo)", () => {
+    collaboratorsData.mockReturnValue({
+      data: [
+        {
+          login: "alice",
+          permissions: { admin: true, maintain: true, push: true, pull: true },
+        },
+        {
+          login: "bob",
+          permissions: {
+            admin: false,
+            maintain: false,
+            push: true,
+            pull: true,
+          },
+        },
+      ],
+    })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="cs101-hw1-team"
+        repo="cs101-hw1-team"
+        isGroup
+        students={[]}
+        onManageMembers={vi.fn()}
+        action={{
+          ...individualAction,
+          mode: "group",
+          owner: "alice",
+          repo: "cs101-hw1-team",
+        }}
+      />,
+    )
+    expect(
+      screen.getByText("submissions.manageModal.collaborators"),
+    ).toBeTruthy()
+    expect(screen.getByText("@bob")).toBeTruthy()
+  })
+
   it("closes the hub, then opens the access editor when Manage access is chosen", async () => {
     const user = userEvent.setup()
     const onManageAccess = vi.fn()
@@ -59,6 +156,7 @@ describe("ManageSubmissionModal", () => {
         repo="cs101-hw1-alice"
         repoHref="https://github.com/acme/cs101-hw1-alice"
         isGroup={false}
+        students={[]}
         action={{ ...individualAction, onManageAccess }}
       />,
     )
@@ -83,6 +181,7 @@ describe("ManageSubmissionModal", () => {
         repo="cs101-hw1-team"
         repoHref="https://github.com/acme/cs101-hw1-team"
         isGroup
+        students={[]}
         onManageMembers={onManageMembers}
         action={{
           ...individualAction,
@@ -110,6 +209,7 @@ describe("ManageSubmissionModal", () => {
         title="Alice"
         repo="cs101-hw1-alice"
         isGroup={false}
+        students={[]}
         action={{
           ...individualAction,
           hasRepo: false,

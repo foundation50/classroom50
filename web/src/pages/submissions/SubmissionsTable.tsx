@@ -808,6 +808,7 @@ const SubmissionsTable = ({
             manageSubmission.hasRepo ? manageSubmission.repoHref : undefined
           }
           isGroup={manageSubmission.isGroup}
+          students={students}
           onManageMembers={
             manageSubmission.isGroup
               ? () => setManageOwner(manageSubmission.owner)

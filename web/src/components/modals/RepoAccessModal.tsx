@@ -23,11 +23,11 @@ import {
   CollaboratorIdentity,
   describeGitHubApiFailure,
   normalizeUsername,
+  permissionFromFlags,
   rejectedItems,
 } from "@/components/modals/collaboratorHelpers"
 import { permissionSatisfies } from "@/domain/assignments/permissions"
 import { GitHubAPIError } from "@/github-core/errors"
-import type { GitHubUser } from "@/github-core/types"
 import type { RepoPermission, Student } from "@/types/classroom"
 import { REPO_PERMISSIONS } from "@/types/classroom"
 
@@ -50,19 +50,6 @@ class RepoAccessNotAppliedError extends Error {
     this.requested = requested
     this.effective = effective
   }
-}
-
-// The effective role from a collaborator's permission booleans (the list
-// endpoint returns no role_name in our GitHubUser shape). Highest wins; triage
-// isn't modeled by the booleans, so it reads back as pull — acceptable, since a
-// no-op save is filtered out by the change diff.
-const permissionFromFlags = (
-  permissions: GitHubUser["permissions"],
-): RepoPermission => {
-  if (permissions.admin) return "admin"
-  if (permissions.maintain) return "maintain"
-  if (permissions.push) return "push"
-  return "pull"
 }
 
 // Map a rejected write to a human reason; reuses the groupCollaborators failure

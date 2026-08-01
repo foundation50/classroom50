@@ -1,20 +1,133 @@
-import { useEffect, useId, useRef } from "react"
+import { useEffect, useId, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { UsersRound } from "lucide-react"
 
 import GitHub from "@/assets/github.svg?react"
-import { Modal, MonoLtr } from "@/components/ui"
+import { Badge, Modal, MonoLtr } from "@/components/ui"
+import useGetRepo from "@/hooks/useGetRepo"
+import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
+import {
+  CollaboratorIdentity,
+  normalizeUsername,
+  permissionFromFlags,
+} from "@/components/modals/collaboratorHelpers"
 import {
   SubmissionActionList,
   type SubmissionActionListProps,
 } from "@/pages/submissions/SubmissionsRowActions"
 import { ActionListRow } from "@/pages/submissions/actionLayout"
+import type { Student } from "@/types/classroom"
+
+const formatDateTime = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  })
+
+// Read-only context above the action list: accept time (repo creation), last
+// push, the enrolled owner's effective access, and any extra collaborators.
+// Fetches lazily (only while the hub is open) — a closed hub costs no requests.
+// Collaborators beyond the owner are hidden when there are none, so an
+// individual repo with just its student shows no collaborator line while a
+// group repo lists its members (one generalized case).
+const SubmissionDetails = ({
+  org,
+  repo,
+  owner,
+  students,
+}: {
+  org: string
+  repo: string
+  owner: string
+  students: Student[]
+}) => {
+  const { t } = useTranslation()
+  const { data: repoData } = useGetRepo(org, repo)
+  const { data: collaborators } = useGetRepoCollaborators(org, repo)
+
+  const ownerLogin = normalizeUsername(owner)
+  const ownerAccess = useMemo(() => {
+    const found = collaborators?.find(
+      (c) => c.login.toLowerCase() === ownerLogin,
+    )
+    return found ? permissionFromFlags(found.permissions) : undefined
+  }, [collaborators, ownerLogin])
+
+  const otherCollaborators = useMemo(
+    () =>
+      (collaborators ?? [])
+        .filter((c) => c.login.toLowerCase() !== ownerLogin)
+        .map((c) => c.login),
+    [collaborators, ownerLogin],
+  )
+
+  const rows: { label: string; value: React.ReactNode }[] = []
+  if (repoData?.created_at) {
+    rows.push({
+      label: t("submissions.manageModal.accepted"),
+      value: formatDateTime(repoData.created_at),
+    })
+  }
+  if (repoData?.pushed_at) {
+    rows.push({
+      label: t("submissions.manageModal.lastPush"),
+      value: formatDateTime(repoData.pushed_at),
+    })
+  }
+  if (ownerAccess) {
+    rows.push({
+      label: t("submissions.manageModal.access"),
+      value: (
+        <Badge ghost>
+          {t(`assignments.form.studentPermission.levels.${ownerAccess}`)}
+        </Badge>
+      ),
+    })
+  }
+
+  if (rows.length === 0 && otherCollaborators.length === 0) return null
+
+  return (
+    <div className="mt-4 rounded-box border border-base-content/10 bg-base-200/40 p-3">
+      <dl className="flex flex-col gap-1.5 text-sm">
+        {rows.map((row) => (
+          <div
+            key={row.label}
+            className="flex items-center justify-between gap-4"
+          >
+            <dt className="text-base-content/60">{row.label}</dt>
+            <dd className="min-w-0 truncate text-end font-medium">
+              {row.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {otherCollaborators.length > 0 ? (
+        <div className="mt-2 border-t border-base-content/10 pt-2">
+          <p className="mb-1 text-sm text-base-content/60">
+            {t("submissions.manageModal.collaborators", {
+              count: otherCollaborators.length,
+            })}
+          </p>
+          <ul className="flex flex-col gap-1">
+            {otherCollaborators.map((login) => (
+              <li key={login} className="min-w-0">
+                <CollaboratorIdentity login={login} students={students} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 // The submission hub: one entry point that gathers every per-submission action
 // behind the row's Manage control. It shows the identity + repo it acts on,
-// then the action list. The rich access/members editors are not nested here —
-// they hand off (this modal closes and the caller opens the dedicated modal),
-// so a dialog never stacks on the hub.
+// read-only context (accept/push time, access, collaborators), then the action
+// list. The rich access/members editors are not nested here — they hand off
+// (this modal closes and the caller opens the dedicated modal), so a dialog
+// never stacks on the hub.
 //
 // Mounted only while a row is selected (the caller gates + remounts via `key`),
 // so it opens once on mount; Esc/backdrop/X fire onClose to clear the selection.
@@ -25,6 +138,7 @@ export const ManageSubmissionModal = ({
   repo,
   repoHref,
   isGroup,
+  students,
   onManageMembers,
   action,
 }: {
@@ -36,6 +150,8 @@ export const ManageSubmissionModal = ({
   repo: string
   repoHref?: string
   isGroup: boolean
+  // Roster, for resolving collaborator display names in the details section.
+  students: Student[]
   // Group hand-off: closes the hub and opens the members modal. Individual
   // access hand-off is carried on `action.onManageAccess`.
   onManageMembers?: () => void
@@ -69,7 +185,7 @@ export const ManageSubmissionModal = ({
     <Modal
       dialogRef={dialogRef}
       onClose={onClose}
-      size="md"
+      size="lg"
       aria-labelledby={titleId}
     >
       <h3 id={titleId} className="truncate pe-8 text-lg font-bold">
@@ -82,21 +198,30 @@ export const ManageSubmissionModal = ({
       ) : null}
       {repoHref ? (
         <a
-          className="mt-2 inline-flex w-fit items-center gap-1.5 link link-hover"
+          className="link link-hover mt-2 inline-flex w-fit max-w-full items-center gap-1.5"
           href={repoHref}
           target="_blank"
           rel="noreferrer"
           title={t("submissions.table.viewRepo")}
         >
           <GitHub aria-hidden="true" className="size-4 shrink-0" />
-          <MonoLtr className="text-sm">{repo}</MonoLtr>
+          <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
         </a>
       ) : (
-        <p className="mt-2 inline-flex w-fit items-center gap-1.5 text-base-content/50">
+        <p className="mt-2 inline-flex w-fit max-w-full items-center gap-1.5 text-base-content/50">
           <GitHub aria-hidden="true" className="size-4 shrink-0" />
-          <MonoLtr className="text-sm">{repo}</MonoLtr>
+          <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
         </p>
       )}
+
+      {action.hasRepo ? (
+        <SubmissionDetails
+          org={action.org}
+          repo={repo}
+          owner={action.owner}
+          students={students}
+        />
+      ) : null}
 
       <div className="mt-4 divide-y divide-base-200">
         <SubmissionActionList

@@ -2296,6 +2296,11 @@
     "manageModal": {
       "open": "Manage submission",
       "openAria": "Manage {{owner}}'s submission",
+      "accepted": "Accepted",
+      "lastPush": "Last push",
+      "access": "Access",
+      "collaborators_one": "{{count}} collaborator",
+      "collaborators_other": "{{count}} collaborators",
       "commitDescription": "Open the latest commit on GitHub",
       "reviewDescription": "Open the feedback pull request",
       "accessDescription": "Edit the student's role and collaborators",

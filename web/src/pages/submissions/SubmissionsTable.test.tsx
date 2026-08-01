@@ -20,6 +20,9 @@ const collaborators = vi.fn()
 vi.mock("@/hooks/useGetRepoCollaborators", () => ({
   default: (...a: unknown[]) => collaborators(...a),
 }))
+vi.mock("@/hooks/useGetRepo", () => ({
+  default: () => ({ data: undefined }),
+}))
 vi.mock("@/hooks/useGetFeedbackPr", () => ({
   default: () => ({ refetch: vi.fn() }),
 }))
