@@ -22,13 +22,15 @@ import type { AssignmentMode } from "@/types/classroom"
 // Per-row regrade: dispatches regrade.yaml scoped to one owner, tracked via
 // useTriggerRegrade (icon shows progress; disabled while any regrade is in
 // flight). Only kicks off grading — the gradebook refreshes on the next collect.
+//
+// A never-accepted non-submitter (`noRepo`) renders a static disabled button and
+// deliberately does NOT mount the tracking hook or confirm modal: with no repo
+// there's nothing to regrade, and skipping the machinery avoids a per-row
+// sessionStorage read and a hidden confirm dialog on rosters full of
+// never-accepted students.
 export const RegradeButton = ({
-  org,
-  classroom,
-  assignment,
-  owner,
-  displayName,
   noRepo = false,
+  ...props
 }: {
   org: string
   classroom: string
@@ -37,10 +39,39 @@ export const RegradeButton = ({
   // The student's display name (individual assignments) when known; falls back
   // to `owner`. Omitted for group repos (owner is the founder/group).
   displayName?: string
-  // No assignment repo exists yet (a never-accepted non-submitter): regrade has
-  // nothing to dispatch against, so the button renders disabled rather than
-  // hidden — the row still shows the full action set, greyed where inapplicable.
   noRepo?: boolean
+}) => {
+  const { t } = useTranslation()
+  if (noRepo) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        shape="square"
+        className="text-base-content/70 disabled:opacity-60"
+        disabled
+        aria-label={t("submissions.rowRegrade.aria", { owner: props.owner })}
+        title={t("submissions.rowRegrade.titleNoRepo")}
+      >
+        <RefreshCw aria-hidden="true" className="size-4" />
+      </Button>
+    )
+  }
+  return <ActiveRegradeButton {...props} />
+}
+
+const ActiveRegradeButton = ({
+  org,
+  classroom,
+  assignment,
+  owner,
+  displayName,
+}: {
+  org: string
+  classroom: string
+  assignment: string
+  owner: string
+  displayName?: string
 }) => {
   const { t } = useTranslation()
   const { regrade, phase, anyRegrading } = useTriggerRegrade({
@@ -56,20 +87,18 @@ export const RegradeButton = ({
   const blocked = anyRegrading && !inFlight
   const [confirmOpen, setConfirmOpen] = useState(false)
 
-  const title = noRepo
-    ? t("submissions.rowRegrade.titleNoRepo")
-    : inFlight
-      ? t("submissions.rowRegrade.titleInFlight")
-      : blocked
-        ? t("submissions.rowRegrade.titleBlocked")
-        : phase === "completed"
-          ? t("submissions.rowRegrade.titleCompleted")
-          : phase === "failed"
-            ? t("submissions.rowRegrade.titleFailed")
-            : t("submissions.rowRegrade.title")
+  const title = inFlight
+    ? t("submissions.rowRegrade.titleInFlight")
+    : blocked
+      ? t("submissions.rowRegrade.titleBlocked")
+      : phase === "completed"
+        ? t("submissions.rowRegrade.titleCompleted")
+        : phase === "failed"
+          ? t("submissions.rowRegrade.titleFailed")
+          : t("submissions.rowRegrade.title")
 
   const handleClick = () => {
-    if (noRepo || inFlight || blocked) return
+    if (inFlight || blocked) return
     setConfirmOpen(true)
   }
 
@@ -80,7 +109,7 @@ export const RegradeButton = ({
         size="sm"
         shape="square"
         className="text-base-content/70 disabled:opacity-60"
-        disabled={noRepo || inFlight || blocked}
+        disabled={inFlight || blocked}
         loading={inFlight}
         loadingLabel={t("submissions.rowRegrade.title")}
         onClick={handleClick}
@@ -151,7 +180,6 @@ export const DownloadButton = ({
   classroom: string
   assignment: string
   owner: string
-  // No assignment repo exists yet: nothing to download, so render disabled.
   noRepo?: boolean
 }) => {
   const { t } = useTranslation()

@@ -32,6 +32,7 @@ import {
   buildGroupDisplayItems,
   buildGroupRosterDisplayItems,
   buildSortedDisplayItems,
+  hasAccepted,
   pageBounds,
   paginateDisplayItems,
   paginationRange,
@@ -635,22 +636,31 @@ const SubmissionsTable = ({
                 // and fall back to the em-dash (like the neutral "Not submitted"
                 // badge does), so the row never asserts "hasn't accepted" with a
                 // disabled cluster while acceptance is still resolving.
-                const login = student.username?.toLowerCase()
-                const acceptanceKnown = acceptedUsernames !== undefined
-                const accepted = Boolean(login && acceptedUsernames?.has(login))
-                const actions =
-                  !isGroup && student.username && acceptanceKnown ? (
+                const showActions =
+                  !isGroup && Boolean(student.username) && acceptedUsernames
+
+                let actions: React.ReactNode
+                if (showActions) {
+                  const repoName = studentRepoName(
+                    classroom,
+                    assignment,
+                    student.username,
+                  )
+                  const repoHref = studentRepoUrl(
+                    org,
+                    classroom,
+                    assignment,
+                    student.username,
+                  )
+                  const accepted = hasAccepted(student.username, showActions)
+                  actions = (
                     <RepoRowActions
                       mode="individual"
                       org={org}
                       classroom={classroom}
                       assignment={assignment}
                       owner={student.username}
-                      repo={studentRepoName(
-                        classroom,
-                        assignment,
-                        student.username,
-                      )}
+                      repo={repoName}
                       hasRepo={accepted}
                       emptyRepo={emptyRepo}
                       displayName={
@@ -658,23 +668,15 @@ const SubmissionsTable = ({
                       }
                       header={
                         <IndividualRowHeader
-                          repo={studentRepoName(
-                            classroom,
-                            assignment,
-                            student.username,
-                          )}
-                          repoHref={studentRepoUrl(
-                            org,
-                            classroom,
-                            assignment,
-                            student.username,
-                          )}
+                          repo={repoName}
+                          repoHref={repoHref}
                           hasRepo={accepted}
                         />
                       }
                       onManageAccess={() => setAccessOwner(student.username)}
                     />
-                  ) : undefined
+                  )
+                }
                 return (
                   <NonSubmitterRow
                     key={`missing-${student.username || student.email || student.github_id}`}
