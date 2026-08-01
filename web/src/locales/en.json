@@ -955,6 +955,7 @@
       "emptyRepoLocked": "It can't be changed after creation.",
       "studentPermission": {
         "label": "Student repo access",
+        "learnMore": "Learn more",
         "help": "The role each student is granted on their own assignment repository at accept time. Push (write) is the default. Choose Admin to let students manage repository settings and enable GitHub Pages. This applies to students who accept from now on; use the gradebook to change repositories already created.",
         "groupHelp": "Group members join with at least admin so the group owner can add teammates. This applies to repositories created from now on; use the gradebook to change existing ones.",
         "default": "Default ({{level}})",
