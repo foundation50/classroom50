@@ -153,23 +153,33 @@ func TestPermissionSatisfies(t *testing.T) {
 	}
 }
 
-// TestFounderPermission pins the mode→role mapping: individual (and
-// empty/unknown, which default to individual) gets least-privilege `push`,
-// group gets `admin` so the founder can add teammates via `gh student invite`.
+// TestFounderPermission pins the mode+config→role mapping: with no configured
+// student_permission, individual (and empty/unknown, which default to
+// individual) gets least-privilege `push`, group gets `admin`. A configured
+// value wins for individual; a group value below admin is clamped up to admin
+// so the founder can add teammates via `gh student invite`.
 func TestFounderPermission(t *testing.T) {
 	cases := []struct {
-		mode string
-		want string
+		name              string
+		mode              string
+		studentPermission string
+		want              string
 	}{
-		{"individual", "push"},
-		{"", "push"},
-		{"team", "push"}, // unknown modes default to individual (least privilege)
-		{"group", "admin"},
+		{"individual default", "individual", "", "push"},
+		{"empty mode default", "", "", "push"},
+		{"unknown mode default", "team", "", "push"}, // defaults to individual (least privilege)
+		{"group default", "group", "", "admin"},
+		{"individual configured admin", "individual", "admin", "admin"},
+		{"individual configured pull", "individual", "pull", "pull"},
+		{"individual configured maintain", "individual", "maintain", "maintain"},
+		{"group clamps push up to admin", "group", "push", "admin"},
+		{"group clamps pull up to admin", "group", "pull", "admin"},
+		{"group configured admin", "group", "admin", "admin"},
 	}
 	for _, tc := range cases {
-		t.Run(tc.mode, func(t *testing.T) {
-			if got := founderPermission(tc.mode); got != tc.want {
-				t.Errorf("founderPermission(%q) = %q, want %q", tc.mode, got, tc.want)
+		t.Run(tc.name, func(t *testing.T) {
+			if got := founderPermission(tc.mode, tc.studentPermission); got != tc.want {
+				t.Errorf("founderPermission(%q,%q) = %q, want %q", tc.mode, tc.studentPermission, got, tc.want)
 			}
 		})
 	}

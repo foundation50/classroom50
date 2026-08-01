@@ -1968,6 +1968,19 @@ describe("founderPermission — accept-time repo role", () => {
   it("grants admin for group assignments (founder manages collaborators)", () => {
     expect(founderPermission("group")).toBe("admin")
   })
+
+  it("honors a configured student_permission for individual", () => {
+    expect(founderPermission("individual", "admin")).toBe("admin")
+    expect(founderPermission("individual", "pull")).toBe("pull")
+    expect(founderPermission("individual", "maintain")).toBe("maintain")
+  })
+
+  it("clamps a group assignment up to admin even when configured lower", () => {
+    // A group founder must hold admin to add teammates via `gh student invite`.
+    expect(founderPermission("group", "push")).toBe("admin")
+    expect(founderPermission("group", "pull")).toBe("admin")
+    expect(founderPermission("group", "admin")).toBe("admin")
+  })
 })
 
 // Mirrors gh-student's assertModeCoherentForCreate: a group-shaped entry

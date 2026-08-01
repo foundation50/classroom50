@@ -1,7 +1,8 @@
 import type { GitHubClient } from "@/github-core/client"
-import type { AssignmentMode } from "@/types/classroom"
+import type { AssignmentMode, RepoPermission } from "@/types/classroom"
 import type { GitHubRepo } from "@/github-core/types"
 import { getRepoPermissionForUser } from "@/github-core/queries"
+import { defaultStudentPermission } from "@/types/classroom"
 import { localizedError } from "@/types/localizedMessage"
 
 // Grant the founder their repo role and verify it took: a repo creator holds
@@ -14,7 +15,7 @@ export async function addFounderCollaborator(params: {
   owner: string
   repo: string
   username: string
-  permission: "push" | "admin"
+  permission: RepoPermission
   isOwner?: boolean
 }) {
   const { client, owner, repo, username, permission, isOwner = false } = params
@@ -55,33 +56,59 @@ export async function addFounderCollaborator(params: {
   }
 }
 
-// Whether the read-back matches the role we set. role_name is authoritative
-// when present: a push target accepts push/write but must reject the
-// more-privileged maintain/admin the legacy field would hide (GitHub collapses
-// maintain->write, admin->admin). isOwner relaxes a push want to also accept
-// admin: an org owner who created the repo can't self-downgrade (org policy
-// blocks it), and admin is a superset of push. Mirrors gh-student's
+// The permission ladder low-to-high, so a read-back can be ranked against the
+// role we wanted. GitHub's role_name reports the effective role (with maintain
+// and admin distinct), while the legacy `permission` field collapses maintain
+// into "write" and only distinguishes admin — so ranking on role_name is exact
+// and ranking on the legacy field can only prove push/write and admin.
+const PERMISSION_RANK: Record<string, number> = {
+  read: 0,
+  pull: 0,
+  triage: 1,
+  write: 2,
+  push: 2,
+  maintain: 3,
+  admin: 4,
+}
+
+// Whether the read-back at least matches the role we set. role_name is
+// authoritative when present (an exact rank compare). isOwner relaxes any want
+// to also accept admin: an org owner who created the repo can't self-downgrade
+// (org policy blocks it), and admin is a superset. Mirrors gh-student's
 // permissionSatisfies.
 export function permissionSatisfies(
   legacy: string | undefined,
   roleName: string | undefined,
-  want: "push" | "admin",
+  want: RepoPermission,
   isOwner = false,
 ): boolean {
+  const wantRank = PERMISSION_RANK[want]
   if (roleName) {
-    if (want === "admin") return roleName === "admin"
-    if (isOwner && roleName === "admin") return true
-    return roleName === "push" || roleName === "write"
+    const gotRank = PERMISSION_RANK[roleName]
+    if (gotRank === undefined) return false
+    if (isOwner && gotRank === PERMISSION_RANK.admin) return true
+    return gotRank === wantRank
   }
-  if (want === "admin") return legacy === "admin"
-  if (isOwner && legacy === "admin") return true
-  return legacy === "write"
+  // Legacy field only: it can't distinguish triage/maintain (both collapse to
+  // "write"), so fall back to a >= compare, which is the best it can prove.
+  const gotRank = PERMISSION_RANK[legacy ?? ""]
+  if (gotRank === undefined) return false
+  if (isOwner && gotRank === PERMISSION_RANK.admin) return true
+  return gotRank >= wantRank
 }
 
-// Maps assignment mode to the founder's repo role: least-privilege `push` for
-// individual, `admin` for group. Mirrors gh-student's founderPermission.
-export function founderPermission(mode: AssignmentMode): "push" | "admin" {
-  return mode === "group" ? "admin" : "push"
+// Maps an assignment to the founder's accept-time repo role: the configured
+// student_permission when set, else the mode default (least-privilege push for
+// individual, admin for group). A group founder must hold at least admin to add
+// teammates via `gh student invite`, so a group value below admin is clamped up.
+// Mirrors gh-student's founderPermission.
+export function founderPermission(
+  mode: AssignmentMode,
+  studentPermission?: RepoPermission,
+): RepoPermission {
+  const want = studentPermission ?? defaultStudentPermission(mode)
+  if (mode === "group" && want !== "admin") return "admin"
+  return want
 }
 
 // Rejects a group-shaped entry (max_group_size >= 2) whose mode isn't `group`:

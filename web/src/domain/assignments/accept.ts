@@ -1,5 +1,5 @@
 import type { GitHubClient } from "@/github-core/client"
-import type { AssignmentMode } from "@/types/classroom"
+import type { AssignmentMode, RepoPermission } from "@/types/classroom"
 import { getUser } from "@/github-core/queries"
 import { studentRepoName } from "@/util/studentRepo"
 import {
@@ -154,10 +154,20 @@ function grantFounderAccessStep(params: {
   repo: string
   username: string
   mode: AssignmentMode
+  studentPermission?: RepoPermission
   isOwner: boolean
   onStepUpdate?: OnAcceptStepUpdate
 }) {
-  const { client, org, repo, username, mode, isOwner, onStepUpdate } = params
+  const {
+    client,
+    org,
+    repo,
+    username,
+    mode,
+    studentPermission,
+    isOwner,
+    onStepUpdate,
+  } = params
   return withAcceptStep(
     {
       id: "access",
@@ -176,7 +186,7 @@ function grantFounderAccessStep(params: {
         owner: org,
         repo,
         username,
-        permission: founderPermission(mode),
+        permission: founderPermission(mode, studentPermission),
         isOwner,
       })
     },
@@ -192,6 +202,7 @@ async function provisionAcceptedRepo(params: {
   repo: GitHubRepo
   username: string
   mode: AssignmentMode
+  studentPermission?: RepoPermission
   branch: string
   metadataYaml: string
   autogradeYaml: string
@@ -207,6 +218,7 @@ async function provisionAcceptedRepo(params: {
     repo,
     username,
     mode,
+    studentPermission,
     branch,
     metadataYaml,
     autogradeYaml,
@@ -222,6 +234,7 @@ async function provisionAcceptedRepo(params: {
     repo: repo.name,
     username,
     mode,
+    studentPermission,
     isOwner,
     onStepUpdate,
   })
@@ -653,7 +666,10 @@ export async function acceptAssignment(params: {
           owner: org,
           repo: created.repo.name,
           username,
-          permission: founderPermission(assignment.mode),
+          permission: founderPermission(
+            assignment.mode,
+            assignment.student_permission,
+          ),
           isOwner,
         })
       } catch (err) {
@@ -674,6 +690,7 @@ export async function acceptAssignment(params: {
         repo: created.repo.name,
         username,
         mode: assignment.mode,
+        studentPermission: assignment.student_permission,
         isOwner,
         onStepUpdate,
       })
@@ -749,7 +766,10 @@ export async function acceptAssignment(params: {
           owner: org,
           repo: created.repo.name,
           username,
-          permission: founderPermission(assignment.mode),
+          permission: founderPermission(
+            assignment.mode,
+            assignment.student_permission,
+          ),
           isOwner,
         })
       } catch (err) {
@@ -821,6 +841,7 @@ export async function acceptAssignment(params: {
       repo: created.repo,
       username,
       mode: assignment.mode,
+      studentPermission: assignment.student_permission,
       branch: created.repo.default_branch || sourceBranch,
       metadataYaml,
       autogradeYaml,
@@ -858,6 +879,7 @@ export async function acceptAssignment(params: {
     repo,
     username,
     mode: assignment.mode,
+    studentPermission: assignment.student_permission,
     branch: targetBranch,
     metadataYaml,
     autogradeYaml,

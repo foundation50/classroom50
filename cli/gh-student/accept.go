@@ -462,28 +462,29 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 
 	repoName := reponame.Name(classroom, assignment, username)
 	return acceptIntoRepo(client, u, verbose, out, acceptRepoParams{
-		org:            org,
-		classroom:      classroom,
-		assignment:     assignment,
-		mode:           entry.Mode,
-		maxGroupSize:   entry.MaxGroupSize,
-		secret:         secret,
-		username:       username,
-		ownerID:        &ownerID,
-		acceptedAt:     acceptedAt,
-		repoName:       repoName,
-		branch:         commitBranch,
-		source:         cfgSource,
-		shim:           shim,
-		autograderName: autograderName,
-		emptyRepo:      entry.EmptyRepo,
-		feedbackPR:     entry.FeedbackPR,
-		fullName:       fullName,
-		htmlURL:        htmlURL,
-		alreadyExisted: alreadyExisted,
-		isOwner:        isOwner,
-		createSp:       createSp,
-		createMsg:      createMsg,
+		org:               org,
+		classroom:         classroom,
+		assignment:        assignment,
+		mode:              entry.Mode,
+		maxGroupSize:      entry.MaxGroupSize,
+		studentPermission: entry.StudentPermission,
+		secret:            secret,
+		username:          username,
+		ownerID:           &ownerID,
+		acceptedAt:        acceptedAt,
+		repoName:          repoName,
+		branch:            commitBranch,
+		source:            cfgSource,
+		shim:              shim,
+		autograderName:    autograderName,
+		emptyRepo:         entry.EmptyRepo,
+		feedbackPR:        entry.FeedbackPR,
+		fullName:          fullName,
+		htmlURL:           htmlURL,
+		alreadyExisted:    alreadyExisted,
+		isOwner:           isOwner,
+		createSp:          createSp,
+		createMsg:         createMsg,
 	})
 }
 
@@ -501,6 +502,10 @@ type acceptRepoParams struct {
 	acceptedAt                 string
 	source                     *classroomcfg.Source
 	shim, autograderName       string
+	// studentPermission is the assignment's optional student_permission (the
+	// accept-time role the student gets on their own repo); empty means the
+	// mode default. See founderPermission.
+	studentPermission string
 	// emptyRepo selects the bare path: no control files are committed and no
 	// marker probe runs — the only provisioning is the idempotent admin grant.
 	emptyRepo bool
@@ -545,7 +550,7 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 			// Already accepted: reconcile the role best-effort. The repo is
 			// already healthy, so a transient/SSO-403/left-org failure must not
 			// fail a re-run that previously always succeeded — warn and report.
-			if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode), p.isOwner); err != nil && verbose {
+			if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission), p.isOwner); err != nil && verbose {
 				u.Detail("could not reconcile %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 			}
 			p.createSp.Stop(fmt.Sprintf("Repo already exists: %s", p.fullName))
@@ -617,7 +622,7 @@ func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.
 		// templated already-accepted path. The bare repo is already healthy
 		// (its only provisioning is this grant), so a transient/SSO-403/
 		// left-org failure must not fail a re-run that previously succeeded.
-		if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode), p.isOwner); err != nil && verbose {
+		if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission), p.isOwner); err != nil && verbose {
 			u.Detail("could not reconcile %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 		}
 		return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
@@ -631,7 +636,7 @@ func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.
 		return err
 	}
 
-	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode), p.isOwner); err != nil {
+	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission), p.isOwner); err != nil {
 		return err
 	}
 
@@ -655,7 +660,7 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 	// Individual founders get least-privilege `push` (enough to push and
 	// trigger autograding); group founders get `admin` (needed to manage
 	// collaborators for `gh student invite`). See founderPermission.
-	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode), p.isOwner); err != nil {
+	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission), p.isOwner); err != nil {
 		return err
 	}
 
@@ -1086,14 +1091,21 @@ func defaultBranchOrMain(branch string) string {
 	return branch
 }
 
-// founderPermission maps an assignment mode to the founder's accept-time repo
-// role: least-privilege `push` for individual, `admin` for group (which needs
-// to manage collaborators for `gh student invite`).
-func founderPermission(mode string) string {
-	if mode == contract.ModeGroup {
-		return "admin"
+// founderPermission maps an assignment to the founder's accept-time repo role:
+// the configured student_permission when set, else the mode default
+// (least-privilege push for individual, admin for group, which needs to manage
+// collaborators for `gh student invite`). A group founder must hold at least
+// admin, so a group value below admin is clamped up. Mirrors the web
+// founderPermission.
+func founderPermission(mode, studentPermission string) string {
+	want := studentPermission
+	if want == "" {
+		want = contract.DefaultStudentPermission(mode)
 	}
-	return "push"
+	if mode == contract.ModeGroup && want != contract.PermissionAdmin {
+		return contract.PermissionAdmin
+	}
+	return want
 }
 
 // inviteFounder sets username's collaborator role and verifies it took effect.
@@ -1136,35 +1148,46 @@ func verifyFounderPermission(client githubapi.Client, org, repoName, username, w
 		username, want, org, repoName, got.Permission, got.RoleName, want)
 }
 
-// permissionSatisfies reports whether the read-back matches the role we set.
-// role_name is authoritative when present: a push target accepts push/write
-// but must reject the more-privileged maintain/admin, which the legacy field
-// would otherwise hide (GitHub collapses maintain→write, admin→admin). isOwner
-// relaxes a push want to also accept admin: an org owner who created the repo
-// can't self-downgrade, and admin is a superset of push.
+// permissionRank is GitHub's permission ladder low-to-high. role_name reports
+// the effective role (maintain and admin distinct); the legacy `permission`
+// field collapses maintain into "write", so a legacy-only compare can prove
+// only push/write and admin. Mirrors the web PERMISSION_RANK.
+var permissionRank = map[string]int{
+	"read": 0, "pull": 0,
+	"triage": 1,
+	"write":  2, "push": 2,
+	"maintain": 3,
+	"admin":    4,
+}
+
+// permissionSatisfies reports whether the read-back at least matches the role
+// we set. role_name is authoritative when present (an exact rank compare).
+// isOwner relaxes any want to also accept admin: an org owner who created the
+// repo can't self-downgrade, and admin is a superset. Mirrors the web
+// permissionSatisfies.
 func permissionSatisfies(legacy, roleName, want string, isOwner bool) bool {
-	if roleName != "" {
-		switch want {
-		case "admin":
-			return roleName == "admin"
-		case "push":
-			if isOwner && roleName == "admin" {
-				return true
-			}
-			return roleName == "push" || roleName == "write"
-		default:
-			return roleName == want
-		}
+	wantRank, ok := permissionRank[want]
+	if !ok {
+		return false
 	}
-	switch want {
-	case "admin":
-		return legacy == "admin"
-	case "push":
-		if isOwner && legacy == "admin" {
+	if roleName != "" {
+		gotRank, ok := permissionRank[roleName]
+		if !ok {
+			return false
+		}
+		if isOwner && gotRank == permissionRank[contract.PermissionAdmin] {
 			return true
 		}
-		return legacy == "write"
-	default:
-		return legacy == want
+		return gotRank == wantRank
 	}
+	// Legacy field only: it can't distinguish triage/maintain (both collapse to
+	// "write"), so fall back to a >= compare, the best it can prove.
+	gotRank, ok := permissionRank[legacy]
+	if !ok {
+		return false
+	}
+	if isOwner && gotRank == permissionRank[contract.PermissionAdmin] {
+		return true
+	}
+	return gotRank >= wantRank
 }
