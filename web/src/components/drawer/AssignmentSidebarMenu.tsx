@@ -93,7 +93,9 @@ export const AssignmentSidebarMenu = ({
   const onSubmission = onRoute(
     "/$org/$classroom/assignments/$assignment/submission",
   )
-  const onSettings = onRoute("/$org/$classroom/assignments/$assignment/edit")
+  const onSettings = onRoute(
+    "/$org/$classroom/assignments/$assignment/settings",
+  )
   const onAccept = onRoute("/$org/$classroom/assignments/$assignment/accept")
 
   // Students only: surface "Accept" until they have their repo. Hidden while
@@ -171,7 +173,7 @@ export const AssignmentSidebarMenu = ({
               </Tip>
               <Tip label={t("nav.settings")}>
                 <Link
-                  to="/$org/$classroom/assignments/$assignment/edit"
+                  to="/$org/$classroom/assignments/$assignment/settings"
                   params={{ org, classroom, assignment }}
                 >
                   <SidebarItemBody
@@ -214,7 +216,7 @@ export const AssignmentSidebarMenu = ({
               {isGroupAssignment && (
                 <Tip label={t("nav.manageGroup")}>
                   <Link
-                    to="/$org/$classroom/assignments/$assignment/edit"
+                    to="/$org/$classroom/assignments/$assignment/settings"
                     params={{ org, classroom, assignment }}
                   >
                     <SidebarItemBody

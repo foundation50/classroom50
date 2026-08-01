@@ -168,7 +168,7 @@ const EditAssignmentFormStudent = ({
   )
 }
 
-const EditAssignmentPage = () => {
+const AssignmentSettingsPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.assignmentSettings"))
   const { org, classroom, assignment } = useParams({ strict: false })
@@ -209,7 +209,7 @@ const EditAssignmentPage = () => {
               settingsLink: (
                 <Link
                   className="link"
-                  to="/$org/$classroom/edit"
+                  to="/$org/$classroom/settings"
                   params={{ org: org ?? "", classroom: classroom ?? "" }}
                 />
               ),
@@ -264,4 +264,4 @@ const EditAssignmentPage = () => {
   )
 }
 
-export default EditAssignmentPage
+export default AssignmentSettingsPage

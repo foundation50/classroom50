@@ -82,7 +82,7 @@ export const SidebarFooter = () => {
       fuzzy: false,
     })
     const onStaffEdit = matchRoute({
-      to: "/$org/$classroom/assignments/$assignment/edit",
+      to: "/$org/$classroom/assignments/$assignment/settings",
       fuzzy: false,
     })
     // -> student view on a staff-only assignment page: land on the student

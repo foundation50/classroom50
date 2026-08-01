@@ -240,7 +240,7 @@ function ClassroomMenu({
             <Link
               role="menuitem"
               tabIndex={-1}
-              to="/$org/$classroom/edit"
+              to="/$org/$classroom/settings"
               params={{ org, classroom: slug }}
               className={menuItem}
               onClick={() => closeMenu()}

@@ -187,7 +187,7 @@ export const TeacherAssignmentsView = ({
               settingsLink: (
                 <Link
                   className="link"
-                  to="/$org/$classroom/edit"
+                  to="/$org/$classroom/settings"
                   params={{ org, classroom }}
                 />
               ),

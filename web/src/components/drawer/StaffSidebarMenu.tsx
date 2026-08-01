@@ -60,7 +60,10 @@ export const StaffSidebarMenu = ({
               </Tip>
               {canEditSettings && (
                 <Tip label={t("nav.settings")}>
-                  <Link to="/$org/$classroom/edit" params={{ org, classroom }}>
+                  <Link
+                    to="/$org/$classroom/settings"
+                    params={{ org, classroom }}
+                  >
                     <SidebarItemBody
                       label={t("nav.settings")}
                       icon={<Settings aria-hidden="true" />}

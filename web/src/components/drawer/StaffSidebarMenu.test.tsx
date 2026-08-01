@@ -63,7 +63,8 @@ const links = () =>
     .filter(Boolean)
 
 const hasRoster = () => links().some((to) => to === "/$org/$classroom/roster")
-const hasSettings = () => links().some((to) => to === "/$org/$classroom/edit")
+const hasSettings = () =>
+  links().some((to) => to === "/$org/$classroom/settings")
 const hasSkeleton = () => document.querySelector(".skeleton") !== null
 
 const renderMenu = () =>

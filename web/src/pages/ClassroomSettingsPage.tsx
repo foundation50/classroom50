@@ -121,7 +121,7 @@ const EditClassroomContent = ({
   )
 }
 
-const EditClassroomPage = () => {
+const ClassroomSettingsPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.classroomSettings"))
   const { org, classroom } = useParams({ strict: false })
@@ -140,4 +140,4 @@ const EditClassroomPage = () => {
   )
 }
 
-export default EditClassroomPage
+export default ClassroomSettingsPage

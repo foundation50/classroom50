@@ -81,7 +81,7 @@ vi.mock("@/hooks/useGetClassroom", () => ({
   default: () => ({ data: { name: "CS 101", active: true } }),
 }))
 
-import EditAssignmentPage from "./EditAssignmentPage"
+import AssignmentSettingsPage from "./AssignmentSettingsPage"
 
 beforeEach(() => {
   orgRepoCreationWarning.mockReturnValue({ show: false })
@@ -100,17 +100,17 @@ const NOTICE = "components.notices.orgRepoCreation.master"
 // keeping a student from seeing a warning about org member privileges they can't
 // act on. (It does not save a request: every org-scoped page's sidebar already
 // issues the same shared org read, for students too.)
-describe("EditAssignmentPage org repo-creation warning", () => {
+describe("AssignmentSettingsPage org repo-creation warning", () => {
   it("renders the notice for a staff role", () => {
     orgRepoCreationWarning.mockReturnValue({ show: true, field: "master" })
-    render(<EditAssignmentPage />)
+    render(<AssignmentSettingsPage />)
     expect(screen.queryByText(NOTICE)).not.toBeNull()
   })
 
   it("is absent for a student, even when the org blocks repo creation", () => {
     orgRepoCreationWarning.mockReturnValue({ show: true, field: "master" })
     role.mockReturnValue("student")
-    render(<EditAssignmentPage />)
+    render(<AssignmentSettingsPage />)
 
     expect(screen.queryByText(NOTICE)).toBeNull()
     // Not merely hidden by CSS: the notice never mounts on the student branch.
@@ -118,7 +118,7 @@ describe("EditAssignmentPage org repo-creation warning", () => {
   })
 
   it("renders nothing for staff when the hook is silent", () => {
-    render(<EditAssignmentPage />)
+    render(<AssignmentSettingsPage />)
     expect(screen.queryByText(NOTICE)).toBeNull()
   })
 })
