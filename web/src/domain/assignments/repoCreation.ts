@@ -263,6 +263,9 @@ export type CreateAssignmentInput = {
   // Raw comma/space-separated apt packages; parsed to string[] on save.
   runtime_apt?: string
   setup_command?: string
+  // Web transport state for the synthesized leading setup test. This is not an
+  // assignments.json field.
+  setup_timeout?: number
   allowed_files?: string
   release_assets: string
   pass_threshold?: number

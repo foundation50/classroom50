@@ -158,10 +158,13 @@ Optional settings for customizing the autograding environment:
   autograding runs on. `ubuntu-latest` is a good default.
 - **Docker image** — grade inside a custom Docker image. The runner must be an
   Ubuntu variant, or Actions errors.
-- **Setup command** — a shell command run before grading (for example, to
-  compile C code with `gcc`).
-- **Allowed files** — a `.gitignore`-style list controlling which files are
-  considered during grading.
+- **Setup command and timeout** — a shell command run before the other tests. Use
+  it to compile code or install dependencies. New setup commands start at 120
+  seconds; choose 0 for the runner's 10-second default or a whole number from 1
+  through 600.
+- **Allowed files** — a `.gitignore`-style list controlling which files remain
+  for setup and grading. Include dependency manifests and project files used by
+  setup.
 - **Submission release files** — exact workspace-relative file paths (one per
   line) to attach to each submission's Release after grading. Paths are not
   globs; basenames must be unique and Release-safe. Missing or unsafe files are
@@ -172,6 +175,10 @@ Optional settings for customizing the autograding environment:
 > submission release files. Submission publishing doesn't support GitHub
 > Immutable Releases. See [Autograders](Autograders#attaching-files-to-submission-releases)
 > for path rules and limits.
+
+Commands run in separate shell processes. See
+[Autograders](Autograders#setup-commands-dependencies-and-environment-variables)
+for dependency installation and environment-variable guidance.
 
 ### Autograding tests
 

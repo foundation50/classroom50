@@ -27,12 +27,29 @@ export type AssignmentTestDraft = {
 // non-zero exit fails). Reserved from user tests so a graded "setup" can't be
 // confused with the synthesized one.
 export const SETUP_TEST_NAME = "setup"
+export const DEFAULT_SETUP_TIMEOUT_SECONDS = 120
+export const TEST_TIMEOUT_MAX_SECONDS = 600
 
-export const makeSetupTest = (command: string): AssignmentTest => ({
+export function validateTestTimeout(timeout: number): string | undefined {
+  if (
+    !Number.isInteger(timeout) ||
+    timeout < 0 ||
+    timeout > TEST_TIMEOUT_MAX_SECONDS
+  ) {
+    return `Timeout must be 0 (use the 10s default) or a whole number of seconds from 1 through ${TEST_TIMEOUT_MAX_SECONDS}.`
+  }
+  return undefined
+}
+
+export const makeSetupTest = (
+  command: string,
+  timeout: number,
+): AssignmentTest => ({
   name: SETUP_TEST_NAME,
   type: "run",
   run: command,
   points: 0,
+  ...(timeout > 0 ? { timeout } : {}),
 })
 
 // Identifies the synthesized setup test by full signature (reserved name, `run`,
@@ -111,7 +128,6 @@ export function draftToTest(draft: AssignmentTestDraft): AssignmentTest {
 }
 
 const TEST_NAME_MAX_BYTES = 100
-const TIMEOUT_MAX_SECONDS = 600
 const POINTS_MAX = 1000
 const EXIT_CODE_MAX = 255
 
@@ -157,12 +173,9 @@ export function validateTestDraft(
     errors.points = `Points must be a whole number between 0 and ${POINTS_MAX}.`
   }
 
-  if (
-    !Number.isInteger(draft.timeout) ||
-    draft.timeout < 0 ||
-    draft.timeout > TIMEOUT_MAX_SECONDS
-  ) {
-    errors.timeout = `Timeout must be 0 (use the 10s default) or a whole number of seconds up to ${TIMEOUT_MAX_SECONDS}.`
+  const timeoutError = validateTestTimeout(draft.timeout)
+  if (timeoutError) {
+    errors.timeout = timeoutError
   }
 
   if (draft.type === "io") {

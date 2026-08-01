@@ -44,7 +44,8 @@ vi.mock("./CreateAssignmentForm", () => ({
           runtime_go: "",
           runtime_rust: "",
           runtime_apt: "",
-          setup_command: "",
+          setup_command: "make",
+          setup_timeout: 300,
           allowed_files: "",
           release_assets: "plots/chart.png",
           pass_threshold_enabled: false,
@@ -62,7 +63,7 @@ import EditAssignmentForm from "./EditAssignmentForm"
 
 beforeEach(() => mutate.mockClear())
 
-it("passes release_assets through the edit boundary", () => {
+it("passes grading form fields through the edit boundary", () => {
   render(
     <EditAssignmentForm
       org="acme"
@@ -79,7 +80,10 @@ it("passes release_assets through the edit boundary", () => {
   )
   fireEvent.click(screen.getByRole("button", { name: "submit" }))
   expect(mutate).toHaveBeenCalledWith(
-    expect.objectContaining({ release_assets: "plots/chart.png" }),
+    expect.objectContaining({
+      setup_timeout: 300,
+      release_assets: "plots/chart.png",
+    }),
     expect.any(Object),
   )
 })

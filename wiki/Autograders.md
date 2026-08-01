@@ -182,11 +182,64 @@ shape `assignment test list --json` emits:
 | `comparison` | `io` only. `included` (substring), `exact` (trimmed equality), or `regex` (Python `re.search`, multiline). |
 | `timeout` | Seconds, 1–600. Omit or 0 for the default of 10s. Applies to `setup` and `run` separately. |
 | `exit-code` | `run` only, 0–255. Omit to require 0. |
-| `points` | Required, 0–1000. 0-point tests are informational. |
+| `points` | Required, 0–1000. A 0-point test does not affect the numeric score; a failure still sets the autograde status to `failure`. |
 
 At most 100 tests per assignment. Put large fixtures in files
 (`input-file` / `expected-file`) under `<classroom>/autograders/<slug>/`, not
 inline.
+
+### Setup commands, dependencies, and environment variables
+
+The web assignment's **Setup command** is stored as the leading zero-point
+`run` test named `setup`. New setup commands start with a 120-second timeout.
+Set the timeout to 0 for the runner's 10-second default, or choose a whole
+number from 1 through 600. A failure or timeout sets the autograde status to
+`failure` without changing the numeric score; later tests still run.
+
+Use the command for filesystem changes that later tests need. Install a
+requirements file with:
+
+```sh
+python3 -m pip install -r requirements.txt
+```
+
+For a packaged project, including one with a `src/` layout, install the package
+in editable mode:
+
+```sh
+python3 -m pip install -e .
+```
+
+Choose the command that matches the project. An editable package install reads
+the project's package metadata; a separate requirements install is needed only
+when the project uses that file.
+
+Every assignment setup, per-test `setup`, and `run` command starts in a separate
+shell process in the student checkout. Files, virtual-environment directories,
+and installed packages persist between commands. Shell state does not: `cd`,
+`export`, aliases, and virtual-environment activation end when their command
+exits. Invoke a virtual environment's interpreter by path in later commands,
+for example `.venv/bin/python -m pytest -q` on Linux or macOS and
+`.venv\Scripts\python.exe -m pytest -q` on Windows.
+
+For pytest-only import paths, set `pythonpath` in `pyproject.toml` or
+`pytest.ini`. A command that needs one environment value can set it inline on
+Linux or macOS:
+
+```sh
+PYTHONPATH=src python3 -m pytest -q
+```
+
+On Windows:
+
+```bat
+set "PYTHONPATH=src" && python -m pytest -q
+```
+
+Do not write grading environment variables to `$GITHUB_ENV`. All declarative
+commands run as child processes inside the single Grade details workflow step,
+and GitHub Actions reads `$GITHUB_ENV` only after that step finishes. A write
+cannot change the runner process or the environment of later tests.
 
 <details>
 <summary>How tests flow, and where failures surface</summary>
@@ -504,10 +557,11 @@ gh teacher assignment add cs50-fall-2026 cs-principles hello \
   keep it (the CLI warns when it's dropped).
 
 > [!WARNING]
-> **`allowed_files` gates what the autograder *reads*.** Files are removed
-> *before* grading, so any file the grader needs — starter scaffolding, helpers,
-> fixtures — must be allowlisted too, or grading fails with a confusing "file not
-> found". Control files (`.classroom50.yaml`, `.github/`) are always kept.
+> **`allowed_files` gates what the autograder reads.** Files are removed before
+> setup and grading, so every student-checkout file they read must be
+> allowlisted. This includes dependency manifests (`requirements.txt`,
+> `pyproject.toml`), package source, setup scripts, and starter scaffolding.
+> Control files (`.classroom50.yaml`, `.github/`) are always kept.
 >
 > **It fails open** and is a grading-scope/hygiene tool, **not** a security
 > boundary: a student who forces a git failure (or just `git push`es) gets the
@@ -579,6 +633,9 @@ configured by `init`). The only PAT in the system is the teacher-side
 
 ## Operational notes
 
+- **The grade job stops after 15 minutes.** This includes managed runtime setup,
+  the assignment Setup command, every test, and submission Release publishing.
+  Per-command timeouts do not extend the job limit.
 - **Every push grades, every push gets a Release.** Five pushes in ten minutes
   produce five graded runs and five Releases.
 - **"Latest" follows commit time** — the pointer moves only when the new

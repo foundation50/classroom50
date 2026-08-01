@@ -53,6 +53,7 @@ const base: CreateAssignmentFormValues = {
   runtime_rust: "",
   runtime_apt: "",
   setup_command: "",
+  setup_timeout: 120,
   allowed_files: "",
   release_assets: "",
   pass_threshold_enabled: false,
@@ -140,6 +141,81 @@ describe("validateAssignmentForm — pass threshold", () => {
         t,
       ).pass_threshold,
     ).toBe("assignments.form.validation.passThresholdRange")
+  })
+})
+
+describe("setup timeout", () => {
+  it("uses 120 seconds when the assignment has no setup test", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+    })
+
+    expect(values.setup_command).toBe("")
+    expect(values.setup_timeout).toBe(120)
+  })
+
+  it.each([
+    ["omitted", undefined, 0],
+    ["explicit zero", 0, 0],
+    ["positive", 600, 600],
+  ] as const)(
+    "lifts a leading setup test with %s timeout",
+    (_label, timeout, expected) => {
+      const values = assignmentToFormValues({
+        slug: "hw1",
+        name: "Homework",
+        mode: "individual",
+        autograder: "default",
+        tests: [
+          {
+            name: "setup",
+            type: "run",
+            run: "python3 -m pip install -e .",
+            points: 0,
+            ...(timeout === undefined ? {} : { timeout }),
+          },
+        ],
+      })
+
+      expect(values.setup_command).toBe("python3 -m pip install -e .")
+      expect(values.setup_timeout).toBe(expected)
+      expect(values.tests).toEqual([])
+    },
+  )
+
+  it.each([Number.NaN, -1, 1.5, 601])(
+    "rejects %s when a setup command is present",
+    (setup_timeout) => {
+      expect(
+        validateAssignmentForm(
+          { ...base, setup_command: "make", setup_timeout },
+          t,
+        ).setup_timeout,
+      ).toBe("assignments.form.validation.setupTimeoutRange")
+    },
+  )
+
+  it("ignores stale timeout values when setup does not apply", () => {
+    expect(
+      validateAssignmentForm(
+        { ...base, setup_command: "  ", setup_timeout: 601 },
+        t,
+      ).setup_timeout,
+    ).toBeUndefined()
+    expect(
+      validateAssignmentForm(
+        {
+          ...base,
+          empty_repo: true,
+          setup_command: "make",
+          setup_timeout: 601,
+        },
+        t,
+      ).setup_timeout,
+    ).toBeUndefined()
   })
 })
 
@@ -263,6 +339,7 @@ describe("toSubmitValues — runtime field clearing", () => {
       template_repo: "acme/starter",
       feedback_pr: true,
       setup_command: "make setup",
+      setup_timeout: 600,
       allowed_files: "*\n!hello.py",
       pass_threshold_enabled: true,
       tests: [{ name: "t", run: "pytest", points: 1 } as never],
@@ -271,6 +348,7 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.template_repo).toBe("")
     expect(out.feedback_pr).toBe(false)
     expect(out.setup_command).toBe("")
+    expect(out.setup_timeout).toBe(0)
     expect(out.allowed_files).toBe("")
     expect(out.pass_threshold_enabled).toBe(false)
     expect(out.tests).toEqual([])

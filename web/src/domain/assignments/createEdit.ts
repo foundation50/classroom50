@@ -15,7 +15,11 @@ import {
 } from "@/github-core/configRepoReads"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { GitHubAPIError } from "@/github-core/errors"
-import { draftToTest, makeSetupTest } from "@/util/assignmentTests"
+import {
+  draftToTest,
+  makeSetupTest,
+  validateTestTimeout,
+} from "@/util/assignmentTests"
 import { buildDueFields } from "@/util/formatDate"
 import { prefixCommit } from "@/util/commit"
 import {
@@ -320,8 +324,15 @@ async function buildAssignmentEntry(
   // the CLI-blessed pre-grading idiom (no runtime.setup field; the runner runs
   // tests in order, non-zero exit fails the step). See makeSetupTest/isSetupTest.
   const setupCommand = input.setup_command?.trim()
+  const setupTimeout = input.setup_timeout ?? 0
+  if (!input.empty_repo && setupCommand) {
+    const setupTimeoutError = validateTestTimeout(setupTimeout)
+    if (setupTimeoutError) {
+      throw new Error(`setup_timeout: ${setupTimeoutError}`)
+    }
+  }
   const tests = setupCommand
-    ? [makeSetupTest(setupCommand), ...userTests]
+    ? [makeSetupTest(setupCommand, setupTimeout), ...userTests]
     : userTests
 
   // empty_repo rules out every grading-adjacent field — a bare repo never

@@ -6,6 +6,10 @@ import { parseReleaseAssets } from "@/util/releaseAssets"
 import { RUNTIME_LANGUAGES } from "@/util/runtime"
 import { isSelfHostedRunnerValue } from "@/util/runners"
 import {
+  DEFAULT_SETUP_TIMEOUT_SECONDS,
+  TEST_TIMEOUT_MAX_SECONDS,
+} from "@/util/assignmentTests"
+import {
   FieldLabel,
   HelpTooltip,
   RunnerField,
@@ -142,27 +146,97 @@ export const AdvancedSection = ({
         {(emptyRepo) =>
           emptyRepo ? null : (
             <>
-              <form.Field name="setup_command">
-                {(field) => (
-                  <div className="mt-4">
-                    <FieldLabel
-                      htmlFor={field.name}
-                      label={t("assignments.form.setupCommand")}
-                      help={t("assignments.form.setupCommandTip")}
-                    />
-                    <Input
-                      id={field.name}
-                      name={field.name}
-                      placeholder={t(
-                        "assignments.form.setupCommandPlaceholder",
-                      )}
-                      value={field.state.value}
-                      onBlur={normalizeOnBlur(field)}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                    />
-                  </div>
-                )}
-              </form.Field>
+              <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-[minmax(0,1fr)_12rem]">
+                <form.Field name="setup_command">
+                  {(commandField) => {
+                    const hasSetupCommand = Boolean(
+                      commandField.state.value.trim(),
+                    )
+                    return (
+                      <>
+                        <div>
+                          <FieldLabel
+                            htmlFor={commandField.name}
+                            label={t("assignments.form.setupCommand")}
+                            help={t("assignments.form.setupCommandTip")}
+                          />
+                          <Input
+                            id={commandField.name}
+                            name={commandField.name}
+                            placeholder={t(
+                              "assignments.form.setupCommandPlaceholder",
+                            )}
+                            value={commandField.state.value}
+                            onBlur={normalizeOnBlur(commandField)}
+                            onChange={(e) =>
+                              commandField.handleChange(e.target.value)
+                            }
+                          />
+                        </div>
+
+                        <form.Field name="setup_timeout">
+                          {(field) => {
+                            const error = field.state.meta.errors[0] as
+                              string | undefined
+                            return (
+                              <div>
+                                <FieldLabel
+                                  htmlFor={field.name}
+                                  label={t("assignments.form.setupTimeout")}
+                                  help={t("assignments.form.setupTimeoutTip", {
+                                    default: DEFAULT_SETUP_TIMEOUT_SECONDS,
+                                    max: TEST_TIMEOUT_MAX_SECONDS,
+                                  })}
+                                  // Opens left: this field sits in the narrow
+                                  // right column, so a bottom bubble would spill
+                                  // past the form's right edge and shift the page.
+                                  helpPosition="left"
+                                />
+                                <Input
+                                  id={field.name}
+                                  name={field.name}
+                                  type="number"
+                                  inputMode="numeric"
+                                  min={0}
+                                  max={TEST_TIMEOUT_MAX_SECONDS}
+                                  step={1}
+                                  value={field.state.value}
+                                  disabled={!hasSetupCommand}
+                                  onBlur={field.handleBlur}
+                                  onChange={(e) =>
+                                    field.handleChange(
+                                      e.target.value === ""
+                                        ? 0
+                                        : e.target.valueAsNumber,
+                                    )
+                                  }
+                                  invalid={!!error}
+                                  aria-describedby={
+                                    error ? `${field.name}-error` : undefined
+                                  }
+                                />
+                                {error ? (
+                                  <p
+                                    id={`${field.name}-error`}
+                                    role="alert"
+                                    className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
+                                  >
+                                    <AlertTriangle
+                                      aria-hidden="true"
+                                      className="size-4 shrink-0"
+                                    />
+                                    {error}
+                                  </p>
+                                ) : null}
+                              </div>
+                            )
+                          }}
+                        </form.Field>
+                      </>
+                    )
+                  }}
+                </form.Field>
+              </div>
 
               <form.Field name="allowed_files">
                 {(field) => {

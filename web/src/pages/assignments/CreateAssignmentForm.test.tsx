@@ -259,6 +259,100 @@ describe("submission release files visibility", () => {
   })
 })
 
+describe("assignment setup timeout", () => {
+  it("submits a stored zero timeout unchanged from the edit form", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          edit
+          defaultValues={assignmentToFormValues({
+            ...baseAssignment,
+            tests: [
+              {
+                name: "setup",
+                type: "run",
+                run: "make",
+                points: 0,
+                timeout: 0,
+              },
+            ],
+          })}
+          onSubmit={onSubmit}
+        />
+      </QueryClientProvider>,
+    )
+
+    const advancedSummary = screen
+      .getByText("assignments.form.advanced")
+      .closest("summary")
+    await user.click(advancedSummary!)
+
+    const timeout = screen.getByLabelText(
+      "assignments.form.setupTimeout",
+    ) as HTMLInputElement
+    expect(timeout.value).toBe("0")
+
+    await user.type(
+      screen.getByRole("textbox", { name: "assignments.form.name" }),
+      " updated",
+    )
+    await user.click(
+      screen.getByRole("button", {
+        name: "assignments.form.saveChanges",
+      }),
+    )
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0].setup_timeout).toBe(0)
+  })
+
+  it("starts at 120 seconds and submits a changed timeout on create", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          defaultValues={{
+            name: "Homework",
+            slug: "hw1",
+          }}
+          onSubmit={onSubmit}
+        />
+      </QueryClientProvider>,
+    )
+
+    const advancedSummary = screen
+      .getByText("assignments.form.advanced")
+      .closest("summary")
+    expect(advancedSummary).not.toBeNull()
+    await user.click(advancedSummary!)
+
+    const command = screen.getByLabelText(
+      "assignments.form.setupCommand",
+    ) as HTMLInputElement
+    const timeout = screen.getByLabelText(
+      "assignments.form.setupTimeout",
+    ) as HTMLInputElement
+    expect(timeout.value).toBe("120")
+    expect(timeout.disabled).toBe(true)
+
+    await user.type(command, "make")
+    expect(timeout.disabled).toBe(false)
+    await user.clear(timeout)
+    await user.type(timeout, "300")
+    await user.click(
+      screen.getByRole("button", {
+        name: "assignments.form.createButton",
+      }),
+    )
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0].setup_timeout).toBe(300)
+  })
+})
+
 // Built-in runtime options (language versions + apt) are disabled when the
 // runner targets self-hosted: the grade job skips managed setup there
 // (runner.environment != 'self-hosted'), so those options wouldn't apply.

@@ -87,6 +87,7 @@ const EditAssignmentForm = ({
                 runtime_rust: values.runtime_rust,
                 runtime_apt: values.runtime_apt,
                 setup_command: values.setup_command,
+                setup_timeout: values.setup_timeout,
                 allowed_files: values.allowed_files,
                 release_assets: values.release_assets,
                 pass_threshold: values.pass_threshold_enabled
