@@ -93,6 +93,7 @@ const EditAssignmentForm = ({
                 pass_threshold: values.pass_threshold_enabled
                   ? values.pass_threshold
                   : undefined,
+                student_permission: values.student_permission || undefined,
                 classroom,
                 tests: values.tests,
                 slug: assignment,

@@ -953,6 +953,19 @@
       "emptyRepo": "Empty repository",
       "emptyRepoHelp": "Create each student's repository completely empty: no starter files, no autograding, no feedback pull request. For assignments where students build everything from scratch, including their own GitHub Actions. This choice is permanent for the assignment.",
       "emptyRepoLocked": "It can't be changed after creation.",
+      "studentPermission": {
+        "label": "Student repo access",
+        "help": "The role each student is granted on their own assignment repository at accept time. Push (write) is the default. Choose Admin to let students manage repository settings and enable GitHub Pages. This applies to students who accept from now on; use the gradebook to change repositories already created.",
+        "groupHelp": "Group members join with at least admin so the group owner can add teammates. This applies to repositories created from now on; use the gradebook to change existing ones.",
+        "default": "Default ({{level}})",
+        "levels": {
+          "pull": "Read (pull)",
+          "triage": "Triage",
+          "push": "Write (push)",
+          "maintain": "Maintain",
+          "admin": "Admin"
+        }
+      },
       "advanced": "Advanced settings",
       "advancedHelp": "Optional grading and runtime settings. Blank fields use their documented defaults.",
       "dockerImage": "Docker image",
@@ -1021,6 +1034,7 @@
         "maxGroupSizeInvalid": "Max group size must be a valid number.",
         "setupTimeoutRange": "Setup timeout must be 0 or a whole number of seconds from 1 through {{max}}.",
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
+        "studentPermissionInvalid": "Student repo access must be one of read, triage, write, maintain, or admin.",
         "releaseAssetsTooMany": "Choose at most {{max}} submission release files (currently {{count}}).",
         "releaseAssetsTooLarge": "Submission release file paths may total at most {{max}} UTF-8 bytes (8 KiB); currently {{bytes}}.",
         "releaseAssetsInvalidPath": "{{path}} is not an exact workspace-relative file path.",

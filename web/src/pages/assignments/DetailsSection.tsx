@@ -1,10 +1,15 @@
 import type { Dispatch, SetStateAction } from "react"
 import { useTranslation } from "react-i18next"
 import { slugify } from "@/util/slug"
-import { Card, FormField, Input, Textarea } from "@/components/ui"
+import { Card, FormField, Input, Select, Textarea } from "@/components/ui"
 import { TemplateField } from "./TemplateField"
 import { FieldLabel, ToggleRow } from "./AdvancedRuntimeFields"
-import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
+import {
+  GROUP_SIZE_MAX,
+  GROUP_SIZE_MIN,
+  REPO_PERMISSIONS,
+  defaultStudentPermission,
+} from "@/types/classroom"
 import type { AssignmentForm } from "./assignmentFormModel"
 
 const FormErrors = ({ form }: { form: AssignmentForm }) => (
@@ -427,6 +432,60 @@ export const DetailsSection = ({
                     </div>
                   ) : null}
                 </div>
+              )}
+            </form.Field>
+
+            <form.Field name="student_permission">
+              {(field) => (
+                <form.Subscribe selector={(state) => state.values.mode}>
+                  {(modeValue) => {
+                    const mode =
+                      modeValue === "group" ? "group" : "individual"
+                    const defaultLevel = defaultStudentPermission(mode)
+                    return (
+                      <FormField
+                        htmlFor={field.name}
+                        label={t("assignments.form.studentPermission.label")}
+                        help={
+                          mode === "group"
+                            ? t("assignments.form.studentPermission.groupHelp")
+                            : t("assignments.form.studentPermission.help")
+                        }
+                      >
+                        {({ id, describedById }) => (
+                          <Select
+                            id={id}
+                            name={field.name}
+                            className="w-full sm:max-w-xs"
+                            aria-describedby={describedById}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) =>
+                              field.handleChange(
+                                e.target.value as typeof field.state.value,
+                              )
+                            }
+                          >
+                            <option value="">
+                              {t("assignments.form.studentPermission.default", {
+                                level: t(
+                                  `assignments.form.studentPermission.levels.${defaultLevel}`,
+                                ),
+                              })}
+                            </option>
+                            {REPO_PERMISSIONS.map((level) => (
+                              <option key={level} value={level}>
+                                {t(
+                                  `assignments.form.studentPermission.levels.${level}`,
+                                )}
+                              </option>
+                            ))}
+                          </Select>
+                        )}
+                      </FormField>
+                    )
+                  }}
+                </form.Subscribe>
               )}
             </form.Field>
           </div>
