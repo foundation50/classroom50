@@ -38,6 +38,7 @@ const SubmissionDetails = ({
   owner,
   students,
   repoData,
+  repoLoading,
   latestCommitHref,
 }: {
   org: string
@@ -45,10 +46,12 @@ const SubmissionDetails = ({
   owner: string
   students: Student[]
   repoData?: GitHubRepo
+  repoLoading?: boolean
   latestCommitHref?: string
 }) => {
   const { t } = useTranslation()
-  const { data: collaborators } = useGetRepoCollaborators(org, repo)
+  const { data: collaborators, isLoading: collaboratorsLoading } =
+    useGetRepoCollaborators(org, repo)
 
   const ownerLogin = normalizeUsername(owner)
   const ownerAccess = useMemo(() => {
@@ -104,6 +107,26 @@ const SubmissionDetails = ({
     })
   }
 
+  const loading = Boolean(repoLoading) || collaboratorsLoading
+
+  // While the repo/collaborator reads are in flight, render a skeleton in the
+  // panel's shape so the section reserves its space and doesn't pop in.
+  if (loading && rows.length === 0 && otherCollaborators.length === 0) {
+    return (
+      <div className="mt-4 rounded-box border border-base-content/10 bg-base-200/40 p-3">
+        <div className="flex flex-col gap-2.5" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center justify-between gap-4">
+              <span className="skeleton skeleton-shimmer h-4 w-20" />
+              <span className="skeleton skeleton-shimmer h-4 w-28" />
+            </div>
+          ))}
+        </div>
+        <span className="sr-only">{t("common.loading")}</span>
+      </div>
+    )
+  }
+
   if (rows.length === 0 && otherCollaborators.length === 0) return null
 
   return (
@@ -120,6 +143,21 @@ const SubmissionDetails = ({
             </dd>
           </div>
         ))}
+        {/* Access comes from the collaborators read; if the repo rows landed
+            first, hold its place with a skeleton rather than popping it in. */}
+        {collaboratorsLoading && !ownerAccess ? (
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-base-content/60">
+              {t("submissions.manageModal.access")}
+            </dt>
+            <dd>
+              <span
+                className="skeleton skeleton-shimmer inline-block h-4 w-16 align-middle"
+                aria-hidden="true"
+              />
+            </dd>
+          </div>
+        ) : null}
       </dl>
       {otherCollaborators.length > 0 ? (
         <div className="mt-2 border-t border-base-content/10 pt-2">
@@ -192,9 +230,13 @@ export const ManageSubmissionModal = ({
   // Lifted here (not in SubmissionDetails) so the repo's default-branch tip can
   // link both the "Last push" row and the "View latest commit" action. Only
   // fetched once the hub is open; skipped entirely when no repo exists yet.
-  const { data: repoData } = useGetRepo(action.org, repo, {
-    enabled: action.hasRepo,
-  })
+  const { data: repoData, isLoading: repoLoading } = useGetRepo(
+    action.org,
+    repo,
+    {
+      enabled: action.hasRepo,
+    },
+  )
   const latestCommitHref =
     repoData?.html_url && repoData.default_branch
       ? `${repoData.html_url}/commit/${repoData.default_branch}`
@@ -259,6 +301,7 @@ export const ManageSubmissionModal = ({
           owner={action.owner}
           students={students}
           repoData={repoData ?? undefined}
+          repoLoading={repoLoading}
           latestCommitHref={latestCommitHref}
         />
       ) : null}

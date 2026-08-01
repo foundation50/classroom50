@@ -16,9 +16,11 @@ vi.mock("react-i18next", async (importOriginal) => {
 
 // Only the hub's own composition/hand-off is under test; the per-action hooks
 // and detail reads are stubbed so no GitHub/provider wiring is needed.
-const repoData = vi.fn(() => ({ data: undefined }) as { data: unknown })
+const repoData = vi.fn(
+  () => ({ data: undefined }) as { data: unknown; isLoading?: boolean },
+)
 const collaboratorsData = vi.fn(
-  () => ({ data: undefined }) as { data: unknown },
+  () => ({ data: undefined }) as { data: unknown; isLoading?: boolean },
 )
 vi.mock("@/hooks/useGetRepo", () => ({
   default: () => repoData(),
@@ -152,6 +154,24 @@ describe("ManageSubmissionModal", () => {
       screen.getByText("submissions.manageModal.collaborators"),
     ).toBeTruthy()
     expect(screen.getByText("@bob")).toBeTruthy()
+  })
+
+  it("shows a skeleton while the repo/collaborator reads are in flight", () => {
+    repoData.mockReturnValue({ data: undefined, isLoading: true })
+    collaboratorsData.mockReturnValue({ data: undefined, isLoading: true })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{ ...individualAction, onManageAccess: vi.fn() }}
+      />,
+    )
+    expect(document.querySelector(".skeleton")).toBeTruthy()
+    expect(screen.getByText("common.loading")).toBeTruthy()
   })
 
   it("opens the access editor stacked on the hub, leaving the hub open", async () => {
