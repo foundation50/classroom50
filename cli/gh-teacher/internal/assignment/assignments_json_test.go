@@ -524,6 +524,80 @@ func TestParseAssignments_PassThresholdRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseAssignments_StudentPermissionRoundTrip(t *testing.T) {
+	// student_permission parses, survives a re-encode/re-parse, and an entry
+	// without the field decodes to the empty string (means the mode default).
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "site",
+      "name": "Site",
+      "mode": "individual",
+      "autograder": "default",
+      "student_permission": "admin"
+    },
+    {
+      "slug": "off",
+      "name": "Off",
+      "mode": "individual",
+      "autograder": "default"
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	if got := file.Assignments[0].StudentPermission; got != "admin" {
+		t.Errorf("site.StudentPermission = %q, want admin", got)
+	}
+	if got := file.Assignments[1].StudentPermission; got != "" {
+		t.Errorf("off.StudentPermission = %q, want empty (field absent)", got)
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"student_permission": "admin"`) {
+		t.Errorf("encoded missing student_permission admin:\n%s", encoded)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if got := again.Assignments[0].StudentPermission; got != "admin" {
+		t.Errorf("student_permission not stable across round-trip: %q", got)
+	}
+	if got := again.Assignments[1].StudentPermission; got != "" {
+		t.Errorf("absent student_permission should round-trip empty, got %q", got)
+	}
+}
+
+func TestValidateStudentPermission(t *testing.T) {
+	cases := []struct {
+		in      string
+		wantErr bool
+	}{
+		{"", false}, // absent => mode default
+		{"pull", false},
+		{"triage", false},
+		{"push", false},
+		{"maintain", false},
+		{"admin", false},
+		{"owner", true},
+		{"Admin", true},
+		{"write", true},
+	}
+	for _, c := range cases {
+		err := ValidateStudentPermission(c.in)
+		if (err != nil) != c.wantErr {
+			t.Errorf("ValidateStudentPermission(%q) err = %v, wantErr %v", c.in, err, c.wantErr)
+		}
+	}
+}
+
 func TestValidatePassThreshold(t *testing.T) {
 	ptr := func(n int) *int { return &n }
 	cases := []struct {

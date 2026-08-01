@@ -89,6 +89,34 @@ export function assertAssignmentMode(value: string): AssignmentMode {
   )
 }
 
+// GitHub's repo collaborator permission ladder, low to high. The contract type
+// for an assignment's student_permission and the gradebook's access controls;
+// mirrors the shared Go contract.RepoPermissions and the schema enum. Defined
+// here (a leaf types module) rather than imported from github-core so the
+// schema contract stays self-contained.
+export type RepoPermission =
+  | "pull"
+  | "triage"
+  | "push"
+  | "maintain"
+  | "admin"
+
+// Ordered low-to-high, so a UI can render the ladder and code can compare rank.
+export const REPO_PERMISSIONS: readonly RepoPermission[] = [
+  "pull",
+  "triage",
+  "push",
+  "maintain",
+  "admin",
+]
+
+// The accept-time role a student gets on their own repo when an assignment sets
+// no student_permission: least-privilege push for individual, admin for group
+// (a group founder must manage collaborators). Mirrors the CLI default.
+export function defaultStudentPermission(mode: AssignmentMode): RepoPermission {
+  return mode === "group" ? "admin" : "push"
+}
+
 // Mirrors one entry of classroom50/assignments/v1 — the shape gh-teacher writes
 // and parses strictly (unknown fields rejected).
 // Schema: https://github.com/foundation50/classroom50/blob/main/schemas/assignments-v1.schema.json
@@ -165,6 +193,14 @@ export type Assignment = {
   // DEFAULT_PASS_THRESHOLD. In lockstep with the CLI's assignments-v1 schema
   // (`pass_threshold`, integer, omitempty).
   pass_threshold?: number
+  // The collaborator role the enrolled student is granted on their OWN repo at
+  // accept time (the old GitHub Classroom "grant students admin" checkbox,
+  // generalized). Absent = the mode default (push individual / admin group).
+  // Accept-time provisioning only: it governs NEW accepters, not repos already
+  // accepted (adjust those with the gradebook access controls). For group mode,
+  // a value below admin is clamped up to admin (a founder must manage members).
+  // In lockstep with the CLI's assignments-v1 schema (`student_permission`).
+  student_permission?: RepoPermission
   tests?: AssignmentTest[]
   // CLI migrate provenance. The GUI doesn't write it but must round-trip it.
   migrated_from?: MigratedFrom

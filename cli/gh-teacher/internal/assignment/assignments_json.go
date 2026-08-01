@@ -47,6 +47,18 @@ func IsValidAssignmentMode(m string) bool {
 	return false
 }
 
+// ValidateStudentPermission checks an assignment's optional student_permission
+// against GitHub's collaborator ladder. Empty is valid (means the mode default).
+func ValidateStudentPermission(p string) error {
+	if p == "" {
+		return nil
+	}
+	if !contract.IsValidRepoPermission(p) {
+		return fmt.Errorf("invalid student_permission %q: must be one of %v", p, contract.RepoPermissions)
+	}
+	return nil
+}
+
 // LargeAssignmentsWarnBytes is the encoded-size threshold above which
 // `assignment add` warns on stderr. Set well below GitHub's ~1 MiB
 // contents-API limit (past which encoding flips to "none", wedging every
@@ -121,6 +133,7 @@ type AssignmentEntry struct {
 	AllowedFiles      []string         `json:"allowed_files,omitempty"`
 	ReleaseAssets     []string         `json:"release_assets,omitempty"`
 	PassThreshold     *int             `json:"pass_threshold,omitempty"`
+	StudentPermission string           `json:"student_permission,omitempty"`
 	MigratedFrom      *MigratedFromRef `json:"migrated_from,omitempty"`
 
 	// Extra holds unknown top-level entry keys, re-emitted verbatim so a
@@ -137,6 +150,7 @@ var knownEntryKeys = map[string]struct{}{
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
 	"locked": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
+	"student_permission": {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then strictly
@@ -797,6 +811,9 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {
 		return err
 	}
+	if err := ValidateStudentPermission(entry.StudentPermission); err != nil {
+		return err
+	}
 	if entry.EmptyRepo {
 		if err := validateEmptyRepoExclusions(entry); err != nil {
 			return err
@@ -922,6 +939,9 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {
+		return fmt.Errorf("entry %q: %w", entry.Slug, err)
+	}
+	if err := ValidateStudentPermission(entry.StudentPermission); err != nil {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if entry.EmptyRepo {
