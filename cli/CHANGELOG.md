@@ -17,6 +17,19 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.22.0](https://github.com/foundation50/classroom50/compare/cli-v1.21.0...cli-v1.22.0) (2026-08-01)
+
+
+### Features
+
+* **cli:** skip autograde grade job when no autograder is configured ([#458](https://github.com/foundation50/classroom50/issues/458)) ([aa16f0a](https://github.com/foundation50/classroom50/commit/aa16f0a2fc3452282246e8d790f0f02a01e4fd18))
+* configurable student assignment-repo access with per-repo and bulk controls ([#466](https://github.com/foundation50/classroom50/issues/466)) ([efb69f8](https://github.com/foundation50/classroom50/commit/efb69f8294512eadb7956bfff69e8e912bbd7ae5))
+
+
+### Bug Fixes
+
+* name the fork's upstream org for cross-org fork templates ([#468](https://github.com/foundation50/classroom50/issues/468)) ([#470](https://github.com/foundation50/classroom50/issues/470)) ([53785b8](https://github.com/foundation50/classroom50/commit/53785b807133023c418580f5b02fcd95a90b3c1f))
+
 ## [1.21.0](https://github.com/foundation50/classroom50/compare/cli-v1.20.0...cli-v1.21.0) (2026-07-29)
 
 
