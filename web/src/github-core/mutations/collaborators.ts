@@ -1,5 +1,6 @@
 import type { GitHubClient } from "../client"
 import { GitHubAPIError } from "../errors"
+import type { RepoPermission } from "@/types/classroom"
 
 // The effective-permission read after a collaborator PUT. A silently ignored
 // write (a downgrade GitHub won't apply to a repo creator, or a higher team/base
@@ -36,7 +37,7 @@ export async function addRepoCollaborator(params: {
   org: string
   repo: string
   username: string
-  permission?: "pull" | "triage" | "push" | "maintain" | "admin"
+  permission?: RepoPermission
   // When set, read the effective permission back after the PUT and return it so
   // the caller can confirm the write actually landed (a bare 204 doesn't prove
   // a downgrade took). `effective` is undefined when the read-back couldn't be

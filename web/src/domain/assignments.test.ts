@@ -2135,8 +2135,8 @@ describe("permissionSatisfies — owner floor vs member exact match", () => {
   })
 
   it("member: rejects a still-higher read-back (silently-ignored downgrade)", () => {
-    // The exact over-access finding #3: a below-default target on a
-    // student-created repo whose creator-admin GitHub won't lower.
+    // A below-default target on a student-created repo whose creator-admin
+    // GitHub won't lower.
     expect(permissionSatisfies("admin", "admin", "push", false)).toBe(false)
     expect(permissionSatisfies("admin", "admin", "pull", false)).toBe(false)
     expect(permissionSatisfies("write", "maintain", "push", false)).toBe(false)

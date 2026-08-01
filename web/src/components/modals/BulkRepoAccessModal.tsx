@@ -12,6 +12,7 @@ import {
   type BulkResultView,
 } from "@/components/bulk/resultView"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
+import { describeGitHubApiFailure } from "@/components/modals/collaboratorHelpers"
 import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
 import { permissionSatisfies } from "@/domain/assignments/permissions"
 import { mapWithConcurrency } from "@/util/concurrency"
@@ -53,13 +54,9 @@ const describeFailure = (reason: unknown, t: TFunction): string | undefined => {
       effective: reason.effective ?? "unknown",
     })
   }
+  const shared = describeGitHubApiFailure(reason, t)
+  if (shared) return shared
   if (reason instanceof GitHubAPIError) {
-    if (reason.isRateLimited)
-      return t("components.modals.groupCollaborators.failure.rateLimited")
-    if (reason.status === 403)
-      return t("components.modals.groupCollaborators.failure.forbidden")
-    if (reason.status === 404)
-      return t("components.modals.groupCollaborators.failure.notFound")
     return t("components.modals.groupCollaborators.failure.httpStatus", {
       status: reason.status,
     })

@@ -19,60 +19,27 @@ import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useRemoveRepoCollaborator from "@/hooks/mutations/useRemoveRepoCollaborator"
-import { getName } from "@/util/students"
+import {
+  CollaboratorIdentity,
+  describeGitHubApiFailure,
+  normalizeUsername,
+  rejectedItems,
+} from "@/components/modals/collaboratorHelpers"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Student } from "@/types/classroom"
 import { GROUP_SIZE_MIN } from "@/types/classroom"
 
-const normalizeUsername = (username: string) =>
-  username.trim().replace(/^@/, "").toLowerCase()
-
-// The usernames whose settled promise rejected, by index into the input list.
-const rejectedItems = <T,>(
-  results: PromiseSettledResult<unknown>[],
-  items: T[],
-): T[] =>
-  results.flatMap((result, i) =>
-    result.status === "rejected" ? [items[i]] : [],
-  )
-
 // Map a rejected add/remove to a human-readable reason. Collapsing every status
 // into "bad username" would hide real causes like a 429 or a 403.
 const describeFailure = (reason: unknown, t: TFunction): string | null => {
+  const shared = describeGitHubApiFailure(reason, t)
+  if (shared) return shared
   if (reason instanceof GitHubAPIError) {
-    if (reason.isRateLimited)
-      return t("components.modals.groupCollaborators.failure.rateLimited")
-    if (reason.status === 403)
-      return t("components.modals.groupCollaborators.failure.forbidden")
-    if (reason.status === 404)
-      return t("components.modals.groupCollaborators.failure.notFound")
     if (reason.status === 422)
       return t("components.modals.groupCollaborators.failure.conflict")
     return reason.message
   }
   return reason instanceof Error ? reason.message : null
-}
-
-// Two-line identity when we have a roster name (name + @handle), else just the
-// @handle. Shared by owner, member, and marked-for-removal rows.
-const CollaboratorIdentity = ({
-  login,
-  students,
-}: {
-  login: string
-  students: Student[]
-}) => {
-  const name = getName(login, students)
-  return name ? (
-    <>
-      <span className="block truncate text-sm font-medium">{name}</span>
-      <span className="block truncate font-mono text-xs text-base-content/70">
-        @{login}
-      </span>
-    </>
-  ) : (
-    <span className="block truncate font-mono text-sm">@{login}</span>
-  )
 }
 
 type GroupCollaboratorsModalProps = {

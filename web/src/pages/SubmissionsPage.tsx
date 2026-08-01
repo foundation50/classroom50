@@ -546,6 +546,7 @@ const SubmissionsPageContent = () => {
     () => scopedScores.map((row) => row.owner),
     [scopedScores],
   )
+  const acceptedOwners = useMemo(() => [...acceptedSet], [acceptedSet])
   const scopedNonSubmitters = useMemo(
     () =>
       sectionFilter === "all"
@@ -1194,7 +1195,7 @@ const SubmissionsPageContent = () => {
         org={org}
         classroom={classroom}
         assignment={assignment}
-        owners={[...acceptedSet]}
+        owners={acceptedOwners}
         students={students}
       />
     </PageShell>

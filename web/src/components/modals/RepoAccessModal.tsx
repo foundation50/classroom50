@@ -19,15 +19,17 @@ import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useRemoveRepoCollaborator from "@/hooks/mutations/useRemoveRepoCollaborator"
-import { getName } from "@/util/students"
+import {
+  CollaboratorIdentity,
+  describeGitHubApiFailure,
+  normalizeUsername,
+  rejectedItems,
+} from "@/components/modals/collaboratorHelpers"
 import { permissionSatisfies } from "@/domain/assignments/permissions"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { GitHubUser } from "@/github-core/types"
 import type { RepoPermission, Student } from "@/types/classroom"
 import { REPO_PERMISSIONS } from "@/types/classroom"
-
-const normalizeUsername = (username: string) =>
-  username.trim().replace(/^@/, "").toLowerCase()
 
 // A collaborator PUT that returned 204 but whose read-back didn't land on the
 // requested role — GitHub silently ignored the write (typically a downgrade it
@@ -63,14 +65,6 @@ const permissionFromFlags = (
   return "pull"
 }
 
-const rejectedItems = <T,>(
-  results: PromiseSettledResult<unknown>[],
-  items: T[],
-): T[] =>
-  results.flatMap((result, i) =>
-    result.status === "rejected" ? [items[i]] : [],
-  )
-
 // Map a rejected write to a human reason; reuses the groupCollaborators failure
 // vocabulary so the two dialogs stay consistent.
 const describeFailure = (reason: unknown, t: TFunction): string | null => {
@@ -79,38 +73,14 @@ const describeFailure = (reason: unknown, t: TFunction): string | null => {
       effective: reason.effective ?? "unknown",
     })
   }
+  const shared = describeGitHubApiFailure(reason, t)
+  if (shared) return shared
   if (reason instanceof GitHubAPIError) {
-    if (reason.isRateLimited)
-      return t("components.modals.groupCollaborators.failure.rateLimited")
-    if (reason.status === 403)
-      return t("components.modals.groupCollaborators.failure.forbidden")
-    if (reason.status === 404)
-      return t("components.modals.groupCollaborators.failure.notFound")
     if (reason.status === 422)
       return t("components.modals.groupCollaborators.failure.conflict")
     return reason.message
   }
   return reason instanceof Error ? reason.message : null
-}
-
-const CollaboratorIdentity = ({
-  login,
-  students,
-}: {
-  login: string
-  students: Student[]
-}) => {
-  const name = getName(login, students)
-  return name ? (
-    <>
-      <span className="block truncate text-sm font-medium">{name}</span>
-      <span className="block truncate font-mono text-xs text-base-content/70">
-        @{login}
-      </span>
-    </>
-  ) : (
-    <span className="block truncate font-mono text-sm">@{login}</span>
-  )
 }
 
 // One row's draft state: its target role, and whether it's staged for removal.
@@ -554,9 +524,8 @@ export function RepoAccessModal({
                       ))}
                     </Select>
                   )}
-                  {/* The enrolled student is never removed here (that would
-                      orphan them from their own submission); their role can
-                      still be changed above. */}
+                  {/* Removing the enrolled student would orphan them from
+                      their own submission; only their role can change. */}
                   {canManage && !isOwner && !entry.markedForRemoval && (
                     <Button
                       variant="ghost"
