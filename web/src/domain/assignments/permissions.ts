@@ -5,11 +5,13 @@ import { getRepoPermissionForUser } from "@/github-core/queries"
 import { defaultStudentPermission } from "@/types/classroom"
 import { localizedError } from "@/types/localizedMessage"
 
-// Grant the founder their repo role and verify it took: a repo creator holds
-// admin, so an individual self-downgrade GitHub silently ignores looks like
-// success. isOwner tolerates an unavoidable residual admin (an org owner can't
-// self-downgrade), since admin already covers push. CLI-aligned with
-// inviteFounder in gh-student's accept.go.
+// Grant the founder their repo role and verify it took: the grant must land at
+// AT LEAST the requested level (a lower read-back is a grant that didn't take).
+// A benign higher effective role (org base permission, or a repo creator GitHub
+// won't self-downgrade) passes, since GitHub is the real ceiling and the
+// teacher's level is a floor. isOwner is accepted for call-site symmetry with
+// the CLI but no longer affects the >= check. CLI-aligned with inviteFounder in
+// gh-student's accept.go.
 export async function addFounderCollaborator(params: {
   client: GitHubClient
   owner: string
@@ -18,7 +20,7 @@ export async function addFounderCollaborator(params: {
   permission: RepoPermission
   isOwner?: boolean
 }) {
-  const { client, owner, repo, username, permission, isOwner = false } = params
+  const { client, owner, repo, username, permission } = params
 
   await client.request(`/repos/${owner}/${repo}/collaborators/${username}`, {
     method: "PUT",
@@ -35,12 +37,7 @@ export async function addFounderCollaborator(params: {
   })
 
   if (
-    !permissionSatisfies(
-      effective.permission,
-      effective.role_name,
-      permission,
-      isOwner,
-    )
+    !permissionSatisfies(effective.permission, effective.role_name, permission)
   ) {
     throw localizedError({
       key: "accept.errors.founderAccessMismatch",
@@ -71,29 +68,31 @@ const PERMISSION_RANK: Record<string, number> = {
   admin: 4,
 }
 
-// Whether the read-back at least matches the role we set. role_name is
-// authoritative when present (an exact rank compare). isOwner relaxes any want
-// to also accept admin: an org owner who created the repo can't self-downgrade
-// (org policy blocks it), and admin is a superset. Mirrors gh-student's
+// Whether the read-back grants AT LEAST the role we set. role_name is
+// authoritative when present. We verify ">=" rather than exact match: the
+// effective role is the max of the direct grant, the org base repository
+// permission, team grants, and creator-admin, so a benign residual above the
+// wanted level (an org base perm higher than a below-default target, or a repo
+// creator GitHub won't self-downgrade) must not fail an otherwise-good accept.
+// The check still fails loudly when the student ends up BELOW the wanted role
+// (the grant that didn't take). GitHub is the real enforcer of any ceiling;
+// the teacher's level is a floor we guarantee. Mirrors gh-student's
 // permissionSatisfies.
 export function permissionSatisfies(
   legacy: string | undefined,
   roleName: string | undefined,
   want: RepoPermission,
-  isOwner = false,
 ): boolean {
   const wantRank = PERMISSION_RANK[want]
   if (roleName) {
     const gotRank = PERMISSION_RANK[roleName]
     if (gotRank === undefined) return false
-    if (isOwner && gotRank === PERMISSION_RANK.admin) return true
-    return gotRank === wantRank
+    return gotRank >= wantRank
   }
   // Legacy field only: it can't distinguish triage/maintain (both collapse to
-  // "write"), so fall back to a >= compare, which is the best it can prove.
+  // "write"), so the same >= compare is the best it can prove.
   const gotRank = PERMISSION_RANK[legacy ?? ""]
   if (gotRank === undefined) return false
-  if (isOwner && gotRank === PERMISSION_RANK.admin) return true
   return gotRank >= wantRank
 }
 

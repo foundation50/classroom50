@@ -116,10 +116,10 @@ func TestCheckOrgStatus(t *testing.T) {
 	}
 }
 
-// TestPermissionSatisfies pins the read-back decision, incl. the guard's
-// boundary: a `maintain` founder (legacy collapses to "write") must FAIL a
-// `push` target, so an ignored self-downgrade isn't passed green. isOwner
-// relaxes a push target to accept the org owner's unavoidable residual admin.
+// TestPermissionSatisfies pins the read-back decision: the grant must land at
+// AT LEAST the wanted role. A read-back BELOW the target fails (the grant that
+// didn't take); a benign higher effective role (org base permission, an
+// un-downgradeable creator-admin) passes, since GitHub is the real ceiling.
 func TestPermissionSatisfies(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -131,18 +131,19 @@ func TestPermissionSatisfies(t *testing.T) {
 	}{
 		{"push grant reads role_name push", "write", "push", "push", false, true},
 		{"push grant reads role_name write", "write", "write", "push", false, true},
-		{"maintain must fail a push target", "write", "maintain", "push", false, false},
-		{"admin must fail a push target", "admin", "admin", "push", false, false},
-		{"read must fail a push target", "read", "read", "push", false, false},
+		{"maintain residual satisfies a push target", "write", "maintain", "push", false, true},
+		{"admin residual satisfies a push target", "admin", "admin", "push", false, true},
+		{"read fails a push target (grant didn't take)", "read", "read", "push", false, false},
+		{"write base perm satisfies a pull target", "write", "write", "pull", false, true},
 		{"admin grant reads role_name admin", "admin", "admin", "admin", false, true},
-		{"push must fail an admin target", "write", "push", "admin", false, false},
+		{"push fails an admin target (under-grant)", "write", "push", "admin", false, false},
+		{"write fails a maintain target (under-grant)", "write", "write", "maintain", false, false},
 		{"empty role_name falls back to legacy write for push", "write", "", "push", false, true},
 		{"empty role_name falls back to legacy admin for admin", "admin", "", "admin", false, true},
-		{"empty role_name legacy write must fail admin", "write", "", "admin", false, false},
+		{"empty role_name legacy write fails admin", "write", "", "admin", false, false},
 		{"owner admin satisfies a push target", "admin", "admin", "push", true, true},
 		{"owner admin (legacy only) satisfies a push target", "admin", "", "push", true, true},
-		{"owner still fails a maintain push target", "write", "maintain", "push", true, false},
-		{"owner does not leak into an admin target", "write", "maintain", "admin", true, false},
+		{"maintain fails an admin target even for an owner", "write", "maintain", "admin", true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -243,9 +244,9 @@ func TestInviteFounder(t *testing.T) {
 	}
 }
 
-// TestInviteFounder_VerificationFails proves the demotion is verified, not
-// fire-and-forget: a read-back still reporting admin after a push grant must
-// return an actionable error, not silently report success.
+// TestInviteFounder_VerificationFails proves the grant is verified, not
+// fire-and-forget: a read-back BELOW the wanted role (the grant that didn't
+// take) must return an actionable error naming the wanted and actual roles.
 func TestInviteFounder_VerificationFails(t *testing.T) {
 	const (
 		org      = "cs50"
@@ -256,8 +257,8 @@ func TestInviteFounder_VerificationFails(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(collabPath+"/permission", func(w http.ResponseWriter, _ *http.Request) {
-		// The downgrade didn't take — student is still admin.
-		_ = json.NewEncoder(w).Encode(map[string]any{"permission": "admin", "role_name": "admin"})
+		// The admin grant didn't take — student is only push.
+		_ = json.NewEncoder(w).Encode(map[string]any{"permission": "write", "role_name": "push"})
 	})
 	mux.HandleFunc(collabPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
@@ -267,12 +268,12 @@ func TestInviteFounder_VerificationFails(t *testing.T) {
 	client := newTestRESTClient(t, server)
 
 	var out bytes.Buffer
-	err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, "push", false)
+	err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, "admin", false)
 	if err == nil {
-		t.Fatalf("expected an error when the effective permission stays admin after a push grant, got nil")
+		t.Fatalf("expected an error when the effective permission stays below admin after an admin grant, got nil")
 	}
-	if !strings.Contains(err.Error(), "push") || !strings.Contains(err.Error(), "admin") {
-		t.Errorf("error should name the wanted (push) and actual (admin) roles, got: %v", err)
+	if !strings.Contains(err.Error(), "admin") || !strings.Contains(err.Error(), "push") {
+		t.Errorf("error should name the wanted (admin) and actual (push) roles, got: %v", err)
 	}
 }
 

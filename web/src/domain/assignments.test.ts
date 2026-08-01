@@ -2016,10 +2016,13 @@ describe("assertAssignmentModeCoherent", () => {
   })
 })
 
-// permissionSatisfies decides whether the read-back after the grant matches the
-// role we set, accounting for GitHub collapsing push -> legacy "write". Guards
-// the verified self-demotion (a repo creator is admin until this downgrades it).
-describe("permissionSatisfies — verified founder demotion", () => {
+// permissionSatisfies decides whether the read-back after the grant grants AT
+// LEAST the role we set. It guards the case that matters — a grant that read
+// back BELOW the wanted role (the downgrade that didn't take) — while
+// tolerating a benign higher effective role (org base permission, a repo
+// creator GitHub won't self-downgrade). GitHub is the real ceiling; the
+// teacher's level is a floor.
+describe("permissionSatisfies — verified founder access floor", () => {
   it("accepts a push grant that reads back as legacy write", () => {
     expect(permissionSatisfies("write", "write", "push")).toBe(true)
     expect(permissionSatisfies("write", "push", "push")).toBe(true)
@@ -2029,18 +2032,20 @@ describe("permissionSatisfies — verified founder demotion", () => {
     expect(permissionSatisfies("admin", "admin", "admin")).toBe(true)
   })
 
-  it("rejects a still-admin read-back after a push grant (downgrade ignored)", () => {
-    expect(permissionSatisfies("admin", "admin", "push")).toBe(false)
+  it("tolerates a still-higher read-back after a lower grant (benign residual)", () => {
+    // The effective role is the max of the direct grant, org base permission,
+    // and creator-admin; a residual above the wanted floor is not a failure.
+    expect(permissionSatisfies("admin", "admin", "push")).toBe(true)
+    expect(permissionSatisfies("write", "maintain", "push")).toBe(true)
+    // want=pull with an org base permission of write reads back as write.
+    expect(permissionSatisfies("write", "write", "pull")).toBe(true)
+    expect(permissionSatisfies("admin", "admin", "pull")).toBe(true)
   })
 
-  it("rejects a maintain read-back for a push target (the guard's boundary)", () => {
-    // GitHub collapses maintain->legacy "write", so legacy alone would pass;
-    // the authoritative role_name must catch the still-over-privileged founder.
-    expect(permissionSatisfies("write", "maintain", "push")).toBe(false)
-  })
-
-  it("rejects a push read-back for an admin target (group under-grant)", () => {
+  it("rejects a read-back BELOW the wanted role (grant didn't take)", () => {
     expect(permissionSatisfies("write", "push", "admin")).toBe(false)
+    expect(permissionSatisfies("read", "read", "push")).toBe(false)
+    expect(permissionSatisfies("write", "write", "maintain")).toBe(false)
   })
 
   it("falls back to the legacy field when role_name is absent", () => {
@@ -2049,21 +2054,13 @@ describe("permissionSatisfies — verified founder demotion", () => {
     expect(permissionSatisfies("write", undefined, "admin")).toBe(false)
   })
 
-  it("rejects an under-grant (read only) for a push target", () => {
-    expect(permissionSatisfies("read", "read", "push")).toBe(false)
+  it("tolerates an unavoidable admin residual for a push target", () => {
+    expect(permissionSatisfies("admin", "admin", "push")).toBe(true)
+    expect(permissionSatisfies("admin", undefined, "push")).toBe(true)
   })
 
-  it("tolerates an owner's unavoidable admin for a push target when isOwner", () => {
-    expect(permissionSatisfies("admin", "admin", "push", true)).toBe(true)
-    expect(permissionSatisfies("admin", undefined, "push", true)).toBe(true)
-  })
-
-  it("still rejects a maintain read-back for a push target even for an owner", () => {
-    expect(permissionSatisfies("write", "maintain", "push", true)).toBe(false)
-  })
-
-  it("does not let isOwner leak into an admin target", () => {
-    expect(permissionSatisfies("write", "maintain", "admin", true)).toBe(false)
+  it("still rejects a below-target read-back for an admin target", () => {
+    expect(permissionSatisfies("write", "maintain", "admin")).toBe(false)
   })
 })
 
@@ -2129,10 +2126,10 @@ describe("addFounderCollaborator — grant + read-back verification", () => {
     })
   })
 
-  it("throws when the read-back still reports admin after a push grant", async () => {
+  it("tolerates a higher residual role (admin) after a push grant", async () => {
+    // The effective role is the max of the direct grant, org base permission,
+    // and creator-admin; a residual above the wanted floor is not a failure.
     const { client } = makeClient({ permission: "admin", role_name: "admin" })
-    // Thrown inside a step, so without its own descriptor the checklist would
-    // relabel it "safe to retry" — wrong for a grant only a teacher can fix.
     await expect(
       addFounderCollaborator({
         client,
@@ -2141,18 +2138,13 @@ describe("addFounderCollaborator — grant + read-back verification", () => {
         username,
         permission: "push",
       }),
-    ).rejects.toMatchObject({
-      localized: {
-        key: "accept.errors.founderAccessMismatch",
-        params: { username, permission: "push", effective: "admin" },
-      },
-    })
+    ).resolves.toBeUndefined()
   })
 
-  it("throws when the read-back is maintain for a push grant (the guard's boundary)", async () => {
+  it("throws when the read-back is BELOW the wanted role (grant didn't take)", async () => {
     const { client } = makeClient({
       permission: "write",
-      role_name: "maintain",
+      role_name: "push",
     })
     await expect(
       addFounderCollaborator({
@@ -2160,12 +2152,12 @@ describe("addFounderCollaborator — grant + read-back verification", () => {
         owner,
         repo,
         username,
-        permission: "push",
+        permission: "admin",
       }),
     ).rejects.toMatchObject({
       localized: {
         key: "accept.errors.founderAccessMismatch",
-        params: { permission: "push", role: "maintain" },
+        params: { permission: "admin", role: "push" },
       },
     })
   })

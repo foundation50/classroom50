@@ -1160,12 +1160,16 @@ var permissionRank = map[string]int{
 	"admin":    4,
 }
 
-// permissionSatisfies reports whether the read-back at least matches the role
-// we set. role_name is authoritative when present (an exact rank compare).
-// isOwner relaxes any want to also accept admin: an org owner who created the
-// repo can't self-downgrade, and admin is a superset. Mirrors the web
-// permissionSatisfies.
-func permissionSatisfies(legacy, roleName, want string, isOwner bool) bool {
+// permissionSatisfies reports whether the read-back grants AT LEAST the role we
+// set. role_name is authoritative when present. We verify ">=" rather than
+// exact match: the effective role is the max of the direct grant, the org base
+// repository permission, team grants, and creator-admin, so a benign residual
+// above the wanted level (an org base perm higher than a below-default target,
+// or a repo creator GitHub won't self-downgrade) must not fail an otherwise-good
+// accept. It still fails loudly when the student ends up BELOW the wanted role.
+// isOwner is accepted for signature symmetry but no longer affects the compare.
+// Mirrors the web permissionSatisfies.
+func permissionSatisfies(legacy, roleName, want string, _ bool) bool {
 	wantRank, ok := permissionRank[want]
 	if !ok {
 		return false
@@ -1175,19 +1179,13 @@ func permissionSatisfies(legacy, roleName, want string, isOwner bool) bool {
 		if !ok {
 			return false
 		}
-		if isOwner && gotRank == permissionRank[contract.PermissionAdmin] {
-			return true
-		}
-		return gotRank == wantRank
+		return gotRank >= wantRank
 	}
 	// Legacy field only: it can't distinguish triage/maintain (both collapse to
-	// "write"), so fall back to a >= compare, the best it can prove.
+	// "write"), so the same >= compare is the best it can prove.
 	gotRank, ok := permissionRank[legacy]
 	if !ok {
 		return false
-	}
-	if isOwner && gotRank == permissionRank[contract.PermissionAdmin] {
-		return true
 	}
 	return gotRank >= wantRank
 }
