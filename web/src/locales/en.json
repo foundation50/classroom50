@@ -2151,6 +2151,8 @@
       "members": "Members",
       "openRepoLabel": "Open repository {{repo}}",
       "viewRepo": "View repo",
+      "manageAccess": "Manage repository access",
+      "manageAccessAria": "Manage repository access for {{owner}}",
       "viewCommit": "View latest commit",
       "commit": "Commit",
       "noCommit": "No commit yet",
@@ -2558,6 +2560,20 @@
           "add": "Some collaborators could not be added.{{removedNote}} Check the highlighted usernames and Save again to retry.{{suffix}}",
           "remove": "Some collaborators could not be removed.{{removedNote}} Check the highlighted usernames and Save again to retry.{{suffix}}"
         }
+      },
+      "repoAccess": {
+        "title": "Manage repository access",
+        "viewRepoNamed": "View {{name}} repository",
+        "loading": "Loading collaborators",
+        "saved": "Access updated!",
+        "needsAdmin": "You need admin access on this repository to change its collaborators.",
+        "adminWarning": "Set each collaborator's role, or add and remove collaborators. <b>Admin</b> lets a collaborator change repository settings and, on a private repo, its visibility.",
+        "studentBadge": "Student",
+        "roleFor": "Role for {{username}}",
+        "newRole": "Role for the new collaborator",
+        "removeUser": "Remove {{username}}",
+        "save": "Save access",
+        "saveError": "Some changes could not be saved. Check the highlighted collaborators and Save again to retry.{{suffix}}"
       },
       "reuseShell": {
         "copying": "Copying…",

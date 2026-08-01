@@ -94,12 +94,7 @@ export function assertAssignmentMode(value: string): AssignmentMode {
 // mirrors the shared Go contract.RepoPermissions and the schema enum. Defined
 // here (a leaf types module) rather than imported from github-core so the
 // schema contract stays self-contained.
-export type RepoPermission =
-  | "pull"
-  | "triage"
-  | "push"
-  | "maintain"
-  | "admin"
+export type RepoPermission = "pull" | "triage" | "push" | "maintain" | "admin"
 
 // Ordered low-to-high, so a UI can render the ladder and code can compare rank.
 export const REPO_PERMISSIONS: readonly RepoPermission[] = [

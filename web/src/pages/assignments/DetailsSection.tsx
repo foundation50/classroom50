@@ -439,8 +439,7 @@ export const DetailsSection = ({
               {(field) => (
                 <form.Subscribe selector={(state) => state.values.mode}>
                   {(modeValue) => {
-                    const mode =
-                      modeValue === "group" ? "group" : "individual"
+                    const mode = modeValue === "group" ? "group" : "individual"
                     const defaultLevel = defaultStudentPermission(mode)
                     return (
                       <FormField
