@@ -155,19 +155,10 @@ function grantFounderAccessStep(params: {
   username: string
   mode: AssignmentMode
   studentPermission?: RepoPermission
-  isOwner: boolean
   onStepUpdate?: OnAcceptStepUpdate
 }) {
-  const {
-    client,
-    org,
-    repo,
-    username,
-    mode,
-    studentPermission,
-    isOwner,
-    onStepUpdate,
-  } = params
+  const { client, org, repo, username, mode, studentPermission, onStepUpdate } =
+    params
   return withAcceptStep(
     {
       id: "access",
@@ -187,7 +178,6 @@ function grantFounderAccessStep(params: {
         repo,
         username,
         permission: founderPermission(mode, studentPermission),
-        isOwner,
       })
     },
   )
@@ -208,7 +198,6 @@ async function provisionAcceptedRepo(params: {
   autogradeYaml: string
   // Open the accept-time Feedback PR after setup succeeds (issue #228).
   feedbackPr?: boolean
-  isOwner?: boolean
   rerenderShimForBranch?: (branch: string) => string
   onStepUpdate?: OnAcceptStepUpdate
 }) {
@@ -223,21 +212,9 @@ async function provisionAcceptedRepo(params: {
     metadataYaml,
     autogradeYaml,
     feedbackPr = false,
-    isOwner = false,
     rerenderShimForBranch,
     onStepUpdate,
   } = params
-
-  await grantFounderAccessStep({
-    client,
-    org,
-    repo: repo.name,
-    username,
-    mode,
-    studentPermission,
-    isOwner,
-    onStepUpdate,
-  })
 
   // Land the metadata + autograde shim, retrying through GitHub's post-generate
   // git-data lag (see commitAcceptFilesWithFreshRepoRetry).
@@ -264,8 +241,9 @@ async function provisionAcceptedRepo(params: {
       }),
   )
 
-  // Last, because it's best-effort: everything above must hold for the accept
-  // to count, while a Feedback PR failure only defers creation to the runner.
+  // Best-effort: a Feedback PR failure only defers creation to the runner, so it
+  // never throws. Runs before the founder grant so the repo is fully set up
+  // before we (possibly) narrow the student's own access.
   await openFeedbackPrStep({
     client,
     org,
@@ -280,6 +258,22 @@ async function provisionAcceptedRepo(params: {
       }),
     mode,
     feedbackPr,
+    onStepUpdate,
+  })
+
+  // The founder grant is LAST: it can narrow the student's role on their own
+  // repo (a below-default student_permission is a self-downgrade), and the
+  // member-exact read-back fails loudly when GitHub won't apply it. Running it
+  // after setup + feedback means such a failure can't strand the student on a
+  // half-provisioned repo — the control files and Feedback PR are already in
+  // place; only the final access narrowing is left to retry.
+  await grantFounderAccessStep({
+    client,
+    org,
+    repo: repo.name,
+    username,
+    mode,
+    studentPermission,
     onStepUpdate,
   })
 }
@@ -478,7 +472,7 @@ export async function acceptAssignment(params: {
   // for public templates too. Org owners bypass (they administer every
   // classroom). Advisory like every client-side gate; GitHub's private-template
   // permission remains the hard boundary.
-  const membership = await withAcceptStep(
+  await withAcceptStep(
     {
       id: "membership",
       label: { key: "accept.steps.membership" },
@@ -494,11 +488,6 @@ export async function acceptAssignment(params: {
       return verified
     },
   )
-
-  // An org owner who creates the repo holds admin and can't self-downgrade to
-  // the push we grant (org policy blocks it); tolerate that residual admin at
-  // the founder read-back so an owner can still accept.
-  const isOwner = isOwnerGitHubOrgRole(membership.role)
 
   const assignment = await withAcceptStep(
     {
@@ -659,6 +648,15 @@ export async function acceptAssignment(params: {
           params: { org, repo: created.repo.name },
         },
       })
+      // setup + feedback are structurally skipped for a bare repo; mark them
+      // complete before the (last) access reconcile so the checklist order is
+      // consistent with the templated path.
+      onStepUpdate?.({
+        id: "setup",
+        status: "complete",
+        message: { key: "accept.stepDone.setupSkippedEmptyRepo" },
+      })
+      skipFeedbackPrStep(onStepUpdate)
       try {
         await patchRepoSurface(client, org, created.repo.name)
         await addFounderCollaborator({
@@ -670,7 +668,6 @@ export async function acceptAssignment(params: {
             assignment.mode,
             assignment.student_permission,
           ),
-          isOwner,
         })
       } catch (err) {
         log.debug("accept: best-effort role reconcile failed (non-fatal)", {
@@ -681,9 +678,18 @@ export async function acceptAssignment(params: {
       }
       onStepUpdate?.({ id: "access", status: "complete" })
     } else {
-      // Fresh create: the grant hard-fails (an un-granted repo is a broken
-      // accept the student can't push to), inside the throwing step so the
-      // checklist surfaces the error and its recovery guidance.
+      // Fresh create: setup + feedback are structurally skipped for a bare repo
+      // (no control files, no Feedback PR), so mark them complete first and run
+      // the founder grant LAST — consistent with the templated path's ordering.
+      // The grant hard-fails (an un-granted repo is a broken accept the student
+      // can't push to), inside the throwing step so the checklist surfaces the
+      // error and its recovery guidance.
+      onStepUpdate?.({
+        id: "setup",
+        status: "complete",
+        message: { key: "accept.stepDone.setupSkippedEmptyRepo" },
+      })
+      skipFeedbackPrStep(onStepUpdate)
       await grantFounderAccessStep({
         client,
         org,
@@ -691,16 +697,9 @@ export async function acceptAssignment(params: {
         username,
         mode: assignment.mode,
         studentPermission: assignment.student_permission,
-        isOwner,
         onStepUpdate,
       })
     }
-    onStepUpdate?.({
-      id: "setup",
-      status: "complete",
-      message: { key: "accept.stepDone.setupSkippedEmptyRepo" },
-    })
-    skipFeedbackPrStep(onStepUpdate)
 
     return {
       status: alreadyAccepted ? "already-accepted" : "created",
@@ -758,27 +757,6 @@ export async function acceptAssignment(params: {
     const provisioned = hasMetadata && hasWorkflow
 
     if (provisioned) {
-      // Healthy already-accepted: reconcile the founder role best-effort. A
-      // transient failure must not fail a re-run that previously succeeded.
-      try {
-        await addFounderCollaborator({
-          client,
-          owner: org,
-          repo: created.repo.name,
-          username,
-          permission: founderPermission(
-            assignment.mode,
-            assignment.student_permission,
-          ),
-          isOwner,
-        })
-      } catch (err) {
-        log.debug("accept: best-effort role reconcile failed (non-fatal)", {
-          org,
-          repo: created.repo.name,
-          err,
-        })
-      }
       onStepUpdate?.({
         id: "repo",
         status: "complete",
@@ -787,7 +765,6 @@ export async function acceptAssignment(params: {
           params: { org, repo: created.repo.name },
         },
       })
-      onStepUpdate?.({ id: "access", status: "complete" })
       onStepUpdate?.({ id: "setup", status: "complete" })
       // Ensure the Feedback PR exists even on the healthy path: repos
       // accepted before the accept-time-PR feature get their PR by
@@ -811,6 +788,28 @@ export async function acceptAssignment(params: {
         feedbackPr: wantsFeedbackPr,
         onStepUpdate,
       })
+      // Reconcile the founder role LAST (best-effort): a transient failure must
+      // not fail a re-run that previously succeeded, and running it after setup
+      // + feedback keeps the access step last on every path.
+      try {
+        await addFounderCollaborator({
+          client,
+          owner: org,
+          repo: created.repo.name,
+          username,
+          permission: founderPermission(
+            assignment.mode,
+            assignment.student_permission,
+          ),
+        })
+      } catch (err) {
+        log.debug("accept: best-effort role reconcile failed (non-fatal)", {
+          org,
+          repo: created.repo.name,
+          err,
+        })
+      }
+      onStepUpdate?.({ id: "access", status: "complete" })
       return {
         status: "already-accepted",
         repo: created.repo,
@@ -846,7 +845,6 @@ export async function acceptAssignment(params: {
       metadataYaml,
       autogradeYaml,
       feedbackPr: wantsFeedbackPr,
-      isOwner,
       rerenderShimForBranch: rerenderShim,
       onStepUpdate,
     })
@@ -884,7 +882,6 @@ export async function acceptAssignment(params: {
     metadataYaml,
     autogradeYaml,
     feedbackPr: wantsFeedbackPr,
-    isOwner,
     rerenderShimForBranch: rerenderShim,
     onStepUpdate,
   })

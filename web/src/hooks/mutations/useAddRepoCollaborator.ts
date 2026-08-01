@@ -13,6 +13,7 @@ export function useAddRepoCollaborator() {
       repo: string
       username: string
       permission?: "pull" | "triage" | "push" | "maintain" | "admin"
+      verify?: boolean
     }) =>
       addRepoCollaborator({
         client,

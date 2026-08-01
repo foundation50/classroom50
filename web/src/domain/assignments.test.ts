@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { readFileSync } from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 import {
   addFounderCollaborator,
@@ -28,6 +29,7 @@ import { localizedError, localizedMessageOf } from "@/types/localizedMessage"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Assignment } from "@/types/classroom"
+import { REPO_PERMISSIONS } from "@/types/classroom"
 
 const fullSource: Assignment = {
   slug: "hw1",
@@ -1061,6 +1063,96 @@ describe("editAssignment (preserved-entry integration)", () => {
       ),
     ).rejects.toThrow(/other-org\/secret-upstream in another org/)
   })
+
+  // buildAssignmentEntry's student_permission branch (clamp group up to admin,
+  // omit when it equals the mode default) is exercised through editAssignment's
+  // write, asserting the entry that lands in the committed assignments.json —
+  // the authoring-side clamp, distinct from the accept-time founderPermission
+  // clamp covered elsewhere.
+  function writtenEntry(committedContent: string): Assignment {
+    const written = JSON.parse(committedContent) as {
+      assignments: Assignment[]
+    }
+    return written.assignments.find((a) => a.slug === SLUG)!
+  }
+
+  it("individual + push (the default) omits student_permission", async () => {
+    const { client, committedContent } = makeClient()
+    await editAssignment(
+      client,
+      editInput({ mode: "individual", student_permission: "push" }),
+    )
+    expect(writtenEntry(committedContent()).student_permission).toBeUndefined()
+  })
+
+  it("individual + admin writes admin (a real above-default value)", async () => {
+    const { client, committedContent } = makeClient()
+    await editAssignment(
+      client,
+      editInput({ mode: "individual", student_permission: "admin" }),
+    )
+    expect(writtenEntry(committedContent()).student_permission).toBe("admin")
+  })
+
+  it("individual + a below-default value (pull) is written verbatim", async () => {
+    const { client, committedContent } = makeClient()
+    await editAssignment(
+      client,
+      editInput({ mode: "individual", student_permission: "pull" }),
+    )
+    expect(writtenEntry(committedContent()).student_permission).toBe("pull")
+  })
+
+  it("group + push clamps up to admin (which is the group default, so omitted not written as push)", async () => {
+    const { client, committedContent } = makeClient()
+    await editAssignment(
+      client,
+      editInput({
+        mode: "group",
+        max_group_size: 3,
+        student_permission: "push",
+      }),
+    )
+    // The clamp raises push -> admin; admin is the group default, so the entry
+    // omits it. The load-bearing assertion is that the raw below-admin value was
+    // NOT written through (a missing clamp would persist "push").
+    expect(writtenEntry(committedContent()).student_permission).toBeUndefined()
+  })
+
+  it("group + admin (the group default) omits student_permission", async () => {
+    const { client, committedContent } = makeClient()
+    await editAssignment(
+      client,
+      editInput({
+        mode: "group",
+        max_group_size: 3,
+        student_permission: "admin",
+      }),
+    )
+    expect(writtenEntry(committedContent()).student_permission).toBeUndefined()
+  })
+
+  it("group + a below-admin value ('') omits (clamped value equals the group default)", async () => {
+    const { client, committedContent } = makeClient()
+    await editAssignment(
+      client,
+      editInput({ mode: "group", max_group_size: 3, student_permission: "" }),
+    )
+    expect(writtenEntry(committedContent()).student_permission).toBeUndefined()
+  })
+
+  it("throws on an off-ladder student_permission value", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(
+        client,
+        editInput({
+          mode: "individual",
+          student_permission: "owner" as unknown as string,
+        }),
+      ),
+    ).rejects.toThrow(/student_permission/)
+  })
 })
 
 describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () => {
@@ -2016,157 +2108,157 @@ describe("assertAssignmentModeCoherent", () => {
   })
 })
 
-// permissionSatisfies decides whether the read-back after the grant grants AT
-// LEAST the role we set. It guards the case that matters — a grant that read
-// back BELOW the wanted role (the downgrade that didn't take) — while
-// tolerating a benign higher effective role (org base permission, a repo
-// creator GitHub won't self-downgrade). GitHub is the real ceiling; the
-// teacher's level is a floor.
-describe("permissionSatisfies — verified founder access floor", () => {
-  it("accepts a push grant that reads back as legacy write", () => {
-    expect(permissionSatisfies("write", "write", "push")).toBe(true)
-    expect(permissionSatisfies("write", "push", "push")).toBe(true)
+// permissionSatisfies decides whether the read-back after the grant is the role
+// we set. isOwner picks the comparison: an org owner tolerates a benign higher
+// residual (">=", their inherited/creator admin can't be self-downgraded),
+// while a plain member must land EXACTLY on the target ("=="), so a
+// silently-ignored downgrade (residual admin an intended lockdown must remove)
+// fails loudly.
+describe("permissionSatisfies — owner floor vs member exact match", () => {
+  it("accepts a push grant that reads back as push (both roles)", () => {
+    expect(permissionSatisfies("write", "write", "push", false)).toBe(true)
+    expect(permissionSatisfies("write", "push", "push", false)).toBe(true)
   })
 
   it("accepts an admin grant that reads back as admin", () => {
-    expect(permissionSatisfies("admin", "admin", "admin")).toBe(true)
+    expect(permissionSatisfies("admin", "admin", "admin", false)).toBe(true)
+    expect(permissionSatisfies("admin", "admin", "admin", true)).toBe(true)
   })
 
-  it("tolerates a still-higher read-back after a lower grant (benign residual)", () => {
-    // The effective role is the max of the direct grant, org base permission,
-    // and creator-admin; a residual above the wanted floor is not a failure.
-    expect(permissionSatisfies("admin", "admin", "push")).toBe(true)
-    expect(permissionSatisfies("write", "maintain", "push")).toBe(true)
-    // want=pull with an org base permission of write reads back as write.
-    expect(permissionSatisfies("write", "write", "pull")).toBe(true)
-    expect(permissionSatisfies("admin", "admin", "pull")).toBe(true)
+  it("owner: tolerates a still-higher read-back after a lower grant", () => {
+    // An owner's effective role is the max of the direct grant, org base
+    // permission, and unavoidable inherited/creator admin.
+    expect(permissionSatisfies("admin", "admin", "push", true)).toBe(true)
+    expect(permissionSatisfies("write", "maintain", "push", true)).toBe(true)
+    expect(permissionSatisfies("write", "write", "pull", true)).toBe(true)
+    expect(permissionSatisfies("admin", "admin", "pull", true)).toBe(true)
   })
 
-  it("rejects a read-back BELOW the wanted role (grant didn't take)", () => {
-    expect(permissionSatisfies("write", "push", "admin")).toBe(false)
-    expect(permissionSatisfies("read", "read", "push")).toBe(false)
-    expect(permissionSatisfies("write", "write", "maintain")).toBe(false)
+  it("member: rejects a still-higher read-back (silently-ignored downgrade)", () => {
+    // The exact over-access finding #3: a below-default target on a
+    // student-created repo whose creator-admin GitHub won't lower.
+    expect(permissionSatisfies("admin", "admin", "push", false)).toBe(false)
+    expect(permissionSatisfies("admin", "admin", "pull", false)).toBe(false)
+    expect(permissionSatisfies("write", "maintain", "push", false)).toBe(false)
+  })
+
+  it("rejects a read-back BELOW the wanted role for both owner and member", () => {
+    expect(permissionSatisfies("write", "push", "admin", true)).toBe(false)
+    expect(permissionSatisfies("write", "push", "admin", false)).toBe(false)
+    expect(permissionSatisfies("read", "read", "push", true)).toBe(false)
+    expect(permissionSatisfies("write", "write", "maintain", false)).toBe(false)
   })
 
   it("falls back to the legacy field when role_name is absent", () => {
-    expect(permissionSatisfies("write", undefined, "push")).toBe(true)
-    expect(permissionSatisfies("admin", undefined, "admin")).toBe(true)
-    expect(permissionSatisfies("write", undefined, "admin")).toBe(false)
+    // Legacy collapses maintain into write, so it can only prove push/write and
+    // admin; the owner/member comparison choice is the same.
+    expect(permissionSatisfies("write", undefined, "push", false)).toBe(true)
+    expect(permissionSatisfies("admin", undefined, "admin", false)).toBe(true)
+    expect(permissionSatisfies("write", undefined, "admin", true)).toBe(false)
+    expect(permissionSatisfies("admin", undefined, "push", true)).toBe(true)
+    expect(permissionSatisfies("admin", undefined, "push", false)).toBe(false)
   })
 
-  it("tolerates an unavoidable admin residual for a push target", () => {
-    expect(permissionSatisfies("admin", "admin", "push")).toBe(true)
-    expect(permissionSatisfies("admin", undefined, "push")).toBe(true)
-  })
-
-  it("still rejects a below-target read-back for an admin target", () => {
-    expect(permissionSatisfies("write", "maintain", "admin")).toBe(false)
+  it("rejects an unknown read-back role, failing closed", () => {
+    expect(permissionSatisfies("", "", "push", true)).toBe(false)
+    expect(permissionSatisfies(undefined, undefined, "push", false)).toBe(false)
   })
 })
 
 // Drives addFounderCollaborator end-to-end (PUT grant -> read-back -> throw),
 // the web mirror of gh-student's TestInviteFounder / _VerificationFails.
-describe("addFounderCollaborator — grant + read-back verification", () => {
+// The web half of the student_permission enum lockstep guard: REPO_PERMISSIONS
+// must equal the schema's student_permission enum (the declared source of
+// truth). The Go half (contract.RepoPermissions vs the same enum) is pinned by
+// TestStudentPermissionEnumParity, so a one-sided edit to any of the three
+// mirrors fails CI here or there rather than silently drifting the accept-time
+// floor verification.
+describe("REPO_PERMISSIONS parity with assignments-v1 schema", () => {
+  const schemaPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../schemas/assignments-v1.schema.json",
+  )
+  const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as {
+    $defs: {
+      assignment: {
+        properties: { student_permission: { enum: string[] } }
+      }
+    }
+  }
+
+  it("matches the schema student_permission enum exactly and in order", () => {
+    const schemaEnum =
+      schema.$defs.assignment.properties.student_permission.enum
+    expect(schemaEnum).toEqual([...REPO_PERMISSIONS])
+  })
+})
+
+describe("addFounderCollaborator — self grant (PUT only, no read-back)", () => {
   const owner = "cs50"
   const repo = "cs50-fall-2026-hello-alice"
   const username = "alice"
   const collabPath = `/repos/${owner}/${repo}/collaborators/${username}`
   const permPath = `${collabPath}/permission`
 
-  // A mock client that records the collaborator PUT body and answers the
-  // permission read-back with `readback`.
-  function makeClient(readback: { permission?: string; role_name?: string }) {
+  // Records the collaborator PUT and flags whether the permission sub-resource
+  // was read back (it must NOT be — the self read-back races an unbounded
+  // window; the grant guard lives on the teacher write paths instead).
+  function makeClient() {
     const put = vi.fn()
+    let readBack = false
     const request = vi.fn(async (path: string, opts?: { method?: string }) => {
       if (path === collabPath && opts?.method === "PUT") {
         put(opts)
         return undefined
       }
-      if (path === permPath) return readback
+      if (path === permPath) {
+        readBack = true
+        return {}
+      }
       throw new Error(`unexpected request: ${opts?.method ?? "GET"} ${path}`)
     })
-    return { client: { request } as unknown as GitHubClient, request, put }
+    return {
+      client: { request } as unknown as GitHubClient,
+      request,
+      put,
+      readBack: () => readBack,
+    }
   }
 
-  it("PUTs push and succeeds when the read-back satisfies", async () => {
-    const { client, request } = makeClient({
-      permission: "write",
-      role_name: "push",
-    })
-    await expect(
-      addFounderCollaborator({
-        client,
-        owner,
-        repo,
-        username,
-        permission: "push",
-      }),
-    ).resolves.toBeUndefined()
-    expect(request).toHaveBeenCalledWith(collabPath, {
-      method: "PUT",
-      body: { permission: "push" },
-    })
-  })
+  it.each(["push", "admin", "pull"] as const)(
+    "PUTs the requested role (%s) and trusts it — no read-back",
+    async (permission) => {
+      const { client, request, readBack } = makeClient()
+      await expect(
+        addFounderCollaborator({ client, owner, repo, username, permission }),
+      ).resolves.toBeUndefined()
+      expect(request).toHaveBeenCalledWith(collabPath, {
+        method: "PUT",
+        body: { permission },
+      })
+      expect(readBack()).toBe(false)
+    },
+  )
 
-  it("PUTs admin for a group founder", async () => {
-    const { client, request } = makeClient({
-      permission: "admin",
-      role_name: "admin",
-    })
-    await addFounderCollaborator({
-      client,
-      owner,
-      repo,
-      username,
-      permission: "admin",
-    })
-    expect(request).toHaveBeenCalledWith(collabPath, {
-      method: "PUT",
-      body: { permission: "admin" },
-    })
-  })
-
-  it("tolerates a higher residual role (admin) after a push grant", async () => {
-    // The effective role is the max of the direct grant, org base permission,
-    // and creator-admin; a residual above the wanted floor is not a failure.
-    const { client } = makeClient({ permission: "admin", role_name: "admin" })
-    await expect(
-      addFounderCollaborator({
-        client,
-        owner,
-        repo,
-        username,
-        permission: "push",
-      }),
-    ).resolves.toBeUndefined()
-  })
-
-  it("throws when the read-back is BELOW the wanted role (grant didn't take)", async () => {
-    const { client } = makeClient({
-      permission: "write",
-      role_name: "push",
-    })
-    await expect(
-      addFounderCollaborator({
-        client,
-        owner,
-        repo,
-        username,
-        permission: "admin",
-      }),
-    ).rejects.toMatchObject({
-      localized: {
-        key: "accept.errors.founderAccessMismatch",
-        params: { permission: "admin", role: "push" },
+  it("propagates a genuine PUT failure (e.g. not an org member)", async () => {
+    const err = new GitHubAPIError({
+      status: 404,
+      url: collabPath,
+      message: "Not Found",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
       },
     })
-  })
-
-  it("resolves for an org owner whose read-back stays admin after a push grant", async () => {
-    const { client, request } = makeClient({
-      permission: "admin",
-      role_name: "admin",
+    const request = vi.fn(async () => {
+      throw err
     })
+    const client = { request } as unknown as GitHubClient
     await expect(
       addFounderCollaborator({
         client,
@@ -2174,13 +2266,8 @@ describe("addFounderCollaborator — grant + read-back verification", () => {
         repo,
         username,
         permission: "push",
-        isOwner: true,
       }),
-    ).resolves.toBeUndefined()
-    expect(request).toHaveBeenCalledWith(collabPath, {
-      method: "PUT",
-      body: { permission: "push" },
-    })
+    ).rejects.toBe(err)
   })
 })
 

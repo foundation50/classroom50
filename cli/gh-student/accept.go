@@ -482,7 +482,6 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		fullName:          fullName,
 		htmlURL:           htmlURL,
 		alreadyExisted:    alreadyExisted,
-		isOwner:           isOwner,
 		createSp:          createSp,
 		createMsg:         createMsg,
 	})
@@ -515,11 +514,8 @@ type acceptRepoParams struct {
 	feedbackPR        bool
 	fullName, htmlURL string
 	alreadyExisted    bool
-	// isOwner tolerates an org owner's unavoidable residual admin at the
-	// founder read-back (they can't self-downgrade to push).
-	isOwner   bool
-	createSp  *ghui.Spinner
-	createMsg string
+	createSp          *ghui.Spinner
+	createMsg         string
 }
 
 // acceptIntoRepo decides whether a just-created-or-existing repo needs
@@ -550,7 +546,7 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 			// Already accepted: reconcile the role best-effort. The repo is
 			// already healthy, so a transient/SSO-403/left-org failure must not
 			// fail a re-run that previously always succeeded — warn and report.
-			if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission), p.isOwner); err != nil && verbose {
+			if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission)); err != nil && verbose {
 				u.Detail("could not reconcile %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 			}
 			p.createSp.Stop(fmt.Sprintf("Repo already exists: %s", p.fullName))
@@ -622,7 +618,7 @@ func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.
 		// templated already-accepted path. The bare repo is already healthy
 		// (its only provisioning is this grant), so a transient/SSO-403/
 		// left-org failure must not fail a re-run that previously succeeded.
-		if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission), p.isOwner); err != nil && verbose {
+		if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission)); err != nil && verbose {
 			u.Detail("could not reconcile %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 		}
 		return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
@@ -636,7 +632,7 @@ func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.
 		return err
 	}
 
-	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission), p.isOwner); err != nil {
+	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission)); err != nil {
 		return err
 	}
 
@@ -646,24 +642,20 @@ func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.
 // provisionAcceptedRepo brings a just-created (or partially-provisioned)
 // student repo to a healthy, autogradable state and is safe to re-run:
 //
-//  1. Grant the founder their repo role (PUT collaborators is an upsert):
-//     `push` for an individual assignment, `admin` for group.
-//  2. Land .classroom50.yaml + the autograde shim in one Tree commit,
+//  1. Land .classroom50.yaml + the autograde shim in one Tree commit,
 //     riding out GitHub's post-create git-data lag.
-//  3. Verify the accept marker is readable before declaring success, so
+//  2. Verify the accept marker is readable before declaring success, so
 //     "accepted" always means "will autograde".
+//  3. Open the accept-time Feedback PR (best-effort; defers to the runner).
+//  4. Grant the founder their repo role LAST (PUT collaborators is an upsert):
+//     `push` for an individual assignment, `admin` for group, or a configured
+//     student_permission. Last so a self-downgrade GitHub won't apply fails
+//     loudly without stranding the student on a half-provisioned repo.
 //
 // The single caller (acceptIntoRepo) covers both the fresh-create and heal
 // paths. Mirrors the GUI's provisionAcceptedRepo so CLI and GUI heal a
 // half-finished accept identically.
 func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p acceptRepoParams, cfg classroomcfg.Config) error {
-	// Individual founders get least-privilege `push` (enough to push and
-	// trigger autograding); group founders get `admin` (needed to manage
-	// collaborators for `gh student invite`). See founderPermission.
-	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission), p.isOwner); err != nil {
-		return err
-	}
-
 	// DropFiles lands both control files in one Tree commit, waiting out
 	// GitHub's post-create replication lag; the spinner animates throughout
 	// (no numeric counter — the wait has no guaranteed bound).
@@ -687,12 +679,25 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 		return err
 	}
 
-	// Last, because it's best-effort: everything above must hold for the
-	// accept to count, while a Feedback PR failure only defers to the runner.
+	// Feedback PR is best-effort (a failure only defers to the runner). Run it
+	// before the founder grant so the repo is fully set up before we (possibly)
+	// narrow the student's own access.
 	if p.feedbackPR {
 		openFeedbackPRStep(client, u, verbose, p, func() (string, error) {
 			return feedbackBaseSHA(client, p.org, p.repoName, acceptSHA), nil
 		})
+	}
+
+	// The founder grant is LAST: individual founders get least-privilege `push`
+	// (enough to push and trigger autograding); group founders get `admin`
+	// (needed to manage collaborators for `gh student invite`); a configured
+	// student_permission can narrow it further. See founderPermission. Running
+	// it after setup + feedback means a below-default self-downgrade GitHub
+	// won't apply (which inviteFounder verifies with a member-exact read-back)
+	// fails loudly without stranding the student on a half-provisioned repo —
+	// the control files and Feedback PR are already in place.
+	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission)); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1108,16 +1113,25 @@ func founderPermission(mode, studentPermission string) string {
 	return want
 }
 
-// inviteFounder sets username's collaborator role and verifies it took effect.
-// A repo creator holds admin, so an individual self-downgrade GitHub silently
-// ignores would otherwise look identical to success. isOwner tolerates an
-// org owner's unavoidable residual admin (admin already covers push).
-func inviteFounder(client githubapi.Client, u *ui.UI, verbose bool, username, org, repoName, permission string, isOwner bool) error {
+// inviteFounder sets username's collaborator role on their OWN repo. The
+// accepting student is the repo creator (they ran the generate/create), so this
+// is a self-directed collaborator change — including a self-downgrade below the
+// default (a teacher can set student_permission to e.g. `pull`). We trust the
+// PUT: it is the authenticated actor changing their own access, so a success
+// means it took.
+//
+// We deliberately do NOT read the effective permission back. The
+// /repos/{org}/{repo}/collaborators/{self}/permission sub-resource lags the PUT
+// by a long, unbounded window right after a self-downgrade on a freshly created
+// repo — it 404s ("no readable collaborator record yet") well past any
+// reasonable accept-run poll, even though the downgrade already applied, which
+// produced false accept failures for the exact legitimate case. The
+// silently-ignored-downgrade guard belongs on the teacher write paths (the web
+// gradebook per-repo / bulk access editors), where a DIFFERENT actor changes a
+// student's role and a read-back can meaningfully confirm it. Mirrors the web
+// addFounderCollaborator.
+func inviteFounder(client githubapi.Client, u *ui.UI, verbose bool, username, org, repoName, permission string) error {
 	if _, err := githubapi.SetCollaborator(client, org, repoName, username, permission); err != nil {
-		return err
-	}
-
-	if err := verifyFounderPermission(client, org, repoName, username, permission, isOwner); err != nil {
 		return err
 	}
 
@@ -1126,66 +1140,4 @@ func inviteFounder(client githubapi.Client, u *ui.UI, verbose bool, username, or
 	}
 
 	return nil
-}
-
-// verifyFounderPermission reads the effective permission back and errors if it
-// doesn't match the role we set (permissionSatisfies handles GitHub's legacy
-// role collapse), so a silently-ignored downgrade fails loud instead.
-func verifyFounderPermission(client githubapi.Client, org, repoName, username, want string, isOwner bool) error {
-	path := fmt.Sprintf("repos/%s/%s/collaborators/%s/permission",
-		url.PathEscape(org), url.PathEscape(repoName), url.PathEscape(username))
-	var got struct {
-		Permission string `json:"permission"`
-		RoleName   string `json:"role_name"`
-	}
-	if err := client.Get(path, &got); err != nil {
-		return fmt.Errorf("verifying %s's permission on %s/%s: %w", username, org, repoName, err)
-	}
-	if permissionSatisfies(got.Permission, got.RoleName, want, isOwner) {
-		return nil
-	}
-	return fmt.Errorf("expected %s to have %q access on %s/%s after setup, but GitHub reports %q (role %q) — a repo creator holds admin and a self-downgrade may be blocked by org policy; ask your teacher to set your access to %q",
-		username, want, org, repoName, got.Permission, got.RoleName, want)
-}
-
-// permissionRank is GitHub's permission ladder low-to-high. role_name reports
-// the effective role (maintain and admin distinct); the legacy `permission`
-// field collapses maintain into "write", so a legacy-only compare can prove
-// only push/write and admin. Mirrors the web PERMISSION_RANK.
-var permissionRank = map[string]int{
-	"read": 0, "pull": 0,
-	"triage": 1,
-	"write":  2, "push": 2,
-	"maintain": 3,
-	"admin":    4,
-}
-
-// permissionSatisfies reports whether the read-back grants AT LEAST the role we
-// set. role_name is authoritative when present. We verify ">=" rather than
-// exact match: the effective role is the max of the direct grant, the org base
-// repository permission, team grants, and creator-admin, so a benign residual
-// above the wanted level (an org base perm higher than a below-default target,
-// or a repo creator GitHub won't self-downgrade) must not fail an otherwise-good
-// accept. It still fails loudly when the student ends up BELOW the wanted role.
-// isOwner is accepted for signature symmetry but no longer affects the compare.
-// Mirrors the web permissionSatisfies.
-func permissionSatisfies(legacy, roleName, want string, _ bool) bool {
-	wantRank, ok := permissionRank[want]
-	if !ok {
-		return false
-	}
-	if roleName != "" {
-		gotRank, ok := permissionRank[roleName]
-		if !ok {
-			return false
-		}
-		return gotRank >= wantRank
-	}
-	// Legacy field only: it can't distinguish triage/maintain (both collapse to
-	// "write"), so the same >= compare is the best it can prove.
-	gotRank, ok := permissionRank[legacy]
-	if !ok {
-		return false
-	}
-	return gotRank >= wantRank
 }

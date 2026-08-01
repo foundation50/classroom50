@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { ShieldCheck } from "lucide-react"
 
 import { Alert, Button, Modal, Select } from "@/components/ui"
@@ -12,6 +13,7 @@ import {
 } from "@/components/bulk/resultView"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
+import { permissionSatisfies } from "@/domain/assignments/permissions"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { studentRepoName } from "@/util/studentRepo"
 import { getName } from "@/util/students"
@@ -30,12 +32,37 @@ type BulkRepoAccessModalProps = {
   students?: Student[]
 }
 
-const describeFailure = (reason: unknown): string | undefined => {
+// A verified write that GitHub silently ignored: the PUT returned 204 but the
+// student's effective role didn't land on the target (the residual admin an
+// intended downgrade is meant to remove). Reported distinctly from a hard error.
+class AccessNotAppliedError extends Error {
+  readonly effective: string | undefined
+  constructor(effective: string | undefined) {
+    super(`access not applied (still ${effective ?? "unchanged"})`)
+    this.name = "AccessNotAppliedError"
+    this.effective = effective
+  }
+}
+
+// Map a rejected write to a localized reason for the result table. Reuses the
+// groupCollaborators failure vocabulary so this dialog stays consistent with
+// its per-repo sibling (RepoAccessModal) instead of assembling raw English.
+const describeFailure = (reason: unknown, t: TFunction): string | undefined => {
+  if (reason instanceof AccessNotAppliedError) {
+    return t("components.modals.repoAccess.notApplied", {
+      effective: reason.effective ?? "unknown",
+    })
+  }
   if (reason instanceof GitHubAPIError) {
-    if (reason.isRateLimited) return "rate limited"
-    if (reason.status === 403) return "forbidden"
-    if (reason.status === 404) return "repo or user not found"
-    return `HTTP ${reason.status}`
+    if (reason.isRateLimited)
+      return t("components.modals.groupCollaborators.failure.rateLimited")
+    if (reason.status === 403)
+      return t("components.modals.groupCollaborators.failure.forbidden")
+    if (reason.status === 404)
+      return t("components.modals.groupCollaborators.failure.notFound")
+    return t("components.modals.groupCollaborators.failure.httpStatus", {
+      status: reason.status,
+    })
   }
   return reason instanceof Error ? reason.message : undefined
 }
@@ -57,6 +84,17 @@ export function BulkRepoAccessModal({
   const { t } = useTranslation()
   const addCollaboratorMutation = useAddRepoCollaborator()
   const runningRef = useRef(false)
+  // Guards setState after unmount and lets an in-flight run stop launching new
+  // writes when the modal closes mid-fan-out (there's no per-request cancel
+  // token on the mutation, so we skip the remaining owners instead).
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      runningRef.current = false
+    }
+  }, [])
 
   const [permission, setPermission] = useState<RepoPermission>("push")
   const [phase, setPhase] = useState<BulkPhase>("idle")
@@ -69,6 +107,7 @@ export function BulkRepoAccessModal({
 
   useEffect(() => {
     if (!open) {
+      runningRef.current = false
       setPermission("push")
       setPhase("idle")
       setResult(null)
@@ -82,6 +121,11 @@ export function BulkRepoAccessModal({
   const permissionLabel = (level: RepoPermission) =>
     t(`assignments.form.studentPermission.levels.${level}`)
 
+  type Outcome =
+    | { owner: string; status: "ok" }
+    | { owner: string; status: "deferred" }
+    | { owner: string; status: "failed"; detail?: string }
+
   const run = async () => {
     if (runningRef.current || total === 0) return
     runningRef.current = true
@@ -90,41 +134,89 @@ export function BulkRepoAccessModal({
     let processed = 0
     setProgress({ processed: 0, total, message: "" })
 
+    // Set once we hit a secondary-rate-limit: stop launching NEW writes and
+    // report the untouched remainder as deferred rather than hammering GitHub
+    // into a deeper throttle (mirrors inviteRosterStudents' throttle handling).
+    let rateLimited = false
+
     const outcomes = await mapWithConcurrency(
       owners,
       REPO_READ_CONCURRENCY,
-      async (owner) => {
+      async (owner): Promise<Outcome> => {
+        // The modal closed/unmounted, or an earlier task tripped the rate
+        // limit: don't start another write; mark the rest deferred.
+        if (rateLimited || !mountedRef.current) {
+          processed += 1
+          if (mountedRef.current) {
+            setProgress({ processed, total, message: displayFor(owner) })
+          }
+          return { owner, status: "deferred" }
+        }
         const repo = studentRepoName(classroom, assignment, owner)
         try {
-          await addCollaboratorMutation.mutateAsync({
+          const { effective } = await addCollaboratorMutation.mutateAsync({
             org,
             repo,
             username: owner,
             permission,
+            verify: true,
           })
-          return { owner, ok: true as const }
+          // The owner segment is the enrolled student — an org member, so
+          // GitHub honors the direct grant exactly. A higher residual means the
+          // requested (typically lower) role was silently ignored, the exact
+          // over-access an intended lockdown must catch.
+          if (
+            effective &&
+            !permissionSatisfies(
+              effective.permission,
+              effective.role_name,
+              permission,
+              false,
+            )
+          ) {
+            throw new AccessNotAppliedError(
+              effective.role_name || effective.permission,
+            )
+          }
+          return { owner, status: "ok" }
         } catch (err) {
-          return { owner, ok: false as const, detail: describeFailure(err) }
+          if (err instanceof GitHubAPIError && err.isRateLimited) {
+            rateLimited = true
+            return { owner, status: "deferred" }
+          }
+          return { owner, status: "failed", detail: describeFailure(err, t) }
         } finally {
           processed += 1
-          setProgress({
-            processed,
-            total,
-            message: displayFor(owner),
-          })
+          if (mountedRef.current) {
+            setProgress({ processed, total, message: displayFor(owner) })
+          }
         }
       },
     )
 
-    const succeeded = outcomes.filter((o) => o.ok)
-    const failed = outcomes.filter((o) => !o.ok)
+    // The modal was closed mid-run: the fan-out finished (or bailed) but there's
+    // no live component to show a result on.
+    if (!mountedRef.current) {
+      runningRef.current = false
+      return
+    }
+
+    const succeeded = outcomes.filter((o) => o.status === "ok")
+    const deferred = outcomes.filter((o) => o.status === "deferred")
+    const failed = outcomes.filter((o) => o.status === "failed")
 
     setResult({
-      headline: t("submissions.bulkAccess.resultHeadline", {
-        count: succeeded.length,
-        total,
-        level: permissionLabel(permission),
-      }),
+      headline: rateLimited
+        ? t("submissions.bulkAccess.resultHeadlineThrottled", {
+            count: succeeded.length,
+            total,
+            level: permissionLabel(permission),
+          })
+        : t("submissions.bulkAccess.resultHeadline", {
+            count: succeeded.length,
+            total,
+            level: permissionLabel(permission),
+          }),
       sections: [
         ...(failed.length
           ? [
@@ -140,9 +232,23 @@ export function BulkRepoAccessModal({
               },
             ]
           : []),
+        ...(deferred.length
+          ? [
+              {
+                title: t("submissions.bulkAccess.deferredSection", {
+                  count: deferred.length,
+                }),
+                rows: deferred.map((o) => ({
+                  key: o.owner,
+                  label: displayFor(o.owner),
+                  detail: t("submissions.bulkAccess.deferredDetail"),
+                })),
+              },
+            ]
+          : []),
       ],
     })
-    setPhase(failed.length ? "error" : "complete")
+    setPhase(failed.length || deferred.length ? "error" : "complete")
     runningRef.current = false
   }
 

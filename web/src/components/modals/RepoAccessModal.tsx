@@ -20,6 +20,7 @@ import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useRemoveRepoCollaborator from "@/hooks/mutations/useRemoveRepoCollaborator"
 import { getName } from "@/util/students"
+import { permissionSatisfies } from "@/domain/assignments/permissions"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { GitHubUser } from "@/github-core/types"
 import type { RepoPermission, Student } from "@/types/classroom"
@@ -27,6 +28,27 @@ import { REPO_PERMISSIONS } from "@/types/classroom"
 
 const normalizeUsername = (username: string) =>
   username.trim().replace(/^@/, "").toLowerCase()
+
+// A collaborator PUT that returned 204 but whose read-back didn't land on the
+// requested role — GitHub silently ignored the write (typically a downgrade it
+// won't apply to a repo creator, leaving residual admin). Carried so handleSave
+// can flag the row and explain the effective role that stuck.
+class RepoAccessNotAppliedError extends Error {
+  readonly login: string
+  readonly requested: RepoPermission
+  readonly effective: string | undefined
+  constructor(
+    login: string,
+    requested: RepoPermission,
+    effective: string | undefined,
+  ) {
+    super(`access for ${login} not applied (still ${effective ?? "unchanged"})`)
+    this.name = "RepoAccessNotAppliedError"
+    this.login = login
+    this.requested = requested
+    this.effective = effective
+  }
+}
 
 // The effective role from a collaborator's permission booleans (the list
 // endpoint returns no role_name in our GitHubUser shape). Highest wins; triage
@@ -52,6 +74,11 @@ const rejectedItems = <T,>(
 // Map a rejected write to a human reason; reuses the groupCollaborators failure
 // vocabulary so the two dialogs stay consistent.
 const describeFailure = (reason: unknown, t: TFunction): string | null => {
+  if (reason instanceof RepoAccessNotAppliedError) {
+    return t("components.modals.repoAccess.notApplied", {
+      effective: reason.effective ?? "unknown",
+    })
+  }
   if (reason instanceof GitHubAPIError) {
     if (reason.isRateLimited)
       return t("components.modals.groupCollaborators.failure.rateLimited")
@@ -327,12 +354,35 @@ export function RepoAccessModal({
 
       const upsertResults = await Promise.allSettled(
         toUpsert.map(async (entry) => {
-          await addCollaboratorMutation.mutateAsync({
+          const isEnrolledStudent = entry.login === ownerLoginResolved
+          const { effective } = await addCollaboratorMutation.mutateAsync({
             org,
             repo: repoName,
             username: entry.login,
             permission: entry.permission,
+            verify: true,
           })
+          // The enrolled student is an org member, so GitHub honors the direct
+          // grant exactly — a mismatch means the write was silently ignored
+          // (e.g. a downgrade below a lingering creator/base admin), the exact
+          // over-access an intended lockdown must catch. An arbitrary added
+          // collaborator only needs the grant to take (>= is enough), so treat
+          // that read-back with owner-style tolerance.
+          if (
+            effective &&
+            !permissionSatisfies(
+              effective.permission,
+              effective.role_name,
+              entry.permission,
+              !isEnrolledStudent,
+            )
+          ) {
+            throw new RepoAccessNotAppliedError(
+              entry.login,
+              entry.permission,
+              effective.role_name || effective.permission,
+            )
+          }
           return entry.login
         }),
       )

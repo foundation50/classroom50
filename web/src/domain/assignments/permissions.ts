@@ -1,24 +1,32 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { AssignmentMode, RepoPermission } from "@/types/classroom"
 import type { GitHubRepo } from "@/github-core/types"
-import { getRepoPermissionForUser } from "@/github-core/queries"
 import { defaultStudentPermission } from "@/types/classroom"
 import { localizedError } from "@/types/localizedMessage"
 
-// Grant the founder their repo role and verify it took: the grant must land at
-// AT LEAST the requested level (a lower read-back is a grant that didn't take).
-// A benign higher effective role (org base permission, or a repo creator GitHub
-// won't self-downgrade) passes, since GitHub is the real ceiling and the
-// teacher's level is a floor. isOwner is accepted for call-site symmetry with
-// the CLI but no longer affects the >= check. CLI-aligned with inviteFounder in
-// gh-student's accept.go.
+// Grant the accepting student their role on their OWN repo. The student is the
+// repo creator (they ran POST /generate), so this PUT is a self-directed
+// collaborator change — including a self-downgrade below the default (a teacher
+// can set student_permission to e.g. `pull`). We trust the PUT: it is the
+// authenticated actor changing their own access, so a 2xx means it took.
+//
+// We deliberately do NOT read the effective permission back here. The
+// /repos/{org}/{repo}/collaborators/{self}/permission sub-resource lags the PUT
+// by a long, unbounded window right after a self-downgrade on a freshly
+// generated repo — it 404s ("no readable collaborator record yet") well past
+// any reasonable accept-run poll, even though the downgrade already applied. A
+// read-back therefore produces false accept failures for the exact legitimate
+// case it was meant to allow. The silently-ignored-downgrade guard belongs on
+// the TEACHER write paths (the per-repo / bulk gradebook modals), where a
+// DIFFERENT actor changes a student's role and a read-back can meaningfully
+// confirm it; see addRepoCollaborator's `verify`. CLI-aligned with
+// inviteFounder in gh-student's accept.go.
 export async function addFounderCollaborator(params: {
   client: GitHubClient
   owner: string
   repo: string
   username: string
   permission: RepoPermission
-  isOwner?: boolean
 }) {
   const { client, owner, repo, username, permission } = params
 
@@ -28,29 +36,6 @@ export async function addFounderCollaborator(params: {
       permission,
     },
   })
-
-  const effective = await getRepoPermissionForUser({
-    client,
-    org: owner,
-    repo,
-    username,
-  })
-
-  if (
-    !permissionSatisfies(effective.permission, effective.role_name, permission)
-  ) {
-    throw localizedError({
-      key: "accept.errors.founderAccessMismatch",
-      params: {
-        username,
-        permission,
-        owner,
-        repo,
-        effective: effective.permission ?? "none",
-        role: effective.role_name ?? "unknown",
-      },
-    })
-  }
 }
 
 // The permission ladder low-to-high, so a read-back can be ranked against the
@@ -68,32 +53,36 @@ const PERMISSION_RANK: Record<string, number> = {
   admin: 4,
 }
 
-// Whether the read-back grants AT LEAST the role we set. role_name is
-// authoritative when present. We verify ">=" rather than exact match: the
-// effective role is the max of the direct grant, the org base repository
-// permission, team grants, and creator-admin, so a benign residual above the
-// wanted level (an org base perm higher than a below-default target, or a repo
-// creator GitHub won't self-downgrade) must not fail an otherwise-good accept.
-// The check still fails loudly when the student ends up BELOW the wanted role
-// (the grant that didn't take). GitHub is the real enforcer of any ceiling;
-// the teacher's level is a floor we guarantee. Mirrors gh-student's
-// permissionSatisfies.
+// Whether the read-back is the role we set. role_name is authoritative when
+// present. isOwner picks the comparison, because it decides whether a HIGHER
+// read-back is benign or a real failure:
+//
+//   - Org OWNER (isOwner): compare ">=". An owner holds unavoidable inherited
+//     admin (and can't self-downgrade below it when they created the repo), so
+//     a residual above the wanted level is benign — GitHub is the real ceiling
+//     and the teacher's level is a floor we guarantee. Only a read-back BELOW
+//     the wanted role (a grant that didn't take) fails.
+//   - Non-owner MEMBER (!isOwner): compare "==". GitHub honors the direct
+//     collaborator grant for a plain member, so the effective role should land
+//     exactly on the target. A higher read-back means a requested downgrade was
+//     silently ignored (e.g. a lingering creator/team/base grant), and for a
+//     BELOW-default target (a teacher deliberately narrowing access) that
+//     residual is exactly the over-access we must catch — so it fails loudly.
+//
+// Mirrors gh-student's permissionSatisfies.
 export function permissionSatisfies(
   legacy: string | undefined,
   roleName: string | undefined,
   want: RepoPermission,
+  isOwner: boolean,
 ): boolean {
   const wantRank = PERMISSION_RANK[want]
-  if (roleName) {
-    const gotRank = PERMISSION_RANK[roleName]
-    if (gotRank === undefined) return false
-    return gotRank >= wantRank
-  }
-  // Legacy field only: it can't distinguish triage/maintain (both collapse to
-  // "write"), so the same >= compare is the best it can prove.
-  const gotRank = PERMISSION_RANK[legacy ?? ""]
+  // role_name is exact (maintain/admin distinct); the legacy field collapses
+  // maintain into "write", so it can only prove push/write and admin — but the
+  // owner-vs-member comparison choice is the same for both.
+  const gotRank = PERMISSION_RANK[roleName || (legacy ?? "")]
   if (gotRank === undefined) return false
-  return gotRank >= wantRank
+  return isOwner ? gotRank >= wantRank : gotRank === wantRank
 }
 
 // Maps an assignment to the founder's accept-time repo role: the configured

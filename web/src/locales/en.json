@@ -1034,7 +1034,7 @@
         "maxGroupSizeInvalid": "Max group size must be a valid number.",
         "setupTimeoutRange": "Setup timeout must be 0 or a whole number of seconds from 1 through {{max}}.",
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
-        "studentPermissionInvalid": "Student repo access must be one of read, triage, write, maintain, or admin.",
+        "studentPermissionInvalid": "Student repo access must be one of pull, triage, push, maintain, or admin.",
         "releaseAssetsTooMany": "Choose at most {{max}} submission release files (currently {{count}}).",
         "releaseAssetsTooLarge": "Submission release file paths may total at most {{max}} UTF-8 bytes (8 KiB); currently {{bytes}}.",
         "releaseAssetsInvalidPath": "{{path}} is not an exact workspace-relative file path.",
@@ -2261,8 +2261,12 @@
       "working": "Updating repositories",
       "progress": "Updated {{processed}} of {{total}}",
       "resultHeadline": "Set {{count}} of {{total}} students to {{level}}.",
+      "resultHeadlineThrottled": "Set {{count}} of {{total}} students to {{level}} before GitHub rate-limited the request — re-run to finish the rest.",
       "failedSection_one": "{{count}} repository could not be updated",
-      "failedSection_other": "{{count}} repositories could not be updated"
+      "failedSection_other": "{{count}} repositories could not be updated",
+      "deferredSection_one": "{{count}} repository was not updated",
+      "deferredSection_other": "{{count}} repositories were not updated",
+      "deferredDetail": "Skipped — re-run to update."
     },
     "rowRegrade": {
       "title": "Regrade this submission",
@@ -2571,7 +2575,8 @@
           "rateLimited": "GitHub rate limit hit — wait a moment and try again.",
           "forbidden": "You don't have permission to change collaborators on this repository.",
           "notFound": "Username not found, or not a member of the GitHub organization.",
-          "conflict": "Already a collaborator, or the request was rejected by GitHub."
+          "conflict": "Already a collaborator, or the request was rejected by GitHub.",
+          "httpStatus": "GitHub returned an error (HTTP {{status}})."
         },
         "error": {
           "addAndRemove": "Some collaborators could not be added or removed.{{removedNote}} Check the highlighted usernames and Save again to retry.{{suffix}}",
@@ -2587,6 +2592,7 @@
         "needsAdmin": "You need admin access on this repository to change its collaborators.",
         "adminWarning": "Set each collaborator's role, or add and remove collaborators. <b>Admin</b> lets a collaborator change repository settings and, on a private repo, its visibility.",
         "studentBadge": "Student",
+        "notApplied": "GitHub kept the existing role ({{effective}}) — a repo creator can't be downgraded below admin. Ask the student to lower their own access, or transfer repo ownership.",
         "roleFor": "Role for {{username}}",
         "newRole": "Role for the new collaborator",
         "removeUser": "Remove {{username}}",

@@ -2,12 +2,54 @@ package assignment
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
 )
+
+// TestStudentPermissionEnumParity pins the student_permission allow-list across
+// its three hand-mirrored sources: the JSON schema enum (the declared source of
+// truth), the Go contract.RepoPermissions (what ValidateStudentPermission
+// enforces), and — via the shared list length — the ordered ladder. A one-sided
+// edit to any of them drifts the accept-time floor verification, so this fails
+// CI rather than surfacing as a CLI/GUI/schema disagreement. The web mirror
+// (REPO_PERMISSIONS) is pinned against the same schema enum by a vitest.
+func TestStudentPermissionEnumParity(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "schemas", "assignments-v1.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	var schema struct {
+		Defs struct {
+			Assignment struct {
+				Properties struct {
+					StudentPermission struct {
+						Enum []string `json:"enum"`
+					} `json:"student_permission"`
+				} `json:"properties"`
+			} `json:"assignment"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	schemaEnum := schema.Defs.Assignment.Properties.StudentPermission.Enum
+	if len(schemaEnum) == 0 {
+		t.Fatalf("schema student_permission.enum not found; did the $defs shape change?")
+	}
+	if !reflect.DeepEqual(schemaEnum, contract.RepoPermissions) {
+		t.Errorf("student_permission drift: schema enum %v != contract.RepoPermissions %v — update every mirror in lockstep (schema, Go contract, web REPO_PERMISSIONS)",
+			schemaEnum, contract.RepoPermissions)
+	}
+}
 
 func TestParseAssignments_Canonical(t *testing.T) {
 	in := []byte(`{

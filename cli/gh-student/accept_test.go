@@ -116,44 +116,6 @@ func TestCheckOrgStatus(t *testing.T) {
 	}
 }
 
-// TestPermissionSatisfies pins the read-back decision: the grant must land at
-// AT LEAST the wanted role. A read-back BELOW the target fails (the grant that
-// didn't take); a benign higher effective role (org base permission, an
-// un-downgradeable creator-admin) passes, since GitHub is the real ceiling.
-func TestPermissionSatisfies(t *testing.T) {
-	cases := []struct {
-		name     string
-		legacy   string
-		roleName string
-		want     string
-		isOwner  bool
-		ok       bool
-	}{
-		{"push grant reads role_name push", "write", "push", "push", false, true},
-		{"push grant reads role_name write", "write", "write", "push", false, true},
-		{"maintain residual satisfies a push target", "write", "maintain", "push", false, true},
-		{"admin residual satisfies a push target", "admin", "admin", "push", false, true},
-		{"read fails a push target (grant didn't take)", "read", "read", "push", false, false},
-		{"write base perm satisfies a pull target", "write", "write", "pull", false, true},
-		{"admin grant reads role_name admin", "admin", "admin", "admin", false, true},
-		{"push fails an admin target (under-grant)", "write", "push", "admin", false, false},
-		{"write fails a maintain target (under-grant)", "write", "write", "maintain", false, false},
-		{"empty role_name falls back to legacy write for push", "write", "", "push", false, true},
-		{"empty role_name falls back to legacy admin for admin", "admin", "", "admin", false, true},
-		{"empty role_name legacy write fails admin", "write", "", "admin", false, false},
-		{"owner admin satisfies a push target", "admin", "admin", "push", true, true},
-		{"owner admin (legacy only) satisfies a push target", "admin", "", "push", true, true},
-		{"maintain fails an admin target even for an owner", "write", "maintain", "admin", true, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := permissionSatisfies(tc.legacy, tc.roleName, tc.want, tc.isOwner); got != tc.ok {
-				t.Errorf("permissionSatisfies(%q,%q,%q,%v) = %v, want %v", tc.legacy, tc.roleName, tc.want, tc.isOwner, got, tc.ok)
-			}
-		})
-	}
-}
-
 // TestFounderPermission pins the mode+config→role mapping: with no configured
 // student_permission, individual (and empty/unknown, which default to
 // individual) gets least-privilege `push`, group gets `admin`. A configured
@@ -186,9 +148,10 @@ func TestFounderPermission(t *testing.T) {
 	}
 }
 
-// TestInviteFounder pins the grant + verification: accept PUTs the student at
-// the requested role, then succeeds only when the read-back matches (a push
-// grant reads back as legacy `write`). Asserts the exact PUT path/body.
+// TestInviteFounder pins the grant: accept PUTs the student at the requested
+// role and trusts the PUT (no read-back — the self-downgrade read-back races an
+// unbounded consistency window; the guard lives on the teacher write paths).
+// Asserts the exact PUT path/body and that no permission read-back is made.
 func TestInviteFounder(t *testing.T) {
 	const (
 		org      = "cs50"
@@ -198,22 +161,15 @@ func TestInviteFounder(t *testing.T) {
 	collabPath := "/repos/" + org + "/" + repoName + "/collaborators/" + username
 	permPath := collabPath + "/permission"
 
-	// want is the role we set; legacyBack is what GitHub reports on the
-	// read-back (push collapses to the legacy "write" role).
-	cases := []struct {
-		want       string
-		legacyBack string
-	}{
-		{"push", "write"},
-		{"admin", "admin"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.want, func(t *testing.T) {
+	for _, want := range []string{"push", "admin", "pull"} {
+		t.Run(want, func(t *testing.T) {
 			var gotPutPath, gotMethod string
 			var gotBody map[string]any
+			var readBack bool
 			mux := http.NewServeMux()
 			mux.HandleFunc(permPath, func(w http.ResponseWriter, _ *http.Request) {
-				_ = json.NewEncoder(w).Encode(map[string]any{"permission": tc.legacyBack, "role_name": tc.want})
+				readBack = true
+				w.WriteHeader(http.StatusNotFound)
 			})
 			mux.HandleFunc(collabPath, func(w http.ResponseWriter, r *http.Request) {
 				gotPutPath = r.URL.Path
@@ -227,7 +183,7 @@ func TestInviteFounder(t *testing.T) {
 			client := newTestRESTClient(t, server)
 
 			var out bytes.Buffer
-			if err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, tc.want, false); err != nil {
+			if err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, want); err != nil {
 				t.Fatalf("inviteFounder returned error: %v", err)
 			}
 
@@ -237,17 +193,19 @@ func TestInviteFounder(t *testing.T) {
 			if gotPutPath != collabPath {
 				t.Errorf("path = %q, want %q", gotPutPath, collabPath)
 			}
-			if perm := gotBody["permission"]; perm != tc.want {
-				t.Errorf("collaborator permission = %v, want %q", perm, tc.want)
+			if perm := gotBody["permission"]; perm != want {
+				t.Errorf("collaborator permission = %v, want %q", perm, want)
+			}
+			if readBack {
+				t.Errorf("inviteFounder must not read the effective permission back (it races an unbounded window)")
 			}
 		})
 	}
 }
 
-// TestInviteFounder_VerificationFails proves the grant is verified, not
-// fire-and-forget: a read-back BELOW the wanted role (the grant that didn't
-// take) must return an actionable error naming the wanted and actual roles.
-func TestInviteFounder_VerificationFails(t *testing.T) {
+// TestInviteFounder_PropagatesGrantError proves a genuine grant failure (not a
+// read-back) still surfaces: the PUT itself erroring must return an error.
+func TestInviteFounder_PropagatesGrantError(t *testing.T) {
 	const (
 		org      = "cs50"
 		repoName = "cs50-fall-2026-hello-alice"
@@ -256,53 +214,17 @@ func TestInviteFounder_VerificationFails(t *testing.T) {
 	collabPath := "/repos/" + org + "/" + repoName + "/collaborators/" + username
 
 	mux := http.NewServeMux()
-	mux.HandleFunc(collabPath+"/permission", func(w http.ResponseWriter, _ *http.Request) {
-		// The admin grant didn't take — student is only push.
-		_ = json.NewEncoder(w).Encode(map[string]any{"permission": "write", "role_name": "push"})
-	})
 	mux.HandleFunc(collabPath, func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusNotFound) // e.g. not an org member
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": "Not Found"})
 	})
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	client := newTestRESTClient(t, server)
 
 	var out bytes.Buffer
-	err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, "admin", false)
-	if err == nil {
-		t.Fatalf("expected an error when the effective permission stays below admin after an admin grant, got nil")
-	}
-	if !strings.Contains(err.Error(), "admin") || !strings.Contains(err.Error(), "push") {
-		t.Errorf("error should name the wanted (admin) and actual (push) roles, got: %v", err)
-	}
-}
-
-// TestInviteFounder_OwnerTolerated proves an org owner can accept: the
-// self-downgrade to push is silently ignored (owner keeps admin), but with
-// isOwner set the read-back tolerates that residual admin instead of failing.
-func TestInviteFounder_OwnerTolerated(t *testing.T) {
-	const (
-		org      = "cs50"
-		repoName = "cs50-fall-2026-hello-alice"
-		username = "alice"
-	)
-	collabPath := "/repos/" + org + "/" + repoName + "/collaborators/" + username
-
-	mux := http.NewServeMux()
-	mux.HandleFunc(collabPath+"/permission", func(w http.ResponseWriter, _ *http.Request) {
-		// Owner can't self-downgrade; GitHub still reports admin.
-		_ = json.NewEncoder(w).Encode(map[string]any{"permission": "admin", "role_name": "admin"})
-	})
-	mux.HandleFunc(collabPath, func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	})
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
-	client := newTestRESTClient(t, server)
-
-	var out bytes.Buffer
-	if err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, "push", true); err != nil {
-		t.Fatalf("owner push grant reading back as admin should be tolerated, got: %v", err)
+	if err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, "push"); err == nil {
+		t.Fatalf("expected an error when the collaborator PUT fails, got nil")
 	}
 }
 
