@@ -2247,7 +2247,7 @@
       "failedHint": "This is often a transient GitHub error — run the action again to retry."
     },
     "bulkAccess": {
-      "menuLabel": "Set student repo access",
+      "menuLabel": "Update student repo access",
       "menuTitle": "Change every student's role on their own repository",
       "titleEmptyRoster": "No students have accepted yet",
       "title": "Set student repository access",
@@ -2590,7 +2590,7 @@
         "roleFor": "Role for {{username}}",
         "newRole": "Role for the new collaborator",
         "removeUser": "Remove {{username}}",
-        "save": "Save access",
+        "save": "Update access",
         "saveError": "Some changes could not be saved. Check the highlighted collaborators and Save again to retry.{{suffix}}"
       },
       "reuseShell": {
