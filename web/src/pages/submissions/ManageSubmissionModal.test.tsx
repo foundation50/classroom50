@@ -116,6 +116,58 @@ describe("ManageSubmissionModal", () => {
     expect(commitLinks.length).toBe(2)
   })
 
+  it("falls the commit action back to the graded snapshot when the default-branch tip is unresolved", () => {
+    // repoData lacks html_url/default_branch, so latestCommitHref is undefined;
+    // the commit action falls back to the scores.json `commit` URL.
+    repoData.mockReturnValue({
+      data: { created_at: "2026-06-01T09:00:00Z" },
+    })
+    const graded = "https://github.com/acme/cs101-hw1-alice/commit/abc123"
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{
+          ...individualAction,
+          commit: graded,
+          onManageAccess: vi.fn(),
+        }}
+      />,
+    )
+    expect(
+      screen
+        .getAllByRole("link")
+        .some((a) => a.getAttribute("href") === graded),
+    ).toBe(true)
+  })
+
+  it("disables the commit action when neither the tip nor a graded commit exists", () => {
+    // No repo tip and no scores.json commit: the row is a disabled button with
+    // the no-commit description rather than a link.
+    repoData.mockReturnValue({ data: { created_at: "2026-06-01T09:00:00Z" } })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{ ...individualAction, commit: null, onManageAccess: vi.fn() }}
+      />,
+    )
+    const commitRow = screen
+      .getAllByRole("button")
+      .find((b) => b.textContent?.includes("submissions.table.viewCommit"))
+    expect(commitRow).toBeTruthy()
+    expect(commitRow?.hasAttribute("disabled")).toBe(true)
+    expect(commitRow?.textContent).toContain("submissions.table.noCommit")
+  })
+
   it("lists collaborators beyond the owner (e.g. a group repo)", () => {
     collaboratorsData.mockReturnValue({
       data: [

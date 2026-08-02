@@ -257,10 +257,10 @@ export const RepoRowActions = ({
 }
 
 // The submission hub's body: every consolidated action as a labeled list row.
-// Simple actions (commit/details links, Review, Regrade, Download) run in place
-// via their existing components in `layout="list"`; the rich access/members
-// editors hand off — `onManageAccess` closes the hub and opens the dedicated
-// modal — so no dialog ever stacks on the hub.
+// Simple actions (commit/details links, Review, Regrade, Download) run in place;
+// the rich access/members editors open stacked on top of the hub (native
+// <dialog> nesting) via `onManageAccess`/`onManageMembers`, with the hub left
+// open underneath — see ManageSubmissionModal for the stacking rationale.
 //
 // Gating mirrors the old cluster: repo-only actions (Review, access, regrade,
 // download) disable only when no repo exists; submission-only links
@@ -282,8 +282,8 @@ export type SubmissionActionListProps = {
   release?: string | null
   emptyRepo: boolean
   displayName?: string
-  // Individual per-student Manage-access hand-off; omitted for group rows
-  // (access is managed through the group Members modal instead).
+  // Opens the individual per-student access editor (stacked on the hub);
+  // omitted for group rows (access is managed through the group Members editor).
   onManageAccess?: () => void
 }
 
