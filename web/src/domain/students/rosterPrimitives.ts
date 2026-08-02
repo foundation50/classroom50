@@ -83,6 +83,9 @@ export async function withRosterRewrite(
     const configBranch = await getConfigRepoBranch(client, org)
     const ref = await getBranchRef(client, org, configBranch)
     const commit = await getCommit(client, org, ref.object.sha)
+    // Read at the freshly-fetched branch HEAD (not a commit we just wrote), so
+    // a 404 here means roster.csv is genuinely absent, not read-your-own-write
+    // lag — surface it rather than masking a missing file.
     const currentCsv = await getRawFile(client, {
       org,
       path: rosterPath(classroom),
