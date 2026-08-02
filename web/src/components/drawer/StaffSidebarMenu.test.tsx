@@ -78,7 +78,7 @@ afterEach(() => {
 })
 
 describe("StaffSidebarMenu — RBAC nav affordances via can()", () => {
-  it("an teacher sees Roster and Settings", () => {
+  it("a teacher sees Roster and Settings", () => {
     classroomCtxMock.mockReturnValue(ctx())
     renderMenu()
     expect(hasRoster()).toBe(true)
@@ -92,7 +92,7 @@ describe("StaffSidebarMenu — RBAC nav affordances via can()", () => {
     expect(hasSettings()).toBe(false)
   })
 
-  it("an teacher previewing as student sees neither (downgrade-only clamp)", () => {
+  it("a teacher previewing as student sees neither (downgrade-only clamp)", () => {
     // role is the preview-clamped one; showStaffItems/canEditSettings key off it,
     // so a real teacher previewing as a student sees the student surface.
     classroomCtxMock.mockReturnValue(
