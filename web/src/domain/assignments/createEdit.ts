@@ -115,6 +115,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   release_assets: "managed",
   pass_threshold: "managed",
   student_permission: "managed",
+  repo_features: "managed",
   tests: "managed",
   // Written only by the CLI's `migrate`; the form never manages it, so it must
   // ride through a GUI edit untouched.
@@ -625,6 +626,26 @@ async function buildAssignmentEntry(
     if (effective !== defaultStudentPermission(mode)) {
       entry.student_permission = effective
     }
+  }
+
+  // repo_features: write only the keys the teacher set (undefined = inherit),
+  // and omit the block entirely when no key is set — mirroring runtime's
+  // omit-when-empty rule so an all-inherit assignment carries no repo_features.
+  const repoFeatures: NonNullable<Assignment["repo_features"]> = {}
+  if (input.repo_features?.issues !== undefined) {
+    repoFeatures.issues = input.repo_features.issues
+  }
+  if (input.repo_features?.wiki !== undefined) {
+    repoFeatures.wiki = input.repo_features.wiki
+  }
+  if (input.repo_features?.projects !== undefined) {
+    repoFeatures.projects = input.repo_features.projects
+  }
+  if (input.repo_features?.pull_requests !== undefined) {
+    repoFeatures.pull_requests = input.repo_features.pull_requests
+  }
+  if (Object.keys(repoFeatures).length > 0) {
+    entry.repo_features = repoFeatures
   }
 
   return { entry, needsTeamGrant }

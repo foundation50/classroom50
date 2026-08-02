@@ -13,6 +13,7 @@ import {
 // values through this module; the rest of the model's surface is imported from
 // assignmentFormModel directly.
 export { assignmentToFormValues } from "./assignmentFormModel"
+export { formValuesToRepoFeatures } from "./assignmentFormModel"
 
 type CreateAssignmentFormProps = {
   defaultValues?: Partial<CreateAssignmentFormValues>

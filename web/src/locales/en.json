@@ -967,6 +967,24 @@
           "admin": "Admin"
         }
       },
+      "repoFeatures": {
+        "heading": "Repository features",
+        "refresh": "Refresh template settings",
+        "help": "Whether each student repository has Wikis, Issues, Projects, and Pull requests enabled. Applied when a student accepts (new repositories only); use the gradebook to change repositories already created. Inheriting a private template also copies its Wiki/Issues/Projects content, so keep answer keys out of a template you inherit from.",
+        "overrideWarning": "These overrides apply to repositories created from now on — repositories students already accepted are not changed. Features left on \"Inherit\" follow the template at accept time, so editing the template later changes only future repositories (existing ones don't drift). Reconcile existing repositories with the bulk repository-features action (coming soon).",
+        "choices": {
+          "inherit": "Inherit from template",
+          "inheritLoading": "Inherit from template (checking…)",
+          "inheritOn": "Inherit from template (currently on)",
+          "inheritOff": "Inherit from template (currently off)",
+          "on": "On",
+          "off": "Off"
+        },
+        "issues": { "label": "Issues" },
+        "wiki": { "label": "Wiki" },
+        "projects": { "label": "Projects" },
+        "pull_requests": { "label": "Pull requests" }
+      },
       "advanced": "Advanced settings",
       "advancedHelp": "Optional grading and runtime settings. Blank fields use their documented defaults.",
       "dockerImage": "Docker image",

@@ -617,6 +617,95 @@ func TestParseAssignments_StudentPermissionRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseAssignments_RepoFeaturesRoundTrip(t *testing.T) {
+	// repo_features parses onto the struct (not Extra), preserves tri-state
+	// (explicit true/false vs absent = nil = inherit), and survives a
+	// re-encode/re-parse.
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "site",
+      "name": "Site",
+      "mode": "individual",
+      "autograder": "default",
+      "repo_features": { "issues": true, "wiki": false, "pull_requests": true }
+    },
+    {
+      "slug": "plain",
+      "name": "Plain",
+      "mode": "individual",
+      "autograder": "default"
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	rf := file.Assignments[0].RepoFeatures
+	if rf == nil {
+		t.Fatal("site.RepoFeatures = nil, want a populated block")
+	}
+	if rf.Issues == nil || !*rf.Issues {
+		t.Errorf("site.RepoFeatures.Issues = %v, want true", rf.Issues)
+	}
+	if rf.Wiki == nil || *rf.Wiki {
+		t.Errorf("site.RepoFeatures.Wiki = %v, want false", rf.Wiki)
+	}
+	if rf.Projects != nil {
+		t.Errorf("site.RepoFeatures.Projects = %v, want nil (absent = inherit)", rf.Projects)
+	}
+	if rf.PullRequests == nil || !*rf.PullRequests {
+		t.Errorf("site.RepoFeatures.PullRequests = %v, want true", rf.PullRequests)
+	}
+	if _, isExtra := file.Assignments[0].Extra["repo_features"]; isExtra {
+		t.Error("repo_features leaked into Extra (should be a known key)")
+	}
+	if file.Assignments[1].RepoFeatures != nil {
+		t.Errorf("plain.RepoFeatures = %v, want nil (field absent)", file.Assignments[1].RepoFeatures)
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"issues": true`) ||
+		!strings.Contains(string(encoded), `"wiki": false`) ||
+		!strings.Contains(string(encoded), `"pull_requests": true`) {
+		t.Errorf("encoded missing repo_features:\n%s", encoded)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	rf2 := again.Assignments[0].RepoFeatures
+	if rf2 == nil || rf2.Issues == nil || !*rf2.Issues || rf2.Wiki == nil || *rf2.Wiki || rf2.Projects != nil || rf2.PullRequests == nil || !*rf2.PullRequests {
+		t.Errorf("repo_features not stable across round-trip: %#v", rf2)
+	}
+}
+
+func TestParseAssignments_RepoFeaturesRejectsUnknownSubKey(t *testing.T) {
+	// The strict decoder on the known subset keeps repo_features closed
+	// (additionalProperties:false in the schema), so a typo'd sub-key is a hard
+	// parse error rather than being silently dropped or diverted to Extra.
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "site",
+      "name": "Site",
+      "mode": "individual",
+      "autograder": "default",
+      "repo_features": { "discussions": true }
+    }
+  ]
+}`)
+	if _, err := ParseAssignments(in); err == nil {
+		t.Error("ParseAssignments accepted an unknown repo_features sub-key, want a strict-decode error")
+	}
+}
+
 func TestValidateStudentPermission(t *testing.T) {
 	cases := []struct {
 		in      string

@@ -355,6 +355,15 @@ export type CreateAssignmentInput = {
   // the mode default (push individual / admin group). buildAssignmentEntry
   // omits it when it equals the default and clamps group up to admin.
   student_permission?: RepoPermission
+  // Per-assignment repo feature overrides (tri-state per key: undefined =
+  // inherit, true = force on, false = force off). buildAssignmentEntry omits
+  // the block when no key is set; accept resolves + applies it at fresh create.
+  repo_features?: {
+    issues?: boolean
+    wiki?: boolean
+    projects?: boolean
+    pull_requests?: boolean
+  }
   tests: AssignmentTestDraft[]
   // Whether the write path may attempt the owner-only template read-grant
   // (addRepositoryToTeam). Set from useCanAttemptTemplateGrant at the call site

@@ -3,6 +3,7 @@ import type { AssignmentMode, RepoPermission } from "@/types/classroom"
 import type { GitHubRepo } from "@/github-core/types"
 import { defaultStudentPermission } from "@/types/classroom"
 import { localizedError } from "@/types/localizedMessage"
+import { log } from "./accessPrimitives"
 
 // Grant the accepting student their role on their OWN repo. The student is the
 // repo creator (they ran POST /generate), so this PUT is a self-directed
@@ -114,17 +115,95 @@ export function assertAssignmentModeCoherent(
   }
 }
 
+// The student-repo features accept controls. Kept as a narrow shape so
+// resolveRepoFeaturesPatch and patchRepoSurface stay in lockstep with the
+// assignments-v1 `repo_features` object and the Go RepoFeatures struct.
+export type RepoFeatures = {
+  issues?: boolean
+  wiki?: boolean
+  projects?: boolean
+  pull_requests?: boolean
+}
+
+// The GitHub PATCH body keys, resolved from an assignment's repo_features. Only
+// the keys present here are sent; an empty object means "send no PATCH".
+export type RepoFeaturePatch = {
+  has_issues?: boolean
+  has_wiki?: boolean
+  has_projects?: boolean
+  has_pull_requests?: boolean
+}
+
+// Resolve an assignment's repo_features into the PATCH body to apply at accept
+// time. Single per-key rule, shared with the CLI (accept.go):
+//
+//   - explicit true/false -> that value is sent.
+//   - absent + templated  -> the TEMPLATE's current has_<key> (from
+//     `templateFeatures`), because GitHub's POST /generate does NOT copy the
+//     template's feature settings — a generated repo gets GitHub defaults, so
+//     "inherit" must actively re-apply the template's value. When the template
+//     read is unavailable (null / key missing), the key is omitted (fall back
+//     to the generated repo's GitHub default rather than guessing).
+//   - absent + template-less -> false (the code-only default).
+//
+// `templateFeatures` is the template repo's resolved has_* (from GET /repos on
+// the template), or null when there's no template / the read failed. Only keys
+// present in the returned patch are sent; an empty object means "send no PATCH".
+export function resolveRepoFeaturesPatch(
+  features: RepoFeatures | undefined,
+  opts: { templated: boolean; templateFeatures?: RepoFeaturePatch | null },
+): RepoFeaturePatch {
+  const patch: RepoFeaturePatch = {}
+  const resolveKey = (
+    value: boolean | undefined,
+    templateValue: boolean | undefined,
+  ): boolean | undefined => {
+    if (value !== undefined) return value // explicit on/off wins
+    if (!opts.templated) return false // template-less: code-only default
+    return templateValue // inherit the template's live value (undefined -> omit)
+  }
+  const tf = opts.templateFeatures ?? undefined
+  const issues = resolveKey(features?.issues, tf?.has_issues)
+  const wiki = resolveKey(features?.wiki, tf?.has_wiki)
+  const projects = resolveKey(features?.projects, tf?.has_projects)
+  const pullRequests = resolveKey(
+    features?.pull_requests,
+    tf?.has_pull_requests,
+  )
+  if (issues !== undefined) patch.has_issues = issues
+  if (wiki !== undefined) patch.has_wiki = wiki
+  if (projects !== undefined) patch.has_projects = projects
+  if (pullRequests !== undefined) patch.has_pull_requests = pullRequests
+  return patch
+}
+
+// Apply the resolved repo-feature PATCH to a just-created student repo. Sends
+// the PATCH only when at least one key is set; an empty patch (templated +
+// all-inherit) skips the request entirely so features carry through from
+// POST /generate. Fail-open: a features PATCH can be rejected by org policy
+// (e.g. org-wide repository-projects disabled 422s has_projects:true), and this
+// runs inside the throwing accept "access" step — so a failure is logged and
+// swallowed rather than stranding the student on a half-provisioned repo. The
+// feature override is best-effort (GitHub is the real enforcer); the founder
+// grant that follows is the load-bearing step.
 export async function patchRepoSurface(
   client: GitHubClient,
   owner: string,
   repo: string,
+  patch: RepoFeaturePatch,
 ) {
-  await client.request<GitHubRepo>(`/repos/${owner}/${repo}`, {
-    method: "PATCH",
-    body: {
-      has_issues: false,
-      has_projects: false,
-      has_wiki: false,
-    },
-  })
+  if (Object.keys(patch).length === 0) return
+  try {
+    await client.request<GitHubRepo>(`/repos/${owner}/${repo}`, {
+      method: "PATCH",
+      body: patch,
+    })
+  } catch (err) {
+    log.warn("accept: repo-feature PATCH failed (non-fatal)", {
+      owner,
+      repo,
+      patch,
+      err,
+    })
+  }
 }

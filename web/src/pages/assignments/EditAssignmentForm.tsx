@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 import CreateAssignmentForm, {
   assignmentToFormValues,
+  formValuesToRepoFeatures,
 } from "./CreateAssignmentForm"
 import { type CreateAssignmentResult } from "@/domain/assignments"
 import { GitHubAPIError } from "@/github-core/errors"
@@ -94,6 +95,7 @@ const EditAssignmentForm = ({
                   ? values.pass_threshold
                   : undefined,
                 student_permission: values.student_permission || undefined,
+                repo_features: formValuesToRepoFeatures(values),
                 classroom,
                 tests: values.tests,
                 slug: assignment,

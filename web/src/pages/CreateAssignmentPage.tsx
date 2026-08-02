@@ -8,7 +8,9 @@ import RequireRole from "@/components/RequireRole"
 import { AnimatedAlert, Button } from "@/components/ui"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
-import CreateAssignmentForm from "@/pages/assignments/CreateAssignmentForm"
+import CreateAssignmentForm, {
+  formValuesToRepoFeatures,
+} from "@/pages/assignments/CreateAssignmentForm"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useCreateAssignment } from "@/hooks/mutations/useCreateAssignment"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -143,6 +145,7 @@ const CreateAssignmentPage = () => {
                   ? values.pass_threshold
                   : undefined,
                 student_permission: values.student_permission || undefined,
+                repo_features: formValuesToRepoFeatures(values),
                 classroom,
                 tests: values.tests,
               },
