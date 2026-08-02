@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 import type { GitHubClient } from "@/github-core/client"
-import { resolveRepoFeaturesPatch, patchRepoSurface } from "./permissions"
+import {
+  resolveRepoFeaturesPatch,
+  explicitRepoFeaturesPatch,
+  patchRepoSurface,
+} from "./permissions"
 
 describe("resolveRepoFeaturesPatch", () => {
   it("templated + no override + no template read -> omit all (GitHub defaults)", () => {
@@ -100,5 +104,54 @@ describe("patchRepoSurface", () => {
     await expect(
       patchRepoSurface(client, "org", "repo", { has_projects: true }),
     ).resolves.toBeUndefined()
+  })
+
+  it("retries with the forced-only body when the full PATCH is rejected", async () => {
+    // Full body inherits has_projects:true (org-banned) plus a forced
+    // has_issues:false; the first PATCH 422s, the retry sends only the forced
+    // key and lands, so the teacher's override is not silently dropped.
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("422 projects disabled"))
+      .mockResolvedValueOnce({})
+    const client = { request } as unknown as GitHubClient
+    await patchRepoSurface(
+      client,
+      "org",
+      "repo",
+      { has_issues: false, has_projects: true },
+      { has_issues: false },
+    )
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(request).toHaveBeenLastCalledWith("/repos/org/repo", {
+      method: "PATCH",
+      body: { has_issues: false },
+    })
+  })
+
+  it("does not retry when the explicit subset equals the full body", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("422"))
+    const client = { request } as unknown as GitHubClient
+    // explicit == full (all keys forced), so a retry would be identical -> skip.
+    await patchRepoSurface(
+      client,
+      "org",
+      "repo",
+      { has_issues: false },
+      { has_issues: false },
+    )
+    expect(request).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("explicitRepoFeaturesPatch", () => {
+  it("returns only the teacher-forced keys, omitting inherited/default ones", () => {
+    expect(
+      explicitRepoFeaturesPatch({ issues: false, pull_requests: true }),
+    ).toEqual({ has_issues: false, has_pull_requests: true })
+  })
+
+  it("returns an empty patch when nothing is forced", () => {
+    expect(explicitRepoFeaturesPatch(undefined)).toEqual({})
   })
 })

@@ -46,8 +46,9 @@ import {
   assertAssignmentModeCoherent,
   patchRepoSurface,
   resolveRepoFeaturesPatch,
-  type RepoFeaturePatch,
+  explicitRepoFeaturesPatch,
 } from "./permissions"
+import type { RepoFeaturePatch } from "@/github-core/mutations"
 import { createAssignmentRepo } from "./repoCreation"
 import type { LocalizedMessage } from "@/types/localizedMessage"
 
@@ -146,6 +147,12 @@ type AcceptAssignmentResult = {
   cloneCommand: string
 }
 
+// The resolved repo-feature PATCH plus its teacher-forced subset. `full` is
+// sent first; on rejection `patchRepoSurface` retries with `explicit` so an
+// org-banned inherited key can't drop a forced override. An all-inherit
+// assignment carries `{ full: {}, explicit: {} }` (no PATCH).
+type RepoFeatureApply = { full: RepoFeaturePatch; explicit: RepoFeaturePatch }
+
 // The tracked "access" step: patch the repo surface + grant the founder role
 // (both idempotent upserts). Throws on failure so the checklist surfaces the
 // recovery guidance — shared by the templated setup path and the bare-accept
@@ -157,9 +164,11 @@ function grantFounderAccessStep(params: {
   username: string
   mode: AssignmentMode
   studentPermission?: RepoPermission
-  // Resolved repo-feature PATCH to apply before the founder grant. Empty ({})
-  // skips the request (templated + all-inherit); best-effort/fail-open.
-  repoFeatures: RepoFeaturePatch
+  // Resolved repo-feature PATCH to apply before the founder grant. `full` is
+  // every resolved key; `explicit` is the teacher-forced subset used as the
+  // fail-open retry body. Empty `full` ({}) skips the request (templated +
+  // all-inherit); best-effort/fail-open.
+  repoFeatures: RepoFeatureApply
   onStepUpdate?: OnAcceptStepUpdate
 }) {
   const {
@@ -184,7 +193,13 @@ function grantFounderAccessStep(params: {
       onStepUpdate,
     },
     async () => {
-      await patchRepoSurface(client, org, repo, repoFeatures)
+      await patchRepoSurface(
+        client,
+        org,
+        repo,
+        repoFeatures.full,
+        repoFeatures.explicit,
+      )
       await addFounderCollaborator({
         client,
         owner: org,
@@ -207,7 +222,7 @@ async function provisionAcceptedRepo(params: {
   mode: AssignmentMode
   studentPermission?: RepoPermission
   // Resolved repo-feature PATCH, forwarded to the founder-access step.
-  repoFeatures: RepoFeaturePatch
+  repoFeatures: RepoFeatureApply
   branch: string
   metadataYaml: string
   autogradeYaml: string
@@ -556,10 +571,13 @@ export async function acceptAssignment(params: {
       })
     }
   }
-  const repoFeatures = resolveRepoFeaturesPatch(assignment.repo_features, {
-    templated: Boolean(assignment.template),
-    templateFeatures,
-  })
+  const repoFeatures: RepoFeatureApply = {
+    full: resolveRepoFeaturesPatch(assignment.repo_features, {
+      templated: Boolean(assignment.template),
+      templateFeatures,
+    }),
+    explicit: explicitRepoFeaturesPatch(assignment.repo_features),
+  }
 
   // empty_repo assignment: the repo is created bare (no commits) and NO
   // control files are ever committed, so the autograder resolution and the
@@ -902,7 +920,7 @@ export async function acceptAssignment(params: {
       // later toggle. Pass an empty patch so patchRepoSurface no-ops, matching
       // the healthy already-accepted branch and both CLIs (which skip the PATCH
       // on 422-already-exists).
-      repoFeatures: {},
+      repoFeatures: { full: {}, explicit: {} },
       branch: created.repo.default_branch || sourceBranch,
       metadataYaml,
       autogradeYaml,

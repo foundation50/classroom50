@@ -33,13 +33,29 @@ func TestResolveRepoFeaturePatchBody(t *testing.T) {
 			features:  nil,
 			templated: true,
 			template: &GeneratedRepo{
-				HasIssues: false, HasWiki: true, HasProjects: false, HasPullRequests: false,
+				HasIssues: false, HasWiki: true, HasProjects: false, HasPullRequests: boolPtr(false),
 			},
 			want: map[string]any{
 				"has_issues":        false,
 				"has_wiki":          true,
 				"has_projects":      false,
 				"has_pull_requests": false,
+			},
+		},
+		{
+			// GitHub's repo object omits has_pull_requests, so a template GET
+			// decodes it to a nil pointer. On inherit that key must be OMITTED
+			// (not forced false), matching the web resolveRepoFeaturesPatch.
+			name:      "templated + no override omits has_pull_requests when the template GET lacks it",
+			features:  nil,
+			templated: true,
+			template: &GeneratedRepo{
+				HasIssues: true, HasWiki: false, HasProjects: true, HasPullRequests: nil,
+			},
+			want: map[string]any{
+				"has_issues":   true,
+				"has_wiki":     false,
+				"has_projects": true,
 			},
 		},
 		{
@@ -57,7 +73,7 @@ func TestResolveRepoFeaturePatchBody(t *testing.T) {
 			name:      "explicit issues:false on a templated assignment is sent",
 			features:  &assignments.RepoFeatures{Issues: boolPtr(false)},
 			templated: true,
-			template:  &GeneratedRepo{HasIssues: true, HasWiki: true, HasProjects: true, HasPullRequests: true},
+			template:  &GeneratedRepo{HasIssues: true, HasWiki: true, HasProjects: true, HasPullRequests: boolPtr(true)},
 			want: map[string]any{
 				// explicit false overrides the template's true; the other three
 				// inherit the template's true.
@@ -71,7 +87,7 @@ func TestResolveRepoFeaturePatchBody(t *testing.T) {
 			name:      "explicit wins over template; absent keys inherit template",
 			features:  &assignments.RepoFeatures{Issues: boolPtr(true)},
 			templated: true,
-			template:  &GeneratedRepo{HasIssues: false, HasWiki: false, HasProjects: false, HasPullRequests: false},
+			template:  &GeneratedRepo{HasIssues: false, HasWiki: false, HasProjects: false, HasPullRequests: boolPtr(false)},
 			want: map[string]any{
 				"has_issues":        true,
 				"has_wiki":          false,
@@ -93,7 +109,7 @@ func TestResolveRepoFeaturePatchBody(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := resolveRepoFeaturePatchBody(tc.features, tc.templated, tc.template)
+			got, _ := resolveRepoFeaturePatchBody(tc.features, tc.templated, tc.template)
 			if len(got) != len(tc.want) {
 				t.Fatalf("body keys = %v, want %v", got, tc.want)
 			}
@@ -103,6 +119,25 @@ func TestResolveRepoFeaturePatchBody(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// resolveRepoFeaturePatchBody's second return is the explicit-only body: the
+// keys the teacher forced (non-nil features.*), so the caller can retry with
+// just those when the full body (including inherited keys) is rejected.
+func TestResolveRepoFeaturePatchBody_ExplicitSubset(t *testing.T) {
+	// Templated inherit with one forced key: full carries all inherited + the
+	// forced key; explicit carries only the forced key.
+	full, explicit := resolveRepoFeaturePatchBody(
+		&assignments.RepoFeatures{Issues: boolPtr(false)},
+		true,
+		&GeneratedRepo{HasIssues: true, HasWiki: true, HasProjects: true, HasPullRequests: boolPtr(true)},
+	)
+	if len(full) != 4 {
+		t.Errorf("full body = %v, want all four keys", full)
+	}
+	if len(explicit) != 1 || explicit["has_issues"] != false {
+		t.Errorf("explicit body = %v, want only has_issues:false", explicit)
 	}
 }
 
@@ -279,6 +314,82 @@ func TestTemplatedFeaturePatchFailsOpen(t *testing.T) {
 	}
 	if branch != "main" {
 		t.Errorf("branch = %q, want main (generate echo, since PATCH failed)", branch)
+	}
+}
+
+// When the full PATCH (inherited + forced keys) is rejected because an org bans
+// an INHERITED key (e.g. org-wide projects disabled), accept must retry with
+// only the teacher-forced keys so the forced override still lands. Here the
+// template has everything ON (so inherit resolves has_projects:true, which the
+// org rejects), while the teacher forced issues OFF — the retry must send
+// exactly {has_issues:false} and succeed.
+func TestTemplatedFeaturePatchRetriesWithForcedKeysOnly(t *testing.T) {
+	tmpl := assignments.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "main"}
+	var patchBodies []map[string]any
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/cs50/hello-template/generate", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"full_name":      "o/cs-principles-hello-alice",
+			"html_url":       "https://github.com/o/cs-principles-hello-alice",
+			"default_branch": "main",
+		})
+	})
+	mux.HandleFunc("/repos/cs50/hello-template", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"full_name":         "cs50/hello-template",
+			"default_branch":    "main",
+			"has_issues":        true,
+			"has_wiki":          true,
+			"has_projects":      true,
+			"has_pull_requests": true,
+		})
+	})
+	mux.HandleFunc("/repos/o/cs-principles-hello-alice", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch {
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			patchBodies = append(patchBodies, body)
+			// Reject any body that tries to enable projects (org-wide disabled).
+			if v, ok := body["has_projects"].(bool); ok && v {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]string{"message": "Projects are disabled for this organization"})
+				return
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"full_name":      "o/cs-principles-hello-alice",
+			"html_url":       "https://github.com/o/cs-principles-hello-alice",
+			"default_branch": "main",
+		})
+	})
+	mux.HandleFunc("/repos/o/cs-principles-hello-alice/branches", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]string{{"name": "main"}})
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	var out bytes.Buffer
+	_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(
+		newTestRESTClient(t, server), ui.NewForced(&out, false), false,
+		"alice", "cs-principles", "hello", "o", tmpl,
+		&assignments.RepoFeatures{Issues: boolPtr(false)}, // forced OFF; projects inherited ON
+	)
+	if err != nil {
+		t.Fatalf("accept must not fail: %v", err)
+	}
+	if len(patchBodies) != 2 {
+		t.Fatalf("expected 2 PATCH attempts (full then forced-only), got %d: %v", len(patchBodies), patchBodies)
+	}
+	// First attempt is the full body (has_projects:true -> 422).
+	if v, ok := patchBodies[0]["has_projects"].(bool); !ok || !v {
+		t.Errorf("first PATCH = %v, want the full body with has_projects:true", patchBodies[0])
+	}
+	// Retry carries ONLY the teacher-forced key and lands.
+	if len(patchBodies[1]) != 1 {
+		t.Errorf("retry PATCH = %v, want only the forced key", patchBodies[1])
+	}
+	if v, ok := patchBodies[1]["has_issues"].(bool); !ok || v {
+		t.Errorf("retry PATCH has_issues = %v, want false (the teacher's forced override survives)", patchBodies[1]["has_issues"])
 	}
 }
 

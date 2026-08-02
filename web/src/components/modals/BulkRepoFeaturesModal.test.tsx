@@ -117,4 +117,33 @@ describe("BulkRepoFeaturesModal", () => {
     )
     expect(mutateAsync).toHaveBeenCalledTimes(2)
   })
+
+  it("stops launching on a secondary rate-limit and reports the rest as deferred", async () => {
+    // First write hits a 429 (isRateLimited); the modal flips rateLimited=true,
+    // returns that repo deferred, and short-circuits remaining owners to
+    // deferred rather than launching more writes. Uses more owners than the
+    // read concurrency so at least one is provably never launched.
+    const owners = Array.from({ length: 12 }, (_, i) => `student${i}`)
+    mutateAsync.mockImplementation(() => Promise.reject(apiError(429)))
+    renderModal(owners)
+    const issues = screen
+      .getByText("assignments.form.repoFeatures.issues.label")
+      .closest("label")!
+      .querySelector("select")!
+    fireEvent.change(issues, { target: { value: "on" } })
+    fireEvent.click(screen.getByText(applyBtn))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.bulkFeatures.resultHeadlineThrottled"),
+      ).toBeTruthy(),
+    )
+    // The throttled result surfaces a deferred section...
+    expect(
+      screen.getByText("submissions.bulkFeatures.deferredSection"),
+    ).toBeTruthy()
+    // ...and the fan-out stopped launching new writes: strictly fewer than the
+    // full roster were sent (the un-launched remainder is deferred).
+    expect(mutateAsync.mock.calls.length).toBeLessThan(owners.length)
+  })
 })

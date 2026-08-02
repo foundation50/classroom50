@@ -968,10 +968,16 @@ type GeneratedRepo struct {
 	Private       bool   `json:"private"`
 	DefaultBranch string `json:"default_branch"`
 
-	HasIssues       bool `json:"has_issues"`
-	HasProjects     bool `json:"has_projects"`
-	HasWiki         bool `json:"has_wiki"`
-	HasPullRequests bool `json:"has_pull_requests"`
+	HasIssues   bool `json:"has_issues"`
+	HasProjects bool `json:"has_projects"`
+	HasWiki     bool `json:"has_wiki"`
+	// GitHub's repository object does NOT expose a has_pull_requests toggle, so
+	// a GET /repos response omits it. A pointer keeps "absent" (nil) distinct
+	// from "explicitly false": on templated-inherit an absent template field is
+	// omitted from the PATCH, matching the web resolveRepoFeaturesPatch (which
+	// omits an undefined key) — a non-pointer bool would decode the omitted
+	// field to false and force has_pull_requests:false, diverging from web.
+	HasPullRequests *bool `json:"has_pull_requests"`
 }
 
 // resolveRepoFeaturePatchBody builds the accept-time repo-feature PATCH body
@@ -987,46 +993,111 @@ type GeneratedRepo struct {
 //     to the generated repo's GitHub default).
 //   - nil + template-less   -> false (the code-only default).
 //
+// It returns two bodies: `full` (every resolved key) and `explicit` (only the
+// keys the teacher forced via a non-nil features.*). The caller sends `full`
+// first, then falls back to `explicit` if that PATCH is rejected — an org that
+// bans one INHERITED key (e.g. org-wide projects disabled) must not drop the
+// teacher's co-resolved forced value in the same all-or-nothing body.
+//
 // templateFeatures is the template repo's current settings (from a GET on the
 // template after generate), or nil when there's no template / the read failed.
-func resolveRepoFeaturePatchBody(features *assignments.RepoFeatures, templated bool, templateFeatures *GeneratedRepo) map[string]any {
+func resolveRepoFeaturePatchBody(features *assignments.RepoFeatures, templated bool, templateFeatures *GeneratedRepo) (full, explicit map[string]any) {
 	var issues, wiki, projects, pullRequests *bool
 	if features != nil {
 		issues, wiki, projects, pullRequests = features.Issues, features.Wiki, features.Projects, features.PullRequests
 	}
-	body := map[string]any{}
+	full = map[string]any{}
+	explicit = map[string]any{}
 	// resolve returns (value, send?). An explicit override wins; a template-less
 	// absent key is explicit false; a templated absent key inherits the
-	// template's live value (omitted when the template read is unavailable).
-	resolve := func(value *bool, templateValue func(*GeneratedRepo) bool) (bool, bool) {
+	// template's live value (omitted when the template read is unavailable, and
+	// for has_pull_requests always omitted since GitHub's repo object has no
+	// such field). templateValue returns (value, present?) so a nil template
+	// pointer omits rather than forcing false.
+	resolve := func(value *bool, templateValue func(*GeneratedRepo) (bool, bool)) (val bool, send, isExplicit bool) {
 		if value != nil {
-			return *value, true
+			return *value, true, true
 		}
 		if !templated {
-			return false, true // template-less: code-only default
+			return false, true, false // template-less: code-only default
 		}
 		if templateFeatures == nil {
-			return false, false // inherit but no template read: omit (GitHub default)
+			return false, false, false // inherit but no template read: omit
 		}
-		return templateValue(templateFeatures), true // inherit the template's value
+		tv, present := templateValue(templateFeatures)
+		return tv, present, false
 	}
-	if v, set := resolve(issues, func(g *GeneratedRepo) bool { return g.HasIssues }); set {
-		body["has_issues"] = v
+	apply := func(key string, value *bool, templateValue func(*GeneratedRepo) (bool, bool)) {
+		v, send, isExplicit := resolve(value, templateValue)
+		if send {
+			full[key] = v
+		}
+		if isExplicit {
+			explicit[key] = v
+		}
 	}
-	if v, set := resolve(wiki, func(g *GeneratedRepo) bool { return g.HasWiki }); set {
-		body["has_wiki"] = v
+	apply("has_issues", issues, func(g *GeneratedRepo) (bool, bool) { return g.HasIssues, true })
+	apply("has_wiki", wiki, func(g *GeneratedRepo) (bool, bool) { return g.HasWiki, true })
+	apply("has_projects", projects, func(g *GeneratedRepo) (bool, bool) { return g.HasProjects, true })
+	apply("has_pull_requests", pullRequests, func(g *GeneratedRepo) (bool, bool) {
+		if g.HasPullRequests == nil {
+			return false, false // GitHub omits it -> nothing to inherit
+		}
+		return *g.HasPullRequests, true
+	})
+	return full, explicit
+}
+
+// patchRepoFeatures applies the resolved repo-feature PATCH best-effort. It
+// sends `full` (all resolved keys); if that is rejected it retries with
+// `explicit` (teacher-forced keys only) so an org that bans one inherited key
+// can't silently drop a forced override. Returns the successful PATCH echo's
+// GeneratedRepo (or nil when nothing was sent / both attempts failed). Fail-open
+// by contract — the caller keeps the create/generate echo on a nil return.
+func patchRepoFeatures(client githubapi.Client, u *ui.UI, verbose bool, org, repo string, full, explicit map[string]any) *GeneratedRepo {
+	patchPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(repo))
+	attempt := func(body map[string]any) (*GeneratedRepo, error) {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("patch body encode error: %w", err)
+		}
+		var updated GeneratedRepo
+		if err := client.Patch(patchPath, bytes.NewReader(encoded), &updated); err != nil {
+			return nil, err
+		}
+		return &updated, nil
 	}
-	if v, set := resolve(projects, func(g *GeneratedRepo) bool { return g.HasProjects }); set {
-		body["has_projects"] = v
+	if len(full) == 0 {
+		return nil
 	}
-	if v, set := resolve(pullRequests, func(g *GeneratedRepo) bool { return g.HasPullRequests }); set {
-		body["has_pull_requests"] = v
+	updated, err := attempt(full)
+	if err == nil {
+		return updated
 	}
-	return body
+	// Fail-open: a repo-feature PATCH is best-effort (an org that disables a
+	// feature org-wide rejects forcing it on), so a failure must not fail an
+	// otherwise-successful accept. Before giving up, retry with just the
+	// teacher-forced keys so a rejected INHERITED key doesn't drop a forced one.
+	if len(explicit) > 0 && len(explicit) < len(full) {
+		if verbose {
+			u.Detail("repo-feature PATCH for %s/%s failed; retrying with forced keys only: %v", org, repo, err)
+		}
+		if updated, retryErr := attempt(explicit); retryErr == nil {
+			return updated
+		} else {
+			err = retryErr
+		}
+	}
+	u.Warn("created %s/%s but could not apply repo features (non-fatal): %v", org, repo, err)
+	return nil
 }
 
 // createTemplatedPrivateAssignmentRepoInOrg generates a private repo from the
-// entry's template and disables issues/projects/wiki. 404 on generate →
+// entry's template and applies the assignment's tri-state repo_features
+// (issues/wiki/projects/pull_requests) best-effort via PATCH: an absent
+// ("inherit") key re-applies the template's live setting (GitHub's /generate
+// does NOT copy feature flags), an explicit true/false forces it. Fail-open —
+// a rejected feature PATCH never fails accept. 404 on generate →
 // cross-org visibility message (template not readable by the student).
 // 422-already-exists → alreadyExisted=true and the PATCH is skipped so
 // re-runs don't disturb an existing repo.
@@ -1104,41 +1175,25 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 	} else if verbose {
 		u.Detail("could not read template %s/%s features; inherited keys fall back to GitHub defaults: %v", tmpl.Owner, tmpl.Repo, err)
 	}
-	featureBody := resolveRepoFeaturePatchBody(features, true /* templated */, templateFeatures)
+	fullBody, explicitBody := resolveRepoFeaturePatchBody(features, true /* templated */, templateFeatures)
 
 	// The generate echo's default_branch anchors the shim/commit ref. When the
 	// PATCH is skipped there is no PATCH echo, so start from the generate
 	// response; a PATCH echo (when we send one) overrides it below.
 	genBranch := created.DefaultBranch
 
-	if len(featureBody) > 0 {
-		patchBody, err := json.Marshal(featureBody)
-		if err != nil {
-			return "", "", "", false, fmt.Errorf("patch body encode error: %w", err)
+	if updated := patchRepoFeatures(client, u, verbose, org, newRepoName, fullBody, explicitBody); updated != nil {
+		if verbose {
+			u.Detail("created private repo %s, applied repo features: %s",
+				updated.FullName, updated.HTMLURL)
 		}
-
-		patchPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
-
-		var updated GeneratedRepo
-		if err := client.Patch(patchPath, bytes.NewReader(patchBody), &updated); err != nil {
-			// Fail-open: a repo-feature PATCH is best-effort (an org that disables
-			// a feature org-wide rejects forcing it on), so a failure must not
-			// fail an otherwise-successful accept. Warn and keep the generate
-			// echo's default_branch. Mirrors the web patchRepoSurface contract.
-			u.Warn("created %s/%s but could not apply repo features (non-fatal): %v", org, newRepoName, err)
-		} else {
-			if verbose {
-				u.Detail("created private repo %s, applied repo features: %s",
-					updated.FullName, updated.HTMLURL)
-			}
-			// Prefer the PATCH response's default_branch — a template generated
-			// into a `master`-defaulting org yields a `master` repo regardless of
-			// the template's own branch name.
-			if updated.DefaultBranch != "" {
-				genBranch = updated.DefaultBranch
-			}
+		// Prefer the PATCH response's default_branch — a template generated
+		// into a `master`-defaulting org yields a `master` repo regardless of
+		// the template's own branch name.
+		if updated.DefaultBranch != "" {
+			genBranch = updated.DefaultBranch
 		}
-	} else if verbose {
+	} else if len(fullBody) == 0 && verbose {
 		u.Detail("created private repo %s, inheriting template repo features: %s",
 			created.FullName, created.HTMLURL)
 	}
@@ -1162,9 +1217,11 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 // commits and no branches at all — the caller must not attempt any commit.
 // Returns the repo's default_branch so the shim caller commits onto the right
 // ref (for a no-auto_init repo it is only GitHub's configured default, which
-// materializes on the student's first push). issues/projects/wiki are disabled
-// like the templated path. 422-already-exists → alreadyExisted=true and the
-// PATCH is skipped so re-runs don't disturb an existing repo.
+// materializes on the student's first push). Applies the assignment's tri-state
+// repo_features best-effort via PATCH (a template-less assignment resolves an
+// absent key to off, the code-only default; an explicit true/false forces it),
+// fail-open like the templated path. 422-already-exists → alreadyExisted=true
+// and the PATCH is skipped so re-runs don't disturb an existing repo.
 func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbose bool, username, classroom, assignment, org string, autoInit bool, features *assignments.RepoFeatures) (htmlURL, fullName, defaultBranch string, alreadyExisted bool, err error) {
 	newRepoName := reponame.Name(classroom, assignment, username)
 	createBody, err := json.Marshal(map[string]any{
@@ -1202,25 +1259,14 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 	}
 
 	// Template-less: absent keys resolve to explicit false (code-only default),
-	// so this body always carries a key for every feature unless the teacher
+	// so the full body always carries a key for every feature unless the teacher
 	// forced some on.
-	patchBody, err := json.Marshal(resolveRepoFeaturePatchBody(features, false /* templated */, nil))
-	if err != nil {
-		return "", "", "", false, fmt.Errorf("patch body encode error: %w", err)
-	}
-
-	patchPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
+	fullBody, explicitBody := resolveRepoFeaturePatchBody(features, false /* templated */, nil)
 
 	// Default to the create response; a successful PATCH echo overrides it.
 	htmlURL, fullName, defaultBranch = created.HTMLURL, created.FullName, defaultBranchOrMain(created.DefaultBranch)
 
-	var updated GeneratedRepo
-	if err := client.Patch(patchPath, bytes.NewReader(patchBody), &updated); err != nil {
-		// Fail-open (mirrors the templated path and the web patchRepoSurface):
-		// a best-effort repo-feature PATCH must not fail an otherwise-successful
-		// accept. Warn and keep the create response's coordinates.
-		u.Warn("created %s/%s but could not apply repo features (non-fatal): %v", org, newRepoName, err)
-	} else {
+	if updated := patchRepoFeatures(client, u, verbose, org, newRepoName, fullBody, explicitBody); updated != nil {
 		htmlURL, fullName, defaultBranch = updated.HTMLURL, updated.FullName, defaultBranchOrMain(updated.DefaultBranch)
 		if verbose {
 			kind := "empty private repo (template-less)"

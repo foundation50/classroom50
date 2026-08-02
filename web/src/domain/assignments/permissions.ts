@@ -1,6 +1,7 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { AssignmentMode, RepoPermission } from "@/types/classroom"
 import type { GitHubRepo } from "@/github-core/types"
+import type { RepoFeaturePatch } from "@/github-core/mutations"
 import { defaultStudentPermission } from "@/types/classroom"
 import { localizedError } from "@/types/localizedMessage"
 import { log } from "./accessPrimitives"
@@ -125,14 +126,10 @@ export type RepoFeatures = {
   pull_requests?: boolean
 }
 
-// The GitHub PATCH body keys, resolved from an assignment's repo_features. Only
-// the keys present here are sent; an empty object means "send no PATCH".
-export type RepoFeaturePatch = {
-  has_issues?: boolean
-  has_wiki?: boolean
-  has_projects?: boolean
-  has_pull_requests?: boolean
-}
+// The GitHub PATCH body keys are single-sourced as RepoFeaturePatch in
+// github-core/mutations/collaborators (re-exported via @/github-core/mutations);
+// domain -> github-core is a permitted edge, so this file imports rather than
+// re-declaring the shape. Only the keys present are sent; {} means no PATCH.
 
 // Resolve an assignment's repo_features into the PATCH body to apply at accept
 // time. Single per-key rule, shared with the CLI (accept.go):
@@ -177,6 +174,24 @@ export function resolveRepoFeaturesPatch(
   return patch
 }
 
+// The explicit-only subset of a repo_features PATCH: only the keys the teacher
+// FORCED (a non-undefined `features.*`), never the inherited/default ones. Used
+// as the fail-open retry body — an org that bans one INHERITED key (e.g.
+// org-wide projects disabled) must not drop the teacher's co-resolved forced
+// value in the same all-or-nothing PATCH.
+export function explicitRepoFeaturesPatch(
+  features: RepoFeatures | undefined,
+): RepoFeaturePatch {
+  const patch: RepoFeaturePatch = {}
+  if (features?.issues !== undefined) patch.has_issues = features.issues
+  if (features?.wiki !== undefined) patch.has_wiki = features.wiki
+  if (features?.projects !== undefined) patch.has_projects = features.projects
+  if (features?.pull_requests !== undefined) {
+    patch.has_pull_requests = features.pull_requests
+  }
+  return patch
+}
+
 // Apply the resolved repo-feature PATCH to a just-created student repo. Sends
 // the PATCH only when at least one key is set; an empty patch (templated +
 // all-inherit) skips the request entirely so features carry through from
@@ -186,24 +201,45 @@ export function resolveRepoFeaturesPatch(
 // swallowed rather than stranding the student on a half-provisioned repo. The
 // feature override is best-effort (GitHub is the real enforcer); the founder
 // grant that follows is the load-bearing step.
+//
+// `explicitPatch` (when it is a proper non-empty subset of `patch`) is the
+// fallback body: if the full PATCH is rejected because an org bans one
+// INHERITED key, retry with only the teacher-forced keys so the forced
+// override still lands. Mirrors the CLI's patchRepoFeatures.
 export async function patchRepoSurface(
   client: GitHubClient,
   owner: string,
   repo: string,
   patch: RepoFeaturePatch,
+  explicitPatch: RepoFeaturePatch = {},
 ) {
   if (Object.keys(patch).length === 0) return
-  try {
-    await client.request<GitHubRepo>(`/repos/${owner}/${repo}`, {
+  const send = (body: RepoFeaturePatch) =>
+    client.request<GitHubRepo>(`/repos/${owner}/${repo}`, {
       method: "PATCH",
-      body: patch,
+      body,
     })
+  try {
+    await send(patch)
   } catch (err) {
+    let finalErr = err
+    const explicitKeys = Object.keys(explicitPatch)
+    if (
+      explicitKeys.length > 0 &&
+      explicitKeys.length < Object.keys(patch).length
+    ) {
+      try {
+        await send(explicitPatch)
+        return
+      } catch (retryErr) {
+        finalErr = retryErr
+      }
+    }
     log.warn("accept: repo-feature PATCH failed (non-fatal)", {
       owner,
       repo,
       patch,
-      err,
+      err: finalErr,
     })
   }
 }
