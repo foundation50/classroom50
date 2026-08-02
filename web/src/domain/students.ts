@@ -60,10 +60,6 @@ export {
   type RosterUploadContext,
 } from "./students/roleWrites"
 export {
-  migrateRosterFile,
-  type MigrateRosterFileResult,
-} from "./students/rosterMigration"
-export {
   inviteRosterStudents,
   bulkInviteByEmail,
   type InviteRosterStudentsInput,

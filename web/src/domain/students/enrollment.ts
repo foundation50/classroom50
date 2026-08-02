@@ -13,7 +13,7 @@ import {
   assertClassroomNotArchived,
   type CreateClassroomResult,
 } from "../classrooms"
-import { getRawFileWithFallbackSource, getUser } from "@/github-core/queries"
+import { getRawFile, getUser } from "@/github-core/queries"
 import {
   getBranchRef,
   getCommit,
@@ -28,7 +28,7 @@ import {
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
-import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/rosterPath"
 import { resolveGitHubId } from "@/util/students"
 import {
   log,
@@ -63,15 +63,14 @@ export async function addStudentToClassroom(
 
   const studentsFilePath = rosterPath(input.classroom)
 
-  const currentCsv = await getRawFileWithFallbackSource(client, {
+  const currentCsv = await getRawFile(client, {
     org: input.org,
     path: studentsFilePath,
-    fallbackPath: legacyRosterPath(input.classroom),
     ref: ref.object.sha,
   })
 
   const githubUser = await getUser(client, normalizedUsername)
-  const currentStudents = parseStudentsCsv(currentCsv.content)
+  const currentStudents = parseStudentsCsv(currentCsv)
 
   const alreadyExists = currentStudents.some(
     (student) =>
@@ -102,7 +101,7 @@ export async function addStudentToClassroom(
   const tree = await createGitTree(client, {
     org: input.org,
     base_tree: commit.tree.sha,
-    tree: rosterWriteTree(input.classroom, nextCsv, currentCsv.fromLegacy),
+    tree: rosterWriteTree(input.classroom, nextCsv),
   })
 
   const newCommit = await createGitCommit(client, {

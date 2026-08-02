@@ -2,17 +2,10 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { renderHook } from "@testing-library/react"
 
-// Drive the two extracted roster auto-effect hooks directly, since the rendered
-// smoke test can't exercise them (its migrate mock never settles the gate and it
-// supplies no drift). These pin the highest-risk part of the U14 split: the
-// once-per-classroom guard refs, the migrate-before-sync gate, and re-arm.
+// Drive the extracted roster auto-sync hook directly, since the rendered smoke
+// test can't exercise it (it supplies no drift). These pin the highest-risk
+// part of the U14 split: the once-per-classroom guard ref, and re-arm.
 
-const migrateMutate = vi.fn()
-vi.mock("@/hooks/mutations/useMigrateRoster", () => ({
-  useMigrateRoster: () => ({ mutate: migrateMutate, isPending: false }),
-}))
-
-import { useRosterAutoMigrate } from "./useRosterAutoMigrate"
 import { useRosterAutoSync } from "./useRosterAutoSync"
 import type { SuppressedLogins } from "@/hooks/useSuppressedLogins"
 
@@ -25,49 +18,17 @@ const noSuppression: SuppressedLogins = {
 
 beforeEach(() => vi.clearAllMocks())
 
-describe("useRosterAutoMigrate", () => {
-  it("fires once per classroom and opens the gate via onSettled", () => {
-    const { result, rerender } = renderHook(
-      ({ classroom, ready }) => useRosterAutoMigrate("acme", classroom, ready),
-      { initialProps: { classroom: "cs101", ready: true } },
-    )
-    expect(migrateMutate).toHaveBeenCalledTimes(1)
-    // The gate stays null until onSettled runs...
-    expect(result.current.migrateSettledFor).toBeNull()
-    // ...even on the error path (onSettled, not onSuccess).
-    migrateMutate.mock.calls[0][1].onSettled()
-    rerender({ classroom: "cs101", ready: true })
-    expect(result.current.migrateSettledFor).toBe("cs101")
-    // A same-classroom rerender must not re-fire.
-    expect(migrateMutate).toHaveBeenCalledTimes(1)
-  })
-
-  it("does not fire until ready, then re-fires for a new classroom", () => {
-    const { rerender } = renderHook(
-      ({ classroom, ready }) => useRosterAutoMigrate("acme", classroom, ready),
-      { initialProps: { classroom: "cs101", ready: false } },
-    )
-    expect(migrateMutate).not.toHaveBeenCalled()
-    rerender({ classroom: "cs101", ready: true })
-    expect(migrateMutate).toHaveBeenCalledTimes(1)
-    // A $classroom route switch on the reused instance must migrate the new one.
-    rerender({ classroom: "cs202", ready: true })
-    expect(migrateMutate).toHaveBeenCalledTimes(2)
-  })
-})
-
 describe("useRosterAutoSync", () => {
   const base = {
     classroom: "cs101",
     ready: true,
-    migrateSettledFor: "cs101",
     csvMissingLogins: ["ghost"],
     backfillNeededLogins: [] as string[],
     suppressedLogins: noSuppression,
     syncPending: false,
   }
 
-  it("fires runSync once when drift exists and migrate has settled", () => {
+  it("fires runSync once when drift exists", () => {
     const runSync = vi.fn()
     renderHook(() => useRosterAutoSync({ ...base, runSync }))
     expect(runSync).toHaveBeenCalledTimes(1)
@@ -86,17 +47,17 @@ describe("useRosterAutoSync", () => {
     expect(runSync).toHaveBeenCalledTimes(1)
   })
 
-  it("stays gated until migrate settles for this classroom", () => {
+  it("stays gated until ready", () => {
     const runSync = vi.fn()
     const { rerender } = renderHook((props) => useRosterAutoSync(props), {
       initialProps: {
         ...base,
-        migrateSettledFor: null as string | null,
+        ready: false,
         runSync,
       },
     })
     expect(runSync).not.toHaveBeenCalled()
-    rerender({ ...base, migrateSettledFor: "cs101", runSync })
+    rerender({ ...base, ready: true, runSync })
     expect(runSync).toHaveBeenCalledTimes(1)
   })
 

@@ -57,7 +57,6 @@ import {
   groupStudentsBySection,
   nextSelectedKeyAfterSave,
 } from "./enrolledStudentsHelpers"
-import { useRosterAutoMigrate } from "./useRosterAutoMigrate"
 import { useRosterAutoSync } from "./useRosterAutoSync"
 import { RosterRow } from "./RosterRow"
 import { FailedInvitationsList } from "./FailedInvitationsList"
@@ -333,15 +332,6 @@ const EnrolledStudents = ({
       : []),
   ]
 
-  // Auto-migrate on open (see useRosterAutoMigrate): converge a pre-rename
-  // classroom so roster.csv physically exists, and gate auto-sync on its
-  // settling so the two roster writers don't race.
-  const { migrateSettledFor } = useRosterAutoMigrate(
-    org,
-    classroom,
-    !isLoading && !isError,
-  )
-
   // Explicit teacher-triggered CSV backfill (also auto-run on open). The hook
   // owns the roster-file invalidation that must always run; the toasts live
   // here so they skip when unmounted.
@@ -366,12 +356,11 @@ const EnrolledStudents = ({
     })
 
   // Auto-sync on open (see useRosterAutoSync): append team members lacking a
-  // CSV row when there's drift, gated on migrate settling; the caller owns
-  // runSync (and its toasts, which skip on unmount).
+  // CSV row when there's drift; the caller owns runSync (and its toasts, which
+  // skip on unmount).
   useRosterAutoSync({
     classroom,
     ready: !isLoading && !isError,
-    migrateSettledFor,
     csvMissingLogins,
     backfillNeededLogins,
     suppressedLogins,

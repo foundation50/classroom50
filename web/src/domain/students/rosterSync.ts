@@ -5,7 +5,7 @@ import {
   updateRef,
 } from "@/github-core/mutations"
 import { withGitConflictRetry, assertClassroomNotArchived } from "../classrooms"
-import { getRawFileWithFallbackSource } from "@/github-core/queries"
+import { getRawFile } from "@/github-core/queries"
 import {
   getBranchRef,
   getCommit,
@@ -19,7 +19,7 @@ import {
   parseStudentsCsv,
   stringifyStudentsCsv,
 } from "@/util/rosterCsv"
-import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/rosterPath"
 import {
   log,
   rosterWriteTree,
@@ -71,13 +71,12 @@ export async function syncRosterFromTeam(
     const commit = await getCommit(client, org, ref.object.sha)
 
     const studentsFilePath = rosterPath(classroom)
-    const currentCsv = await getRawFileWithFallbackSource(client, {
+    const currentCsv = await getRawFile(client, {
       org,
       path: studentsFilePath,
-      fallbackPath: legacyRosterPath(classroom),
       ref: ref.object.sha,
     })
-    const currentStudents = parseStudentsCsv(currentCsv.content)
+    const currentStudents = parseStudentsCsv(currentCsv)
 
     const { ids, logins } = rosterClaimSet(currentStudents)
     // Email set mirrors buildTeamRoster's indexCsv.byEmail fold: a member whose
@@ -205,7 +204,7 @@ export async function syncRosterFromTeam(
     const tree = await createGitTree(client, {
       org,
       base_tree: commit.tree.sha,
-      tree: rosterWriteTree(classroom, nextCsv, currentCsv.fromLegacy),
+      tree: rosterWriteTree(classroom, nextCsv),
     })
 
     const newCommit = await createGitCommit(client, {

@@ -8,7 +8,7 @@ import {
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { withGitConflictRetry, assertClassroomNotArchived } from "../classrooms"
-import { getRawFileWithFallbackSource } from "@/github-core/queries"
+import { getRawFile } from "@/github-core/queries"
 import { getAuthenticatedUser } from "@/domain/queries/users"
 import {
   getBranchRef,
@@ -22,7 +22,7 @@ import {
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
-import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/rosterPath"
 import { type Student } from "@/types/classroom"
 import {
   log,
@@ -74,14 +74,13 @@ export async function unenrollStudent(
 
   const studentsFilePath = rosterPath(classroom)
 
-  const currentCsv = await getRawFileWithFallbackSource(client, {
+  const currentCsv = await getRawFile(client, {
     org,
     path: studentsFilePath,
-    fallbackPath: legacyRosterPath(classroom),
     ref: ref.object.sha,
   })
 
-  const currentStudents = parseStudentsCsv(currentCsv.content)
+  const currentStudents = parseStudentsCsv(currentCsv)
 
   // Match the target row via the shared roster-row matcher (username/github_id).
   const sameRow = (student: StudentCsvRow) =>
@@ -101,7 +100,7 @@ export async function unenrollStudent(
   const tree = await createGitTree(client, {
     org,
     base_tree: commit.tree.sha,
-    tree: rosterWriteTree(classroom, nextCsv, currentCsv.fromLegacy),
+    tree: rosterWriteTree(classroom, nextCsv),
   })
 
   const newCommit = await createGitCommit(client, {
@@ -269,13 +268,12 @@ export async function bulkUnenrollStudents(
     const configBranch = await getConfigRepoBranch(client, org)
     const ref = await getBranchRef(client, org, configBranch)
     const commit = await getCommit(client, org, ref.object.sha)
-    const currentCsv = await getRawFileWithFallbackSource(client, {
+    const currentCsv = await getRawFile(client, {
       org,
       path: studentsFilePath,
-      fallbackPath: legacyRosterPath(classroom),
       ref: ref.object.sha,
     })
-    const currentStudents = parseStudentsCsv(currentCsv.content)
+    const currentStudents = parseStudentsCsv(currentCsv)
 
     removed = targets.filter((target) =>
       currentStudents.some((row) => matchesTarget(row, target)),
@@ -296,7 +294,7 @@ export async function bulkUnenrollStudents(
     const tree = await createGitTree(client, {
       org,
       base_tree: commit.tree.sha,
-      tree: rosterWriteTree(classroom, nextCsv, currentCsv.fromLegacy),
+      tree: rosterWriteTree(classroom, nextCsv),
     })
     const newCommit = await createGitCommit(client, {
       org,

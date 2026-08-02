@@ -2,11 +2,10 @@ import { queryOptions } from "@tanstack/react-query"
 import Papa from "papaparse"
 
 import type { GitHubClient } from "../client"
-import type { GitHubCommit, GitHubTreeResponse } from "../types"
+import type { GitHubCommit } from "../types"
 import { CONFIG_REPO } from "@/util/configRepo"
-import { GitHubAPIError, tolerateGitHubError } from "../errors"
+import { tolerateGitHubError } from "../errors"
 import { decodeBase64Utf8 } from "@/util/github"
-import { getCommit } from "../configRepoReads"
 import type { GetAssignmentsFileInput } from "@/domain/queries/assignments"
 import { githubKeys } from "./keys"
 
@@ -115,36 +114,11 @@ export function csvFileQuery<T>(
   repo: string,
   path: string,
   ref?: string,
-  // Legacy path tried only when `path` 404s (current roster name -> legacy).
-  // The query key stays on `path`, so a post-migration read converges on the
-  // current name and optimistic writes never have to know which name served the
-  // bytes.
-  fallbackPath?: string,
 ) {
   return queryOptions({
     queryKey: githubKeys.csvFile(owner, repo, path, ref),
     queryFn: async ({ signal }) => {
-      let raw: string
-      try {
-        raw = await readContents(client, owner, repo, path, ref, signal)
-      } catch (err) {
-        if (
-          fallbackPath &&
-          err instanceof GitHubAPIError &&
-          err.status === 404
-        ) {
-          raw = await readContents(
-            client,
-            owner,
-            repo,
-            fallbackPath,
-            ref,
-            signal,
-          )
-        } else {
-          throw err
-        }
-      }
+      const raw = await readContents(client, owner, repo, path, ref, signal)
 
       const csvParse = Papa.parse<T>(raw, {
         header: true,
@@ -180,10 +154,9 @@ function readContents(
   )
 }
 
-// Raw roster.csv bytes with a legacy fallback (current roster name -> legacy on
-// a 404), returning the unparsed text so the caller can run the strict parser
-// and surface per-line problems. Keyed on `rosterRawFile` — a namespace of its
-// own, distinct from both `rawFile` (rawFileQuery, no fallback, different
+// Raw roster.csv bytes, returning the unparsed text so the caller can run the
+// strict parser and surface per-line problems. Keyed on `rosterRawFile` — a
+// namespace of its own, distinct from both `rawFile` (rawFileQuery, different
 // queryFn) and csvFileQuery's parsed-rows key — so this additive
 // problem-detection read can never collide with another raw or parsed read of
 // the same path. The parsed-rows read (csvFileQuery) still drives display.
@@ -192,32 +165,12 @@ export function rosterRawFileQuery(
   owner: string,
   repo: string,
   path: string,
-  fallbackPath?: string,
   ref?: string,
 ) {
   return queryOptions({
     queryKey: githubKeys.rosterRawFile(owner, repo, path, ref),
-    queryFn: async ({ signal }) => {
-      try {
-        return await readContents(client, owner, repo, path, ref, signal)
-      } catch (err) {
-        if (
-          fallbackPath &&
-          err instanceof GitHubAPIError &&
-          err.status === 404
-        ) {
-          return await readContents(
-            client,
-            owner,
-            repo,
-            fallbackPath,
-            ref,
-            signal,
-          )
-        }
-        throw err
-      }
-    },
+    queryFn: ({ signal }) =>
+      readContents(client, owner, repo, path, ref, signal),
     enabled: Boolean(owner && repo && typeof path === "string"),
     staleTime: 10 * 60 * 1000,
     retry: false,
@@ -243,58 +196,6 @@ export async function getRawFile(
   }
 
   return decodeBase64Utf8(file.content)
-}
-
-// Read a config file for a WRITE, reporting whether the returned bytes came
-// from the legacy fallback path. Callers pass `fromLegacy` to rosterWriteTree,
-// where it authorizes deleting the legacy file — so it must NOT be decided by a
-// bare Contents-API 404: that API is eventually consistent per path, so right
-// after a write to the current name a read pinned to that commit can briefly
-// 404 while the legacy name still serves stale bytes. Trusting that 404 would
-// overwrite the current file with stale legacy content and delete it on a clean
-// fast-forward the conflict-retry loop can't catch — a silently lost write. So
-// on a 404 we resolve legacy-vs-lag from the git TREE at the same commit
-// (internally consistent, unlike per-path Contents reads). A non-404 error
-// propagates unchanged.
-export async function getRawFileWithFallbackSource(
-  client: GitHubClient,
-  input: GetAssignmentsFileInput & { fallbackPath: string },
-): Promise<{ content: string; fromLegacy: boolean }> {
-  const { fallbackPath, ...primary } = input
-  try {
-    return { content: await getRawFile(client, primary), fromLegacy: false }
-  } catch (err) {
-    if (!(err instanceof GitHubAPIError && err.status === 404)) throw err
-    // Primary 404 — decide legacy-vs-lag from the commit tree, not the 404.
-    if (
-      await pathInCommitTree(client, primary.org, primary.path, primary.ref)
-    ) {
-      // Tree says the current name exists; the 404 was consistency lag. Re-read
-      // it so a stale legacy read can't drive an overwrite + delete.
-      return { content: await getRawFile(client, primary), fromLegacy: false }
-    }
-    return {
-      content: await getRawFile(client, { ...primary, path: fallbackPath }),
-      fromLegacy: true,
-    }
-  }
-}
-
-// True when `path` is a blob in the commit's recursive tree at `ref`. A
-// truncated tree is treated as "not confirmed present" so the caller only takes
-// the destructive legacy path when the tree positively lacks `path`.
-async function pathInCommitTree(
-  client: GitHubClient,
-  org: string,
-  path: string,
-  ref: string,
-): Promise<boolean> {
-  const commit = await getCommit(client, org, ref)
-  const tree = await client.request<GitHubTreeResponse>(
-    `/repos/${org}/${CONFIG_REPO}/git/trees/${commit.tree.sha}?recursive=1`,
-  )
-  if (tree.truncated) return false
-  return tree.tree.some((e) => e.type === "blob" && e.path === path)
 }
 
 export async function getClassroom50Yaml(

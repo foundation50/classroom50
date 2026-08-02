@@ -133,18 +133,6 @@ func TestHappyPath(t *testing.T) {
 		}
 	})
 
-	step(t, "2.4 roster migrate is an idempotent no-op on a roster.csv classroom", func(t *testing.T) {
-		// `classroom add` already scaffolds roster.csv, so migrate has nothing
-		// to rename — it must report the no-op and leave the roster intact.
-		out := teacher(t, "roster", "migrate", cfg.Org, cfg.Classroom)
-		if !strings.Contains(out, "already migrated") {
-			t.Errorf("roster migrate output = %q, want an 'already migrated' no-op", out)
-		}
-		if !contentExists(t, cfg.TeacherPAT, "classroom50", cfg.Classroom+"/roster.csv") {
-			t.Errorf("roster.csv missing after a no-op migrate")
-		}
-	})
-
 	step(t, "3.1 assignment add", func(t *testing.T) {
 		due := time.Now().Add(72 * time.Hour).Format("2006-01-02T15:04:05-07:00")
 		args := []string{"assignment", "add", cfg.Org, cfg.Classroom, cfg.Assignment,
