@@ -1,6 +1,6 @@
 // Package roster implements the `gh teacher roster` command: managing the
 // classroom roster in <org>/classroom50/<classroom>/roster.csv (list, add,
-// update, remove, import, migrate), including resolving each student's GitHub
+// update, remove, import), including resolving each student's GitHub
 // id and inviting them to the org. Only NewCmd is exported.
 package roster
 
@@ -32,10 +32,7 @@ func NewCmd() *cobra.Command {
 			"  add      append or upsert one student (resolves github_id, invites to org)\n" +
 			"  update   correct fields on an existing student (roster-only; never invites)\n" +
 			"  remove   remove one student from the roster (does NOT touch org membership)\n" +
-			"  import   bulk upsert from a local CSV (5-column input accepted; github_id auto-filled)\n" +
-			"  migrate  rename a legacy students.csv to roster.csv (one commit)\n\n" +
-			"Reads fall back to that legacy name for classrooms\n" +
-			"bootstrapped before the rename; writes always target roster.csv.\n\n" +
+			"  import   bulk upsert from a local CSV (5-column input accepted; github_id auto-filled)\n\n" +
 			"All writes use a single Tree commit on <org>/classroom50's\n" +
 			"default branch and retry with an optimistic rebase loop\n" +
 			"(up to 5 attempts) so concurrent edits don't silently lose\n" +
@@ -48,7 +45,6 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(rosterUpdateCmd())
 	cmd.AddCommand(rosterRemoveCmd())
 	cmd.AddCommand(rosterImportCmd())
-	cmd.AddCommand(rosterMigrateCmd())
 	return cmd
 }
 
@@ -314,7 +310,7 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 
 	var action string
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
-		rows, sourcePath, err := configrepo.LoadRosterWithSourceLenient(client, org, classroom, parentSHA)
+		rows, err := configrepo.LoadRosterLenient(client, org, classroom, parentSHA)
 		if err != nil {
 			return configwrite.CommitChange{}, err
 		}
@@ -324,7 +320,7 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 		} else {
 			action = "added"
 		}
-		return configrepo.RosterWriteChange(classroom, sourcePath, updated)
+		return configrepo.RosterWriteChange(classroom, updated)
 	}
 
 	message := contract.PrefixCommit(fmt.Sprintf("roster: add %s to %s (gh teacher roster add)", login, classroom))
@@ -380,7 +376,7 @@ func runRosterUpdate(client githubapi.Client, out io.Writer, org, classroom, use
 	var noChange bool
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
 		noChange = false
-		rows, sourcePath, err := configrepo.LoadRosterWithSourceLenient(client, org, classroom, parentSHA)
+		rows, err := configrepo.LoadRosterLenient(client, org, classroom, parentSHA)
 		if err != nil {
 			return configwrite.CommitChange{}, err
 		}
@@ -393,7 +389,7 @@ func runRosterUpdate(client githubapi.Client, out io.Writer, org, classroom, use
 			noChange = true // empty change → CommitTreeChange skips the commit.
 			return configwrite.CommitChange{}, nil
 		}
-		return configrepo.RosterWriteChange(classroom, sourcePath, next)
+		return configrepo.RosterWriteChange(classroom, next)
 	}
 
 	message := contract.PrefixCommit(fmt.Sprintf("roster: update %s in %s (gh teacher roster update)", username, classroom))
@@ -419,7 +415,7 @@ func runRosterRemove(client githubapi.Client, out io.Writer, org, classroom, use
 
 	var removed bool
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
-		rows, sourcePath, err := configrepo.LoadRosterWithSourceLenient(client, org, classroom, parentSHA)
+		rows, err := configrepo.LoadRosterLenient(client, org, classroom, parentSHA)
 		if err != nil {
 			return configwrite.CommitChange{}, err
 		}
@@ -428,7 +424,7 @@ func runRosterRemove(client githubapi.Client, out io.Writer, org, classroom, use
 		if !ok {
 			return configwrite.CommitChange{}, nil // empty → skips the commit (already absent)
 		}
-		return configrepo.RosterWriteChange(classroom, sourcePath, next)
+		return configrepo.RosterWriteChange(classroom, next)
 	}
 
 	message := contract.PrefixCommit(fmt.Sprintf("roster: remove %s from %s (gh teacher roster remove)", username, classroom))
@@ -511,7 +507,7 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 		updated int
 	)
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
-		rows, sourcePath, err := configrepo.LoadRosterWithSourceLenient(client, org, classroom, parentSHA)
+		rows, err := configrepo.LoadRosterLenient(client, org, classroom, parentSHA)
 		if err != nil {
 			return configwrite.CommitChange{}, err
 		}
@@ -526,7 +522,7 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 				added++
 			}
 		}
-		return configrepo.RosterWriteChange(classroom, sourcePath, rows)
+		return configrepo.RosterWriteChange(classroom, rows)
 	}
 
 	message := contract.PrefixCommit(fmt.Sprintf("roster: import %d row(s) into %s (gh teacher roster import)", len(resolved), classroom))
