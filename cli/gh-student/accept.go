@@ -1167,13 +1167,17 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 	// "inherit" (nil) key on a templated assignment must re-apply the TEMPLATE's
 	// live setting — GitHub's /generate does NOT copy them — so read the template
 	// repo's current features first (best-effort; a failed read leaves inherited
-	// keys unset = GitHub default). Explicit on/off always win.
+	// keys unset = GitHub default). Explicit on/off always win. Skip the read
+	// when every key is forced explicitly: resolveRepoFeaturePatchBody never
+	// consults the template then, so the GET would be pure waste.
 	var templateFeatures *GeneratedRepo
-	var tmplRepo GeneratedRepo
-	if err := client.Get(fmt.Sprintf("repos/%s/%s", url.PathEscape(tmpl.Owner), url.PathEscape(tmpl.Repo)), &tmplRepo); err == nil {
-		templateFeatures = &tmplRepo
-	} else if verbose {
-		u.Detail("could not read template %s/%s features; inherited keys fall back to GitHub defaults: %v", tmpl.Owner, tmpl.Repo, err)
+	if features.HasAnyInherit() {
+		var tmplRepo GeneratedRepo
+		if err := client.Get(fmt.Sprintf("repos/%s/%s", url.PathEscape(tmpl.Owner), url.PathEscape(tmpl.Repo)), &tmplRepo); err == nil {
+			templateFeatures = &tmplRepo
+		} else if verbose {
+			u.Detail("could not read template %s/%s features; inherited keys fall back to GitHub defaults: %v", tmpl.Owner, tmpl.Repo, err)
+		}
 	}
 	fullBody, explicitBody := resolveRepoFeaturePatchBody(features, true /* templated */, templateFeatures)
 

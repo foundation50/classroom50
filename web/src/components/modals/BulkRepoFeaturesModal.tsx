@@ -17,6 +17,7 @@ import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { studentRepoName } from "@/util/studentRepo"
 import { getName } from "@/util/students"
+import { describeGitHubApiFailure } from "@/components/modals/collaboratorHelpers"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Student } from "@/types/classroom"
 
@@ -56,7 +57,12 @@ function choicesToPatch(
   return patch
 }
 
+// Map a rejected write to a localized reason for the result table. Reuses the
+// shared groupCollaborators failure vocabulary (rate-limit/403/404) like the
+// sibling BulkRepoAccessModal, then falls back to the HTTP status / raw message.
 const describeFailure = (reason: unknown, t: TFunction): string | undefined => {
+  const shared = describeGitHubApiFailure(reason, t)
+  if (shared) return shared
   if (reason instanceof GitHubAPIError) {
     return t("components.modals.groupCollaborators.failure.httpStatus", {
       status: reason.status,

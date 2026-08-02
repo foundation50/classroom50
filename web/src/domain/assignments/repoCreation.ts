@@ -1,6 +1,6 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubRepo } from "@/github-core/types"
-import type { RepoPermission } from "@/types/classroom"
+import type { RepoPermission, RepoFeatures } from "@/types/classroom"
 import { GitHubAPIError } from "@/github-core/errors"
 import { getRepo } from "@/github-core/repoReads"
 import { DEFAULT_BRANCH } from "@/util/configRepo"
@@ -358,12 +358,7 @@ export type CreateAssignmentInput = {
   // Per-assignment repo feature overrides (tri-state per key: undefined =
   // inherit, true = force on, false = force off). buildAssignmentEntry omits
   // the block when no key is set; accept resolves + applies it at fresh create.
-  repo_features?: {
-    issues?: boolean
-    wiki?: boolean
-    projects?: boolean
-    pull_requests?: boolean
-  }
+  repo_features?: RepoFeatures
   tests: AssignmentTestDraft[]
   // Whether the write path may attempt the owner-only template read-grant
   // (addRepositoryToTeam). Set from useCanAttemptTemplateGrant at the call site

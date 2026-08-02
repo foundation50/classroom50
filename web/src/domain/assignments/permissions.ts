@@ -1,5 +1,5 @@
 import type { GitHubClient } from "@/github-core/client"
-import type { AssignmentMode, RepoPermission } from "@/types/classroom"
+import type { AssignmentMode, RepoPermission, RepoFeatures } from "@/types/classroom"
 import type { GitHubRepo } from "@/github-core/types"
 import type { RepoFeaturePatch } from "@/github-core/mutations"
 import { defaultStudentPermission } from "@/types/classroom"
@@ -116,15 +116,11 @@ export function assertAssignmentModeCoherent(
   }
 }
 
-// The student-repo features accept controls. Kept as a narrow shape so
-// resolveRepoFeaturesPatch and patchRepoSurface stay in lockstep with the
-// assignments-v1 `repo_features` object and the Go RepoFeatures struct.
-export type RepoFeatures = {
-  issues?: boolean
-  wiki?: boolean
-  projects?: boolean
-  pull_requests?: boolean
-}
+// The student-repo features accept controls. Re-exported from types/classroom
+// (the leaf source of truth for the assignments-v1 `repo_features` shape) so
+// resolveRepoFeaturesPatch and patchRepoSurface stay in lockstep with it and
+// the Go RepoFeatures struct without re-declaring the shape.
+export type { RepoFeatures }
 
 // The GitHub PATCH body keys are single-sourced as RepoFeaturePatch in
 // github-core/mutations/collaborators (re-exported via @/github-core/mutations);

@@ -551,8 +551,19 @@ export async function acceptAssignment(params: {
   // GitHub default). Explicit on/off always win; a template-less assignment
   // resolves absent keys to off. Computed once and threaded into every
   // fresh-create access step, never re-asserted on the healthy re-accept path.
+  //
+  // Skip the template read when every feature is forced explicitly (no key
+  // inherits): resolveRepoFeaturesPatch never consults the template then, so the
+  // extra GET would be pure waste on every such accept.
+  const rf = assignment.repo_features
+  const anyInherit =
+    !rf ||
+    rf.issues === undefined ||
+    rf.wiki === undefined ||
+    rf.projects === undefined ||
+    rf.pull_requests === undefined
   let templateFeatures: RepoFeaturePatch | null = null
-  if (assignment.template && sourceOwner && sourceRepo) {
+  if (assignment.template && sourceOwner && sourceRepo && anyInherit) {
     try {
       const tmpl = await getRepo(client, sourceOwner, sourceRepo)
       if (tmpl) {
