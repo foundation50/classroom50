@@ -755,7 +755,7 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     }
   })
 
-  it("invites an teacher as an org OWNER (admin role)", async () => {
+  it("invites a teacher as an org OWNER (admin role)", async () => {
     const { client, state } = makeClient()
 
     await bulkInviteByEmail(client, {
@@ -2715,7 +2715,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
   })
 
   it("does NOT clear the role of a pending invitee (still on no team)", async () => {
-    // prof was just invited as an teacher (org owner) and their role was
+    // prof was just invited as a teacher (org owner) and their role was
     // written to roster.csv, but they haven't accepted yet — so they're on no
     // team. A pending teacher-team invite must preserve the recorded role;
     // clearing it here would wipe the writeback for the whole pending window.
@@ -3264,7 +3264,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     expect(invitations[0]).toMatchObject({ role: "direct_member" })
   })
 
-  it("invites an teacher row as an organization OWNER (role admin)", async () => {
+  it("invites a teacher row as an organization OWNER (role admin)", async () => {
     const { client, invitations } = makeInviteClient({
       users: { prof: { id: 9 } },
       members: [],
@@ -3331,9 +3331,9 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     expect(byId.get(3)).toMatchObject({ role: "admin" })
   })
 
-  it("does not escalate an existing active member for an teacher row", async () => {
+  it("does not escalate an existing active member for a teacher row", async () => {
     // The no-escalation invariant: ensureOrgMembership short-circuits an
-    // active/pending member BEFORE createOrgInvitation, so an teacher-role
+    // active/pending member BEFORE createOrgInvitation, so a teacher-role
     // upload of an already-member never sends an admin (owner) invite.
     const { client, invitations } = makeInviteClient({
       users: { prof: { id: 9 } },
@@ -3354,7 +3354,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     expect(invitations).toEqual([])
   })
 
-  it("does not escalate an existing pending member for an teacher row", async () => {
+  it("does not escalate an existing pending member for a teacher row", async () => {
     const { client, invitations } = makeInviteClient({
       users: { prof: { id: 9 } },
       pending: ["prof"],
@@ -3922,7 +3922,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
       slug: "classroom50-cs101",
       login: "userb",
     })
-    // Not an teacher move, so no org-owner promotion.
+    // Not a teacher move, so no org-owner promotion.
     expect(orgRolePuts).toEqual([])
   })
 
@@ -3946,7 +3946,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
     expect(orgRolePuts).toContainEqual({ login: "userb", role: "admin" })
   })
 
-  it("downgrades an teacher to student: demotes org role to member BEFORE any team change", async () => {
+  it("downgrades a teacher to student: demotes org role to member BEFORE any team change", async () => {
     const { client, teamAdds, teamRemoves, orgRolePuts, ops } =
       makeRoleChangeClient({ members: ["boss"] })
 

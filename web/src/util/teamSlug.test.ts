@@ -23,7 +23,7 @@ describe("classroomTeamSlug", () => {
   })
 })
 
-// The enrolled-set enumeration, student-first and legacy-inclusive. Byte-mirrors
+// The enrolled-set enumeration, student-first. Byte-mirrors
 // the CLI's contract.ClassroomTeamSlugs — a drift here would let the accept
 // gate and the CLI disagree on who counts as enrolled.
 describe("classroomTeamSlugs", () => {
