@@ -971,8 +971,9 @@
         "heading": "Repository features",
         "refresh": "Refresh template settings",
         "help": "Whether each student repository has Wikis, Issues, Projects, and Pull requests enabled. Applied when a student accepts (new repositories only); use the gradebook to change repositories already created. Inheriting a private template also copies its Wiki/Issues/Projects content, so keep answer keys out of a template you inherit from.",
-        "overrideWarning": "Applies to repositories created from now on; ones students already accepted aren't changed. \"Inherit\" follows the template at accept time (existing repositories don't drift when the template changes later). To update existing repositories, use the bulk repository-features action on the submissions page.",
+        "overrideWarning": "Applies to repositories created from now on; ones students already accepted aren't changed. With a template, the default follows the template at accept time (existing repositories don't drift when the template changes later); without a template, the default leaves GitHub's own repository defaults in place. To update existing repositories, use the bulk repository-features action on the submissions page.",
         "choices": {
+          "default": "Default (GitHub default)",
           "inherit": "Inherit from template",
           "inheritLoading": "Inherit from template (checking…)",
           "inheritOn": "Inherit from template (currently on)",

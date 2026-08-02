@@ -71,9 +71,9 @@ type Entry struct {
 
 	// RepoFeatures overrides Issues/Wiki/Projects/Pull requests on the student repo at accept
 	// time (fresh create only). Each key is tri-state: a nil pointer inherits
-	// (the template's setting carries through on a templated assignment; off
-	// template-less), an explicit true/false forces the feature on/off. See
-	// accept.go's repo-feature PATCH.
+	// (the template's setting carries through on a templated assignment; GitHub's
+	// own create default template-less), an explicit true/false forces the
+	// feature on/off. See accept.go's repo-feature PATCH.
 	RepoFeatures *RepoFeatures `json:"repo_features,omitempty"`
 }
 

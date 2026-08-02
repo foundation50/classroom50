@@ -534,9 +534,10 @@ export const DetailsSection = ({
 }
 
 // The repo-feature controls (Issues / Wiki / Projects / Pull requests), one uniform
-// tri-state Select each regardless of template presence. "Inherit" is the
-// default; its help names the resolved outcome so the effect is visible at the
-// control (template's setting when templated, off when template-less/empty).
+// tri-state Select each. The default choice is context-aware: "Inherit from
+// template" when a template is set (its help names the template's live setting,
+// which accept re-applies since /generate drops the flags), else "Default"
+// (no override — GitHub's own create default stands).
 const REPO_FEATURE_KEYS = [
   { field: "repo_feature_wiki", key: "wiki" },
   { field: "repo_feature_issues", key: "issues" },
@@ -589,10 +590,11 @@ export const RepoFeatureControls = ({
   const client = useOptionalGitHubClient()
   const parsed = parseOwnerRepo(templateRepo)
 
-  // Read the template's current feature flags so the "inherit" choice can name
-  // its resolved outcome (e.g. "On (inherit)"). Advisory only: a failed/absent
-  // read falls back to a plain "Inherit" label. Skipped for a bare empty_repo
-  // (no features to inherit) and when there's no full owner/repo ref yet.
+  // Read the template's current feature flags so the "Inherit from template"
+  // choice can name its resolved outcome (e.g. "matches template: on").
+  // Advisory only: a failed/absent read falls back to a plain label. Skipped
+  // for a bare empty_repo and when there's no full owner/repo ref yet — a
+  // template-less assignment shows "Default" (no override) instead.
   const enabled = Boolean(client && parsed && !emptyRepo)
   const templateRepoQuery = useQuery({
     queryKey: ["template-repo-features", parsed?.owner, parsed?.repo],
@@ -608,15 +610,18 @@ export const RepoFeatureControls = ({
   // reading a stale resolved value mid-fetch.
   const isRefreshing = enabled && templateRepoQuery.isFetching
 
-  // The concrete on/off an "inherit" choice resolves to, per feature. An
-  // empty_repo has no features (off); a template-less assignment is off; a
-  // templated one follows the template's live flag. undefined = not yet known
-  // (still loading, or the read failed) — the option shows a plain "Inherit".
+  // Whether this assignment is templated. Drives the default choice's label:
+  // "Inherit from template" (templated) vs. "Default" (no override).
+  const templated = Boolean(parsed) && !emptyRepo
+
+  // For a templated assignment, the concrete on/off the "inherit" choice
+  // resolves to per feature (the template's live flag). undefined = not yet
+  // known (still loading, or the read failed) or template-less (no override) —
+  // the label then omits the "matches template" hint.
   const resolvedInherit = (
     key: "issues" | "wiki" | "projects" | "pull_requests",
   ): boolean | undefined => {
-    if (emptyRepo || !parsed) return false
-    if (!template) return undefined
+    if (!templated || !template) return undefined
     const flag = {
       issues: "has_issues",
       wiki: "has_wiki",
@@ -627,6 +632,9 @@ export const RepoFeatureControls = ({
   }
 
   const inheritLabel = (resolved: boolean | undefined): string => {
+    if (!templated) {
+      return t("assignments.form.repoFeatures.choices.default")
+    }
     if (isRefreshing) {
       return t("assignments.form.repoFeatures.choices.inheritLoading")
     }

@@ -76,6 +76,7 @@ const inheritKey = "assignments.form.repoFeatures.choices.inherit"
 const inheritOnKey = "assignments.form.repoFeatures.choices.inheritOn"
 const inheritOffKey = "assignments.form.repoFeatures.choices.inheritOff"
 const loadingKey = "assignments.form.repoFeatures.choices.inheritLoading"
+const defaultKey = "assignments.form.repoFeatures.choices.default"
 
 // The Inherit <option> for a feature select, located by the select's stable id
 // (field.name), e.g. "repo_feature_issues".
@@ -124,12 +125,13 @@ describe("RepoFeatureControls — inherit label resolution", () => {
     )
   })
 
-  it("does not query for an incomplete owner/repo ref (inherit resolves off)", () => {
+  it("shows the Default label and does not query for an incomplete owner/repo ref", () => {
     const { container } = renderControls({ templateRepo: "org-only" })
     expect(getRepo).not.toHaveBeenCalled()
-    // No resolvable template -> inherit resolves to off ("Off (inherit)").
+    // No resolvable template -> the default choice is "Default" (no override),
+    // not an inherit label — a template-less assignment doesn't force a value.
     expect(inheritOption(container, "repo_feature_issues").textContent).toBe(
-      inheritOffKey,
+      defaultKey,
     )
   })
 

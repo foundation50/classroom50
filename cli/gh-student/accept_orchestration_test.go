@@ -296,7 +296,9 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		htmlURL, fullName, branch, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil)
+		// A forced feature so the PATCH still fires (a nil/all-default template-
+		// less assignment now sends none — GitHub's create defaults stand).
+		htmlURL, fullName, branch, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, &assignments.RepoFeatures{Issues: boolPtr(true)})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

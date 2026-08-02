@@ -35,13 +35,10 @@ describe("resolveRepoFeaturesPatch", () => {
     })
   })
 
-  it("template-less + no override resolves to all-off", () => {
-    expect(resolveRepoFeaturesPatch(undefined, { templated: false })).toEqual({
-      has_issues: false,
-      has_wiki: false,
-      has_projects: false,
-      has_pull_requests: false,
-    })
+  it("template-less + no override omits every key (GitHub create defaults)", () => {
+    expect(resolveRepoFeaturesPatch(undefined, { templated: false })).toEqual(
+      {},
+    )
   })
 
   it("explicit override wins over the template; absent keys inherit template", () => {
@@ -66,14 +63,11 @@ describe("resolveRepoFeaturesPatch", () => {
     })
   })
 
-  it("template-less honors explicit-on and defaults the rest off", () => {
+  it("template-less honors explicit-on and omits the rest (GitHub defaults)", () => {
     expect(
       resolveRepoFeaturesPatch({ wiki: true }, { templated: false }),
     ).toEqual({
-      has_issues: false,
       has_wiki: true,
-      has_projects: false,
-      has_pull_requests: false,
     })
   })
 })

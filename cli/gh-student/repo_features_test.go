@@ -59,15 +59,10 @@ func TestResolveRepoFeaturePatchBody(t *testing.T) {
 			},
 		},
 		{
-			name:      "template-less + no override resolves to all-off",
+			name:      "template-less + no override omits every key (GitHub create defaults)",
 			features:  nil,
 			templated: false,
-			want: map[string]any{
-				"has_issues":        false,
-				"has_wiki":          false,
-				"has_projects":      false,
-				"has_pull_requests": false,
-			},
+			want:      map[string]any{},
 		},
 		{
 			name:      "explicit issues:false on a templated assignment is sent",
@@ -96,14 +91,11 @@ func TestResolveRepoFeaturePatchBody(t *testing.T) {
 			},
 		},
 		{
-			name:      "template-less honors explicit-on and defaults the rest off",
+			name:      "template-less honors explicit-on and omits the rest (GitHub defaults)",
 			features:  &assignments.RepoFeatures{Wiki: boolPtr(true)},
 			templated: false,
 			want: map[string]any{
-				"has_issues":        false,
-				"has_wiki":          true,
-				"has_projects":      false,
-				"has_pull_requests": false,
+				"has_wiki": true,
 			},
 		},
 	}
@@ -419,9 +411,13 @@ func TestEmptyFeaturePatchFailsOpen(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var out bytes.Buffer
+	// Force a feature so a PATCH is actually sent (a nil/all-default template-
+	// less assignment now sends none); the org rejects it and accept must still
+	// succeed.
 	htmlURL, _, branch, _, err := createEmptyPrivateAssignmentRepoInOrg(
 		newTestRESTClient(t, server), ui.NewForced(&out, false), false,
-		"alice", "cs-principles", "solo", "o", true, nil,
+		"alice", "cs-principles", "solo", "o", true,
+		&assignments.RepoFeatures{Projects: boolPtr(true)},
 	)
 	if err != nil {
 		t.Fatalf("empty accept must not fail when the feature PATCH is rejected: %v", err)
