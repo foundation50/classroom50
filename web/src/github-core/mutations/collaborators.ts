@@ -102,3 +102,32 @@ export async function removeRepoCollaborator(params: {
     },
   )
 }
+
+// The GitHub repo-feature toggles PATCH /repos accepts. Only the keys present
+// are changed. Shared with the accept path's RepoFeaturePatch shape.
+export type RepoFeaturePatch = {
+  has_issues?: boolean
+  has_wiki?: boolean
+  has_projects?: boolean
+  has_pull_requests?: boolean
+}
+
+// Set a repo's feature toggles (Issues/Wiki/Projects/Pull requests) via
+// PATCH /repos/{org}/{repo}. Sends only the provided keys. Throws on failure so
+// a bulk caller can record the per-repo outcome (unlike the accept path's
+// fail-open patchRepoSurface, whose whole job is to never block accept).
+export async function setRepoFeatures(params: {
+  client: GitHubClient
+  org: string
+  repo: string
+  features: RepoFeaturePatch
+}): Promise<void> {
+  const { client, org, repo, features } = params
+  await client.request(
+    `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}`,
+    {
+      method: "PATCH",
+      body: features,
+    },
+  )
+}
