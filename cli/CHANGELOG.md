@@ -17,6 +17,25 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.23.0](https://github.com/foundation50/classroom50/compare/cli-v1.22.0...cli-v1.23.0) (2026-08-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove students.csv legacy roster support ([#474](https://github.com/foundation50/classroom50/issues/474))
+* a classroom still on a -instructor team or with a teams.instructor ref is no longer accepted rather than silently normalized; a role=instructor CSV row imports as an unknown role (degrades to student).
+
+### Features
+
+* **cli:** surface roster role column and note dual staff/student roles ([#475](https://github.com/foundation50/classroom50/issues/475)) ([634cbb4](https://github.com/foundation50/classroom50/commit/634cbb4df50aa39b47e4403ff1180a98a5e8b2cc))
+* remove legacy "instructor" staff-role alias ([#473](https://github.com/foundation50/classroom50/issues/473)) ([85164b9](https://github.com/foundation50/classroom50/commit/85164b9a7bb3791c72f652c3bbf42196928d7255))
+* remove students.csv legacy roster support ([#474](https://github.com/foundation50/classroom50/issues/474)) ([b00ce2c](https://github.com/foundation50/classroom50/commit/b00ce2ce0df7f9e72fdb964646082461d28b17bc))
+
+
+### Miscellaneous Chores
+
+* release 1.23.0 ([#476](https://github.com/foundation50/classroom50/issues/476)) ([4a50632](https://github.com/foundation50/classroom50/commit/4a50632a2832fdfa5a5e3bc385712620a0d9e797))
+
 ## [1.22.0](https://github.com/foundation50/classroom50/compare/cli-v1.21.0...cli-v1.22.0) (2026-08-01)
 
 
