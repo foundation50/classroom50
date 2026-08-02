@@ -113,6 +113,12 @@ type AssignmentsJSON struct {
 // enforceable boundary is that locking a PRIVATE in-org template also removes
 // the STUDENT team's read on it (staff teams untouched), and unlocking
 // re-grants it. Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
+//
+// RepoFeatures overrides Issues/Wiki/Projects/Pull requests on each student repo at accept
+// time (fresh create only). Each key is tri-state (nil pointer = inherit;
+// explicit true/false = force on/off), so absent inherits the template's
+// feature on a templated assignment and resolves to off template-less. See
+// RepoFeatures.
 type AssignmentEntry struct {
 	Slug              string           `json:"slug"`
 	Name              string           `json:"name"`
@@ -134,6 +140,7 @@ type AssignmentEntry struct {
 	ReleaseAssets     []string         `json:"release_assets,omitempty"`
 	PassThreshold     *int             `json:"pass_threshold,omitempty"`
 	StudentPermission string           `json:"student_permission,omitempty"`
+	RepoFeatures      *RepoFeatures    `json:"repo_features,omitempty"`
 	MigratedFrom      *MigratedFromRef `json:"migrated_from,omitempty"`
 
 	// Extra holds unknown top-level entry keys, re-emitted verbatim so a
@@ -150,7 +157,7 @@ var knownEntryKeys = map[string]struct{}{
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
 	"locked": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
-	"student_permission": {},
+	"student_permission": {}, "repo_features": {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then strictly
@@ -240,6 +247,20 @@ func (e AssignmentEntry) MarshalJSON() ([]byte, error) {
 	}
 	buf.WriteByte('}')
 	return buf.Bytes(), nil
+}
+
+// RepoFeatures is the tri-state Issues/Wiki/Projects/Pull-requests override applied to a
+// student repo at accept time (fresh create only). A nil pointer field means
+// inherit (the templated assignment carries the template's setting through
+// GitHub's generate; a template-less one resolves to off); an explicit
+// true/false forces the feature on/off via PATCH regardless of template.
+// additionalProperties is false in the schema and the strict entry decoder
+// keeps this closed, so an unknown sub-key is a hard parse error.
+type RepoFeatures struct {
+	Issues       *bool `json:"issues,omitempty"`
+	Wiki         *bool `json:"wiki,omitempty"`
+	Projects     *bool `json:"projects,omitempty"`
+	PullRequests *bool `json:"pull_requests,omitempty"`
 }
 
 // MaxGroupSizeCap bounds max_group_size (when set; 0 = unset).

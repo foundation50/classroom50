@@ -95,6 +95,17 @@ export function defaultStudentPermission(mode: AssignmentMode): RepoPermission {
   return mode === "group" ? "admin" : "push"
 }
 
+// Per-assignment repo feature overrides (tri-state per key: absent = inherit,
+// true = force on, false = force off). The `repo_features` block on Assignment,
+// and the value the create/edit form round-trips. In lockstep with the CLI's
+// assignments-v1 schema and the Go RepoFeatures struct.
+export type RepoFeatures = {
+  issues?: boolean
+  wiki?: boolean
+  projects?: boolean
+  pull_requests?: boolean
+}
+
 // Mirrors one entry of classroom50/assignments/v1 — the shape gh-teacher writes
 // and parses strictly (unknown fields rejected).
 // Schema: https://github.com/foundation50/classroom50/blob/main/schemas/assignments-v1.schema.json
@@ -179,6 +190,14 @@ export type Assignment = {
   // a value below admin is clamped up to admin (a founder must manage members).
   // In lockstep with the CLI's assignments-v1 schema (`student_permission`).
   student_permission?: RepoPermission
+  // Per-assignment repo feature overrides applied to each student repo at
+  // accept time, on fresh create only. Each key is tri-state: absent = inherit
+  // (a templated assignment carries the template's setting through GitHub's
+  // generate; a template-less one resolves to off), true = force on, false =
+  // force off. Not retrofitted to already-accepted repos, not re-asserted on
+  // re-accept. In lockstep with the CLI's assignments-v1 schema and the Go
+  // RepoFeatures struct (`repo_features`, closed object).
+  repo_features?: RepoFeatures
   tests?: AssignmentTest[]
   // CLI migrate provenance. The GUI doesn't write it but must round-trip it.
   migrated_from?: MigratedFrom

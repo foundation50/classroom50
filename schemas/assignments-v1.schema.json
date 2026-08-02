@@ -174,6 +174,17 @@
         "student_permission": {
           "enum": ["pull", "triage", "push", "maintain", "admin"],
           "description": "The collaborator role the enrolled student is granted on their OWN assignment repo at accept time (the old GitHub Classroom \"grant students admin access\" checkbox, generalized to GitHub's full ladder). ABSENT means the built-in default: `push` for `individual`, `admin` for `group`. This is accept-time provisioning only — it governs what NEW accepters get; it does not retroactively change repos already accepted (teachers adjust those with the gradebook's per-repo/bulk access controls). Group coherence: a group founder must hold at least `admin` to add teammates via `gh student invite`, so for `mode: group` any configured value below `admin` is clamped up to `admin` by every accept client — prefer omitting it (or writing `admin`) for group assignments. Caution: on a PRIVATE in-org repo, `admin` also lets the student change repo visibility (e.g. make it public) and settings."
+        },
+        "repo_features": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "issues": { "type": "boolean" },
+            "wiki": { "type": "boolean" },
+            "projects": { "type": "boolean" },
+            "pull_requests": { "type": "boolean" }
+          },
+          "description": "Per-assignment repository feature overrides applied to each student repo at ACCEPT TIME, on FRESH CREATE only. Each key (issues/wiki/projects/pull_requests) is tri-state: ABSENT = inherit the TEMPLATE's current setting — accept reads the template repo's has_issues/has_wiki/has_projects/has_pull_requests and re-applies them to the student repo, because GitHub's `POST /generate` does NOT copy the template's feature settings (a generated repo otherwise gets GitHub defaults). For a template-less/empty_repo assignment absent resolves to OFF (the code-only default). `true` = force the feature on, `false` = force it off (an explicit value always wins over the template). Applied via `PATCH /repos/{org}/{repo}`, best-effort/fail-open (a rejection, e.g. org-disabled projects, is logged and does not fail accept). NOT retrofitted to already-accepted repos and NOT re-asserted on re-accept (a student's own later toggle survives); reconcile existing repos with the gradebook bulk action instead. Trust boundary: inheriting a PRIVATE template copies its Issues/Projects/Wiki CONTENT (e.g. a wiki that may hold solutions) into every student repo, so a template used for inherit should not carry cohort-sensitive content. The object is omitted entirely when no key is set."
         }
       },
       "allOf": [

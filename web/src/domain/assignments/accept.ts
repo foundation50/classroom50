@@ -45,7 +45,10 @@ import {
   founderPermission,
   assertAssignmentModeCoherent,
   patchRepoSurface,
+  resolveRepoFeaturesPatch,
+  explicitRepoFeaturesPatch,
 } from "./permissions"
+import type { RepoFeaturePatch } from "@/github-core/mutations"
 import { createAssignmentRepo } from "./repoCreation"
 import type { LocalizedMessage } from "@/types/localizedMessage"
 
@@ -144,6 +147,12 @@ type AcceptAssignmentResult = {
   cloneCommand: string
 }
 
+// The resolved repo-feature PATCH plus its teacher-forced subset. `full` is
+// sent first; on rejection `patchRepoSurface` retries with `explicit` so an
+// org-banned inherited key can't drop a forced override. An all-inherit
+// assignment carries `{ full: {}, explicit: {} }` (no PATCH).
+type RepoFeatureApply = { full: RepoFeaturePatch; explicit: RepoFeaturePatch }
+
 // The tracked "access" step: patch the repo surface + grant the founder role
 // (both idempotent upserts). Throws on failure so the checklist surfaces the
 // recovery guidance — shared by the templated setup path and the bare-accept
@@ -155,10 +164,23 @@ function grantFounderAccessStep(params: {
   username: string
   mode: AssignmentMode
   studentPermission?: RepoPermission
+  // Resolved repo-feature PATCH to apply before the founder grant. `full` is
+  // every resolved key; `explicit` is the teacher-forced subset used as the
+  // fail-open retry body. Empty `full` ({}) skips the request (templated +
+  // all-inherit); best-effort/fail-open.
+  repoFeatures: RepoFeatureApply
   onStepUpdate?: OnAcceptStepUpdate
 }) {
-  const { client, org, repo, username, mode, studentPermission, onStepUpdate } =
-    params
+  const {
+    client,
+    org,
+    repo,
+    username,
+    mode,
+    studentPermission,
+    repoFeatures,
+    onStepUpdate,
+  } = params
   return withAcceptStep(
     {
       id: "access",
@@ -171,7 +193,13 @@ function grantFounderAccessStep(params: {
       onStepUpdate,
     },
     async () => {
-      await patchRepoSurface(client, org, repo)
+      await patchRepoSurface(
+        client,
+        org,
+        repo,
+        repoFeatures.full,
+        repoFeatures.explicit,
+      )
       await addFounderCollaborator({
         client,
         owner: org,
@@ -193,6 +221,8 @@ async function provisionAcceptedRepo(params: {
   username: string
   mode: AssignmentMode
   studentPermission?: RepoPermission
+  // Resolved repo-feature PATCH, forwarded to the founder-access step.
+  repoFeatures: RepoFeatureApply
   branch: string
   metadataYaml: string
   autogradeYaml: string
@@ -208,6 +238,7 @@ async function provisionAcceptedRepo(params: {
     username,
     mode,
     studentPermission,
+    repoFeatures,
     branch,
     metadataYaml,
     autogradeYaml,
@@ -274,6 +305,7 @@ async function provisionAcceptedRepo(params: {
     username,
     mode,
     studentPermission,
+    repoFeatures,
     onStepUpdate,
   })
 }
@@ -510,6 +542,54 @@ export async function acceptAssignment(params: {
   const sourceRepo = assignment.template?.repo
   const sourceBranch = assignment.template?.branch ?? "main"
 
+  // Resolve the per-assignment repo-feature override into the PATCH applied at
+  // fresh create. "inherit" (an absent key) on a templated assignment must
+  // re-apply the TEMPLATE's live setting, because GitHub's POST /generate does
+  // NOT copy the template's has_issues/has_wiki/has_projects — the generated
+  // repo otherwise gets GitHub defaults (Issues on). So read the template repo's
+  // features first (best-effort; a failed read leaves inherited keys unset =
+  // GitHub default). Explicit on/off always win; a template-less assignment
+  // resolves absent keys to off. Computed once and threaded into every
+  // fresh-create access step, never re-asserted on the healthy re-accept path.
+  //
+  // Skip the template read when every feature is forced explicitly (no key
+  // inherits): resolveRepoFeaturesPatch never consults the template then, so the
+  // extra GET would be pure waste on every such accept.
+  const rf = assignment.repo_features
+  const anyInherit =
+    !rf ||
+    rf.issues === undefined ||
+    rf.wiki === undefined ||
+    rf.projects === undefined ||
+    rf.pull_requests === undefined
+  let templateFeatures: RepoFeaturePatch | null = null
+  if (assignment.template && sourceOwner && sourceRepo && anyInherit) {
+    try {
+      const tmpl = await getRepo(client, sourceOwner, sourceRepo)
+      if (tmpl) {
+        templateFeatures = {
+          has_issues: tmpl.has_issues,
+          has_wiki: tmpl.has_wiki,
+          has_projects: tmpl.has_projects,
+          has_pull_requests: tmpl.has_pull_requests,
+        }
+      }
+    } catch (err) {
+      log.debug("accept: template feature read failed (non-fatal)", {
+        sourceOwner,
+        sourceRepo,
+        err,
+      })
+    }
+  }
+  const repoFeatures: RepoFeatureApply = {
+    full: resolveRepoFeaturesPatch(assignment.repo_features, {
+      templated: Boolean(assignment.template),
+      templateFeatures,
+    }),
+    explicit: explicitRepoFeaturesPatch(assignment.repo_features),
+  }
+
   // empty_repo assignment: the repo is created bare (no commits) and NO
   // control files are ever committed, so the autograder resolution and the
   // whole setup step are skipped. Mirrors the CLI's acceptIntoBareRepo.
@@ -657,8 +737,11 @@ export async function acceptAssignment(params: {
         message: { key: "accept.stepDone.setupSkippedEmptyRepo" },
       })
       skipFeedbackPrStep(onStepUpdate)
+      // Re-accept of an already-created bare repo: reconcile ONLY the founder
+      // role (best-effort). Repo features are accept-time-only (written at fresh
+      // create), so we deliberately do NOT re-PATCH them here — re-asserting
+      // would silently revert a student's own later toggle.
       try {
-        await patchRepoSurface(client, org, created.repo.name)
         await addFounderCollaborator({
           client,
           owner: org,
@@ -697,6 +780,7 @@ export async function acceptAssignment(params: {
         username,
         mode: assignment.mode,
         studentPermission: assignment.student_permission,
+        repoFeatures,
         onStepUpdate,
       })
     }
@@ -841,6 +925,13 @@ export async function acceptAssignment(params: {
       username,
       mode: assignment.mode,
       studentPermission: assignment.student_permission,
+      // Accept-time only: features are applied on the FRESH create below, never
+      // re-asserted when repairing an already-existing repo (this branch runs on
+      // a re-accept). Re-PATCHing here would silently revert a student's own
+      // later toggle. Pass an empty patch so patchRepoSurface no-ops, matching
+      // the healthy already-accepted branch and both CLIs (which skip the PATCH
+      // on 422-already-exists).
+      repoFeatures: { full: {}, explicit: {} },
       branch: created.repo.default_branch || sourceBranch,
       metadataYaml,
       autogradeYaml,
@@ -878,6 +969,7 @@ export async function acceptAssignment(params: {
     username,
     mode: assignment.mode,
     studentPermission: assignment.student_permission,
+    repoFeatures,
     branch: targetBranch,
     metadataYaml,
     autogradeYaml,

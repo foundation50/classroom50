@@ -68,6 +68,35 @@ type Entry struct {
 	// gate still refuses to proceed. Absent reads as false (teacher CLI omits
 	// it when false).
 	Locked bool `json:"locked,omitempty"`
+
+	// RepoFeatures overrides Issues/Wiki/Projects/Pull requests on the student repo at accept
+	// time (fresh create only). Each key is tri-state: a nil pointer inherits
+	// (the template's setting carries through on a templated assignment; off
+	// template-less), an explicit true/false forces the feature on/off. See
+	// accept.go's repo-feature PATCH.
+	RepoFeatures *RepoFeatures `json:"repo_features,omitempty"`
+}
+
+// RepoFeatures is the tri-state Issues/Wiki/Projects/Pull-requests override; a nil pointer
+// field inherits, an explicit true/false forces on/off. Mirrors the teacher
+// CLI's assignment.RepoFeatures.
+type RepoFeatures struct {
+	Issues       *bool `json:"issues,omitempty"`
+	Wiki         *bool `json:"wiki,omitempty"`
+	Projects     *bool `json:"projects,omitempty"`
+	PullRequests *bool `json:"pull_requests,omitempty"`
+}
+
+// HasAnyInherit reports whether any feature key inherits (a nil pointer). Only
+// then does the accept path need the template read — a fully-explicit override
+// resolves every key without consulting the template. A nil receiver (no
+// repo_features block) inherits every key.
+func (f *RepoFeatures) HasAnyInherit() bool {
+	if f == nil {
+		return true
+	}
+	return f.Issues == nil || f.Wiki == nil ||
+		f.Projects == nil || f.PullRequests == nil
 }
 
 // defaultAutograderName is the fallback when Entry.Autograder is empty.

@@ -19,6 +19,7 @@ import { MetricsModal } from "@/pages/submissions/MetricsModal"
 import { OpenAllFeedbackPrsModal } from "@/pages/submissions/OpenAllFeedbackPrsModal"
 import { DownloadAllSubmissionsModal } from "@/pages/submissions/DownloadAllSubmissionsModal"
 import { BulkRepoAccessModal } from "@/components/modals/BulkRepoAccessModal"
+import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal"
 import { DataFreshness } from "@/pages/submissions/DataFreshness"
 import { ConfirmModal } from "@/components/modals"
 import {
@@ -258,6 +259,7 @@ const SubmissionsPageContent = () => {
   const [openAllPrsOpen, setOpenAllPrsOpen] = useState(false)
   const [downloadAllOpen, setDownloadAllOpen] = useState(false)
   const [bulkAccessOpen, setBulkAccessOpen] = useState(false)
+  const [bulkFeaturesOpen, setBulkFeaturesOpen] = useState(false)
 
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
   // Gate on a resolved roster so a transient load/permission failure falls back
@@ -1038,6 +1040,17 @@ const SubmissionsPageContent = () => {
                 ? () => setBulkAccessOpen(true)
                 : undefined
             }
+            // Bulk set repo features: same gate as bulk access. Reconciles
+            // existing repos with the assignment's repo_features (which apply at
+            // accept-time only).
+            onBulkFeatures={
+              isOwner &&
+              !isGroupAssignment &&
+              !isEmptyRepoAssignment &&
+              acceptedSet.size > 0
+                ? () => setBulkFeaturesOpen(true)
+                : undefined
+            }
             locked={isLockedAssignment}
             lockPending={setLock.isPending}
             // Lock/unlock is an authoring-tier action (teacher|hta), same gate
@@ -1192,6 +1205,15 @@ const SubmissionsPageContent = () => {
       <BulkRepoAccessModal
         open={bulkAccessOpen}
         onClose={() => setBulkAccessOpen(false)}
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+        owners={acceptedOwners}
+        students={students}
+      />
+      <BulkRepoFeaturesModal
+        open={bulkFeaturesOpen}
+        onClose={() => setBulkFeaturesOpen(false)}
         org={org}
         classroom={classroom}
         assignment={assignment}

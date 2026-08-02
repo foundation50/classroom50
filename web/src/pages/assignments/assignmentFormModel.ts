@@ -33,7 +33,11 @@ import {
   validateLanguageVersion,
 } from "@/util/runtime"
 import { utcIsoToDatetimeLocalValue } from "./formFieldHelpers"
-import type { Assignment, RepoPermission } from "@/types/classroom"
+import type {
+  Assignment,
+  RepoPermission,
+  RepoFeatures,
+} from "@/types/classroom"
 import {
   GROUP_SIZE_MAX,
   GROUP_SIZE_MIN,
@@ -100,7 +104,58 @@ export type CreateAssignmentFormValues = {
   // pins it. buildAssignmentEntry omits it when it equals the default and
   // clamps group up to admin.
   student_permission: "" | RepoPermission
+  // Per-feature repo override, tri-state (one control shape regardless of
+  // template): "inherit" writes no key (absent = inherit template / off
+  // template-less), "on"/"off" force the feature. Round-trips to
+  // Assignment["repo_features"] via repoFeaturesToFormValues /
+  // formValuesToRepoFeatures.
+  repo_feature_issues: RepoFeatureChoice
+  repo_feature_wiki: RepoFeatureChoice
+  repo_feature_projects: RepoFeatureChoice
+  repo_feature_pull_requests: RepoFeatureChoice
   tests: AssignmentTestDraft[]
+}
+
+// A single repo-feature control's value. "inherit" is the default and omits the
+// wire key; "on"/"off" force true/false.
+export type RepoFeatureChoice = "inherit" | "on" | "off"
+
+// Read mapping: a stored boolean/absent -> the form choice. Absent (or an
+// absent object) is "inherit"; true is "on"; false is "off". Shared by create
+// and edit so a stored "off" never silently reverts to "inherit" on edit.
+export function repoFeatureChoice(
+  value: boolean | undefined,
+): RepoFeatureChoice {
+  if (value === undefined) return "inherit"
+  return value ? "on" : "off"
+}
+
+// Write mapping: the three form choices -> the Assignment repo_features object,
+// omitting any "inherit" key. Returns undefined when every choice inherits so the
+// caller can omit the block entirely (matching buildAssignmentEntry's
+// omit-when-empty rule).
+export function formValuesToRepoFeatures(
+  value: Pick<
+    CreateAssignmentFormValues,
+    | "repo_feature_issues"
+    | "repo_feature_wiki"
+    | "repo_feature_projects"
+    | "repo_feature_pull_requests"
+  >,
+): RepoFeatures | undefined {
+  const result: RepoFeatures = {}
+  const apply = (
+    choice: RepoFeatureChoice,
+    key: "issues" | "wiki" | "projects" | "pull_requests",
+  ) => {
+    if (choice === "on") result[key] = true
+    else if (choice === "off") result[key] = false
+  }
+  apply(value.repo_feature_issues, "issues")
+  apply(value.repo_feature_wiki, "wiki")
+  apply(value.repo_feature_projects, "projects")
+  apply(value.repo_feature_pull_requests, "pull_requests")
+  return Object.keys(result).length > 0 ? result : undefined
 }
 
 // Create-only: slug uniqueness is not validated in edit mode (no rename).
@@ -351,6 +406,13 @@ export function toSubmitValues(
     pass_threshold_enabled: isEmptyRepo ? false : value.pass_threshold_enabled,
     pass_threshold: Number(value.pass_threshold),
     student_permission: value.student_permission,
+    // Uniform tri-state controls; "inherit" is the default and resolves to the
+    // template's feature (templated) or off (template-less) at accept time, so
+    // no template-dependent default-flip is needed here.
+    repo_feature_issues: value.repo_feature_issues,
+    repo_feature_wiki: value.repo_feature_wiki,
+    repo_feature_projects: value.repo_feature_projects,
+    repo_feature_pull_requests: value.repo_feature_pull_requests,
     tests: isEmptyRepo ? [] : value.tests,
   }
 }
@@ -393,6 +455,11 @@ export const useAssignmentForm = (
       pass_threshold_enabled: defaultValues?.pass_threshold_enabled ?? false,
       pass_threshold: defaultValues?.pass_threshold ?? DEFAULT_PASS_THRESHOLD,
       student_permission: defaultValues?.student_permission ?? "",
+      repo_feature_issues: defaultValues?.repo_feature_issues ?? "inherit",
+      repo_feature_wiki: defaultValues?.repo_feature_wiki ?? "inherit",
+      repo_feature_projects: defaultValues?.repo_feature_projects ?? "inherit",
+      repo_feature_pull_requests:
+        defaultValues?.repo_feature_pull_requests ?? "inherit",
       tests: defaultValues?.tests || [],
     } satisfies CreateAssignmentFormValues,
     validators: {
@@ -469,6 +536,16 @@ export const assignmentToFormValues = (
     // Absent means the mode default; the form shows "Default" and the submit
     // path re-omits it. A stored value pins the picker to that level.
     student_permission: assignment.student_permission ?? "",
+    // Read mapping: absent object/key -> "inherit", true -> "on", false ->
+    // "off", per key, so a stored "off" round-trips instead of reverting.
+    repo_feature_issues: repoFeatureChoice(assignment.repo_features?.issues),
+    repo_feature_wiki: repoFeatureChoice(assignment.repo_features?.wiki),
+    repo_feature_projects: repoFeatureChoice(
+      assignment.repo_features?.projects,
+    ),
+    repo_feature_pull_requests: repoFeatureChoice(
+      assignment.repo_features?.pull_requests,
+    ),
     allowed_files: allowedFilesToText(assignment.allowed_files),
     release_assets: releaseAssetsToText(assignment.release_assets),
     tests,

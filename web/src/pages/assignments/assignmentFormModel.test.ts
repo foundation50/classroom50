@@ -5,6 +5,7 @@ import {
   assignmentToFormValues,
   validateAssignmentForm,
   toSubmitValues,
+  formValuesToRepoFeatures,
   type CreateAssignmentFormValues,
 } from "./assignmentFormModel"
 
@@ -59,6 +60,10 @@ const base: CreateAssignmentFormValues = {
   pass_threshold_enabled: false,
   pass_threshold: 80,
   student_permission: "",
+  repo_feature_issues: "inherit",
+  repo_feature_wiki: "inherit",
+  repo_feature_projects: "inherit",
+  repo_feature_pull_requests: "inherit",
   tests: [],
 }
 
@@ -425,11 +430,83 @@ describe("available_from (release date)", () => {
     })
     expect(values.available_from_date).toBe("")
   })
-
   it("trims the field on submit", () => {
     expect(
       toSubmitValues({ ...base, available_from_date: " 2026-09-01T12:00 " })
         .available_from_date,
     ).toBe("2026-09-01T12:00")
+  })
+})
+
+describe("repo_features tri-state round-trip", () => {
+  it("reads absent object/key -> inherit, true -> on, false -> off", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      repo_features: { issues: true, wiki: false, pull_requests: true },
+    })
+    expect(values.repo_feature_issues).toBe("on")
+    expect(values.repo_feature_wiki).toBe("off")
+    expect(values.repo_feature_pull_requests).toBe("on")
+    // Absent key inherits.
+    expect(values.repo_feature_projects).toBe("inherit")
+  })
+
+  it("defaults all to inherit when no repo_features is stored", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+    })
+    expect(values.repo_feature_issues).toBe("inherit")
+    expect(values.repo_feature_wiki).toBe("inherit")
+    expect(values.repo_feature_projects).toBe("inherit")
+    expect(values.repo_feature_pull_requests).toBe("inherit")
+  })
+
+  it("writes on -> true, off -> false, and omits inherit keys", () => {
+    expect(
+      formValuesToRepoFeatures({
+        repo_feature_issues: "on",
+        repo_feature_wiki: "off",
+        repo_feature_projects: "inherit",
+        repo_feature_pull_requests: "off",
+      }),
+    ).toEqual({ issues: true, wiki: false, pull_requests: false })
+  })
+
+  it("returns undefined when all inherit (omit the block entirely)", () => {
+    expect(
+      formValuesToRepoFeatures({
+        repo_feature_issues: "inherit",
+        repo_feature_wiki: "inherit",
+        repo_feature_projects: "inherit",
+        repo_feature_pull_requests: "inherit",
+      }),
+    ).toBeUndefined()
+  })
+
+  it("round-trips a stored off without reverting to inherit", () => {
+    const stored = { issues: false as const }
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      repo_features: stored,
+    })
+    expect(values.repo_feature_issues).toBe("off")
+    expect(
+      formValuesToRepoFeatures({
+        repo_feature_issues: values.repo_feature_issues ?? "inherit",
+        repo_feature_wiki: values.repo_feature_wiki ?? "inherit",
+        repo_feature_projects: values.repo_feature_projects ?? "inherit",
+        repo_feature_pull_requests:
+          values.repo_feature_pull_requests ?? "inherit",
+      }),
+    ).toEqual({ issues: false })
   })
 })

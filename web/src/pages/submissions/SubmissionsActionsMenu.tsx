@@ -10,6 +10,7 @@ import {
   LockOpen,
   RefreshCw,
   ShieldCheck,
+  SlidersHorizontal,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -39,6 +40,7 @@ export function SubmissionsActionsMenu({
   onDownloadAll,
   downloadAllDisabled,
   onBulkAccess,
+  onBulkFeatures,
   locked = false,
   lockPending = false,
   onLockToggle,
@@ -76,6 +78,10 @@ export function SubmissionsActionsMenu({
   // hidden) when the viewer can't write every repo (non-owner), for a group or
   // empty_repo assignment, or when there are no accepted repos to target.
   onBulkAccess?: () => void
+  // Opens the whole-assignment "Set repository features" modal. Same gate as
+  // onBulkAccess (owner, individual, non-empty, has accepted repos); omitted
+  // otherwise. Reconciles existing repos with the assignment's repo_features.
+  onBulkFeatures?: () => void
   // Current locked state, for the Lock/Unlock item's label and icon.
   locked?: boolean
   // Whether a lock/unlock is mid-flight, to disable the item and show progress.
@@ -257,6 +263,27 @@ export function SubmissionsActionsMenu({
                 {t("submissions.bulkAccess.menuLabel")}
               </button>
             </li>
+            {onBulkFeatures && (
+              <li>
+                <button
+                  type="button"
+                  disabled={disabledActions}
+                  title={
+                    emptyRoster
+                      ? t("submissions.bulkFeatures.titleEmptyRoster")
+                      : t("submissions.bulkFeatures.menuTitle")
+                  }
+                  onClick={() => {
+                    closeMenu()
+                    if (disabledActions) return
+                    onBulkFeatures()
+                  }}
+                >
+                  <SlidersHorizontal aria-hidden="true" className="size-4" />
+                  {t("submissions.bulkFeatures.menuLabel")}
+                </button>
+              </li>
+            )}
             <div
               className="my-1 border-t border-base-content/10"
               role="separator"

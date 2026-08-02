@@ -31,6 +31,7 @@ vi.mock("@/lib/githubHealth/githubStatusApi", () => ({
 // Stub the form to a single submit button that fires onSubmit with a minimal
 // payload — the page's onError/onSuccess wiring is what's under test.
 vi.mock("@/pages/assignments/CreateAssignmentForm", () => ({
+  formValuesToRepoFeatures: () => undefined,
   default: ({
     onSubmit,
   }: {

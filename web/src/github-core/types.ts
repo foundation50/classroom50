@@ -87,6 +87,13 @@ export type GitHubRepo = {
   default_branch: string
   visibility?: "public" | "private" | "internal"
   archived?: boolean
+  // Repository feature flags (GET /repos returns them). Used by the assignment
+  // form to resolve the "inherit" repo-feature choice to the template's actual
+  // current setting (e.g. "On (inherit)"). Optional — most callers ignore them.
+  has_issues?: boolean
+  has_wiki?: boolean
+  has_projects?: boolean
+  has_pull_requests?: boolean
   // Last push to the repo; used to sort orgs by "last modified" on the home
   // page. GitHub returns both on GET /repos; typed optional as older callers
   // don't rely on them.

@@ -106,6 +106,8 @@ export {
 export {
   addRepoCollaborator,
   removeRepoCollaborator,
+  setRepoFeatures,
+  type RepoFeaturePatch,
 } from "./mutations/collaborators"
 export {
   createPullRequest,
