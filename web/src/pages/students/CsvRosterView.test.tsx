@@ -60,18 +60,16 @@ describe("CsvRosterView", () => {
     expect(screen.getByText("students.roleStudent")).toBeTruthy()
   })
 
-  it("maps each known role cell to its badge (teacher/instructor/ta)", () => {
+  it("maps each known role cell to its badge (teacher/ta)", () => {
     render(
       <CsvRosterView
         students={[
           student({ username: "t", role: "teacher" }),
-          student({ username: "i", role: "instructor" }),
           student({ username: "a", role: "ta" }),
         ]}
       />,
     )
-    // teacher + its legacy instructor alias share the teacher label.
-    expect(screen.getAllByText("students.roleTeacher")).toHaveLength(2)
+    expect(screen.getByText("students.roleTeacher")).toBeTruthy()
     expect(screen.getByText("students.roleTa")).toBeTruthy()
   })
 

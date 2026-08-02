@@ -18,8 +18,7 @@ export type ClassroomRoleInput = {
   org: string | undefined
   classroom: string | undefined
   // Per-classroom team memberships (teacher > hta > ta > student precedence).
-  // The `teacher` signal combines membership in either the canonical `-teacher`
-  // team or the legacy `-instructor` team (see useClassroomRole).
+  // The `teacher` signal is membership in the `-teacher` team.
   teacher: GitHubTeamMembership
   hta: GitHubTeamMembership
   ta: GitHubTeamMembership
@@ -91,12 +90,10 @@ export function applyViewAs(
 }
 
 // Translation key for the human role label; null while `unresolved` so callers
-// show a skeleton mid-load. Pass through t(). The canonical `teacher` and the
-// legacy `instructor` alias share the same label key.
+// show a skeleton mid-load. Pass through t().
 export function roleLabelKey(role: ResolvedRole): string | null {
   switch (role) {
     case "teacher":
-    case "instructor":
       return "nav.roleTeacher"
     case "hta":
       return "nav.roleHeadTa"

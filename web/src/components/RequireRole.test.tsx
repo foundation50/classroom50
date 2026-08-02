@@ -48,7 +48,7 @@ const shown = () => {
   return "none"
 }
 
-// Default classroom context: an teacher (overridden per test).
+// Default classroom context: a teacher (overridden per test).
 const ctx = (over: Record<string, unknown> = {}) => ({
   role: "teacher",
   actualRole: "teacher",
@@ -108,7 +108,7 @@ describe("RequireRole — staff gate on a classroom", () => {
 })
 
 describe("RequireRole — teacher gate on a classroom", () => {
-  it("an teacher reaches classroom settings", () => {
+  it("a teacher reaches classroom settings", () => {
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
     classroomCtxMock.mockReturnValue(ctx({ role: "teacher" }))
     render(<RequireRole allow="teacher">{child}</RequireRole>)

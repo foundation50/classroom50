@@ -170,7 +170,7 @@ func TestClassroomJSON_NoExtraOmitsCleanly(t *testing.T) {
 // decodes into the typed Teams field (NOT Extra) and survives a
 // read-modify-write verbatim.
 func TestClassroomJSON_TeamsRoundTrip(t *testing.T) {
-	in := []byte(`{"schema":"classroom50/classroom/v1","name":"n","short_name":"cs101","term":"","org":"o","teams":{"instructor":{"id":11,"slug":"classroom50-cs101-instructor"},"ta":{"id":12,"slug":"classroom50-cs101-ta"}}}`)
+	in := []byte(`{"schema":"classroom50/classroom/v1","name":"n","short_name":"cs101","term":"","org":"o","teams":{"teacher":{"id":11,"slug":"classroom50-cs101-teacher"},"ta":{"id":12,"slug":"classroom50-cs101-ta"}}}`)
 	var c ClassroomJSON
 	if err := json.Unmarshal(in, &c); err != nil {
 		t.Fatalf("unmarshal: %v", err)
@@ -181,11 +181,11 @@ func TestClassroomJSON_TeamsRoundTrip(t *testing.T) {
 			t.Errorf("teams should decode into the typed field, not Extra: %v", c.Extra)
 		}
 	}
-	if c.Teams == nil || c.Teams.Instructor == nil || c.Teams.TA == nil {
+	if c.Teams == nil || c.Teams.Teacher == nil || c.Teams.TA == nil {
 		t.Fatalf("teams not decoded into typed Teams field: %+v", c.Teams)
 	}
-	if c.Teams.Instructor.Slug != "classroom50-cs101-instructor" || c.Teams.Instructor.ID != 11 {
-		t.Errorf("instructor team ref wrong: %+v", c.Teams.Instructor)
+	if c.Teams.Teacher.Slug != "classroom50-cs101-teacher" || c.Teams.Teacher.ID != 11 {
+		t.Errorf("teacher team ref wrong: %+v", c.Teams.Teacher)
 	}
 	if c.Teams.TA.Slug != "classroom50-cs101-ta" || c.Teams.TA.ID != 12 {
 		t.Errorf("ta team ref wrong: %+v", c.Teams.TA)
@@ -200,7 +200,7 @@ func TestClassroomJSON_TeamsRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(out, &back); err != nil {
 		t.Fatalf("re-parse: %v\n%s", err, out)
 	}
-	if back.Teams == nil || back.Teams.Instructor == nil || back.Teams.TA == nil {
+	if back.Teams == nil || back.Teams.Teacher == nil || back.Teams.TA == nil {
 		t.Errorf("teams lost on round-trip: %s", out)
 	}
 }

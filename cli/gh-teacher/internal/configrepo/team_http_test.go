@@ -215,7 +215,7 @@ func TestStaffTeamName(t *testing.T) {
 		want  string
 	}{
 		{"cs-principles", RoleTeacher, "classroom50-cs-principles-teacher"},
-		{"cs-principles", RoleInstructor, "classroom50-cs-principles-instructor"},
+		{"cs-principles", RoleHeadTA, "classroom50-cs-principles-hta"},
 		{"cs-principles", RoleTA, "classroom50-cs-principles-ta"},
 		{"cs50", RoleTeacher, "classroom50-cs50-teacher"},
 	}
@@ -227,8 +227,8 @@ func TestStaffTeamName(t *testing.T) {
 }
 
 // TestStaffTeamRepoPermissions pins the collect-time grant map: the non-owner
-// staff teams (head-TA and TA) get read (pull), and the teacher/instructor
-// roles are intentionally absent (owners get repo access via ownership, not the
+// staff teams (head-TA and TA) get read (pull), and the teacher role is
+// intentionally absent (owners get repo access via ownership, not the
 // collector). This map is the source of truth the collector's
 // STAFF_TEAM_PERMISSIONS mirror must match in lockstep.
 func TestStaffTeamRepoPermissions(t *testing.T) {
@@ -240,9 +240,6 @@ func TestStaffTeamRepoPermissions(t *testing.T) {
 	}
 	if _, ok := StaffTeamRepoPermissions[RoleTeacher]; ok {
 		t.Error("teacher must NOT be in StaffTeamRepoPermissions — owners get repo access via ownership")
-	}
-	if _, ok := StaffTeamRepoPermissions[RoleInstructor]; ok {
-		t.Error("instructor must NOT be in StaffTeamRepoPermissions — the collector grants it nothing")
 	}
 	valid := map[string]bool{"pull": true, "triage": true, "push": true, "maintain": true, "admin": true}
 	for role, perm := range StaffTeamRepoPermissions {
@@ -404,7 +401,7 @@ func TestGrantTeamRepoWrite(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		granted, err := GrantTeamRepoWrite(client, "o", "classroom50-x-instructor", "o", "classroom50")
+		granted, err := GrantTeamRepoWrite(client, "o", "classroom50-x-teacher", "o", "classroom50")
 		if err != nil {
 			t.Fatalf("GrantTeamRepoWrite: %v", err)
 		}
@@ -427,7 +424,7 @@ func TestGrantTeamRepoWrite(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		granted, err := GrantTeamRepoWrite(client, "o", "classroom50-x-instructor", "o", "classroom50")
+		granted, err := GrantTeamRepoWrite(client, "o", "classroom50-x-teacher", "o", "classroom50")
 		if err != nil {
 			t.Fatalf("GrantTeamRepoWrite: %v", err)
 		}
@@ -501,7 +498,7 @@ func TestDeleteClassroomTeam_RefusesZeroID(t *testing.T) {
 			http.NotFound(w, r)
 		}))
 		client := githubtest.NewTestClient(t, server)
-		err := DeleteClassroomTeam(client, "o", TeamRef{ID: id, Slug: "classroom50-other-instructor"})
+		err := DeleteClassroomTeam(client, "o", TeamRef{ID: id, Slug: "classroom50-other-teacher"})
 		server.Close()
 		if err == nil || !strings.Contains(err.Error(), "no recorded id") {
 			t.Errorf("id=%d: err = %v, want a fail-closed 'no recorded id' refusal", id, err)
@@ -516,9 +513,9 @@ func TestIsDeletableClassroomTeamRef(t *testing.T) {
 		team TeamRef
 		want bool
 	}{
-		{TeamRef{ID: 1, Slug: "classroom50-cs-instructor"}, true},
-		{TeamRef{ID: 0, Slug: "classroom50-cs-instructor"}, false},
-		{TeamRef{ID: -1, Slug: "classroom50-cs-instructor"}, false},
+		{TeamRef{ID: 1, Slug: "classroom50-cs-teacher"}, true},
+		{TeamRef{ID: 0, Slug: "classroom50-cs-teacher"}, false},
+		{TeamRef{ID: -1, Slug: "classroom50-cs-teacher"}, false},
 		{TeamRef{ID: 1, Slug: "other-team"}, false},
 		{TeamRef{ID: 1, Slug: ""}, false},
 	}
@@ -539,9 +536,9 @@ func TestEnsureClassroomStaffTeam_AdoptsExisting422(t *testing.T) {
 		case r.URL.Path == "/orgs/o/teams" && r.Method == http.MethodPost:
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			_, _ = w.Write([]byte(`{"message":"name already taken"}`))
-		case r.URL.Path == "/orgs/o/teams/classroom50-cs-instructor" && r.Method == http.MethodGet:
-			_ = json.NewEncoder(w).Encode(map[string]any{"id": 7, "slug": "classroom50-cs-instructor", "privacy": "closed"})
-		case r.URL.Path == "/orgs/o/teams/classroom50-cs-instructor" && r.Method == http.MethodPatch:
+		case r.URL.Path == "/orgs/o/teams/classroom50-cs-teacher" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 7, "slug": "classroom50-cs-teacher", "privacy": "closed"})
+		case r.URL.Path == "/orgs/o/teams/classroom50-cs-teacher" && r.Method == http.MethodPatch:
 			patched = true
 			w.WriteHeader(http.StatusOK)
 		default:
@@ -552,12 +549,12 @@ func TestEnsureClassroomStaffTeam_AdoptsExisting422(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 
-	ref, err := EnsureClassroomStaffTeam(client, "o", "cs", RoleInstructor)
+	ref, err := EnsureClassroomStaffTeam(client, "o", "cs", RoleTeacher)
 	if err != nil {
 		t.Fatalf("EnsureClassroomStaffTeam adopt: %v", err)
 	}
-	if ref.ID != 7 || ref.Slug != "classroom50-cs-instructor" {
-		t.Errorf("adopted ref = %+v, want id 7 / classroom50-cs-instructor", ref)
+	if ref.ID != 7 || ref.Slug != "classroom50-cs-teacher" {
+		t.Errorf("adopted ref = %+v, want id 7 / classroom50-cs-teacher", ref)
 	}
 	if !patched {
 		t.Errorf("expected a PATCH reconciling privacy to secret on the closed team")

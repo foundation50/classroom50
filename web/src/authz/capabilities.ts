@@ -49,7 +49,7 @@ export function can(cap: Capability, input: CapabilityInput): boolean {
         classroomRole === "ta"
       )
     case "authorAssignments":
-      // Config-repo write tier: teacher (+ legacy instructor) and head-TA can
+      // Config-repo write tier: teacher and head-TA can
       // author assignments; a plain TA is read-only (config-repo `pull`), so a
       // TA save would 403 at GitHub. The template read-grant is owner-only and
       // gated separately on `manageOrg` (see the module doc / plan KTD-4).

@@ -134,7 +134,7 @@ export type BuildTeamRosterInput = {
   invitations?: GitHubOrgInvitation[]
   // Active members of the per-classroom staff teams, keyed by role. Merged into
   // the same rows as `members` (a person on both the student and teacher
-  // team is one enrolled row with roles ["instructor","student"]).
+  // team is one enrolled row with roles ["teacher","student"]).
   staffMembers?: Partial<Record<StaffRole, GitHubUser[]>>
   // Pending team invitations for the staff teams, keyed by role. Team-scoped, so
   // a pending row is tagged with the role whose team lists it.

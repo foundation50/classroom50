@@ -18,22 +18,19 @@ describe("classroomTeamSlug", () => {
   })
 
   it("staff roles append the role suffix", () => {
-    expect(classroomTeamSlug("cs101", "instructor")).toBe(
-      "classroom50-cs101-instructor",
-    )
+    expect(classroomTeamSlug("cs101", "hta")).toBe("classroom50-cs101-hta")
     expect(classroomTeamSlug("cs101", "ta")).toBe("classroom50-cs101-ta")
   })
 })
 
-// The enrolled-set enumeration, student-first and legacy-inclusive. Byte-mirrors
+// The enrolled-set enumeration, student-first. Byte-mirrors
 // the CLI's contract.ClassroomTeamSlugs — a drift here would let the accept
 // gate and the CLI disagree on who counts as enrolled.
 describe("classroomTeamSlugs", () => {
-  it("returns the student team then every staff team (incl. legacy instructor)", () => {
+  it("returns the student team then every staff team", () => {
     expect(classroomTeamSlugs("cs-principles")).toEqual([
       "classroom50-cs-principles",
       "classroom50-cs-principles-teacher",
-      "classroom50-cs-principles-instructor",
       "classroom50-cs-principles-hta",
       "classroom50-cs-principles-ta",
     ])
@@ -42,9 +39,9 @@ describe("classroomTeamSlugs", () => {
 
 describe("parseClassroomTeamSlug", () => {
   it("parses a staff slug back to { classroom, role }", () => {
-    expect(parseClassroomTeamSlug("classroom50-cs101-instructor")).toEqual({
+    expect(parseClassroomTeamSlug("classroom50-cs101-hta")).toEqual({
       classroom: "cs101",
-      role: "instructor",
+      role: "hta",
     })
     expect(parseClassroomTeamSlug("classroom50-cs101-ta")).toEqual({
       classroom: "cs101",
@@ -55,11 +52,11 @@ describe("parseClassroomTeamSlug", () => {
   it("round-trips classroomTeamSlug for a hyphenated classroom name", () => {
     // A classroom short-name may contain hyphens; the parser must match the role
     // SUFFIX, not split naively on '-'.
-    const slug = classroomTeamSlug("cs-principles", "instructor")
-    expect(slug).toBe("classroom50-cs-principles-instructor")
+    const slug = classroomTeamSlug("cs-principles", "hta")
+    expect(slug).toBe("classroom50-cs-principles-hta")
     expect(parseClassroomTeamSlug(slug)).toEqual({
       classroom: "cs-principles",
-      role: "instructor",
+      role: "hta",
     })
   })
 
@@ -73,9 +70,9 @@ describe("parseClassroomTeamSlug", () => {
   })
 
   it("returns null when there is no classroom segment before the role suffix", () => {
-    // `classroom50-instructor` has an empty middle — not a real per-classroom
+    // `classroom50-hta` has an empty middle — not a real per-classroom
     // team, so it must not parse to a staff membership.
-    expect(parseClassroomTeamSlug("classroom50-instructor")).toBeNull()
+    expect(parseClassroomTeamSlug("classroom50-hta")).toBeNull()
   })
 })
 
@@ -97,7 +94,7 @@ describe("parseStudentClassroomSlug", () => {
   it("returns null for a staff slug (complement of parseClassroomTeamSlug)", () => {
     expect(parseStudentClassroomSlug("classroom50-cs101-ta")).toBeNull()
     expect(parseStudentClassroomSlug("classroom50-cs101-teacher")).toBeNull()
-    expect(parseStudentClassroomSlug("classroom50-cs101-instructor")).toBeNull()
+    expect(parseStudentClassroomSlug("classroom50-cs101-hta")).toBeNull()
   })
 
   it("returns null for a non-classroom slug", () => {
@@ -148,22 +145,10 @@ describe("resolveClassroomRoleSlug", () => {
     )
   })
 
-  it("teacher prefers teams.teacher, else legacy teams.instructor, else derives", () => {
+  it("teacher prefers teams.teacher, else derives", () => {
     expect(
       resolveClassroomRoleSlug("cs101", "teacher", {
         teams: { teacher: ref("gh-teacher") },
-      }),
-    ).toBe("gh-teacher")
-    // Not-yet-migrated classroom: only the legacy instructor ref exists.
-    expect(
-      resolveClassroomRoleSlug("cs101", "teacher", {
-        teams: { instructor: ref("gh-instructor") },
-      }),
-    ).toBe("gh-instructor")
-    // teacher wins over instructor when both are present.
-    expect(
-      resolveClassroomRoleSlug("cs101", "teacher", {
-        teams: { teacher: ref("gh-teacher"), instructor: ref("gh-instructor") },
       }),
     ).toBe("gh-teacher")
     expect(resolveClassroomRoleSlug("cs101", "teacher", {})).toBe(

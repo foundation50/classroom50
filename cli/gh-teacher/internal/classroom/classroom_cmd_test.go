@@ -139,13 +139,13 @@ func (m *configRepoMock) handler(t *testing.T) http.Handler {
 		}
 	})
 
-	// Staff-team verify+delete routes (instructor, ta), keyed by the
+	// Staff-team verify+delete routes (teacher, ta), keyed by the
 	// slug + recorded ids the classroomJSONWithStaffTeams helper sets.
 	for _, st := range []struct {
 		slug string
 		id   int64
 	}{
-		{"classroom50-cs-principles-instructor", 4243},
+		{"classroom50-cs-principles-teacher", 4243},
 		{"classroom50-cs-principles-ta", 4244},
 	} {
 		st := st
@@ -176,8 +176,8 @@ func classroomJSONWithStaffTeams(t *testing.T, org, shortName string) string {
 		Org:       org,
 		Team:      &configrepo.TeamRef{ID: 4242, Slug: "classroom50-" + shortName},
 		Teams: &configrepo.StaffTeamsRef{
-			Instructor: &configrepo.TeamRef{ID: 4243, Slug: "classroom50-" + shortName + "-instructor"},
-			TA:         &configrepo.TeamRef{ID: 4244, Slug: "classroom50-" + shortName + "-ta"},
+			Teacher: &configrepo.TeamRef{ID: 4243, Slug: "classroom50-" + shortName + "-teacher"},
+			TA:      &configrepo.TeamRef{ID: 4244, Slug: "classroom50-" + shortName + "-ta"},
 		},
 	})
 	if err != nil {
@@ -412,8 +412,8 @@ func TestRemoveClassroom(t *testing.T) {
 			t.Error("students team should be deleted")
 		}
 		want := map[string]bool{
-			"classroom50-cs-principles-instructor": true,
-			"classroom50-cs-principles-ta":         true,
+			"classroom50-cs-principles-teacher": true,
+			"classroom50-cs-principles-ta":      true,
 		}
 		if len(mock.staffTeamDeleted) != 2 {
 			t.Fatalf("staffTeamDeleted = %v, want both staff teams", mock.staffTeamDeleted)
@@ -423,8 +423,8 @@ func TestRemoveClassroom(t *testing.T) {
 				t.Errorf("unexpected staff-team delete %q", s)
 			}
 		}
-		if !strings.Contains(out.String(), "deleted staff team classroom50-cs-principles-instructor") {
-			t.Errorf("stdout = %q, want instructor staff-team delete confirmation", out.String())
+		if !strings.Contains(out.String(), "deleted staff team classroom50-cs-principles-teacher") {
+			t.Errorf("stdout = %q, want teacher staff-team delete confirmation", out.String())
 		}
 	})
 

@@ -1,9 +1,5 @@
 import { CONFIG_REPO } from "@/util/configRepo"
-import {
-  STAFF_ROLES_WITH_LEGACY,
-  type StaffRole,
-  type Classroom,
-} from "@/types/classroom"
+import { STAFF_ROLES, type StaffRole, type Classroom } from "@/types/classroom"
 
 // Roles a per-classroom team can back. Broader than StaffRole: also the students
 // team, a real team but not a staff role (no `-<role>` suffix, absent from
@@ -32,8 +28,7 @@ export function classroomTeamSlug(
 }
 
 // The full set of team slugs whose active membership means a user is enrolled
-// in a classroom: the student team plus every staff team (including the legacy
-// `-instructor` team so a not-yet-migrated staffer still reads as enrolled).
+// in a classroom: the student team plus every staff team.
 // Single-sources the "is enrolled?" slug enumeration — the accept gate (the
 // self-scoped enrollment probe and the accept-flow guard) derives its slugs
 // here rather than re-listing roles, so a role change can't drift the gate.
@@ -42,9 +37,7 @@ export function classroomTeamSlug(
 export function classroomTeamSlugs(classroom: string): string[] {
   return [
     classroomTeamSlug(classroom),
-    ...STAFF_ROLES_WITH_LEGACY.map((role) =>
-      classroomTeamSlug(classroom, role),
-    ),
+    ...STAFF_ROLES.map((role) => classroomTeamSlug(classroom, role)),
   ]
 }
 
@@ -54,8 +47,7 @@ export function classroomTeamSlugs(classroom: string): string[] {
 // the classroom.json ref is absent (a pre-feature classroom, or a teacher who
 // hasn't loaded classroom.json yet). Owner surfaces (roster view + Settings
 // staff section) resolve slugs through here so they can't target different teams
-// for the same role. The `teacher` role also honors the legacy `instructor`
-// ref so a not-yet-migrated classroom still resolves.
+// for the same role.
 export function resolveClassroomRoleSlug(
   classroom: string,
   role: ClassroomTeamRole,
@@ -65,33 +57,28 @@ export function resolveClassroomRoleSlug(
     return refs?.team?.slug || classroomTeamSlug(classroom, "student")
   }
   if (role === "teacher") {
-    return (
-      refs?.teams?.teacher?.slug ||
-      refs?.teams?.instructor?.slug ||
-      classroomTeamSlug(classroom, "teacher")
-    )
+    return refs?.teams?.teacher?.slug || classroomTeamSlug(classroom, "teacher")
   }
   return refs?.teams?.[role]?.slug || classroomTeamSlug(classroom, role)
 }
 
 // Inverse of classroomTeamSlug for a STAFF team: parse a team slug back to its
 // { classroom, role } when it is a
-// `classroom50-<classroom>-<teacher|instructor|hta|ta>` team, else null. Used to
+// `classroom50-<classroom>-<teacher|hta|ta>` team, else null. Used to
 // derive an org-level staff signal from the viewer's own team memberships
 // (GET /user/teams) without reading the config repo.
 //
 // A classroom short-name may contain hyphens (e.g., `cs-principles`), so match a
 // known role SUFFIX first, then take the middle as the classroom — never split
-// naively on `-`. Only staff roles are recognized (including the legacy
-// `-instructor` team so a not-yet-migrated staffer still reads as staff): a bare
-// student slug (`classroom50-<classroom>`, no role suffix) returns null, since
-// the student team is not a staff signal. A non-classroom slug returns null.
+// naively on `-`. Only staff roles are recognized: a bare student slug
+// (`classroom50-<classroom>`, no role suffix) returns null, since the student
+// team is not a staff signal. A non-classroom slug returns null.
 export function parseClassroomTeamSlug(
   slug: string,
 ): { classroom: string; role: StaffRole } | null {
   const prefix = `${CONFIG_REPO}-`
   if (!slug.startsWith(prefix)) return null
-  for (const role of STAFF_ROLES_WITH_LEGACY) {
+  for (const role of STAFF_ROLES) {
     const suffix = `-${role}`
     if (slug.endsWith(suffix)) {
       // Everything between the prefix and the role suffix is the classroom.

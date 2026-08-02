@@ -11,11 +11,9 @@ import type { MetadataField } from "@/util/rosterMetadataMerge"
 // re-exported here so UI callers have one import for all role presentation.
 export { ROLE_RANK, sortRolesByRank }
 
-// i18n key per role for row badges and filter labels. `teacher` and its legacy
-// `instructor` alias share the label key.
+// i18n key per role for row badges and filter labels.
 export const ROLE_LABEL_KEY: Record<ClassroomRole, string> = {
   teacher: "students.roleTeacher",
-  instructor: "students.roleTeacher",
   hta: "students.roleHeadTa",
   ta: "students.roleTa",
   student: "students.roleStudent",
@@ -26,7 +24,6 @@ export const ROLE_LABEL_KEY: Record<ClassroomRole, string> = {
 // chip (rendered with the Badge `ghost` prop), so it maps to "neutral" here.
 export const ROLE_BADGE_TONE: Record<ClassroomRole, BadgeTone> = {
   teacher: "primary",
-  instructor: "primary",
   hta: "info",
   ta: "secondary",
   student: "neutral",
@@ -38,14 +35,12 @@ export const ROLE_BADGE_TONE: Record<ClassroomRole, BadgeTone> = {
 // other role-presentation maps so the two surfaces can't drift on role copy.
 export const ROLE_PLURAL_KEY: Record<StaffRole, string> = {
   teacher: "classes.staff.roleTeacherPlural",
-  instructor: "classes.staff.roleTeacherPlural",
   hta: "classes.staff.roleHeadTaPlural",
   ta: "classes.staff.roleTaPlural",
 }
 
 export const ROLE_ACCESS_KEY: Record<StaffRole, string> = {
   teacher: "classes.staff.accessTeacher",
-  instructor: "classes.staff.accessTeacher",
   hta: "classes.staff.accessHeadTa",
   ta: "classes.staff.accessTa",
 }
@@ -101,7 +96,6 @@ export type RoleCounts = Record<ClassroomRole, number>
 export function countByRole(rows: TeamRosterRow[]): RoleCounts {
   const counts: RoleCounts = {
     teacher: 0,
-    instructor: 0,
     hta: 0,
     ta: 0,
     student: 0,

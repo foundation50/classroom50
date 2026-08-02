@@ -218,7 +218,6 @@ func collectClassroomTeams(client githubapi.Client, org string, errOut io.Writer
 		add(c.Team)
 		if c.Teams != nil {
 			add(c.Teams.Teacher)
-			add(c.Teams.Instructor)
 			add(c.Teams.HeadTA)
 			add(c.Teams.TA)
 		}

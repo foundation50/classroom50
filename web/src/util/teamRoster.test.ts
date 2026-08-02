@@ -380,7 +380,6 @@ describe("buildTeamRoster — needs-attention (CSV row on no team)", () => {
     })
     expect(enrolledCountsByRole(rows)).toEqual({
       teacher: 0,
-      instructor: 0,
       hta: 0,
       ta: 0,
       student: 1,
@@ -662,7 +661,6 @@ describe("buildTeamRoster — CSV-only rows do not render (team-driven)", () => 
 describe("githubOrgRoleForRole / roleForGitHubOrgRole — classroom<->org role mapping", () => {
   it("maps teacher to org OWNER (admin), student/ta to direct_member", () => {
     expect(githubOrgRoleForRole("teacher")).toBe("admin")
-    expect(githubOrgRoleForRole("instructor")).toBe("admin")
     expect(githubOrgRoleForRole("ta")).toBe("direct_member")
     expect(githubOrgRoleForRole("student")).toBe("direct_member")
   })

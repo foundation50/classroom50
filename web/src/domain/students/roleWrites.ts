@@ -212,14 +212,12 @@ export async function resolveRosterUploadContext(
     teamIdsByRole: {
       student: studentSets.ids,
       teacher: teacherSets.ids,
-      instructor: teacherSets.ids,
       hta: htaSets.ids,
       ta: taSets.ids,
     },
     teamLoginsByRole: {
       student: studentSets.logins,
       teacher: teacherSets.logins,
-      instructor: teacherSets.logins,
       hta: htaSets.logins,
       ta: taSets.logins,
     },
@@ -366,7 +364,7 @@ export async function applyClassroomRoleChange(
   const slugForRole = (role: ClassroomRole): string =>
     role === "student" ? slugs.student : slugs.staff[role]
 
-  // Teacher (and its legacy `instructor` alias) is the org-owner role.
+  // Teacher is the org-owner role.
   const wasTeacher = fromRoles.some(isTeacherRole)
   const toIsTeacher = isTeacherRole(toRole)
   const demotesOwner = wasTeacher && !toIsTeacher

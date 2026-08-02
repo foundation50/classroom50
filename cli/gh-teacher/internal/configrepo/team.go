@@ -46,16 +46,10 @@ const (
 	RoleTeacher StaffRole = "teacher"
 	RoleHeadTA  StaffRole = "hta"
 	RoleTA      StaffRole = "ta"
-	// RoleInstructor is the legacy name for RoleTeacher, kept so pre-rename
-	// classrooms (whose team slug + `teams.instructor` ref say "instructor")
-	// still resolve. New writes use RoleTeacher; reads accept either.
-	RoleInstructor StaffRole = "instructor"
 )
 
-// StaffRoles is every CANONICAL staff role, in rank order (teacher, then the
-// head-TA middle tier, then ta). The legacy RoleInstructor is intentionally
-// absent — creation and enumeration use the canonical set, while reads fall
-// back to the legacy team via ResolveClassroomStaffTeam.
+// StaffRoles is every staff role, in rank order (teacher, then the
+// head-TA middle tier, then ta). Creation and enumeration use this set.
 var StaffRoles = []StaffRole{RoleTeacher, RoleHeadTA, RoleTA}
 
 // GitHub team-level notification toggle, set at create and reconciled on adopt.
@@ -96,16 +90,15 @@ var StaffTeamRepoPermissions = map[StaffRole]string{
 var TemplateReadStaffRoles = []StaffRole{RoleHeadTA, RoleTA}
 
 // ConfigRepoPermission is the permission a staff role's team gets on the org's
-// `classroom50` config repo. Teacher (and its legacy instructor alias) and the
-// head-TA can author assignments → `push`; a plain TA is read-only → `pull`.
+// `classroom50` config repo. Teacher and the head-TA can author assignments →
+// `push`; a plain TA is read-only → `pull`.
 // This is a SEPARATE axis from StaffTeamRepoPermissions above, which governs
 // student assignment repos and private templates. A role absent here is granted
 // nothing on the config repo.
 var ConfigRepoPermission = map[StaffRole]string{
-	RoleTeacher:    "push",
-	RoleInstructor: "push",
-	RoleHeadTA:     "push",
-	RoleTA:         "pull",
+	RoleTeacher: "push",
+	RoleHeadTA:  "push",
+	RoleTA:      "pull",
 }
 
 // staffTeamName derives the staff-role team name: `classroom50-<short>-<role>`.
@@ -116,26 +109,23 @@ func staffTeamName(shortName string, role StaffRole) string {
 
 // StaffTeamsRef holds the per-classroom staff team refs the web GUI persists
 // under classroom.json `teams`. Mirrors classroom-v1's `teams` $def. `Teacher`
-// is the canonical staff team; `Instructor` is the legacy pre-rename ref, read
-// as a fallback and migrated to `Teacher` on touch. `HeadTA` is the middle-tier
-// role granted config-repo write like teacher but never org-owner.
+// is the canonical staff team; `HeadTA` is the middle-tier role granted
+// config-repo write like teacher but never org-owner.
 type StaffTeamsRef struct {
-	Teacher    *TeamRef `json:"teacher,omitempty"`
-	Instructor *TeamRef `json:"instructor,omitempty"`
-	HeadTA     *TeamRef `json:"hta,omitempty"`
-	TA         *TeamRef `json:"ta,omitempty"`
+	Teacher *TeamRef `json:"teacher,omitempty"`
+	HeadTA  *TeamRef `json:"hta,omitempty"`
+	TA      *TeamRef `json:"ta,omitempty"`
 }
 
-// RefForRole returns the persisted staff-team ref for a canonical staff role
+// RefForRole returns the persisted staff-team ref for a staff role
 // (teacher/hta/ta), or nil when absent. Lets callers iterate a role set (e.g.
-// TemplateReadStaffRoles) instead of hand-matching each struct field. The
-// legacy instructor alias resolves to the teacher ref.
+// TemplateReadStaffRoles) instead of hand-matching each struct field.
 func (r *StaffTeamsRef) RefForRole(role StaffRole) *TeamRef {
 	if r == nil {
 		return nil
 	}
 	switch role {
-	case RoleTeacher, RoleInstructor:
+	case RoleTeacher:
 		return r.Teacher
 	case RoleHeadTA:
 		return r.HeadTA
@@ -174,13 +164,8 @@ func ResolveClassroomStaffTeam(client githubapi.Client, org, shortName, ref stri
 	}
 	var team *TeamRef
 	switch role {
-	case RoleTeacher, RoleInstructor:
-		// Prefer the canonical teacher ref; fall back to the legacy
-		// instructor ref so pre-rename classrooms still resolve.
+	case RoleTeacher:
 		team = c.Teams.Teacher
-		if team == nil || team.Slug == "" {
-			team = c.Teams.Instructor
-		}
 	case RoleTA:
 		team = c.Teams.TA
 	case RoleHeadTA:
@@ -496,32 +481,6 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 	return nil
 }
 
-// ResolveLegacyInstructorTeam reads the legacy `teams.instructor` ref only when
-// it is DISTINCT from the canonical `teams.teacher` team — the
-// partially-migrated case where both refs point at different teams. Used by
-// teardown to sweep a stale instructor team that ResolveClassroomStaffTeam
-// (which prefers `teacher`) would otherwise skip. Returns ok=false when there
-// is no teacher ref yet (the legacy team is already covered by the RoleTeacher
-// fallback), when the instructor ref is absent, or when both refs share a slug.
-func ResolveLegacyInstructorTeam(client githubapi.Client, org, shortName, ref string) (TeamRef, bool, error) {
-	c, ok, err := LoadClassroom(client, org, shortName, ref)
-	if err != nil {
-		return TeamRef{}, false, err
-	}
-	if !ok || c.Teams == nil || c.Teams.Instructor == nil || c.Teams.Instructor.Slug == "" {
-		return TeamRef{}, false, nil
-	}
-	// No canonical teacher ref: the RoleTeacher resolve already falls back to
-	// this instructor team, so returning it here would double-count.
-	if c.Teams.Teacher == nil || c.Teams.Teacher.Slug == "" {
-		return TeamRef{}, false, nil
-	}
-	if c.Teams.Teacher.Slug == c.Teams.Instructor.Slug {
-		return TeamRef{}, false, nil
-	}
-	return *c.Teams.Instructor, true, nil
-}
-
 // TeamMemberRole is a GitHub team-membership role — distinct from the
 // per-classroom StaffRole. A typed constant keeps the compiler honest at call
 // sites instead of surfacing a typo'd literal as a runtime 422.
@@ -647,7 +606,7 @@ func putTeamRepoPermission(client githubapi.Client, org, slug, repoOwner, repo, 
 
 // GrantTeamConfigRepoAccess sets the staff team's permission on the org's
 // `classroom50` config repo to the role's ConfigRepoPermission — `push` for
-// teacher/instructor/hta, `pull` for ta. Unlike GrantTeamRepoWrite this is
+// teacher/hta, `pull` for ta. Unlike GrantTeamRepoWrite this is
 // permission-AWARE: it re-PUTs when the current permission differs, so
 // re-affirming an existing TA team that holds `push` downgrades it to `pull`.
 // Returns whether a change was applied. A role with no config-repo permission

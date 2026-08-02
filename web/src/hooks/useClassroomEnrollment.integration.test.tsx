@@ -12,7 +12,6 @@ import { GitHubAPIError } from "@/github-core/errors"
 // verdicts. `<classroom>` (no suffix) is the students team.
 type Resp = "active" | "404" | "500"
 let teacherResp: Resp = "404"
-let instructorResp: Resp = "404"
 let htaResp: Resp = "404"
 let taResp: Resp = "404"
 let studentResp: Resp = "404"
@@ -43,8 +42,6 @@ const respond = (url: string, r: Resp) => {
 
 const request = vi.fn(async (url: string) => {
   if (url.includes("-teacher/memberships/")) return respond(url, teacherResp)
-  if (url.includes("-instructor/memberships/"))
-    return respond(url, instructorResp)
   if (url.includes("-hta/memberships/")) return respond(url, htaResp)
   if (url.includes("-ta/memberships/")) return respond(url, taResp)
   if (url.includes("/memberships/")) {
@@ -78,7 +75,6 @@ const renderEnrollment = (username: string | undefined = "u") =>
 
 beforeEach(() => {
   teacherResp = "404"
-  instructorResp = "404"
   htaResp = "404"
   taResp = "404"
   studentResp = "404"

@@ -37,7 +37,7 @@ export const createClassroomMetadata = (
   // Grants rostered students read on private org templates.
   ...(team ? { team } : {}),
   // Per-classroom staff teams (teacher/hta/ta) backing in-app roles. Written
-  // only when provisioned. `instructor` is the legacy alias of teacher. A
+  // only when provisioned. A
   // generic presence check so a future staff role flows in without reopening
   // the silent-drop trap (an unenumerated role would drop the whole block).
   ...(teams && Object.values(teams).some(Boolean) ? { teams } : {}),

@@ -51,7 +51,7 @@ export function useOrgStaff(org: string | undefined): UseOrgStaffResult {
   const isOwner = can("manageOrg", { githubOrgRole })
 
   // Staff iff owner, or any of the viewer's teams IN THIS ORG parses to a
-  // classroom staff slug (classroom50-<classroom>-<instructor|ta>). Cross-org
+  // classroom staff slug (classroom50-<classroom>-<teacher|hta|ta>). Cross-org
   // teams are filtered out by organization.login; the student team (no role
   // suffix) parses to null.
   const isStaff =

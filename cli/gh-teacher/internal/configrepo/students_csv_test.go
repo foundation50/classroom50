@@ -9,7 +9,7 @@ import (
 
 func TestParseRoster_Canonical(t *testing.T) {
 	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
-		"alice,Alice,Andersson,alice@example.edu,section-1,12345,instructor\n" +
+		"alice,Alice,Andersson,alice@example.edu,section-1,12345,teacher\n" +
 		"bob,Bob,Baker,,,67890,ta\n" +
 		"carol,,,carol@example.edu,section-2,11111,student\n")
 
@@ -18,7 +18,7 @@ func TestParseRoster_Canonical(t *testing.T) {
 		t.Fatalf("ParseRoster: %v", err)
 	}
 	want := []RosterRow{
-		{Username: "alice", FirstName: "Alice", LastName: "Andersson", Email: "alice@example.edu", Section: "section-1", GitHubID: 12345, Role: "instructor"},
+		{Username: "alice", FirstName: "Alice", LastName: "Andersson", Email: "alice@example.edu", Section: "section-1", GitHubID: 12345, Role: "teacher"},
 		{Username: "bob", FirstName: "Bob", LastName: "Baker", Email: "", Section: "", GitHubID: 67890, Role: "ta"},
 		{Username: "carol", FirstName: "", LastName: "", Email: "carol@example.edu", Section: "section-2", GitHubID: 11111, Role: "student"},
 	}
@@ -241,7 +241,7 @@ func TestParseImportCSV_Rejects(t *testing.T) {
 
 func TestEncodeRoster_RoundTrip(t *testing.T) {
 	original := []RosterRow{
-		{Username: "alice", FirstName: "Alice", LastName: "Andersson", Email: "alice@example.edu", Section: "section-1", GitHubID: 12345, Role: "instructor"},
+		{Username: "alice", FirstName: "Alice", LastName: "Andersson", Email: "alice@example.edu", Section: "section-1", GitHubID: 12345, Role: "teacher"},
 		{Username: "bob", FirstName: "Bob, Jr.", LastName: `"Baker"`, Email: "bob+tag@example.org", Section: "section, 2", GitHubID: 67890, Role: "ta"},
 		{Username: "carol", FirstName: "", LastName: "", Email: "", Section: "", GitHubID: 11111, Role: "student"},
 	}
@@ -576,12 +576,12 @@ func TestEncodeRoster_LeavesSafeCellsAlone(t *testing.T) {
 // doesn't know the role (empty Role) must preserve the existing recorded role
 // rather than blanking it — mirroring the Extra-preservation guard.
 func TestUpsertRosterRow_PreservesRoleWhenIncomingEmpty(t *testing.T) {
-	rows := []RosterRow{{Username: "alice", GitHubID: 1, Role: "instructor"}}
+	rows := []RosterRow{{Username: "alice", GitHubID: 1, Role: "teacher"}}
 	updated, replaced := UpsertRosterRow(rows, RosterRow{Username: "alice", FirstName: "Alice", GitHubID: 1})
 	if !replaced {
 		t.Fatalf("expected replace")
 	}
-	if updated[0].Role != "instructor" {
+	if updated[0].Role != "teacher" {
 		t.Errorf("empty incoming Role should preserve existing role, got %q", updated[0].Role)
 	}
 	// A non-empty incoming role overrides (a re-sync that changed the role).

@@ -681,17 +681,17 @@ class TestGroupMemberUsernames:
         assert members == ["alice", "cs50-duck"]
 
     def test_non_rostered_admin_is_excluded(self, monkeypatch):
-        # An instructor/TA who is admin but NOT on the roster is still
+        # A teacher/TA who is admin but NOT on the roster is still
         # excluded — the roster is the gate, and they aren't on it.
         monkeypatch.setattr(
-            cs, "list_repo_collaborator_logins", lambda *a, **k: ["instructor", "bob"]
+            cs, "list_repo_collaborator_logins", lambda *a, **k: ["prof", "bob"]
         )
         members = cs.group_member_usernames(
             "https://api.github.com", "cs50", "cs-principles-hello-alice", "alice", "token",
             {"alice", "bob"},
         )
         assert members == ["alice", "bob"]
-        assert "instructor" not in members
+        assert "prof" not in members
 
 
 class TestListRepoCollaboratorLogins:
@@ -701,7 +701,7 @@ class TestListRepoCollaboratorLogins:
         # function returns EVERY collaborator regardless of role_name.
         # A group teammate who is an org owner (admin on every repo) or a
         # founder kept as repo admin must NOT be dropped here — that was
-        # the attribution bug. Instructors/TAs are filtered later by the
+        # the attribution bug. Teachers/TAs are filtered later by the
         # roster intersection, not by an admin check.
         page1 = [{"login": f"u{i}", "role_name": "write"} for i in range(100)]
         page2 = [
@@ -1635,7 +1635,7 @@ class TestRosterMetadataJoin:
         # normally; role is recorded metadata the collector does not consume.
         write_roster(tmp_path / "roster.csv", [{
             "username": "alice", "first_name": "Ada", "last_name": "Lovelace",
-            "email": "ada@uni.edu", "section": "A", "github_id": "1", "role": "instructor",
+            "email": "ada@uni.edu", "section": "A", "github_id": "1", "role": "teacher",
         }])
         results = self._collect(tmp_path, monkeypatch)
         assert len(results) == 1
@@ -2580,10 +2580,11 @@ class TestStaffTeamPermissions:
         # explicit read on private in-org templates/student repos.
         assert cs.STAFF_TEAM_PERMISSIONS["hta"] == "pull"
 
-    def test_instructor_not_granted_at_collect_time(self):
-        # The instructor team gets its access at classroom setup; the collector
-        # must not grant it (parity with Go StaffTeamRepoPermissions).
-        assert "instructor" not in cs.STAFF_TEAM_PERMISSIONS
+    def test_teacher_not_granted_at_collect_time(self):
+        # The teacher team's members are org owners with repo access via
+        # ownership; the collector must not grant it (parity with Go
+        # StaffTeamRepoPermissions).
+        assert "teacher" not in cs.STAFF_TEAM_PERMISSIONS
 
     def test_all_permissions_are_valid_github_values(self):
         valid = {"pull", "triage", "push", "maintain", "admin"}
@@ -2594,12 +2595,12 @@ class TestResolveStaffTeamSlugs:
     def test_returns_present_roles_with_slugs(self):
         meta = {
             "teams": {
-                "instructor": {"id": 1, "slug": "classroom50-cs-instructor"},
+                "teacher": {"id": 1, "slug": "classroom50-cs-teacher"},
                 "ta": {"id": 2, "slug": "classroom50-cs-ta"},
             }
         }
         assert cs.resolve_staff_team_slugs(meta) == {
-            "instructor": "classroom50-cs-instructor",
+            "teacher": "classroom50-cs-teacher",
             "ta": "classroom50-cs-ta",
         }
 
@@ -2607,7 +2608,7 @@ class TestResolveStaffTeamSlugs:
         assert cs.resolve_staff_team_slugs({}) == {}
 
     def test_skips_role_without_slug(self):
-        meta = {"teams": {"ta": {"id": 2}, "instructor": {"slug": "  "}}}
+        meta = {"teams": {"ta": {"id": 2}, "teacher": {"slug": "  "}}}
         assert cs.resolve_staff_team_slugs(meta) == {}
 
 

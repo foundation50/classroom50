@@ -411,9 +411,9 @@ export type MemberWithRole = {
 
 // Resolve the student-team slug plus the two staff-team slugs from one
 // classroom.json read (slugs are authoritative there; GitHub may rewrite them
-// on name collision). The per-role precedence (json ref -> legacy instructor ->
-// derived) is single-sourced in resolveClassroomRoleSlug so this async path and
-// the sync roster/staff UI can't drift on it.
+// on name collision). The per-role precedence (json ref -> derived) is
+// single-sourced in resolveClassroomRoleSlug so this async path and the sync
+// roster/staff UI can't drift on it.
 export async function resolveClassroomTeamSlugs(
   client: GitHubClient,
   org: string,
@@ -436,7 +436,6 @@ export async function resolveClassroomTeamSlugs(
     student: slug("student"),
     staff: {
       teacher: slug("teacher"),
-      instructor: slug("instructor"),
       hta: slug("hta"),
       ta: slug("ta"),
     },
@@ -626,7 +625,6 @@ export async function resolveTeamIdByRole(
   const result: Record<ClassroomRole, number | undefined> = {
     student: undefined,
     teacher: undefined,
-    instructor: undefined,
     hta: undefined,
     ta: undefined,
   }
@@ -636,8 +634,6 @@ export async function resolveTeamIdByRole(
     // so no catch here: a blip must surface, not be mistaken for "no team".
     result.student = (await resolveClassroomTeam(client, org, classroom)).id
   }
-  // A legacy `instructor` role in the batch resolves to the canonical teacher
-  // team (both map to org-owner). Treat it as teacher for team provisioning.
   const wantsTeacher = [...rolesPresent].some(isTeacherRole)
   for (const role of STAFF_ROLES) {
     if (role === "teacher" ? !wantsTeacher : !rolesPresent.has(role)) continue
@@ -645,7 +641,6 @@ export async function resolveTeamIdByRole(
       const team = await ensureClassroomRoleTeam(client, org, classroom, role)
       await grantTeamConfigRepoAccess(client, org, team.slug, role)
       result[role] = team.id
-      if (role === "teacher") result.instructor = team.id
     } catch (err) {
       // Only a DEFINITIVE failure (e.g., 403 no permission to create/grant the
       // staff team) degrades to a teamless invite. A transient 5xx/429/network

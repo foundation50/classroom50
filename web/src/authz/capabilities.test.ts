@@ -14,7 +14,6 @@ const orgRoles: GitHubOrgRole[] = [
 ]
 const classroomRoles: ResolvedRole[] = [
   "teacher",
-  "instructor",
   "hta",
   "ta",
   "student",
@@ -47,10 +46,6 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
     expect(can("viewClassroomStaffContent", { classroomRole: "teacher" })).toBe(
       true,
     )
-    // Legacy instructor alias still resolves to staff.
-    expect(
-      can("viewClassroomStaffContent", { classroomRole: "instructor" }),
-    ).toBe(true)
     expect(can("viewClassroomStaffContent", { classroomRole: "ta" })).toBe(true)
     // Head TA sees staff content (R6).
     expect(can("viewClassroomStaffContent", { classroomRole: "hta" })).toBe(
@@ -70,7 +65,6 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
 
   it("authorAssignments: teacher|hta only (TA read-only, student/unresolved denied)", () => {
     expect(can("authorAssignments", { classroomRole: "teacher" })).toBe(true)
-    expect(can("authorAssignments", { classroomRole: "instructor" })).toBe(true)
     expect(can("authorAssignments", { classroomRole: "hta" })).toBe(true)
     expect(can("authorAssignments", { classroomRole: "ta" })).toBe(false)
     expect(can("authorAssignments", { classroomRole: "student" })).toBe(false)
@@ -84,9 +78,6 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
 
   it("editClassroomSettings: teacher only (TA, student, unresolved all denied)", () => {
     expect(can("editClassroomSettings", { classroomRole: "teacher" })).toBe(
-      true,
-    )
-    expect(can("editClassroomSettings", { classroomRole: "instructor" })).toBe(
       true,
     )
     expect(can("editClassroomSettings", { classroomRole: "unresolved" })).toBe(
@@ -103,7 +94,6 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
 
   it("previewAsRole: a real teacher only (never TA/student/unresolved)", () => {
     expect(can("previewAsRole", { classroomRole: "teacher" })).toBe(true)
-    expect(can("previewAsRole", { classroomRole: "instructor" })).toBe(true)
     expect(can("previewAsRole", { classroomRole: "ta" })).toBe(false)
     expect(can("previewAsRole", { classroomRole: "hta" })).toBe(false)
     expect(can("previewAsRole", { classroomRole: "student" })).toBe(false)
@@ -126,12 +116,6 @@ describe("can — claimTeacher (KTD-4 self-repair)", () => {
       can("claimTeacher", {
         githubOrgRole: "owner",
         classroomRole: "teacher",
-      }),
-    ).toBe(false)
-    expect(
-      can("claimTeacher", {
-        githubOrgRole: "owner",
-        classroomRole: "instructor",
       }),
     ).toBe(false)
     expect(

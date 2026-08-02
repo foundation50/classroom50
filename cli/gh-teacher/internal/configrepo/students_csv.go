@@ -14,7 +14,7 @@ import (
 // RosterColumns: canonical required column order. github_id is CLI-managed
 // (from `GET /users/{username}`); the immutable numeric ID defends against
 // mid-class username changes. Email may be empty. role is best-effort recorded
-// metadata (instructor/ta/student, or "") refreshed from the classroom's GitHub
+// metadata (teacher/ta/student, or "") refreshed from the classroom's GitHub
 // teams on sync — the teams, not this column, remain the enrollment/role
 // authority; nothing reads it for logic.
 var RosterColumns = []string{"username", "first_name", "last_name", "email", "section", "github_id", "role"}
@@ -68,10 +68,9 @@ type RosterRow struct {
 	// githubIDRaw holds a github_id cell that read as unresolved, so a rewrite
 	// preserves the teacher's value instead of silently clearing it.
 	githubIDRaw string
-	// Role is best-effort recorded metadata: "teacher" (or the legacy
-	// "instructor"), "ta", "student", or "" (unknown / a pre-role file).
-	// Refreshed from team membership on sync; never consulted for enrollment
-	// decisions.
+	// Role is best-effort recorded metadata: "teacher", "ta", "student", or
+	// "" (unknown / a pre-role file). Refreshed from team membership on sync;
+	// never consulted for enrollment decisions.
 	Role string
 	// Extra carries non-canonical columns keyed by header name, so a
 	// read/modify/write round-trips them. nil for a plain canonical file.

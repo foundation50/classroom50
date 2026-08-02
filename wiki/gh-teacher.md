@@ -174,9 +174,6 @@ autograder (classrooms grade as a vacuous pass until you add one), and the
 autograde shim (embedded in `gh-student`, dropped into each student repo at
 accept).
 
-**Legacy alias:** `instructor` is the former name for `teacher`; a pre-rename
-team is migrated to `-teacher` automatically on touch.
-
 </details>
 
 **Errors:** missing config repo → `run gh teacher init <org> first`; existing
@@ -343,7 +340,7 @@ Manage a classroom's **staff teams** — `classroom50-<classroom>-{teacher,hta,t
 The `teacher` and `hta` (head TA) teams get write on the config repo; `ta` gets
 read-only. The classroom's GitHub teams — not the `role` column in `roster.csv` —
 are the role authority, so a classroom's staff is the same from the CLI or the
-web app. (`instructor` is a legacy alias of `teacher`.)
+web app.
 
 ```sh
 gh teacher staff add <org> <classroom> <username> [--role teacher|hta|ta]

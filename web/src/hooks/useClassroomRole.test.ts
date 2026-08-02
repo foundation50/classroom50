@@ -5,7 +5,6 @@ import {
   roleLabelKey,
   type ClassroomRoleInput,
 } from "@/authz"
-import { combineTeacherMembership } from "./useClassroomRole"
 
 // The pure resolution is exercised in depth in resolveRole.test.ts. This suite
 // pins the KTD-4 behavior change directly against the pure resolver: org-admin
@@ -33,33 +32,6 @@ describe("resolveClassroomRole (KTD-4: owner is not a classroom role)", () => {
     expect(resolveClassroomRole({ ...base, teacher: "unresolved" })).toBe(
       "unresolved",
     )
-  })
-})
-
-// The teacher signal probes BOTH the canonical -teacher team and the legacy
-// -instructor team during the rename migration; membership in either is teacher.
-describe("combineTeacherMembership (teacher OR legacy instructor team)", () => {
-  it("member when on the teacher team", () => {
-    expect(combineTeacherMembership("member", "non-member")).toBe("member")
-  })
-  it("member when only on the legacy instructor team", () => {
-    expect(combineTeacherMembership("non-member", "member")).toBe("member")
-  })
-  it("non-member only when a definitive non-member of BOTH", () => {
-    expect(combineTeacherMembership("non-member", "non-member")).toBe(
-      "non-member",
-    )
-  })
-  it("holds unresolved when either read is in flight (never demote a teacher)", () => {
-    expect(combineTeacherMembership("unresolved", "non-member")).toBe(
-      "unresolved",
-    )
-    expect(combineTeacherMembership("non-member", "unresolved")).toBe(
-      "unresolved",
-    )
-  })
-  it("member wins even if the other read is in flight", () => {
-    expect(combineTeacherMembership("member", "unresolved")).toBe("member")
   })
 })
 
