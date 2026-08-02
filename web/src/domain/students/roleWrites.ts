@@ -10,7 +10,7 @@ import {
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { assertClassroomNotArchived } from "../classrooms"
 import {
-  getRawFileWithFallbackSource,
+  getRawFile,
   getUser,
   listAllOrgMembers,
   listOrgAdmins,
@@ -23,7 +23,7 @@ import {
 } from "@/github-core/configRepoReads"
 import { isSameGitHubUser } from "@/util/students"
 import { parseRosterCsv } from "@/util/rosterCsv"
-import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/rosterPath"
 import { type ClassroomRole } from "@/util/teamRoster"
 import { isTeacherRole } from "@/authz"
 import { memberIdentitySets } from "@/util/identity"
@@ -259,13 +259,12 @@ async function resolveStoredRosterLookup(
   try {
     const configBranch = await getConfigRepoBranch(client, org)
     const ref = await getBranchRef(client, org, configBranch)
-    const currentCsv = await getRawFileWithFallbackSource(client, {
+    const currentCsv = await getRawFile(client, {
       org,
       path: rosterPath(classroom),
-      fallbackPath: legacyRosterPath(classroom),
       ref: ref.object.sha,
     })
-    const { rows: students } = parseRosterCsv(currentCsv.content)
+    const { rows: students } = parseRosterCsv(currentCsv)
     for (const s of students) {
       const metadata: StoredRosterRow = {
         first_name: s.first_name,

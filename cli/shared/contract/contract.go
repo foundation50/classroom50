@@ -63,15 +63,11 @@ const (
 	ReleaseBodyFilename = "release-body.md"
 
 	// RosterFilename is the per-classroom roster file
-	// (<classroom>/roster.csv). LegacyRosterFilename is the pre-rename name;
-	// readers fall back to it so classrooms bootstrapped before the rename keep
-	// working, and `gh teacher roster migrate` converges them. Writers always
-	// target RosterFilename. Hand-mirrored with NO compile-time link in the web
-	// GUI (web/src/util/rosterPath.ts) and the Python collect-scores script
-	// (collect_scores.py ROSTER_FILENAME / LEGACY_ROSTER_FILENAME) — keep all
-	// copies byte-identical; contract_test.go pins the Go half.
-	RosterFilename       = "roster.csv"
-	LegacyRosterFilename = "students.csv"
+	// (<classroom>/roster.csv). Hand-mirrored with NO compile-time link in the
+	// web GUI (web/src/util/rosterPath.ts) and the Python collect-scores script
+	// (collect_scores.py ROSTER_FILENAME) — keep all copies byte-identical;
+	// contract_test.go pins the Go half.
+	RosterFilename = "roster.csv"
 
 	// ServiceTokenSecretName is the repo-level Actions secret on the config repo
 	// holding the fine-grained PAT that collect-scores.yaml / regrade.yaml

@@ -13,7 +13,7 @@ import { CONFIG_REPO } from "@/util/configRepo"
 import useGetClasses from "@/hooks/useGetClasses"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { toStudent } from "@/util/roster"
-import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/rosterPath"
 import {
   isClassroomArchived,
   type Classroom,
@@ -83,8 +83,6 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
         org ?? "",
         CONFIG_REPO,
         rosterPath(name),
-        undefined,
-        legacyRosterPath(name),
       ),
       enabled: Boolean(org),
       select: (rows: Student[]) => rows.map(toStudent),

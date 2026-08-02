@@ -27,19 +27,15 @@ vi.mock("@/hooks/useTeamRoster", () => ({
 }))
 
 // Mutation hooks -> inert objects (no network); most phase tests never fire
-// them. Migrate + sync get dedicated, per-test-controllable spies so the
-// composed wiring test can open the migrate gate and observe the auto-sync.
+// them. Sync gets a dedicated, per-test-controllable spy so the composed wiring
+// test can observe the auto-sync.
 const inertMutation = { mutate: vi.fn(), isPending: false }
-const migrateMutate = vi.fn()
 const syncMutate = vi.fn()
 vi.mock("@/hooks/mutations/useDismissFailedInvite", () => ({
   useDismissFailedInvite: () => inertMutation,
 }))
 vi.mock("@/hooks/mutations/useSyncRoster", () => ({
   useSyncRoster: () => ({ mutate: syncMutate, isPending: false }),
-}))
-vi.mock("@/hooks/mutations/useMigrateRoster", () => ({
-  useMigrateRoster: () => ({ mutate: migrateMutate, isPending: false }),
 }))
 vi.mock("@/hooks/mutations/useReinviteFailedInvite", () => ({
   useReinviteFailedInvite: () => inertMutation,
@@ -124,9 +120,6 @@ const renderView = (): ReactElement => (
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
-  // clearAllMocks resets call records but not implementations; reset the
-  // migrate spy so one test's onSettled stub can't leak the gate into the next.
-  migrateMutate.mockReset()
   mockIsOwner = true
   capturedCanManage = undefined
 })
@@ -195,13 +188,9 @@ describe("EnrolledStudents — rendered phase views", () => {
     expect(screen.getByText("ghost")).not.toBeNull()
   })
 
-  // Composed wiring: exercises the useRosterAutoMigrate -> migrateSettledFor ->
-  // useRosterAutoSync seam through EnrolledStudents (the isolated-hook tests in
-  // rosterAutoEffects.test.ts can't, since the gate is opened via the migrate
-  // mutation's onSettled here). Migrate settles the gate, drift is present, so
-  // auto-sync must fire exactly once.
-  it("auto-syncs once when migrate settles and the roster has drift", () => {
-    migrateMutate.mockImplementation((_vars, opts) => opts?.onSettled?.())
+  // Composed wiring: exercises the useRosterAutoSync seam through
+  // EnrolledStudents. Drift is present, so auto-sync must fire exactly once.
+  it("auto-syncs once when the roster has drift", () => {
     useTeamRoster.mockReturnValue({
       ...emptyRoster,
       isEmpty: false,
@@ -209,17 +198,6 @@ describe("EnrolledStudents — rendered phase views", () => {
     })
     render(renderView())
     expect(syncMutate).toHaveBeenCalledTimes(1)
-  })
-
-  it("does not auto-sync while the migrate gate is still closed", () => {
-    // Default migrate mock never calls onSettled -> gate stays shut.
-    useTeamRoster.mockReturnValue({
-      ...emptyRoster,
-      isEmpty: false,
-      csvMissingLogins: ["ghost"],
-    })
-    render(renderView())
-    expect(syncMutate).not.toHaveBeenCalled()
   })
 
   // Owner-gate wiring: the per-member modal's management actions hit owner-only

@@ -1560,16 +1560,15 @@ def test_full_roster_header_matches_go_constant():
 
 
 def test_roster_filename_matches_go_constant():
-    # The roster filename must stay in lockstep with contract.RosterFilename /
-    # contract.LegacyRosterFilename in cli/shared/contract/contract.go (pinned by
-    # TestContractLiterals) and the web's src/util/rosterPath.ts. There is no
-    # compile-time link across the three tools; a Python-only drift would
-    # otherwise ship green while readers stopped agreeing on which file to read.
+    # The roster filename must stay in lockstep with contract.RosterFilename in
+    # cli/shared/contract/contract.go (pinned by TestContractLiterals) and the
+    # web's src/util/rosterPath.ts. There is no compile-time link across the
+    # three tools; a Python-only drift would otherwise ship green while readers
+    # stopped agreeing on which file to read.
     assert cs.ROSTER_FILENAME == "roster.csv"
-    assert cs.LEGACY_ROSTER_FILENAME == "students.csv"
 
 
-# Roster metadata join (best-effort) + roster.csv/students.csv fallback -------
+# Roster metadata join (best-effort) ------------------------------------------
 
 
 class TestRosterMetadataJoin:
@@ -1606,29 +1605,6 @@ class TestRosterMetadataJoin:
         assert results[0]["last_name"] == "Lovelace"
         assert results[0]["email"] == "ada@uni.edu"
         assert results[0]["section"] == "A"
-
-    def test_falls_back_to_legacy_students_csv(self, tmp_path, monkeypatch):
-        # No roster.csv — only the legacy students.csv exists (a classroom
-        # bootstrapped before the rename). The read must fall back and still
-        # join the metadata. This is the fallback under test: with only the
-        # pre-rename read (roster.csv), the metadata would be blank.
-        write_roster(tmp_path / "students.csv", [{
-            "username": "alice", "first_name": "Grace", "last_name": "Hopper",
-            "email": "grace@uni.edu", "section": "B", "github_id": "2",
-        }])
-        results = self._collect(tmp_path, monkeypatch)
-        assert len(results) == 1
-        assert results[0]["first_name"] == "Grace"
-        assert results[0]["email"] == "grace@uni.edu"
-        assert results[0]["section"] == "B"
-
-    def test_roster_csv_preferred_over_legacy(self, tmp_path, monkeypatch):
-        # Both present during the rename window: roster.csv wins, the legacy
-        # students.csv is ignored.
-        write_roster(tmp_path / "roster.csv", [{"username": "alice", "first_name": "New"}])
-        write_roster(tmp_path / "students.csv", [{"username": "alice", "first_name": "Old"}])
-        results = self._collect(tmp_path, monkeypatch)
-        assert results[0]["first_name"] == "New"
 
     def test_role_column_tolerated_metadata_still_joins(self, tmp_path, monkeypatch):
         # A roster.csv carrying the role column joins its display metadata

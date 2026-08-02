@@ -9,7 +9,7 @@ import {
   assertClassroomNotArchived,
   type CreateClassroomResult,
 } from "../classrooms"
-import { getRawFileWithFallbackSource } from "@/github-core/queries"
+import { getRawFile } from "@/github-core/queries"
 import {
   getBranchRef,
   getCommit,
@@ -23,7 +23,7 @@ import {
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
-import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/rosterPath"
 import { rosterWriteTree } from "./rosterPrimitives"
 
 // The teacher-editable subset of a roster row. Identity columns (username,
@@ -77,14 +77,13 @@ export async function updateStudent(
 
   const studentsFilePath = rosterPath(classroom)
 
-  const currentCsv = await getRawFileWithFallbackSource(client, {
+  const currentCsv = await getRawFile(client, {
     org,
     path: studentsFilePath,
-    fallbackPath: legacyRosterPath(classroom),
     ref: ref.object.sha,
   })
 
-  const currentStudents = parseStudentsCsv(currentCsv.content)
+  const currentStudents = parseStudentsCsv(currentCsv)
 
   // Stable per-row identity via the shared studentKey (github_id -> username ->
   // email), the same precedence the UI and reconcile use.
@@ -154,7 +153,7 @@ export async function updateStudent(
   const tree = await createGitTree(client, {
     org,
     base_tree: commit.tree.sha,
-    tree: rosterWriteTree(classroom, nextCsv, currentCsv.fromLegacy),
+    tree: rosterWriteTree(classroom, nextCsv),
   })
 
   const newCommit = await createGitCommit(client, {

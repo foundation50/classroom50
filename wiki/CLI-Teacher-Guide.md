@@ -277,11 +277,6 @@ the collaborator's permission in place.
 Each classroom keeps a `roster.csv`. The CLI manages it — you rarely hand-edit
 it.
 
-> [!NOTE]
-> **Renamed from `students.csv`.** Older classrooms are still read
-> automatically, but new writes target `roster.csv`. Convert one with
-> `gh teacher roster migrate <org> <classroom>`.
-
 **Add or update one student:**
 
 ```sh

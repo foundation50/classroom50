@@ -28,7 +28,6 @@ output, or `--verbose` / `-v` for per-step detail.
 | `roster update <org> <classroom> <username>` | Correct fields on an existing row (roster-only). |
 | `roster remove <org> <classroom> <username>` | Remove a roster row (not org membership). |
 | `roster import <org> <classroom> <csv>` | Bulk upsert from a CSV. |
-| `roster migrate <org> <classroom>` | Rename legacy `students.csv` to `roster.csv`. |
 | `staff add` / `remove <org> <classroom> <username>` | Manage staff teams (`--role teacher\|hta\|ta`). |
 | `assignment add <org> <classroom> <slug>` | Register/upsert an assignment. |
 | `assignment reuse <org> <slug> --from <src> --to <dst>` | Copy an assignment into another classroom. |
@@ -319,15 +318,6 @@ Bulk upsert. Accepts a 5-column header
 (`username,first_name,last_name,email,section`) or 6-column with a trailing
 `github_id` (which is ignored and re-resolved). Every username is resolved up
 front — one typo aborts before any commit. New students are invited.
-
-### `roster migrate`
-
-```sh
-gh teacher roster migrate <org> <classroom>
-```
-
-Renames a classroom's legacy `students.csv` to `roster.csv` in one commit.
-Idempotent.
 
 **Errors common to roster commands:** missing config repo → `run gh teacher init
 <org> first`; missing `roster.csv` → points at `classroom add`; bad header →

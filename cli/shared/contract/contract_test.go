@@ -31,12 +31,10 @@ func TestContractLiterals(t *testing.T) {
 		{"ModeGroup", ModeGroup, "group"},
 		{"ResultFilename", ResultFilename, "result.json"},
 		{"ReleaseBodyFilename", ReleaseBodyFilename, "release-body.md"},
-		// RosterFilename / LegacyRosterFilename are mirrored, with NO
-		// compile-time link, in the web GUI (web/src/util/rosterPath.ts) and the
-		// Python collect-scores script (collect_scores.py). Update every copy in
-		// lockstep on change.
+		// RosterFilename is mirrored, with NO compile-time link, in the web GUI
+		// (web/src/util/rosterPath.ts) and the Python collect-scores script
+		// (collect_scores.py). Update every copy in lockstep on change.
 		{"RosterFilename", RosterFilename, "roster.csv"},
-		{"LegacyRosterFilename", LegacyRosterFilename, "students.csv"},
 		// ServiceTokenSecretName / ServiceTokenExpiresAtVar / ServiceTokenNameVar
 		// are mirrored, with NO compile-time link, in the collect-scores /
 		// regrade workflow YAML, the gh-teacher servicetoken package

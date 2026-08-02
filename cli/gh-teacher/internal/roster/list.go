@@ -37,8 +37,7 @@ func rosterListCmd() *cobra.Command {
 		Use:   "list <org> <classroom>",
 		Short: "List the students in the roster",
 		Long: "List every student row in\n" +
-			"<org>/classroom50/<classroom>/roster.csv (falling back to the\n" +
-			"legacy students.csv for un-migrated classrooms).\n\n" +
+			"<org>/classroom50/<classroom>/roster.csv.\n\n" +
 			"Default output is an aligned table on stdout (username, name,\n" +
 			"email, section, github_id) with a one-line\n" +
 			"`<org>/<repo>/<classroom>/roster.csv: N student(s)` summary\n" +

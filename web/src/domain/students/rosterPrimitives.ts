@@ -13,7 +13,6 @@ import {
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   getRawFile,
-  getRawFileWithFallbackSource,
   listTeamInvitations,
   listTeamMembers,
   sleep,
@@ -29,7 +28,7 @@ import {
   isDefinitiveGitHubStatus,
   tolerateGitHubError,
 } from "@/github-core/errors"
-import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/rosterPath"
 import { prefixCommit } from "@/util/commit"
 import {
   formatRosterProblems,
@@ -50,32 +49,19 @@ import { logger } from "@/lib/logger"
 
 export const log = logger.scope("mutations:students")
 
-// Git-tree entries for a roster write: the roster.csv blob, plus — when
-// `fromLegacy` (from getRawFileWithFallbackSource) — a delete of the legacy
-// path, so a first edit of an un-migrated classroom converges it in one commit
-// (matching `gh teacher roster migrate`) instead of leaving a stale copy.
+// Git-tree entries for a roster write: the roster.csv blob.
 export function rosterWriteTree(
   classroom: string,
   csv: string,
-  fromLegacy: boolean,
 ): GitTreeEntry[] {
-  const tree: GitTreeEntry[] = [
+  return [
     { path: rosterPath(classroom), mode: "100644", type: "blob", content: csv },
   ]
-  if (fromLegacy) {
-    tree.push({
-      path: legacyRosterPath(classroom),
-      mode: "100644",
-      type: "blob",
-      sha: null,
-    })
-  }
-  return tree
 }
 
 // The conflict-safe roster.csv read-modify-write shared by the roster writers
 // (writeClassroomRoles, updateClassroomMetadata). Runs inside withGitConflictRetry:
-// reads the config branch/ref/commit, reads roster.csv with the legacy fallback,
+// reads the config branch/ref/commit, reads roster.csv,
 // parses it tolerantly and REFUSES a malformed file with a typed
 // RosterCsvMalformedError (a positional re-serialize would corrupt the bad row),
 // then hands the parsed rows to `mutate`. `mutate` returns the next rows plus how
@@ -97,15 +83,15 @@ export async function withRosterRewrite(
     const configBranch = await getConfigRepoBranch(client, org)
     const ref = await getBranchRef(client, org, configBranch)
     const commit = await getCommit(client, org, ref.object.sha)
-    const currentCsv = await getRawFileWithFallbackSource(client, {
+    // Read at the freshly-fetched branch HEAD (not a commit we just wrote), so
+    // a 404 here means roster.csv is genuinely absent, not read-your-own-write
+    // lag — surface it rather than masking a missing file.
+    const currentCsv = await getRawFile(client, {
       org,
       path: rosterPath(classroom),
-      fallbackPath: legacyRosterPath(classroom),
       ref: ref.object.sha,
     })
-    const { rows: currentStudents, problems } = parseRosterCsv(
-      currentCsv.content,
-    )
+    const { rows: currentStudents, problems } = parseRosterCsv(currentCsv)
     if (problems.length > 0) {
       throw new RosterCsvMalformedError(formatRosterProblems(problems))
     }
@@ -117,7 +103,7 @@ export async function withRosterRewrite(
     const tree = await createGitTree(client, {
       org,
       base_tree: commit.tree.sha,
-      tree: rosterWriteTree(classroom, nextCsv, currentCsv.fromLegacy),
+      tree: rosterWriteTree(classroom, nextCsv),
     })
     const newCommit = await createGitCommit(client, {
       org,

@@ -1251,13 +1251,13 @@ func TestRewriteAssetURL(t *testing.T) {
 }
 
 // TestLoadRosterMetadata_MissingCSVWarnsAndBlanks: the roster is optional
-// display metadata now — a missing/unreadable file must NOT skip students. Both
-// roster.csv and the legacy fallback contents reads 404, so LoadRoster
-// errors; loadRosterMetadata warns and returns an empty map so every team
-// member still gets a (blank-metadata) row.
+// display metadata now — a missing/unreadable file must NOT skip students. When
+// the roster.csv contents read 404s, LoadRoster errors; loadRosterMetadata
+// warns and returns an empty map so every team member still gets a
+// (blank-metadata) row.
 func TestLoadRosterMetadata_MissingCSVWarnsAndBlanks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r) // roster.csv and the legacy fallback both 404
+		http.NotFound(w, r) // roster.csv 404s
 	}))
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)

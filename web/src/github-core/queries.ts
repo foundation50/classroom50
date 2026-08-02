@@ -57,7 +57,6 @@ export {
   csvFileQuery,
   rosterRawFileQuery,
   getRawFile,
-  getRawFileWithFallbackSource,
   getClassroom50Yaml,
 } from "./queries/fileReads"
 export {

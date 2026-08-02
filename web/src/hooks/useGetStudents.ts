@@ -9,7 +9,7 @@ import {
 } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { toStudent } from "@/util/roster"
-import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/rosterPath"
 import { parseRosterCsv, type RosterCsvProblem } from "@/domain/students"
 import type { Student } from "@/types/classroom"
 
@@ -40,8 +40,6 @@ const useGetStudents = (
       org ?? "",
       CONFIG_REPO,
       rosterPath(classroom ?? ""),
-      undefined,
-      legacyRosterPath(classroom ?? ""),
     ),
     select: selectStudents,
   })
@@ -60,7 +58,6 @@ const useGetStudents = (
       org ?? "",
       CONFIG_REPO,
       rosterPath(classroom ?? ""),
-      legacyRosterPath(classroom ?? ""),
     ),
   )
   const parseProblems = useMemo(

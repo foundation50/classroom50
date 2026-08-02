@@ -5,12 +5,11 @@ import {
 } from "@/hooks/useSuppressedLogins"
 
 // Auto-sync on open: append team members lacking a CSV row (fire once per drift
-// episode, per classroom; re-arm when the drift clears). Gated on migrate having
-// settled for this classroom so the two roster writers run in sequence, not a
-// race. dropSuppressed skips any csv-missing member the teacher just unenrolled
-// whose best-effort team-drop failed — otherwise auto-sync would re-append the
-// student it just removed. (suppressedLogins is read in the effect, not during
-// render; the sync re-derives the authoritative set server-side.)
+// episode, per classroom; re-arm when the drift clears). dropSuppressed skips
+// any csv-missing member the teacher just unenrolled whose best-effort team-drop
+// failed — otherwise auto-sync would re-append the student it just removed.
+// (suppressedLogins is read in the effect, not during render; the sync
+// re-derives the authoritative set server-side.)
 //
 // Keyed by classroom (not a boolean): the component instance is reused across a
 // $classroom param switch, so a boolean set true for a drifting classroom A
@@ -23,7 +22,6 @@ import {
 export function useRosterAutoSync(params: {
   classroom: string
   ready: boolean
-  migrateSettledFor: string | null
   csvMissingLogins: string[]
   backfillNeededLogins: string[]
   suppressedLogins: SuppressedLogins
@@ -33,7 +31,6 @@ export function useRosterAutoSync(params: {
   const {
     classroom,
     ready,
-    migrateSettledFor,
     csvMissingLogins,
     backfillNeededLogins,
     suppressedLogins,
@@ -46,9 +43,6 @@ export function useRosterAutoSync(params: {
   const backfillNeededKey = backfillNeededLogins.join(",")
   useEffect(() => {
     if (!ready) return
-    // Wait for the migrate pass to settle first (converges the legacy roster
-    // name onto roster.csv) so sync's write can't race migrate's on the ref.
-    if (migrateSettledFor !== classroom) return
     // Sync when there's drift to fix: a team member with no CSV row (missing),
     // OR an existing CSV row that's stale against the team (blank github_id or a
     // wrong role — the login-only row case). Without the backfill term a
@@ -68,5 +62,5 @@ export function useRosterAutoSync(params: {
     autoSyncedForRef.current = classroom
     runSync()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [csvMissingKey, backfillNeededKey, ready, migrateSettledFor, classroom])
+  }, [csvMissingKey, backfillNeededKey, ready, classroom])
 }
