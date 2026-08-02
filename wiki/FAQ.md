@@ -216,10 +216,18 @@ build your own automations against it.
 
 ### As a teacher, can I test an assignment as a student?
 
-You can accept your own assignment, but as an organization owner you'll keep
-`admin` on the repository (GitHub won't let an owner reduce their own access to
-`write`), so it won't match a real student's setup. To test the exact student
-experience, use a separate GitHub account that you add to the classroom as a
+You can — Classroom 50 doesn't currently disallow one account holding both a
+staff and a student role. Add yourself to the roster with `gh teacher roster
+add` (or the web app) while remaining on a staff team; you'll then show **both**
+roles and be graded as a student. (Your in-app access stays at your highest
+role, and the `roster.csv` `role` column records that highest role — an
+automatic sync may rewrite it, which doesn't affect your student enrollment. See
+[Dual roles](gh-teacher#dual-roles-staff-who-are-also-students).)
+
+One caveat: as an **organization owner** you keep `admin` on your own assignment
+repo (GitHub won't let an owner reduce their own access to `write`), so it won't
+match a real student's `write`-level setup. To test the exact student
+experience, use a **separate** GitHub account added to the classroom as a
 student.
 
 ## Migrating from GitHub Classroom

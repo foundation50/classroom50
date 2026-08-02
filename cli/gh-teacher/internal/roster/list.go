@@ -18,7 +18,11 @@ import (
 
 // rosterListEntry is the `--json` view of one roster.csv row. Field names
 // mirror the CSV columns. github_id is always present; 0 for an unresolved row
-// — consumers branch on `github_id == 0`, not key presence.
+// — consumers branch on `github_id == 0`, not key presence. role is a display
+// snapshot of the account's highest team-derived role ("teacher"/"ta"/
+// "student", or "" when unknown); the teams remain the enrollment/role
+// authority. An account holding several roles (dual roles aren't disallowed)
+// reads as its highest one here while still being an enrolled student.
 type rosterListEntry struct {
 	Username  string `json:"username"`
 	FirstName string `json:"first_name"`
@@ -26,6 +30,7 @@ type rosterListEntry struct {
 	Email     string `json:"email"`
 	Section   string `json:"section"`
 	GitHubID  int64  `json:"github_id"`
+	Role      string `json:"role"`
 }
 
 func rosterListCmd() *cobra.Command {
@@ -39,11 +44,17 @@ func rosterListCmd() *cobra.Command {
 		Long: "List every student row in\n" +
 			"<org>/classroom50/<classroom>/roster.csv.\n\n" +
 			"Default output is an aligned table on stdout (username, name,\n" +
-			"email, section, github_id) with a one-line\n" +
+			"email, section, github_id, role) with a one-line\n" +
 			"`<org>/<repo>/<classroom>/roster.csv: N student(s)` summary\n" +
 			"on stderr.\n\n" +
+			"The `role` column is a display snapshot of the account's\n" +
+			"highest team-derived role (teacher/ta/student, or empty when\n" +
+			"unknown) refreshed on sync; the classroom's GitHub teams — not\n" +
+			"this column — remain the enrollment/role authority. An account\n" +
+			"holding several roles (dual roles aren't disallowed) reads as\n" +
+			"its highest one here while still being an enrolled student.\n\n" +
 			"Pass --json for the full array of\n" +
-			"{username, first_name, last_name, email, section, github_id}\n" +
+			"{username, first_name, last_name, email, section, github_id, role}\n" +
 			"objects. Pass --quiet for one username per line on stdout (no\n" +
 			"table, no stderr summary) -- pipeable into `xargs`, `grep`, or\n" +
 			"an agent loop. --json takes precedence over --quiet.\n\n" +
@@ -72,7 +83,7 @@ func rosterListCmd() *cobra.Command {
 			return runRosterList(client, cmd.OutOrStdout(), cmd.ErrOrStderr(), org, classroom, asJSON, quiet)
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit the full JSON array of {username, first_name, last_name, email, section, github_id} objects instead of the table")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit the full JSON array of {username, first_name, last_name, email, section, github_id, role} objects instead of the table")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Print one username per line (no table, no stderr summary)")
 	return cmd
 }
@@ -102,6 +113,7 @@ func runRosterList(client githubapi.Client, out, errOut io.Writer, org, classroo
 				Email:     r.Email,
 				Section:   r.Section,
 				GitHubID:  r.GitHubID,
+				Role:      r.Role,
 			})
 		}
 		data, err := output.JSONPretty(entries)
@@ -129,16 +141,17 @@ func runRosterList(client githubapi.Client, out, errOut io.Writer, org, classroo
 // discoverable; the "no students" signal is the stderr summary.
 func writeRosterTable(out io.Writer, rows []configrepo.RosterRow) {
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "USERNAME\tNAME\tEMAIL\tSECTION\tGITHUB_ID")
+	_, _ = fmt.Fprintln(tw, "USERNAME\tNAME\tEMAIL\tSECTION\tGITHUB_ID\tROLE")
 	for _, r := range rows {
 		name := strings.TrimSpace(r.FirstName + " " + r.LastName)
 		githubID := ""
 		if r.GitHubID != 0 {
 			githubID = strconv.FormatInt(r.GitHubID, 10)
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			dashIfEmpty(r.Username), dashIfEmpty(name),
-			dashIfEmpty(r.Email), dashIfEmpty(r.Section), dashIfEmpty(githubID))
+			dashIfEmpty(r.Email), dashIfEmpty(r.Section), dashIfEmpty(githubID),
+			dashIfEmpty(r.Role))
 	}
 	_ = tw.Flush()
 }

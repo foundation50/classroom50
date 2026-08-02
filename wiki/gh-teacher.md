@@ -276,8 +276,10 @@ gh teacher roster list <org> <classroom> [--json] [--quiet]
 ```
 
 Default is an aligned table (empty cells show as `-`). `--json` emits full row
-objects (`github_id` is `0` when unresolved); `--quiet` prints one username per
-line. Read-only.
+objects (`github_id` is `0` when unresolved; `role` is `""` when unknown);
+`--quiet` prints one username per line. The `role` column is a display snapshot
+of the account's highest team-derived role — see
+[Dual roles](#dual-roles-staff-who-are-also-students). Read-only.
 
 ### `roster add`
 
@@ -340,6 +342,37 @@ gh teacher staff remove <org> <classroom> <username> [--role teacher|hta|ta]
 `--role` defaults to `teacher`. `add` self-heals a classroom that predates staff
 teams (creating and recording the missing team). `remove` doesn't touch org
 membership and is idempotent.
+
+### Dual roles (staff who are also students)
+
+Classroom 50 does not currently disallow a single account holding more than one
+role in a classroom — most commonly a teacher or TA who also adds themselves to
+the roster to preview the student experience. In practice this only arises on
+the teacher's side: `staff add` and `roster add` each manage their own GitHub
+team, so running both for one account leaves it on both teams. There's no guard
+against it, so it's worth knowing how the app behaves.
+
+The classroom's GitHub teams are the authority for enrollment and role; the
+`role` column in `roster.csv` is only a display snapshot. With that in mind:
+
+- **Roster view** — team memberships are unioned, so the account shows **all**
+  its role badges and appears under each role's filter.
+- **In-app access** — the **highest** role wins (`teacher > hta > ta > student`),
+  so a teacher-who-is-also-a-student keeps teacher-level access. "View as" only
+  downgrades the preview locally; it never grants access.
+- **`role` column / `roster list`** — records the single **highest** role. The
+  automatic sync refreshes it, so you may see a commit rewrite an empty/`""`
+  role to `teacher` shortly after `roster add`. That's the snapshot updating,
+  not a change to enrollment — nothing reads this column to decide access.
+- **Grades & submissions** — an account with a student enrollment is always
+  listed as a student. (A pure-staff account only appears in submissions once it
+  has actually accepted an assignment repo.)
+- **Unenroll** — drops only the student side (the roster row and student-team
+  membership); any staff role stays intact.
+
+`roster add` prints a note when the target is already staff, so the later
+`role`-column rewrite isn't a surprise. If you want a "pure" student view with no
+staff access, use a separate GitHub account for student testing.
 
 ## `assignment`
 

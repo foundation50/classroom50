@@ -529,3 +529,135 @@ func TestRunRosterAdd_PreservesMalformedRow(t *testing.T) {
 		t.Errorf("added student aristotea missing from written roster: %#v", rows)
 	}
 }
+
+// dualRoleAddMock extends rosterAddMock with classroom.json (carrying staff-team
+// refs) and staff-team member endpoints, so runRosterAdd's best-effort
+// dual-role check can resolve teams and find (or not find) the target on them.
+// staffMembers maps a team slug -> the logins it lists.
+type dualRoleAddMock struct {
+	*rosterWriteMock
+	classroomJSON string
+	staffMembers  map[string][]string
+}
+
+func (m *dualRoleAddMock) handler(t *testing.T) http.Handler {
+	t.Helper()
+	base := m.rosterWriteMock.handler(t).(*http.ServeMux)
+	base.HandleFunc("/users/", func(w http.ResponseWriter, r *http.Request) {
+		login := strings.TrimPrefix(r.URL.Path, "/users/")
+		_ = json.NewEncoder(w).Encode(map[string]any{"login": login, "id": 999})
+	})
+	base.HandleFunc("/orgs/o/invitations", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": 1})
+	})
+	// classroom.json read (ResolveClassroomTeam / ResolveClassroomStaffTeam).
+	base.HandleFunc("/repos/o/classroom50/contents/ai26/classroom.json", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"content":  base64.StdEncoding.EncodeToString([]byte(m.classroomJSON)),
+			"encoding": "base64",
+		})
+	})
+	// Staff-team member lists (ListTeamMembers) + team membership PUTs (the
+	// classroom-team add in runRosterAdd). A slug not in staffMembers 404s on
+	// /members -> ListTeamMembers treats it as empty.
+	base.HandleFunc("/orgs/o/teams/", func(w http.ResponseWriter, r *http.Request) {
+		rest := strings.TrimPrefix(r.URL.Path, "/orgs/o/teams/")
+		slug, tail, _ := strings.Cut(rest, "/")
+		// PUT .../memberships/<user>: the classroom-team add. Accept it.
+		if strings.HasPrefix(tail, "memberships/") {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"state": "active"})
+			return
+		}
+		if tail != "members" {
+			http.NotFound(w, r)
+			return
+		}
+		logins, ok := m.staffMembers[slug]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		var members []map[string]any
+		for _, l := range logins {
+			members = append(members, map[string]any{"login": l, "id": 1})
+		}
+		_ = json.NewEncoder(w).Encode(members)
+	})
+	return base
+}
+
+// classroomJSONWithStaffTeams builds a classroom.json carrying the student team
+// plus all three staff-team refs, so the dual-role check can resolve slugs.
+func classroomJSONWithStaffTeams(t *testing.T, classroom string) string {
+	t.Helper()
+	c := map[string]any{
+		"name": classroom,
+		"team": map[string]any{"id": 1, "slug": "classroom50-" + classroom},
+		"teams": map[string]any{
+			"teacher": map[string]any{"id": 2, "slug": "classroom50-" + classroom + "-teacher"},
+			"hta":     map[string]any{"id": 3, "slug": "classroom50-" + classroom + "-hta"},
+			"ta":      map[string]any{"id": 4, "slug": "classroom50-" + classroom + "-ta"},
+		},
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		t.Fatalf("marshal classroom.json: %v", err)
+	}
+	return string(b)
+}
+
+// TestRunRosterAdd_DualRoleNote: adding a user already on the teacher staff team
+// prints the advisory dual-role note to stderr; a plain new student does not.
+func TestRunRosterAdd_DualRoleNote(t *testing.T) {
+	roster := "username,first_name,last_name,email,section,github_id,role\n"
+
+	t.Run("existing staff member gets the dual-role note", func(t *testing.T) {
+		mock := &dualRoleAddMock{
+			rosterWriteMock: &rosterWriteMock{files: map[string]string{
+				"ai26/roster.csv": roster,
+			}},
+			classroomJSON: classroomJSONWithStaffTeams(t, "ai26"),
+			staffMembers: map[string][]string{
+				"classroom50-ai26-teacher": {"prof"},
+			},
+		}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		var out, errOut bytes.Buffer
+		if err := runRosterAdd(client, &out, &errOut, "o", "ai26", "prof", "", "", "", ""); err != nil {
+			t.Fatalf("runRosterAdd: %v", err)
+		}
+		if !strings.Contains(errOut.String(), "Dual roles aren't disallowed") {
+			t.Errorf("stderr missing the dual-role note:\n%s", errOut.String())
+		}
+		if !strings.Contains(errOut.String(), "teacher") {
+			t.Errorf("dual-role note should name the teacher role:\n%s", errOut.String())
+		}
+	})
+
+	t.Run("plain new student gets no dual-role note", func(t *testing.T) {
+		mock := &dualRoleAddMock{
+			rosterWriteMock: &rosterWriteMock{files: map[string]string{
+				"ai26/roster.csv": roster,
+			}},
+			classroomJSON: classroomJSONWithStaffTeams(t, "ai26"),
+			// No staff-team members: every staff-team read 404s -> empty.
+			staffMembers: map[string][]string{},
+		}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		var out, errOut bytes.Buffer
+		if err := runRosterAdd(client, &out, &errOut, "o", "ai26", "newbie", "", "", "", ""); err != nil {
+			t.Fatalf("runRosterAdd: %v", err)
+		}
+		if strings.Contains(errOut.String(), "Dual roles aren't disallowed") {
+			t.Errorf("a plain student must not get the dual-role note:\n%s", errOut.String())
+		}
+	})
+}
