@@ -1588,7 +1588,6 @@ describe("TEMPLATE_READ_STAFF_ROLES parity with Go TemplateReadStaffRoles", () =
   // Go role-constant -> wire string (configrepo team.go: RoleHeadTA="hta", etc.).
   const GO_ROLE_VALUES: Record<string, string> = {
     RoleTeacher: "teacher",
-    RoleInstructor: "instructor",
     RoleHeadTA: "hta",
     RoleTA: "ta",
   }

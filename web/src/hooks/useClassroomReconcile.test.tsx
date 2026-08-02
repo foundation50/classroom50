@@ -34,14 +34,12 @@ import type { ClassroomReconcileResult } from "@/domain/reconcileClassroom"
 
 const healthy: ClassroomReconcileResult = {
   skipped: false,
-  migration: { changed: false },
   description: { changed: false },
   staffCreated: [],
 }
 
 const archived: ClassroomReconcileResult = {
   skipped: true,
-  migration: { changed: false },
   description: { changed: false },
   staffCreated: [],
 }
@@ -157,7 +155,7 @@ describe("useClassroomReconcile", () => {
     )
   })
 
-  it("invalidates the RUN's own classroom on a migration, not the current one", async () => {
+  it("invalidates the RUN's own classroom on a staff-team create, not the current one", async () => {
     // A late-resolving cs101 reconcile must invalidate cs101's caches even after
     // the hook has navigated to cs202 — the mutation-variable invariant.
     let resolveFirst: (v: ClassroomReconcileResult) => void = () => {}
@@ -181,7 +179,7 @@ describe("useClassroomReconcile", () => {
 
     resolveFirst({
       ...healthy,
-      migration: { changed: true, phase: "create", teacherSlug: "s" },
+      staffCreated: ["hta"],
     })
     await waitFor(() =>
       expect(invalidateQueries).toHaveBeenCalledWith(
@@ -215,8 +213,8 @@ describe("useClassroomReconcile", () => {
   })
 
   it("RETRIES on re-entry after a plain 404 (transient — not the wrong-slug case)", async () => {
-    // A bare GitHubAPIError 404 (a propagating commit, a just-deleted instructor
-    // team) is transient now: it releases the key so a later entry retries,
+    // A bare GitHubAPIError 404 (a propagating commit) is transient now: it
+    // releases the key so a later entry retries,
     // instead of latching the whole classroom heal off for the mount.
     reconcile.mockRejectedValueOnce(githubAPIError(404))
     reconcile.mockResolvedValue(healthy)

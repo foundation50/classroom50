@@ -687,7 +687,7 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
             state.csvWritten = true
             return Promise.resolve({ sha: "tree-sha" })
           }
-          // Staff-team ensure (instructor/ta role -> resolveTeamIdByRole): create
+          // Staff-team ensure (teacher/ta role -> resolveTeamIdByRole): create
           // returns a fresh team; the config-repo write grant is a no-op PUT.
           if (path.endsWith("/teams") && options?.method === "POST") {
             const body = (options as { body?: { name?: string } }).body
@@ -755,13 +755,13 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     }
   })
 
-  it("invites an instructor as an org OWNER (admin role)", async () => {
+  it("invites an teacher as an org OWNER (admin role)", async () => {
     const { client, state } = makeClient()
 
     await bulkInviteByEmail(client, {
       org: "acme",
       classroom: "cs101",
-      invites: [{ email: "prof@x.edu", role: "instructor" }],
+      invites: [{ email: "prof@x.edu", role: "teacher" }],
     })
 
     expect(state.inviteBodies[0]).toMatchObject({
@@ -962,7 +962,7 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
   })
 
   it("maps a mixed-role batch to the right team and org role per email", async () => {
-    // student/ta -> plain member on their team; instructor -> org OWNER (admin).
+    // student/ta -> plain member on their team; teacher -> org OWNER (admin).
     // Asserts role AND team_ids together so a role/team cross-wiring is caught.
     const { client, state } = makeClient()
 
@@ -972,7 +972,7 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
       invites: [
         { email: "stu@x.edu", role: "student" },
         { email: "ta@x.edu", role: "ta" },
-        { email: "prof@x.edu", role: "instructor" },
+        { email: "prof@x.edu", role: "teacher" },
       ],
     })
 
@@ -987,7 +987,7 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
       role: "direct_member",
       team_ids: [5000],
     })
-    // Instructor becomes an org OWNER on the ensured staff team.
+    // Teacher becomes an org OWNER on the ensured staff team.
     expect(byEmail.get("prof@x.edu")).toMatchObject({
       role: "admin",
       team_ids: [5000],
@@ -1145,7 +1145,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
   })
 
   it("upserts a new row when no row matches but identity is provided", async () => {
-    // A team member (e.g., a staff instructor) with no roster.csv row yet: editing
+    // A team member (e.g., a staff teacher) with no roster.csv row yet: editing
     // their profile should CREATE the row from identity rather than throw.
     const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
 
@@ -2218,7 +2218,7 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
 // to end (CSV read+commit, /users/{login}, membership
 // GET, team-add PUT, team-members list). `users` maps login -> id/name/email;
 // `members` is the set of ACTIVE org-member logins (case-insensitive); `teamHas`
-// seeds the STUDENT team-member list, and `instructorHas`/`taHas` the staff
+// seeds the STUDENT team-member list, and `teacherHas`/`taHas` the staff
 // teams (matched by the derived `classroom50-cs101[-role]` slug suffix) that
 // syncRosterFromTeam now reads across all three teams.
 type TeamMemberSeed = { login: string; id: number; name?: string | null }
@@ -2230,19 +2230,19 @@ const makeTeamClient = (opts: {
   >
   members?: string[]
   teamHas?: TeamMemberSeed[]
-  instructorHas?: TeamMemberSeed[]
+  teacherHas?: TeamMemberSeed[]
   htaHas?: TeamMemberSeed[]
   taHas?: TeamMemberSeed[]
   // Pending team invitations per role (login, and/or email for email-only
   // invitees). syncRosterFromTeam reads these so it never clears the role of a
   // person who is invited-but-not-yet-a-member.
   teamInvites?: { login?: string; email?: string }[]
-  instructorInvites?: { login?: string; email?: string }[]
+  teacherInvites?: { login?: string; email?: string }[]
   htaInvites?: { login?: string; email?: string }[]
   taInvites?: { login?: string; email?: string }[]
-  // When set, a members read for the instructor/ta team rejects with this
+  // When set, a members read for the teacher/ta team rejects with this
   // non-404 status (to exercise the best-effort staff-read degradation).
-  staffReadRejects?: { role: "instructor" | "ta"; status: number }
+  staffReadRejects?: { role: "teacher" | "ta"; status: number }
 }) => {
   const committed: { content: string | null } = { content: null }
   const memberSet = new Set((opts.members ?? []).map((m) => m.toLowerCase()))
@@ -2286,34 +2286,31 @@ const makeTeamClient = (opts: {
         const slug = decodeURIComponent(
           path.split("/teams/")[1].split("/invitations")[0],
         )
-        const seed =
-          slug.endsWith("-instructor") || slug.endsWith("-teacher")
-            ? (opts.instructorInvites ?? [])
-            : slug.endsWith("-hta")
-              ? (opts.htaInvites ?? [])
-              : slug.endsWith("-ta")
-                ? (opts.taInvites ?? [])
-                : (opts.teamInvites ?? [])
+        const seed = slug.endsWith("-teacher")
+          ? (opts.teacherInvites ?? [])
+          : slug.endsWith("-hta")
+            ? (opts.htaInvites ?? [])
+            : slug.endsWith("-ta")
+              ? (opts.taInvites ?? [])
+              : (opts.teamInvites ?? [])
         return Promise.resolve(
           seed.map((i) => ({ login: i.login ?? null, email: i.email ?? null })),
         )
       }
       // Team members list (syncRosterFromTeam): GET .../teams/{slug}/members
       // (checked AFTER /memberships/ since "/members" is a substring of it).
-      // Route by the derived slug so the student vs instructor vs ta teams
+      // Route by the derived slug so the student vs teacher vs ta teams
       // return their own seeded lists.
       if (path.includes("/teams/") && path.includes("/members")) {
         const slug = decodeURIComponent(
           path.split("/teams/")[1].split("/members")[0],
         )
         const rejects = opts.staffReadRejects
-        // The sync reads the canonical teacher slug; a test that rejects the
-        // legacy "instructor" staff read applies to the teacher team too.
         const rejectsTeacher =
           rejects &&
           (rejects.role === "ta"
             ? slug.endsWith("-ta")
-            : slug.endsWith("-teacher") || slug.endsWith("-instructor"))
+            : slug.endsWith("-teacher"))
         if (rejects && rejectsTeacher) {
           return Promise.reject(
             new GitHubAPIError({
@@ -2332,14 +2329,13 @@ const makeTeamClient = (opts: {
             }),
           )
         }
-        const seed =
-          slug.endsWith("-instructor") || slug.endsWith("-teacher")
-            ? (opts.instructorHas ?? [])
-            : slug.endsWith("-hta")
-              ? (opts.htaHas ?? [])
-              : slug.endsWith("-ta")
-                ? (opts.taHas ?? [])
-                : (opts.teamHas ?? [])
+        const seed = slug.endsWith("-teacher")
+          ? (opts.teacherHas ?? [])
+          : slug.endsWith("-hta")
+            ? (opts.htaHas ?? [])
+            : slug.endsWith("-ta")
+              ? (opts.taHas ?? [])
+              : (opts.teamHas ?? [])
         const members = seed.map((m) => ({
           login: m.login,
           id: m.id,
@@ -2612,7 +2608,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       startingCsv: HEADER,
       users: {},
       teamHas: [], // no student-team members
-      instructorHas: [{ login: "prof", id: 1 }],
+      teacherHas: [{ login: "prof", id: 1 }],
       taHas: [{ login: "helper", id: 2 }],
     })
 
@@ -2641,7 +2637,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       startingCsv: HEADER,
       users: {},
       teamHas: [{ login: "prof", id: 1 }], // also a student-team member
-      instructorHas: [{ login: "prof", id: 1 }],
+      teacherHas: [{ login: "prof", id: 1 }],
     })
 
     const result = await syncRosterFromTeam(client, {
@@ -2663,7 +2659,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       startingCsv: HEADER + "grace,Grace,Hopper,g@x.edu,A,707,student\n",
       users: {},
       teamHas: [],
-      instructorHas: [{ login: "grace", id: 707 }],
+      teacherHas: [{ login: "grace", id: 707 }],
     })
 
     const result = await syncRosterFromTeam(client, {
@@ -2693,7 +2689,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       startingCsv: HEADER + "tara,Tara,Vance,t@x.edu,B,55,ta\n",
       users: {},
       teamHas: [],
-      instructorHas: [],
+      teacherHas: [],
       taHas: [], // removed from the ta team
     })
 
@@ -2719,16 +2715,16 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
   })
 
   it("does NOT clear the role of a pending invitee (still on no team)", async () => {
-    // prof was just invited as an instructor (org owner) and their role was
+    // prof was just invited as an teacher (org owner) and their role was
     // written to roster.csv, but they haven't accepted yet — so they're on no
-    // team. A pending instructor-team invite must preserve the recorded role;
+    // team. A pending teacher-team invite must preserve the recorded role;
     // clearing it here would wipe the writeback for the whole pending window.
     const { client, committed } = makeTeamClient({
-      startingCsv: HEADER + "prof,,,,,9,instructor\n" + "ada,,,,,101,\n", // a co-occurring backfill row makes sync run
+      startingCsv: HEADER + "prof,,,,,9,teacher\n" + "ada,,,,,101,\n", // a co-occurring backfill row makes sync run
       users: {},
       teamHas: [{ login: "ada", id: 101 }],
-      instructorHas: [], // prof not yet a member
-      instructorInvites: [{ login: "prof" }], // ...but has a pending invite
+      teacherHas: [], // prof not yet a member
+      teacherInvites: [{ login: "prof" }], // ...but has a pending invite
     })
 
     const result = await syncRosterFromTeam(client, {
@@ -2740,7 +2736,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     const prof = rowsFromCsv(committed.content!).find(
       (r) => r.username === "prof",
     )
-    expect(prof?.role).toBe("instructor") // preserved, not cleared to ""
+    expect(prof?.role).toBe("teacher") // preserved, not cleared to ""
   })
 
   it("clears a stale role when the person is on no team AND has no pending invite", async () => {
@@ -2764,15 +2760,15 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
   })
 
   it("does NOT clear an active staffer's role when a staff-team read degrades", async () => {
-    // grace is a current instructor, but the instructor-team read transiently
+    // grace is a current teacher, but the teacher-team read transiently
     // 500s (degrades to []). Sync must NOT treat "absent from the degraded read"
     // as "removed" and wipe her recorded role — the read was incomplete.
     const { client, committed } = makeTeamClient({
-      startingCsv: HEADER + "grace,Grace,Hopper,g@x.edu,A,707,instructor\n",
+      startingCsv: HEADER + "grace,Grace,Hopper,g@x.edu,A,707,teacher\n",
       users: {},
       teamHas: [],
-      instructorHas: [{ login: "grace", id: 707 }],
-      staffReadRejects: { role: "instructor", status: 500 },
+      teacherHas: [{ login: "grace", id: 707 }],
+      staffReadRejects: { role: "teacher", status: 500 },
     })
 
     const result = await syncRosterFromTeam(client, {
@@ -2787,19 +2783,19 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       const grace = rowsFromCsv(committed.content).find(
         (r) => r.username === "grace",
       )
-      expect(grace?.role).toBe("instructor")
+      expect(grace?.role).toBe("teacher")
     }
   })
 
   it("a non-404 failure on a staff-team read degrades to [] and still syncs students", async () => {
-    // The instructor-team read 500s; that must NOT fail the whole sync — the
+    // The teacher-team read 500s; that must NOT fail the whole sync — the
     // student-team member is still backfilled (staff reads are best-effort).
     const { client, committed } = makeTeamClient({
       startingCsv: HEADER,
       users: {},
       teamHas: [{ login: "stu", id: 10 }],
-      instructorHas: [{ login: "prof", id: 1 }], // would be added, but read 500s
-      staffReadRejects: { role: "instructor", status: 500 },
+      teacherHas: [{ login: "prof", id: 1 }], // would be added, but read 500s
+      staffReadRejects: { role: "teacher", status: 500 },
     })
 
     const result = await syncRosterFromTeam(client, {
@@ -2807,7 +2803,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       classroom: "cs101",
     })
 
-    // The student synced; the instructor (whose read failed) did not, but the
+    // The student synced; the teacher (whose read failed) did not, but the
     // sync as a whole succeeded rather than throwing.
     expect(result.addedUsernames).toEqual(["stu"])
     const rows = rowsFromCsv(committed.content!)
@@ -2898,19 +2894,19 @@ describe("writeClassroomRoles — set role on existing rows", () => {
     const res = await writeClassroomRoles(client, {
       org: "acme",
       classroom: "cs101",
-      roles: [{ username: "prof", role: "instructor" }],
+      roles: [{ username: "prof", role: "teacher" }],
     })
 
     expect(res.changed).toBe(1)
     const prof = rowsFromCsv(committed.content!).find(
       (r) => r.username === "prof",
     )
-    expect(prof?.role).toBe("instructor")
+    expect(prof?.role).toBe("teacher")
   })
 
   it("no-ops when the role already matches (no commit)", async () => {
     const { client, committed } = makeTeamClient({
-      startingCsv: HEADER + "prof,,,,,9,instructor\n",
+      startingCsv: HEADER + "prof,,,,,9,teacher\n",
       users: {},
       teamHas: [],
     })
@@ -2918,7 +2914,7 @@ describe("writeClassroomRoles — set role on existing rows", () => {
     const res = await writeClassroomRoles(client, {
       org: "acme",
       classroom: "cs101",
-      roles: [{ username: "prof", role: "instructor" }],
+      roles: [{ username: "prof", role: "teacher" }],
     })
 
     expect(res.changed).toBe(0)
@@ -2939,7 +2935,7 @@ describe("writeClassroomRoles — set role on existing rows", () => {
       writeClassroomRoles(client, {
         org: "acme",
         classroom: "cs101",
-        roles: [{ username: "prof", role: "instructor" }],
+        roles: [{ username: "prof", role: "teacher" }],
       }),
     ).rejects.toBeInstanceOf(RosterCsvMalformedError)
     expect(committed.content).toBeNull() // nothing written
@@ -2947,7 +2943,7 @@ describe("writeClassroomRoles — set role on existing rows", () => {
 
   it("no-ops for a username absent from the CSV (never appends a row)", async () => {
     const { client, committed } = makeTeamClient({
-      startingCsv: HEADER + "prof,,,,,9,instructor\n",
+      startingCsv: HEADER + "prof,,,,,9,teacher\n",
       users: {},
       teamHas: [],
     })
@@ -2964,7 +2960,7 @@ describe("writeClassroomRoles — set role on existing rows", () => {
 
   it("no-ops (no git read/commit) for an empty roles input", async () => {
     const { client, committed, request } = makeTeamClient({
-      startingCsv: HEADER + "prof,,,,,9,instructor\n",
+      startingCsv: HEADER + "prof,,,,,9,teacher\n",
       users: {},
       teamHas: [],
     })
@@ -3033,7 +3029,7 @@ describe("parseRosterCsv — structured per-line problems", () => {
   it("reports the exact malformed line for a too-many-fields row (the login-only-row case)", () => {
     // The real bug: a hand-written row with one comma too many (8 fields vs 7).
     const csv =
-      HEADER + "rongxin-liu,,,,,10591665,instructor\n" + "student1,,,,,,,\n"
+      HEADER + "rongxin-liu,,,,,10591665,teacher\n" + "student1,,,,,,,\n"
     const { rows, problems } = parseRosterCsv(csv)
     expect(problems).toHaveLength(1)
     // Header is line 1; rongxin-liu line 2; the malformed student1 row is line 3.
@@ -3238,7 +3234,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
 
   it("does not create staff teams for a students-only upload", async () => {
     // resolveTeamIdByRole must only ensure a staff team for a role actually
-    // present. A students-only invite must not create/grant instructor/ta teams.
+    // present. A students-only invite must not create/grant teacher/ta teams.
     const teamWrites: string[] = []
     const { client, invitations } = makeInviteClient({
       users: { stu: { id: 5 } },
@@ -3268,7 +3264,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     expect(invitations[0]).toMatchObject({ role: "direct_member" })
   })
 
-  it("invites an instructor row as an organization OWNER (role admin)", async () => {
+  it("invites an teacher row as an organization OWNER (role admin)", async () => {
     const { client, invitations } = makeInviteClient({
       users: { prof: { id: 9 } },
       members: [],
@@ -3277,10 +3273,10 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     const res = await inviteRosterStudents(client, {
       org: "acme",
       classroom: "cs101",
-      students: [{ username: "prof", github_id: "9", role: "instructor" }],
+      students: [{ username: "prof", github_id: "9", role: "teacher" }],
     })
 
-    expect(res.invited).toEqual([{ username: "prof", role: "instructor" }])
+    expect(res.invited).toEqual([{ username: "prof", role: "teacher" }])
     // The org invite must carry admin (owner), not direct_member.
     expect(invitations[0]).toMatchObject({ invitee_id: 9, role: "admin" })
   })
@@ -3298,7 +3294,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     })
 
     expect(res.invited).toEqual([{ username: "helper", role: "ta" }])
-    // A TA is a plain org member; only instructor -> admin.
+    // A TA is a plain org member; only teacher -> admin.
     expect(invitations[0]).toMatchObject({
       invitee_id: 8,
       role: "direct_member",
@@ -3317,7 +3313,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
       students: [
         { username: "stu", github_id: "1", role: "student" },
         { username: "helper", github_id: "2", role: "ta" },
-        { username: "prof", github_id: "3", role: "instructor" },
+        { username: "prof", github_id: "3", role: "teacher" },
       ],
     })
 
@@ -3325,19 +3321,19 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
       expect.arrayContaining([
         { username: "stu", role: "student" },
         { username: "helper", role: "ta" },
-        { username: "prof", role: "instructor" },
+        { username: "prof", role: "teacher" },
       ]),
     )
-    // Only the instructor is invited as an org owner (admin); the rest are plain.
+    // Only the teacher is invited as an org owner (admin); the rest are plain.
     const byId = new Map(invitations.map((i) => [i.invitee_id, i]))
     expect(byId.get(1)).toMatchObject({ role: "direct_member" })
     expect(byId.get(2)).toMatchObject({ role: "direct_member" })
     expect(byId.get(3)).toMatchObject({ role: "admin" })
   })
 
-  it("does not escalate an existing active member for an instructor row", async () => {
+  it("does not escalate an existing active member for an teacher row", async () => {
     // The no-escalation invariant: ensureOrgMembership short-circuits an
-    // active/pending member BEFORE createOrgInvitation, so an instructor-role
+    // active/pending member BEFORE createOrgInvitation, so an teacher-role
     // upload of an already-member never sends an admin (owner) invite.
     const { client, invitations } = makeInviteClient({
       users: { prof: { id: 9 } },
@@ -3347,7 +3343,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     const res = await inviteRosterStudents(client, {
       org: "acme",
       classroom: "cs101",
-      students: [{ username: "prof", github_id: "9", role: "instructor" }],
+      students: [{ username: "prof", github_id: "9", role: "teacher" }],
     })
 
     expect(res.invited).toEqual([])
@@ -3358,7 +3354,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     expect(invitations).toEqual([])
   })
 
-  it("does not escalate an existing pending member for an instructor row", async () => {
+  it("does not escalate an existing pending member for an teacher row", async () => {
     const { client, invitations } = makeInviteClient({
       users: { prof: { id: 9 } },
       pending: ["prof"],
@@ -3367,7 +3363,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     const res = await inviteRosterStudents(client, {
       org: "acme",
       classroom: "cs101",
-      students: [{ username: "prof", github_id: "9", role: "instructor" }],
+      students: [{ username: "prof", github_id: "9", role: "teacher" }],
     })
 
     expect(res.invited).toEqual([])
@@ -3926,11 +3922,11 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
       slug: "classroom50-cs101",
       login: "userb",
     })
-    // Not an instructor move, so no org-owner promotion.
+    // Not an teacher move, so no org-owner promotion.
     expect(orgRolePuts).toEqual([])
   })
 
-  it("promotes to instructor: adds to the instructor team AND sets org role admin", async () => {
+  it("promotes to teacher: adds to the teacher team AND sets org role admin", async () => {
     const { client, teamAdds, orgRolePuts } = makeRoleChangeClient({
       members: ["userb"],
     })
@@ -3940,17 +3936,17 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
       classroom: "cs101",
       username: "userb",
       fromRoles: ["student"],
-      toRole: "instructor",
+      toRole: "teacher",
     })
 
     expect(teamAdds).toContainEqual({
-      slug: "classroom50-cs101-instructor",
+      slug: "classroom50-cs101-teacher",
       login: "userb",
     })
     expect(orgRolePuts).toContainEqual({ login: "userb", role: "admin" })
   })
 
-  it("downgrades an instructor to student: demotes org role to member BEFORE any team change", async () => {
+  it("downgrades an teacher to student: demotes org role to member BEFORE any team change", async () => {
     const { client, teamAdds, teamRemoves, orgRolePuts, ops } =
       makeRoleChangeClient({ members: ["boss"] })
 
@@ -3958,7 +3954,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
       org: "acme",
       classroom: "cs101",
       username: "boss",
-      fromRoles: ["instructor"],
+      fromRoles: ["teacher"],
       toRole: "student",
     })
 
@@ -3967,7 +3963,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
       login: "boss",
     })
     expect(teamRemoves).toContainEqual({
-      slug: "classroom50-cs101-instructor",
+      slug: "classroom50-cs101-teacher",
       login: "boss",
     })
     expect(orgRolePuts).toContainEqual({ login: "boss", role: "member" })
@@ -3979,17 +3975,17 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
   it("drops EVERY non-target classroom team for a multi-team member", async () => {
     const { client, teamRemoves } = makeRoleChangeClient({ members: ["boss"] })
 
-    // On both instructor + ta; move to student -> both staff teams dropped.
+    // On both teacher + ta; move to student -> both staff teams dropped.
     await applyClassroomRoleChange(client, {
       org: "acme",
       classroom: "cs101",
       username: "boss",
-      fromRoles: ["ta", "instructor"],
+      fromRoles: ["ta", "teacher"],
       toRole: "student",
     })
 
     expect(teamRemoves).toContainEqual({
-      slug: "classroom50-cs101-instructor",
+      slug: "classroom50-cs101-teacher",
       login: "boss",
     })
     expect(teamRemoves).toContainEqual({
@@ -4016,7 +4012,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
       login: "newta",
     })
     expect(teamRemoves).toEqual([])
-    expect(orgRolePuts).toEqual([]) // ta target, not instructor
+    expect(orgRolePuts).toEqual([]) // ta target, not teacher
   })
 
   it("surfaces a warning (not a throw) when the old-team removal fails", async () => {
@@ -4057,7 +4053,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
     expect(teamAdds).toEqual([])
   })
 
-  it("refuses a self-demotion off instructor before any mutation", async () => {
+  it("refuses a self-demotion off teacher before any mutation", async () => {
     const { client, orgRolePuts, teamAdds } = makeRoleChangeClient({
       members: ["boss"],
       viewerLogin: "boss", // the acting owner IS the demotion target
@@ -4068,7 +4064,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
         org: "acme",
         classroom: "cs101",
         username: "boss",
-        fromRoles: ["instructor"],
+        fromRoles: ["teacher"],
         toRole: "student",
       }),
     ).rejects.toThrow(/can't demote yourself/i)
@@ -4089,7 +4085,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
         org: "acme",
         classroom: "cs101",
         username: "boss",
-        fromRoles: ["instructor"],
+        fromRoles: ["teacher"],
         toRole: "student",
       }),
     ).rejects.toThrow(/only organization owner/i)
@@ -4108,7 +4104,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
       org: "acme",
       classroom: "cs101",
       username: "boss",
-      fromRoles: ["instructor"],
+      fromRoles: ["teacher"],
       toRole: "student",
     })
 
@@ -4128,7 +4124,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
         org: "acme",
         classroom: "cs101",
         username: "boss",
-        fromRoles: ["instructor"],
+        fromRoles: ["teacher"],
         toRole: "student",
       }),
     ).rejects.toThrow(/demoted from organization owner.*Re-run/s)
@@ -4176,10 +4172,10 @@ describe("resolveTeamIdForRoleRead — read-only team id per role", () => {
 
   it("staff -> the role's team id from classroom.json.teams[role]", async () => {
     const client = makeClient({
-      teams: { instructor: { id: 7 }, ta: { id: 9 } },
+      teams: { teacher: { id: 7 }, ta: { id: 9 } },
     })
     expect(
-      await resolveTeamIdForRoleRead(client, "acme", "cs101", "instructor"),
+      await resolveTeamIdForRoleRead(client, "acme", "cs101", "teacher"),
     ).toBe(7)
     expect(await resolveTeamIdForRoleRead(client, "acme", "cs101", "ta")).toBe(
       9,
@@ -4189,7 +4185,7 @@ describe("resolveTeamIdForRoleRead — read-only team id per role", () => {
   it("staff with no teams block -> undefined (no team to attach)", async () => {
     const client = makeClient({ team: { slug: "classroom50-cs101", id: 1 } })
     expect(
-      await resolveTeamIdForRoleRead(client, "acme", "cs101", "instructor"),
+      await resolveTeamIdForRoleRead(client, "acme", "cs101", "teacher"),
     ).toBeUndefined()
   })
 

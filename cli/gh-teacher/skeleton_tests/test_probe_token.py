@@ -199,10 +199,10 @@ def test_team_members_403_fails(monkeypatch):
 
 
 def test_resolve_staff_team_slugs_present_and_absent():
-    meta = {"teams": {"ta": {"id": 2, "slug": "classroom50-cs1-ta"}, "instructor": {"id": 1, "slug": "classroom50-cs1-instructor"}}}
+    meta = {"teams": {"ta": {"id": 2, "slug": "classroom50-cs1-ta"}, "teacher": {"id": 1, "slug": "classroom50-cs1-teacher"}}}
     assert pt.resolve_staff_team_slugs(meta) == {
         "ta": "classroom50-cs1-ta",
-        "instructor": "classroom50-cs1-instructor",
+        "teacher": "classroom50-cs1-teacher",
     }
     assert pt.resolve_staff_team_slugs({}) == {}
     assert pt.resolve_staff_team_slugs({"teams": {"ta": {"id": 2}}}) == {}

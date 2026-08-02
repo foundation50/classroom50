@@ -563,7 +563,7 @@ class TestClassroomSchema:
             "schema": "classroom50/classroom/v1", "name": "CS Principles",
             "short_name": "cs-principles", "term": "Fall 2026", "org": "cs50",
             "teams": {
-                "instructor": {"id": 11, "slug": "classroom50-cs-principles-instructor"},
+                "teacher": {"id": 11, "slug": "classroom50-cs-principles-teacher"},
                 "ta": {"id": 12, "slug": "classroom50-cs-principles-ta"},
             },
         }
@@ -574,15 +574,16 @@ class TestClassroomSchema:
         doc = {
             "schema": "classroom50/classroom/v1", "name": "X",
             "short_name": "cs1", "term": "", "org": "o",
-            "teams": {"instructor": {"id": 11, "slug": "classroom50-cs1-instructor"}},
+            "teams": {"teacher": {"id": 11, "slug": "classroom50-cs1-teacher"}},
         }
         assert _errs(CLASSROOM_V, doc) == []
 
     @pytest.mark.parametrize("teams, why", [
-        ({"instructor": {"slug": "classroom50-cs1-instructor"}}, "teamRef missing id"),
-        ({"instructor": {"id": 11}}, "teamRef missing slug"),
-        ({"instructor": {"id": 11, "slug": "x", "extra": 1}}, "teamRef extra key"),
+        ({"teacher": {"slug": "classroom50-cs1-teacher"}}, "teamRef missing id"),
+        ({"teacher": {"id": 11}}, "teamRef missing slug"),
+        ({"teacher": {"id": 11, "slug": "x", "extra": 1}}, "teamRef extra key"),
         ({"owner": {"id": 11, "slug": "classroom50-cs1-owner"}}, "unknown role key"),
+        ({"instructor": {"id": 11, "slug": "classroom50-cs1-instructor"}}, "legacy instructor role removed (#322)"),
     ])
     def test_staff_teams_malformed_rejected(self, teams, why):
         doc = {

@@ -314,17 +314,12 @@ const (
 	RoleTeacher StaffRole = "teacher"
 	RoleHeadTA  StaffRole = "hta"
 	RoleTA      StaffRole = "ta"
-	// RoleInstructor is the legacy name for RoleTeacher, kept so pre-rename
-	// classrooms (whose team slug says "instructor") still resolve on read.
-	RoleInstructor StaffRole = "instructor"
 )
 
-// StaffRolesWithLegacy is every staff role INCLUDING the legacy instructor
-// alias, for reads (membership probes, slug enumeration) that must recognize a
-// not-yet-migrated `-instructor` team. Mirrors web STAFF_ROLES_WITH_LEGACY.
-var StaffRolesWithLegacy = []StaffRole{
+// StaffRoles is every staff role, in rank order (teacher, then the head-TA
+// middle tier, then ta). Mirrors web STAFF_ROLES.
+var StaffRoles = []StaffRole{
 	RoleTeacher,
-	RoleInstructor,
 	RoleHeadTA,
 	RoleTA,
 }
@@ -345,13 +340,13 @@ func StaffTeamSlug(shortName string, role StaffRole) string {
 }
 
 // ClassroomTeamSlugs is the full set of team slugs whose membership means a
-// user is enrolled in a classroom: the student team plus every staff team
-// (including the legacy instructor team). Single-sources the "is enrolled?"
-// slug enumeration so a role change can't drift the gate. Ordered
-// student-first so a sequential caller can short-circuit on the common case.
+// user is enrolled in a classroom: the student team plus every staff team.
+// Single-sources the "is enrolled?" slug enumeration so a role change can't
+// drift the gate. Ordered student-first so a sequential caller can
+// short-circuit on the common case.
 func ClassroomTeamSlugs(shortName string) []string {
 	slugs := []string{ClassroomStudentTeamSlug(shortName)}
-	for _, role := range StaffRolesWithLegacy {
+	for _, role := range StaffRoles {
 		slugs = append(slugs, StaffTeamSlug(shortName, role))
 	}
 	return slugs

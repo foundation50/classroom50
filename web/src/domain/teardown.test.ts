@@ -91,14 +91,13 @@ function serverError(): GitHubAPIError {
 
 // One classroom directory in the classroom50 config repo. `team` is the students
 // ref persisted in its classroom.json (omit for a pre-feature/teamless
-// classroom); `teams` is the per-classroom staff-team block (teacher/instructor/
+// classroom); `teams` is the per-classroom staff-team block (teacher/hta/
 // ta), each an optional ref.
 type ClassroomFixture = {
   dir: string
   team?: { id: number; slug: string }
   teams?: {
     teacher?: { id: number; slug: string }
-    instructor?: { id: number; slug: string }
     hta?: { id: number; slug: string }
     ta?: { id: number; slug: string }
   }
@@ -132,13 +131,7 @@ function makeClient(opts: Opts) {
       if (method === "GET" && teamMatch) {
         const slug = teamMatch[1]
         const recorded = classrooms
-          .flatMap((c) => [
-            c.team,
-            c.teams?.teacher,
-            c.teams?.instructor,
-            c.teams?.hta,
-            c.teams?.ta,
-          ])
+          .flatMap((c) => [c.team, c.teams?.teacher, c.teams?.hta, c.teams?.ta])
           .find((t) => t?.slug === slug)
         const liveId = opts.teamIdMismatch?.[slug] ?? recorded?.id ?? 1
         return Promise.resolve({ id: liveId })
@@ -460,8 +453,7 @@ describe("executeTeardown", () => {
   })
 
   it("sweeps a migrated classroom's staff teams including teams.teacher", async () => {
-    // Regression for the instructor->teacher rename: a migrated classroom records
-    // the canonical teams.teacher (and drops teams.instructor). Teardown must
+    // A classroom records the canonical teams.teacher. Teardown must
     // delete the teacher staff team (config-repo-write granted) alongside the
     // students team + ta, not orphan it — parity with the Go teardown sweep.
     const { client, teamDeletes } = makeClient({
@@ -487,37 +479,6 @@ describe("executeTeardown", () => {
     const result = await executeTeardown(client, plan)
     expect(teamDeletes.sort()).toEqual([
       "classroom50-cs101",
-      "classroom50-cs101-ta",
-      "classroom50-cs101-teacher",
-    ])
-    expect(result.teamsFailed).toHaveLength(0)
-  })
-
-  it("sweeps both teacher and legacy instructor staff teams on a mid-migration classroom", async () => {
-    // A classroom paused between phase-1 and phase-2 records BOTH teams; teardown
-    // must delete both (plus students + ta), never leaving either behind.
-    const { client, teamDeletes } = makeClient({
-      markerExists: true,
-      repos: ["classroom50"],
-      classrooms: [
-        {
-          dir: "cs101",
-          team: { id: 11, slug: "classroom50-cs101" },
-          teams: {
-            teacher: { id: 12, slug: "classroom50-cs101-teacher" },
-            instructor: { id: 14, slug: "classroom50-cs101-instructor" },
-            hta: { id: 15, slug: "classroom50-cs101-hta" },
-            ta: { id: 13, slug: "classroom50-cs101-ta" },
-          },
-        },
-      ],
-    })
-    const plan = await planTeardown(client, "acme")
-    const result = await executeTeardown(client, plan)
-    expect(teamDeletes.sort()).toEqual([
-      "classroom50-cs101",
-      "classroom50-cs101-hta",
-      "classroom50-cs101-instructor",
       "classroom50-cs101-ta",
       "classroom50-cs101-teacher",
     ])

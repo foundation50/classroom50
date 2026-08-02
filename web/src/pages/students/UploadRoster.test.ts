@@ -88,10 +88,10 @@ describe("parseRosterImportFile", () => {
     )
   })
 
-  it("normalizes a legacy 'instructor' role column to teacher", () => {
+  it("treats a legacy 'instructor' role column as an unknown role (undefined)", () => {
     const csv = "username,role\nprof,Instructor\n"
     expect(parseRosterImportFile(csv).map((r) => [r.username, r.role])).toEqual(
-      [["prof", "teacher"]],
+      [["prof", undefined]],
     )
   })
 })
@@ -155,9 +155,9 @@ describe("coerceImportRole", () => {
     expect(coerceImportRole("  TA  ")).toBe("ta")
   })
 
-  it("normalizes the legacy 'instructor' value to teacher", () => {
-    expect(coerceImportRole("instructor")).toBe("teacher")
-    expect(coerceImportRole("Instructor")).toBe("teacher")
+  it("returns undefined for the legacy 'instructor' value (no longer recognized)", () => {
+    expect(coerceImportRole("instructor")).toBeUndefined()
+    expect(coerceImportRole("Instructor")).toBeUndefined()
   })
 
   it("returns undefined for an unknown, empty, or missing value", () => {

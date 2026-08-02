@@ -114,8 +114,7 @@ export function useTeamRoster(
   const teamSlug = resolveClassroomRoleSlug(classroom, "student", classroomJson)
   // Staff team slugs: prefer the classroom's stored slug, else the derived
   // classroomTeamSlug (same precedence as the student slug above). The teacher
-  // slug prefers the canonical `teams.teacher`, falling back to a not-yet-
-  // migrated classroom's legacy `teams.instructor`, then the derived slug.
+  // slug prefers the canonical `teams.teacher`, then the derived slug.
   const teacherSlug = resolveClassroomRoleSlug(
     classroom,
     "teacher",
@@ -361,7 +360,6 @@ export function useTeamRoster(
     teamSlugByRole: {
       student: teamSlug,
       teacher: teacherSlug,
-      instructor: teacherSlug,
       hta: htaSlug,
       ta: taSlug,
     },

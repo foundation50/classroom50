@@ -794,15 +794,6 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 			staffTeams = append(staffTeams, t)
 		}
 	}
-	// Also sweep the legacy instructor team when a partially-migrated
-	// classroom still records both `teacher` and `instructor` refs — the
-	// RoleTeacher resolve above prefers `teacher`, so the stale instructor
-	// team would otherwise be orphaned.
-	if t, ok, terr := configrepo.ResolveLegacyInstructorTeam(client, org, shortName, branch); terr != nil {
-		return terr
-	} else if ok {
-		staffTeams = append(staffTeams, t)
-	}
 
 	var deleted int
 	build := func(parentSHA string) (configwrite.CommitChange, error) {

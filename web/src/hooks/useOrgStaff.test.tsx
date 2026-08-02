@@ -85,7 +85,7 @@ describe("useOrgStaff — team-based org-staff signal", () => {
   it("ignores a staff team in a DIFFERENT org", () => {
     useQueryMock.mockReturnValue(
       teams({
-        data: [team("classroom50-cs101-instructor", "other-org")],
+        data: [team("classroom50-cs101-teacher", "other-org")],
         isSuccess: true,
       }),
     )

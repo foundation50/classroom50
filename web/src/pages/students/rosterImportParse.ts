@@ -15,9 +15,8 @@ import {
 // Coerce a raw string to a ClassroomRole, or undefined when absent/unknown.
 // Case-insensitive; the upload defaults undefined to "student" and lets the
 // teacher override, so an unrecognized value degrades to student rather than
-// failing the whole import. The legacy "instructor" value normalizes to the
-// canonical "teacher". Exported so both the CSV parse and the preview Select
-// coerce through one guard (no unchecked cast on raw input).
+// failing the whole import. Exported so both the CSV parse and the preview
+// Select coerce through one guard (no unchecked cast on raw input).
 export const coerceImportRole = (
   raw: string | undefined,
 ): ClassroomRole | undefined => {
@@ -30,8 +29,6 @@ export const coerceImportRole = (
   ) {
     return value
   }
-  // Legacy alias: a roster that still says "instructor" imports as teacher.
-  if (value === "instructor") return "teacher"
   return undefined
 }
 

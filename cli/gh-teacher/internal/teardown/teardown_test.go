@@ -127,17 +127,17 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
   "org": "classroom50-test",
   "team": {"id": 1, "slug": "classroom50-cs-principles"},
   "teams": {
-    "instructor": {"id": 2, "slug": "classroom50-cs-principles-instructor"},
+    "teacher": {"id": 2, "slug": "classroom50-cs-principles-teacher"},
     "hta": {"id": 4, "slug": "classroom50-cs-principles-hta"},
     "ta": {"id": 3, "slug": "classroom50-cs-principles-ta"}
   }
 }`),
 		},
 		teamGET: map[string]string{
-			"/orgs/classroom50-test/teams/classroom50-cs-principles":            `{"id":1}`,
-			"/orgs/classroom50-test/teams/classroom50-cs-principles-instructor": `{"id":2}`,
-			"/orgs/classroom50-test/teams/classroom50-cs-principles-hta":        `{"id":4}`,
-			"/orgs/classroom50-test/teams/classroom50-cs-principles-ta":         `{"id":3}`,
+			"/orgs/classroom50-test/teams/classroom50-cs-principles":         `{"id":1}`,
+			"/orgs/classroom50-test/teams/classroom50-cs-principles-teacher": `{"id":2}`,
+			"/orgs/classroom50-test/teams/classroom50-cs-principles-hta":     `{"id":4}`,
+			"/orgs/classroom50-test/teams/classroom50-cs-principles-ta":      `{"id":3}`,
 		},
 	}
 	server := httptest.NewServer(state.handler(t, "classroom50-test"))
@@ -152,10 +152,10 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
 	teams := append([]string(nil), state.deletedTeams...)
 	state.mu.Unlock()
 	want := map[string]bool{
-		"classroom50-cs-principles":            true,
-		"classroom50-cs-principles-instructor": true,
-		"classroom50-cs-principles-hta":        true,
-		"classroom50-cs-principles-ta":         true,
+		"classroom50-cs-principles":         true,
+		"classroom50-cs-principles-teacher": true,
+		"classroom50-cs-principles-hta":     true,
+		"classroom50-cs-principles-ta":      true,
 	}
 	if len(teams) != 4 {
 		t.Fatalf("deleted teams = %v, want the 4 classroom teams", teams)
@@ -223,15 +223,15 @@ func TestRunTeardown_SweepsTeamsEvenOnPartialFailure(t *testing.T) {
   "org": "classroom50-test",
   "team": {"id": 1, "slug": "classroom50-cs-principles"},
   "teams": {
-    "instructor": {"id": 2, "slug": "classroom50-cs-principles-instructor"},
+    "teacher": {"id": 2, "slug": "classroom50-cs-principles-teacher"},
     "ta": {"id": 3, "slug": "classroom50-cs-principles-ta"}
   }
 }`),
 		},
 		teamGET: map[string]string{
-			"/orgs/classroom50-test/teams/classroom50-cs-principles":            `{"id":1}`,
-			"/orgs/classroom50-test/teams/classroom50-cs-principles-instructor": `{"id":2}`,
-			"/orgs/classroom50-test/teams/classroom50-cs-principles-ta":         `{"id":3}`,
+			"/orgs/classroom50-test/teams/classroom50-cs-principles":         `{"id":1}`,
+			"/orgs/classroom50-test/teams/classroom50-cs-principles-teacher": `{"id":2}`,
+			"/orgs/classroom50-test/teams/classroom50-cs-principles-ta":      `{"id":3}`,
 		},
 	}
 	server := httptest.NewServer(state.handler(t, "classroom50-test"))

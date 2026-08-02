@@ -1207,7 +1207,7 @@ describe("resendOrgInvitation carries team_ids", () => {
     })
   })
 
-  it("re-issues with the same org role (instructor -> admin), not a downgrade", async () => {
+  it("re-issues with the same org role (teacher -> admin), not a downgrade", async () => {
     const { client, state } = makeClient()
     await resendOrgInvitation(client, {
       org: "acme",
@@ -1217,7 +1217,7 @@ describe("resendOrgInvitation carries team_ids", () => {
       teamIds: [7],
       role: "admin",
     })
-    // The recreated invite must carry role "admin" so a re-sent instructor
+    // The recreated invite must carry role "admin" so a re-sent teacher
     // invite is equivalent to the original, not silently downgraded to member.
     expect(state.inviteBodies[0]).toMatchObject({
       invitee_id: 1,

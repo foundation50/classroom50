@@ -222,10 +222,6 @@ describe("role predicates", () => {
     expect(roleLabelKey("student")).toBe("nav.roleStudent")
     expect(roleLabelKey("unresolved")).toBeNull()
   })
-
-  it("roleLabelKey: legacy instructor alias shares the teacher label key", () => {
-    expect(roleLabelKey("instructor")).toBe("nav.roleTeacher")
-  })
 })
 
 describe("applyViewAs (downgrade-only preview)", () => {

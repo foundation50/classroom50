@@ -307,8 +307,7 @@ export function membershipLookup(
 export { memberIdentitySets } from "@/util/identity"
 
 // Whether any confirmed role change promotes someone to teacher (org owner),
-// so the UI can surface the owner-access warning only when relevant. Matches the
-// canonical "teacher" and the legacy "instructor" alias.
+// so the UI can surface the owner-access warning only when relevant.
 export function hasTeacherPromotion(
   roleChanges: Extract<PreflightOutcome, { kind: "role_change" }>[],
 ): boolean {

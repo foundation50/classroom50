@@ -128,22 +128,19 @@ export async function ensureClassroomTeam(
 }
 
 // The per-classroom staff team refs persisted under classroom.json `teams`.
-// `teacher` is canonical; `instructor` is the legacy alias retained for
-// backward-compatible reads during the rename migration; `hta` (head TA) is the
-// middle tier granted config-repo write but never org-owner.
+// `teacher` is canonical; `hta` (head TA) is the middle tier granted
+// config-repo write but never org-owner.
 export type StaffTeamRefs = {
   teacher?: ClassroomTeamRef
-  instructor?: ClassroomTeamRef
   hta?: ClassroomTeamRef
   ta?: ClassroomTeamRef
 }
 
-// Config-repo permission per staff role: teacher/instructor/hta author
-// assignments (write), a plain TA is read-only. Mirrors the CLI's
+// Config-repo permission per staff role: teacher/hta author assignments
+// (write), a plain TA is read-only. Mirrors the CLI's
 // configrepo.ConfigRepoPermission. A role absent here gets no config-repo grant.
 const CONFIG_REPO_PERMISSION: Partial<Record<StaffRole, "pull" | "push">> = {
   teacher: "push",
-  instructor: "push",
   hta: "push",
   ta: "pull",
 }
@@ -185,7 +182,7 @@ export async function grantTeamConfigRepoWrite(
 }
 
 // Set a staff team's config-repo permission to the role's mapped level —
-// `push` for teacher/instructor/hta, `pull` for ta. Unlike a bare
+// `push` for teacher/hta, `pull` for ta. Unlike a bare
 // grantTeamConfigRepoWrite this is role-aware and, because addRepositoryToTeam
 // PUTs unconditionally, it DOWNGRADES an existing stronger grant (a TA team
 // that held `push` drops to `pull`) — the behavior the TA read-only demotion

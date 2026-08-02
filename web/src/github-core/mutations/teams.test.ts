@@ -39,7 +39,7 @@ describe("grantTeamConfigRepoAccess", () => {
 
   it("is a no-op for a role with no config-repo permission", async () => {
     const { client, request } = makeClient()
-    // A student is not a staff role; instructor maps to push, so use a cast to
+    // A student is not a staff role, so use a cast to
     // exercise the guard for an unmapped value.
     await grantTeamConfigRepoAccess(
       client,

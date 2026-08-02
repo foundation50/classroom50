@@ -49,12 +49,12 @@ describe("classifyRosterUpload", () => {
   })
 
   it("no-ops a multi-role member whose set includes the CSV role", () => {
-    // On both instructor + student teams, CSV says student -> already on it.
+    // On both teacher + student teams, CSV says student -> already on it.
     const rows: PreflightRow[] = [{ username: "prof", role: "student" }]
     const result = classifyRosterUpload(
       rows,
       lookupFrom({
-        prof: { isOrgMember: true, roles: ["instructor", "student"] },
+        prof: { isOrgMember: true, roles: ["teacher", "student"] },
       }),
     )
     expect(result.noAction.map((o) => o.username)).toEqual(["prof"])
@@ -220,19 +220,19 @@ describe("classifyRosterUpload", () => {
   })
 
   it("uses the highest-precedence current role for a multi-team member", () => {
-    // On instructor + ta; CSV says student -> change from instructor (highest).
+    // On teacher + ta; CSV says student -> change from teacher (highest).
     const rows: PreflightRow[] = [{ username: "boss", role: "student" }]
     const result = classifyRosterUpload(
       rows,
-      lookupFrom({ boss: { isOrgMember: true, roles: ["ta", "instructor"] } }),
+      lookupFrom({ boss: { isOrgMember: true, roles: ["ta", "teacher"] } }),
     )
     expect(result.roleChanges[0]).toMatchObject({
       username: "boss",
       role: "student",
-      currentRole: "instructor",
+      currentRole: "teacher",
     })
     // Carries the FULL current role set so the move drops both staff teams.
-    expect(result.roleChanges[0].currentRoles).toEqual(["ta", "instructor"])
+    expect(result.roleChanges[0].currentRoles).toEqual(["ta", "teacher"])
   })
 
   it("reports allAlreadyMembers when nobody needs an invite", () => {
@@ -265,14 +265,12 @@ describe("membershipLookup", () => {
     teamIdsByRole: {
       student: new Set(["101"]),
       teacher: new Set<string>(),
-      instructor: new Set<string>(),
       hta: new Set<string>(),
       ta: new Set<string>(),
     },
     teamLoginsByRole: {
       student: new Set(["ada"]),
       teacher: new Set<string>(),
-      instructor: new Set<string>(),
       hta: new Set<string>(),
       ta: new Set(["helper"]),
     },

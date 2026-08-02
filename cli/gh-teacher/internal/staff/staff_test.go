@@ -142,8 +142,8 @@ func TestRunStaffAdd(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		var out, errOut bytes.Buffer
-		if err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleTeacher); err != nil {
+		var out bytes.Buffer
+		if err := runStaffAdd(client, &out, "o", "cs-principles", "alice", configrepo.RoleTeacher); err != nil {
 			t.Fatalf("runStaffAdd: %v", err)
 		}
 		if len(mock.membershipPUT) != 1 || !strings.Contains(mock.membershipPUT[0], "classroom50-cs-principles-teacher/memberships/alice") {
@@ -160,8 +160,8 @@ func TestRunStaffAdd(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		var out, errOut bytes.Buffer
-		if err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "bob", configrepo.RoleTA); err != nil {
+		var out bytes.Buffer
+		if err := runStaffAdd(client, &out, "o", "cs-principles", "bob", configrepo.RoleTA); err != nil {
 			t.Fatalf("runStaffAdd ta: %v", err)
 		}
 		if len(mock.membershipPUT) != 1 || !strings.Contains(mock.membershipPUT[0], "classroom50-cs-principles-ta/memberships/bob") {
@@ -175,8 +175,8 @@ func TestRunStaffAdd(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		var out, errOut bytes.Buffer
-		if err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleTeacher); err != nil {
+		var out bytes.Buffer
+		if err := runStaffAdd(client, &out, "o", "cs-principles", "alice", configrepo.RoleTeacher); err != nil {
 			t.Fatalf("runStaffAdd should self-heal, got err = %v", err)
 		}
 		if len(mock.teamsCreated) != 1 || mock.teamsCreated[0] != "classroom50-cs-principles-teacher" {
@@ -199,8 +199,8 @@ func TestRunStaffAdd(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		var out, errOut bytes.Buffer
-		err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "ghost", configrepo.RoleTeacher)
+		var out bytes.Buffer
+		err := runStaffAdd(client, &out, "o", "cs-principles", "ghost", configrepo.RoleTeacher)
 		if err == nil || !strings.Contains(err.Error(), "not found") {
 			t.Fatalf("err = %v, want a user-not-found error", err)
 		}
@@ -213,8 +213,8 @@ func TestRunStaffRemove(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 
-	var out, errOut bytes.Buffer
-	if err := runStaffRemove(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleTA); err != nil {
+	var out bytes.Buffer
+	if err := runStaffRemove(client, &out, "o", "cs-principles", "alice", configrepo.RoleTA); err != nil {
 		t.Fatalf("runStaffRemove: %v", err)
 	}
 	if len(mock.membershipDEL) != 1 || !strings.Contains(mock.membershipDEL[0], "classroom50-cs-principles-ta/memberships/alice") {
@@ -234,8 +234,8 @@ func TestParseRole(t *testing.T) {
 		{"", "teacher", false},
 		{"teacher", "teacher", false},
 		{"TEACHER", "teacher", false},
-		{"instructor", "teacher", false}, // legacy alias resolves to teacher
-		{"INSTRUCTOR", "teacher", false},
+		{"instructor", "", true}, // no longer a recognized role
+		{"INSTRUCTOR", "", true},
 		{"ta", "ta", false},
 		{"TA", "ta", false},
 		{"hta", "hta", false},

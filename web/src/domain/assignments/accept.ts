@@ -397,7 +397,7 @@ async function isActiveTeamMember(
 
 // Enforce that the viewer is enrolled in this classroom before accept: on the
 // `classroom50-<classroom>` student team, OR holding a staff role
-// (teacher/hta/ta, incl. the legacy `-instructor` team). Owners are filtered by
+// (teacher/hta/ta). Owners are filtered by
 // the caller. The slug set is single-sourced from classroomTeamSlugs. The slugs
 // are derived (a student can't read classroom.json for the GitHub-assigned
 // slug); a slug-collision rewrite 404s and reads as non-member, so a miss never

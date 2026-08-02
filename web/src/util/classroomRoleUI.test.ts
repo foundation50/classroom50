@@ -59,7 +59,6 @@ describe("countByRole", () => {
     ]
     expect(countByRole(rows)).toEqual({
       teacher: 1,
-      instructor: 0,
       hta: 0,
       ta: 1,
       student: 3,
@@ -79,7 +78,6 @@ describe("enrolledCountsByRole", () => {
     // teacher + the ta. pending excluded.
     expect(enrolledCountsByRole(rows)).toEqual({
       teacher: 1,
-      instructor: 0,
       hta: 0,
       ta: 1,
       student: 2,

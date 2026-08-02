@@ -659,13 +659,13 @@ func (s *migrateE2EState) dispatch(t *testing.T, w http.ResponseWriter, r *http.
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 
-	// Authenticated user lookup (CurrentUser) for the instructor
+	// Authenticated user lookup (CurrentUser) for the teacher
 	// maintainer add.
 	case path == "/user" && r.Method == http.MethodGet:
 		writeJSON(t, w, map[string]any{"login": "teacher", "id": 1})
 
 	// Target-side: staff-team config-repo grant probe/PUT and membership
-	// PUT (add instructor maintainer). Both live under a staff-team slug.
+	// PUT (add teacher maintainer). Both live under a staff-team slug.
 	// A staff-team grant on the private template repo (readability) is the
 	// eager TA-team template read; record it so a test can assert it fired.
 	case strings.HasPrefix(path, "/orgs/"+s.targetOrg()+"/teams/") && strings.Contains(path, "/repos/"):
@@ -695,7 +695,7 @@ func (s *migrateE2EState) dispatch(t *testing.T, w http.ResponseWriter, r *http.
 	// Target-side: membership DELETE — dropping the creator from the
 	// students + TA teams (they must not hold a student/TA role). Idempotent;
 	// 204 = removed. Record the targeted slug so the test can assert WHICH
-	// teams are dropped (students + ta, never instructor).
+	// teams are dropped (students + ta, never teacher).
 	case strings.HasPrefix(path, "/orgs/"+s.targetOrg()+"/teams/") && strings.Contains(path, "/memberships/") && r.Method == http.MethodDelete:
 		if slug, _, ok := strings.Cut(strings.TrimPrefix(path, "/orgs/"+s.targetOrg()+"/teams/"), "/memberships/"); ok {
 			// dispatch runs under s.mu (see handler), so append directly.

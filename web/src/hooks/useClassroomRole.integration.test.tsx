@@ -7,14 +7,12 @@ import { createElement } from "react"
 
 import { GitHubAPIError } from "@/github-core/errors"
 
-// Drive each team-membership request by team slug. `<classroom>-teacher` and
-// `<classroom>-instructor` are the (canonical + legacy) teacher elevation
-// teams; `<classroom>-ta` is the TA team; `<classroom>` (no role suffix) is the
-// students team. Each responder is switchable so we can compose the
-// teacher/ta/student verdicts the hook reduces.
+// Drive each team-membership request by team slug. `<classroom>-teacher` is the
+// teacher elevation team; `<classroom>-ta` is the TA team; `<classroom>` (no
+// role suffix) is the students team. Each responder is switchable so we can
+// compose the teacher/ta/student verdicts the hook reduces.
 type Resp = "active" | "inactive" | "404" | "500"
 let teacherResp: Resp = "404"
-let instructorResp: Resp = "404"
 let htaResp: Resp = "404"
 let taResp: Resp = "404"
 let studentResp: Resp = "404"
@@ -44,8 +42,6 @@ const respond = (url: string, r: Resp) => {
 const request = vi.fn((url: string) => {
   // .../teams/classroom50-cs101-teacher/memberships/...
   if (url.includes("-teacher/memberships/")) return respond(url, teacherResp)
-  if (url.includes("-instructor/memberships/"))
-    return respond(url, instructorResp)
   if (url.includes("-hta/memberships/")) return respond(url, htaResp)
   if (url.includes("-ta/memberships/")) return respond(url, taResp)
   if (url.includes("/memberships/")) return respond(url, studentResp)
@@ -76,7 +72,6 @@ const renderRole = (username: string | undefined = "u") =>
 
 beforeEach(() => {
   teacherResp = "404"
-  instructorResp = "404"
   htaResp = "404"
   taResp = "404"
   studentResp = "404"
@@ -115,12 +110,6 @@ describe("useClassroomRole — team resolution wiring", () => {
     await waitFor(() => expect(result.current.role).toBe("teacher"))
   })
 
-  it("resolves teacher from the LEGACY instructor team (not-yet-migrated classroom)", async () => {
-    instructorResp = "active"
-    const { result } = renderRole()
-    await waitFor(() => expect(result.current.role).toBe("teacher"))
-  })
-
   it("resolves ta when only the ta membership is active", async () => {
     taResp = "active"
     const { result } = renderRole()
@@ -133,11 +122,10 @@ describe("useClassroomRole — team resolution wiring", () => {
     await waitFor(() => expect(result.current.role).toBe("student"))
   })
 
-  it("fails OPEN to student when teacher/instructor/ta are 404 and the students read errors non-404", async () => {
+  it("fails OPEN to student when teacher/ta are 404 and the students read errors non-404", async () => {
     // The composed asymmetric fail-open: elevation reads definitive non-member,
     // students read a transient 500 -> role must resolve to student, not hold.
     teacherResp = "404"
-    instructorResp = "404"
     taResp = "404"
     studentResp = "500"
     const { result } = renderRole()
@@ -153,7 +141,6 @@ describe("useClassroomRole — team resolution wiring", () => {
 
   it("surfaces isError (does not strand) when an elevation read settles in a non-404 error", async () => {
     teacherResp = "500"
-    instructorResp = "404"
     taResp = "404"
     studentResp = "404"
     const { result } = renderRole()

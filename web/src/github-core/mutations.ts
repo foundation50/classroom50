@@ -123,10 +123,6 @@ export {
   type EditClassroomResult,
 } from "./mutations/classroomEdit"
 export {
-  migrateInstructorTeamToTeacher,
-  type TeacherMigrationResult,
-} from "./mutations/teacherMigration"
-export {
   reconcileStudentTeamDescription,
   ClassroomSourceReadError,
   type TeamDescriptionReconcileResult,

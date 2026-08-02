@@ -92,9 +92,7 @@ func TestContractLiterals(t *testing.T) {
 // enumeration. These are byte-mirrored, with NO compile-time link, in the web
 // GUI (web/src/util/teamSlug.ts classroomTeamSlug / classroomTeamSlugs) and
 // gh-teacher (internal/configrepo/team.go classroomTeamName / staffTeamName).
-// The set is ordered student-first and includes the legacy instructor team so a
-// not-yet-migrated staffer still reads as enrolled. Update every copy in
-// lockstep on change.
+// The set is ordered student-first. Update every copy in lockstep on change.
 func TestClassroomTeamSlugs(t *testing.T) {
 	if got := ClassroomStudentTeamSlug("cs101"); got != "classroom50-cs101" {
 		t.Errorf("ClassroomStudentTeamSlug = %q, want %q", got, "classroom50-cs101")
@@ -102,14 +100,13 @@ func TestClassroomTeamSlugs(t *testing.T) {
 	if got := StaffTeamSlug("cs101", RoleTeacher); got != "classroom50-cs101-teacher" {
 		t.Errorf("StaffTeamSlug(teacher) = %q, want %q", got, "classroom50-cs101-teacher")
 	}
-	if got := StaffTeamSlug("cs101", RoleInstructor); got != "classroom50-cs101-instructor" {
-		t.Errorf("StaffTeamSlug(instructor) = %q, want %q", got, "classroom50-cs101-instructor")
+	if got := StaffTeamSlug("cs101", RoleHeadTA); got != "classroom50-cs101-hta" {
+		t.Errorf("StaffTeamSlug(hta) = %q, want %q", got, "classroom50-cs101-hta")
 	}
 	// A classroom short-name may contain hyphens; the slug must not mangle them.
 	want := []string{
 		"classroom50-cs-principles",
 		"classroom50-cs-principles-teacher",
-		"classroom50-cs-principles-instructor",
 		"classroom50-cs-principles-hta",
 		"classroom50-cs-principles-ta",
 	}

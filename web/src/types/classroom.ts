@@ -16,12 +16,9 @@ export type Classroom = {
   // Per-classroom GitHub staff teams backing in-app roles. Each is a `secret`
   // team `classroom50-<short_name>-<role>`. Teacher and head-TA (`hta`) teams
   // are granted config-repo write; the `ta` team is read-only. Ensured on
-  // touch. Absent on classrooms created before this feature. `instructor` is
-  // the legacy name for `teacher`, kept for backward-compatible reads during
-  // the rename migration; writers prefer `teacher`.
+  // touch. Absent on classrooms created before this feature.
   teams?: {
     teacher?: TeamRef
-    instructor?: TeamRef
     hta?: TeamRef
     ta?: TeamRef
   }
@@ -41,26 +38,12 @@ export type TeamRef = {
 
 // The staff roles modeled as per-classroom GitHub teams, named
 // `classroom50-<short_name>-<StaffRole>`. `teacher` is canonical; `hta` (head
-// TA) is the middle tier granted config-repo write but never org-owner;
-// `instructor` is teacher's legacy alias, retained so pre-rename classrooms
-// (whose team slug and `teams.instructor` ref say "instructor") still resolve.
-// New teams/writes use `teacher`; reads accept either.
-export type StaffRole = "teacher" | "instructor" | "hta" | "ta"
+// TA) is the middle tier granted config-repo write but never org-owner.
+export type StaffRole = "teacher" | "hta" | "ta"
 
 // The canonical staff roles used for creation, enumeration, and slug parsing,
-// in rank order (`teacher` first, then the `hta` middle tier, then `ta`). The
-// legacy `instructor` is intentionally absent — reads fall back to it
-// explicitly where needed.
+// in rank order (`teacher` first, then the `hta` middle tier, then `ta`).
 export const STAFF_ROLES: readonly StaffRole[] = ["teacher", "hta", "ta"]
-
-// Every staff role including the legacy `instructor` alias — for slug parsing
-// that must still recognize a pre-rename `-instructor` team.
-export const STAFF_ROLES_WITH_LEGACY: readonly StaffRole[] = [
-  "teacher",
-  "instructor",
-  "hta",
-  "ta",
-]
 
 // Archived when `active` is explicitly false (see the `active` field).
 export const isClassroomArchived = (cl: { active?: boolean }): boolean =>
@@ -263,10 +246,9 @@ export type AssignmentTest = {
 // The roster's identity/metadata columns — the classroom GitHub team is the
 // source of truth for enrollment, so the email-first onboarding lifecycle
 // columns were pruned. `role` is best-effort recorded metadata
-// (teacher/ta/student, the legacy "instructor", or ""), refreshed from the
-// classroom's GitHub teams on sync; nothing reads it for logic. A data contract
-// shared with the gh-teacher CLI and the Python collector; all moved in
-// lockstep.
+// (teacher/ta/student, or ""), refreshed from the classroom's GitHub teams on
+// sync; nothing reads it for logic. A data contract shared with the gh-teacher
+// CLI and the Python collector; all moved in lockstep.
 export type Student = {
   username: string
   first_name: string

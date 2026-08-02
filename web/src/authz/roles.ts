@@ -23,10 +23,9 @@ export type GitHubOrgRole = "owner" | "member" | "non-member" | "unresolved"
 type StudentRole = "student"
 
 // A person's role WITHIN a classroom: student (classroom team) or a StaffRole
-// (teacher/ta staff teams; `instructor` is the legacy alias of teacher). The
-// single base the other classroom-role shapes derive from. A person can hold
-// several (a teacher also on the student team), so roster rows carry a set of
-// these.
+// (teacher/ta staff teams). The single base the other classroom-role shapes
+// derive from. A person can hold several (a teacher also on the student team),
+// so roster rows carry a set of these.
 export type ClassroomRole = StudentRole | StaffRole
 
 // A resolved classroom role for guards/UI: the base plus the fail-closed
@@ -37,15 +36,13 @@ export type ResolvedRole = ClassroomRole | "unresolved"
 
 // The roles a teacher can preview the app AS — a client-side lens that never
 // escalates (see applyViewAs). Derived as ClassroomRole minus the top staff
-// roles so it can't drift: you can't preview as the top role.
-export type ViewAsRole = Exclude<ClassroomRole, "teacher" | "instructor">
+// role so it can't drift: you can't preview as the top role.
+export type ViewAsRole = Exclude<ClassroomRole, "teacher">
 
 // Role precedence (teacher > hta > ta > student), shared by the primary-badge/
-// roster sort and the view-as downgrade clamp so the two can't disagree. The
-// legacy `instructor` alias shares the teacher rank.
+// roster sort and the view-as downgrade clamp so the two can't disagree.
 export const ROLE_RANK: Record<ClassroomRole, number> = {
   teacher: 3,
-  instructor: 3,
   hta: 2,
   ta: 1,
   student: 0,
@@ -55,14 +52,11 @@ export function sortRolesByRank(roles: ClassroomRole[]): ClassroomRole[] {
   return roles.toSorted((a, b) => ROLE_RANK[b] - ROLE_RANK[a])
 }
 
-// The single predicate for "is this the top staff role" — the canonical
-// `teacher` or its legacy `instructor` alias. Lives here (the leaf role-
-// vocabulary module) so every consumer — capabilities, resolution, role
-// writes, roster preflight — shares one definition and can't drift on the two
-// names during the rename migration. When the alias is retired, this is the
-// one place the `instructor` arm is dropped.
+// The single predicate for "is this the top staff role" — `teacher`. Lives here
+// (the leaf role-vocabulary module) so every consumer — capabilities,
+// resolution, role writes, roster preflight — shares one definition.
 export function isTeacherRole(role: ResolvedRole | undefined): boolean {
-  return role === "teacher" || role === "instructor"
+  return role === "teacher"
 }
 
 // --- 3. Team-membership probe primitive -------------------------------------
@@ -80,8 +74,7 @@ export type GitHubTeamMembership = "member" | "non-member" | "unresolved"
 // helpers below live here.
 
 // WRITE: the org membership role an invite/role-change carries. Only teacher
-// (and its legacy `instructor` alias) maps to owner ("admin"); student/ta are
-// "direct_member".
+// maps to owner ("admin"); student/ta are "direct_member".
 export function githubOrgRoleForRole(
   role: ClassroomRole,
 ): "admin" | "direct_member" {
