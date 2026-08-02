@@ -110,6 +110,13 @@ func TestResolveRepoFeaturePatchBody(t *testing.T) {
 					t.Errorf("body[%q] = %v, want %v", k, got[k], v)
 				}
 			}
+			// Guard the omit cases precisely: a leaked key the resolver should
+			// have omitted must fail here, not slip past the count check.
+			for k := range got {
+				if _, ok := tc.want[k]; !ok {
+					t.Errorf("body carries unexpected key %q = %v", k, got[k])
+				}
+			}
 		})
 	}
 }

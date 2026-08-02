@@ -135,9 +135,17 @@ describe("RepoFeatureControls — inherit label resolution", () => {
     )
   })
 
-  it("does not query for an empty_repo assignment (features off, no template)", () => {
-    renderControls({ templateRepo: "org/template", emptyRepo: true })
+  it("shows the Default label and does not query for an empty_repo assignment", () => {
+    const { container } = renderControls({
+      templateRepo: "org/template",
+      emptyRepo: true,
+    })
     expect(getRepo).not.toHaveBeenCalled()
+    // An empty_repo assignment is never templated, so the default choice is
+    // "Default" (no override) even though a template ref is present in state.
+    expect(inheritOption(container, "repo_feature_issues").textContent).toBe(
+      defaultKey,
+    )
   })
 })
 

@@ -1264,9 +1264,8 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 		return "", "", "", false, fmt.Errorf("POST %s: %w", createPath, err)
 	}
 
-	// Template-less: absent keys resolve to explicit false (code-only default),
-	// so the full body always carries a key for every feature unless the teacher
-	// forced some on.
+	// Template-less: absent keys are omitted (GitHub's own create default stands),
+	// so the full body carries only the features the teacher forced on/off.
 	fullBody, explicitBody := resolveRepoFeaturePatchBody(features, false /* templated */, nil)
 
 	// Default to the create response; a successful PATCH echo overrides it.

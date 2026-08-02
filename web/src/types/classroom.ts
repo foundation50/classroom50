@@ -193,7 +193,8 @@ export type Assignment = {
   // Per-assignment repo feature overrides applied to each student repo at
   // accept time, on fresh create only. Each key is tri-state: absent = inherit
   // (a templated assignment carries the template's setting through GitHub's
-  // generate; a template-less one resolves to off), true = force on, false =
+  // generate; a template-less one leaves GitHub's own create default, no PATCH
+  // key sent), true = force on, false =
   // force off. Not retrofitted to already-accepted repos, not re-asserted on
   // re-accept. In lockstep with the CLI's assignments-v1 schema and the Go
   // RepoFeatures struct (`repo_features`, closed object).
