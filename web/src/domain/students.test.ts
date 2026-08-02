@@ -166,9 +166,9 @@ const rowsFromCsv = (csv: string) =>
   >[]
 
 describe("roster write target — commits roster.csv", () => {
-  // The write targets roster.csv and never touches the legacy students.csv (no
-  // stray upsert or deletion entry).
-  it("writes the roster blob at roster.csv and leaves students.csv untouched", async () => {
+  // The write targets roster.csv and writes no other path (no stray upsert or
+  // deletion entry).
+  it("writes the roster blob at roster.csv and touches no other path", async () => {
     const treePaths: string[] = []
     const { client } = makeClient({
       startingCsv: HEADER,
@@ -185,8 +185,7 @@ describe("roster write target — commits roster.csv", () => {
       username: "alice",
     })
 
-    expect(treePaths).toContain("cs101/roster.csv")
-    expect(treePaths).not.toContain("cs101/students.csv")
+    expect(treePaths).toEqual(["cs101/roster.csv"])
   })
 })
 
