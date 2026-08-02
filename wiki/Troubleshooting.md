@@ -93,6 +93,22 @@ Check under `https://github.com/orgs/<org>/people` — you should show **Owner**
 Not errors — the desired state already exists. The CLI reports them clearly and
 exits 0, so invite commands are safe to re-run in scripts.
 
+## A student's `role` flipped to `teacher` after `roster add`
+
+Expected when the account is on **both** a staff team and the student team.
+Classroom 50 doesn't currently disallow dual roles (usually a teacher adding
+themselves as a student), and the classroom's GitHub teams — not the `role`
+column — are the enrollment authority. The automatic sync refreshes that column
+to the account's **highest** role (`teacher > hta > ta > student`), so you'll
+see a commit like `[Classroom 50] Sync 0 members into roster: <classroom>`
+rewrite an empty/`""` role to `teacher`.
+
+The student enrollment is unchanged: the account still shows a student badge
+(alongside the staff one), is graded as a student, and can be unenrolled from
+the student side. `roster add` prints a note when the target is already staff.
+See [Dual roles](gh-teacher#dual-roles-staff-who-are-also-students). For a
+"pure" student, use a separate GitHub account.
+
 ## "Assignment already accepted" on `gh student accept`
 
 You've already accepted; the repo is at

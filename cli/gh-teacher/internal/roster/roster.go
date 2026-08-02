@@ -69,6 +69,11 @@ func rosterAddCmd() *cobra.Command {
 			"member of <org> (and doesn't already have a pending invite),\n" +
 			"this command sends an org invitation (same path `gh teacher\n" +
 			"invite` uses).\n\n" +
+			"Adding a user who is already a teacher/TA on this classroom is\n" +
+			"not disallowed: they become an enrolled student too and show\n" +
+			"both roles in the app. The roster's `role` column records only\n" +
+			"their highest role (e.g. teacher), so a later sync rewriting it\n" +
+			"doesn't change the student enrollment.\n\n" +
 			"Returns non-zero on: classroom directory missing, roster\n" +
 			"missing or malformed, GitHub user not found, or after 5\n" +
 			"failed rebase attempts against a concurrently-edited\n" +
@@ -361,7 +366,54 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 		return fmt.Errorf("roster row committed and org invite sent, but adding %s to the classroom team failed: %w", login, err)
 	}
 	_, _ = fmt.Fprintf(out, "%s: added %s to classroom team %s\n", org, login, team.Slug)
+
+	// Dual-role note (best-effort): a user already on a staff team can also be a
+	// student — Classroom 50 doesn't currently disallow this. Note it so the
+	// teacher isn't surprised when the auto-sync rewrites this row's `role` cell
+	// to the highest-precedence role (e.g. teacher). The student enrollment is
+	// NOT lost — the roster `role` column is only a highest-role snapshot, never
+	// the enrollment authority. A read failure here is swallowed: the add
+	// already landed, and the note is advisory.
+	if staffRole, ok := staffRoleForLogin(client, org, classroom, branch, login); ok {
+		_, _ = fmt.Fprintf(errOut,
+			"Note: %s is also a %s on classroom %s. Dual roles aren't disallowed — they'll show both roles in the app and stay an enrolled student, but the automatic sync records their highest role (%s) in the roster's `role` column. That doesn't change the student enrollment.\n",
+			login, staffRole, classroom, staffRole)
+	}
 	return nil
+}
+
+// staffRoleForLogin reports the highest-precedence staff role (teacher > hta >
+// ta) the login already holds on this classroom, or ("", false) when they're on
+// no staff team (or the check can't be completed). Best-effort and never
+// fatal: it reads classroom.json ONCE for the persisted staff-team slugs and
+// membership-checks each. A missing classroom/team block, an unresolved slug,
+// or any read error yields ("", false) so the caller silently skips the
+// advisory note rather than failing an add that already succeeded.
+func staffRoleForLogin(client githubapi.Client, org, classroom, branch, login string) (configrepo.StaffRole, bool) {
+	loginKey := strings.ToLower(strings.TrimSpace(login))
+	if loginKey == "" {
+		return "", false
+	}
+	c, ok, err := configrepo.LoadClassroom(client, org, classroom, branch)
+	if err != nil || !ok {
+		return "", false
+	}
+	for _, role := range configrepo.StaffRoles {
+		team := c.Teams.RefForRole(role)
+		if team == nil || team.Slug == "" {
+			continue
+		}
+		members, err := configrepo.ListTeamMembers(client, org, team.Slug)
+		if err != nil {
+			continue
+		}
+		for _, m := range members {
+			if strings.ToLower(strings.TrimSpace(m)) == loginKey {
+				return role, true
+			}
+		}
+	}
+	return "", false
 }
 
 // runRosterUpdate edits an existing roster row only: it never invites or

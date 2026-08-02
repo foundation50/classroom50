@@ -224,6 +224,65 @@ func TestRunRosterList(t *testing.T) {
 		}
 	})
 
+	t.Run("role column surfaces in the table and --json", func(t *testing.T) {
+		csv := "username,first_name,last_name,email,section,github_id,role\n" +
+			"alice,Alice,Andersson,alice@example.edu,section-1,111,student\n" +
+			"prof,Pat,Prof,,,222,teacher\n"
+		mock := &rosterListMock{files: map[string]string{"cs-principles/roster.csv": csv}}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		var tableOut, tableErr bytes.Buffer
+		if err := runRosterList(client, &tableOut, &tableErr, "o", "cs-principles", false, false); err != nil {
+			t.Fatalf("runRosterList table: %v", err)
+		}
+		if !strings.Contains(tableOut.String(), "ROLE") {
+			t.Errorf("table header missing ROLE column\n%s", tableOut.String())
+		}
+		for _, want := range []string{"student", "teacher"} {
+			if !strings.Contains(tableOut.String(), want) {
+				t.Errorf("table missing role %q\n%s", want, tableOut.String())
+			}
+		}
+
+		var jsonOut, jsonErr bytes.Buffer
+		if err := runRosterList(client, &jsonOut, &jsonErr, "o", "cs-principles", true, false); err != nil {
+			t.Fatalf("runRosterList --json: %v", err)
+		}
+		var got []rosterListEntry
+		if err := json.Unmarshal(jsonOut.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal json: %v\n%s", err, jsonOut.String())
+		}
+		if len(got) != 2 || got[0].Role != "student" || got[1].Role != "teacher" {
+			t.Errorf("entries = %#v, want alice=student, prof=teacher", got)
+		}
+	})
+
+	t.Run("pre-role roster reads role as empty (dash in table, \"\" in json)", func(t *testing.T) {
+		// rosterCSVTwoStudents is the legacy 6-column shape (no role column).
+		mock := &rosterListMock{files: map[string]string{
+			"cs-principles/roster.csv": rosterCSVTwoStudents,
+		}}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		var out, errOut bytes.Buffer
+		if err := runRosterList(client, &out, &errOut, "o", "cs-principles", true, false); err != nil {
+			t.Fatalf("runRosterList --json: %v", err)
+		}
+		var got []rosterListEntry
+		if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal json: %v\n%s", err, out.String())
+		}
+		for _, e := range got {
+			if e.Role != "" {
+				t.Errorf("pre-role row %q got role %q, want empty", e.Username, e.Role)
+			}
+		}
+	})
+
 	t.Run("missing roster errors and points at classroom add", func(t *testing.T) {
 		mock := &rosterListMock{files: map[string]string{}}
 		server := httptest.NewServer(mock.handler(t))
