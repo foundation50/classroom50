@@ -1,5 +1,9 @@
 import type { GitHubClient } from "@/github-core/client"
-import type { AssignmentMode, RepoPermission, RepoFeatures } from "@/types/classroom"
+import type {
+  AssignmentMode,
+  RepoPermission,
+  RepoFeatures,
+} from "@/types/classroom"
 import type { GitHubRepo } from "@/github-core/types"
 import type { RepoFeaturePatch } from "@/github-core/mutations"
 import { defaultStudentPermission } from "@/types/classroom"

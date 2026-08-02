@@ -33,7 +33,11 @@ import {
   validateLanguageVersion,
 } from "@/util/runtime"
 import { utcIsoToDatetimeLocalValue } from "./formFieldHelpers"
-import type { Assignment, RepoPermission, RepoFeatures } from "@/types/classroom"
+import type {
+  Assignment,
+  RepoPermission,
+  RepoFeatures,
+} from "@/types/classroom"
 import {
   GROUP_SIZE_MAX,
   GROUP_SIZE_MIN,
