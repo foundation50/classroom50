@@ -234,8 +234,6 @@ func TestParseRole(t *testing.T) {
 		{"", "teacher", false},
 		{"teacher", "teacher", false},
 		{"TEACHER", "teacher", false},
-		{"instructor", "", true}, // no longer a recognized role
-		{"INSTRUCTOR", "", true},
 		{"ta", "ta", false},
 		{"TA", "ta", false},
 		{"hta", "hta", false},

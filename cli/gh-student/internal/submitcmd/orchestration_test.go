@@ -30,7 +30,7 @@ func TestFetchRepoPath(t *testing.T) {
 	})
 	mux.HandleFunc("/repos/o/r/contents/.github/CODEOWNERS", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"type": "file", "path": ".github/CODEOWNERS", "encoding": "base64", "content": b64("* @instructor\n"),
+			"type": "file", "path": ".github/CODEOWNERS", "encoding": "base64", "content": b64("* @teacher\n"),
 		})
 	})
 	mux.HandleFunc("/repos/o/r/contents/.github/workflows", func(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +53,7 @@ func TestFetchRepoPath(t *testing.T) {
 	}
 
 	for path, want := range map[string]string{
-		".github/CODEOWNERS":       "* @instructor\n",
+		".github/CODEOWNERS":       "* @teacher\n",
 		".github/workflows/ci.yml": "name: CI\n",
 	} {
 		got, err := os.ReadFile(filepath.Join(dst, path))
