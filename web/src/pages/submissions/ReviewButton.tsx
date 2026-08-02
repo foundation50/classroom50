@@ -6,6 +6,7 @@ import { Button, Modal, MonoLtr } from "@/components/ui"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetFeedbackPr from "@/hooks/useGetFeedbackPr"
 import useRepairFeedbackPr from "@/hooks/mutations/useRepairFeedbackPr"
+import { ActionListRow } from "@/pages/submissions/actionLayout"
 import type { AssignmentMode } from "@/types/classroom"
 
 // Review action: links to the open Feedback PR (opened at accept time, or by
@@ -25,7 +26,7 @@ export const ReviewButton = ({
   repo: string
   mode: AssignmentMode
   // No assignment repo exists yet (never-accepted non-submitter): there can be
-  // no Feedback PR to review or repair, so render the button disabled.
+  // no Feedback PR to review or repair, so render the row disabled.
   noRepo?: boolean
 }) => {
   const { t } = useTranslation()
@@ -111,24 +112,16 @@ export const ReviewButton = ({
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
-        shape="square"
-        className="text-base-content/70 disabled:opacity-60"
-        disabled={noRepo || resolving}
+      <ActionListRow
+        icon={MessageCircle}
+        title={t("submissions.table.review")}
+        description={t("submissions.manageModal.reviewDescription")}
+        onClick={handleReview}
+        disabled={noRepo}
         loading={resolving}
         loadingLabel={t("submissions.table.review")}
-        onClick={handleReview}
-        aria-label={t("submissions.table.reviewAria")}
-        title={
-          noRepo
-            ? t("submissions.table.reviewNoRepo")
-            : t("submissions.table.review")
-        }
-      >
-        {!resolving && <MessageCircle aria-hidden="true" className="size-4" />}
-      </Button>
+        ariaLabel={t("submissions.table.reviewAria")}
+      />
       <Modal
         dialogRef={dialogRef}
         size="md"

@@ -92,6 +92,10 @@ export type GitHubRepo = {
   // don't rely on them.
   pushed_at?: string
   updated_at?: string
+  // Repo creation time. For an assignment repo this is when the student
+  // accepted (the repo is created on accept). Optional — older callers don't
+  // rely on it.
+  created_at?: string
   description?: string | null
   owner?: {
     login: string

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
@@ -18,6 +19,9 @@ vi.mock("react-i18next", async (importOriginal) => {
 const collaborators = vi.fn()
 vi.mock("@/hooks/useGetRepoCollaborators", () => ({
   default: (...a: unknown[]) => collaborators(...a),
+}))
+vi.mock("@/hooks/useGetRepo", () => ({
+  default: () => ({ data: undefined }),
 }))
 vi.mock("@/hooks/useGetFeedbackPr", () => ({
   default: () => ({ refetch: vi.fn() }),
@@ -37,6 +41,9 @@ vi.mock("@/hooks/mutations/useDownloadSubmission", () => ({
 }))
 vi.mock("@/components/modals/GroupCollaboratorsModal", () => ({
   GroupCollaboratorsModal: () => null,
+}))
+vi.mock("@/components/modals/RepoAccessModal", () => ({
+  RepoAccessModal: () => null,
 }))
 vi.mock("@/components/modals/StudentProfileModal", () => ({
   StudentProfileModal: () => null,
@@ -86,6 +93,14 @@ const baseProps = {
   org: "acme",
   classroom: "cs101",
   assignment: "hw1",
+}
+
+// Open the single row's submission hub (ManageSubmissionModal) by clicking its
+// Manage trigger, where the consolidated actions live.
+async function openHub(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    screen.getByRole("button", { name: "submissions.manageModal.openAria" }),
+  )
 }
 
 describe("SubmissionsTable non-submitter repo links", () => {
@@ -192,7 +207,8 @@ describe("SubmissionsTable empty_repo score cell", () => {
 })
 
 describe("SubmissionsTable per-row download", () => {
-  it("renders a download button for a submitter row and fires the hook on click", () => {
+  it("fires the download hook from the hub for a submitter row", async () => {
+    const user = userEvent.setup()
     render(
       <SubmissionsTable
         {...baseProps}
@@ -200,8 +216,8 @@ describe("SubmissionsTable per-row download", () => {
         acceptedUsernames={new Set(["alice"])}
       />,
     )
-    const btn = screen.getByTitle("submissions.rowDownload.title")
-    btn.click()
+    await openHub(user)
+    screen.getByRole("button", { name: "submissions.rowDownload.aria" }).click()
     expect(downloadSubmission).toHaveBeenCalledWith(
       {
         org: "acme",
@@ -213,7 +229,8 @@ describe("SubmissionsTable per-row download", () => {
     )
   })
 
-  it("renders the download button even for an empty_repo assignment", () => {
+  it("offers download in the hub even for an empty_repo assignment", async () => {
+    const user = userEvent.setup()
     render(
       <SubmissionsTable
         {...baseProps}
@@ -222,10 +239,14 @@ describe("SubmissionsTable per-row download", () => {
         emptyRepo
       />,
     )
-    expect(screen.getByTitle("submissions.rowDownload.title")).toBeTruthy()
+    await openHub(user)
+    expect(
+      screen.getByRole("button", { name: "submissions.rowDownload.aria" }),
+    ).toBeTruthy()
   })
 
-  it("shows the download button for an accepted-not-submitted non-submitter", () => {
+  it("enables download in the hub for an accepted-not-submitted non-submitter", async () => {
+    const user = userEvent.setup()
     render(
       <SubmissionsTable
         {...baseProps}
@@ -233,13 +254,15 @@ describe("SubmissionsTable per-row download", () => {
         acceptedUsernames={new Set(["alice"])}
       />,
     )
-    // The full per-repo action cluster now renders for non-submitters; an
-    // accepted student has a repo, so Download is enabled.
-    const btn = screen.getByTitle("submissions.rowDownload.title")
+    await openHub(user)
+    const btn = screen.getByRole("button", {
+      name: "submissions.rowDownload.aria",
+    })
     expect(btn.hasAttribute("disabled")).toBe(false)
   })
 
-  it("disables the download button for a never-accepted non-submitter", () => {
+  it("disables download in the hub for a never-accepted non-submitter", async () => {
+    const user = userEvent.setup()
     render(
       <SubmissionsTable
         {...baseProps}
@@ -247,14 +270,17 @@ describe("SubmissionsTable per-row download", () => {
         acceptedUsernames={new Set()}
       />,
     )
-    // No repo exists, so Download shows but is disabled (via titleNoRepo).
-    const btn = screen.getByTitle("submissions.rowDownload.titleNoRepo")
+    await openHub(user)
+    const btn = screen.getByRole("button", {
+      name: "submissions.rowDownload.aria",
+    })
     expect(btn.hasAttribute("disabled")).toBe(true)
   })
 })
 
-describe("SubmissionsTable non-submitter action cluster", () => {
-  it("shows the repo-scoped actions (Review, Manage access, Regrade) for a non-submitter", () => {
+describe("SubmissionsTable hub action list", () => {
+  it("shows the repo-scoped actions (Review, Manage access, Regrade) for a non-submitter", async () => {
+    const user = userEvent.setup()
     render(
       <SubmissionsTable
         {...baseProps}
@@ -262,12 +288,22 @@ describe("SubmissionsTable non-submitter action cluster", () => {
         acceptedUsernames={new Set(["alice"])}
       />,
     )
-    expect(screen.getByTitle("submissions.table.review")).toBeTruthy()
-    expect(screen.getByTitle("submissions.table.manageAccess")).toBeTruthy()
-    expect(screen.getByTitle("submissions.rowRegrade.title")).toBeTruthy()
+    await openHub(user)
+    expect(
+      screen.getByRole("button", { name: "submissions.table.reviewAria" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("button", {
+        name: "submissions.table.manageAccessAria",
+      }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("button", { name: "submissions.rowRegrade.aria" }),
+    ).toBeTruthy()
   })
 
-  it("disables the repo-scoped actions for a never-accepted non-submitter", () => {
+  it("disables the repo-scoped actions for a never-accepted non-submitter", async () => {
+    const user = userEvent.setup()
     render(
       <SubmissionsTable
         {...baseProps}
@@ -275,24 +311,26 @@ describe("SubmissionsTable non-submitter action cluster", () => {
         acceptedUsernames={new Set()}
       />,
     )
+    await openHub(user)
     expect(
       screen
-        .getByTitle("submissions.table.reviewNoRepo")
+        .getByRole("button", { name: "submissions.table.reviewAria" })
         .hasAttribute("disabled"),
     ).toBe(true)
     expect(
       screen
-        .getByTitle("submissions.table.manageAccessNoRepo")
+        .getByRole("button", { name: "submissions.table.manageAccessAria" })
         .hasAttribute("disabled"),
     ).toBe(true)
     expect(
       screen
-        .getByTitle("submissions.rowRegrade.titleNoRepo")
+        .getByRole("button", { name: "submissions.rowRegrade.aria" })
         .hasAttribute("disabled"),
     ).toBe(true)
   })
 
-  it("hides grading actions for an empty_repo non-submitter but keeps repo + download", () => {
+  it("hides grading actions in the hub for an empty_repo non-submitter but keeps the repo shortcut + download", async () => {
+    const user = userEvent.setup()
     render(
       <SubmissionsTable
         {...baseProps}
@@ -301,21 +339,32 @@ describe("SubmissionsTable non-submitter action cluster", () => {
         emptyRepo
       />,
     )
-    // empty_repo never autogrades: Review/Manage access/Regrade are hidden,
-    // but Open repo and Download stay.
-    expect(screen.queryByTitle("submissions.table.review")).toBeNull()
-    expect(screen.queryByTitle("submissions.rowRegrade.title")).toBeNull()
+    // The Open-repo shortcut stays inline in the row.
     expect(
       screen.getByRole("link", {
         name: "submissions.table.openRepoLabel:cs101-hw1-alice",
       }),
     ).toBeTruthy()
-    expect(screen.getByTitle("submissions.rowDownload.title")).toBeTruthy()
-    // Manage access is one of the grading-tier actions hidden for empty_repo.
-    expect(screen.queryByTitle("submissions.table.manageAccess")).toBeNull()
+    await openHub(user)
+    // empty_repo never autogrades: Review/Manage access/Regrade are hidden in
+    // the hub, but Download stays.
+    expect(
+      screen.queryByRole("button", { name: "submissions.table.reviewAria" }),
+    ).toBeNull()
+    expect(
+      screen.queryByRole("button", { name: "submissions.rowRegrade.aria" }),
+    ).toBeNull()
+    expect(
+      screen.queryByRole("button", {
+        name: "submissions.table.manageAccessAria",
+      }),
+    ).toBeNull()
+    expect(
+      screen.getByRole("button", { name: "submissions.rowDownload.aria" }),
+    ).toBeTruthy()
   })
 
-  it("shows an em-dash (no actions) while acceptance data is still loading", () => {
+  it("shows an em-dash (no Manage trigger) while acceptance data is still loading", () => {
     render(
       <SubmissionsTable
         {...baseProps}
@@ -326,15 +375,15 @@ describe("SubmissionsTable non-submitter action cluster", () => {
     // acceptedUsernames === undefined means acceptance is unknown (org repo list
     // not loaded): the row must not assert "hasn't accepted" with a disabled
     // cluster, so no action controls render at all.
-    expect(screen.queryByTitle("submissions.table.review")).toBeNull()
-    expect(screen.queryByTitle("submissions.table.reviewNoRepo")).toBeNull()
-    expect(screen.queryByTitle("submissions.rowDownload.title")).toBeNull()
     expect(
-      screen.queryByTitle("submissions.rowDownload.titleNoRepo"),
+      screen.queryByRole("button", {
+        name: "submissions.manageModal.openAria",
+      }),
     ).toBeNull()
   })
 
-  it("renders the shared action cluster for a group submitter row", () => {
+  it("renders the hub action list for a group submitter row", async () => {
+    const user = userEvent.setup()
     render(
       <SubmissionsTable
         {...baseProps}
@@ -342,15 +391,27 @@ describe("SubmissionsTable non-submitter action cluster", () => {
         scores={[scoreRow({ owner: "team-rocket", usernames: ["alice"] })]}
       />,
     )
-    // Group rows go through the same RepoRowActions as individual rows, so the
-    // Review/Regrade/Download tail must be present (parity with the individual
-    // submitter row, which shares the component).
-    expect(screen.getByTitle("submissions.table.review")).toBeTruthy()
-    expect(screen.getByTitle("submissions.rowRegrade.title")).toBeTruthy()
-    expect(screen.getByTitle("submissions.rowDownload.title")).toBeTruthy()
-    // Members button (group header) is present; the per-student Manage-access
-    // button is not (group access is managed via the Members modal).
-    expect(screen.getByTitle("submissions.table.members")).toBeTruthy()
-    expect(screen.queryByTitle("submissions.table.manageAccess")).toBeNull()
+    await openHub(user)
+    // Group rows open the same hub as individual rows, so the
+    // Review/Regrade/Download actions are present (parity).
+    expect(
+      screen.getByRole("button", { name: "submissions.table.reviewAria" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("button", { name: "submissions.rowRegrade.aria" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("button", { name: "submissions.rowDownload.aria" }),
+    ).toBeTruthy()
+    // The group Members hand-off is present; the per-student Manage-access
+    // action is not (group access is managed via the Members modal).
+    expect(
+      screen.getByRole("button", { name: /submissions\.table\.members/ }),
+    ).toBeTruthy()
+    expect(
+      screen.queryByRole("button", {
+        name: "submissions.table.manageAccessAria",
+      }),
+    ).toBeNull()
   })
 })

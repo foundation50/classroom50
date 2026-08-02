@@ -2,7 +2,21 @@ import type { TFunction } from "i18next"
 
 import { getName } from "@/util/students"
 import { GitHubAPIError } from "@/github-core/errors"
-import type { Student } from "@/types/classroom"
+import type { GitHubUser } from "@/github-core/types"
+import type { RepoPermission, Student } from "@/types/classroom"
+
+// The effective role from a collaborator's permission booleans (the list
+// endpoint returns no role_name in our GitHubUser shape). Highest wins; triage
+// isn't modeled by the booleans, so it reads back as pull — acceptable, since a
+// no-op save is filtered out by the caller's change diff.
+export const permissionFromFlags = (
+  permissions: GitHubUser["permissions"],
+): RepoPermission => {
+  if (permissions.admin) return "admin"
+  if (permissions.maintain) return "maintain"
+  if (permissions.push) return "push"
+  return "pull"
+}
 
 export const normalizeUsername = (username: string) =>
   username.trim().replace(/^@/, "").toLowerCase()

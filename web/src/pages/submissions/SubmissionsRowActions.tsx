@@ -3,6 +3,7 @@ import {
   GitCommitHorizontal,
   RefreshCw,
   ScrollText,
+  Settings2,
   ShieldCheck,
 } from "lucide-react"
 import { useState } from "react"
@@ -13,6 +14,7 @@ import { safeHttpUrl } from "@/util/url"
 import { Button, EmphasisLtr } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { ActionIconLink } from "@/pages/submissions/SubmissionsRows"
+import { ActionListRow } from "@/pages/submissions/actionLayout"
 import { ReviewButton } from "@/pages/submissions/ReviewButton"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import useDownloadSubmission from "@/hooks/mutations/useDownloadSubmission"
@@ -44,17 +46,14 @@ export const RegradeButton = ({
   const { t } = useTranslation()
   if (noRepo) {
     return (
-      <Button
-        variant="ghost"
-        size="sm"
-        shape="square"
-        className="text-base-content/70 disabled:opacity-60"
+      <ActionListRow
+        icon={RefreshCw}
+        title={t("submissions.rowRegrade.title")}
+        description={t("submissions.manageModal.regradeDescription")}
+        onClick={() => {}}
         disabled
-        aria-label={t("submissions.rowRegrade.aria", { owner: props.owner })}
-        title={t("submissions.rowRegrade.titleNoRepo")}
-      >
-        <RefreshCw aria-hidden="true" className="size-4" />
-      </Button>
+        ariaLabel={t("submissions.rowRegrade.aria", { owner: props.owner })}
+      />
     )
   }
   return <ActiveRegradeButton {...props} />
@@ -104,25 +103,23 @@ const ActiveRegradeButton = ({
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
-        shape="square"
-        className="text-base-content/70 disabled:opacity-60"
+      <ActionListRow
+        icon={RefreshCw}
+        title={t("submissions.rowRegrade.title")}
+        description={
+          // Surface live phase (in progress / blocked / completed / failed) so
+          // the hub reflects the same state the icon button used to show in its
+          // tooltip; falls back to the static description at rest.
+          inFlight || blocked || phase === "completed" || phase === "failed"
+            ? title
+            : t("submissions.manageModal.regradeDescription")
+        }
+        onClick={handleClick}
         disabled={inFlight || blocked}
         loading={inFlight}
         loadingLabel={t("submissions.rowRegrade.title")}
-        onClick={handleClick}
-        aria-label={t("submissions.rowRegrade.aria", { owner })}
-        title={title}
-      >
-        {!inFlight && (
-          <RefreshCw
-            aria-hidden="true"
-            className={`size-4 ${phase === "completed" ? "text-success" : phase === "failed" ? "text-error" : ""}`}
-          />
-        )}
-      </Button>
+        ariaLabel={t("submissions.rowRegrade.aria", { owner })}
+      />
       <ConfirmModal
         open={confirmOpen}
         title={t("submissions.rowRegrade.confirmTitle", {
@@ -186,65 +183,111 @@ export const DownloadButton = ({
   const { notify } = useToast()
   const download = useDownloadSubmission()
 
+  const start = () => {
+    if (noRepo || download.isPending) return
+    download.mutate(
+      { org, classroom, assignment, owner },
+      {
+        onError: (err) => {
+          // "no-submission" (missing/never-pushed repo) is benign info,
+          // not an error.
+          const nothing =
+            err instanceof Error && err.message === "no-submission"
+          notify({
+            tone: nothing ? "info" : "error",
+            message: nothing
+              ? t("submissions.rowDownload.nothingToDownload", { owner })
+              : t("submissions.rowDownload.error", { owner }),
+          })
+        },
+      },
+    )
+  }
+
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      shape="square"
-      className="text-base-content/70 disabled:opacity-60"
-      disabled={noRepo || download.isPending}
+    <ActionListRow
+      icon={Download}
+      title={t("submissions.rowDownload.title")}
+      description={t("submissions.manageModal.downloadDescription")}
+      onClick={start}
+      disabled={noRepo}
       loading={download.isPending}
       loadingLabel={t("submissions.rowDownload.title")}
-      onClick={() => {
-        if (noRepo || download.isPending) return
-        download.mutate(
-          { org, classroom, assignment, owner },
-          {
-            onError: (err) => {
-              // "no-submission" (missing/never-pushed repo) is benign info,
-              // not an error.
-              const nothing =
-                err instanceof Error && err.message === "no-submission"
-              notify({
-                tone: nothing ? "info" : "error",
-                message: nothing
-                  ? t("submissions.rowDownload.nothingToDownload", { owner })
-                  : t("submissions.rowDownload.error", { owner }),
-              })
-            },
-          },
-        )
-      }}
-      aria-label={t("submissions.rowDownload.aria", { owner })}
-      title={
-        noRepo
-          ? t("submissions.rowDownload.titleNoRepo")
-          : t("submissions.rowDownload.title")
-      }
-    >
-      {!download.isPending && (
-        <Download aria-hidden="true" className="size-4" />
-      )}
-    </Button>
+      ariaLabel={t("submissions.rowDownload.aria", { owner })}
+    />
   )
 }
 
-// The per-repo action cluster shared by every row family — submitted,
-// non-submitter, and group. Group and individual rows differ only in the
-// leading `header` (Open-repo link vs. Members + repo link), the `mode` passed
-// to Review, and whether the per-student Manage-access button applies; the tail
-// (commit -> Review -> [access] -> details -> Regrade -> Download) is identical,
-// so it lives here once rather than being hand-copied per branch.
-//
-// Actions split by what they actually need:
-//   - repo-only (Open repo, Review PR, Manage access, Regrade, Download): a repo
-//     exists the moment a student accepts, so these stay live for an
-//     accepted-not-submitted student and only disable when no repo exists at all.
-//   - submission-only (View commit, View details): tied to a specific attempt,
-//     so they render dimmed (via ActionIconLink's empty branch) until one lands.
-// `emptyRepo` assignments never autograde, so their PR/regrade/details actions
-// disable regardless (kept visible, greyed, so the row layout doesn't jump).
+// The per-repo Actions cell, shared by every row family (submitted,
+// non-submitter, group). It now holds just two affordances: the leading
+// Open-repo shortcut (`header`) and a single Manage trigger that opens the
+// submission hub (ManageSubmissionModal), where every other action —
+// commit, Review, access, details, regrade, download — lives as a labeled row.
+// Consolidating keeps the dense table to one GitHub-repo shortcut plus one
+// entry point that scales as we add actions, instead of a growing icon cluster.
 export const RepoRowActions = ({
+  owner,
+  header,
+  onManage,
+}: {
+  owner: string
+  // The leading affordance for this row family (Open-repo link for individuals,
+  // repo link for groups).
+  header: React.ReactNode
+  // Opens the submission hub for this row.
+  onManage: () => void
+}) => {
+  const { t } = useTranslation()
+  return (
+    <>
+      {header}
+      <Button
+        variant="ghost"
+        size="sm"
+        shape="square"
+        className="text-base-content/70"
+        onClick={onManage}
+        aria-label={t("submissions.manageModal.openAria", { owner })}
+        title={t("submissions.manageModal.open")}
+      >
+        <Settings2 aria-hidden="true" className="size-4" />
+      </Button>
+    </>
+  )
+}
+
+// The submission hub's body: every consolidated action as a labeled list row.
+// Simple actions (commit/details links, Review, Regrade, Download) run in place;
+// the rich access/members editors open stacked on top of the hub (native
+// <dialog> nesting) via `onManageAccess`/`onManageMembers`, with the hub left
+// open underneath — see ManageSubmissionModal for the stacking rationale.
+//
+// Gating mirrors the old cluster: repo-only actions (Review, access, regrade,
+// download) disable only when no repo exists; submission-only links
+// (commit, details) dim until an attempt lands; `emptyRepo` assignments omit
+// the PR/access/details/regrade actions entirely.
+export type SubmissionActionListProps = {
+  mode: AssignmentMode
+  org: string
+  classroom: string
+  assignment: string
+  owner: string
+  repo: string
+  hasRepo: boolean
+  commit?: string | null
+  // The repo's true latest commit (default-branch tip). When present it links
+  // the "View latest commit" action, since `commit` is only the latest *graded*
+  // snapshot from scores.json and can lag a fresh push. Falls back to `commit`.
+  latestCommitHref?: string | null
+  release?: string | null
+  emptyRepo: boolean
+  displayName?: string
+  // Opens the individual per-student access editor (stacked on the hub);
+  // omitted for group rows (access is managed through the group Members editor).
+  onManageAccess?: () => void
+}
+
+export const SubmissionActionList = ({
   mode,
   org,
   classroom,
@@ -253,77 +296,55 @@ export const RepoRowActions = ({
   repo,
   hasRepo,
   commit,
+  latestCommitHref,
   release,
   emptyRepo,
   displayName,
-  header,
   onManageAccess,
-}: {
-  mode: AssignmentMode
-  org: string
-  classroom: string
-  assignment: string
-  owner: string
-  repo: string
-  // Whether an assignment repo exists (submitted, or accepted-not-submitted). A
-  // never-accepted individual non-submitter has none, so the repo-scoped actions
-  // disable. Group rows always have a repo.
-  hasRepo: boolean
-  // Latest attempt's commit/release URLs, when a submission exists.
-  commit?: string | null
-  release?: string | null
-  emptyRepo: boolean
-  displayName?: string
-  // The leading affordance for this row family (Open-repo link for individuals,
-  // Members + repo link for groups).
-  header: React.ReactNode
-  // Individual per-student Manage-access action; omitted for group rows (access
-  // is managed through the group Members modal instead).
-  onManageAccess?: () => void
-}) => {
+}: SubmissionActionListProps) => {
   const { t } = useTranslation()
+  const commitHref = latestCommitHref ?? safeHttpUrl(commit)
+  const releaseHref = safeHttpUrl(release)
   return (
-    <>
-      {header}
-      <ActionIconLink
-        href={safeHttpUrl(commit)}
+    <div className="flex flex-col">
+      <ActionListRow
         icon={GitCommitHorizontal}
-        label={t("submissions.table.viewCommit")}
-        title={t("submissions.table.commit")}
-        emptyLabel={t("submissions.table.noCommit")}
-        emptyTitle={t("submissions.table.noCommit")}
+        title={t("submissions.table.viewCommit")}
+        description={
+          commitHref
+            ? t("submissions.manageModal.commitDescription")
+            : t("submissions.table.noCommit")
+        }
+        href={commitHref ?? undefined}
+        onClick={commitHref ? undefined : () => {}}
+        disabled={!commitHref}
+        external
       />
       {!emptyRepo && (
         <>
           <ReviewButton org={org} repo={repo} mode={mode} noRepo={!hasRepo} />
           {onManageAccess && (
-            <Button
-              variant="ghost"
-              size="sm"
-              shape="square"
-              className="text-base-content/70 disabled:opacity-60"
+            <ActionListRow
+              icon={ShieldCheck}
+              title={t("submissions.table.manageAccess")}
+              description={t("submissions.manageModal.accessDescription")}
+              onClick={onManageAccess}
               disabled={!hasRepo}
-              aria-label={t("submissions.table.manageAccessAria", { owner })}
-              title={
-                hasRepo
-                  ? t("submissions.table.manageAccess")
-                  : t("submissions.table.manageAccessNoRepo")
-              }
-              onClick={() => {
-                if (!hasRepo) return
-                onManageAccess()
-              }}
-            >
-              <ShieldCheck aria-hidden="true" className="size-4" />
-            </Button>
+              ariaLabel={t("submissions.table.manageAccessAria", { owner })}
+            />
           )}
-          <ActionIconLink
-            href={safeHttpUrl(release)}
+          <ActionListRow
             icon={ScrollText}
-            label={t("submissions.table.viewDetails")}
-            title={t("submissions.table.details")}
-            emptyLabel={t("submissions.table.noDetailsLabel")}
-            emptyTitle={t("submissions.table.noDetails")}
+            title={t("submissions.table.viewDetails")}
+            description={
+              releaseHref
+                ? t("submissions.manageModal.detailsDescription")
+                : t("submissions.table.noDetails")
+            }
+            href={releaseHref ?? undefined}
+            onClick={releaseHref ? undefined : () => {}}
+            disabled={!releaseHref}
+            external
           />
           <RegradeButton
             org={org}
@@ -342,7 +363,7 @@ export const RepoRowActions = ({
         owner={owner}
         noRepo={!hasRepo}
       />
-    </>
+    </div>
   )
 }
 

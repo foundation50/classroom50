@@ -1,4 +1,3 @@
-import { UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import GitHub from "@/assets/github.svg?react"
@@ -199,41 +198,26 @@ export const GroupMembers = ({
   )
 }
 
-// Shared action cluster for a group repo: Members button (opens the manage
-// modal) + the repo link. Used by both the submitted score row and the
-// awaiting group-repo row so the two never drift (one recipe, one source).
+// Shared leading affordance for a group repo row: just the repo link. The
+// Members action moved into the submission hub (ManageSubmissionModal), so the
+// Actions cell keeps a single GitHub-repo shortcut like the individual rows.
 export const GroupActionControls = ({
   repo,
   repoHref,
-  onManage,
 }: {
   repo: string
   repoHref: string
-  onManage: () => void
 }) => {
   const { t } = useTranslation()
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="sm"
-        shape="square"
-        className="text-base-content/70"
-        onClick={onManage}
-        aria-label={t("submissions.table.membersAria")}
-        title={t("submissions.table.members")}
-      >
-        <UsersRound aria-hidden="true" className="size-4" />
-      </Button>
-      <ActionIconLink
-        href={repoHref}
-        icon={GitHub}
-        label={t("submissions.table.openRepoLabel", { repo })}
-        title={t("submissions.table.viewRepo")}
-        emptyLabel={t("submissions.table.openRepoLabel", { repo })}
-        emptyTitle={t("submissions.table.viewRepo")}
-      />
-    </>
+    <ActionIconLink
+      href={repoHref}
+      icon={GitHub}
+      label={t("submissions.table.openRepoLabel", { repo })}
+      title={t("submissions.table.viewRepo")}
+      emptyLabel={t("submissions.table.openRepoLabel", { repo })}
+      emptyTitle={t("submissions.table.viewRepo")}
+    />
   )
 }
 
@@ -295,10 +279,9 @@ export const NonSubmitterRow = ({
 }
 
 // A group repo that exists but has no submission yet: repo + members (from the
-// collaborators cache) with an "awaiting submission" badge and the shared group
-// actions. Fetching is lazy — the Members modal loads collaborators on demand,
-// so a class with many formed-but-unpushed groups doesn't fan out one request
-// per row on mount (#245).
+// collaborators cache) with an "awaiting submission" badge. The Actions cell is
+// composed by the caller (`actions`) so this stays presentational and avoids a
+// cycle with SubmissionsRowActions (#245 keeps fetching lazy).
 export const GroupRepoRow = ({
   org,
   classroom,
@@ -306,7 +289,7 @@ export const GroupRepoRow = ({
   owner,
   repoName,
   students,
-  onManage,
+  actions,
 }: {
   org: string
   classroom: string
@@ -314,7 +297,7 @@ export const GroupRepoRow = ({
   owner: string
   repoName: string
   students: Student[]
-  onManage: () => void
+  actions: React.ReactNode
 }) => {
   const { t } = useTranslation()
   const repoHref = studentRepoUrl(org, classroom, assignment, owner)
@@ -338,13 +321,7 @@ export const GroupRepoRow = ({
       <td>—</td>
       <td>—</td>
       <td>
-        <div className="flex items-center gap-1">
-          <GroupActionControls
-            repo={repoName}
-            repoHref={repoHref}
-            onManage={onManage}
-          />
-        </div>
+        <div className="flex items-center gap-1">{actions}</div>
       </td>
     </tr>
   )
