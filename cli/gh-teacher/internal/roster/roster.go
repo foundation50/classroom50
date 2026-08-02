@@ -367,13 +367,8 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 	}
 	_, _ = fmt.Fprintf(out, "%s: added %s to classroom team %s\n", org, login, team.Slug)
 
-	// Dual-role note (best-effort): a user already on a staff team can also be a
-	// student — Classroom 50 doesn't currently disallow this. Note it so the
-	// teacher isn't surprised when the auto-sync rewrites this row's `role` cell
-	// to the highest-precedence role (e.g. teacher). The student enrollment is
-	// NOT lost — the roster `role` column is only a highest-role snapshot, never
-	// the enrollment authority. A read failure here is swallowed: the add
-	// already landed, and the note is advisory.
+	// Dual-role note: best-effort and advisory (a read failure here is swallowed
+	// — the add already landed). See staffRoleForLogin for the rationale.
 	if staffRole, ok := staffRoleForLogin(client, org, classroom, branch, login); ok {
 		_, _ = fmt.Fprintf(errOut,
 			"Note: %s is also a %s on classroom %s. Dual roles aren't disallowed — they'll show both roles in the app and stay an enrolled student, but the automatic sync records their highest role (%s) in the roster's `role` column. That doesn't change the student enrollment.\n",
