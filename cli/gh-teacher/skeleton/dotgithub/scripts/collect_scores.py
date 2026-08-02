@@ -10,7 +10,7 @@ member who accepted an assignment to test the autograde flow is collected like
 a student. Staff who never accepted have no assignment repo, so their poll
 returns no releases and they produce no entry (the "accepted" gate is implicit
 in the per-repo release read). The classroom GitHub teams are the source of
-truth for enrollment; the roster (roster.csv, or the legacy name) is only a
+truth for enrollment; the roster (roster.csv) is only a
 best-effort source of optional display metadata (name/section/email).
 
 `scores.json` is keyed by assignment slug under root `assignments`: each value
@@ -107,13 +107,10 @@ MAX_RESULT_BYTES = 10 * 1024 * 1024
 # DictReader is header-keyed and a missing column just yields "".
 ROSTER_REQUIRED_COLUMNS = ("username", "first_name", "last_name", "email", "section", "github_id", "role")
 
-# Per-classroom roster file. ROSTER_FILENAME is the current name; a reader
-# falls back to LEGACY_ROSTER_FILENAME for classrooms bootstrapped before the
-# rename (writers always target roster.csv). Mirrors contract.RosterFilename /
-# contract.LegacyRosterFilename in cli/shared/contract/contract.go with NO
-# compile-time link — keep byte-identical.
+# Per-classroom roster file. Mirrors contract.RosterFilename in
+# cli/shared/contract/contract.go with NO compile-time link — keep
+# byte-identical.
 ROSTER_FILENAME = "roster.csv"
-LEGACY_ROSTER_FILENAME = "students.csv"
 
 # The exact on-disk roster.csv header. Must equal FullRosterHeader in the Go
 # students_csv.go (asserted by TestFullRosterHeader) and the web app's
@@ -296,7 +293,7 @@ def iter_classrooms(
     Collection is TEAM-driven: the classroom GitHub team is the source of truth
     for enrollment, so this no longer reads the roster to decide who to poll
     (the team enumeration in collect_classroom drives the pairs). The roster
-    (roster.csv, or the legacy name) is only best-effort display metadata,
+    (roster.csv) is only best-effort display metadata,
     joined onto collected results and also consumed elsewhere (the Go download
     scores.csv join and the web roster view).
     """
@@ -335,34 +332,30 @@ def iter_classrooms(
 
 def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str]]:
     """Best-effort roster read for optional display metadata, keyed by
-    lowercased username. Tries roster.csv first, then the legacy name
-    (classrooms bootstrapped before the rename); writers always target
-    roster.csv. The classroom GitHub team — not this file — is authoritative
-    for enrollment, so a missing/unreadable/malformed roster is NOT fatal: it
-    just yields no metadata (blank name/section/email), never a crash or a
-    dropped student.
+    lowercased username, from roster.csv. The classroom GitHub team — not this
+    file — is authoritative for enrollment, so a missing/unreadable/malformed
+    roster is NOT fatal: it just yields no metadata (blank name/section/email),
+    never a crash or a dropped student.
     """
-    for filename in (ROSTER_FILENAME, LEGACY_ROSTER_FILENAME):
-        path = classroom_dir / filename
-        if not path.is_file():
-            continue
-        try:
-            with path.open(newline="") as fh:
-                reader = csv.DictReader(fh)
-                meta: dict[str, dict[str, str]] = {}
-                for row in reader:
-                    username = (row.get("username") or "").strip()
-                    if not username:
-                        continue
-                    meta[username.lower()] = {
-                        col: (row.get(col) or "").strip()
-                        for col in ("first_name", "last_name", "email", "section")
-                    }
-            return meta
-        except (OSError, csv.Error):
-            # Best-effort: a read/parse failure degrades to blank metadata.
-            return {}
-    return {}
+    path = classroom_dir / ROSTER_FILENAME
+    if not path.is_file():
+        return {}
+    try:
+        with path.open(newline="") as fh:
+            reader = csv.DictReader(fh)
+            meta: dict[str, dict[str, str]] = {}
+            for row in reader:
+                username = (row.get("username") or "").strip()
+                if not username:
+                    continue
+                meta[username.lower()] = {
+                    col: (row.get(col) or "").strip()
+                    for col in ("first_name", "last_name", "email", "section")
+                }
+        return meta
+    except (OSError, csv.Error):
+        # Best-effort: a read/parse failure degrades to blank metadata.
+        return {}
 
 
 # Per-classroom collection ----------------------------------------------------
@@ -486,7 +479,7 @@ def collect_classroom(
     mode_flip_assignments = 0
 
     # Team-driven username source: the classroom GitHub teams are authoritative
-    # for enrollment. The roster (roster.csv, or the legacy name) is only
+    # for enrollment. The roster (roster.csv) is only
     # best-effort display metadata, so the (username, assignment) pairs come
     # from the team member lists, NOT the CSV. The set is the union of the
     # STUDENT team and every STAFF team (teacher/hta/ta) so a staff member who
