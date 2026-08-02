@@ -105,9 +105,9 @@ export type CreateAssignmentFormValues = {
   // clamps group up to admin.
   student_permission: "" | RepoPermission
   // Per-feature repo override, tri-state (one control shape regardless of
-  // template): "inherit" writes no key (absent = inherit template / off
-  // template-less), "on"/"off" force the feature. Round-trips to
-  // Assignment["repo_features"] via repoFeaturesToFormValues /
+  // template): "inherit" writes no key (absent = inherit the template when
+  // templated, else GitHub's own create default), "on"/"off" force the feature.
+  // Round-trips to Assignment["repo_features"] via repoFeaturesToFormValues /
   // formValuesToRepoFeatures.
   repo_feature_issues: RepoFeatureChoice
   repo_feature_wiki: RepoFeatureChoice
@@ -407,8 +407,8 @@ export function toSubmitValues(
     pass_threshold: Number(value.pass_threshold),
     student_permission: value.student_permission,
     // Uniform tri-state controls; "inherit" is the default and resolves to the
-    // template's feature (templated) or off (template-less) at accept time, so
-    // no template-dependent default-flip is needed here.
+    // template's feature (templated) or GitHub's own create default (template-
+    // less) at accept time, so no template-dependent default-flip is needed here.
     repo_feature_issues: value.repo_feature_issues,
     repo_feature_wiki: value.repo_feature_wiki,
     repo_feature_projects: value.repo_feature_projects,

@@ -991,7 +991,8 @@ type GeneratedRepo struct {
 //     "inherit" must actively re-apply the template's value. When the template
 //     read is unavailable (templateFeatures nil), the key is omitted (fall back
 //     to the generated repo's GitHub default).
-//   - nil + template-less   -> false (the code-only default).
+//   - nil + template-less   -> omitted (the "Default" choice: leave GitHub's
+//     own create default in place rather than force the feature off).
 //
 // It returns two bodies: `full` (every resolved key) and `explicit` (only the
 // keys the teacher forced via a non-nil features.*). The caller sends `full`
@@ -1009,9 +1010,10 @@ func resolveRepoFeaturePatchBody(features *assignments.RepoFeatures, templated b
 	full = map[string]any{}
 	explicit = map[string]any{}
 	// resolve returns (value, send?). An explicit override wins; a template-less
-	// absent key is explicit false; a templated absent key inherits the
-	// template's live value (omitted when the template read is unavailable, and
-	// for has_pull_requests always omitted since GitHub's repo object has no
+	// absent key is omitted (the "Default" choice: leave GitHub's own create
+	// default in place rather than force it off); a templated absent key inherits
+	// the template's live value (omitted when the template read is unavailable,
+	// and for has_pull_requests always omitted since GitHub's repo object has no
 	// such field). templateValue returns (value, present?) so a nil template
 	// pointer omits rather than forcing false.
 	resolve := func(value *bool, templateValue func(*GeneratedRepo) (bool, bool)) (val bool, send, isExplicit bool) {
@@ -1019,7 +1021,7 @@ func resolveRepoFeaturePatchBody(features *assignments.RepoFeatures, templated b
 			return *value, true, true
 		}
 		if !templated {
-			return false, true, false // template-less: code-only default
+			return false, false, false // template-less: leave GitHub default
 		}
 		if templateFeatures == nil {
 			return false, false, false // inherit but no template read: omit
@@ -1222,8 +1224,8 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 // Returns the repo's default_branch so the shim caller commits onto the right
 // ref (for a no-auto_init repo it is only GitHub's configured default, which
 // materializes on the student's first push). Applies the assignment's tri-state
-// repo_features best-effort via PATCH (a template-less assignment resolves an
-// absent key to off, the code-only default; an explicit true/false forces it),
+// repo_features best-effort via PATCH (a template-less assignment leaves an
+// absent key at GitHub's own create default; an explicit true/false forces it),
 // fail-open like the templated path. 422-already-exists → alreadyExisted=true
 // and the PATCH is skipped so re-runs don't disturb an existing repo.
 func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbose bool, username, classroom, assignment, org string, autoInit bool, features *assignments.RepoFeatures) (htmlURL, fullName, defaultBranch string, alreadyExisted bool, err error) {
@@ -1262,9 +1264,8 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 		return "", "", "", false, fmt.Errorf("POST %s: %w", createPath, err)
 	}
 
-	// Template-less: absent keys resolve to explicit false (code-only default),
-	// so the full body always carries a key for every feature unless the teacher
-	// forced some on.
+	// Template-less: absent keys are omitted (GitHub's own create default stands),
+	// so the full body carries only the features the teacher forced on/off.
 	fullBody, explicitBody := resolveRepoFeaturePatchBody(features, false /* templated */, nil)
 
 	// Default to the create response; a successful PATCH echo overrides it.

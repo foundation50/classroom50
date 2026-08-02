@@ -141,7 +141,8 @@ export type { RepoFeatures }
 //     "inherit" must actively re-apply the template's value. When the template
 //     read is unavailable (null / key missing), the key is omitted (fall back
 //     to the generated repo's GitHub default rather than guessing).
-//   - absent + template-less -> false (the code-only default).
+//   - absent + template-less -> omitted (the "Default" choice: leave GitHub's
+//     own create default in place rather than force the feature off).
 //
 // `templateFeatures` is the template repo's resolved has_* (from GET /repos on
 // the template), or null when there's no template / the read failed. Only keys
@@ -156,7 +157,7 @@ export function resolveRepoFeaturesPatch(
     templateValue: boolean | undefined,
   ): boolean | undefined => {
     if (value !== undefined) return value // explicit on/off wins
-    if (!opts.templated) return false // template-less: code-only default
+    if (!opts.templated) return undefined // template-less: leave GitHub default
     return templateValue // inherit the template's live value (undefined -> omit)
   }
   const tf = opts.templateFeatures ?? undefined
@@ -194,8 +195,9 @@ export function explicitRepoFeaturesPatch(
 
 // Apply the resolved repo-feature PATCH to a just-created student repo. Sends
 // the PATCH only when at least one key is set; an empty patch (templated +
-// all-inherit) skips the request entirely so features carry through from
-// POST /generate. Fail-open: a features PATCH can be rejected by org policy
+// all-inherit, or a template-less all-default assignment) skips the request
+// entirely so features carry through from POST /generate or GitHub's own create
+// defaults. Fail-open: a features PATCH can be rejected by org policy
 // (e.g. org-wide repository-projects disabled 422s has_projects:true), and this
 // runs inside the throwing accept "access" step — so a failure is logged and
 // swallowed rather than stranding the student on a half-provisioned repo. The

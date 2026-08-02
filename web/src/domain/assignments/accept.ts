@@ -549,7 +549,7 @@ export async function acceptAssignment(params: {
   // repo otherwise gets GitHub defaults (Issues on). So read the template repo's
   // features first (best-effort; a failed read leaves inherited keys unset =
   // GitHub default). Explicit on/off always win; a template-less assignment
-  // resolves absent keys to off. Computed once and threaded into every
+  // omits absent keys, leaving GitHub's own create default. Computed once and threaded into every
   // fresh-create access step, never re-asserted on the healthy re-accept path.
   //
   // Skip the template read when every feature is forced explicitly (no key

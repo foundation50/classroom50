@@ -296,7 +296,9 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		htmlURL, fullName, branch, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil)
+		// A forced feature so the PATCH still fires (a nil/all-default template-
+		// less assignment now sends none — GitHub's create defaults stand).
+		htmlURL, fullName, branch, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, &assignments.RepoFeatures{Issues: boolPtr(true)})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -314,6 +316,48 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		}
 		if fullName != "o/cs-principles-solo-alice" || !strings.Contains(htmlURL, "cs-principles-solo-alice") {
 			t.Errorf("got (%q, %q), want the created repo coordinates", htmlURL, fullName)
+		}
+	})
+
+	t.Run("template-less nil features sends no repo-feature PATCH (GitHub defaults stand)", func(t *testing.T) {
+		var created, patched bool
+		mux := http.NewServeMux()
+		mux.HandleFunc("/orgs/o/repos", func(w http.ResponseWriter, _ *http.Request) {
+			created = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"full_name":      "o/cs-principles-solo-alice",
+				"html_url":       "https://github.com/o/cs-principles-solo-alice",
+				"default_branch": "main",
+			})
+		})
+		mux.HandleFunc("/repos/o/cs-principles-solo-alice", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPatch {
+				patched = true
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"full_name":      "o/cs-principles-solo-alice",
+				"html_url":       "https://github.com/o/cs-principles-solo-alice",
+				"default_branch": "main",
+			})
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+
+		var out bytes.Buffer
+		_, _, branch, _, err := createEmptyPrivateAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// The behavior this fix introduces: a template-less all-default assignment
+		// leaves GitHub's create defaults in place, so accept sends no PATCH.
+		if !created {
+			t.Error("created = false, want the repo to be created")
+		}
+		if patched {
+			t.Error("patched = true, want NO repo-feature PATCH for a template-less nil-features assignment")
+		}
+		if branch != "main" {
+			t.Errorf("default branch = %q, want main", branch)
 		}
 	})
 
