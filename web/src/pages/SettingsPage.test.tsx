@@ -10,6 +10,12 @@ vi.mock("@/components/PageShell", () => ({
     <div>{children}</div>
   ),
 }))
+// LanguageSwitcher pulls in the full language/registry stack (useLanguage reads
+// i18n.language, which this suite's react-i18next mock doesn't provide); it has
+// its own tests, so stub it here to keep this suite focused on the page.
+vi.mock("@/components/settings/LanguageSwitcher", () => ({
+  LanguageSwitcher: () => <div data-testid="language-switcher" />,
+}))
 vi.mock("@/hooks/useDocumentTitle", () => ({ useDocumentTitle: () => {} }))
 vi.mock("react-i18next", async (importActual) => {
   const actual = await importActual<typeof import("react-i18next")>()

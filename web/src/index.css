@@ -159,6 +159,10 @@ body {
     animation: none;
   }
 }
+[data-reduce-motion="true"]::view-transition-old(root),
+[data-reduce-motion="true"]::view-transition-new(root) {
+  animation: none;
+}
 
 /* Loading skeletons: a moving sheen sweeping left-to-right signals "loading"
    more clearly than a static block. Layered over daisyUI's `skeleton` base via
@@ -232,11 +236,17 @@ body {
   transform: scale(0.97);
 }
 
-/* Global safety net: honor an explicit reduced-motion preference everywhere,
-   even for animations that forgot their own guard. Near-instant rather than
-   truly 0ms so single-run transitions still fire their end events. Functional
-   spinners (daisyUI `.loading`, Tailwind `animate-spin`) are exempted so they
-   keep spinning during real async work — a frozen loading ring reads as a hang. */
+/* Global safety net: honor a reduced-motion preference everywhere, even for
+   animations that forgot their own guard. Two triggers share one rule:
+     - `@media (prefers-reduced-motion: reduce)` — the OS-level preference;
+     - `html[data-reduce-motion="true"]` — the in-app override (useReducedMotion
+       sets the attribute when the user picks "off", or "system" resolves to a
+       reducing OS), so a user can suppress motion without an OS setting.
+   Near-instant rather than truly 0ms so single-run transitions still fire their
+   end events. Functional spinners (daisyUI `.loading`, Tailwind `animate-spin`)
+   are exempted so they keep spinning during real async work — a frozen loading
+   ring reads as a hang. The JS variants collapse in parallel via <MotionConfig
+   reducedMotion> in main.tsx, which the same hook drives. */
 @media (prefers-reduced-motion: reduce) {
   *:not(.loading):not(.animate-spin),
   *::before,
@@ -246,6 +256,14 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+[data-reduce-motion="true"] *:not(.loading):not(.animate-spin),
+[data-reduce-motion="true"] *::before,
+[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
 
 /* ── WCAG 2.1 AA contrast overrides ────────────────────────────────────────

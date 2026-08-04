@@ -846,6 +846,12 @@
       "heading": "Settings",
       "subheading": "Preferences for this browser. Nothing here is shared with your organizations."
     },
+    "groups": {
+      "preferences": "Preferences",
+      "preferencesDescription": "Display and interaction settings for this browser.",
+      "organizations": "Organizations",
+      "organizationsDescription": "Manage your organizations and home page."
+    },
     "hiddenOrgs": {
       "heading": "Hidden organizations",
       "subheading": "Organizations you've hidden from your home page. Unhide one to show it again.",
@@ -859,6 +865,32 @@
       "empty": "No organizations with Classroom 50 set up yet.",
       "expires": "Expires {{date}}",
       "manage": "Manage"
+    },
+    "motion": {
+      "heading": "Animations",
+      "subheading": "Control interface motion such as page transitions, menus, and other animated effects.",
+      "system": "System",
+      "systemHint": "Follow your device's reduce-motion setting.",
+      "on": "On",
+      "onHint": "Always animate.",
+      "off": "Off",
+      "offHint": "Turn off all animations.",
+      "groupAria": "Animation preference"
+    },
+    "appearance": {
+      "heading": "Appearance",
+      "subheading": "Choose a light or dark theme, or follow your device's setting.",
+      "system": "System",
+      "systemHint": "Follow your device's light/dark setting.",
+      "light": "Light",
+      "lightHint": "Always use the light theme.",
+      "dark": "Dark",
+      "darkHint": "Always use the dark theme.",
+      "groupAria": "Theme preference"
+    },
+    "language": {
+      "heading": "Language",
+      "subheading": "Switch languages or install a translated language pack."
     }
   },
   "assignments": {

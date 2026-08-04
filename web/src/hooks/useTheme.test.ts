@@ -158,6 +158,67 @@ describe("useTheme", () => {
     expect(result.current.isDark).toBe(true)
   })
 
+  describe("tri-state preference (setThemePref)", () => {
+    it("defaults pref to system when nothing is stored", () => {
+      stubMatchMedia(false)
+      const { result } = renderHook(() => useTheme())
+      expect(result.current.pref).toBe("system")
+    })
+
+    it("reflects a stored explicit theme as the pref", () => {
+      window.localStorage.setItem(THEME_STORAGE_KEY, "sumi-dark")
+      stubMatchMedia(false)
+      const { result } = renderHook(() => useTheme())
+      expect(result.current.pref).toBe("sumi-dark")
+    })
+
+    it("pins light/dark: sets pref, resolves theme, and persists", () => {
+      stubMatchMedia(false)
+      const { result } = renderHook(() => useTheme())
+      act(() => result.current.setThemePref("sumi-dark"))
+      expect(result.current.pref).toBe("sumi-dark")
+      expect(result.current.theme).toBe("sumi-dark")
+      expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("sumi-dark")
+    })
+
+    it("system clears the stored key and re-resolves from the OS", () => {
+      const mql = stubMatchMedia(true) // OS prefers dark
+      const { result } = renderHook(() => useTheme())
+
+      act(() => result.current.setThemePref("sumi")) // pin light
+      expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("sumi")
+
+      act(() => result.current.setThemePref("system"))
+      expect(result.current.pref).toBe("system")
+      expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull()
+      // Back to following the OS (dark).
+      expect(result.current.theme).toBe("sumi-dark")
+
+      // And OS changes are followed again once back on system.
+      act(() => mql.emit(false))
+      expect(result.current.theme).toBe("sumi")
+    })
+
+    it("resets pref to system on a cross-tab clear", () => {
+      window.localStorage.setItem(THEME_STORAGE_KEY, "sumi-dark")
+      stubMatchMedia(false)
+      const { result } = renderHook(() => useTheme())
+      expect(result.current.pref).toBe("sumi-dark")
+
+      act(() => {
+        window.localStorage.removeItem(THEME_STORAGE_KEY)
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: THEME_STORAGE_KEY,
+            newValue: null,
+          }),
+        )
+      })
+      expect(result.current.pref).toBe("system")
+      expect(result.current.theme).toBe("sumi")
+    })
+  })
+
   it("follows OS changes only while no explicit choice is stored", () => {
     const mql = stubMatchMedia(false)
     const { result } = renderHook(() => useTheme())
