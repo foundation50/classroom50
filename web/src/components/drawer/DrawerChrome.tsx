@@ -1,7 +1,7 @@
 import { Menu } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { type ReactNode } from "react"
-import { Outlet } from "@tanstack/react-router"
+import { Outlet, useRouterState } from "@tanstack/react-router"
 import { AnimatePresence, motion } from "motion/react"
 import Drawer, { MOBILE_DRAWER_ID, useSidebarCollapse } from "./collapseContext"
 import {
@@ -12,7 +12,26 @@ import {
 import { ClassroomLogo, ExpandSidebarButton } from "./primitives"
 import { SidebarFooter } from "./SidebarFooter"
 import { useSidebarNav } from "./useSidebarNav"
-import { sidebarLevelVariants } from "@/lib/motion"
+import { sidebarLevelVariants, pageContentVariants } from "@/lib/motion"
+
+// Replays a subtle enter animation on each route swap. Keying the motion element
+// by pathname remounts it, so it plays `initial -> animate` once per navigation
+// — no AnimatePresence/exit, so the incoming page never waits behind an outgoing
+// one (navigation stays instant). Banners stay outside this so they don't
+// re-animate on every navigation.
+const PageTransition = ({ children }: { children: ReactNode }) => {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  return (
+    <motion.div
+      key={pathname}
+      variants={pageContentVariants}
+      initial="initial"
+      animate="animate"
+    >
+      {children}
+    </motion.div>
+  )
+}
 
 // Persistent app shell: the drawer chrome + rail mount ONCE here and page
 // content flows through <Outlet/>, so navigating between pages swaps only the
@@ -25,7 +44,9 @@ export const AppShell = ({ topSlot }: { topSlot?: ReactNode }) => (
       <DrawerToggle />
       <DrawerContent>
         {topSlot}
-        <Outlet />
+        <PageTransition>
+          <Outlet />
+        </PageTransition>
       </DrawerContent>
       <DrawerSidebar />
     </Drawer>

@@ -17,9 +17,9 @@ import {
   Card,
   Input,
   Select,
-  Spinner,
   rtlFlip,
 } from "@/components/ui"
+import { SkeletonRows } from "@/components/list"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -455,12 +455,9 @@ const OrgMembersPage = () => {
             </Select>
           </div>
 
-          <Card className="mt-4 w-full overflow-hidden">
+          <Card className="mt-4 w-full overflow-hidden" aria-busy={isLoading}>
             {isLoading ? (
-              <div className="flex items-center justify-center gap-3 px-6 py-12 text-base-content/70">
-                <Spinner size="md" />
-                <span className="text-sm">{t("orgMembers.loading")}</span>
-              </div>
+              <SkeletonRows rows={6} />
             ) : isError ? (
               <div className="px-6 py-10 text-center text-sm text-error">
                 {t("orgMembers.loadError")}

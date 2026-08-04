@@ -102,3 +102,30 @@ export function NoSearchResults({
     />
   )
 }
+
+// Placeholder rows for a list/table body while its data loads. Shared so list
+// pages skeleton-in consistently (content fades into place) instead of a
+// centered spinner that content then jumps to replace. Decorative — hidden from
+// assistive tech; the surrounding container carries the aria-busy signal.
+export function SkeletonRows({
+  rows = 5,
+  className = "divide-y divide-base-200",
+}: {
+  rows?: number
+  className?: string
+}) {
+  return (
+    <div className={className} aria-hidden="true">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 px-6 py-4">
+          <div className="skeleton skeleton-shimmer size-8 shrink-0 rounded-full" />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <div className="skeleton skeleton-shimmer h-4 w-40" />
+            <div className="skeleton skeleton-shimmer h-3 w-24" />
+          </div>
+          <div className="skeleton skeleton-shimmer h-6 w-20 shrink-0" />
+        </div>
+      ))}
+    </div>
+  )
+}

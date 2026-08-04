@@ -2412,7 +2412,6 @@
     "exportCsv": "Export CSV",
     "searchPlaceholder": "Search activity...",
     "searchLabel": "Search activity",
-    "loading": "Loading activity...",
     "loadOlder": "Load older",
     "partialError": "Some activity couldn't be loaded. Showing what's available.",
     "filters": {
@@ -2469,7 +2468,6 @@
     "filterByClassroomLabel": "Filter by classroom",
     "filterAllClassrooms": "All classrooms",
     "filterNoClassroom": "No classroom",
-    "loading": "Loading members...",
     "loadError": "Couldn't load organization members.",
     "noMatch": "No members match your search.",
     "noMembersInClassroom": "No members in {{classroom}}.",
