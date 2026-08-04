@@ -1,5 +1,8 @@
 import { useParams } from "@tanstack/react-router"
+import { AnimatePresence, motion } from "motion/react"
+import type { ReactNode } from "react"
 import useGetClassroom from "@/hooks/useGetClassroom"
+import { sidebarLevelVariants } from "@/lib/motion"
 import {
   ClassroomLogo,
   ExpandSidebarButton,
@@ -12,6 +15,30 @@ import { SidebarFooter } from "./SidebarFooter"
 import { MyClasses } from "./MyClasses"
 import { MyOrgs } from "./MyOrgs"
 
+// Swaps the menu region on a level change (orgs -> classes -> classroom ->
+// assignment). `levelKey` drives AnimatePresence so the outgoing level slides
+// out while the incoming one slides in; the shared chrome (logo, footer) around
+// this stays put. mode="wait" avoids two menus overlapping mid-swap.
+const LevelMenu = ({
+  levelKey,
+  children,
+}: {
+  levelKey: string
+  children: ReactNode
+}) => (
+  <AnimatePresence mode="wait" initial={false}>
+    <motion.div
+      key={levelKey}
+      variants={sidebarLevelVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
+      {children}
+    </motion.div>
+  </AnimatePresence>
+)
+
 export const SidebarContent = ({ selected }: { selected: string }) => {
   const { org, classroom, assignment } = useParams({ strict: false })
   const { data: classData } = useGetClassroom(org, classroom)
@@ -23,11 +50,13 @@ export const SidebarContent = ({ selected }: { selected: string }) => {
       <>
         <ClassroomLogo />
         <ExpandSidebarButton />
-        <AssignmentSidebarMenu
-          org={org}
-          classroom={classroom}
-          assignment={assignment}
-        />
+        <LevelMenu levelKey={`assignment:${assignment}`}>
+          <AssignmentSidebarMenu
+            org={org}
+            classroom={classroom}
+            assignment={assignment}
+          />
+        </LevelMenu>
         <SidebarFooter />
       </>
     )
@@ -40,7 +69,13 @@ export const SidebarContent = ({ selected }: { selected: string }) => {
       {org && <AllClasses org={org} />}
       <SidebarClassInfo classInfo={classData} />
       {org && classroom && (
-        <StaffSidebarMenu selected={selected} org={org} classroom={classroom} />
+        <LevelMenu levelKey={`classroom:${classroom}`}>
+          <StaffSidebarMenu
+            selected={selected}
+            org={org}
+            classroom={classroom}
+          />
+        </LevelMenu>
       )}
       <SidebarFooter />
     </>
@@ -58,7 +93,9 @@ export const SidebarContentClasses = ({
     <>
       <ClassroomLogo />
       <ExpandSidebarButton />
-      <MyClasses selected={selected} settings={settings} />
+      <LevelMenu levelKey="classes">
+        <MyClasses selected={selected} settings={settings} />
+      </LevelMenu>
       <SidebarFooter />
     </>
   )
@@ -69,7 +106,9 @@ export const SidebarContentOrgs = ({ selected }: { selected: string }) => {
     <>
       <ClassroomLogo />
       <ExpandSidebarButton />
-      <MyOrgs settings={selected === "settings"} />
+      <LevelMenu levelKey="orgs">
+        <MyOrgs settings={selected === "settings"} />
+      </LevelMenu>
       <SidebarFooter />
     </>
   )

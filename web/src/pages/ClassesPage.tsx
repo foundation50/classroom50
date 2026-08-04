@@ -179,7 +179,7 @@ const ClassesPage = () => {
   }
 
   return (
-    <PageShell page="classes" selected="assignments">
+    <PageShell>
       <PageHeader
         loading={roleLoading}
         title={isStaff ? t("classes.myClasses") : t("classes.myAssignments")}

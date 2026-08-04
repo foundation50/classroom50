@@ -1,4 +1,5 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
+import { createFileRoute, redirect, useParams } from "@tanstack/react-router"
+import { type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { ScopeWarningBanner } from "@/auth/ScopeWarningBanner"
 import { SkeletonDriftBanner } from "@/components/SkeletonDriftBanner"
@@ -7,7 +8,10 @@ import { OfflineBanner } from "@/components/OfflineBanner"
 import { GitHubStatusBanner } from "@/components/GitHubStatusBanner"
 import { UpdateAvailableBanner } from "@/components/UpdateAvailableBanner"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
+import { GitHubOrgRoleProvider } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
+import { ClassroomRoleProvider } from "@/context/classroomRole/ClassroomRoleProvider"
 import { Spinner } from "@/components/Spinner"
+import { AppShell } from "@/components/drawer"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_ROUTER } from "@/lib/logScopes"
 
@@ -54,14 +58,38 @@ function AuthedLayout() {
   }
 
   return (
-    <>
-      <OfflineBanner />
-      <GitHubStatusBanner />
-      <ScopeWarningBanner />
-      <SkeletonDriftBanner />
-      <BudgetCreatedBanner />
-      <UpdateAvailableBanner />
-      <Outlet />
-    </>
+    <AuthedShell
+      topSlot={
+        <>
+          <OfflineBanner />
+          <GitHubStatusBanner />
+          <ScopeWarningBanner />
+          <SkeletonDriftBanner />
+          <BudgetCreatedBanner />
+          <UpdateAvailableBanner />
+        </>
+      }
+    />
+  )
+}
+
+// The role providers now wrap the PERSISTENT shell (sidebar + Outlet) rather
+// than the per-level layout routes: the hoisted sidebar reads the classroom/org
+// role, and it lives above $org/$classroom, so the providers must too. Both are
+// param-tolerant (reads disable to `unresolved` off-route), and keys reset the
+// resolution when the org/classroom changes so a stale role never leaks across
+// boundaries. Child pages + layout gates read this single instance.
+function AuthedShell({ topSlot }: { topSlot?: ReactNode }) {
+  const { org, classroom } = useParams({ strict: false })
+  return (
+    <GitHubOrgRoleProvider key={org ?? "no-org"} org={org}>
+      <ClassroomRoleProvider
+        key={`${org ?? "no-org"}/${classroom ?? "no-classroom"}`}
+        org={org}
+        classroom={classroom}
+      >
+        <AppShell topSlot={topSlot} />
+      </ClassroomRoleProvider>
+    </GitHubOrgRoleProvider>
   )
 }

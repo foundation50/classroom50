@@ -451,7 +451,7 @@ const PublishedResourcesPage = () => {
   const { org } = useParams({ strict: false })
 
   return (
-    <PageShell page="classes" selected="published">
+    <PageShell>
       <RequireRole>
         <PageHeader
           title={t("published.pageHeading")}

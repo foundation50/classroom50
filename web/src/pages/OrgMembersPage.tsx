@@ -370,7 +370,7 @@ const OrgMembersPage = () => {
 
   return (
     <>
-      <PageShell page="classes" selected="members">
+      <PageShell>
         <RequireRole allow="owner">
           <PageHeader
             title={t("orgMembers.heading")}

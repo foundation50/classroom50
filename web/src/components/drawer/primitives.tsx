@@ -7,13 +7,16 @@ import {
 import { Link, useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { type ReactNode } from "react"
+import { motion } from "motion/react"
 import type { Classroom } from "@/types/classroom"
 import { useSidebarCollapse } from "./collapseContext"
 import {
   navItemClass,
+  sidebarActivePillClass,
   sidebarTooltip,
   sidebarIconButton,
 } from "./sidebarClasses"
+import { sidebarPillTransition } from "@/lib/motion"
 import { rtlFlip } from "@/components/ui"
 
 export const Tip = ({
@@ -34,14 +37,21 @@ export const Tip = ({
 
 // Inner markup of a sidebar nav row. Callers keep their own typed <Link to
 // params> around this so router type inference stays intact.
+//
+// The active highlight is a single shared-`layoutId` pill per menu (`groupId`),
+// so moving `active` between rows FLIP-glides it rather than snapping. The
+// global MotionConfig reducedMotion="user" turns that into an instant swap when
+// the user prefers reduced motion.
 export const SidebarItemBody = ({
   label,
   icon,
   active,
+  groupId = "sidebar",
 }: {
   label: string
   icon: ReactNode
   active: boolean
+  groupId?: string
 }) => {
   const { collapsed } = useSidebarCollapse()
   return (
@@ -49,8 +59,16 @@ export const SidebarItemBody = ({
       aria-current={active ? "page" : undefined}
       className={navItemClass(active, collapsed)}
     >
-      <span className="shrink-0">{icon}</span>
-      {!collapsed && <span className="truncate">{label}</span>}
+      {active && (
+        <motion.span
+          aria-hidden="true"
+          layoutId={`${groupId}-active-pill`}
+          className={sidebarActivePillClass}
+          transition={sidebarPillTransition}
+        />
+      )}
+      <span className="relative z-10 shrink-0">{icon}</span>
+      {!collapsed && <span className="relative z-10 truncate">{label}</span>}
     </li>
   )
 }

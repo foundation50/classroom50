@@ -14,6 +14,7 @@ export const MyOrgs = ({ settings = false }) => {
               label={t("nav.organizations")}
               icon={<BookText aria-hidden="true" />}
               active={!settings}
+              groupId="orgs"
             />
           </Link>
         </Tip>
@@ -23,6 +24,7 @@ export const MyOrgs = ({ settings = false }) => {
               label={t("nav.settings")}
               icon={<Settings aria-hidden="true" />}
               active={settings}
+              groupId="orgs"
             />
           </Link>
         </Tip>

@@ -100,3 +100,30 @@ export const crossFade: Variants = {
   animate: { opacity: 1, transition: { duration: DURATION.base } },
   exit: { opacity: 0, transition: { duration: DURATION.fast } },
 }
+
+// Sidebar active-highlight glide. The pill is a single shared-`layoutId`
+// element, so switching pages FLIP-tweens it from the old row to the new one
+// (a spring reads more like a physical slider than a linear ease here).
+export const sidebarPillTransition: Transition = {
+  type: "spring",
+  stiffness: 520,
+  damping: 42,
+  mass: 0.7,
+}
+
+// Level swap for the sidebar menu (orgs -> classes -> classroom -> assignment):
+// the outgoing menu fades out while the incoming one slides in from a small
+// horizontal offset, reading as "descending into" the next level.
+export const sidebarLevelVariants: Variants = {
+  initial: { opacity: 0, x: 8 },
+  animate: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: DURATION.slow, ease: EASE_OUT },
+  },
+  exit: {
+    opacity: 0,
+    x: -8,
+    transition: { duration: DURATION.fast, ease: EASE_OUT },
+  },
+}

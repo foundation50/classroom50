@@ -168,6 +168,7 @@ export const AssignmentSidebarMenu = ({
                     label={t("nav.submissions")}
                     icon={<UsersRound aria-hidden="true" />}
                     active={onSubmissions}
+                    groupId="assignment"
                   />
                 </Link>
               </Tip>
@@ -180,6 +181,7 @@ export const AssignmentSidebarMenu = ({
                     label={t("nav.settings")}
                     icon={<Settings aria-hidden="true" />}
                     active={onSettings}
+                    groupId="assignment"
                   />
                 </Link>
               </Tip>
@@ -197,6 +199,7 @@ export const AssignmentSidebarMenu = ({
                       label={t("nav.acceptAssignment")}
                       icon={<FilePlus2 aria-hidden="true" />}
                       active={onAccept}
+                      groupId="assignment"
                     />
                   </Link>
                 </Tip>
@@ -210,6 +213,7 @@ export const AssignmentSidebarMenu = ({
                     label={t("nav.mySubmission")}
                     icon={<FileCheck2 aria-hidden="true" />}
                     active={onSubmission}
+                    groupId="assignment"
                   />
                 </Link>
               </Tip>
@@ -223,6 +227,7 @@ export const AssignmentSidebarMenu = ({
                       label={t("nav.manageGroup")}
                       icon={<UsersRound aria-hidden="true" />}
                       active={onSettings}
+                      groupId="assignment"
                     />
                   </Link>
                 </Tip>

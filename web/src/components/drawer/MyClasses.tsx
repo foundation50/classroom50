@@ -42,6 +42,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
                 active={
                   !onSettings && !onPublished && !onMembers && !onActivity
                 }
+                groupId="org"
               />
             </Link>
           </Tip>
@@ -53,6 +54,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
                 label={t("nav.published")}
                 icon={<Globe aria-hidden="true" />}
                 active={onPublished}
+                groupId="org"
               />
             </Link>
           </Tip>
@@ -64,6 +66,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
                 label={t("nav.members")}
                 icon={<UsersRound aria-hidden="true" />}
                 active={onMembers}
+                groupId="org"
               />
             </Link>
           </Tip>
@@ -75,6 +78,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
                 label={t("nav.activity")}
                 icon={<Activity aria-hidden="true" />}
                 active={onActivity}
+                groupId="org"
               />
             </Link>
           </Tip>
@@ -86,6 +90,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
                 label={t("nav.settings")}
                 icon={<Settings aria-hidden="true" />}
                 active={onSettings}
+                groupId="org"
               />
             </Link>
           </Tip>

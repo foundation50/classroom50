@@ -128,7 +128,7 @@ export const ImportClassroomPage = () => {
   }
 
   return (
-    <PageShell page="import" selected="assignments">
+    <PageShell>
       <PageHeader
         title={t("migration.title")}
         subtitle={<p className="max-w-2xl">{t("migration.subtitle")}</p>}

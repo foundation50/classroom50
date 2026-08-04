@@ -119,7 +119,7 @@ const OrgActivityPage = () => {
     filters.types.size > 0
 
   return (
-    <PageShell page="classes" selected="activity">
+    <PageShell>
       <RequireRole allow="owner">
         <PageHeader
           title={t("orgActivity.heading")}

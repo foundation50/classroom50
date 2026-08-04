@@ -274,7 +274,7 @@ const AssignmentsPage = () => {
   const isStudent = role === "student"
 
   return (
-    <PageShell selected="assignments">
+    <PageShell>
       <Breadcrumb endpoint={t("nav.assignments")} />
       {org && classroom && (
         <ClaimTeacherNotice org={org} classroom={classroom} />

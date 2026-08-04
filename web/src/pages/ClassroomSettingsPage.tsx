@@ -127,7 +127,7 @@ const ClassroomSettingsPage = () => {
   const { org, classroom } = useParams({ strict: false })
 
   return (
-    <PageShell selected="settings">
+    <PageShell>
       <Breadcrumb endpoint={t("nav.settings")} />
       <RequireRole allow="teacher">
         {!org || !classroom ? (

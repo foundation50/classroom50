@@ -575,7 +575,7 @@ const OrgsPage = () => {
 
   return (
     <>
-      <PageShell page="orgs">
+      <PageShell>
         {isLoading ? (
           <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
             <Spinner size="lg" className="text-primary" />

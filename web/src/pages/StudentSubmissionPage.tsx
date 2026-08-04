@@ -275,7 +275,7 @@ const StudentSubmissionPage = () => {
   const description = assignmentDescription(assignmentData)
 
   return (
-    <PageShell selected="assignments">
+    <PageShell>
       <Breadcrumb endpoint={t("nav.mySubmission")} />
       <PageHeader
         title={
