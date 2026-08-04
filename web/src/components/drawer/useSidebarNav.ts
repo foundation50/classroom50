@@ -21,12 +21,33 @@ export type SidebarNav = {
 // replaces the old per-page PageShell props (page/selected/settings) with one
 // source of truth, matched by route id so a renamed path fails loudly rather
 // than silently mis-highlighting.
+
+// Route id -> active row for the org "classes" level. The settings route also
+// flips the `settings` flag; every other row is a plain selection. Missing from
+// the table (classes list, create, import, setup) falls through to the home row.
+const CLASSES_ROW: Record<string, { selected: string; settings?: boolean }> = {
+  "/_authed/$org/settings/": { selected: "settings", settings: true },
+  "/_authed/$org/published/": { selected: "published" },
+  "/_authed/$org/members/": { selected: "members" },
+  "/_authed/$org/activity/": { selected: "activity" },
+}
+
+// Route id -> active row for the classroom level. Inside an assignment the
+// AssignmentSidebarMenu self-derives its own active row, so only these
+// classroom-scoped rows need mapping here; the default is the assignments list.
+const CLASSROOM_ROW: Record<string, string> = {
+  "/_authed/$org/$classroom/roster/": "roster",
+  "/_authed/$org/$classroom/settings/": "settings",
+}
+
 export const useSidebarNav = (): SidebarNav => {
   const { org, classroom, assignment } = useParams({ strict: false })
+  // Keep the selector returning an array (router structural-sharing compares it
+  // by value, avoiding needless re-renders); build the Set for O(1) lookups here.
   const routeIds = useRouterState({
     select: (s) => s.matches.map((m) => m.routeId as string),
   })
-  const on = (id: string) => routeIds.includes(id)
+  const matched = new Set(routeIds)
 
   // Level: no org -> the orgs list; org but no classroom -> the class/admin
   // menu; inside a classroom -> the classroom/assignment menu (page "").
@@ -47,37 +68,29 @@ export const useSidebarNav = (): SidebarNav => {
   // Orgs level (top): only the account Settings page is "selected"; the orgs
   // list itself is the default row.
   if (page === "orgs") {
-    const settings = on("/_authed/settings/")
+    const settings = matched.has("/_authed/settings/")
+    return { page, selected: settings ? "settings" : "", settings, levelKey }
+  }
+
+  // Classes level ($org/*): the org admin menu.
+  if (page === "classes") {
+    const hit = Object.entries(CLASSES_ROW).find(([id]) => matched.has(id))?.[1]
     return {
       page,
-      selected: settings ? "settings" : "",
-      settings,
+      selected: hit?.selected ?? "",
+      settings: hit?.settings ?? false,
       levelKey,
     }
   }
 
-  // Classes level ($org/*): the org admin menu (classes home, published,
-  // members, activity, settings).
-  if (page === "classes") {
-    if (on("/_authed/$org/settings/"))
-      return { page, selected: "settings", settings: true, levelKey }
-    if (on("/_authed/$org/published/"))
-      return { page, selected: "published", settings: false, levelKey }
-    if (on("/_authed/$org/members/"))
-      return { page, selected: "members", settings: false, levelKey }
-    if (on("/_authed/$org/activity/"))
-      return { page, selected: "activity", settings: false, levelKey }
-    // classes list, create-classroom, import, setup all sit under the classes
-    // home row.
-    return { page, selected: "", settings: false, levelKey }
+  // Classroom level ($org/$classroom/*): the classroom/assignment menu.
+  const classroomRow = Object.entries(CLASSROOM_ROW).find(([id]) =>
+    matched.has(id),
+  )?.[1]
+  return {
+    page,
+    selected: classroomRow ?? "assignments",
+    settings: false,
+    levelKey,
   }
-
-  // Classroom level ($org/$classroom/*): the classroom/assignment menu. Inside
-  // an assignment the AssignmentSidebarMenu self-derives its active row via
-  // useMatchRoute, so only the classroom-scoped rows need a `selected` here.
-  if (on("/_authed/$org/$classroom/roster/"))
-    return { page, selected: "roster", settings: false, levelKey }
-  if (on("/_authed/$org/$classroom/settings/"))
-    return { page, selected: "settings", settings: false, levelKey }
-  return { page, selected: "assignments", settings: false, levelKey }
 }

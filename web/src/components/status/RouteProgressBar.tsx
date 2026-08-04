@@ -9,34 +9,34 @@ import { EASE_OUT } from "@/lib/motion"
 // signal. The bar trickles toward ~90% while fetches are in flight, then snaps
 // to 100% and fades out when they settle, mimicking a native app's route load.
 //
-// Care taken against render loops: the fill is a Motion value animated
-// imperatively (no per-frame setState); React state holds only the coarse
-// visible/hidden flag, flipped at most twice per load cycle. A short show-delay
-// keeps a burst of cached reads from flashing the bar.
+// Render-loop / churn safety: the fill is a Motion value animated imperatively
+// (no per-frame setState); React state holds only the coarse visible flag,
+// flipped at most twice per load cycle. Crucially the effect does NOT clear the
+// timers in a per-run cleanup — `fetching` changes on every query start/finish,
+// so a staggered burst of reads (this app's norm) would otherwise keep clearing
+// and rescheduling the show-timer and the bar would never appear. Instead each
+// timer is armed once per transition (guarded by its ref) and only cleared on
+// unmount, so the 120ms reveal survives fetch-count churn.
 const SHOW_DELAY_MS = 120
 const HIDE_DELAY_MS = 180
 
 export function RouteProgressBar() {
-  const fetching = useIsFetching()
+  const active = useIsFetching() > 0
   const [visible, setVisible] = useState(false)
   const progress = useMotionValue(0)
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const clearTimers = () => {
-      if (showTimer.current) clearTimeout(showTimer.current)
-      if (hideTimer.current) clearTimeout(hideTimer.current)
-      showTimer.current = null
-      hideTimer.current = null
-    }
-
-    if (fetching > 0) {
+    if (active) {
+      // A new load (or a resumed one): cancel any pending fade-out.
       if (hideTimer.current) {
         clearTimeout(hideTimer.current)
         hideTimer.current = null
       }
-      // Delay the reveal so instant cache hits don't flash a bar.
+      // Arm the reveal once. The show-timer ref guard means later `active`
+      // re-runs during the same load don't reset the 120ms delay, so a
+      // churny multi-fetch page still reveals the bar on schedule.
       if (!visible && !showTimer.current) {
         showTimer.current = setTimeout(() => {
           showTimer.current = null
@@ -47,14 +47,15 @@ export function RouteProgressBar() {
           animate(progress, 0.9, { duration: 8, ease: EASE_OUT })
         }, SHOW_DELAY_MS)
       }
-      return clearTimers
+      return
     }
 
-    // Fetches settled: cancel a pending reveal, or complete + fade a shown bar.
+    // Fetches settled: cancel a pending (not-yet-shown) reveal outright.
     if (showTimer.current) {
       clearTimeout(showTimer.current)
       showTimer.current = null
     }
+    // Complete + fade a shown bar, armed once via the hide-timer ref guard.
     if (visible && !hideTimer.current) {
       animate(progress, 1, { duration: 0.2, ease: EASE_OUT })
       hideTimer.current = setTimeout(() => {
@@ -63,8 +64,16 @@ export function RouteProgressBar() {
         progress.set(0)
       }, HIDE_DELAY_MS)
     }
-    return clearTimers
-  }, [fetching, visible, progress])
+  }, [active, visible, progress])
+
+  // Clear timers only on unmount — never in a per-run cleanup (see above).
+  useEffect(
+    () => () => {
+      if (showTimer.current) clearTimeout(showTimer.current)
+      if (hideTimer.current) clearTimeout(hideTimer.current)
+    },
+    [],
+  )
 
   return (
     <AnimatePresence>
