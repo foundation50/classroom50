@@ -124,9 +124,13 @@ function mixColorFlatten(fg: LinearRgb, bg: LinearRgb): LinearRgb {
   const toL = (s: number) =>
     s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
   const a = fg.a
-  const blend = (fl: number, bl: number) =>
-    toL(toG(fl) * a + toG(bl) * (1 - a))
-  return { r: blend(fg.r, bg.r), g: blend(fg.g, bg.g), b: blend(fg.b, bg.b), a: 1 }
+  const blend = (fl: number, bl: number) => toL(toG(fl) * a + toG(bl) * (1 - a))
+  return {
+    r: blend(fg.r, bg.r),
+    g: blend(fg.g, bg.g),
+    b: blend(fg.b, bg.b),
+    a: 1,
+  }
 }
 
 // Opacity-tier foreground: color a token at NN% over transparent (what
@@ -157,20 +161,47 @@ function buildTheme(theme: Theme): Pair[] {
     size: SizeClass,
     kind: Kind = "text",
     exempt = false,
-  ) => pairs.push({ id: `${theme}:${id}`, theme, label, fg, bg, size, kind, exempt })
+  ) =>
+    pairs.push({
+      id: `${theme}:${id}`,
+      theme,
+      label,
+      fg,
+      bg,
+      size,
+      kind,
+      exempt,
+    })
 
   // Body ink on each surface a page realistically uses.
-  add("ink-100", "base-content on base-100", opaque(T.baseContent), opaque(T.base100), "body")
-  add("ink-200", "base-content on base-200", opaque(T.baseContent), opaque(T.base200), "body")
-  add("ink-300", "base-content on base-300", opaque(T.baseContent), opaque(T.base300), "body")
+  add(
+    "ink-100",
+    "base-content on base-100",
+    opaque(T.baseContent),
+    opaque(T.base100),
+    "body",
+  )
+  add(
+    "ink-200",
+    "base-content on base-200",
+    opaque(T.baseContent),
+    opaque(T.base200),
+    "body",
+  )
+  add(
+    "ink-300",
+    "base-content on base-300",
+    opaque(T.baseContent),
+    opaque(T.base300),
+    "body",
+  )
 
   // Muted text tiers, at their AAA-remapped opacity floors (index.css). Audited
   // against the realistic worst-case surface for the foreground's polarity:
   // dark ink on the DARKEST surface (base-300) is the lowest-contrast case in
   // light theme; light ink's worst case in dark theme is the lightest surface
   // (base-100).
-  const tierWorstBg =
-    theme === "sumi" ? opaque(T.base300) : opaque(T.base100)
+  const tierWorstBg = theme === "sumi" ? opaque(T.base300) : opaque(T.base100)
   for (const pct of [50, 60, 70, 80] as const) {
     add(
       `muted-${pct}`,
@@ -196,7 +227,13 @@ function buildTheme(theme: Theme): Pair[] {
     ],
   ]
   for (const [name, fill, content] of fills) {
-    add(`fill-${name}`, `${name}-content on ${name} fill`, opaque(content), opaque(fill), "large")
+    add(
+      `fill-${name}`,
+      `${name}-content on ${name} fill`,
+      opaque(content),
+      opaque(fill),
+      "large",
+    )
   }
 
   // Soft badge text: nudged token on an 8% tint of the token over base-100.
@@ -243,8 +280,20 @@ function buildTheme(theme: Theme): Pair[] {
   )
 
   // Placeholder and .label both render at the muted-70 floor (index.css).
-  add("placeholder", "input placeholder", tierFg(T.baseContent, T.muted[70]), opaque(T.base100), "body")
-  add("label", ".label text", tierFg(T.baseContent, T.muted[70]), opaque(T.base100), "body")
+  add(
+    "placeholder",
+    "input placeholder",
+    tierFg(T.baseContent, T.muted[70]),
+    opaque(T.base100),
+    "body",
+  )
+  add(
+    "label",
+    ".label text",
+    tierFg(T.baseContent, T.muted[70]),
+    opaque(T.base100),
+    "body",
+  )
 
   // Non-text: the default divider/border (base-300) on base-100 is structural,
   // NOT the sole means of identifying a control, so it's outside 1.4.11's scope
@@ -252,7 +301,15 @@ function buildTheme(theme: Theme): Pair[] {
   // exempt so the guard doesn't force a heavy 3:1 divider that would break the
   // minimalist aesthetic. Focus rings / active-state borders (which DO identify
   // state) are the primary/accent tokens, audited via the fill/link pairs.
-  add("border", "base-300 structural divider on base-100", opaque(T.base300), opaque(T.base100), "body", "nonText", true)
+  add(
+    "border",
+    "base-300 structural divider on base-100",
+    opaque(T.base300),
+    opaque(T.base100),
+    "body",
+    "nonText",
+    true,
+  )
 
   return pairs
 }

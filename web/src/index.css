@@ -309,16 +309,32 @@ body {
   --muted-80: 86%;
 }
 .text-base-content\/50 {
-  color: color-mix(in oklab, var(--color-base-content) var(--muted-50), transparent);
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-50),
+    transparent
+  );
 }
 .text-base-content\/60 {
-  color: color-mix(in oklab, var(--color-base-content) var(--muted-60), transparent);
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-60),
+    transparent
+  );
 }
 .text-base-content\/70 {
-  color: color-mix(in oklab, var(--color-base-content) var(--muted-70), transparent);
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-70),
+    transparent
+  );
 }
 .text-base-content\/80 {
-  color: color-mix(in oklab, var(--color-base-content) var(--muted-80), transparent);
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-80),
+    transparent
+  );
 }
 
 /* Input placeholders: raise to the AAA muted floor (was ~0.65). */
@@ -326,13 +342,21 @@ body {
 .textarea::placeholder,
 input::placeholder,
 textarea::placeholder {
-  color: color-mix(in oklab, var(--color-base-content) var(--muted-70), transparent);
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-70),
+    transparent
+  );
   opacity: 1;
 }
 
 /* DaisyUI `.label`: raise to the AAA muted floor (was ~0.70). */
 .label {
-  color: color-mix(in oklab, var(--color-base-content) var(--muted-70), transparent);
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-70),
+    transparent
+  );
 }
 
 /* Links: daisyUI `.link` (and `hover:text-primary`) render the primary token as

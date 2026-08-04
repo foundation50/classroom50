@@ -25,7 +25,11 @@ function linearToSrgbChannel(c: number): number {
 
 // ── oklab/oklch -> linear sRGB ─────────────────────────────────────────────
 // Björn Ottosson's OKLab. oklch is oklab in polar form (L, C, hue°).
-function oklabToLinearRgb(L: number, a: number, b: number): {
+function oklabToLinearRgb(
+  L: number,
+  a: number,
+  b: number,
+): {
   r: number
   g: number
   bl: number
@@ -45,7 +49,11 @@ function oklabToLinearRgb(L: number, a: number, b: number): {
   }
 }
 
-function oklchToLinearRgb(L: number, C: number, hDeg: number): {
+function oklchToLinearRgb(
+  L: number,
+  C: number,
+  hDeg: number,
+): {
   r: number
   g: number
   bl: number

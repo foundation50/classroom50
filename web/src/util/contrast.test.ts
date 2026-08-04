@@ -17,17 +17,15 @@ import {
 
 describe("contrastRatio — WCAG reference pairs", () => {
   it("black on white is 21:1", () => {
-    expect(contrastRatio(parseColor("#000000"), parseColor("#ffffff"))).toBeCloseTo(
-      21,
-      2,
-    )
+    expect(
+      contrastRatio(parseColor("#000000"), parseColor("#ffffff")),
+    ).toBeCloseTo(21, 2)
   })
 
   it("white on white is 1:1", () => {
-    expect(contrastRatio(parseColor("#ffffff"), parseColor("#ffffff"))).toBeCloseTo(
-      1,
-      5,
-    )
+    expect(
+      contrastRatio(parseColor("#ffffff"), parseColor("#ffffff")),
+    ).toBeCloseTo(1, 5)
   })
 
   it("sumi ink #232323 on base #fafafa is ~14.9:1 (a known AAA pass)", () => {
@@ -84,8 +82,9 @@ describe("color-mix — validated against browser-computed values", () => {
     const flat = ratioSurface(half)
     // ~127.5/255 per channel; allow the ±1 LSB the linear round-trip can drift.
     const channel = Math.round(
-      (flat.r <= 0.0031308 ? flat.r * 12.92 : 1.055 * flat.r ** (1 / 2.4) - 0.055) *
-        255,
+      (flat.r <= 0.0031308
+        ? flat.r * 12.92
+        : 1.055 * flat.r ** (1 / 2.4) - 0.055) * 255,
     )
     expect(channel).toBeGreaterThanOrEqual(127)
     expect(channel).toBeLessThanOrEqual(128)
