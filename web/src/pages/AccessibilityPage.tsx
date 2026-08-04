@@ -63,7 +63,7 @@ function ColorPreviewButton({ row, onOpen }: { row: Row; onOpen: () => void }) {
       onClick={onOpen}
       title={t("accessibility.preview.open")}
       aria-label={t("accessibility.preview.openFor", { pair: row.id })}
-      className="flex h-9 w-14 items-center justify-center rounded border border-base-300 text-sm font-semibold transition hover:ring-2 hover:ring-primary/40"
+      className="flex h-9 w-14 cursor-pointer items-center justify-center rounded border border-base-300 text-sm font-semibold transition hover:ring-2 hover:ring-primary/40"
       style={{ backgroundColor: row.bgHex, color: row.fgHex }}
     >
       <span aria-hidden="true">{isText ? "Aa" : "▭"}</span>
