@@ -304,26 +304,22 @@ export default function AccessibilityPage() {
 
       {audit && (
         <>
-          <Alert tone={audit.summary.allPass ? "success" : "error"}>
-            {!audit.summary.allPass
-              ? t("accessibility.summaryFail", {
-                  failures: audit.summary.failures,
-                })
-              : marginCount > 0
-                ? t("accessibility.summaryPassMargin", {
-                    total: audit.summary.total,
-                    count: marginCount,
-                  })
-                : t("accessibility.summaryPass", {
-                    total: audit.summary.total,
-                  })}
-          </Alert>
-
           <details className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
             <summary className="collapse-title text-sm font-medium">
-              {t("accessibility.criteria.toggle")}
+              {!audit.summary.allPass
+                ? t("accessibility.summaryFail", {
+                    failures: audit.summary.failures,
+                  })
+                : marginCount > 0
+                  ? t("accessibility.summaryPassMargin", {
+                      total: audit.summary.total,
+                      count: marginCount,
+                    })
+                  : t("accessibility.summaryPass", {
+                      total: audit.summary.total,
+                    })}
             </summary>
-            <div className="collapse-content flex flex-col gap-2 text-sm text-base-content/70">
+            <div className="collapse-content flex flex-col gap-4 text-sm text-base-content/70">
               <p>{t("accessibility.criteria.standardText")}</p>
               <div>
                 <p className="font-medium text-base-content">
@@ -370,6 +366,33 @@ export default function AccessibilityPage() {
                 </ul>
                 <p className="mt-1">{t("accessibility.criteria.marginWhy")}</p>
               </div>
+              <div>
+                <p className="font-medium text-base-content">
+                  {t("accessibility.legend.heading")}
+                </p>
+                <div className="mt-1 flex flex-col gap-1">
+                  <span className="flex items-center gap-2">
+                    <Badge tone="success">
+                      {t("accessibility.status.pass")}
+                    </Badge>
+                    {t("accessibility.legend.pass")}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Info aria-hidden="true" className="size-4" />
+                    {t("accessibility.legend.passMargin")}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Badge tone="error">{t("accessibility.status.fail")}</Badge>
+                    {t("accessibility.legend.fail")}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Badge tone="neutral">
+                      {t("accessibility.status.exempt")}
+                    </Badge>
+                    {t("accessibility.legend.exempt")}
+                  </span>
+                </div>
+              </div>
               <p>
                 {t("accessibility.criteria.generated", {
                   generated: audit.generated,
@@ -396,25 +419,6 @@ export default function AccessibilityPage() {
           {shownTheme && (
             <ThemeTable theme={shownTheme} onOpenRow={setSelectedRow} />
           )}
-
-          <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-base-content/70">
-            <span className="flex items-center gap-1">
-              <Badge tone="success">{t("accessibility.status.pass")}</Badge>
-              {t("accessibility.legend.pass")}
-            </span>
-            <span className="flex items-center gap-1">
-              <Info aria-hidden="true" className="size-4" />
-              {t("accessibility.legend.passMargin")}
-            </span>
-            <span className="flex items-center gap-1">
-              <Badge tone="error">{t("accessibility.status.fail")}</Badge>
-              {t("accessibility.legend.fail")}
-            </span>
-            <span className="flex items-center gap-1">
-              <Badge tone="neutral">{t("accessibility.status.exempt")}</Badge>
-              {t("accessibility.legend.exempt")}
-            </span>
-          </div>
         </>
       )}
 

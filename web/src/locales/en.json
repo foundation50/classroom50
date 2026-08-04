@@ -10,7 +10,6 @@
     "summaryFail": "{{failures}} color pair(s) are below the WCAG contrast floor.",
     "themeToggle": "Theme",
     "criteria": {
-      "toggle": "Standard, thresholds, and safety margin",
       "standardText": "WCAG 2.2 — 1.4.6 Contrast (Enhanced, AAA) for text, 1.4.11 Non-text Contrast for UI components.",
       "thresholdsHeading": "Required minimums (WCAG floor):",
       "bodyText": "Body text ≥ {{body}}:1",
@@ -50,6 +49,7 @@
     },
     "marginInfo": "{{ratio}}:1 meets the {{floor}}:1 WCAG minimum, but is below our recommended {{margin}}:1 target — still a pass, with less headroom.",
     "legend": {
+      "heading": "Legend",
       "pass": "meets the WCAG minimum",
       "passMargin": "passes, but below the recommended margin (info icon shows the numbers)",
       "fail": "below the WCAG minimum",
