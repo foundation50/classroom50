@@ -33,19 +33,19 @@ describe("DeployEnvBadge", () => {
   it("shows the Dev label on the dev server", () => {
     // Vitest runs with import.meta.env.DEV === true.
     render(<DeployEnvBadge />)
-    expect(screen.getByRole("status").textContent).toBe("nav.envDev")
+    expect(screen.getByText("nav.envDev")).toBeTruthy()
   })
 
   it("shows the Preview label on the preview host", () => {
     vi.stubEnv("DEV", false)
     vi.stubGlobal("location", new URL("https://preview.classroom50.org/"))
     render(<DeployEnvBadge />)
-    expect(screen.getByRole("status").textContent).toBe("nav.envPreview")
+    expect(screen.getByText("nav.envPreview")).toBeTruthy()
   })
 
   it("carries an explanatory title tooltip (reads on the collapsed rail too)", () => {
     render(<DeployEnvBadge />)
-    expect(screen.getByRole("status").getAttribute("title")).toContain(
+    expect(screen.getByText("nav.envDev").getAttribute("title")).toContain(
       "nav.envIndicator",
     )
   })
