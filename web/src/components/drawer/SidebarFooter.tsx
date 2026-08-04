@@ -182,10 +182,6 @@ export const SidebarFooter = () => {
           )}
         </a>
       ) : null}
-      {/* The inline env badge sits by the role badge, which only renders on org
-          routes with the rail expanded; show the standalone marker everywhere
-          else so it's never lost. */}
-      {(!org || collapsed) && <DeployEnvBadge pushToBottom={!org} />}
       <div
         ref={footerRef}
         className={`relative cursor-pointer border-t border-neutral-content/20 py-3 transition-colors hover:bg-[var(--sidebar-surface)]/60 ${org ? "" : "mt-auto"}`}
@@ -364,7 +360,7 @@ export const SidebarFooter = () => {
         </div>
 
         <div
-          className={`flex w-full items-center gap-2.5 text-start ${collapsed ? "justify-center" : "justify-start"}`}
+          className={`flex w-full items-center gap-2.5 text-start ${collapsed ? "flex-col justify-center" : "justify-start"}`}
           title={collapsed ? name : undefined}
         >
           <div className="avatar avatar-placeholder">
@@ -374,6 +370,8 @@ export const SidebarFooter = () => {
               className={`rounded-full ${collapsed ? "w-7" : "w-8"}`}
             />
           </div>
+
+          {collapsed && <DeployEnvBadge />}
 
           {!collapsed && (
             <div className="min-w-0 flex-1">
@@ -399,9 +397,15 @@ export const SidebarFooter = () => {
                       {t("nav.preview")}
                     </span>
                   ) : null}
-                  <DeployEnvBadge variant="inline" />
+                  <DeployEnvBadge />
                 </div>
-              ) : null}
+              ) : (
+                // No org route (no role row) — still surface the env badge so
+                // dev/preview is marked everywhere the account block shows.
+                <div className="flex items-center gap-1.5">
+                  <DeployEnvBadge />
+                </div>
+              )}
             </div>
           )}
         </div>
