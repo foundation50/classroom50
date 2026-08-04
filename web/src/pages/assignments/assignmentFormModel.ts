@@ -468,8 +468,15 @@ export const useAssignmentForm = (
         return Object.keys(errors).length > 0 ? { fields: errors } : undefined
       },
     },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value, formApi }) => {
       await onSubmit(toSubmitValues(value))
+      // Re-baseline to the just-saved values so `isDefaultValue` reads true
+      // again — the Save button re-disables until the next edit. Awaited, so a
+      // failed write (which rejects) leaves the form dirty and re-submittable.
+      // Create navigates away on success, so this is edit-only.
+      if (slugContext?.edit) {
+        formApi.reset(value)
+      }
     },
   })
 

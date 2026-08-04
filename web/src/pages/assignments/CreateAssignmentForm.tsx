@@ -75,7 +75,10 @@ const CreateAssignmentForm = ({
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        form.handleSubmit()
+        // handleSubmit re-throws an onSubmit rejection (an edit-mode mutateAsync
+        // failure); the caller's onError banner already surfaces it, so swallow
+        // it here to avoid an unhandled rejection.
+        void form.handleSubmit().catch(() => {})
       }}
     >
       {/* readOnly disables every descendant control. */}

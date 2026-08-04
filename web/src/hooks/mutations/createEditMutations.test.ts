@@ -160,7 +160,7 @@ describe("useCreateAssignment", () => {
 })
 
 describe("useEditAssignment", () => {
-  it("forwards onWrite and delegates to the domain write, but does NOT invalidate (edit path relies on its own refetch)", async () => {
+  it("invalidates the assignments.json listing, forwards onWrite, and delegates to the domain write", async () => {
     const queryClient = freshClient()
     const invalidate = vi.spyOn(queryClient, "invalidateQueries")
     const onWrite = vi.fn()
@@ -168,18 +168,35 @@ describe("useEditAssignment", () => {
       wrapper: wrapperWith(queryClient),
     })
 
-    result.current.mutate({ slug: "hw1", name: "HW1" } as never)
+    result.current.mutate({
+      slug: "hw1",
+      name: "HW1",
+      org: ORG,
+      classroom: CLASSROOM,
+    } as never)
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(editAssignmentWithConflictRetry).toHaveBeenCalledWith(
       expect.anything(),
-      { slug: "hw1", name: "HW1", canGrantTemplateAccess: true },
+      {
+        slug: "hw1",
+        name: "HW1",
+        org: ORG,
+        classroom: CLASSROOM,
+        canGrantTemplateAccess: true,
+      },
     )
     expect(onWrite).toHaveBeenCalledWith(
       { newCommitSha: "sha-ea" },
-      { slug: "hw1", name: "HW1" },
+      { slug: "hw1", name: "HW1", org: ORG, classroom: CLASSROOM },
     )
-    expect(invalidate).not.toHaveBeenCalled()
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: githubKeys.jsonFile(
+        ORG,
+        CONFIG_REPO,
+        `${CLASSROOM}/assignments.json`,
+      ),
+    })
   })
 
   it("runs the hook-level onMutate before the write settles", async () => {
