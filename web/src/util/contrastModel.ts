@@ -12,7 +12,13 @@
 // the resolver (contrast.ts) reproduces the rendered pixel rather than an
 // approximation. Keep this a pure leaf: data + types only, no app imports.
 
-import { mixColor, parseColor, ratioOver, type LinearRgb } from "./contrast"
+import {
+  flattenOver,
+  mixColor,
+  parseColor,
+  ratioOver,
+  type LinearRgb,
+} from "./contrast"
 
 export type SizeClass = "body" | "large"
 export type Theme = "sumi" | "sumi-dark"
@@ -23,6 +29,13 @@ export const SPEC_FLOOR = { body: 7, large: 4.5, nonText: 3 } as const
 export const MARGIN_TARGET = { body: 7.5, large: 5, nonText: 3.5 } as const
 
 export type Kind = "text" | "nonText"
+
+// Which `text-base-content/NN` and `text-neutral-content/NN` opacity tiers the
+// model audits. The coverage guard (contrastSource.test.ts) scans src/** and
+// fails if a tier used on text is missing here — turning the "a pair present in
+// JSX but absent here is an audit gap" comment into an enforced check.
+export const MODELED_BASE_CONTENT_TIERS = [30, 40, 50, 60, 70, 80, 90] as const
+export const MODELED_NEUTRAL_CONTENT_TIERS = [50, 60, 70] as const
 
 export type Pair = {
   /** Stable id for reporting. */
@@ -40,10 +53,15 @@ export type Pair = {
   exempt?: boolean
 }
 
-// ── Raw theme token values (mirrors index.css; single source for the audit) ──
+// ── Raw theme token values ────────────────────────────────────────────────
+// These duplicate the index.css theme tokens by necessity — vitest runs in node
+// with no CSS engine, so the audit can't read computed styles. The drift guard
+// (contrastSource.test.ts) reads index.css and asserts these still match, so the
+// duplication can't silently diverge (the "mirrors X" smell is neutralized by an
+// enforced parity test, the same pattern the anti-flash script uses).
 // Light theme "sumi". (base-content darkened to #1a1a1a and warning darkened
 // for text/fill per the AAA override block in index.css.)
-const SUMI = {
+export const SUMI = {
   base100: "#fafafa",
   base200: "#f1f1f1",
   base300: "#e3e3e3",
@@ -70,13 +88,16 @@ const SUMI = {
   sidebarSurface: "#3a3a3a",
   // Per-theme link color and muted-tier opacity floors (index.css overrides).
   link: "#324d8c",
-  muted: { 50: 78, 60: 82, 70: 86, 80: 90 } as Record<number, number>,
+  muted: { 30: 78, 40: 78, 50: 78, 60: 82, 70: 86, 80: 90, 90: 92 } as Record<
+    number,
+    number
+  >,
   badgeNudge: 65,
   sidebarMuted: 85,
 } as const
 
-// Dark theme "sumi-dark".
-const DARK = {
+// Dark theme "sumi-dark". Exported for the drift guard (see SUMI).
+export const DARK = {
   base100: "#1b1b1d",
   base200: "#161618",
   base300: "#100f11",
@@ -99,7 +120,10 @@ const DARK = {
   errorContent: "#14181c",
   // Per-theme link color and muted-tier opacity floors (index.css overrides).
   link: "#9bb0dc",
-  muted: { 50: 68, 60: 74, 70: 80, 80: 86 } as Record<number, number>,
+  muted: { 30: 68, 40: 68, 50: 68, 60: 74, 70: 80, 80: 86, 90: 92 } as Record<
+    number,
+    number
+  >,
   badgeNudge: 60,
   sidebarMuted: 85,
 } as const
@@ -109,28 +133,7 @@ const DARK = {
 function darkSidebarSurface(): LinearRgb {
   const sheet = mixColor("oklch", DARK.neutralContent, 10, "transparent")
   // Flatten the translucent sheet over the dark base to get its real color.
-  const base = parseColor(DARK.base100)
-  return {
-    ...mixColorFlatten(sheet, base),
-  }
-}
-
-// Flatten helper (gamma-space composite lives in contrast.ts via ratioOver's
-// internal flatten; expose the same for a precomputed opaque surface).
-function mixColorFlatten(fg: LinearRgb, bg: LinearRgb): LinearRgb {
-  // Reuse ratioOver's flatten indirectly by compositing here in gamma space.
-  const toG = (l: number) =>
-    l <= 0.0031308 ? l * 12.92 : 1.055 * l ** (1 / 2.4) - 0.055
-  const toL = (s: number) =>
-    s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
-  const a = fg.a
-  const blend = (fl: number, bl: number) => toL(toG(fl) * a + toG(bl) * (1 - a))
-  return {
-    r: blend(fg.r, bg.r),
-    g: blend(fg.g, bg.g),
-    b: blend(fg.b, bg.b),
-    a: 1,
-  }
+  return flattenOver(sheet, parseColor(DARK.base100))
 }
 
 // Opacity-tier foreground: color a token at NN% over transparent (what
@@ -147,7 +150,7 @@ const badgeSoftFg = (theme: Theme, token: string): LinearRgb =>
 
 // A soft badge/alert ground: an 8% tint of the token over the base surface.
 const softGround = (token: string, base: string): LinearRgb =>
-  mixColorFlatten(mixColor("srgb", token, 8, "transparent"), parseColor(base))
+  flattenOver(mixColor("srgb", token, 8, "transparent"), parseColor(base))
 
 function buildTheme(theme: Theme): Pair[] {
   const T = theme === "sumi" ? SUMI : DARK
@@ -202,7 +205,7 @@ function buildTheme(theme: Theme): Pair[] {
   // light theme; light ink's worst case in dark theme is the lightest surface
   // (base-100).
   const tierWorstBg = theme === "sumi" ? opaque(T.base300) : opaque(T.base100)
-  for (const pct of [50, 60, 70, 80] as const) {
+  for (const pct of MODELED_BASE_CONTENT_TIERS) {
     add(
       `muted-${pct}`,
       `base-content/${pct} (rendered ${T.muted[pct]}%) on worst-case surface`,
@@ -260,13 +263,14 @@ function buildTheme(theme: Theme): Pair[] {
   // color on base-100, body size (index.css --color-link override).
   add("link", "link on base-100", opaque(T.link), opaque(T.base100), "body")
 
-  // Sidebar (dark rail in both themes). Resting muted row is neutral-content at
-  // the AAA-raised opacity; hover lifts to full neutral-content.
+  // Sidebar (dark rail in both themes). The index.css override remaps every
+  // resting muted tier used on the rail (/50, /60, /70) to the same 85% floor,
+  // so one pair represents them all; hover lifts to full neutral-content.
   const sidebarSurface =
     theme === "sumi" ? opaque(SUMI.sidebarSurface) : darkSidebarSurface()
   add(
     "sidebar-muted",
-    `neutral-content/${T.sidebarMuted} (resting) on sidebar surface`,
+    `neutral-content resting tiers (rendered ${T.sidebarMuted}%) on sidebar surface`,
     tierFg(T.neutralContent, T.sidebarMuted),
     sidebarSurface,
     "body",
@@ -301,6 +305,11 @@ function buildTheme(theme: Theme): Pair[] {
   // exempt so the guard doesn't force a heavy 3:1 divider that would break the
   // minimalist aesthetic. Focus rings / active-state borders (which DO identify
   // state) are the primary/accent tokens, audited via the fill/link pairs.
+  //
+  // PRECONDITION for this exemption: base-300 must never become the *sole*
+  // visual signal of a control's boundary or state (an unfilled input, a
+  // selectable/selected card). Such a control falls under 1.4.11 and needs a
+  // non-exempt pair here at the 3:1 floor.
   add(
     "border",
     "base-300 structural divider on base-100",

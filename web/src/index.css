@@ -297,16 +297,36 @@ body {
    base-300; dark needs >=~68% on base-100. Utilities are overridden by their
    generated class so every call site is covered at once. */
 [data-theme="sumi"] {
+  --muted-30: 78%;
+  --muted-40: 78%;
   --muted-50: 78%;
   --muted-60: 82%;
   --muted-70: 86%;
   --muted-80: 90%;
+  --muted-90: 92%;
 }
 [data-theme="sumi-dark"] {
+  --muted-30: 68%;
+  --muted-40: 68%;
   --muted-50: 68%;
   --muted-60: 74%;
   --muted-70: 80%;
   --muted-80: 86%;
+  --muted-90: 92%;
+}
+.text-base-content\/30 {
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-30),
+    transparent
+  );
+}
+.text-base-content\/40 {
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-40),
+    transparent
+  );
 }
 .text-base-content\/50 {
   color: color-mix(
@@ -333,6 +353,13 @@ body {
   color: color-mix(
     in oklab,
     var(--color-base-content) var(--muted-80),
+    transparent
+  );
+}
+.text-base-content\/90 {
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-90),
     transparent
   );
 }
@@ -391,10 +418,16 @@ textarea::placeholder {
   );
 }
 
-/* Sidebar muted rows: `text-neutral-content/60` on the rail surface lands under
-   7:1. Raise the rendered opacity so the resting (non-hover) row text is AAA;
-   the hover state already lifts to full neutral-content. */
+/* Sidebar muted rows: `text-neutral-content/{50,60,70}` on the rail surface land
+   under 7:1. Raise the rendered opacity so resting (non-hover) row/footer text is
+   AAA; the hover state already lifts to full neutral-content. 85% clears 7:1 on
+   both the light opaque rail (#3a3a3a -> 7.79:1) and the dark translucent sheet
+   (8.55:1). */
+[data-theme="sumi"] .text-neutral-content\/50,
+[data-theme="sumi-dark"] .text-neutral-content\/50,
 [data-theme="sumi"] .text-neutral-content\/60,
-[data-theme="sumi-dark"] .text-neutral-content\/60 {
+[data-theme="sumi-dark"] .text-neutral-content\/60,
+[data-theme="sumi"] .text-neutral-content\/70,
+[data-theme="sumi-dark"] .text-neutral-content\/70 {
   color: color-mix(in oklab, var(--color-neutral-content) 85%, transparent);
 }

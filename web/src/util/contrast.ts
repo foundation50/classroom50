@@ -70,10 +70,14 @@ function oklchToLinearRgb(
 const HEX3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i
 const HEX6 = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i
 
-function num(token: string): number {
-  // "62%" -> 0.62 ; "0.62" -> 0.62 ; "120" (hue) -> 120
+// Parse a CSS number/percentage token. `pctRef` is the value that `100%` maps
+// to: 1 for L and alpha (the default), and 0.4 for oklch/oklab chroma and the
+// oklab a/b axes (per CSS Color 4, where 100% == 0.4). Hues are always
+// unit-less and parsed directly with parseFloat.
+function num(token: string, pctRef = 1): number {
+  // "62%" -> 0.62 (pctRef 1) ; "20%" -> 0.08 (pctRef 0.4) ; "0.62" -> 0.62
   const t = token.trim()
-  if (t.endsWith("%")) return parseFloat(t) / 100
+  if (t.endsWith("%")) return (parseFloat(t) / 100) * pctRef
   return parseFloat(t)
 }
 
@@ -112,12 +116,13 @@ export function parseColor(input: string): LinearRgb {
     const a = alphaPart !== undefined ? num(alphaPart) : 1
     if (kind === "oklch") {
       const [L, C, h] = parts
-      const { r, g, bl } = oklchToLinearRgb(num(L), num(C), parseFloat(h))
+      // 100% chroma == 0.4 per CSS Color 4; hue is always unit-less.
+      const { r, g, bl } = oklchToLinearRgb(num(L), num(C, 0.4), parseFloat(h))
       return { r, g, b: bl, a }
     }
-    // oklab
+    // oklab: a/b axes also use 100% == 0.4.
     const [L, aa, bb] = parts
-    const { r, g, bl } = oklabToLinearRgb(num(L), num(aa), num(bb))
+    const { r, g, bl } = oklabToLinearRgb(num(L), num(aa, 0.4), num(bb, 0.4))
     return { r, g, b: bl, a }
   }
 

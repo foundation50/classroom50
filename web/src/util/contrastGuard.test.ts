@@ -21,6 +21,14 @@ const evaluated = evaluateAll()
 describe("WCAG 2.2 contrast guard — spec floor (blocking)", () => {
   const enforced = evaluated.filter((p) => !p.exempt)
 
+  // Floor: a bug that empties PAIRS or tags everything exempt would make the
+  // it.each below register zero cases and pass silently. Fail loudly instead.
+  it("enforces a non-empty set of pairs in both themes", () => {
+    expect(enforced.length).toBeGreaterThanOrEqual(20)
+    expect(enforced.some((p) => p.theme === "sumi")).toBe(true)
+    expect(enforced.some((p) => p.theme === "sumi-dark")).toBe(true)
+  })
+
   it.each(enforced)("$id meets its spec floor ($label)", (p: Evaluated) => {
     expect(
       p.ratio,
@@ -52,7 +60,12 @@ describe("WCAG 2.2 contrast guard — coverage", () => {
         `\n[contrast] ${misses.length} pair(s) clear the WCAG floor but miss the design margin:\n${lines}\n`,
       )
     }
-    // Intentionally no assertion on the margin — it is aspirational, not enforced.
-    expect(misses.every((p) => p.passesFloor)).toBe(true)
+    // Exercise the passesFloor/passesMargin derivation (not the filter predicate):
+    // every margin-miss must sit in the band [floor, margin). The margin itself
+    // is aspirational and intentionally not enforced as a failure.
+    for (const p of misses) {
+      expect(p.ratio).toBeGreaterThanOrEqual(p.floor)
+      expect(p.ratio).toBeLessThan(p.margin)
+    }
   })
 })

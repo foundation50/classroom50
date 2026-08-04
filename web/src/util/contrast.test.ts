@@ -99,6 +99,21 @@ describe("color-mix — validated against browser-computed values", () => {
       original.r + original.g + original.b,
     )
   })
+
+  it("pins the chromatic oklab mix path used by soft badges", () => {
+    // The badge-soft foreground mixes a genuinely chromatic token in oklab
+    // (mixColor("oklab", "#3e5da8", 65, "black")). Unlike the achromatic cases
+    // above, this exercises the a/b (hue/chroma) channels and the
+    // linearRgbToOklab -> oklabToLinearRgb round trip. Pinned to the resolved
+    // sRGB hex, cross-checkable against a browser's
+    // `color-mix(in oklab, #3e5da8 65%, black)`; a hue/chroma regression in the
+    // OKLab matrices would move this value and fail here rather than silently
+    // shifting a badge ratio.
+    expect(toHex(mixColor("oklab", "#3e5da8", 65, "black"))).toBe("#1e305c")
+    expect(toHex(mixColor("oklab", "#c04a2b", 65, "black"))).toBe("#6a2513")
+    // A pure oklch->sRGB conversion pinned to a known hex.
+    expect(toHex(parseColor("oklch(0.7 0.15 250)"))).toBe("#4ba3f7")
+  })
 })
 
 // Local helper mirroring ratioOver's flatten step (gamma-space composite) for
