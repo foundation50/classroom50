@@ -33,6 +33,7 @@ import { AboutDialog } from "@/components/AboutDialog"
 import { githubOrgUrl } from "@/util/orgUrl"
 import { WIKI_URL } from "@/version"
 import { useSidebarCollapse } from "./collapseContext"
+import { DeployEnvBadge } from "./DeployEnvBadge"
 
 export const SidebarFooter = () => {
   const { signOut, user } = useGithubAuth()
@@ -359,7 +360,7 @@ export const SidebarFooter = () => {
         </div>
 
         <div
-          className={`flex w-full items-center gap-2.5 text-start ${collapsed ? "justify-center" : "justify-start"}`}
+          className={`flex w-full items-center gap-2.5 text-start ${collapsed ? "flex-col justify-center" : "justify-start"}`}
           title={collapsed ? name : undefined}
         >
           <div className="avatar avatar-placeholder">
@@ -370,6 +371,8 @@ export const SidebarFooter = () => {
             />
           </div>
 
+          {collapsed && <DeployEnvBadge />}
+
           {!collapsed && (
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium text-neutral-content">
@@ -377,7 +380,7 @@ export const SidebarFooter = () => {
               </div>
 
               {org ? (
-                <div className="flex items-center gap-1.5">
+                <div className="mt-1 flex items-center gap-1.5">
                   <span className="text-xs text-neutral-content/60">
                     {labelPending ? (
                       <span className="skeleton inline-block h-3 w-16 align-middle bg-neutral-content/10" />
@@ -394,8 +397,14 @@ export const SidebarFooter = () => {
                       {t("nav.preview")}
                     </span>
                   ) : null}
+                  <DeployEnvBadge />
                 </div>
-              ) : null}
+              ) : (
+                // No role row off an org route — still surface the env badge.
+                <div className="mt-1 flex items-center gap-1.5">
+                  <DeployEnvBadge />
+                </div>
+              )}
             </div>
           )}
         </div>
