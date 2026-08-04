@@ -17,14 +17,14 @@ on:
   push:
     branches: [main]
     paths:
-      - 'web/**'
-      - 'cli/gh-teacher/skeleton/dotgithub/**'
-      - '.github/workflows/web-ci.yaml'
+      - "web/**"
+      - "cli/gh-teacher/skeleton/dotgithub/**"
+      - ".github/workflows/web-ci.yaml"
   pull_request:
     paths:
-      - 'web/**'
-      - 'cli/gh-teacher/skeleton/dotgithub/**'
-      - '.github/workflows/web-ci.yaml'
+      - "web/**"
+      - "cli/gh-teacher/skeleton/dotgithub/**"
+      - ".github/workflows/web-ci.yaml"
 
 # Cancel superseded runs on the same ref so a quick succession of pushes
 # doesn't pile up redundant CI.
@@ -76,6 +76,23 @@ jobs:
       - name: Test
         run: npm test
 
+      # Generate the WCAG contrast audit report and attach it as a build
+      # artifact (never committed — it's a rendering of guaranteed-green state
+      # the contrast guard tests enforce). Downloadable from the run summary so
+      # a reviewer always has the current per-pair ratios. `if: always()` so the
+      # report is still produced when a later non-contrast step fails.
+      - name: Generate contrast audit report
+        if: always()
+        run: npm run audit:contrast
+
+      - name: Upload contrast audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contrast-audit
+          path: web/CONTRAST-AUDIT.md
+          if-no-files-found: warn
+
       # Unit tests for the i18n audit tool itself. Its detection logic is
       # entirely regex-driven, so these lock down the source-of-truth behavior
       # (missing-key hard-fail, --strict flip, key-form capture, plural base,
@@ -85,7 +102,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.14'
+          python-version: "3.14"
 
       - name: Install audit test deps
         working-directory: ${{ github.workspace }}

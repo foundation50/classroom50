@@ -25,6 +25,12 @@ dist-ssr
 
 .tanstack/tmp
 
+# Generated WCAG contrast audit report. Never committed — it's a rendering of
+# guaranteed-green state (the contrast guard tests enforce the facts). Produced
+# fresh as a CI artifact and emitted into dist/ by the Vite build (served at
+# /CONTRAST-AUDIT.md), so it's always current by construction.
+CONTRAST-AUDIT.md
+
 # Local dev launcher (machine-specific paths)
 dev.sh
 

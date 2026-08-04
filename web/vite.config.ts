@@ -9,6 +9,8 @@ import path from "node:path"
 import { execSync } from "node:child_process"
 import { createRequire } from "node:module"
 
+import { renderContrastReport } from "./src/util/contrastReport"
+
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
 // package.json; a `web-v*` release tag (VITE_APP_VERSION, set by web-deploy.yaml)
@@ -70,6 +72,31 @@ function versionJsonPlugin(): Plugin {
   }
 }
 
+// Publishes the WCAG contrast audit report as /CONTRAST-AUDIT.md in the built
+// site (a stable public URL an accessibility/ADA reviewer can cite), and serves
+// it in dev. Generated from src/util/contrastModel.ts at build time — never
+// committed — so it is always current with the shipped palette. The contrast
+// guard tests are the enforcement; this file is the human-readable rendering.
+function contrastAuditPlugin(): Plugin {
+  const body = renderContrastReport()
+  return {
+    name: "classroom50:contrast-audit",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "CONTRAST-AUDIT.md",
+        source: body,
+      })
+    },
+    configureServer(server) {
+      server.middlewares.use("/CONTRAST-AUDIT.md", (_req, res) => {
+        res.setHeader("Content-Type", "text/markdown; charset=utf-8")
+        res.end(body)
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
@@ -87,6 +114,7 @@ export default defineConfig({
     tailwindcss(),
     babel({ presets: [reactCompilerPreset()] }),
     versionJsonPlugin(),
+    contrastAuditPlugin(),
   ],
   resolve: {
     alias: {
