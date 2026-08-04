@@ -330,6 +330,32 @@ func TestEntryDecodesFeedbackPR(t *testing.T) {
 	}
 }
 
+func TestEntryDecodesSubmissionMode(t *testing.T) {
+	// submission_mode decodes when present and defaults to every-push
+	// semantics when absent — accept (shim rendering) and submit (tag push)
+	// both branch on IsTagSubmissionMode, so the wire contract matters.
+	var file assignmentsFile
+	if err := json.Unmarshal([]byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {"slug": "tagged", "name": "Tagged", "mode": "individual", "autograder": "default", "submission_mode": "tag"},
+    {"slug": "explicit", "name": "Explicit", "mode": "individual", "autograder": "default", "submission_mode": "every-push"},
+    {"slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default"}
+  ]
+}`), &file); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !file.Assignments[0].IsTagSubmissionMode() {
+		t.Error("tagged.IsTagSubmissionMode() = false, want true")
+	}
+	if file.Assignments[1].IsTagSubmissionMode() {
+		t.Error("explicit(every-push).IsTagSubmissionMode() = true, want false")
+	}
+	if file.Assignments[2].IsTagSubmissionMode() {
+		t.Error("hello(absent).IsTagSubmissionMode() = true, want false")
+	}
+}
+
 func TestEntryDecodesLocked(t *testing.T) {
 	// locked decodes when present and defaults to false when absent — the
 	// accept flow refuses a locked assignment, so the wire contract matters.

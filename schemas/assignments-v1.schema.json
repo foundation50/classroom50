@@ -175,6 +175,10 @@
           "enum": ["pull", "triage", "push", "maintain", "admin"],
           "description": "The collaborator role the enrolled student is granted on their OWN assignment repo at accept time (the old GitHub Classroom \"grant students admin access\" checkbox, generalized to GitHub's full ladder). ABSENT means the built-in default: `push` for `individual`, `admin` for `group`. This is accept-time provisioning only — it governs what NEW accepters get; it does not retroactively change repos already accepted (teachers adjust those with the gradebook's per-repo/bulk access controls). Group coherence: a group founder must hold at least `admin` to add teammates via `gh student invite`, so for `mode: group` any configured value below `admin` is clamped up to `admin` by every accept client — prefer omitting it (or writing `admin`) for group assignments. Caution: on a PRIVATE in-org repo, `admin` also lets the student change repo visibility (e.g. make it public) and settings."
         },
+        "submission_mode": {
+          "enum": ["every-push", "tag"],
+          "description": "When the autograder fires. ABSENT or \"every-push\" (the default): the student-repo shim triggers on every push to the default branch AND on submit/* tag pushes (the runner mints the submit/<UTC-timestamp>-<short-sha> tag itself on branch pushes). \"tag\": the shim triggers ONLY on submit/* tag pushes — `gh student submit` and the web submit page push the tag after the branch commit, so a plain `git push` does not grade (the primary Actions-cost lever for large cohorts). Applied to the shim at ACCEPT TIME; changing it later requires retrofitting each existing student repo's shim (`gh teacher assignment submission-mode` or the gradebook bulk action) and students must re-pull afterward. Default-autograder assignments only for the retrofit — teacher-authored (non-default) shims are never rewritten, though the field still governs client tag-pushing. Meaningless for empty_repo (no shim exists) — mutually exclusive (see the conditional at the assignment level). On the wire it is collapsed like feedback_pr: writers omit \"every-push\" (the CLI normalizes it away), so readers must treat an absent field as \"every-push\"; accept an explicit \"every-push\" too. Additive room is reserved for a future custom tag/branch-pattern field."
+        },
         "repo_features": {
           "type": "object",
           "additionalProperties": false,
@@ -202,6 +206,7 @@
               { "not": { "required": ["allowed_files"] } },
               { "not": { "required": ["release_assets"] } },
               { "not": { "required": ["pass_threshold"] } },
+              { "not": { "required": ["submission_mode"] } },
               { "properties": { "feedback_pr": { "const": false } } }
             ]
           }

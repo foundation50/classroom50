@@ -54,7 +54,7 @@ import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsM
 import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
-import type { Student } from "@/types/classroom"
+import type { Student, SubmissionMode } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 
 const formatDateTime = (datetime: string) =>
@@ -228,6 +228,7 @@ const SubmissionsTable = ({
   filtered = false,
   onClearFilters,
   emptyRepo = false,
+  submissionMode,
   initialLoading = false,
   nonSubmittersLoading = false,
   page = 0,
@@ -265,6 +266,10 @@ const SubmissionsTable = ({
   // empty_repo assignment: never autogrades, so score badges and the
   // Feedback-PR/regrade actions are hidden (repos + accept state stay useful).
   emptyRepo?: boolean
+  // The assignment's submission_mode, enabling the per-repo "Update
+  // autograding trigger" action in the manage hub. Omitted (action hidden)
+  // for custom-autograder assignments and non-owners.
+  submissionMode?: SubmissionMode
   // Core data (snapshot + roster) is still loading on first paint; render a
   // loading state rather than the "no submissions" empty state, which would
   // otherwise flash before data arrives.
@@ -833,6 +838,7 @@ const SubmissionsTable = ({
             onManageAccess: manageSubmission.isGroup
               ? undefined
               : () => setAccessOwner(manageSubmission.owner),
+            submissionMode,
           }}
         />
       )}

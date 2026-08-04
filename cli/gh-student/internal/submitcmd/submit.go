@@ -39,11 +39,17 @@ func NewCmd() *cobra.Command {
 		Use:   "submit",
 		Short: "Submit the current assignment to its remote",
 		Long: "Snapshot the current branch and push it as a new commit on top\n" +
-			"of the assignment repo's default branch. The autograde workflow\n" +
-			"in the student repo listens for pushes to that branch and (a)\n" +
-			"creates its own `submit/<UTC-timestamp>-<short-sha>` tag at the\n" +
-			"pushed commit and (b) publishes a scored Release at that tag a\n" +
-			"minute or two later.\n\n" +
+			"of the assignment repo's default branch. For an every-push\n" +
+			"assignment (the default) the autograde workflow listens for\n" +
+			"pushes to that branch and (a) creates its own\n" +
+			"`submit/<UTC-timestamp>-<short-sha>` tag at the pushed commit\n" +
+			"and (b) publishes a scored Release at that tag a minute or two\n" +
+			"later.\n\n" +
+			"For a tag-mode assignment (submission_mode: tag) plain pushes\n" +
+			"are not graded; this command additionally pushes the\n" +
+			"`submit/<UTC-timestamp>-<short-sha>` tag itself, which is what\n" +
+			"triggers grading. (Pushing your own `submit/*` tag by hand\n" +
+			"works too.)\n\n" +
 			"Before snapshotting, the latest teacher `.gitignore` and\n" +
 			"`.github/` (both optional) are fetched from the template repo\n" +
 			"recorded in `.classroom50.yaml` so any teacher-side updates\n" +
@@ -155,9 +161,15 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		u.Detail("Preparing submission snapshot from %s", root)
 	}
 
-	// Resolve allowed_files (best-effort): a fetch failure never blocks
-	// submission — the runner enforces authoritatively at grade time.
-	allowedFiles := fetchAllowedFiles(ctx, repoOwner, config, u, verbose)
+	// Resolve the manifest entry once (best-effort): allowed_files fails open
+	// (the runner enforces authoritatively at grade time); submission_mode
+	// failing to resolve is warned about after the push (a tag-mode
+	// assignment would then need a re-run to grade).
+	entry, entryErr := fetchSubmitEntry(ctx, repoOwner, config, u, verbose)
+	var allowedFiles []string
+	if entry != nil {
+		allowedFiles = entry.AllowedFiles
+	}
 
 	if err := copySubmittableFiles(root, workTree, allowedFiles, u, verbose); err != nil {
 		return err
@@ -229,6 +241,25 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		sp.Stop("Submission pushed")
 	}
 
+	// Tag-mode assignments grade ONLY on submit/* tag pushes, so push the tag
+	// with the user's token (user pushes fire workflows; the runner's own
+	// github.token pushes deliberately don't). Every-push assignments must NOT
+	// get a tag here — the branch push already grades, and a second push
+	// event would double-grade the same commit.
+	if entry != nil && entry.IsTagSubmissionMode() {
+		tag, err := pushSubmitTag(gitDir, sha)
+		if err != nil {
+			return fmt.Errorf(
+				"submission pushed (%s/commit/%s) but the submit tag failed: %w\n"+
+					"this assignment grades only on submit/* tags — re-run `gh student submit` to retry (the pushed work is safe)",
+				repoHTMLURL, sha, err,
+			)
+		}
+		if verbose {
+			u.Detail("Pushed submission tag %s", tag)
+		}
+	}
+
 	// Confirmation on stdout: the assignment's full name (falls back to the
 	// slug — see resolveAssignmentName), the local submission time, then a
 	// link to the submitted commit.
@@ -237,6 +268,13 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 	_, _ = fmt.Fprintf(out, "Submitted assignment %q at %s\n", displayName, localTime)
 	_, _ = fmt.Fprintf(out, "View your submission at: %s/commit/%s\n", repoHTMLURL, sha)
 
+	if entry == nil && entryErr != nil {
+		// Mode unknown: never push a tag blind (double-grades an every-push
+		// assignment). Warn AFTER the confirmation so it's the last thing a
+		// tag-mode student sees — their push may not grade.
+		u.Warn("could not determine the assignment's submission mode (%v); if this assignment grades on submit tags, re-run `gh student submit`", entryErr)
+	}
+
 	return nil
 }
 
@@ -244,25 +282,75 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 // exercise the success and failure paths without a live Pages fetch.
 var fetchEntryFn = assignments.FetchEntry
 
-// fetchAllowedFiles resolves the assignment's allowed_files patterns
-// from the manifest. Best-effort: any failure returns nil and warns,
-// since the runner enforces the list authoritatively. Bounded by
-// assignmentNameTimeout.
-func fetchAllowedFiles(ctx context.Context, org string, config *classroomcfg.Config, u *ui.UI, verbose bool) []string {
-	ctx, cancel := context.WithTimeout(ctx, assignmentNameTimeout)
+// fetchSubmitEntry resolves the assignment's manifest entry (one Pages fetch
+// for allowed_files + submission_mode). Best-effort: any failure returns
+// (nil, err) and the caller decides — allowed_files fails open (the runner
+// enforces authoritatively), submission_mode failure warns post-push.
+// Bounded by submitEntryTimeout: unlike the cosmetic name lookup, this fetch
+// decides whether a tag-mode submission pushes the tag that grades it, so it
+// gets a generous bound (it also runs BEFORE the slow clone/push, where a few
+// extra seconds stall nothing).
+func fetchSubmitEntry(ctx context.Context, org string, config *classroomcfg.Config, u *ui.UI, verbose bool) (*assignments.Entry, error) {
+	ctx, cancel := context.WithTimeout(ctx, submitEntryTimeout)
 	defer cancel()
 	entry, err := fetchEntryFn(ctx, org, config.Classroom, config.Secret, config.Assignment)
 	if err != nil {
 		if verbose {
-			u.Detail("Could not resolve allowed_files (%v); submitting all files — the autograder enforces the list", err)
+			u.Detail("Could not resolve the assignment entry (%v); submitting all files — the autograder enforces allowed_files", err)
 		}
-		return nil
+		return nil, err
 	}
 	if len(entry.AllowedFiles) > 0 && verbose {
 		u.Detail("Applying allowed_files filter (%d pattern(s))", len(entry.AllowedFiles))
 	}
-	return entry.AllowedFiles
+	return &entry, nil
 }
+
+// pushSubmitTag creates submit/<UTC-timestamp>-<short-sha> at sha and pushes
+// it from the temp bare clone left by commitWorkTreeOnRemoteBranch. If a
+// submit/* tag already points at sha (a retry after a tag-push failure, or a
+// hand-pushed tag), it is reused — mirroring the runner's ls-remote
+// idempotency check — so the same commit never grades twice.
+func pushSubmitTag(gitDir, sha string) (string, error) {
+	existing, err := existingSubmitTagAt(gitDir, sha)
+	if err == nil && existing != "" {
+		return existing, nil
+	}
+	// A failed reuse probe falls through to pushing a fresh tag. The fresh
+	// tag's timestamped name never collides with an existing one, so the
+	// worst case is a second submit/* tag at the same SHA (one extra graded
+	// run of identical work) — preferred over failing the submission when
+	// the probe hiccups but the push would succeed.
+	tag := contract.BuildSubmitTag(timeNow(), sha)
+	if _, err := gitOutputWithGitDir(gitDir, "push", "origin", sha+":refs/tags/"+tag); err != nil {
+		return "", err
+	}
+	return tag, nil
+}
+
+// existingSubmitTagAt returns the first submit/* tag pointing at sha on
+// origin, or "" when none. `--refs` filters the peeled-ref (^{}) rows
+// annotated tags emit, mirroring the runner's awk pipeline.
+func existingSubmitTagAt(gitDir, sha string) (string, error) {
+	out, err := gitOutputWithGitDir(gitDir, "ls-remote", "--refs", "--tags", "origin")
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		refSHA, ref := fields[0], fields[1]
+		if refSHA == sha && strings.HasPrefix(ref, "refs/tags/"+contract.SubmitTagPrefix) {
+			return strings.TrimPrefix(ref, "refs/tags/"), nil
+		}
+	}
+	return "", nil
+}
+
+// timeNow is stubbed in tests to pin the generated tag name.
+var timeNow = time.Now
 
 // resolveAssignmentName returns the assignment's full name from the published
 // manifest, falling back to the slug on any error/timeout. The fetch is
@@ -281,6 +369,13 @@ func resolveAssignmentName(ctx context.Context, org, classroom, secret, slug str
 // assignmentNameTimeout caps the cosmetic post-push name lookup so a slow
 // Pages CDN can't stall the terminal after the submission already landed.
 const assignmentNameTimeout = 3 * time.Second
+
+// submitEntryTimeout bounds the pre-push manifest fetch (allowed_files +
+// submission_mode). Deliberately larger than assignmentNameTimeout: on a
+// tag-mode assignment this fetch gates the submit/* tag push — timing out
+// means the submission silently doesn't grade — and it runs before the
+// clone/push, so the extra allowance never stalls a completed submission.
+const submitEntryTimeout = 15 * time.Second
 
 // resolveRepoDefaultBranch reads the assignment repo's default branch. A GET
 // failure is returned as an error (submitting to the wrong branch would skip

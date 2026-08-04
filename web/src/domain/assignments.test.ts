@@ -24,12 +24,14 @@ import {
 // Not on the @/domain/assignments barrel (the wrapper is internal scaffolding),
 // so reach the module directly rather than widening the public surface.
 import { withAcceptStep } from "./assignments/accessPrimitives"
+import { defaultAutograderWorkflow } from "./assignments/autograderYaml"
 import { extractAssignments } from "@/github-core/queries"
 import { localizedError, localizedMessageOf } from "@/types/localizedMessage"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Assignment } from "@/types/classroom"
-import { REPO_PERMISSIONS } from "@/types/classroom"
+import { REPO_PERMISSIONS, SUBMISSION_MODES } from "@/types/classroom"
+import type { SubmissionMode } from "@/types/classroom"
 
 const fullSource: Assignment = {
   slug: "hw1",
@@ -2313,6 +2315,30 @@ describe("REPO_PERMISSIONS parity with assignments-v1 schema", () => {
   })
 })
 
+// The web half of the submission_mode enum lockstep guard: SUBMISSION_MODES
+// must equal the schema's submission_mode enum (the declared source of truth).
+// The Go half (contract.SubmissionModes vs the same enum) is pinned by
+// TestSubmissionModeEnumParity; the runner's inline validator carries a
+// by-value copy.
+describe("SUBMISSION_MODES parity with assignments-v1 schema", () => {
+  const schemaPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../schemas/assignments-v1.schema.json",
+  )
+  const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as {
+    $defs: {
+      assignment: {
+        properties: { submission_mode: { enum: string[] } }
+      }
+    }
+  }
+
+  it("matches the schema submission_mode enum exactly and in order", () => {
+    const schemaEnum = schema.$defs.assignment.properties.submission_mode.enum
+    expect(schemaEnum).toEqual([...SUBMISSION_MODES])
+  })
+})
+
 describe("addFounderCollaborator — self grant (PUT only, no read-back)", () => {
   const owner = "cs50"
   const repo = "cs50-fall-2026-hello-alice"
@@ -2525,6 +2551,48 @@ describe("resolveAutograderWorkflow default shim branch templating", () => {
         configBranch: "main",
       }),
     ).resolves.toContain('branches: ["main"]')
+  })
+
+  it("tag mode drops the branch trigger and keeps only submit/* tags", async () => {
+    const yaml = await resolveAutograderWorkflow({
+      org: "cs50",
+      classroom: "cs101",
+      autograder: "default",
+      branch: "main",
+      configBranch: "main",
+      submissionMode: "tag",
+    })
+    expect(yaml).not.toContain("branches:")
+    expect(yaml).toContain('tags: ["submit/*"]')
+    expect(yaml).toContain(
+      'uses: "cs50/classroom50/.github/workflows/autograde-runner.yaml@main"',
+    )
+    // Exactly one line removed: tag mode equals every-push minus the branch
+    // trigger line. Mirrors the CLI's TestRenderEmbeddedShim_TagMode.
+    const everyPush = defaultAutograderWorkflow("cs50", "main", "main")
+    expect(yaml).toBe(everyPush.replace('    branches: ["main"]\n', ""))
+  })
+
+  it("every-push output is byte-identical for absent/explicit/junk modes", () => {
+    // Introducing submission_mode must change nothing for existing
+    // assignments: only the exact value "tag" alters the render.
+    const base = defaultAutograderWorkflow("cs50", "main", "main")
+    expect(defaultAutograderWorkflow("cs50", "main", "main", undefined)).toBe(
+      base,
+    )
+    expect(
+      defaultAutograderWorkflow("cs50", "main", "main", "every-push"),
+    ).toBe(base)
+    // Junk is unrepresentable in the SubmissionMode union, so cast to pin the
+    // runtime contract: anything that isn't exactly "tag" renders every-push.
+    expect(
+      defaultAutograderWorkflow(
+        "cs50",
+        "main",
+        "main",
+        "junk" as SubmissionMode,
+      ),
+    ).toBe(base)
   })
 })
 

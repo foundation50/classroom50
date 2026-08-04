@@ -478,8 +478,84 @@ class TestIsAcceptanceCommit:
 
         monkeypatch.setattr(ag.subprocess, "run", fake_run)
         assert ag.is_acceptance_commit(repo, shas[1]) is False
-    # `runner.py --detect-acceptance`: writes is-acceptance to
-    # $GITHUB_OUTPUT from cwd, always exits 0.
+
+
+class TestIsShimUpdateCommit:
+    # True only when the tip commit touches ONLY the shim path
+    # (SHIM_UPDATE_COMMIT_PATHS); everything uncertain fails open
+    # (False -> grade). The [skip ci] on retrofit commits is the primary
+    # suppression; this is the backstop.
+
+    def _head(self, path):
+        return _git(path, "rev-parse", "HEAD").stdout.strip()
+
+    def _commit_shim_only(self, repo, subject="[Classroom 50] Update autograder trigger to tag (submission-mode)"):
+        wf = repo / ".github" / "workflows"
+        wf.mkdir(parents=True, exist_ok=True)
+        (wf / "autograde.yaml").write_text(f"name: Autograde\n# {subject}\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-q", "-m", subject)
+
+    def test_shim_only_commit_is_shim_update(self, tmp_path):
+        repo = tmp_path / "repo"
+        _make_repo(repo, ["Initial commit", ACCEPT, "Submit hello"])
+        self._commit_shim_only(repo)
+        assert ag.is_shim_update_commit(repo, self._head(repo)) is True
+
+    def test_subject_is_irrelevant(self, tmp_path):
+        # Path-based like acceptance detection: a student hand-editing
+        # their shim gets the skip too (the edit alone is never gradeable).
+        repo = tmp_path / "repo"
+        _make_repo(repo, ["Initial commit", ACCEPT])
+        self._commit_shim_only(repo, subject="tweak my workflow")
+        assert ag.is_shim_update_commit(repo, self._head(repo)) is True
+
+    def test_shim_plus_other_file_grades(self, tmp_path):
+        # A commit smuggling real work alongside the shim edit must grade.
+        repo = tmp_path / "repo"
+        _make_repo(repo, ["Initial commit", ACCEPT])
+        wf = repo / ".github" / "workflows"
+        wf.mkdir(parents=True)
+        (wf / "autograde.yaml").write_text("name: Autograde\n")
+        (repo / "solution.py").write_text("print('graded work')\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-q", "-m", "Update trigger (and sneak in work)")
+        assert ag.is_shim_update_commit(repo, self._head(repo)) is False
+
+    def test_ordinary_submission_grades(self, tmp_path):
+        repo = tmp_path / "repo"
+        shas = _make_repo(repo, ["Initial commit", ACCEPT, "Submit hello"])
+        assert ag.is_shim_update_commit(repo, shas[2]) is False
+
+    def test_empty_head_sha_grades(self, tmp_path):
+        repo = tmp_path / "repo"
+        _make_repo(repo, ["Initial commit", ACCEPT])
+        assert ag.is_shim_update_commit(repo, "") is False
+
+    def test_non_repo_grades(self, tmp_path):
+        (tmp_path / "plain").mkdir()
+        assert ag.is_shim_update_commit(tmp_path / "plain", "deadbeef") is False
+
+    def test_git_error_grades(self, tmp_path, monkeypatch):
+        repo = tmp_path / "repo"
+        _make_repo(repo, ["Initial commit", ACCEPT])
+        self._commit_shim_only(repo)
+        head = self._head(repo)
+        real_run = subprocess.run
+
+        def fake_run(cmd, *args, **kwargs):
+            if (isinstance(cmd, (list, tuple)) and cmd[0] == "git"
+                    and "--name-only" in cmd):
+                return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="boom")
+            return real_run(cmd, *args, **kwargs)
+
+        monkeypatch.setattr(ag.subprocess, "run", fake_run)
+        assert ag.is_shim_update_commit(repo, head) is False
+
+
+class TestDetectAcceptanceMode:
+    # `runner.py --detect-acceptance`: writes is-acceptance and
+    # is-shim-update to $GITHUB_OUTPUT from cwd, always exits 0.
     def _run(self, repo, head_sha, tmp_path, monkeypatch):
         out = tmp_path / "ghout"
         out.write_text("")
@@ -495,6 +571,9 @@ class TestIsAcceptanceCommit:
         rc, text = self._run(repo, shas[1], tmp_path, monkeypatch)
         assert rc == 0
         assert "is-acceptance=true\n" in text
+        # Acceptance takes precedence — the accept commit also touches the
+        # shim path, but must never double-report as a shim update.
+        assert "is-shim-update=false\n" in text
 
     def test_submission_emits_false(self, tmp_path, monkeypatch):
         repo = tmp_path / "repo"
@@ -503,6 +582,25 @@ class TestIsAcceptanceCommit:
         rc, text = self._run(repo, head, tmp_path, monkeypatch)
         assert rc == 0
         assert "is-acceptance=false\n" in text
+        assert "is-shim-update=false\n" in text
+
+    def test_shim_update_commit_emits_true(self, tmp_path, monkeypatch):
+        # A submission-mode retrofit: tip commit touches ONLY the shim.
+        # Normally [skip ci] keeps the workflow from running at all; this
+        # detection is the backstop.
+        repo = tmp_path / "repo"
+        _make_repo(repo, ["Initial commit", ACCEPT, "Submit hello"])
+        wf = repo / ".github" / "workflows"
+        wf.mkdir(parents=True)
+        (wf / "autograde.yaml").write_text("name: Autograde\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-q", "-m",
+             "[Classroom 50] Update autograder trigger to tag (submission-mode)")
+        head = _git(repo, "rev-parse", "HEAD").stdout.strip()
+        rc, text = self._run(repo, head, tmp_path, monkeypatch)
+        assert rc == 0
+        assert "is-acceptance=false\n" in text
+        assert "is-shim-update=true\n" in text
 
     def test_main_dispatches_on_flag(self, tmp_path, monkeypatch):
         # The flag short-circuits before main()'s env checks.

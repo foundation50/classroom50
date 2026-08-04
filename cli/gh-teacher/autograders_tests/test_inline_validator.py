@@ -180,7 +180,8 @@ _MISSING = object()
 
 def _manifest(*, slug: str = "hello", runtime: dict | None = None,
               tests: list | None = None,
-              release_assets: object = _MISSING) -> dict:
+              release_assets: object = _MISSING,
+              submission_mode: object = _MISSING) -> dict:
     """Minimum assignments.json with one entry, optional runtime/tests."""
     entry = {
         "slug": slug,
@@ -195,6 +196,8 @@ def _manifest(*, slug: str = "hello", runtime: dict | None = None,
         entry["tests"] = tests
     if release_assets is not _MISSING:
         entry["release_assets"] = release_assets
+    if submission_mode is not _MISSING:
+        entry["submission_mode"] = submission_mode
     return {
         "schema": "classroom50/assignments/v1",
         "assignments": [entry],
@@ -851,3 +854,89 @@ class TestNoAutograderDetection:
         assert rc != 0
         assert "empty-repository assignment" in stderr
         assert "no-autograder" not in outputs
+
+
+# ---------------------------------------------------------------------------
+# Submission mode — stale-shim defense
+# ---------------------------------------------------------------------------
+
+
+class TestSubmissionMode:
+    # The read step emits submission-mode (absent → every-push) and
+    # branch-push-suppressed (tag mode + branch-triggered run). Suppression
+    # only fires for a stale/hand-edited every-push shim on a tag-mode
+    # assignment — a correctly retrofitted shim never branch-triggers.
+
+    _BRANCH_REF = {"REF": "refs/heads/main"}
+    _TAG_REF = {"REF": "refs/tags/submit/2026-06-01T14-32-05Z-a1b2c3d"}
+
+    def test_absent_mode_defaults_to_every_push(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc == 0
+        assert outputs["submission-mode"] == "every-push"
+        assert outputs["branch-push-suppressed"] == "false"
+
+    def test_explicit_every_push_not_suppressed(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_mode="every-push"),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc == 0
+        assert outputs["submission-mode"] == "every-push"
+        assert outputs["branch-push-suppressed"] == "false"
+
+    def test_tag_mode_branch_run_suppressed(self, inline_script, tmp_path):
+        # The stale-shim case: mode flipped to tag but this repo's shim
+        # still branch-triggers. Suppress so the push costs nothing.
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_mode="tag"),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc == 0
+        assert outputs["submission-mode"] == "tag"
+        assert outputs["branch-push-suppressed"] == "true"
+
+    def test_tag_mode_tag_run_grades(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_mode="tag"),
+            extra_env=self._TAG_REF,
+        )
+        assert rc == 0
+        assert outputs["submission-mode"] == "tag"
+        assert outputs["branch-push-suppressed"] == "false"
+
+    def test_invalid_mode_hard_fails(self, inline_script, tmp_path):
+        # Mirrors the other per-entry fields: junk in a hand-edited
+        # manifest is a setup-time error, not a silent default.
+        rc, _stdout, stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_mode="on-demand"),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc != 0
+        assert "submission_mode" in stderr
+        assert "branch-push-suppressed" not in outputs
+
+    def test_every_push_tag_run_not_suppressed(self, inline_script, tmp_path):
+        # A manual submit/* tag on an every-push assignment always grades
+        # (today's behavior, unchanged).
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(),
+            extra_env=self._TAG_REF,
+        )
+        assert rc == 0
+        assert outputs["branch-push-suppressed"] == "false"

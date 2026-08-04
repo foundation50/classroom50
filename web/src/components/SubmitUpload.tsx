@@ -12,6 +12,7 @@ import {
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useSubmitAssignment } from "@/hooks/mutations/useSubmitAssignment"
+import type { SubmissionMode } from "@/types/classroom"
 import {
   normalizeRepoPath,
   isReservedUploadPath,
@@ -35,11 +36,15 @@ export function SubmitUpload({
   org,
   repo,
   assignment,
+  submissionMode,
   onSubmitted,
 }: {
   org: string
   repo: string
   assignment: string
+  // The assignment's submission_mode from assignments.json; "tag" makes the
+  // upload also push the submit/* tag that triggers grading.
+  submissionMode?: SubmissionMode
   // Fired after a successful submit so the page can nudge the "grading runs in
   // the background" affordance.
   onSubmitted?: () => void
@@ -47,7 +52,12 @@ export function SubmitUpload({
   const { t } = useTranslation()
   const { notify } = useToast()
   const run = useSafeSubmit()
-  const mutation = useSubmitAssignment({ org, repo, assignment })
+  const mutation = useSubmitAssignment({
+    org,
+    repo,
+    assignment,
+    submissionMode,
+  })
 
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<Picked[]>([])

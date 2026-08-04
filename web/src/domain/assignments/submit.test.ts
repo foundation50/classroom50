@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { submitAssignment, normalizeRepoPath } from "./submit"
+import { submitAssignment, normalizeRepoPath, buildSubmitTag } from "./submit"
 import type { GitHubClient } from "@/github-core/client"
 
 describe("normalizeRepoPath", () => {
@@ -22,12 +22,16 @@ function makeClient(opts: {
   defaultBranch: string
   existingTree: { path: string; type: string; sha: string; mode: string }[]
   truncated?: boolean
+  // Pre-existing submit/* tags on the repo: tag name -> target sha, served
+  // from the matching-refs probe the tag-mode path runs before tagging.
+  existingSubmitTags?: Record<string, string>
 }) {
   const created = {
     blobs: [] as { content: string; encoding: string }[],
     tree: null as null | { hasBaseTree: boolean; paths: string[] },
     commit: null as null | { message: string; parents: string[] },
     updatedRef: null as null | { branch: string; sha: string },
+    tagRefs: [] as { ref: string; sha: string }[],
   }
   let blobN = 0
 
@@ -80,6 +84,21 @@ function makeClient(opts: {
         const branch = path.split("/git/refs/heads/")[1]
         created.updatedRef = { branch, sha: body.sha }
         return { ref: "", object: { sha: body.sha, type: "commit", url: "" } }
+      }
+      // findSubmitTagAtSha
+      if (path.includes("/git/matching-refs/tags/submit%2F") && method === "GET") {
+        return Object.entries(opts.existingSubmitTags ?? {}).map(
+          ([tag, sha]) => ({
+            ref: `refs/tags/${tag}`,
+            object: { sha, type: "commit", url: "" },
+          }),
+        )
+      }
+      // createTagRefForRepo
+      if (path.endsWith("/git/refs") && method === "POST") {
+        const body = init?.body as { ref: string; sha: string }
+        created.tagRefs.push({ ref: body.ref, sha: body.sha })
+        return { ref: body.ref, object: { sha: body.sha, type: "commit", url: "" } }
       }
       throw new Error(`unexpected request: ${method} ${path}`)
     },
@@ -237,5 +256,74 @@ describe("submitAssignment", () => {
         files: [],
       }),
     ).rejects.toThrow(/No files/i)
+  })
+
+  it("tag mode pushes a submit/* tag at the new commit", async () => {
+    const { client, created } = makeClient({
+      defaultBranch: "main",
+      existingTree: [blob(".github/workflows/autograde.yaml", "wf-sha")],
+    })
+    const result = await submitAssignment({
+      client,
+      org: "acme",
+      repo: "r",
+      assignment: "hw",
+      files: [upload("main.py")],
+      submissionMode: "tag",
+    })
+    expect(created.tagRefs).toHaveLength(1)
+    expect(created.tagRefs[0].sha).toBe("new-commit-sha")
+    expect(created.tagRefs[0].ref).toMatch(/^refs\/tags\/submit\//)
+    expect(result.tag).toBe(created.tagRefs[0].ref.replace("refs/tags/", ""))
+  })
+
+  it("tag mode reuses an existing submit/* tag at the same SHA", async () => {
+    // A retry after a failed tag push (or a hand-pushed tag) must not mint a
+    // second tag — one grading run per commit.
+    const { client, created } = makeClient({
+      defaultBranch: "main",
+      existingTree: [],
+      existingSubmitTags: { "submit/hand-pushed": "new-commit-sha" },
+    })
+    const result = await submitAssignment({
+      client,
+      org: "acme",
+      repo: "r",
+      assignment: "hw",
+      files: [upload("main.py")],
+      submissionMode: "tag",
+    })
+    expect(created.tagRefs).toHaveLength(0)
+    expect(result.tag).toBe("submit/hand-pushed")
+  })
+
+  it("every-push mode (absent or explicit) never touches tag refs", async () => {
+    for (const submissionMode of [undefined, "every-push"]) {
+      const { client, created } = makeClient({
+        defaultBranch: "main",
+        existingTree: [],
+      })
+      const result = await submitAssignment({
+        client,
+        org: "acme",
+        repo: "r",
+        assignment: "hw",
+        files: [upload("main.py")],
+        submissionMode,
+      })
+      expect(created.tagRefs).toHaveLength(0)
+      expect(result.tag).toBeUndefined()
+    }
+  })
+})
+
+describe("buildSubmitTag", () => {
+  it("formats submit/<UTC-timestamp>-<short-sha> (runner/CLI parity)", () => {
+    // Byte-format parity with the runner's `date -u +%Y-%m-%dT%H-%M-%SZ` and
+    // Go's contract.BuildSubmitTag (pinned by TestBuildSubmitTag).
+    const at = new Date(Date.UTC(2026, 7, 3, 14, 30, 5))
+    expect(buildSubmitTag("abcdef0123456789", at)).toBe(
+      "submit/2026-08-03T14-30-05Z-abcdef0",
+    )
   })
 })

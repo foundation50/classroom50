@@ -13,6 +13,8 @@ export {
   createCommitForAssignment,
   updateRef,
   updateRefForRepo,
+  createTagRefForRepo,
+  findSubmitTagAtSha,
   createGitTree,
   createGitCommit,
   createBlob,

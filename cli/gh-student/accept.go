@@ -57,18 +57,39 @@ const (
 	defaultConfigRepoBranch     = "main"
 )
 
+// shimBranchTriggerLine is the exact `on.push.branches` line of the embedded
+// shim (before placeholder substitution). Tag submission mode removes it, so
+// the shim triggers only on submit/* tag pushes. Pinned by the accept shim
+// tests so an embed edit can't silently break the line surgery.
+const shimBranchTriggerLine = "    branches: [\"" + shimBranchPlaceholder + "\"]\n"
+
 // renderEmbeddedShim returns the embedded shim with the org, submission-branch,
 // and config-branch placeholders substituted. The shim never changes after
 // accept — runtime customization, runner edits, and teacher overrides all flow
 // through the runner workflow + assignments.json on the teacher's side.
-func renderEmbeddedShim(org, branch, configBranch string) string {
+//
+// submissionMode contract.SubmissionModeTag drops the branch-push trigger line
+// so only submit/* tag pushes grade (`gh student submit` creates the tag; a
+// hand-pushed submit/* tag works too). Every other value — including "" and an
+// explicit "every-push" — takes the identical code path as before the field
+// existed, keeping the default shim byte-identical.
+func renderEmbeddedShim(org, branch, configBranch, submissionMode string) string {
 	if branch == "" {
 		branch = defaultConfigRepoBranch
 	}
 	if configBranch == "" {
 		configBranch = defaultConfigRepoBranch
 	}
-	out := strings.ReplaceAll(embeddedShimContent, shimOrgPlaceholder, org)
+	shim := embeddedShimContent
+	if submissionMode == contract.SubmissionModeTag {
+		// Exact-line surgery, not a template branch: the embed stays one
+		// lintable file and every-push output can't drift. If the embed's
+		// trigger line ever changes shape, the tests pin this constant and
+		// the fallback below keeps accept emitting a valid (every-push) shim
+		// rather than garbage.
+		shim = strings.Replace(shim, shimBranchTriggerLine, "", 1)
+	}
+	out := strings.ReplaceAll(shim, shimOrgPlaceholder, org)
 	out = strings.ReplaceAll(out, shimBranchPlaceholder, branch)
 	out = strings.ReplaceAll(out, shimConfigBranchPlaceholder, configBranch)
 	return out
@@ -458,7 +479,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 			}
 			configBranch = commitBranch
 		}
-		shim = renderEmbeddedShim(org, commitBranch, configBranch)
+		shim = renderEmbeddedShim(org, commitBranch, configBranch, entry.SubmissionMode)
 	}
 
 	repoName := reponame.Name(classroom, assignment, username)

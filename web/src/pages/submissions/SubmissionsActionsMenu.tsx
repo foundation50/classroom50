@@ -5,6 +5,7 @@ import {
   ExternalLink,
   FileArchive,
   FileDown,
+  GitBranch,
   GitPullRequest,
   Lock,
   LockOpen,
@@ -41,6 +42,7 @@ export function SubmissionsActionsMenu({
   downloadAllDisabled,
   onBulkAccess,
   onBulkFeatures,
+  onBulkTrigger,
   locked = false,
   lockPending = false,
   onLockToggle,
@@ -82,6 +84,10 @@ export function SubmissionsActionsMenu({
   // onBulkAccess (owner, individual, non-empty, has accepted repos); omitted
   // otherwise. Reconciles existing repos with the assignment's repo_features.
   onBulkFeatures?: () => void
+  // Opens the whole-assignment "Update autograding triggers" modal (retrofits
+  // each repo's shim to the assignment's submission_mode). Bulk-features gate
+  // plus default-autograder only; omitted otherwise.
+  onBulkTrigger?: () => void
   // Current locked state, for the Lock/Unlock item's label and icon.
   locked?: boolean
   // Whether a lock/unlock is mid-flight, to disable the item and show progress.
@@ -285,6 +291,36 @@ export function SubmissionsActionsMenu({
                 </button>
               </li>
             )}
+            <div
+              className="my-1 border-t border-base-content/10"
+              role="separator"
+            />
+          </>
+        )}
+        {/* Update autograding triggers — retrofits each repo's shim to the
+            assignment's submission_mode. Gated independently of bulk access
+            (also requires the default autograder), but same authoring tier. */}
+        {onBulkTrigger && (
+          <>
+            <li>
+              <button
+                type="button"
+                disabled={disabledActions}
+                title={
+                  emptyRoster
+                    ? t("submissions.bulkTrigger.titleEmptyRoster")
+                    : t("submissions.bulkTrigger.menuTitle")
+                }
+                onClick={() => {
+                  closeMenu()
+                  if (disabledActions) return
+                  onBulkTrigger()
+                }}
+              >
+                <GitBranch aria-hidden="true" className="size-4" />
+                {t("submissions.bulkTrigger.menuLabel")}
+              </button>
+            </li>
             <div
               className="my-1 border-t border-base-content/10"
               role="separator"

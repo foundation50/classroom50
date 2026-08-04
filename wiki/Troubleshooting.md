@@ -184,6 +184,29 @@ teacher to fix it.)
 graded, confirm the push landed on the default branch and that the autograde
 workflow ran under the repo's Actions tab.
 
+## My push didn't grade / the check says "push not graded"
+
+The assignment is in **submit-only mode** (`submission_mode: tag`): plain
+pushes don't trigger the autograder there — that's the point (they cost no
+Actions minutes). The commit status
+`tag-mode assignment — push not graded; run gh student submit` is the runner
+telling you exactly that. To be graded, submit explicitly:
+
+- `gh student submit` or the web submit page (both push the `submit/…` tag
+  that triggers grading), or
+- tag a commit yourself: `git tag submit/final && git push origin
+  submit/final` — any tag under `submit/` grades.
+
+If a push shows NO workflow run at all, that's normal for tag mode too: the
+repo's workflow only fires on `submit/*` tags.
+
+Teachers: if a repo you *expected* to grade on push shows that status, the
+repo's shim is still on the every-push trigger while the assignment is
+tag-mode (or vice versa) — run
+`gh teacher assignment submission-mode <org> <classroom> <slug> --tag` (or
+`--every-push`) or the web bulk action to reconcile, and have students
+`git pull` afterward.
+
 ## `gh teacher download` clones nothing
 
 By default `download` is team-driven. If you get zero clones:

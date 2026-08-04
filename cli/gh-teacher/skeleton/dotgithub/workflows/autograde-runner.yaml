@@ -40,7 +40,16 @@ jobs:
       # 'true' -> pushed commit is the acceptance commit; skip the tag/read
       # steps and the grade job (no submission tag, no release).
       is-acceptance:  ${{ steps.acceptance.outputs.is-acceptance }}
-      submission-tag: ${{ steps.read.outputs.submission-tag }}
+      # 'true' -> pushed commit is a teacher-side shim retrofit (touches only
+      # .github/workflows/autograde.yaml); nothing to grade. Defense-in-depth
+      # behind the [skip ci] in the retrofit commit message.
+      is-shim-update: ${{ steps.acceptance.outputs.is-shim-update }}
+      # 'true' -> the assignment is in tag submission mode but this run was
+      # branch-triggered (a stale every-push shim, or a hand-edited one);
+      # skip tagging + grading so a plain `git push` costs nothing.
+      branch-push-suppressed: ${{ steps.read.outputs.branch-push-suppressed }}
+      submission-mode: ${{ steps.read.outputs.submission-mode }}
+      submission-tag: ${{ steps.tag.outputs.tag }}
       runs-on:        ${{ steps.read.outputs.runs-on }}
       container:      ${{ steps.read.outputs.container }}
       python:         ${{ steps.read.outputs.python }}
@@ -76,12 +85,15 @@ jobs:
         run: python3 -m pip install --quiet --user pyyaml
         working-directory: ${{ runner.temp }}
 
-      # === Skip the acceptance commit ===
+      # === Skip the acceptance commit / a shim-retrofit commit ===
       # The accept commit (adds .classroom50.yaml + the shim, student-
-      # authored, so it fires this workflow) has nothing to grade. Detect
-      # it via the Pages-fetched runner.py and skip the tag/read steps and
-      # grade job. Branch trigger only (a tag push is always a submission).
-      # Fails open (grades) on a fetch failure.
+      # authored, so it fires this workflow) has nothing to grade — and
+      # neither does a teacher-side submission-mode shim retrofit (touches
+      # only .github/workflows/autograde.yaml; its [skip ci] normally keeps
+      # this workflow from running at all, this is the backstop). Detect
+      # both via the Pages-fetched runner.py and skip the tag/read steps
+      # and grade job. Branch trigger only (a tag push is always a
+      # submission). Fails open (grades) on a fetch failure.
       - name: Detect acceptance commit
         id: acceptance
         if: github.ref_type == 'branch'
@@ -102,10 +114,12 @@ jobs:
             python3 "$RUNNER_SCRIPT" --detect-acceptance || {
               echo "::warning::acceptance detection errored; grading proceeds"
               echo "is-acceptance=false" >> "$GITHUB_OUTPUT"
+              echo "is-shim-update=false" >> "$GITHUB_OUTPUT"
             }
           else
             echo "::warning::could not fetch runner.py for acceptance check; grading proceeds"
             echo "is-acceptance=false" >> "$GITHUB_OUTPUT"
+            echo "is-shim-update=false" >> "$GITHUB_OUTPUT"
           fi
 
       # === Acceptance-skip commit status ===
@@ -129,49 +143,6 @@ jobs:
             -f description="acceptance commit — nothing to grade yet; run gh student submit" \
             -f target_url="$RUN_URL" >/dev/null 2>&1 || true
 
-      # === Tag the submission ===
-      # Branch trigger: create submit/<UTC-timestamp>-<short-sha> at
-      # the pushed SHA. Tag trigger: reuse the pushed tag. Tags pushed
-      # with github.token don't fire workflows (anti-recursion).
-      - name: Tag submission
-        id: tag
-        if: steps.acceptance.outputs.is-acceptance != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REF: ${{ github.ref }}
-          REF_NAME: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          if [[ "$REF" == refs/tags/* ]]; then
-            if [[ "$REF_NAME" != submit/* ]]; then
-              echo "::error::tag $REF_NAME does not match submit/* prefix" >&2
-              exit 1
-            fi
-            echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Idempotency: if a submit/* tag already points at this SHA
-          # (workflow re-run of the same commit), reuse it instead of
-          # racing on a fresh timestamp. `--refs` filters out the
-          # `refs/tags/X^{}` peeled-ref rows that annotated tags emit
-          # — without it, awk could capture e.g., `submit/foo^{}` and
-          # produce an invalid pseudo-tag.
-          EXISTING=$(git ls-remote --refs --tags origin \
-                       | awk -v sha="$SHA" '$1 == sha && $2 ~ /^refs\/tags\/submit\// { sub("refs/tags/", "", $2); print $2; exit }')
-          if [[ -n "$EXISTING" ]]; then
-            echo "tag=$EXISTING" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Short-SHA suffix prevents collisions when two pushes land
-          # in the same UTC second.
-          TAG="submit/$(date -u +%Y-%m-%dT%H-%M-%SZ)-$(echo "$SHA" | cut -c1-7)"
-          git config user.name  "classroom50-bot"
-          git config user.email "bot@classroom50"
-          git tag "$TAG" "$SHA"
-          git push origin "refs/tags/$TAG"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
       # === Read metadata + validate runtime ===
       # `.classroom50.yaml` is in the student repo (untrusted) — every
       # field validated against a strict regex; org pinned to the
@@ -181,9 +152,11 @@ jobs:
       # cli/gh-teacher/tests.go (declarative tests block).
       - name: Read assignment config
         id: read
-        if: steps.acceptance.outputs.is-acceptance != 'true'
+        if: >-
+          steps.acceptance.outputs.is-acceptance != 'true' &&
+          steps.acceptance.outputs.is-shim-update != 'true'
         env:
-          SUBMISSION_TAG: ${{ steps.tag.outputs.tag }}
+          REF: ${{ github.ref }}
           REPO_OWNER: ${{ github.repository_owner }}
         shell: python3 {0}
         run: |
@@ -562,11 +535,20 @@ jobs:
               release_assets, separators=(",", ":"), ensure_ascii=False
           )
 
-          submission_tag = os.environ.get("SUBMISSION_TAG", "").strip()
-          if not submission_tag:
-              submission_tag = os.environ.get("GITHUB_REF_NAME", "")
-              if not submission_tag.startswith("submit/"):
-                  fail(f"submission tag {submission_tag!r} does not match submit/*")
+          # === Submission mode ===
+          # Mirror Go's ValidateSubmissionMode: absent/empty means every-push;
+          # a non-empty value must be one of the enum (contract.SubmissionModes,
+          # by-value copy — keep in lockstep). In tag mode a BRANCH-triggered
+          # run is suppressed (no tag, no grade): the shim shouldn't have fired
+          # at all, so this only happens with a stale every-push shim (mode
+          # changed, retrofit pending/failed) or a hand-edited one. Suppressing
+          # here keeps a plain `git push` from grading — the cost lever the
+          # mode exists for — while a submit/* tag push always grades.
+          submission_mode = entry.get("submission_mode") or "every-push"
+          if submission_mode not in ("every-push", "tag"):
+              fail(f"entry {assignment!r}: submission_mode {submission_mode!r} must be 'every-push' or 'tag'")
+          is_branch_run = not os.environ.get("REF", "").startswith("refs/tags/")
+          branch_push_suppressed = submission_mode == "tag" and is_branch_run
 
           # === No-autograder detection ===
           # Skip grade + set-latest when nothing is configured to grade,
@@ -605,7 +587,8 @@ jobs:
               default_py = f"{base_url}/{seg}/autograder.py"
               no_autograder = probe_absent(bundle) and probe_absent(default_py)
 
-          emit("submission-tag", submission_tag)
+          emit("submission-mode", submission_mode)
+          emit("branch-push-suppressed", "true" if branch_push_suppressed else "false")
           emit("runs-on", runs_on_json)
           emit("container", container_json)
           emit("python", python)
@@ -624,13 +607,99 @@ jobs:
           emit("release-assets", release_assets_json)
           emit("no-autograder", "true" if no_autograder else "false")
 
+      # === Tag the submission ===
+      # Branch trigger: create submit/<UTC-timestamp>-<short-sha> at
+      # the pushed SHA. Tag trigger: reuse the pushed tag. Tags pushed
+      # with github.token don't fire workflows (anti-recursion). Runs
+      # AFTER the read step so a tag-mode branch push (stale shim) is
+      # suppressed before it can mint a tag for a run that won't grade.
+      - name: Tag submission
+        id: tag
+        if: >-
+          steps.acceptance.outputs.is-acceptance != 'true' &&
+          steps.acceptance.outputs.is-shim-update != 'true' &&
+          steps.read.outputs.branch-push-suppressed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF" == refs/tags/* ]]; then
+            if [[ "$REF_NAME" != submit/* ]]; then
+              echo "::error::tag $REF_NAME does not match submit/* prefix" >&2
+              exit 1
+            fi
+            echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Idempotency: if a submit/* tag already points at this SHA
+          # (workflow re-run of the same commit, or a submit client that
+          # already tagged it), reuse it instead of racing on a fresh
+          # timestamp. `--refs` filters out the `refs/tags/X^{}`
+          # peeled-ref rows that annotated tags emit — without it, awk
+          # could capture e.g., `submit/foo^{}` and produce an invalid
+          # pseudo-tag.
+          EXISTING=$(git ls-remote --refs --tags origin \
+                       | awk -v sha="$SHA" '$1 == sha && $2 ~ /^refs\/tags\/submit\// { sub("refs/tags/", "", $2); print $2; exit }')
+          if [[ -n "$EXISTING" ]]; then
+            echo "tag=$EXISTING" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Short-SHA suffix prevents collisions when two pushes land
+          # in the same UTC second.
+          TAG="submit/$(date -u +%Y-%m-%dT%H-%M-%SZ)-$(echo "$SHA" | cut -c1-7)"
+          git config user.name  "classroom50-bot"
+          git config user.email "bot@classroom50"
+          git tag "$TAG" "$SHA"
+          git push origin "refs/tags/$TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      # === Suppressed-push commit status ===
+      # A tag-mode assignment got a branch push (stale every-push shim or a
+      # hand-edited trigger): nothing tags or grades. Post an explicit
+      # success status so the student sees WHY nothing ran and what to do.
+      # Best-effort; never fails the job.
+      - name: Suppressed-push commit status
+        if: steps.read.outputs.branch-push-suppressed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="success" \
+            -f context="classroom50/autograde" \
+            -f description="tag-mode assignment — push not graded; run gh student submit" \
+            -f target_url="$RUN_URL" >/dev/null 2>&1 || true
+
+      # === Shim-update commit status ===
+      # Parallel to the acceptance-skip status, for the [skip ci] backstop
+      # path: a shim-retrofit commit that still fired the workflow skips
+      # everything; say so explicitly. Best-effort; never fails the job.
+      - name: Shim-update commit status
+        if: steps.acceptance.outputs.is-shim-update == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="success" \
+            -f context="classroom50/autograde" \
+            -f description="autograder trigger updated — nothing to grade" \
+            -f target_url="$RUN_URL" >/dev/null 2>&1 || true
+
       # === Autograde-skipped commit status ===
       # Parallel to the acceptance-skip status: post an explicit
       # classroom50/autograde success so a status-polling client can tell
       # "skipped — no autograder configured" from "hasn't run yet".
       # Best-effort; never fails the job.
       - name: Autograde-skipped commit status
-        if: steps.read.outputs.no-autograder == 'true'
+        if: >-
+          steps.read.outputs.no-autograder == 'true' &&
+          steps.read.outputs.branch-push-suppressed != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -644,9 +713,14 @@ jobs:
 
   grade:
     needs: setup
-    # Skip the acceptance commit and the no-autograder case (set-latest needs
+    # Skip the acceptance commit, a shim-retrofit commit, a suppressed
+    # tag-mode branch push, and the no-autograder case (set-latest needs
     # grade, so it skips too).
-    if: needs.setup.outputs.is-acceptance != 'true' && needs.setup.outputs.no-autograder != 'true'
+    if: >-
+      needs.setup.outputs.is-acceptance != 'true' &&
+      needs.setup.outputs.is-shim-update != 'true' &&
+      needs.setup.outputs.branch-push-suppressed != 'true' &&
+      needs.setup.outputs.no-autograder != 'true'
     runs-on:   ${{ fromJSON(needs.setup.outputs.runs-on) }}
     container: ${{ fromJSON(needs.setup.outputs.container) }}
     timeout-minutes: 15
@@ -921,9 +995,14 @@ jobs:
   # reclaiming latest.
   set-latest:
     needs: [setup, grade]
-    # Explicit no-autograder guard, defensive against a future change to
-    # grade's result semantics.
-    if: needs.setup.outputs.no-autograder != 'true' && needs.grade.result == 'success' && (needs.grade.outputs.status == 'success' || needs.grade.outputs.status == 'failure')
+    # Explicit no-autograder / suppressed-push / shim-update guards,
+    # defensive against a future change to grade's result semantics.
+    if: >-
+      needs.setup.outputs.no-autograder != 'true' &&
+      needs.setup.outputs.branch-push-suppressed != 'true' &&
+      needs.setup.outputs.is-shim-update != 'true' &&
+      needs.grade.result == 'success' &&
+      (needs.grade.outputs.status == 'success' || needs.grade.outputs.status == 'failure')
     runs-on: ubuntu-latest
     concurrency:
       group: classroom50-set-latest-${{ github.repository }}

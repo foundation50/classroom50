@@ -67,6 +67,14 @@ You submit by [committing](https://github.com/git-guides/git-commit) and
 you accepted. Using the CLI instead? See
 [Submit in the CLI Student Guide](https://github.com/foundation50/classroom50/wiki/CLI-Student-Guide#4-submit).
 
+> [!NOTE]
+> Some assignments grade **only on submit**: pushing saves your work but
+> doesn't grade it (the commit's check says so). Submit from your assignment
+> page here, run `gh student submit`, or push a tag under `submit/` (for
+> example `git tag submit/final && git push origin submit/final`) to be
+> graded. And if your teacher changes an assignment's grading setup, run
+> `git pull` before your next push.
+
 ## Group assignments
 
 Some assignments are done in a group. When accepting, you'll see the assignment

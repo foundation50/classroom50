@@ -325,3 +325,87 @@ func TestRunAssignmentAdd_PreservesLockAndSkipsGrant(t *testing.T) {
 		t.Errorf("expected a note that the assignment stayed locked, got %q", errOut.String())
 	}
 }
+
+// submissionModeAssignmentsBody is lockAssignmentsBody's tag-mode twin: one
+// existing entry whose submission_mode is "tag", for re-add carry-forward tests.
+func submissionModeAssignmentsBody() string {
+	return `{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "hello",
+      "name": "Hello",
+      "template": { "owner": "o", "repo": "hello-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default",
+      "submission_mode": "tag",
+      "feedback_pr": true
+    }
+  ]
+}`
+}
+
+// TestRunAssignmentAdd_PreservesSubmissionMode is the regression guard for the
+// carry-forward: a same-slug re-add WITHOUT --submission-mode must keep a prior
+// "tag" mode. A silent reset to every-push would strand the assignment —
+// deployed tag-only shims fire on nothing while the submit clients stop pushing
+// tags, so NOTHING grades. Mirrors TestRunAssignmentAdd_PreservesLockAndSkipsGrant.
+func TestRunAssignmentAdd_PreservesSubmissionMode(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments: submissionModeAssignmentsBody(),
+		classroom:   lockClassroomBody(),
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:        "o",
+		Classroom:  "dst",
+		Slug:       "hello",
+		Name:       "Hello",
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template", Branch: "main"},
+		Mode:       assignment.ModeIndividual,
+		Autograder: "default",
+		// --submission-mode omitted: SubmissionMode is the normalized zero value
+		// and SubmissionModeChanged is false — the carry-forward must fire.
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(re-add tag-mode): %v", err)
+	}
+	if got := decodeLock(t, fix).Assignments[0].SubmissionMode; got != "tag" {
+		t.Errorf("re-adding without --submission-mode must keep submission_mode=tag, got %q", got)
+	}
+}
+
+// TestRunAssignmentAdd_ExplicitEveryPushResetsSubmissionMode pins the deliberate
+// half of the contract: --submission-mode every-push on a re-add is an explicit
+// reset (SubmissionModeChanged=true with the normalized empty value), so the
+// prior "tag" must NOT be carried forward.
+func TestRunAssignmentAdd_ExplicitEveryPushResetsSubmissionMode(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments: submissionModeAssignmentsBody(),
+		classroom:   lockClassroomBody(),
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:        "o",
+		Classroom:  "dst",
+		Slug:       "hello",
+		Name:       "Hello",
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template", Branch: "main"},
+		Mode:       assignment.ModeIndividual,
+		Autograder: "default",
+		// An explicit --submission-mode every-push normalizes to "" with
+		// Changed=true — a deliberate reset the carry-forward must honor.
+		SubmissionMode:        "",
+		SubmissionModeChanged: true,
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(explicit every-push reset): %v", err)
+	}
+	if got := decodeLock(t, fix).Assignments[0].SubmissionMode; got != "" {
+		t.Errorf("explicit --submission-mode every-push must reset the field (absent on the wire), got %q", got)
+	}
+}

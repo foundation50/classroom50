@@ -385,6 +385,84 @@ export const DetailsSection = ({
                 </form.Subscribe>
               )}
             </form.Field>
+
+            {/* Submission trigger: every-push (the default) or tag mode
+                (only submit/* tags grade — the Actions-cost lever). A bare
+                repo has no shim, so the picker locks to the default. On
+                EDIT, a change only affects new accepts: warn that existing
+                repos need the retrofit action. */}
+            <form.Subscribe selector={(state) => state.values.empty_repo}>
+              {(emptyRepo) => (
+                <form.Field name="submission_mode">
+                  {(field) => (
+                    <div
+                      className={
+                        emptyRepo ? "pointer-events-none opacity-50" : ""
+                      }
+                      aria-disabled={emptyRepo}
+                    >
+                      <FormField
+                        htmlFor={field.name}
+                        label={t("assignments.form.submissionMode.label")}
+                        help={
+                          emptyRepo
+                            ? t("assignments.form.submissionMode.emptyRepoHelp")
+                            : t("assignments.form.submissionMode.help")
+                        }
+                      >
+                        {({ id, describedById }) => (
+                          <Select
+                            id={id}
+                            name={field.name}
+                            className="w-full sm:max-w-xs"
+                            aria-describedby={describedById}
+                            value={emptyRepo ? "every-push" : field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) =>
+                              field.handleChange(
+                                e.target.value as typeof field.state.value,
+                              )
+                            }
+                          >
+                            <option value="every-push">
+                              {t(
+                                "assignments.form.submissionMode.choices.everyPush",
+                              )}
+                            </option>
+                            <option value="tag">
+                              {t("assignments.form.submissionMode.choices.tag")}
+                            </option>
+                          </Select>
+                        )}
+                      </FormField>
+                      {edit ? (
+                        <form.Subscribe
+                          selector={(state) => state.values.submission_mode}
+                        >
+                          {(mode) =>
+                            mode !==
+                            (form.options.defaultValues?.submission_mode ??
+                              "every-push") ? (
+                              <Alert
+                                tone="warning"
+                                role="status"
+                                className="mt-2 text-sm"
+                              >
+                                <span>
+                                  {t(
+                                    "assignments.form.submissionMode.editWarning",
+                                  )}
+                                </span>
+                              </Alert>
+                            ) : null
+                          }
+                        </form.Subscribe>
+                      ) : null}
+                    </div>
+                  )}
+                </form.Field>
+              )}
+            </form.Subscribe>
           </div>
 
           <div className="flex flex-col gap-4">

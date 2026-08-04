@@ -104,6 +104,28 @@ describe("SubmissionsActionsMenu — Download all submissions item", () => {
   })
 })
 
+describe("SubmissionsActionsMenu — Update autograding triggers item", () => {
+  it("shows the item only when onBulkTrigger is provided (owner + default autograder)", () => {
+    const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)
+    expect(screen.queryByText("submissions.bulkTrigger.menuLabel")).toBeNull()
+    rerender(
+      <SubmissionsActionsMenu {...baseProps} onBulkTrigger={() => {}} />,
+    )
+    expect(
+      screen.queryByText("submissions.bulkTrigger.menuLabel"),
+    ).not.toBeNull()
+  })
+
+  it("fires the handler on click", () => {
+    const onBulkTrigger = vi.fn()
+    render(
+      <SubmissionsActionsMenu {...baseProps} onBulkTrigger={onBulkTrigger} />,
+    )
+    screen.getByText("submissions.bulkTrigger.menuLabel").click()
+    expect(onBulkTrigger).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe("SubmissionsActionsMenu — Lock/Unlock item", () => {
   it("shows the item only when onLockToggle is provided (authoring tier)", () => {
     const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)

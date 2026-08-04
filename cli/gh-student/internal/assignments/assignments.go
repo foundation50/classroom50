@@ -75,6 +75,20 @@ type Entry struct {
 	// own create default template-less), an explicit true/false forces the
 	// feature on/off. See accept.go's repo-feature PATCH.
 	RepoFeatures *RepoFeatures `json:"repo_features,omitempty"`
+
+	// SubmissionMode picks when the autograder fires: absent/"every-push"
+	// (the wire default) keeps the shim's every-push trigger; "tag" makes the
+	// shim trigger ONLY on submit/* tag pushes, which `gh student submit`
+	// creates after the branch push. Consumed at accept time (shim rendering)
+	// and at submit time (tag push).
+	SubmissionMode string `json:"submission_mode,omitempty"`
+}
+
+// IsTagSubmissionMode reports whether the entry grades only on submit/* tag
+// pushes. Centralized so accept (shim rendering) and submit (tag push) can't
+// drift on the absent-means-every-push default.
+func (e Entry) IsTagSubmissionMode() bool {
+	return e.SubmissionMode == contract.SubmissionModeTag
 }
 
 // RepoFeatures is the tri-state Issues/Wiki/Projects/Pull-requests override; a nil pointer

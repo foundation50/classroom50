@@ -2,6 +2,7 @@ import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { classroomPagesSegment } from "@/util/secret"
 import { fetchTextWithFriendlyErrors } from "../queries/assignments"
 import { localizedError } from "@/types/localizedMessage"
+import type { SubmissionMode } from "@/types/classroom"
 
 export function createClassroom50Yaml(params: {
   classroom: string
@@ -88,13 +89,23 @@ export function defaultAutograderWorkflow(
   org: string,
   branch: string,
   configBranch: string,
+  submissionMode?: SubmissionMode,
 ) {
+  // Tag mode drops ONLY the branches: line, so the shim fires exclusively on
+  // submit/* tag pushes (the submit flows create the tag; a hand-pushed
+  // submit/* tag works too). Every other value — undefined, an explicit
+  // "every-push", anything unvalidated — renders the identical bytes as
+  // before submission_mode existed. Mirrors the CLI's renderEmbeddedShim.
+  const pushTriggers =
+    submissionMode === "tag"
+      ? `    tags: ["submit/*"]`
+      : `    branches: ["${branch}"]
+    tags: ["submit/*"]`
   return `name: Autograde
 
 on:
   push:
-    branches: ["${branch}"]
-    tags: ["submit/*"]
+${pushTriggers}
 
 jobs:
   grade:
@@ -125,13 +136,26 @@ export async function resolveAutograderWorkflow(params: {
   // built-in default shim; teacher-authored autograders are branch-agnostic.
   branch?: string
   configBranch?: string
+  // The assignment's submission_mode; "tag" drops the branch-push trigger.
+  // Only applies to the default shim — teacher-authored autograders own their
+  // triggers and are never rewritten.
+  submissionMode?: SubmissionMode
 }): Promise<string> {
-  const { org, classroom, autograder, secret, branch, configBranch } = params
+  const {
+    org,
+    classroom,
+    autograder,
+    secret,
+    branch,
+    configBranch,
+    submissionMode,
+  } = params
   if (isDefaultAutograder(autograder)) {
     return defaultAutograderWorkflow(
       org,
       branch || DEFAULT_BRANCH,
       configBranch || DEFAULT_BRANCH,
+      submissionMode,
     )
   }
   // Narrowed: isDefaultAutograder returns true for undefined/"default", so a

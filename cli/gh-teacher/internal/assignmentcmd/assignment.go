@@ -55,6 +55,7 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(assignmentRemoveCmd())
 	cmd.AddCommand(assignmentListCmd())
 	cmd.AddCommand(assignmentLockCmd())
+	cmd.AddCommand(assignmentSubmissionModeCmd())
 	cmd.AddCommand(assignmentTestCmd())
 	cmd.AddCommand(feedbackpr.NewCmd())
 	return cmd
@@ -80,6 +81,7 @@ func assignmentAddCmd() *cobra.Command {
 		allowedFiles  []string
 		passThreshold int
 		studentPerm   string
+		submissionMd  string
 	)
 
 	cmd := &cobra.Command{
@@ -200,6 +202,21 @@ func assignmentAddCmd() *cobra.Command {
 			if err := assignment.ValidateStudentPermission(studentPermVal); err != nil {
 				return err
 			}
+			// Normalize the wire default away so an every-push assignment's
+			// entry stays byte-identical to one written before the field
+			// existed. --empty-repo excludes it (no shim to trigger).
+			submissionModeVal := strings.TrimSpace(submissionMd)
+			if submissionModeVal == contract.SubmissionModeEveryPush {
+				submissionModeVal = ""
+			}
+			if submissionModeVal != "" {
+				if err := assignment.ValidateSubmissionMode(submissionModeVal); err != nil {
+					return err
+				}
+				if emptyRepo {
+					return errors.New("--empty-repo is mutually exclusive with --submission-mode: a bare repo has no autograde shim to trigger")
+				}
+			}
 			if err := autograderseam.ValidateName(autograderVal); err != nil {
 				return err
 			}
@@ -237,26 +254,28 @@ func assignmentAddCmd() *cobra.Command {
 			}
 			return runAssignmentAdd(client, cmd.OutOrStdout(), cmd.ErrOrStderr(),
 				addAssignmentParams{
-					Org:               org,
-					Classroom:         classroom,
-					Slug:              slug,
-					Name:              nameVal,
-					Description:       strings.TrimSpace(description),
-					Tmpl:              tmplArg,
-					Due:               dueVal,
-					DueMeta:           dueMetaVal,
-					AvailableFrom:     availableFromVal,
-					AvailableFromMeta: availableFromMetaVal,
-					Mode:              modeVal,
-					MaxGroupSize:      maxGroupSize,
-					Autograder:        autograderVal,
-					Runtime:           runtime,
-					Tests:             tests,
-					FeedbackPR:        feedbackPRVal,
-					EmptyRepo:         emptyRepo,
-					AllowedFiles:      allowedFiles,
-					PassThreshold:     passThresholdPtr,
-					StudentPermission: studentPermVal,
+					Org:                   org,
+					Classroom:             classroom,
+					Slug:                  slug,
+					Name:                  nameVal,
+					Description:           strings.TrimSpace(description),
+					Tmpl:                  tmplArg,
+					Due:                   dueVal,
+					DueMeta:               dueMetaVal,
+					AvailableFrom:         availableFromVal,
+					AvailableFromMeta:     availableFromMetaVal,
+					Mode:                  modeVal,
+					MaxGroupSize:          maxGroupSize,
+					Autograder:            autograderVal,
+					Runtime:               runtime,
+					Tests:                 tests,
+					FeedbackPR:            feedbackPRVal,
+					EmptyRepo:             emptyRepo,
+					AllowedFiles:          allowedFiles,
+					PassThreshold:         passThresholdPtr,
+					StudentPermission:     studentPermVal,
+					SubmissionMode:        submissionModeVal,
+					SubmissionModeChanged: cmd.Flags().Changed("submission-mode"),
 				})
 		},
 	}
@@ -276,6 +295,7 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&allowedFiles, "allowed-files", nil, "Ordered .gitignore-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. Pass `--allowed-files '*' --allowed-files '!hello.py'` to allow only hello.py. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file.")
 	cmd.Flags().IntVar(&passThreshold, "pass-threshold", 0, "Opt-in passing bar as a percentage of max score (0–100): at/above it a gradebook client shows a submission as passing. Advisory/display-only — it does not change a student's score. Omit to leave it off (no passing concept); pass --pass-threshold 0 for an explicit 0%.")
 	cmd.Flags().StringVar(&studentPerm, "student-permission", "", "Optional collaborator role each student gets on their OWN assignment repo at accept time: one of pull, triage, push, maintain, admin. Omit for the default (push for individual, admin for group). Choose admin to let students manage repo settings and enable GitHub Pages. Applies to students who accept from now on; existing repos are unchanged. Caution: admin on a private repo also lets the student change its visibility.")
+	cmd.Flags().StringVar(&submissionMd, "submission-mode", contract.SubmissionModeEveryPush, "When the autograder fires: `every-push` (default; every push to the default branch grades) or `tag` (only submit/* tag pushes grade — `gh student submit`, the web submit page, or a hand-pushed submit/* tag; plain `git push` costs no Actions minutes). Baked into each student repo's shim at accept time; change it later with `gh teacher assignment submission-mode`, which also retrofits existing repos. Mutually exclusive with --empty-repo.")
 	return cmd
 }
 
@@ -549,6 +569,14 @@ type addAssignmentParams struct {
 	AllowedFiles      []string
 	PassThreshold     *int
 	StudentPermission string
+	SubmissionMode    string
+	// Whether --submission-mode was explicitly passed. Distinguishes "omitted"
+	// (carry a prior entry's mode forward, like Locked) from an explicit
+	// --submission-mode every-push (a deliberate reset). Without this a
+	// same-slug re-add would silently flip a tag-mode assignment back to
+	// every-push while its deployed shims still only fire on tags — submit
+	// would stop pushing tags and NOTHING would grade.
+	SubmissionModeChanged bool
 }
 
 // runAssignmentAdd validates template visibility and entry shape before the
@@ -631,6 +659,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		AllowedFiles:      allowedFiles,
 		PassThreshold:     passThreshold,
 		StudentPermission: p.StudentPermission,
+		SubmissionMode:    p.SubmissionMode,
 	}
 	if err := assignment.ValidateAssignmentEntry(entry); err != nil {
 		return err
@@ -750,6 +779,15 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			attemptEntry.ReleaseAssets = append([]string(nil), previous.ReleaseAssets...)
 			attemptEntry.Extra = previous.Extra
 			attemptEntry.Locked = previous.Locked
+			// submission_mode is carried forward when --submission-mode was
+			// omitted: deployed shims were rendered under the prior mode, so a
+			// silent reset to every-push would strand a tag-mode assignment
+			// (tag-only shims + a submit client that stops pushing tags =
+			// nothing grades). An explicit flag is a deliberate change — the
+			// teacher owns retrofitting via `assignment submission-mode`.
+			if !p.SubmissionModeChanged {
+				attemptEntry.SubmissionMode = previous.SubmissionMode
+			}
 		}
 		committedLocked = attemptEntry.Locked
 		updated, replaced := assignment.UpsertAssignment(file.Assignments, attemptEntry)

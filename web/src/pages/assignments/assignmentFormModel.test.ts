@@ -60,6 +60,7 @@ const base: CreateAssignmentFormValues = {
   pass_threshold_enabled: false,
   pass_threshold: 80,
   student_permission: "",
+  submission_mode: "every-push",
   repo_feature_issues: "inherit",
   repo_feature_wiki: "inherit",
   repo_feature_projects: "inherit",

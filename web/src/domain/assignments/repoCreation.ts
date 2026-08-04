@@ -1,6 +1,10 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubRepo } from "@/github-core/types"
-import type { RepoPermission, RepoFeatures } from "@/types/classroom"
+import type {
+  RepoPermission,
+  RepoFeatures,
+  SubmissionMode,
+} from "@/types/classroom"
 import { GitHubAPIError } from "@/github-core/errors"
 import { getRepo } from "@/github-core/repoReads"
 import { DEFAULT_BRANCH } from "@/util/configRepo"
@@ -355,6 +359,11 @@ export type CreateAssignmentInput = {
   // the mode default (push individual / admin group). buildAssignmentEntry
   // omits it when it equals the default and clamps group up to admin.
   student_permission?: RepoPermission
+  // When the autograder fires. Undefined or "every-push" = the wire default
+  // (buildAssignmentEntry omits it); "tag" = the shim grades only submit/* tag
+  // pushes. Mutually exclusive with empty_repo. Mirrors the CLI's
+  // --submission-mode.
+  submission_mode?: SubmissionMode
   // Per-assignment repo feature overrides (tri-state per key: undefined =
   // inherit, true = force on, false = force off). buildAssignmentEntry omits
   // the block when no key is set; accept resolves + applies it at fresh create.

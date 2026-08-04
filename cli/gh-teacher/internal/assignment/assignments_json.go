@@ -59,6 +59,19 @@ func ValidateStudentPermission(p string) error {
 	return nil
 }
 
+// ValidateSubmissionMode accepts "" (the wire default, every-push) or one of
+// contract.SubmissionModes. An explicit "every-push" is legal on read (other
+// writers may emit it) even though this CLI normalizes it to absent on write.
+func ValidateSubmissionMode(m string) error {
+	if m == "" {
+		return nil
+	}
+	if !contract.IsValidSubmissionMode(m) {
+		return fmt.Errorf("invalid submission_mode %q: must be one of %v", m, contract.SubmissionModes)
+	}
+	return nil
+}
+
 // LargeAssignmentsWarnBytes is the encoded-size threshold above which
 // `assignment add` warns on stderr. Set well below GitHub's ~1 MiB
 // contents-API limit (past which encoding flips to "none", wedging every
@@ -119,6 +132,14 @@ type AssignmentsJSON struct {
 // explicit true/false = force on/off), so absent inherits the template's
 // feature on a templated assignment and leaves GitHub's own create default
 // template-less. See RepoFeatures.
+//
+// SubmissionMode picks when the autograder fires: "" or
+// contract.SubmissionModeEveryPush (the wire default — writers omit it) keeps
+// today's shim triggers (every default-branch push plus submit/* tags);
+// contract.SubmissionModeTag makes the shim trigger ONLY on submit/* tag
+// pushes, which the submit clients create. Baked into the shim at accept time;
+// changing it later requires retrofitting existing repos' shims (`gh teacher
+// assignment submission-mode`). Mutually exclusive with EmptyRepo (no shim).
 type AssignmentEntry struct {
 	Slug              string           `json:"slug"`
 	Name              string           `json:"name"`
@@ -140,6 +161,7 @@ type AssignmentEntry struct {
 	ReleaseAssets     []string         `json:"release_assets,omitempty"`
 	PassThreshold     *int             `json:"pass_threshold,omitempty"`
 	StudentPermission string           `json:"student_permission,omitempty"`
+	SubmissionMode    string           `json:"submission_mode,omitempty"`
 	RepoFeatures      *RepoFeatures    `json:"repo_features,omitempty"`
 	MigratedFrom      *MigratedFromRef `json:"migrated_from,omitempty"`
 
@@ -157,7 +179,7 @@ var knownEntryKeys = map[string]struct{}{
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
 	"locked": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
-	"student_permission": {}, "repo_features": {},
+	"student_permission": {}, "submission_mode": {}, "repo_features": {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then strictly
@@ -835,6 +857,9 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	if err := ValidateStudentPermission(entry.StudentPermission); err != nil {
 		return err
 	}
+	if err := ValidateSubmissionMode(entry.SubmissionMode); err != nil {
+		return err
+	}
 	if entry.EmptyRepo {
 		if err := validateEmptyRepoExclusions(entry); err != nil {
 			return err
@@ -865,6 +890,9 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 	}
 	if entry.PassThreshold != nil {
 		return errors.New("empty_repo is mutually exclusive with pass_threshold (--empty-repo vs --pass-threshold): a bare repo never autogrades")
+	}
+	if entry.SubmissionMode != "" {
+		return errors.New("empty_repo is mutually exclusive with submission_mode (--empty-repo vs --submission-mode): a bare repo has no autograde shim to trigger")
 	}
 	return nil
 }
@@ -963,6 +991,9 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidateStudentPermission(entry.StudentPermission); err != nil {
+		return fmt.Errorf("entry %q: %w", entry.Slug, err)
+	}
+	if err := ValidateSubmissionMode(entry.SubmissionMode); err != nil {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if entry.EmptyRepo {

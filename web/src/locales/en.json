@@ -1134,6 +1134,16 @@
           "admin": "Admin"
         }
       },
+      "submissionMode": {
+        "label": "Autograding trigger",
+        "help": "When the autograder runs. \"Every push\" grades each push to the default branch. \"On submit only\" grades only when a student submits (from here or with gh student submit) or pushes a submit/* tag — regular pushes cost no Actions minutes, which matters for large classes.",
+        "emptyRepoHelp": "Unavailable for empty repositories — they carry no autograding workflow.",
+        "editWarning": "Changing the trigger only affects repositories created from now on. Repositories students already accepted keep the old trigger until you update them — use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
+        "choices": {
+          "everyPush": "Every push (default)",
+          "tag": "On submit only"
+        }
+      },
       "repoFeatures": {
         "heading": "Repository features",
         "refresh": "Refresh template settings",
@@ -1222,6 +1232,7 @@
         "setupTimeoutRange": "Setup timeout must be 0 or a whole number of seconds from 1 through {{max}}.",
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
         "studentPermissionInvalid": "Student repo access must be one of pull, triage, push, maintain, or admin.",
+        "submissionModeInvalid": "Autograding trigger must be \"every-push\" or \"tag\".",
         "releaseAssetsTooMany": "Choose at most {{max}} submission release files (currently {{count}}).",
         "releaseAssetsTooLarge": "Submission release file paths may total at most {{max}} UTF-8 bytes (8 KiB); currently {{bytes}}.",
         "releaseAssetsInvalidPath": "{{path}} is not an exact workspace-relative file path.",
@@ -2484,6 +2495,48 @@
       "deferredSection_one": "{{count}} repository was not updated",
       "deferredSection_other": "{{count}} repositories were not updated",
       "deferredDetail": "Skipped — re-run to update."
+    },
+    "bulkTrigger": {
+      "menuLabel": "Update autograding triggers",
+      "menuTitle": "Rewrite each student repository's autograding workflow to match the assignment's trigger setting",
+      "titleEmptyRoster": "No students have accepted yet",
+      "title": "Update autograding triggers",
+      "subtitle_one": "Sets the autograding trigger to \"{{mode}}\" on {{count}} student's repository.",
+      "subtitle_other": "Sets the autograding trigger to \"{{mode}}\" on {{count}} students' repositories.",
+      "noRepos": "No students have accepted this assignment yet, so there are no repositories to update.",
+      "warning_one": "This commits a change to the autograding workflow in {{count}} student's repository. The commit is marked so it doesn't trigger grading. Repositories whose workflow was hand-edited are reported and left untouched. Students must pull afterward — clones made before this change will conflict on their next push.",
+      "warning_other": "This commits a change to the autograding workflow in {{count}} students' repositories. The commit is marked so it doesn't trigger grading. Repositories whose workflow was hand-edited are reported and left untouched. Students must pull afterward — clones made before this change will conflict on their next push.",
+      "apply": "Update all",
+      "working": "Updating repositories",
+      "progress": "Processed {{processed}} of {{total}}",
+      "resultHeadline": "Updated {{updated}} of {{total}} repositories ({{current}} already current).",
+      "repullReminder": "Tell students to run git pull — clones made before this change will conflict on their next push.",
+      "scopeSection_one": "{{count}} repository needs a token with the workflow scope",
+      "scopeSection_other": "{{count}} repositories need a token with the workflow scope",
+      "scopeDetail": "Your GitHub authorization can't modify workflow files. Sign out and back in, then re-run.",
+      "failedSection_one": "{{count}} repository could not be updated",
+      "failedSection_other": "{{count}} repositories could not be updated",
+      "unrecognizedSection_one": "{{count}} repository was skipped (workflow not recognized)",
+      "unrecognizedSection_other": "{{count}} repositories were skipped (workflow not recognized)",
+      "deferredSection_one": "{{count}} repository was not processed",
+      "deferredSection_other": "{{count}} repositories were not processed",
+      "deferredDetail": "Skipped — re-run to update.",
+      "notAcceptedSection_one": "{{count}} student has not accepted yet",
+      "notAcceptedSection_other": "{{count}} students have not accepted yet",
+      "notAcceptedDetail": "No repository exists — nothing to update."
+    },
+    "rowTrigger": {
+      "title": "Update autograding trigger",
+      "description": "Rewrite this repository's autograding workflow to match the assignment's trigger setting.",
+      "aria": "Update the autograding trigger on {{repo}}",
+      "outcome": {
+        "updated": "Autograding trigger updated. The student must pull before their next push.",
+        "current": "Already up to date — no change needed.",
+        "unrecognized": "Skipped: this repository's workflow was modified and can't be updated automatically.",
+        "notAccepted": "No repository exists yet — nothing to update.",
+        "missingWorkflowScope": "Your GitHub authorization can't modify workflow files. Sign out and back in, then retry.",
+        "failed": "Could not update the workflow — try again."
+      }
     },
     "rowRegrade": {
       "title": "Regrade this submission",

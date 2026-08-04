@@ -217,6 +217,16 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		// a dropped output would make every gate below read empty and
 		// re-grade the acceptance commit.
 		"is-acceptance",
+		// is-shim-update gates the skip for a teacher-side submission-mode
+		// shim retrofit commit — the backstop behind the [skip ci] in the
+		// retrofit commit message.
+		"is-shim-update",
+		// branch-push-suppressed gates the tag-mode stale-shim defense: a
+		// branch-triggered run on a tag-mode assignment must not tag or
+		// grade. A dropped output would read empty and grade every push,
+		// defeating the cost lever the mode exists for.
+		"branch-push-suppressed",
+		"submission-mode",
 		// no-autograder gates the skip-when-nothing-configured path; a
 		// dropped output would read empty and grade every submission,
 		// re-spending Actions minutes on assignments with no autograder.
@@ -237,13 +247,20 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// exactly what this guard exists to prevent.
 	//
 	// grade is gated at the job level (set-latest needs grade, so it skips
-	// transitively). The gate also carries the no-autograder skip: an
-	// assignment with no declarative tests, no per-assignment bundle, and no
+	// transitively). The gate carries four skips: the acceptance commit, a
+	// teacher-side shim-retrofit commit (is-shim-update, the [skip ci]
+	// backstop), a suppressed tag-mode branch push (branch-push-suppressed,
+	// the stale-shim defense), and the no-autograder case: an assignment
+	// with no declarative tests, no per-assignment bundle, and no
 	// classroom-default autograder.py has nothing to grade, so setup emits
 	// no-autograder=true and the grade job skips (fail-open — any probe error
 	// emits false and grades).
-	if got, _ := nested(doc, "jobs", "grade", "if"); got != "needs.setup.outputs.is-acceptance != 'true' && needs.setup.outputs.no-autograder != 'true'" {
-		t.Errorf("grade.if = %v, want the acceptance-commit + no-autograder skip gate", got)
+	wantGradeIf := "needs.setup.outputs.is-acceptance != 'true' && " +
+		"needs.setup.outputs.is-shim-update != 'true' && " +
+		"needs.setup.outputs.branch-push-suppressed != 'true' && " +
+		"needs.setup.outputs.no-autograder != 'true'"
+	if got, _ := nested(doc, "jobs", "grade", "if"); got != wantGradeIf {
+		t.Errorf("grade.if = %v, want the acceptance + shim-update + suppressed-push + no-autograder skip gate", got)
 	}
 	// The setup checkout must use full history: _baseline_scan walks back
 	// to the commit that added .classroom50.yaml, and a shallow clone
@@ -253,9 +270,63 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		t.Errorf("autograde-runner.yaml setup checkout missing fetch-depth: 0 (acceptance scan needs full history)")
 	}
 	// The tag and read steps are step-gated off the same detection so the
-	// acceptance commit produces no submit/* tag and no metadata read.
-	if !strings.Contains(body, "if: steps.acceptance.outputs.is-acceptance != 'true'") {
-		t.Errorf("autograde-runner.yaml tag/read steps not gated on the acceptance detection")
+	// acceptance commit produces no submit/* tag and no metadata read. Both
+	// use folded (>-) multi-line ifs now, so assert on the parsed step
+	// conditions rather than a raw substring. The tag step additionally
+	// gates on branch-push-suppressed: it runs AFTER the read step so a
+	// tag-mode branch push (stale every-push shim) never mints a tag for a
+	// run that won't grade.
+	setupSteps, _ := nested(doc, "jobs", "setup", "steps")
+	stepIf := func(id string) string {
+		steps, _ := setupSteps.([]any)
+		for _, s := range steps {
+			m, _ := s.(map[string]any)
+			if m["id"] == id {
+				cond, _ := m["if"].(string)
+				return cond
+			}
+		}
+		return ""
+	}
+	for _, id := range []string{"read", "tag"} {
+		cond := stepIf(id)
+		for _, gate := range []string{
+			"steps.acceptance.outputs.is-acceptance != 'true'",
+			"steps.acceptance.outputs.is-shim-update != 'true'",
+		} {
+			if !strings.Contains(cond, gate) {
+				t.Errorf("autograde-runner.yaml %s step if = %q, missing gate %q", id, cond, gate)
+			}
+		}
+	}
+	if cond := stepIf("tag"); !strings.Contains(cond, "steps.read.outputs.branch-push-suppressed != 'true'") {
+		t.Errorf("autograde-runner.yaml tag step if = %q, missing the branch-push-suppressed gate (a suppressed tag-mode push must not mint a tag)", cond)
+	}
+	// The read step's suppression decision classifies branch vs tag runs from
+	// $REF, so the env mapping is load-bearing: dropped, REF reads empty,
+	// every run classifies as branch-triggered, and tag-mode submit/* TAG
+	// pushes get suppressed — grading stops for tag mode entirely. The Python
+	// tests inject REF themselves, so only this pin catches the mapping.
+	stepEnv := func(id string) map[string]any {
+		steps, _ := setupSteps.([]any)
+		for _, s := range steps {
+			m, _ := s.(map[string]any)
+			if m["id"] == id {
+				env, _ := m["env"].(map[string]any)
+				return env
+			}
+		}
+		return nil
+	}
+	if got := stepEnv("read")["REF"]; got != "${{ github.ref }}" {
+		t.Errorf("read step env.REF = %v, want ${{ github.ref }} (suppression classifies branch vs tag runs from it)", got)
+	}
+	// submission-tag was rewired from the read step to the tag step (which
+	// now runs after read); pin the expression VALUE, not just key presence —
+	// a typo'd expression would silently feed an empty TAG to the release
+	// and set-latest jobs.
+	if got := outputsMap["submission-tag"]; got != "${{ steps.tag.outputs.tag }}" {
+		t.Errorf("setup.outputs.submission-tag = %v, want ${{ steps.tag.outputs.tag }}", got)
 	}
 	// Branch trigger only — a tag push is always a submission, so the
 	// detection step must not run on tag pushes (its absence leaves

@@ -9,6 +9,8 @@ import type { CreateClassroomInput } from "@/domain/classrooms"
 import { STUDENT_CSV_FIELDS } from "@/util/rosterCsv"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { prefixCommit } from "@/util/commit"
+import { paginateAll } from "../paginate"
+import { SUBMISSION_TAG_PREFIX } from "../queries/releaseRunReads"
 import type { ClassroomTeamRef, StaffTeamRefs } from "./teams"
 
 // The branch a config repo's default is renamed TO when normalizing it.
@@ -317,6 +319,57 @@ export function updateRefForRepo(params: {
       },
     },
   )
+}
+
+// Create a lightweight tag ref at a commit. Used by the tag-mode submit flow
+// to push the submit/<UTC-timestamp>-<short-sha> tag with the user's token —
+// user pushes fire workflows, which is exactly the point (the runner's own
+// github.token tag pushes deliberately don't).
+export function createTagRefForRepo(params: {
+  client: GitHubClient
+  owner: string
+  repo: string
+  tag: string
+  commitSha: string
+}) {
+  const { client, owner, repo, tag, commitSha } = params
+
+  return client.request<GitHubRef>(`/repos/${owner}/${repo}/git/refs`, {
+    method: "POST",
+    body: {
+      ref: `refs/tags/${tag}`,
+      sha: commitSha,
+    },
+  })
+}
+
+// First submit/* tag pointing at `sha`, or null. The tag-mode submit flow
+// checks this before creating a fresh tag — mirroring the runner's ls-remote
+// idempotency check — so a retry after a tag-push failure reuses the existing
+// tag and the same commit never grades twice. matching-refs is a prefix match
+// (the prefix's slash needs encoding); the response carries each ref's target.
+// Paginated: a tag-mode repo accrues one submit/* tag per submission, so a
+// semester's worth easily exceeds one page — an unpaginated read would miss
+// the existing tag and mint a duplicate (one redundant graded run).
+export async function findSubmitTagAtSha(params: {
+  client: GitHubClient
+  owner: string
+  repo: string
+  sha: string
+}): Promise<string | null> {
+  const { client, owner, repo, sha } = params
+  const prefix = encodeURIComponent(SUBMISSION_TAG_PREFIX)
+  const refs = await paginateAll<GitHubRef>(
+    client,
+    (page) =>
+      `/repos/${owner}/${repo}/git/matching-refs/tags/${prefix}?per_page=100&page=${page}`,
+  )
+  for (const ref of refs) {
+    if (ref.object?.sha === sha) {
+      return ref.ref.replace(/^refs\/tags\//, "")
+    }
+  }
+  return null
 }
 
 // One entry in a git tree write. GitHub accepts either inline `content` or a

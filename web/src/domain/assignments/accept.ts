@@ -651,6 +651,7 @@ export async function acceptAssignment(params: {
             // Preliminary branch; the default shim is re-rendered post-create
             // with the assignment repo's actual default branch (below).
             branch: sourceBranch || "main",
+            submissionMode: assignment.submission_mode,
           }),
       )
   if (isEmptyRepo) {
@@ -812,9 +813,19 @@ export async function acceptAssignment(params: {
       org,
       resolvedBranch,
     )
-    autogradeYaml = defaultAutograderWorkflow(org, resolvedBranch, configBranch)
+    autogradeYaml = defaultAutograderWorkflow(
+      org,
+      resolvedBranch,
+      configBranch,
+      assignment.submission_mode,
+    )
     rerenderShim = (branch: string) =>
-      defaultAutograderWorkflow(org, branch, configBranch)
+      defaultAutograderWorkflow(
+        org,
+        branch,
+        configBranch,
+        assignment.submission_mode,
+      )
   }
 
   if (created.kind === "already-accepted") {

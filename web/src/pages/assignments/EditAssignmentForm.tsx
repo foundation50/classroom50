@@ -95,6 +95,7 @@ const EditAssignmentForm = ({
                   ? values.pass_threshold
                   : undefined,
                 student_permission: values.student_permission || undefined,
+                submission_mode: values.submission_mode,
                 repo_features: formValuesToRepoFeatures(values),
                 classroom,
                 tests: values.tests,

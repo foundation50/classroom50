@@ -100,6 +100,13 @@ class TestSchemaAccepts:
         assert _errors(_manifest(_entry(allowed_files=["*", "!hello.py"]))) == []
         assert _errors(_manifest(_entry(allowed_files=[]))) == []
 
+    def test_submission_mode_accepted(self):
+        # Both enum values are legal: writers omit every-push (the wire
+        # default) but other clients may write it explicitly, and readers
+        # must accept it. Absent is covered by test_minimal_manifest.
+        assert _errors(_manifest(_entry(submission_mode="tag"))) == []
+        assert _errors(_manifest(_entry(submission_mode="every-push"))) == []
+
     def test_container_with_ubuntu_runs_on(self):
         entry = _entry(runtime={"container": {"image": "x"}, "runs-on": "ubuntu-22.04"})
         assert _errors(_manifest(entry)) == []
@@ -348,6 +355,15 @@ class TestSchemaRejects:
     def test_locked_must_be_boolean(self):
         assert _errors(_manifest(_entry(locked="yes"))) != []
 
+    @pytest.mark.parametrize(
+        "submission_mode", ["Tag", "every_push", "push", "", None, True]
+    )
+    def test_bad_submission_mode(self, submission_mode):
+        # Only the two enum values are legal; the Go parser normalizes
+        # nothing here (unlike autograder), so clients must write exact
+        # values. Mirrors contract.SubmissionModes.
+        assert _errors(_manifest(_entry(submission_mode=submission_mode))) != []
+
 
 class TestEmptyRepo:
     def _bare_entry(self, **overrides):
@@ -391,6 +407,15 @@ class TestEmptyRepo:
 
     def test_empty_repo_rejects_pass_threshold(self):
         assert _errors(_manifest(self._bare_entry(pass_threshold=70))) != []
+
+    def test_empty_repo_rejects_submission_mode(self):
+        # A bare repo carries no autograde shim, so there is no trigger for
+        # submission_mode to configure. Mirrors Go's
+        # validateEmptyRepoExclusions.
+        assert _errors(_manifest(self._bare_entry(submission_mode="tag"))) != []
+        assert (
+            _errors(_manifest(self._bare_entry(submission_mode="every-push"))) != []
+        )
 
 
 def _release_assets_errors(value):

@@ -1,5 +1,6 @@
 import {
   Download,
+  GitBranch,
   GitCommitHorizontal,
   RefreshCw,
   ScrollText,
@@ -19,7 +20,10 @@ import { ReviewButton } from "@/pages/submissions/ReviewButton"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import useDownloadSubmission from "@/hooks/mutations/useDownloadSubmission"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import type { AssignmentMode } from "@/types/classroom"
+import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useSafeSubmit } from "@/hooks/useSafeSubmit"
+import { updateShimSubmissionMode } from "@/domain/assignments/submissionTrigger"
+import type { AssignmentMode, SubmissionMode } from "@/types/classroom"
 
 // Per-row regrade: dispatches regrade.yaml scoped to one owner, tracked via
 // useTriggerRegrade (icon shows progress; disabled while any regrade is in
@@ -285,6 +289,11 @@ export type SubmissionActionListProps = {
   // Opens the individual per-student access editor (stacked on the hub);
   // omitted for group rows (access is managed through the group Members editor).
   onManageAccess?: () => void
+  // The assignment's submission_mode, enabling the per-repo "Update
+  // autograding trigger" action (the single-repo twin of the bulk retrofit).
+  // Omitted (action hidden) for custom-autograder assignments — teacher-
+  // authored shims are never rewritten — and for non-owners.
+  submissionMode?: SubmissionMode
 }
 
 export const SubmissionActionList = ({
@@ -301,6 +310,7 @@ export const SubmissionActionList = ({
   emptyRepo,
   displayName,
   onManageAccess,
+  submissionMode,
 }: SubmissionActionListProps) => {
   const { t } = useTranslation()
   const commitHref = latestCommitHref ?? safeHttpUrl(commit)
@@ -354,6 +364,14 @@ export const SubmissionActionList = ({
             displayName={displayName}
             noRepo={!hasRepo}
           />
+          {submissionMode && (
+            <UpdateTriggerButton
+              org={org}
+              repo={repo}
+              submissionMode={submissionMode}
+              noRepo={!hasRepo}
+            />
+          )}
         </>
       )}
       <DownloadButton
@@ -364,6 +382,73 @@ export const SubmissionActionList = ({
         noRepo={!hasRepo}
       />
     </div>
+  )
+}
+
+// Per-row autograding-trigger retrofit: rewrite this one repo's shim to the
+// assignment's submission_mode — the single-repo twin of the bulk modal (for
+// a repo that was skipped/failed there, or a single late accepter). The
+// domain call is idempotent; the toast reports which outcome happened.
+const UpdateTriggerButton = ({
+  org,
+  repo,
+  submissionMode,
+  noRepo,
+}: {
+  org: string
+  repo: string
+  submissionMode: SubmissionMode
+  noRepo: boolean
+}) => {
+  const { t } = useTranslation()
+  const { notify } = useToast()
+  const client = useGitHubClient()
+  // `pending` drives the disabled state; the synchronous useSafeSubmit latch is
+  // the real re-entrancy guard (React state updates a render tick late, so two
+  // same-tick clicks would both pass a pending check and race duplicate shim
+  // commits — the loser 422s on the non-force ref update).
+  const run = useSafeSubmit()
+  const [pending, setPending] = useState(false)
+
+  const handleClick = async () => {
+    if (noRepo) return
+    setPending(true)
+    try {
+      const outcome = await updateShimSubmissionMode({
+        client,
+        org,
+        repo,
+        mode: submissionMode,
+      })
+      notify({
+        tone:
+          outcome.status === "updated" || outcome.status === "current"
+            ? "success"
+            : "warning",
+        message: t(`submissions.rowTrigger.outcome.${outcome.status}`),
+      })
+    } catch (err) {
+      notify({
+        tone: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : t("submissions.rowTrigger.outcome.failed"),
+      })
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <ActionListRow
+      icon={GitBranch}
+      title={t("submissions.rowTrigger.title")}
+      description={t("submissions.rowTrigger.description")}
+      onClick={() => void run(handleClick)}
+      disabled={noRepo || pending}
+      ariaLabel={t("submissions.rowTrigger.aria", { repo })}
+    />
   )
 }
 

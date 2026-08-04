@@ -2,11 +2,14 @@ import type { GitHubClient } from "@/github-core/client"
 import {
   createBlobForRepo,
   createCommitForAssignment,
+  createTagRefForRepo,
   createTreeFromFullEntries,
+  findSubmitTagAtSha,
   getRepoTreeRecursive,
   updateRefForRepo,
   type GitHubTreeEntryFull,
 } from "@/github-core/mutations"
+import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
 import { getRepo } from "@/github-core/repoReads"
 import {
   getBranchRefRepo,
@@ -17,6 +20,7 @@ import {
 import { prefixCommit } from "@/util/commit"
 import { fileToBase64 } from "@/util/fileBytes"
 import { mapWithConcurrency } from "@/util/concurrency"
+import type { SubmissionMode } from "@/types/classroom"
 
 // A file the student picked, with its repo-relative path. `path` is the drop's
 // relative path (or the bare name) — POSIX-normalized by the caller.
@@ -38,11 +42,33 @@ export type SubmitAssignmentResult = {
   commitSha: string
   branch: string
   fileCount: number
+  // The submit/* tag pushed (tag mode only; created fresh or reused when the
+  // commit already carries one).
+  tag?: string
+}
+
+// Tag-mode partial failure: the snapshot commit LANDED on the default branch
+// but the submit/* tag push (the write that triggers grading) failed. Callers
+// must not report this as an upload failure — the files are safe; only grading
+// wasn't triggered, and a retry reuses the landed commit via the tag probe.
+export class SubmitTagPushError extends Error {
+  readonly commitSha: string
+  constructor(commitSha: string, cause: unknown) {
+    super(
+      `Files were uploaded (commit ${commitSha}), but pushing the submit tag that triggers grading failed. Submit again to retry — the uploaded work is safe.`,
+    )
+    this.name = "SubmitTagPushError"
+    this.commitSha = commitSha
+    this.cause = cause
+  }
 }
 
 // Commit the uploaded files as a replace-all snapshot on the student repo's
 // default branch — the browser equivalent of `gh student submit`. The push
 // (authored with the user's OAuth token) fires on:push and triggers autograding.
+// For a tag-mode assignment (submission_mode: "tag") branch pushes are not
+// graded, so a submit/<UTC-timestamp>-<short-sha> tag is additionally pushed —
+// that tag push is what triggers grading.
 //
 // The new tree is AUTHORITATIVE (no base_tree), so prior files not re-uploaded
 // are dropped; the runner's control paths (.github/**, .classroom50.yaml) are
@@ -54,8 +80,9 @@ export async function submitAssignment(params: {
   repo: string
   assignment: string
   files: UploadFile[]
+  submissionMode?: SubmissionMode
 }): Promise<SubmitAssignmentResult> {
-  const { client, org, repo, assignment, files } = params
+  const { client, org, repo, assignment, files, submissionMode } = params
 
   if (files.length === 0) {
     throw new Error("No files selected to submit.")
@@ -173,7 +200,55 @@ export async function submitAssignment(params: {
     }
   })
 
+  // Tag-mode assignments grade ONLY on submit/* tag pushes, so push the tag
+  // with the user's token after the branch update (user pushes fire
+  // workflows). Outside the fresh-repo retry: the commit exists by now, and a
+  // tag-push failure must surface as its own actionable error, not re-run the
+  // whole snapshot. Reuse an existing submit/* tag at the same SHA (a retry,
+  // or a hand-pushed tag) so one commit never grades twice. Every-push
+  // assignments must NOT get a tag here — the branch push already grades.
+  if (submissionMode === "tag") {
+    const existing = await findSubmitTagAtSha({
+      client,
+      owner: org,
+      repo,
+      sha: result.commitSha,
+    }).catch(() => null) // probe failure → fall through to a fresh tag
+    if (existing) {
+      result.tag = existing
+    } else {
+      const tag = buildSubmitTag(result.commitSha)
+      try {
+        await createTagRefForRepo({
+          client,
+          owner: org,
+          repo,
+          tag,
+          commitSha: result.commitSha,
+        })
+      } catch (err) {
+        // The commit landed; only the grading trigger failed. Surface a typed
+        // error so the UI can say "uploaded but not graded — retry" instead of
+        // the false "couldn't upload your files".
+        throw new SubmitTagPushError(result.commitSha, err)
+      }
+      result.tag = tag
+    }
+  }
+
   return result
+}
+
+// The canonical submission tag for a commit: submit/<UTC-timestamp>-<short-sha>.
+// Byte-format-identical with the runner's tag-minting step and the CLI's
+// contract.BuildSubmitTag — the short-SHA suffix prevents collisions when two
+// submissions land in the same UTC second.
+export function buildSubmitTag(sha: string, now: Date = new Date()): string {
+  const ts = now
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z")
+    .replaceAll(":", "-")
+  return `${SUBMISSION_TAG_PREFIX}${ts}-${sha.slice(0, 7)}`
 }
 
 // Normalize a drop-relative path to a POSIX repo path: forward slashes, no

@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/foundation50/classroom50-cli-shared/contract"
 )
 
 func TestRenderEmbeddedShim(t *testing.T) {
@@ -13,7 +15,7 @@ func TestRenderEmbeddedShim(t *testing.T) {
 	// accept drops into every student repo. {{ORG}}, the submission branch, and
 	// the config-repo branch are the per-repo substitutions; everything else is
 	// fixed.
-	got := renderEmbeddedShim("cs50-fall-2026", "main", "main")
+	got := renderEmbeddedShim("cs50-fall-2026", "main", "main", "")
 
 	// Trigger contract: branch pushes auto-grade; manual submit/* tag pushes
 	// still work (the runner detects which fired and creates or reuses the tag).
@@ -74,7 +76,7 @@ func TestRenderEmbeddedShim_OrgSubstitution(t *testing.T) {
 	// matching anything else.
 	for _, org := range []string{"cs50-fall-2026", "foundation50", "very-long-org-name-2026"} {
 		t.Run(org, func(t *testing.T) {
-			got := renderEmbeddedShim(org, "main", "main")
+			got := renderEmbeddedShim(org, "main", "main", "")
 			wantUses := `uses: "` + org + `/classroom50/.github/workflows/autograde-runner.yaml@main"`
 			if !strings.Contains(got, wantUses) {
 				t.Errorf("expected %q in shim, got:\n%s", wantUses, got)
@@ -90,7 +92,7 @@ func TestRenderEmbeddedShim_BranchSubstitution(t *testing.T) {
 	// A master-default assignment repo must trigger on `master`; a config repo
 	// that stayed on `master` (rename didn't land) must be referenced via
 	// `@master` so the reusable-workflow ref resolves.
-	got := renderEmbeddedShim("cs50", "master", "master")
+	got := renderEmbeddedShim("cs50", "master", "master", "")
 	if !strings.Contains(got, `branches: ["master"]`) {
 		t.Errorf("expected branches: [\"master\"], got:\n%s", got)
 	}
@@ -100,12 +102,75 @@ func TestRenderEmbeddedShim_BranchSubstitution(t *testing.T) {
 	}
 
 	// Empty branch/configBranch default to main.
-	def := renderEmbeddedShim("cs50", "", "")
+	def := renderEmbeddedShim("cs50", "", "", "")
 	if !strings.Contains(def, `branches: ["main"]`) {
 		t.Errorf("empty branch should default to main, got:\n%s", def)
 	}
 	if !strings.Contains(def, "autograde-runner.yaml@main") {
 		t.Errorf("empty configBranch should default to main, got:\n%s", def)
+	}
+}
+
+func TestRenderEmbeddedShim_TagMode(t *testing.T) {
+	got := renderEmbeddedShim("cs50-fall-2026", "main", "main", contract.SubmissionModeTag)
+
+	// Tag mode keeps ONLY the submit/* tag trigger: a plain `git push` must
+	// not grade. The branch trigger line is removed whole — no leftover key.
+	if strings.Contains(got, "branches:") {
+		t.Errorf("tag-mode shim must not contain a branches: trigger:\n%s", got)
+	}
+	if !strings.Contains(got, `tags: ["submit/*"]`) {
+		t.Errorf("tag-mode shim missing the submit/* tag trigger:\n%s", got)
+	}
+
+	// Everything else is unchanged: uses: line, permissions, no placeholders.
+	wantUses := `uses: "cs50-fall-2026/classroom50/.github/workflows/autograde-runner.yaml@main"`
+	if !strings.Contains(got, wantUses) {
+		t.Errorf("tag-mode shim missing %q\nfull:\n%s", wantUses, got)
+	}
+	for _, ph := range []string{"{{ORG}}", "{{BRANCH}}", "{{CONFIG_BRANCH}}"} {
+		if strings.Contains(got, ph) {
+			t.Errorf("tag-mode shim still contains unsubstituted %s:\n%s", ph, got)
+		}
+	}
+	for _, perm := range []string{"contents: write", "statuses: write"} {
+		if !strings.Contains(got, perm) {
+			t.Errorf("tag-mode shim missing required permission %q\nfull:\n%s", perm, got)
+		}
+	}
+
+	// The removal is exactly one line: tag-mode output equals every-push
+	// output minus the substituted branch trigger line.
+	everyPush := renderEmbeddedShim("cs50-fall-2026", "main", "main", "")
+	wantTag := strings.Replace(everyPush, "    branches: [\"main\"]\n", "", 1)
+	if got != wantTag {
+		t.Errorf("tag-mode shim is not every-push minus the branch line:\ngot:\n%s\nwant:\n%s", got, wantTag)
+	}
+}
+
+// TestRenderEmbeddedShim_EveryPushByteIdentical pins that every non-tag mode
+// value — absent, the explicit wire default, and junk (validated upstream) —
+// renders the identical bytes, so introducing submission_mode changed nothing
+// for existing assignments.
+func TestRenderEmbeddedShim_EveryPushByteIdentical(t *testing.T) {
+	base := renderEmbeddedShim("cs50", "main", "main", "")
+	for _, mode := range []string{contract.SubmissionModeEveryPush, "unvalidated-junk"} {
+		if got := renderEmbeddedShim("cs50", "main", "main", mode); got != base {
+			t.Errorf("mode %q rendered different bytes than the default", mode)
+		}
+	}
+}
+
+// TestShimBranchTriggerLine_MatchesEmbed guards the line-surgery constant
+// against embed drift: if autograde-shim.yaml's trigger line changes shape,
+// tag mode would silently stop removing it (falling back to an every-push
+// shim). Fail here instead.
+func TestShimBranchTriggerLine_MatchesEmbed(t *testing.T) {
+	if !strings.Contains(embeddedShimContent, shimBranchTriggerLine) {
+		t.Fatalf("embed/autograde-shim.yaml no longer contains the exact branch trigger line %q — update shimBranchTriggerLine in lockstep", shimBranchTriggerLine)
+	}
+	if strings.Count(embeddedShimContent, shimBranchTriggerLine) != 1 {
+		t.Fatalf("branch trigger line appears more than once in the embed; single-occurrence surgery would remove the wrong one")
 	}
 }
 

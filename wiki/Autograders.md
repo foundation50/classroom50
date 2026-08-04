@@ -27,11 +27,32 @@ maintenance.
 
 ## Which commits grade
 
-The shim triggers on two events:
+What triggers grading is a **per-assignment choice** (`submission_mode` in
+assignments.json, settable at creation or later from the assignment settings /
+`gh teacher assignment add --submission-mode` / `gh teacher assignment
+submission-mode`):
+
+**`every-push` (the default)** — the shim triggers on two events:
 
 - **Push to the default branch** — every commit grades, **except the acceptance
   commit** (the one that introduced `.classroom50.yaml`, with nothing on top).
 - **Push of a `submit/*` tag** — manual tag pushes work too.
+
+**`tag`** — the shim triggers **only** on `submit/*` tag pushes. A plain
+`git push` runs nothing and costs no Actions minutes — the cost lever for
+large cohorts. Submissions become an explicit act:
+
+- `gh student submit` and the web submit page push a
+  `submit/<UTC-timestamp>-<short-sha>` tag after the branch commit — that tag
+  push is what grades.
+- A hand-pushed tag works exactly the same: `git tag submit/anything && git
+  push origin submit/anything`. Any tag under `submit/` grades; no CLI
+  required.
+
+Because the trigger lives in each student repo's shim (GitHub evaluates a
+workflow's `on:` block before any job runs), **changing the mode after repos
+exist requires retrofitting each repo's shim** — see
+[Changing the trigger on existing repos](#changing-the-trigger-on-existing-repos).
 
 <details>
 <summary>Why the acceptance commit is skipped</summary>
@@ -44,6 +65,48 @@ than risk dropping a real submission. Your first `gh student submit` always
 stacks a fresh commit, so it's never mistaken for the acceptance.
 
 </details>
+
+<details>
+<summary>Tag-mode defenses in the runner</summary>
+
+Two guards keep tag mode honest even when a repo's shim is stale:
+
+- **Stale-shim suppression** — a repo accepted before the mode flipped to
+  `tag` (or whose retrofit failed) still carries the every-push trigger. The
+  runner reads `submission_mode` from the published assignments.json at setup
+  time and, when the assignment is tag-mode but the run was branch-triggered,
+  skips tagging and grading, posting an explicit `classroom50/autograde`
+  success status: *"tag-mode assignment — push not graded; run gh student
+  submit"*.
+- **Retrofit-commit skip** — the teacher-side shim update commits with
+  `[skip ci]`, so it fires no workflow. As a backstop (e.g., a client that
+  dropped the marker), the runner also recognizes a tip commit touching ONLY
+  `.github/workflows/autograde.yaml` and skips it with the status
+  *"autograder trigger updated — nothing to grade"*.
+
+</details>
+
+## Changing the trigger on existing repos
+
+The shim is written at accept time and otherwise never changes, so flipping
+`submission_mode` on an assignment with accepted repos needs a retrofit:
+
+- **CLI**: `gh teacher assignment submission-mode <org> <classroom> <slug>
+  --tag` (or `--every-push`) flips the field AND rewrites the shim across
+  every student repo (add `--user <login>` for one repo, `--dry-run` to
+  preview). Requires the `workflow` OAuth scope
+  (`gh auth refresh -s workflow`).
+- **Web**: change the trigger on the assignment settings page, then run
+  **Update autograding triggers** from the submissions page's actions menu
+  (or per-repo from a row's manage dialog).
+
+The rewrite is surgical — only the trigger lines change; a shim a student
+hand-edited is reported and left untouched. **Custom (non-default)
+autograders are never rewritten**: you own their `on:` block; edit it
+yourself and use `--update-shims=false` to flip only the field.
+
+After a retrofit, students must `git pull` — clones made before the change
+will conflict on their next push.
 
 ## The `result.json` contract
 
