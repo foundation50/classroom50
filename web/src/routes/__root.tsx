@@ -15,12 +15,14 @@ import { LOG_SCOPE_ROUTER } from "@/lib/logScopes"
 const log = logger.scope(LOG_SCOPE_ROUTER)
 
 const RootComponent = () => {
-  // Scope "view as" to the current org (reset across orgs via the key); the
-  // provider re-syncs on classroom change. Reading params at the root keeps the
-  // provider inside the router.
+  // Scope "view as" to the current org+classroom. The provider re-syncs on
+  // org/classroom change (no React `key`) so it stays mounted across
+  // navigation — keeping the persistent app shell alive so its sidebar can
+  // animate menu-level swaps. Reading params at the root keeps the provider
+  // inside the router.
   const { org, classroom } = useParams({ strict: false })
   return (
-    <RoleViewProvider key={org ?? "no-org"} org={org} classroom={classroom}>
+    <RoleViewProvider org={org} classroom={classroom}>
       <Outlet />
     </RoleViewProvider>
   )
