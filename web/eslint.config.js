@@ -221,6 +221,14 @@ export default defineConfig([
       "no-console": "off",
     },
   },
+  // Build/report scripts are node CLIs, not app code: console is their output
+  // channel and they're outside the src/ layer graph.
+  {
+    files: ["scripts/**/*.{ts,tsx}"],
+    rules: {
+      "no-console": "off",
+    },
+  },
   // Enforce the layered architecture (features -> components -> domain ->
   // github-core -> util/types, strictly downward) by disallowing the
   // load-bearing inversions. `default: allow` + explicit disallows (not
