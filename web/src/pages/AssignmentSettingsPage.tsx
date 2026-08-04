@@ -189,7 +189,7 @@ const AssignmentSettingsPage = () => {
   )
 
   return (
-    <PageShell selected="assignments">
+    <PageShell>
       <Breadcrumb endpoint={t("documentTitle.assignmentSettings")} />
       <AnimatedAlert tone="error" show={!!editError}>
         {editError}

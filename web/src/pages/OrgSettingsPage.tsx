@@ -576,7 +576,7 @@ const OrgSettingsPage = () => {
   const highlightedId = useHashSectionHighlight()
 
   return (
-    <PageShell page="classes" settings selected="settings">
+    <PageShell>
       <RequireRole allow="owner">
         <PageHeader
           title={t("orgSettings.page.heading")}

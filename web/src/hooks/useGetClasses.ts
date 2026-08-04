@@ -16,6 +16,10 @@ const useGetClasses = (org: string | undefined) => {
           (c) => c.type === "dir" && c.name !== ".github",
         )
       : [],
+    // Surfaced so a caller can show a loading state instead of flashing its
+    // empty state: an empty `classes` array during the fetch is otherwise
+    // indistinguishable from a genuinely empty org.
+    isLoading: classesQuery.isLoading,
   }
 }
 

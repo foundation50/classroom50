@@ -37,7 +37,7 @@ import {
   User,
 } from "lucide-react"
 import OrgDetailsModal from "@/components/modals/OrgDetailsModal"
-import { AnimatePresence } from "motion/react"
+import { AnimatePresence, motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
@@ -46,6 +46,7 @@ import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
 import { EnterDiv, PresenceCardDiv } from "@/lib/motionComponents"
+import { listStagger } from "@/lib/motion"
 import { orgListPrefs, type OrgSortKey } from "@/lib/orgListPrefs"
 import { useListPrefsState } from "@/lib/listPrefs"
 import { formatRelativeToNow } from "@/util/formatDate"
@@ -575,7 +576,7 @@ const OrgsPage = () => {
 
   return (
     <>
-      <PageShell page="orgs">
+      <PageShell>
         {isLoading ? (
           <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
             <Spinner size="lg" className="text-primary" />
@@ -658,8 +659,13 @@ const OrgsPage = () => {
                 onClear={() => setSearch("")}
               />
             ) : sorted.length > 0 ? (
-              <div className="grid grid-cols-12 gap-4">
-                <AnimatePresence mode="popLayout" initial={false}>
+              <motion.div
+                className="grid grid-cols-12 gap-4"
+                variants={listStagger}
+                initial="initial"
+                animate="animate"
+              >
+                <AnimatePresence mode="popLayout">
                   {sorted.map((summary) => {
                     const updatedIso = lastModified[summary.org.login]
                     const updatedAgo = updatedIso
@@ -682,7 +688,7 @@ const OrgsPage = () => {
                     )
                   })}
                 </AnimatePresence>
-              </div>
+              </motion.div>
             ) : needsSetupOrgs.length > 0 ? (
               <EmptyState
                 title={t("orgs.setUpFirst.title")}

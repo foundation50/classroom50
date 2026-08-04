@@ -3,7 +3,12 @@
 // and the per-context composers); this file preserves the original public
 // surface so `@/components/drawer` importers are unchanged.
 export { default } from "./collapseContext"
-export { DrawerContent, DrawerToggle, DrawerSidebar } from "./DrawerChrome"
+export {
+  AppShell,
+  DrawerContent,
+  DrawerToggle,
+  DrawerSidebar,
+} from "./DrawerChrome"
 export { ClassroomLogo, AllClasses, SidebarClassInfo } from "./primitives"
 export { StaffSidebarMenu } from "./StaffSidebarMenu"
 export { SidebarFooter } from "./SidebarFooter"

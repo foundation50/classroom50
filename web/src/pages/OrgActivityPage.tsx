@@ -5,10 +5,10 @@ import { useQuery } from "@tanstack/react-query"
 import Papa from "papaparse"
 import { Activity } from "lucide-react"
 
-import { AnimatedAlert, Card, Spinner, Button } from "@/components/ui"
+import { AnimatedAlert, Card, Button } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
-import { EmptyState } from "@/components/list"
+import { EmptyState, SkeletonRows } from "@/components/list"
 import RequireRole from "@/components/RequireRole"
 import { DiagnosticsDialog } from "@/components/DiagnosticsDialog"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -119,7 +119,7 @@ const OrgActivityPage = () => {
     filters.types.size > 0
 
   return (
-    <PageShell page="classes" selected="activity">
+    <PageShell>
       <RequireRole allow="owner">
         <PageHeader
           title={t("orgActivity.heading")}
@@ -154,10 +154,9 @@ const OrgActivityPage = () => {
 
         {items.length === 0 ? (
           loading ? (
-            <div className="mt-4 flex items-center justify-center gap-3 px-6 py-12 text-base-content/70">
-              <Spinner size="md" />
-              <span className="text-sm">{t("orgActivity.loading")}</span>
-            </div>
+            <Card className="mt-4 w-full overflow-hidden" aria-busy>
+              <SkeletonRows rows={6} />
+            </Card>
           ) : (
             <EmptyState
               className="mt-4 rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center"

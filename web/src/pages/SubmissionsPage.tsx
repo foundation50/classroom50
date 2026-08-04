@@ -799,7 +799,7 @@ const SubmissionsPageContent = () => {
   }
 
   return (
-    <PageShell selected="assignments">
+    <PageShell>
       <Breadcrumb endpoint={t("nav.submissions")} />
       {emptyRoster.show && (
         <EmptyRosterNotice

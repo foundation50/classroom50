@@ -161,7 +161,7 @@ const ClassesPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.classes"))
   const { org } = useParams({ strict: false })
-  const { classes } = useGetClasses(org)
+  const { classes, isLoading: classesLoading } = useGetClasses(org)
   const { isStaff, isNonStaff, isLoading: roleLoading } = useOrgStaff(org)
   const { data: membership, isLoading: loadingMembership } =
     useGetOwnOrgMembership(org)
@@ -179,7 +179,7 @@ const ClassesPage = () => {
   }
 
   return (
-    <PageShell page="classes" selected="assignments">
+    <PageShell>
       <PageHeader
         loading={roleLoading}
         title={isStaff ? t("classes.myClasses") : t("classes.myAssignments")}
@@ -190,7 +190,10 @@ const ClassesPage = () => {
         <JoinOrgCard org={org} />
       )}
       {isOwner && <OrgPreflightNotice org={org} />}
-      {roleLoading ? (
+      {/* Hold the skeleton until BOTH the role and (for staff) the class list
+          resolve — otherwise a staff view flashes the "no classrooms" empty
+          state on the empty-while-loading array before the classes arrive. */}
+      {roleLoading || (isStaff && classesLoading) ? (
         <div className="grid grid-cols-12 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <div

@@ -1,16 +1,15 @@
 import { useParams } from "@tanstack/react-router"
 import useGetClassroom from "@/hooks/useGetClassroom"
-import {
-  ClassroomLogo,
-  ExpandSidebarButton,
-  AllClasses,
-  SidebarClassInfo,
-} from "./primitives"
+import { AllClasses, SidebarClassInfo } from "./primitives"
 import { AssignmentSidebarMenu } from "./AssignmentSidebarMenu"
 import { StaffSidebarMenu } from "./StaffSidebarMenu"
-import { SidebarFooter } from "./SidebarFooter"
 import { MyClasses } from "./MyClasses"
 import { MyOrgs } from "./MyOrgs"
+
+// Level bodies only (no logo/footer chrome — that stays mounted in
+// DrawerSidebar, outside the AnimatePresence that swaps these). Each composer
+// renders the menu for one nav level; DrawerSidebar cross-fades between them on
+// a level change.
 
 export const SidebarContent = ({ selected }: { selected: string }) => {
   const { org, classroom, assignment } = useParams({ strict: false })
@@ -20,29 +19,21 @@ export const SidebarContent = ({ selected }: { selected: string }) => {
   // actions (and a back link) instead of the classroom menu.
   if (org && classroom && assignment) {
     return (
-      <>
-        <ClassroomLogo />
-        <ExpandSidebarButton />
-        <AssignmentSidebarMenu
-          org={org}
-          classroom={classroom}
-          assignment={assignment}
-        />
-        <SidebarFooter />
-      </>
+      <AssignmentSidebarMenu
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+      />
     )
   }
 
   return (
     <>
-      <ClassroomLogo />
-      <ExpandSidebarButton />
       {org && <AllClasses org={org} />}
       <SidebarClassInfo classInfo={classData} />
       {org && classroom && (
         <StaffSidebarMenu selected={selected} org={org} classroom={classroom} />
       )}
-      <SidebarFooter />
     </>
   )
 }
@@ -54,23 +45,9 @@ export const SidebarContentClasses = ({
   selected: string
   settings?: boolean
 }) => {
-  return (
-    <>
-      <ClassroomLogo />
-      <ExpandSidebarButton />
-      <MyClasses selected={selected} settings={settings} />
-      <SidebarFooter />
-    </>
-  )
+  return <MyClasses selected={selected} settings={settings} />
 }
 
 export const SidebarContentOrgs = ({ selected }: { selected: string }) => {
-  return (
-    <>
-      <ClassroomLogo />
-      <ExpandSidebarButton />
-      <MyOrgs settings={selected === "settings"} />
-      <SidebarFooter />
-    </>
-  )
+  return <MyOrgs settings={selected === "settings"} />
 }

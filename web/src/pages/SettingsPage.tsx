@@ -134,7 +134,7 @@ const SettingsPage = () => {
   const highlightedId = useHashSectionHighlight()
 
   return (
-    <PageShell page="orgs" selected="settings">
+    <PageShell>
       <PageHeader
         title={t("settings.page.heading")}
         subtitle={t("settings.page.subheading")}

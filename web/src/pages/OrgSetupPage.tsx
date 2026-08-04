@@ -354,7 +354,7 @@ const OrgSetupPage = () => {
   }
 
   return (
-    <PageShell page="classes" selected="assignments">
+    <PageShell>
       <PageHeader
         title={t("setup.pageHeading")}
         subtitle={t("setup.pageSubheading")}

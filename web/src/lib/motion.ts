@@ -22,6 +22,16 @@ export const staggerTransition = (index: number): Transition => ({
   delay: Math.min(index, 8) * 0.06,
 })
 
+// Parent container that orchestrates a staggered entrance for its motion
+// children WITHOUT threading an index into each: set on a `motion` wrapper with
+// `initial="initial" animate="animate"`, and children using `enterExit` (same
+// variant keys) cascade in. Preferred over per-child `staggerTransition` when
+// the children can't take a `transition` prop (e.g. wrapped in a typed <Card>).
+export const listStagger: Variants = {
+  initial: {},
+  animate: { transition: { staggerChildren: 0.06 } },
+}
+
 export const enterExit: Variants = {
   initial: { opacity: 0, scale: 0.96 },
   animate: {
@@ -99,4 +109,46 @@ export const crossFade: Variants = {
   initial: { opacity: 0 },
   animate: { opacity: 1, transition: { duration: DURATION.base } },
   exit: { opacity: 0, transition: { duration: DURATION.fast } },
+}
+
+// Sidebar active-highlight glide. The pill is a single shared-`layoutId`
+// element, so switching pages FLIP-tweens it from the old row to the new one
+// (a spring reads more like a physical slider than a linear ease here).
+export const sidebarPillTransition: Transition = {
+  type: "spring",
+  stiffness: 520,
+  damping: 42,
+  mass: 0.7,
+}
+
+// Level swap for the sidebar menu (orgs -> classes -> classroom -> assignment):
+// the outgoing menu fades out while the incoming one slides in from a small
+// horizontal offset, reading as "descending into" the next level.
+export const sidebarLevelVariants: Variants = {
+  initial: { opacity: 0, x: 8 },
+  animate: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: DURATION.slow, ease: EASE_OUT },
+  },
+  exit: {
+    opacity: 0,
+    x: -8,
+    transition: { duration: DURATION.fast, ease: EASE_OUT },
+  },
+}
+
+// Page-content entrance for a route swap in the persistent shell: a gentle
+// fade + short rise so a new view eases in rather than snapping. Enter-only (no
+// exit): the consumer (PageTransition) remounts it per route via a `key` rather
+// than wrapping it in AnimatePresence, so there's no exit to wait on and the
+// incoming page is never held behind an outgoing one. Kept subtle so it layers
+// cleanly over per-page skeletons.
+export const pageContentVariants: Variants = {
+  initial: { opacity: 0, y: 6 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: DURATION.slow, ease: EASE_OUT },
+  },
 }

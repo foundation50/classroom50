@@ -68,7 +68,7 @@ const CreateAssignmentPage = () => {
     return <MissingParams message={t("assignments.missingOrgOrClassroom")} />
   }
   return (
-    <PageShell selected="assignments">
+    <PageShell>
       <Breadcrumb endpoint={t("assignments.createBreadcrumb")} />
       <RequireRole allow="author">
         <PageHeader title={t("assignments.createHeading")} />

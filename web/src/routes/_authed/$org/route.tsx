@@ -9,10 +9,7 @@ import {
 import { Spinner } from "@/components/Spinner"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useOrgClassroom50Status } from "@/hooks/useOrgClassroom50Status"
-import {
-  GitHubOrgRoleProvider,
-  useGitHubOrgRole,
-} from "@/context/githubOrgRole/GitHubOrgRoleProvider"
+import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/authz"
 
 export const Route = createFileRoute("/_authed/$org")({
@@ -23,16 +20,10 @@ export const Route = createFileRoute("/_authed/$org")({
 // initialized is sent to setup instead of landing on empty pages that 404 under
 // the hood. Students/non-admins are never redirected — a 404 on the private
 // config repo is expected for them, so gating would lock them out of their org.
+//
+// The org role provider now wraps the `_authed` shell above this route, so this
+// layout reads the role directly (no local provider needed).
 function OrgLayout() {
-  const { org } = useParams({ from: "/_authed/$org" })
-  return (
-    <GitHubOrgRoleProvider org={org}>
-      <OrgLayoutInner />
-    </GitHubOrgRoleProvider>
-  )
-}
-
-function OrgLayoutInner() {
   const { org } = useParams({ from: "/_authed/$org" })
   // Match the setup route by matched-route id, not a pathname suffix: a suffix
   // check (endsWith("/setup")) both collides with any path segment named
@@ -43,8 +34,8 @@ function OrgLayoutInner() {
   })
 
   const { isLoading: loadingMembership } = useGetOwnOrgMembership(org)
-  // Gate on the org-role capability (provider mounted by OrgLayout) rather than
-  // re-deriving the admin literal from membership.
+  // Gate on the org-role capability (from the shell's provider above) rather
+  // than re-deriving the admin literal from membership.
   const { githubOrgRole } = useGitHubOrgRole()
   const isAdmin = can("manageOrg", { githubOrgRole })
 

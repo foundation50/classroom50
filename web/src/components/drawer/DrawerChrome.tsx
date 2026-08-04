@@ -1,23 +1,65 @@
 import { Menu } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { type ReactNode } from "react"
-import { MOBILE_DRAWER_ID, useSidebarCollapse } from "./collapseContext"
+import { Outlet, useRouterState } from "@tanstack/react-router"
+import { AnimatePresence, motion } from "motion/react"
+import Drawer, { MOBILE_DRAWER_ID, useSidebarCollapse } from "./collapseContext"
 import {
   SidebarContent,
   SidebarContentClasses,
   SidebarContentOrgs,
 } from "./SidebarContent"
+import { ClassroomLogo, ExpandSidebarButton } from "./primitives"
+import { SidebarFooter } from "./SidebarFooter"
+import { useSidebarNav } from "./useSidebarNav"
+import { sidebarLevelVariants, pageContentVariants } from "@/lib/motion"
 
-export const DrawerContent = ({
-  children,
-  className,
-}: {
-  children: ReactNode
-  className?: string
-}) => {
+// Replays a subtle enter animation on each route swap. Keying the motion element
+// by pathname remounts it, so it plays `initial -> animate` once per navigation
+// — no AnimatePresence/exit, so the incoming page never waits behind an outgoing
+// one (navigation stays instant). Banners stay outside this so they don't
+// re-animate on every navigation.
+const PageTransition = ({ children }: { children: ReactNode }) => {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  return (
+    <motion.div
+      key={pathname}
+      variants={pageContentVariants}
+      initial="initial"
+      animate="animate"
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+// Persistent app shell: the drawer chrome + rail mount ONCE here and page
+// content flows through <Outlet/>, so navigating between pages swaps only the
+// content while the sidebar (and its motion `layoutId` highlight) stays mounted
+// and glides. Rendered by the `_authed` layout route. `topSlot` is app-wide
+// chrome (banners) that renders above page content, inside the scroll area.
+export const AppShell = ({ topSlot }: { topSlot?: ReactNode }) => (
+  <div className="min-h-screen">
+    <Drawer>
+      <DrawerToggle />
+      <DrawerContent>
+        {topSlot}
+        <PageTransition>
+          <Outlet />
+        </PageTransition>
+      </DrawerContent>
+      <DrawerSidebar />
+    </Drawer>
+  </div>
+)
+
+export const DrawerContent = ({ children }: { children: ReactNode }) => {
   const { t } = useTranslation()
   return (
-    <div className={`${className} drawer-content`}>
+    // The base background + full-height live here (not on the per-page frame) so
+    // it always covers the viewport even when a page's content is shorter than
+    // the window — the page frame (PageShell) only owns padding on top of this.
+    <div className="drawer-content min-h-screen bg-base-200">
       <a
         href="#main-content"
         className="btn btn-primary btn-sm sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-50"
@@ -40,13 +82,19 @@ export const DrawerToggle = () => (
   <input id={MOBILE_DRAWER_ID} type="checkbox" className="drawer-toggle" />
 )
 
-export const DrawerSidebar = ({
-  selected = "",
-  page = "",
-  settings = false,
-}) => {
+// The rail lives in the persistent `_authed` shell, so it derives its active
+// state from the current route (see useSidebarNav) rather than per-page props.
+// Two coordinated animations live here:
+//   - The active-row highlight is a single motion `layoutId` pill that stays
+//     mounted across navigations and glides between rows (see SidebarItemBody).
+//   - The menu BODY swaps on a level change (orgs -> classes -> classroom ->
+//     assignment) via one AnimatePresence keyed by `levelKey`. The chrome (logo,
+//     expand button, footer) sits OUTSIDE that presence so it stays put while
+//     only the menu cross-fades/slides.
+export const DrawerSidebar = () => {
   const { collapsed } = useSidebarCollapse()
   const { t } = useTranslation()
+  const { page, selected, settings, levelKey } = useSidebarNav()
   return (
     <div className="drawer-side z-40">
       <label
@@ -62,13 +110,26 @@ export const DrawerSidebar = ({
             : "w-60 min-w-30 [&>div]:px-6"
         }`}
       >
-        {page === "classes" ? (
-          <SidebarContentClasses selected={selected} settings={settings} />
-        ) : page === "orgs" ? (
-          <SidebarContentOrgs selected={selected} />
-        ) : (
-          <SidebarContent selected={selected} />
-        )}
+        <ClassroomLogo />
+        <ExpandSidebarButton />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={levelKey}
+            variants={sidebarLevelVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
+            {page === "classes" ? (
+              <SidebarContentClasses selected={selected} settings={settings} />
+            ) : page === "orgs" ? (
+              <SidebarContentOrgs selected={selected} />
+            ) : (
+              <SidebarContent selected={selected} />
+            )}
+          </motion.div>
+        </AnimatePresence>
+        <SidebarFooter />
       </nav>
     </div>
   )

@@ -35,6 +35,7 @@ export const StaffSidebarMenu = ({
               label={t("nav.assignments")}
               icon={<BookText aria-hidden="true" />}
               active={selected === "assignments"}
+              groupId="staff"
             />
           </Link>
         </Tip>
@@ -55,6 +56,7 @@ export const StaffSidebarMenu = ({
                     label={t("nav.roster")}
                     icon={<UsersRound aria-hidden="true" />}
                     active={selected === "roster"}
+                    groupId="staff"
                   />
                 </Link>
               </Tip>
@@ -68,6 +70,7 @@ export const StaffSidebarMenu = ({
                       label={t("nav.settings")}
                       icon={<Settings aria-hidden="true" />}
                       active={selected === "settings"}
+                      groupId="staff"
                     />
                   </Link>
                 </Tip>

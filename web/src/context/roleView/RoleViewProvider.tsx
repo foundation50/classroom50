@@ -47,8 +47,10 @@ function readStored(
   return raw === "hta" || raw === "ta" || raw === "student" ? raw : null
 }
 
-// Scoped to one org (remounts on org change via `key`) and one classroom
-// (re-synced below), so the preview never leaks across orgs or classrooms.
+// Scoped to one org + classroom (re-synced below on either change), so the
+// preview never leaks across orgs or classrooms. Stays mounted across
+// navigation so the persistent app shell isn't torn down on an org/classroom
+// switch.
 export function RoleViewProvider({
   org,
   classroom,
@@ -61,13 +63,17 @@ export function RoleViewProvider({
     readStored(org, classroom),
   )
 
-  // On classroom change (the provider stays mounted across intra-org
-  // navigation), re-read this classroom's stored preview so one set in classroom
-  // A never bleeds into classroom B.
-  const prevClassroomRef = useRef(classroom)
+  // Re-read the stored preview whenever the org OR classroom changes (the
+  // provider now stays mounted across org and classroom navigation, so it can't
+  // rely on a remount to reset). Keeping it mounted lets the persistent app
+  // shell's sidebar animate the menu-level swap on those navigations. The lens
+  // stays isolated per org+classroom: a preview set in one never bleeds into
+  // another, and org-less routes read `null` (inert).
+  const prevScopeRef = useRef(keyFor(org, classroom))
   useEffect(() => {
-    if (prevClassroomRef.current !== classroom) {
-      prevClassroomRef.current = classroom
+    const scope = keyFor(org, classroom)
+    if (prevScopeRef.current !== scope) {
+      prevScopeRef.current = scope
       setViewAsState(readStored(org, classroom))
     }
   }, [org, classroom])

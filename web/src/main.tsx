@@ -17,6 +17,7 @@ import { NotificationProvider } from "./context/notifications/NotificationProvid
 import { HiddenOrgsProvider } from "./context/hiddenOrgs/HiddenOrgsProvider"
 import { ActionActivityProvider } from "./context/actions/ActionActivityProvider"
 import { ActionsBanner } from "./components/status/ActionsBanner"
+import { RouteProgressBar } from "./components/status/RouteProgressBar"
 import { LanguagePackUpdateToaster } from "./components/settings/LanguagePackUpdateToaster"
 import App from "./App"
 import { appVersion, formatAppVersion } from "./version"
@@ -89,6 +90,7 @@ createRoot(document.getElementById("root")!).render(
             <ActionActivityProvider>
               <NotificationProvider>
                 <HiddenOrgsProvider>
+                  <RouteProgressBar />
                   <App />
                   <ActionsBanner />
                   <LanguagePackUpdateToaster />

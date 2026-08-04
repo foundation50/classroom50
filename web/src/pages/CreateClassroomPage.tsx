@@ -44,7 +44,7 @@ const CreateClassroomPage = () => {
   }
 
   return (
-    <PageShell page="classes" selected="classes">
+    <PageShell>
       <Breadcrumb endpoint={t("documentTitle.newClassroom")} />
       <RequireRole allow="owner">
         <PageHeader title={t("classes.createTitle")} />
