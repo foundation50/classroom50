@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { GitHubAPIError } from "@/github-core/errors"
 import { clearActivity, recordError } from "@/lib/activity/activityStore"
@@ -9,6 +9,7 @@ import { buildDiagnostics } from "./snapshot"
 afterEach(() => {
   clearActivity()
   clearObservedContext()
+  vi.unstubAllEnvs()
 })
 
 describe("buildDiagnostics", () => {
@@ -24,6 +25,16 @@ describe("buildDiagnostics", () => {
   it("marks a dev-server build so it isn't mistaken for a release", () => {
     // Vitest runs with import.meta.env.DEV === true.
     expect(buildDiagnostics()).toContain("LOCAL DEV SERVER")
+  })
+
+  it("flags a preview build so it isn't read as production", () => {
+    // A non-dev build served from the preview host resolves to "preview".
+    vi.stubEnv("DEV", false)
+    vi.stubGlobal("location", new URL("https://preview.classroom50.org/"))
+    const text = buildDiagnostics()
+    expect(text).toContain("PREVIEW (preview.classroom50.org)")
+    expect(text).not.toContain("LOCAL DEV SERVER")
+    vi.unstubAllGlobals()
   })
 
   it("reports the granted scopes and any missing scope gap", () => {

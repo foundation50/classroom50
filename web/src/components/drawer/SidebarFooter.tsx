@@ -33,6 +33,7 @@ import { AboutDialog } from "@/components/AboutDialog"
 import { githubOrgUrl } from "@/util/orgUrl"
 import { WIKI_URL } from "@/version"
 import { useSidebarCollapse } from "./collapseContext"
+import { DeployEnvBadge } from "./DeployEnvBadge"
 
 export const SidebarFooter = () => {
   const { signOut, user } = useGithubAuth()
@@ -181,6 +182,7 @@ export const SidebarFooter = () => {
           )}
         </a>
       ) : null}
+      <DeployEnvBadge pushToBottom={!org} />
       <div
         ref={footerRef}
         className={`relative cursor-pointer border-t border-neutral-content/20 py-3 transition-colors hover:bg-[var(--sidebar-surface)]/60 ${org ? "" : "mt-auto"}`}
