@@ -49,6 +49,44 @@ const STATUS_TONE: Record<ContrastStatus, BadgeTone> = {
   exempt: "neutral",
 }
 
+type VpatConformance =
+  "supports" | "partially" | "doesNotSupport" | "notApplicable" | "notEvaluated"
+
+type VpatCriterion = {
+  id: string
+  name: string
+  level: "A" | "AA" | "AAA"
+  principle: string
+  status: VpatConformance
+  remark: string
+}
+
+type Vpat = {
+  schema: string
+  product: string
+  generated: string
+  summary: {
+    total: number
+    byStatus: Record<VpatConformance, number>
+  }
+  criteria: VpatCriterion[]
+}
+
+const VPAT_TONE: Record<VpatConformance, BadgeTone> = {
+  supports: "success",
+  partially: "warning",
+  doesNotSupport: "error",
+  notApplicable: "neutral",
+  notEvaluated: "neutral",
+}
+
+const PRINCIPLE_ORDER = [
+  "Perceivable",
+  "Operable",
+  "Understandable",
+  "Robust",
+] as const
+
 // A live preview of the pair — the actual foreground text on the actual
 // surface. Rendered as a button that opens the detail modal.
 function ColorPreviewButton({ row, onOpen }: { row: Row; onOpen: () => void }) {
@@ -241,6 +279,132 @@ function ThemeTable({
   )
 }
 
+function VpatConformanceTable({ vpat }: { vpat: Vpat }) {
+  const { t } = useTranslation()
+  const byPrinciple = PRINCIPLE_ORDER.map((principle) => ({
+    principle,
+    rows: vpat.criteria.filter((c) => c.principle === principle),
+  })).filter((g) => g.rows.length > 0)
+
+  return (
+    <Card radius="xl" shadow={false}>
+      <Card.Body className="gap-4 p-4">
+        {byPrinciple.map(({ principle, rows }) => (
+          <div key={principle} className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold">{principle}</h3>
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th>{t("accessibility.vpat.col.criterion")}</th>
+                    <th>{t("accessibility.vpat.col.level")}</th>
+                    <th>{t("accessibility.vpat.col.conformance")}</th>
+                    <th>{t("accessibility.vpat.col.remarks")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((c) => (
+                    <tr key={c.id}>
+                      <td className="whitespace-nowrap">
+                        <span className="font-mono text-xs">{c.id}</span>{" "}
+                        {c.name}
+                      </td>
+                      <td className="font-mono text-xs">{c.level}</td>
+                      <td>
+                        <Badge tone={VPAT_TONE[c.status]}>
+                          {t(`accessibility.vpat.status.${c.status}`)}
+                        </Badge>
+                      </td>
+                      <td className="text-xs text-base-content/70">
+                        {c.remark}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </Card.Body>
+    </Card>
+  )
+}
+
+function VpatSection() {
+  const { t } = useTranslation()
+  const [vpat, setVpat] = useState<Vpat | null>(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    fetch("/vpat-report.json")
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json() as Promise<Vpat>
+      })
+      .then((data) => {
+        if (active) setVpat(data)
+      })
+      .catch(() => {
+        if (active) setError(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  return (
+    <section className="flex flex-col gap-4" aria-labelledby="vpat-heading">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h2 id="vpat-heading" className="text-xl font-bold tracking-tight">
+            {t("accessibility.vpat.heading")}
+          </h2>
+          <div className="mt-1 text-sm text-base-content/70">
+            {t("accessibility.vpat.subtitle")}
+          </div>
+        </div>
+        {vpat && (
+          <div className="flex flex-wrap gap-2">
+            <Button as="a" href="/VPAT.md" download variant="outline" size="sm">
+              {t("accessibility.vpat.downloadWcag")}
+            </Button>
+            <Button
+              as="a"
+              href="/VPAT-508.md"
+              download
+              variant="outline"
+              size="sm"
+            >
+              {t("accessibility.vpat.download508")}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {error && <Alert tone="error">{t("accessibility.vpat.loadError")}</Alert>}
+
+      {!error && !vpat && (
+        <div className="skeleton skeleton-shimmer h-40 w-full rounded-box" />
+      )}
+
+      {vpat && (
+        <>
+          <div className="text-sm text-base-content/70">
+            {t("accessibility.vpat.summary", {
+              total: vpat.summary.total,
+              supports: vpat.summary.byStatus.supports,
+              notEvaluated: vpat.summary.byStatus.notEvaluated,
+            })}{" "}
+            · {t("accessibility.vpat.generated", { generated: vpat.generated })}
+          </div>
+          <VpatConformanceTable vpat={vpat} />
+        </>
+      )}
+    </section>
+  )
+}
+
 export default function AccessibilityPage() {
   const { t } = useTranslation()
   useDocumentTitle(t("accessibility.title"))
@@ -427,6 +591,10 @@ export default function AccessibilityPage() {
           onClose={() => setSelectedRow(null)}
         />
       )}
+
+      <div className="divider" role="separator" />
+
+      <VpatSection />
     </div>
   )
 }

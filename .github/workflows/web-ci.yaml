@@ -95,6 +95,26 @@ jobs:
             web/CONTRAST-AUDIT.md
           if-no-files-found: warn
 
+      # Generate the WCAG 2.2 VPAT / ACR (WCAG + Section 508 editions) and attach
+      # it as a build artifact. Same discipline as the contrast report above:
+      # never committed — a rendering of guarded state (vpatGuard.test.ts + the
+      # contrast guard enforce the facts). `if: always()` so it's produced even
+      # when a later non-VPAT step fails.
+      - name: Generate VPAT report
+        if: always()
+        run: npm run audit:vpat
+
+      - name: Upload VPAT report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpat-report
+          path: |
+            web/vpat-report.json
+            web/VPAT.md
+            web/VPAT-508.md
+          if-no-files-found: warn
+
       # Unit tests for the i18n audit tool itself. Its detection logic is
       # entirely regex-driven, so these lock down the source-of-truth behavior
       # (missing-key hard-fail, --strict flip, key-form capture, plural base,

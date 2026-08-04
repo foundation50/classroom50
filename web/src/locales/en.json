@@ -53,6 +53,28 @@
       "passMargin": "passes, but below the recommended margin (info icon shows the numbers)",
       "fail": "below the WCAG minimum",
       "exempt": "outside WCAG scope (decorative / disabled)"
+    },
+    "vpat": {
+      "heading": "Conformance report (VPAT)",
+      "subtitle": "WCAG 2.2 Level AA conformance, criterion by criterion. Contrast is verified automatically; the rest is assessed and updated as work lands.",
+      "loadError": "Couldn't load the conformance report.",
+      "downloadWcag": "Download VPAT — WCAG (.md)",
+      "download508": "Download VPAT — Section 508 (.md)",
+      "summary": "{{total}} applicable criteria: {{supports}} Supports, {{notEvaluated}} Not Evaluated.",
+      "generated": "Report date {{generated}}",
+      "col": {
+        "criterion": "Criterion",
+        "level": "Level",
+        "conformance": "Conformance",
+        "remarks": "Remarks"
+      },
+      "status": {
+        "supports": "Supports",
+        "partially": "Partially Supports",
+        "doesNotSupport": "Does Not Support",
+        "notApplicable": "Not Applicable",
+        "notEvaluated": "Not Evaluated"
+      }
     }
   },
   "actionsBanner": {

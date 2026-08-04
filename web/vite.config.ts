@@ -13,6 +13,7 @@ import {
   renderContrastJson,
   renderContrastReport,
 } from "./src/util/contrastReport"
+import { renderVpatJson, renderVpatReport } from "./src/util/vpatReport"
 
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
@@ -111,6 +112,48 @@ function contrastAuditPlugin(): Plugin {
   }
 }
 
+// Publishes the WCAG 2.2 VPAT / ACR in the built site: vpat-report.json (the
+// source of truth the /accessibility page fetches) plus VPAT.md (WCAG edition)
+// and VPAT-508.md (Section 508 edition), the human-readable downloads. All three
+// derive from src/util/vpatModel.ts at build time — never committed — so they
+// stay current with the shipped app; vpatGuard.test.ts is the enforcement. Same
+// dev + build wiring as the contrast audit above.
+function vpatReportPlugin(): Plugin {
+  const assets: { fileName: string; source: string; type: string }[] = [
+    {
+      fileName: "vpat-report.json",
+      source: renderVpatJson(),
+      type: "application/json",
+    },
+    {
+      fileName: "VPAT.md",
+      source: renderVpatReport("wcag"),
+      type: "text/markdown; charset=utf-8",
+    },
+    {
+      fileName: "VPAT-508.md",
+      source: renderVpatReport("508"),
+      type: "text/markdown; charset=utf-8",
+    },
+  ]
+  return {
+    name: "classroom50:vpat-report",
+    generateBundle() {
+      for (const a of assets) {
+        this.emitFile({ type: "asset", fileName: a.fileName, source: a.source })
+      }
+    },
+    configureServer(server) {
+      for (const a of assets) {
+        server.middlewares.use(`/${a.fileName}`, (_req, res) => {
+          res.setHeader("Content-Type", a.type)
+          res.end(a.source)
+        })
+      }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
@@ -129,6 +172,7 @@ export default defineConfig({
     babel({ presets: [reactCompilerPreset()] }),
     versionJsonPlugin(),
     contrastAuditPlugin(),
+    vpatReportPlugin(),
   ],
   resolve: {
     alias: {
