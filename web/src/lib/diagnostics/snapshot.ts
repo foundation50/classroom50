@@ -34,8 +34,8 @@ export function buildDiagnostics(input: SnapshotInput = {}): string {
     // plainly so a local run is never mistaken for what shipped.
     lines.push(`Build: LOCAL DEV SERVER (not a deployed release)`)
   } else if (env === "preview") {
-    // Preview and production build identically; only the host differs. Flag it
-    // so a bug report from preview.classroom50.org isn't read as production.
+    // Preview and production build identically; flag it so a report from
+    // preview.classroom50.org isn't read as production.
     lines.push(`Build: PREVIEW (preview.classroom50.org)`)
   }
   lines.push(`Version: ${formatAppVersion()}`)

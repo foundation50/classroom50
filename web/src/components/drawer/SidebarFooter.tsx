@@ -400,8 +400,7 @@ export const SidebarFooter = () => {
                   <DeployEnvBadge />
                 </div>
               ) : (
-                // No org route (no role row) — still surface the env badge so
-                // dev/preview is marked everywhere the account block shows.
+                // No role row off an org route — still surface the env badge.
                 <div className="mt-1 flex items-center gap-1.5">
                   <DeployEnvBadge />
                 </div>
