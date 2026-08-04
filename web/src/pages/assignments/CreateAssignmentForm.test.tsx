@@ -353,6 +353,71 @@ describe("assignment setup timeout", () => {
   })
 })
 
+// After a successful save, the edit form re-baselines to the saved values so
+// the "Save Changes" button returns to disabled (nothing pending), then
+// re-enables once the teacher edits again. Create mode navigates away on
+// success, so this reset is edit-only.
+describe("edit form re-disables Save after a successful save", () => {
+  const renderForm = (
+    onSubmit: (values: CreateAssignmentFormValues) => void | Promise<void>,
+  ) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          edit
+          defaultValues={assignmentToFormValues(baseAssignment)}
+          onSubmit={onSubmit}
+        />
+      </QueryClientProvider>,
+    )
+
+  const saveButton = () =>
+    screen.getByRole("button", {
+      name: "assignments.form.saveChanges",
+    }) as HTMLButtonElement
+
+  it("disables Save on success, then re-enables on the next edit", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderForm(onSubmit)
+
+    const name = screen.getByRole("textbox", {
+      name: "assignments.form.name",
+    })
+    // Unchanged form -> Save disabled (isDefaultValue).
+    expect(saveButton().disabled).toBe(true)
+
+    await user.type(name, " updated")
+    expect(saveButton().disabled).toBe(false)
+
+    await user.click(saveButton())
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+
+    // Saved values are the new baseline, so Save falls back to disabled without
+    // navigating away.
+    await vi.waitFor(() => expect(saveButton().disabled).toBe(true))
+
+    // A further edit re-enables it.
+    await user.type(name, " again")
+    expect(saveButton().disabled).toBe(false)
+  })
+
+  it("keeps the form dirty and re-submittable when the save fails", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockRejectedValue(new Error("boom"))
+    renderForm(onSubmit)
+
+    const name = screen.getByRole("textbox", {
+      name: "assignments.form.name",
+    })
+    await user.type(name, " updated")
+    await user.click(saveButton())
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+
+    // A rejected write must NOT re-baseline, so the button stays enabled.
+    await vi.waitFor(() => expect(saveButton().disabled).toBe(false))
+  })
+})
 // Built-in runtime options (language versions + apt) are disabled when the
 // runner targets self-hosted: the grade job skips managed setup there
 // (runner.environment != 'self-hosted'), so those options wouldn't apply.

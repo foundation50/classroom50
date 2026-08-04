@@ -2,9 +2,9 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
 
-const mutate = vi.fn()
+const mutateAsync = vi.fn().mockResolvedValue({})
 vi.mock("@/hooks/mutations/useEditAssignment", () => ({
-  useEditAssignment: () => ({ isPending: false, mutate }),
+  useEditAssignment: () => ({ isPending: false, mutateAsync }),
 }))
 vi.mock("@/hooks/useTrackPublishDeploy", () => ({
   useTrackPublishDeploy: () => vi.fn(),
@@ -62,7 +62,7 @@ vi.mock("./CreateAssignmentForm", () => ({
 
 import EditAssignmentForm from "./EditAssignmentForm"
 
-beforeEach(() => mutate.mockClear())
+beforeEach(() => mutateAsync.mockClear())
 
 it("passes grading form fields through the edit boundary", () => {
   render(
@@ -80,7 +80,7 @@ it("passes grading form fields through the edit boundary", () => {
     />,
   )
   fireEvent.click(screen.getByRole("button", { name: "submit" }))
-  expect(mutate).toHaveBeenCalledWith(
+  expect(mutateAsync).toHaveBeenCalledWith(
     expect.objectContaining({
       setup_timeout: 300,
       release_assets: "plots/chart.png",

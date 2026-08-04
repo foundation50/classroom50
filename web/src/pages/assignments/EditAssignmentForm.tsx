@@ -65,8 +65,8 @@ const EditAssignmentForm = ({
           slug={assignment}
           onCancel={onCancel}
           defaultValues={assignmentToFormValues(defaultData)}
-          onSubmit={(values) => {
-            editAssignmentMutation.mutate(
+          onSubmit={async (values) => {
+            await editAssignmentMutation.mutateAsync(
               {
                 name: values.name,
                 mode: values.mode,
