@@ -56,4 +56,22 @@ describe("DeployEnvBadge", () => {
     expect(badge.textContent).toBe("")
     expect(badge.getAttribute("aria-label")).toContain("nav.envIndicator")
   })
+
+  it("inline variant is a bare labelled pill (no row chrome)", () => {
+    vi.stubEnv("DEV", false)
+    vi.stubGlobal("location", new URL("https://preview.classroom50.org/"))
+    const { container } = render(<DeployEnvBadge variant="inline" />)
+    const badge = screen.getByRole("status")
+    expect(badge.textContent).toBe("nav.envPreview")
+    // No wrapping row/border — the badge is the root node.
+    expect(container.firstElementChild).toBe(badge)
+    expect(badge.getAttribute("title")).toContain("nav.envIndicator")
+  })
+
+  it("inline variant renders nothing in production", () => {
+    vi.stubEnv("DEV", false)
+    vi.stubGlobal("location", new URL("https://classroom50.org/"))
+    const { container } = render(<DeployEnvBadge variant="inline" />)
+    expect(container.innerHTML).toBe("")
+  })
 })

@@ -182,7 +182,10 @@ export const SidebarFooter = () => {
           )}
         </a>
       ) : null}
-      <DeployEnvBadge pushToBottom={!org} />
+      {/* The inline env badge sits by the role badge, which only renders on org
+          routes with the rail expanded; show the standalone marker everywhere
+          else so it's never lost. */}
+      {(!org || collapsed) && <DeployEnvBadge pushToBottom={!org} />}
       <div
         ref={footerRef}
         className={`relative cursor-pointer border-t border-neutral-content/20 py-3 transition-colors hover:bg-[var(--sidebar-surface)]/60 ${org ? "" : "mt-auto"}`}
@@ -396,6 +399,7 @@ export const SidebarFooter = () => {
                       {t("nav.preview")}
                     </span>
                   ) : null}
+                  <DeployEnvBadge variant="inline" />
                 </div>
               ) : null}
             </div>
