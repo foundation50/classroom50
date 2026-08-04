@@ -266,50 +266,159 @@ body {
   scroll-behavior: auto !important;
 }
 
-/* ── WCAG 2.1 AA contrast overrides ────────────────────────────────────────
-   The light semantic tokens are tuned a touch vivid so button fills (color +
-   white label) pop. `warning` (gold) is the one that fails AA as small text /
-   soft-badge foreground, so darken just that token for text use while keeping a
-   gold fill. info/success/error/primary clear AA as text at body size; soft
-   badges get an extra per-theme darkening below. Declared unlayered so it wins
-   over daisyUI's layered theme definition; scoped to the light theme only (a
-   bare :root would also match the dark theme). */
+/* ── WCAG 2.2 AAA contrast overrides ───────────────────────────────────────
+   Targets 1.4.6 (7:1 body / 4.5:1 large text) and 1.4.11 (3:1 non-text; no AAA
+   tier). src/util/contrastGuard.test.ts recomputes every pair, so a value
+   changed here that drops below the floor fails CI. Hues are preserved
+   (lightness moved) to keep the sumi identity. */
 [data-theme="sumi"] {
-  --color-warning: #8a5e1c;
+  /* Deeper ink lifts every base-content tier toward AAA, still "soft" (was #232323). */
+  --color-base-content: #1a1a1a;
+  --color-warning: #7a5012; /* warning-as-text: 7:1 body on base-100 */
+  --color-warning-fill: #7a5012; /* solid warning button: white label >=4.5 large */
 }
 
-/* Input placeholders ship at base-content/0.5 (~3.3:1). Raise to ~0.65 (~5.3:1). */
+/* daisyUI derives .btn-warning / non-soft .badge-warning from --color-warning;
+   darkening it for text AAA darkens the fill too — intentional, still reads gold. */
+
+/* Muted opacity tiers (`text-base-content/NN`). At their shipped opacities the
+   low tiers can't reach 7:1 on the darkest realistic surface (base-300). Remap
+   each tier's rendered opacity to an AAA floor while keeping a perceptible
+   ladder, so the muted/primary hierarchy survives. Light needs >=~78% on
+   base-300; dark needs >=~68% on base-100. Utilities are overridden by their
+   generated class so every call site is covered at once. */
+[data-theme="sumi"] {
+  --muted-30: 78%;
+  --muted-40: 78%;
+  --muted-50: 78%;
+  --muted-60: 82%;
+  --muted-70: 86%;
+  --muted-80: 90%;
+  --muted-90: 92%;
+}
+[data-theme="sumi-dark"] {
+  --muted-30: 68%;
+  --muted-40: 68%;
+  --muted-50: 68%;
+  --muted-60: 74%;
+  --muted-70: 80%;
+  --muted-80: 86%;
+  --muted-90: 92%;
+}
+.text-base-content\/30 {
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-30),
+    transparent
+  );
+}
+.text-base-content\/40 {
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-40),
+    transparent
+  );
+}
+.text-base-content\/50 {
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-50),
+    transparent
+  );
+}
+.text-base-content\/60 {
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-60),
+    transparent
+  );
+}
+.text-base-content\/70 {
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-70),
+    transparent
+  );
+}
+.text-base-content\/80 {
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-80),
+    transparent
+  );
+}
+.text-base-content\/90 {
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-90),
+    transparent
+  );
+}
+
+/* Input placeholders: raise to the AAA muted floor (was ~0.65). */
 .input::placeholder,
 .textarea::placeholder,
 input::placeholder,
 textarea::placeholder {
-  color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-70),
+    transparent
+  );
   opacity: 1;
 }
 
-/* DaisyUI `.label` defaults to ~base-content/0.6 (4.45:1 on #fafafa, under AA).
-   Raise to /0.70 — the muted-text floor used elsewhere. */
+/* DaisyUI `.label`: raise to the AAA muted floor (was ~0.70). */
 .label {
-  color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
+  color: color-mix(
+    in oklab,
+    var(--color-base-content) var(--muted-70),
+    transparent
+  );
 }
 
-/* Soft badges render the raw semantic token as text on an 8% tint of that same
-   token. Several land just under AA (4.5:1) at badge-sm/xs sizes — notably
-   `secondary` (4.4) in light, and `primary`/`info`/`secondary` (3.4–4.4) in
-   dark, where the token is tuned for white button labels rather than text.
-   Nudge the badge foreground per theme (darker in light, lighter in dark) so
-   every soft badge clears AA without touching the button-fill tokens. */
+/* Links: daisyUI `.link` (and `hover:text-primary`) render the primary token as
+   text, which lands ~6:1 on base-100 in both themes. Use a per-theme link color
+   (darker in light, lighter in dark) that clears 7:1 without touching the brand
+   primary used for fills and marks. */
+[data-theme="sumi"] {
+  --color-link: #324d8c;
+}
+[data-theme="sumi-dark"] {
+  --color-link: #9bb0dc;
+}
+.link {
+  color: var(--color-link);
+}
+
+/* Soft badges render the semantic token as text on an 8% tint of that token.
+   Nudge the foreground per theme (darker in light, lighter in dark) hard enough
+   to clear 7:1 body at badge-sm/xs, without touching the button-fill tokens. */
 [data-theme="sumi"] .badge-soft {
   color: color-mix(
     in oklab,
-    var(--badge-color, var(--color-base-content)) 88%,
+    var(--badge-color, var(--color-base-content)) 65%,
     black
   );
 }
 [data-theme="sumi-dark"] .badge-soft {
   color: color-mix(
     in oklab,
-    var(--badge-color, var(--color-base-content)) 75%,
+    var(--badge-color, var(--color-base-content)) 60%,
     white
   );
+}
+
+/* Sidebar muted rows: `text-neutral-content/{50,60,70}` on the rail surface land
+   under 7:1. Raise the rendered opacity so resting (non-hover) row/footer text is
+   AAA; the hover state already lifts to full neutral-content. 85% clears 7:1 on
+   both the light opaque rail (#3a3a3a -> 7.79:1) and the dark translucent sheet
+   (8.55:1). */
+[data-theme="sumi"] .text-neutral-content\/50,
+[data-theme="sumi-dark"] .text-neutral-content\/50,
+[data-theme="sumi"] .text-neutral-content\/60,
+[data-theme="sumi-dark"] .text-neutral-content\/60,
+[data-theme="sumi"] .text-neutral-content\/70,
+[data-theme="sumi-dark"] .text-neutral-content\/70 {
+  color: color-mix(in oklab, var(--color-neutral-content) 85%, transparent);
 }

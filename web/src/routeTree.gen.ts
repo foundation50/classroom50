@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthedRouteImport } from './routes/_authed'
+import { Route as AccessibilityRouteImport } from './routes/accessibility'
 import { Route as AssignmentsRouteImport } from './routes/assignments'
 import { Route as ClassesRouteImport } from './routes/classes'
 import { Route as LoginRouteImport } from './routes/login'
@@ -41,6 +42,11 @@ import { Route as AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRouteIm
 
 const AuthedRoute = AuthedRouteImport.update({
   id: '/_authed',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccessibilityRoute = AccessibilityRouteImport.update({
+  id: '/accessibility',
+  path: '/accessibility',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AssignmentsRoute = AssignmentsRouteImport.update({
@@ -197,6 +203,7 @@ const AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
+  '/accessibility': typeof AccessibilityRoute
   '/assignments': typeof AssignmentsRoute
   '/classes': typeof ClassesRoute
   '/login': typeof LoginRoute
@@ -226,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/$org/$classroom/assignments/$assignment/submissions/': typeof AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRoute
 }
 export interface FileRoutesByTo {
+  '/accessibility': typeof AccessibilityRoute
   '/assignments': typeof AssignmentsRoute
   '/classes': typeof ClassesRoute
   '/login': typeof LoginRoute
@@ -256,6 +264,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authed': typeof AuthedRouteWithChildren
+  '/accessibility': typeof AccessibilityRoute
   '/assignments': typeof AssignmentsRoute
   '/classes': typeof ClassesRoute
   '/login': typeof LoginRoute
@@ -289,6 +298,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/accessibility'
     | '/assignments'
     | '/classes'
     | '/login'
@@ -318,6 +328,7 @@ export interface FileRouteTypes {
     | '/$org/$classroom/assignments/$assignment/submissions/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/accessibility'
     | '/assignments'
     | '/classes'
     | '/login'
@@ -347,6 +358,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authed'
+    | '/accessibility'
     | '/assignments'
     | '/classes'
     | '/login'
@@ -379,6 +391,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren
+  AccessibilityRoute: typeof AccessibilityRoute
   AssignmentsRoute: typeof AssignmentsRoute
   ClassesRoute: typeof ClassesRoute
   LoginRoute: typeof LoginRoute
@@ -392,6 +405,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accessibility': {
+      id: '/accessibility'
+      path: '/accessibility'
+      fullPath: '/accessibility'
+      preLoaderRoute: typeof AccessibilityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/assignments': {
@@ -681,6 +701,7 @@ const AuthedRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthedRoute: AuthedRouteWithChildren,
+  AccessibilityRoute: AccessibilityRoute,
   AssignmentsRoute: AssignmentsRoute,
   ClassesRoute: ClassesRoute,
   LoginRoute: LoginRoute,

@@ -9,6 +9,11 @@ import path from "node:path"
 import { execSync } from "node:child_process"
 import { createRequire } from "node:module"
 
+import {
+  renderContrastJson,
+  renderContrastReport,
+} from "./src/util/contrastReport"
+
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
 // package.json; a `web-v*` release tag (VITE_APP_VERSION, set by web-deploy.yaml)
@@ -70,6 +75,42 @@ function versionJsonPlugin(): Plugin {
   }
 }
 
+// Publishes the WCAG contrast audit in the built site: contrast-audit.json (the
+// source of truth the /accessibility page fetches) and CONTRAST-AUDIT.md (the
+// human-readable download, derived from the same data). Both are served in dev
+// too, so `npm run dev` shows a live report at /accessibility. Generated from
+// src/util/contrastModel.ts at build time — never committed — so they are always
+// current with the shipped palette. The contrast guard tests are the
+// enforcement; these files are renderings.
+function contrastAuditPlugin(): Plugin {
+  const json = renderContrastJson()
+  const md = renderContrastReport()
+  const assets: { fileName: string; source: string; type: string }[] = [
+    { fileName: "contrast-audit.json", source: json, type: "application/json" },
+    {
+      fileName: "CONTRAST-AUDIT.md",
+      source: md,
+      type: "text/markdown; charset=utf-8",
+    },
+  ]
+  return {
+    name: "classroom50:contrast-audit",
+    generateBundle() {
+      for (const a of assets) {
+        this.emitFile({ type: "asset", fileName: a.fileName, source: a.source })
+      }
+    },
+    configureServer(server) {
+      for (const a of assets) {
+        server.middlewares.use(`/${a.fileName}`, (_req, res) => {
+          res.setHeader("Content-Type", a.type)
+          res.end(a.source)
+        })
+      }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
@@ -87,6 +128,7 @@ export default defineConfig({
     tailwindcss(),
     babel({ presets: [reactCompilerPreset()] }),
     versionJsonPlugin(),
+    contrastAuditPlugin(),
   ],
   resolve: {
     alias: {
