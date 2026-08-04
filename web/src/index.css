@@ -266,50 +266,111 @@ body {
   scroll-behavior: auto !important;
 }
 
-/* ── WCAG 2.1 AA contrast overrides ────────────────────────────────────────
-   The light semantic tokens are tuned a touch vivid so button fills (color +
-   white label) pop. `warning` (gold) is the one that fails AA as small text /
-   soft-badge foreground, so darken just that token for text use while keeping a
-   gold fill. info/success/error/primary clear AA as text at body size; soft
-   badges get an extra per-theme darkening below. Declared unlayered so it wins
-   over daisyUI's layered theme definition; scoped to the light theme only (a
-   bare :root would also match the dark theme). */
+/* ── WCAG 2.2 AAA contrast overrides ───────────────────────────────────────
+   Target: 1.4.6 Contrast (Enhanced) — 7:1 body text, 4.5:1 large text — plus
+   1.4.11 non-text at 3:1 (no AAA tier exists for non-text). Ratios are
+   enforced by src/util/contrastGuard.test.ts, which recomputes every
+   (foreground, surface, size-class) triple; changing a value here without
+   keeping the guard green will fail CI. The sumi hues are kept (hue preserved,
+   lightness moved) so the identity survives the contrast raise.
+
+   Light theme: `warning` is darkened for text use (a solid gold fill with a
+   dark label fails), and its button fill is darkened too so white-on-gold
+   clears 4.5:1 large. */
 [data-theme="sumi"] {
-  --color-warning: #8a5e1c;
+  /* Slightly deeper ink lifts every base-content tier toward AAA while staying
+     "soft, not clinical" (was #232323). */
+  --color-base-content: #1a1a1a;
+  --color-warning: #7a5012; /* warning-as-text: 7:1 body on base-100 */
+  --color-warning-fill: #7a5012; /* solid warning button: white label >=4.5 large */
 }
 
-/* Input placeholders ship at base-content/0.5 (~3.3:1). Raise to ~0.65 (~5.3:1). */
+/* daisyUI derives `.btn-warning` / non-soft `.badge-warning` from --color-warning.
+   Light theme darkens --color-warning for text AAA, which also darkens the fill;
+   that is intentional — the darker gold still reads as gold and now clears 4.5:1
+   for its white label. */
+
+/* Muted opacity tiers (`text-base-content/NN`). At their shipped opacities the
+   low tiers can't reach 7:1 on the darkest realistic surface (base-300). Remap
+   each tier's rendered opacity to an AAA floor while keeping a perceptible
+   ladder, so the muted/primary hierarchy survives. Light needs >=~78% on
+   base-300; dark needs >=~68% on base-100. Utilities are overridden by their
+   generated class so every call site is covered at once. */
+[data-theme="sumi"] {
+  --muted-50: 78%;
+  --muted-60: 82%;
+  --muted-70: 86%;
+  --muted-80: 90%;
+}
+[data-theme="sumi-dark"] {
+  --muted-50: 68%;
+  --muted-60: 74%;
+  --muted-70: 80%;
+  --muted-80: 86%;
+}
+.text-base-content\/50 {
+  color: color-mix(in oklab, var(--color-base-content) var(--muted-50), transparent);
+}
+.text-base-content\/60 {
+  color: color-mix(in oklab, var(--color-base-content) var(--muted-60), transparent);
+}
+.text-base-content\/70 {
+  color: color-mix(in oklab, var(--color-base-content) var(--muted-70), transparent);
+}
+.text-base-content\/80 {
+  color: color-mix(in oklab, var(--color-base-content) var(--muted-80), transparent);
+}
+
+/* Input placeholders: raise to the AAA muted floor (was ~0.65). */
 .input::placeholder,
 .textarea::placeholder,
 input::placeholder,
 textarea::placeholder {
-  color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  color: color-mix(in oklab, var(--color-base-content) var(--muted-70), transparent);
   opacity: 1;
 }
 
-/* DaisyUI `.label` defaults to ~base-content/0.6 (4.45:1 on #fafafa, under AA).
-   Raise to /0.70 — the muted-text floor used elsewhere. */
+/* DaisyUI `.label`: raise to the AAA muted floor (was ~0.70). */
 .label {
-  color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
+  color: color-mix(in oklab, var(--color-base-content) var(--muted-70), transparent);
 }
 
-/* Soft badges render the raw semantic token as text on an 8% tint of that same
-   token. Several land just under AA (4.5:1) at badge-sm/xs sizes — notably
-   `secondary` (4.4) in light, and `primary`/`info`/`secondary` (3.4–4.4) in
-   dark, where the token is tuned for white button labels rather than text.
-   Nudge the badge foreground per theme (darker in light, lighter in dark) so
-   every soft badge clears AA without touching the button-fill tokens. */
+/* Links: daisyUI `.link` (and `hover:text-primary`) render the primary token as
+   text, which lands ~6:1 on base-100 in both themes. Use a per-theme link color
+   (darker in light, lighter in dark) that clears 7:1 without touching the brand
+   primary used for fills and marks. */
+[data-theme="sumi"] {
+  --color-link: #324d8c;
+}
+[data-theme="sumi-dark"] {
+  --color-link: #9bb0dc;
+}
+.link {
+  color: var(--color-link);
+}
+
+/* Soft badges render the semantic token as text on an 8% tint of that token.
+   Nudge the foreground per theme (darker in light, lighter in dark) hard enough
+   to clear 7:1 body at badge-sm/xs, without touching the button-fill tokens. */
 [data-theme="sumi"] .badge-soft {
   color: color-mix(
     in oklab,
-    var(--badge-color, var(--color-base-content)) 88%,
+    var(--badge-color, var(--color-base-content)) 65%,
     black
   );
 }
 [data-theme="sumi-dark"] .badge-soft {
   color: color-mix(
     in oklab,
-    var(--badge-color, var(--color-base-content)) 75%,
+    var(--badge-color, var(--color-base-content)) 60%,
     white
   );
+}
+
+/* Sidebar muted rows: `text-neutral-content/60` on the rail surface lands under
+   7:1. Raise the rendered opacity so the resting (non-hover) row text is AAA;
+   the hover state already lifts to full neutral-content. */
+[data-theme="sumi"] .text-neutral-content\/60,
+[data-theme="sumi-dark"] .text-neutral-content\/60 {
+  color: color-mix(in oklab, var(--color-neutral-content) 85%, transparent);
 }
