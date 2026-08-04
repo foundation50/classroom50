@@ -8,6 +8,11 @@ export const THEME_STORAGE_KEY = "classroom50:theme"
 
 export type Theme = "sumi" | "sumi-dark"
 
+// The user's *preference*, distinct from the resolved `Theme`. "system" means
+// no explicit choice (follow the OS `prefers-color-scheme`); the concrete themes
+// pin light/dark. Stored as the theme name, or absent for "system".
+export type ThemePref = "system" | Theme
+
 const LIGHT: Theme = "sumi"
 const DARK: Theme = "sumi-dark"
 
@@ -22,6 +27,12 @@ export function resolveInitialTheme(): Theme {
     "(prefers-color-scheme: dark)",
   )?.matches
   return prefersDark ? DARK : LIGHT
+}
+
+// The preference to show in a settings control: the stored theme, or "system"
+// when nothing explicit is stored (the app then tracks the OS).
+export function resolveInitialThemePref(): ThemePref {
+  return storedTheme() ?? "system"
 }
 
 function storedTheme(): Theme | null {
@@ -57,6 +68,11 @@ function applyThemeAnimated(theme: Theme) {
 
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(resolveInitialTheme)
+  // The preference the UI shows: "system" while no explicit choice is stored
+  // (the app then follows the OS), else the stored theme. Tracked alongside the
+  // resolved `theme` so a settings control can offer System/Light/Dark while the
+  // rest of the app keeps consuming the concrete resolved theme.
+  const [pref, setPrefState] = useState<ThemePref>(resolveInitialThemePref)
 
   // Only an explicit user toggle cross-fades. Apply the active theme to <html>
   // here without animating: the first run re-asserts what the anti-flash script
@@ -71,9 +87,10 @@ export function useTheme() {
     applyTheme(theme)
   }, [theme])
 
-  // While the user has made no explicit choice, follow the OS and any choice
-  // made in another tab. Both listeners are no-ops once a value is stored, so a
-  // tab holding an explicit choice ignores cross-tab writes too.
+  // Follow external theme changes. The OS listener only applies while no
+  // explicit choice is stored (a stored light/dark pins the theme against OS
+  // drift); the storage listener always mirrors a cross-tab write, including a
+  // clear back to "system".
   useEffect(() => {
     if (typeof window === "undefined") return
 
@@ -87,6 +104,11 @@ export function useTheme() {
       if (event.key !== THEME_STORAGE_KEY) return
       if (event.newValue === LIGHT || event.newValue === DARK) {
         setThemeState(event.newValue)
+        setPrefState(event.newValue)
+      } else if (event.newValue === null) {
+        // A cross-tab reset to "system": drop back to following the OS.
+        setPrefState("system")
+        setThemeState(resolveInitialTheme())
       }
     }
     window.addEventListener("storage", onStorage)
@@ -103,6 +125,7 @@ export function useTheme() {
     // [theme] effect) keeps OS/cross-tab-driven changes instant.
     applyThemeAnimated(next)
     setThemeState(next)
+    setPrefState(next)
     if (typeof window !== "undefined") {
       window.localStorage.setItem(THEME_STORAGE_KEY, next)
     }
@@ -114,5 +137,36 @@ export function useTheme() {
     [persist, theme],
   )
 
-  return { theme, isDark: theme === DARK, setTheme, toggleTheme }
+  // Set the tri-state preference. "system" clears the stored choice (rather than
+  // storing a sentinel — the resolver treats a missing key as "system") and
+  // resolves the concrete theme from the current OS setting; the change still
+  // cross-fades since it's an explicit user action.
+  const setThemePref = useCallback(
+    (next: ThemePref) => {
+      if (next !== "system") {
+        persist(next)
+        return
+      }
+      setPrefState("system")
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(THEME_STORAGE_KEY)
+      }
+      const resolved = resolveInitialTheme()
+      setThemeState(resolved)
+      // Only cross-fade when the resolved theme actually differs — picking
+      // "system" while already showing the OS theme shouldn't fire a no-op
+      // View Transition.
+      if (resolved !== theme) applyThemeAnimated(resolved)
+    },
+    [persist, theme],
+  )
+
+  return {
+    theme,
+    pref,
+    isDark: theme === DARK,
+    setTheme,
+    setThemePref,
+    toggleTheme,
+  }
 }

@@ -26,6 +26,7 @@ import { recordError } from "./lib/activity/activityStore"
 import { retryTransientGitHubError } from "./github-core/errors"
 import { recordGitHubFailure, recordGitHubSuccess } from "./lib/githubHealth"
 import { RateLimitOverlay } from "./components/dev/RateLimitOverlay"
+import { useReducedMotion } from "./hooks/useReducedMotion"
 
 // Safe query defaults so a new `useQuery` can't silently inherit React Query's
 // aggressive built-ins (staleTime:0 + refetchOnWindowFocus:true + retry:3). Every
@@ -81,9 +82,21 @@ console.info(
   `Classroom 50 — ${formatAppVersion()} — built ${appVersion.buildDate}`,
 )
 
+// Bridges the user's motion preference into Motion's JS layer. `reducedMotion`
+// flips between "always" (collapse every JS variant) and "user" (still honor the
+// OS query), matching the CSS layer the same hook drives via <html> attribute.
+function MotionPreferenceProvider({ children }: { children: React.ReactNode }) {
+  const { reduced } = useReducedMotion()
+  return (
+    <MotionConfig reducedMotion={reduced ? "always" : "user"}>
+      {children}
+    </MotionConfig>
+  )
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <MotionConfig reducedMotion="user">
+    <MotionPreferenceProvider>
       <QueryClientProvider client={client}>
         <GitHubAuthProvider>
           <GitHubClientProviderFromAuth>
@@ -106,6 +119,6 @@ createRoot(document.getElementById("root")!).render(
           </GitHubClientProviderFromAuth>
         </GitHubAuthProvider>
       </QueryClientProvider>
-    </MotionConfig>
+    </MotionPreferenceProvider>
   </StrictMode>,
 )

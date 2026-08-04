@@ -62,6 +62,24 @@
           }
         } catch (e) {}
       })()
+      // Anti-flash: apply the resolved reduced-motion verdict before the app
+      // renders so a motion-off user never sees a first-paint animation. Mirrors
+      // motionReduced/resolveInitialMotionPref in src/hooks/useReducedMotion.ts.
+      ;(function () {
+        try {
+          var pref = localStorage.getItem("classroom50:motion")
+          var reduced =
+            pref === "off"
+              ? true
+              : pref === "on"
+                ? false
+                : window.matchMedia &&
+                  window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          if (reduced) {
+            document.documentElement.setAttribute("data-reduce-motion", "true")
+          }
+        } catch (e) {}
+      })()
     </script>
   </head>
   <body>
