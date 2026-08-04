@@ -22,12 +22,9 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const repoWeb = path.resolve(here, "..", "..")
 const cssText = readFileSync(path.join(repoWeb, "src/index.css"), "utf8")
 
-// Extract the value of a CSS custom property within a `[data-theme="<theme>"]`
-// or bare theme block. daisyUI theme tokens live in `@plugin "daisyui/theme"`
-// blocks keyed by `name:`, and the AAA overrides live in `[data-theme=...]`
-// blocks; both set `--token: value;`, so a token may appear more than once
-// (base value + override). Return the LAST occurrence within the matching
-// theme, which is the effective (override-wins) value — matching cascade order.
+// Read a CSS custom property for a theme. A token can appear twice (daisyUI
+// `@plugin "daisyui/theme"` base value + a `[data-theme=...]` AAA override), so
+// return the LAST match — the effective, override-wins value.
 function cssVar(theme: "sumi" | "sumi-dark", token: string): string | null {
   // Match either `name: "<theme>"` plugin blocks or `[data-theme="<theme>"]`
   // selector blocks, capturing their body up to the closing brace.

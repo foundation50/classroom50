@@ -1,13 +1,9 @@
 // WCAG contrast math for the theme audit and its regression guard.
 //
-// WCAG relative luminance (and thus the contrast ratio) is defined only on
-// sRGB. The sumi themes, however, express several colors in oklab/oklch via
-// CSS `color-mix(...)` (the placeholder/.label/badge-soft overrides, the dark
-// sidebar surface). vitest runs under `environment: "node"` with no CSS engine,
-// so `getComputedStyle` cannot resolve those mixes — this module does the
-// color-space + alpha math itself: parse -> convert to linear sRGB -> flatten
-// any alpha over a known backdrop -> WCAG luminance -> ratio. Keep it a pure
-// leaf (no app imports) so it satisfies the util/ leaf boundary.
+// WCAG luminance is defined on sRGB, but the sumi themes mix colors in
+// oklab/oklch via `color-mix(...)`, and vitest's node env has no CSS engine to
+// resolve them — so this module does the color-space + alpha math itself. Pure
+// leaf (no app imports) to satisfy the util/ boundary.
 
 /** Linear-light sRGB, each channel in [0,1]. Alpha in [0,1]; 1 = opaque. */
 export type LinearRgb = { r: number; g: number; b: number; a: number }
@@ -62,18 +58,15 @@ function oklchToLinearRgb(
   return oklabToLinearRgb(L, C * Math.cos(h), C * Math.sin(h))
 }
 
-// ── Parsing ────────────────────────────────────────────────────────────────
-// Supports the subset the sumi themes actually use: #rgb / #rrggbb hex,
-// oklch()/oklab(), and the `transparent` keyword. Percentages and unit-less
-// forms both accepted for L/C where the spec allows them.
+// Parsing — the subset the sumi themes use: #rgb/#rrggbb hex, oklch()/oklab(),
+// and `transparent`.
 
 const HEX3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i
 const HEX6 = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i
 
-// Parse a CSS number/percentage token. `pctRef` is the value that `100%` maps
-// to: 1 for L and alpha (the default), and 0.4 for oklch/oklab chroma and the
-// oklab a/b axes (per CSS Color 4, where 100% == 0.4). Hues are always
-// unit-less and parsed directly with parseFloat.
+// Parse a CSS number/percentage token. `pctRef` is what `100%` maps to: 1 for
+// L and alpha, 0.4 for oklch/oklab chroma and oklab a/b (CSS Color 4). Hues are
+// unit-less.
 function num(token: string, pctRef = 1): number {
   // "62%" -> 0.62 (pctRef 1) ; "20%" -> 0.08 (pctRef 0.4) ; "0.62" -> 0.62
   const t = token.trim()
@@ -129,12 +122,9 @@ export function parseColor(input: string): LinearRgb {
   throw new Error(`Unsupported color syntax: ${input}`)
 }
 
-// ── color-mix(in <space>, colorA pctA, colorB pctB) ─────────────────────────
-// Mirrors CSS color-mix: percentages are normalized, and when they don't sum
-// to 100% the result is scaled (the CSS "alpha multiplier" behaviour). The
-// sumi overrides all mix a token with `black`/`white`/`transparent`, and mix
-// in oklab or oklch — so mixing happens in the mix color-space, then converts
-// to linear sRGB. Alpha is interpolated linearly.
+// color-mix(in <space>, colorA pctA, colorB pctB). Mirrors CSS: weights are
+// normalized, and a sum below 100% scales the result alpha. The sumi tokens
+// only ever mix with black/white/transparent.
 export function mixColor(
   space: "oklab" | "oklch" | "srgb",
   colorA: string,
@@ -176,13 +166,9 @@ export function mixColor(
     }
   }
 
-  // Mix in oklab/oklch: convert both endpoints to that space, interpolate,
-  // convert back. We only ever need the oklab path numerically — oklch mixes
-  // of our tokens (a color mixed with an achromatic black/white/transparent)
-  // give the same result mixed in oklab because the chromatic endpoint's hue
-  // is preserved when the other endpoint has zero chroma. Interpolating in
-  // oklab is therefore exact for our inputs and avoids hue-wraparound edge
-  // cases; documented so a future non-achromatic oklch mix is added knowingly.
+  // Mixing in oklab is exact for our inputs: every oklch mix has one achromatic
+  // endpoint (black/white/transparent), so the chromatic hue is preserved and
+  // oklab avoids hue-wraparound. Revisit if a two-chromatic oklch mix is added.
   const toOklab = (lin: LinearRgb) => linearRgbToOklab(lin)
   const oa = toOklab(a)
   const ob = toOklab(b)

@@ -1,16 +1,12 @@
 // The color model the audit report and the regression guard both consume.
 //
 // Per KTD5, the audit unit is a resolved (foreground, surface, size-class)
-// triple, not a token — text size and the surface a `/NN` foreground flattens
-// against are per-site Tailwind facts. This module enumerates the DISTINCT
-// triples the sumi themes actually produce (the unique combinations that decide
-// pass/fail), grounded in the usage scan of src/**. A pair present in JSX but
-// absent here is an audit gap the guard cannot cover; add it when introduced.
-//
-// Foregrounds are expressed exactly as the CSS produces them (a hex token, an
-// opacity `mix(... transparent)`, or the per-theme badge/label overrides) so
-// the resolver (contrast.ts) reproduces the rendered pixel rather than an
-// approximation. Keep this a pure leaf: data + types only, no app imports.
+// triple, not a token — text size and the surface a `/NN` foreground sits on
+// are per-site Tailwind facts. This enumerates the distinct triples the themes
+// produce; a pair used in JSX but absent here is an audit gap (the coverage
+// guard in contrastSource.test.ts enforces against it). Foregrounds are
+// expressed as the CSS produces them so contrast.ts resolves the real pixel.
+// Pure leaf: data + types only, no app imports.
 
 import {
   flattenOver,
@@ -54,14 +50,10 @@ export type Pair = {
   exempt?: boolean
 }
 
-// ── Raw theme token values ────────────────────────────────────────────────
-// These duplicate the index.css theme tokens by necessity — vitest runs in node
-// with no CSS engine, so the audit can't read computed styles. The drift guard
-// (contrastSource.test.ts) reads index.css and asserts these still match, so the
-// duplication can't silently diverge (the "mirrors X" smell is neutralized by an
-// enforced parity test, the same pattern the anti-flash script uses).
-// Light theme "sumi". (base-content darkened to #1a1a1a and warning darkened
-// for text/fill per the AAA override block in index.css.)
+// Raw theme token values. These duplicate the index.css tokens (node has no CSS
+// engine to read them); the drift guard in contrastSource.test.ts asserts they
+// stay in sync, so the copy can't silently diverge.
+// Light theme "sumi" (base-content and warning darkened per the AAA overrides).
 export const SUMI = {
   base100: "#fafafa",
   base200: "#f1f1f1",
@@ -200,11 +192,9 @@ function buildTheme(theme: Theme): Pair[] {
     "body",
   )
 
-  // Muted text tiers, at their AAA-remapped opacity floors (index.css). Audited
-  // against the realistic worst-case surface for the foreground's polarity:
-  // dark ink on the DARKEST surface (base-300) is the lowest-contrast case in
-  // light theme; light ink's worst case in dark theme is the lightest surface
-  // (base-100).
+  // Muted tiers at their AAA-remapped opacities (index.css), audited against the
+  // worst-case surface for the ink polarity: darkest surface (base-300) in light,
+  // lightest (base-100) in dark.
   const tierWorstBg = theme === "sumi" ? opaque(T.base300) : opaque(T.base100)
   for (const pct of MODELED_BASE_CONTENT_TIERS) {
     add(
@@ -300,17 +290,10 @@ function buildTheme(theme: Theme): Pair[] {
     "body",
   )
 
-  // Non-text: the default divider/border (base-300) on base-100 is structural,
-  // NOT the sole means of identifying a control, so it's outside 1.4.11's scope
-  // (which governs information "required to identify" a component/state). Marked
-  // exempt so the guard doesn't force a heavy 3:1 divider that would break the
-  // minimalist aesthetic. Focus rings / active-state borders (which DO identify
-  // state) are the primary/accent tokens, audited via the fill/link pairs.
-  //
-  // PRECONDITION for this exemption: base-300 must never become the *sole*
-  // visual signal of a control's boundary or state (an unfilled input, a
-  // selectable/selected card). Such a control falls under 1.4.11 and needs a
-  // non-exempt pair here at the 3:1 floor.
+  // Structural divider (base-300 on base-100): outside 1.4.11's scope since it's
+  // not the sole means of identifying a control, so exempt. Precondition: if a
+  // control ever relies on this border alone (an unfilled input, a selectable
+  // card), it falls under 1.4.11 and needs a non-exempt pair at the 3:1 floor.
   add(
     "border",
     "base-300 structural divider on base-100",

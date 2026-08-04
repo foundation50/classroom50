@@ -267,28 +267,19 @@ body {
 }
 
 /* ── WCAG 2.2 AAA contrast overrides ───────────────────────────────────────
-   Target: 1.4.6 Contrast (Enhanced) — 7:1 body text, 4.5:1 large text — plus
-   1.4.11 non-text at 3:1 (no AAA tier exists for non-text). Ratios are
-   enforced by src/util/contrastGuard.test.ts, which recomputes every
-   (foreground, surface, size-class) triple; changing a value here without
-   keeping the guard green will fail CI. The sumi hues are kept (hue preserved,
-   lightness moved) so the identity survives the contrast raise.
-
-   Light theme: `warning` is darkened for text use (a solid gold fill with a
-   dark label fails), and its button fill is darkened too so white-on-gold
-   clears 4.5:1 large. */
+   Targets 1.4.6 (7:1 body / 4.5:1 large text) and 1.4.11 (3:1 non-text; no AAA
+   tier). src/util/contrastGuard.test.ts recomputes every pair, so a value
+   changed here that drops below the floor fails CI. Hues are preserved
+   (lightness moved) to keep the sumi identity. */
 [data-theme="sumi"] {
-  /* Slightly deeper ink lifts every base-content tier toward AAA while staying
-     "soft, not clinical" (was #232323). */
+  /* Deeper ink lifts every base-content tier toward AAA, still "soft" (was #232323). */
   --color-base-content: #1a1a1a;
   --color-warning: #7a5012; /* warning-as-text: 7:1 body on base-100 */
   --color-warning-fill: #7a5012; /* solid warning button: white label >=4.5 large */
 }
 
-/* daisyUI derives `.btn-warning` / non-soft `.badge-warning` from --color-warning.
-   Light theme darkens --color-warning for text AAA, which also darkens the fill;
-   that is intentional — the darker gold still reads as gold and now clears 4.5:1
-   for its white label. */
+/* daisyUI derives .btn-warning / non-soft .badge-warning from --color-warning;
+   darkening it for text AAA darkens the fill too — intentional, still reads gold. */
 
 /* Muted opacity tiers (`text-base-content/NN`). At their shipped opacities the
    low tiers can't reach 7:1 on the darkest realistic surface (base-300). Remap

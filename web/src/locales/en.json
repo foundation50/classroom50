@@ -8,7 +8,6 @@
     "summaryPassMargin_one": "All {{total}} audited color pairs meet their WCAG contrast floor. {{count}} passes but sits below our recommended safety margin (see below).",
     "summaryPassMargin_other": "All {{total}} audited color pairs meet their WCAG contrast floor. {{count}} pass but sit below our recommended safety margin (see below).",
     "summaryFail": "{{failures}} color pair(s) are below the WCAG contrast floor.",
-    "themeToggle": "Theme",
     "criteria": {
       "standardText": "WCAG 2.2 — 1.4.6 Contrast (Enhanced, AAA) for text, 1.4.11 Non-text Contrast for UI components.",
       "thresholdsHeading": "Required minimums (WCAG floor):",

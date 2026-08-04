@@ -6,12 +6,9 @@ import { Alert, Badge, Button, Card, Modal } from "@/components/ui"
 import type { BadgeTone } from "@/types/badgeTone"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
-// Public /accessibility page: the human-readable rendering of the WCAG 2.2
-// contrast audit. Fetches the build-emitted contrast-audit.json (the source of
-// truth, always current with the shipped palette) and renders it as a themed
-// table with live color previews; the .md download links the sibling artifact
-// (which keeps both themes in one document). No auth — an ADA/VPAT reviewer can
-// open it directly.
+// Public /accessibility page: renders the build-emitted contrast-audit.json (the
+// source of truth) as a themed table with live color previews. No auth, so an
+// ADA/VPAT reviewer can open it; the .md download carries both themes.
 
 type ContrastStatus = "pass" | "fail" | "exempt"
 
@@ -95,11 +92,9 @@ function PairDetailModal({ row, onClose }: { row: Row; onClose: () => void }) {
   const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
 
-  // Mounted only while a row is selected (the caller gates + remounts via
-  // `key`), so open once imperatively. Esc/backdrop/X fire onClose to clear the
-  // selection. This avoids the controlled-`open` + conditional-content race
-  // where clearing the row would empty the box mid close-animation (the
-  // "collapse to a white line" glitch).
+  // Mounted only while a row is selected (caller gates + remounts via `key`), so
+  // open once imperatively. This avoids the controlled-`open` + conditional-
+  // content race that emptied the box mid close-animation.
   useEffect(() => {
     dialogRef.current?.showModal()
   }, [])
