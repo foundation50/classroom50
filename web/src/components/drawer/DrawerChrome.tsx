@@ -35,7 +35,10 @@ export const AppShell = ({ topSlot }: { topSlot?: ReactNode }) => (
 export const DrawerContent = ({ children }: { children: ReactNode }) => {
   const { t } = useTranslation()
   return (
-    <div className="drawer-content">
+    // The base background + full-height live here (not on the per-page frame) so
+    // it always covers the viewport even when a page's content is shorter than
+    // the window — the page frame (PageShell) only owns padding on top of this.
+    <div className="drawer-content min-h-screen bg-base-200">
       <a
         href="#main-content"
         className="btn btn-primary btn-sm sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-50"
