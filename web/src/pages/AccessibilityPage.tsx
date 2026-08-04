@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Info } from "lucide-react"
 
@@ -91,76 +91,79 @@ function ColorRef({ hex, role }: { hex: string; role: string }) {
   )
 }
 
-function PairDetailModal({
-  row,
-  onClose,
-}: {
-  row: Row | null
-  onClose: () => void
-}) {
+function PairDetailModal({ row, onClose }: { row: Row; onClose: () => void }) {
   const { t } = useTranslation()
+  const dialogRef = useRef<HTMLDialogElement | null>(null)
+
+  // Mounted only while a row is selected (the caller gates + remounts via
+  // `key`), so open once imperatively. Esc/backdrop/X fire onClose to clear the
+  // selection. This avoids the controlled-`open` + conditional-content race
+  // where clearing the row would empty the box mid close-animation (the
+  // "collapse to a white line" glitch).
+  useEffect(() => {
+    dialogRef.current?.showModal()
+  }, [])
+
   return (
-    <Modal open={row !== null} onClose={onClose} size="lg">
-      {row && (
-        <div className="flex flex-col gap-4">
-          <div>
-            <h3 className="font-mono text-sm font-semibold">{row.id}</h3>
-            <p className="text-sm text-base-content/70">{row.label}</p>
-          </div>
-
-          {/* The combined sample: real foreground on the real surface — the way
-              WebAIM and other contrast tools preview a pair, because contrast is
-              a property of the combination, not two isolated swatches. */}
-          <div
-            className="flex flex-col items-center justify-center gap-2 rounded-box border border-base-300 p-8"
-            style={{ backgroundColor: row.bgHex, color: row.fgHex }}
-          >
-            <span className="text-2xl font-semibold" aria-hidden="true">
-              {t("accessibility.detail.sampleHeading")}
-            </span>
-            <span className="text-sm" aria-hidden="true">
-              {t("accessibility.detail.sampleBody")}
-            </span>
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-            <ColorRef
-              hex={row.fgHex}
-              role={t("accessibility.detail.foreground")}
-            />
-            <ColorRef
-              hex={row.bgHex}
-              role={t("accessibility.detail.background")}
-            />
-          </div>
-
-          <div className="rounded-box border border-base-300 p-4">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-sm text-base-content/70">
-                {t("accessibility.detail.ratio")}
-              </span>
-              <span className="font-mono text-2xl font-bold tabular-nums">
-                {row.ratio.toFixed(2)}:1
-              </span>
-            </div>
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <span className="text-sm text-base-content/70">
-                {t("accessibility.detail.minimum", { floor: row.floor })}
-              </span>
-              <StatusCell row={row} />
-            </div>
-            {row.withinMargin && (
-              <p className="mt-2 text-sm text-base-content/70">
-                {t("accessibility.marginInfo", {
-                  ratio: row.ratio.toFixed(2),
-                  floor: row.floor,
-                  margin: row.margin,
-                })}
-              </p>
-            )}
-          </div>
+    <Modal dialogRef={dialogRef} onClose={onClose} size="lg">
+      <div className="flex flex-col gap-4">
+        <div>
+          <h3 className="font-mono text-sm font-semibold">{row.id}</h3>
+          <p className="text-sm text-base-content/70">{row.label}</p>
         </div>
-      )}
+
+        {/* The combined sample: real foreground on the real surface — the way
+            WebAIM and other contrast tools preview a pair, because contrast is
+            a property of the combination, not two isolated swatches. */}
+        <div
+          className="flex flex-col items-center justify-center gap-2 rounded-box border border-base-300 p-8"
+          style={{ backgroundColor: row.bgHex, color: row.fgHex }}
+        >
+          <span className="text-2xl font-semibold" aria-hidden="true">
+            {t("accessibility.detail.sampleHeading")}
+          </span>
+          <span className="text-sm" aria-hidden="true">
+            {t("accessibility.detail.sampleBody")}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+          <ColorRef
+            hex={row.fgHex}
+            role={t("accessibility.detail.foreground")}
+          />
+          <ColorRef
+            hex={row.bgHex}
+            role={t("accessibility.detail.background")}
+          />
+        </div>
+
+        <div className="rounded-box border border-base-300 p-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-sm text-base-content/70">
+              {t("accessibility.detail.ratio")}
+            </span>
+            <span className="font-mono text-2xl font-bold tabular-nums">
+              {row.ratio.toFixed(2)}:1
+            </span>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <span className="text-sm text-base-content/70">
+              {t("accessibility.detail.minimum", { floor: row.floor })}
+            </span>
+            <StatusCell row={row} />
+          </div>
+          {row.withinMargin && (
+            <p className="mt-2 text-sm text-base-content/70">
+              {t("accessibility.marginInfo", {
+                ratio: row.ratio.toFixed(2),
+                floor: row.floor,
+                margin: row.margin,
+              })}
+            </p>
+          )}
+        </div>
+      </div>
     </Modal>
   )
 }
@@ -422,7 +425,13 @@ export default function AccessibilityPage() {
         </>
       )}
 
-      <PairDetailModal row={selectedRow} onClose={() => setSelectedRow(null)} />
+      {selectedRow && (
+        <PairDetailModal
+          key={selectedRow.id}
+          row={selectedRow}
+          onClose={() => setSelectedRow(null)}
+        />
+      )}
     </div>
   )
 }
