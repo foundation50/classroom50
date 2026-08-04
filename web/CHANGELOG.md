@@ -17,6 +17,14 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.25.0](https://github.com/foundation50/classroom50/compare/web-v1.24.1...web-v1.25.0) (2026-08-04)
+
+
+### Features
+
+* **web:** mark dev/preview builds in the account footer ([#488](https://github.com/foundation50/classroom50/issues/488)) ([26b842f](https://github.com/foundation50/classroom50/commit/26b842fb41bcffe564023c4c7418643cc8cc2ce9))
+* **web:** persistent app shell with animated navigation and smoother loading ([#486](https://github.com/foundation50/classroom50/issues/486)) ([2c6d8ff](https://github.com/foundation50/classroom50/commit/2c6d8ff7f1846139f2449180cfb659c3e067f050))
+
 ## [1.24.1](https://github.com/foundation50/classroom50/compare/web-v1.24.0...web-v1.24.1) (2026-08-02)
 
 
