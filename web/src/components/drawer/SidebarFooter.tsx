@@ -380,7 +380,7 @@ export const SidebarFooter = () => {
               </div>
 
               {org ? (
-                <div className="flex items-center gap-1.5">
+                <div className="mt-1 flex items-center gap-1.5">
                   <span className="text-xs text-neutral-content/60">
                     {labelPending ? (
                       <span className="skeleton inline-block h-3 w-16 align-middle bg-neutral-content/10" />
@@ -402,7 +402,7 @@ export const SidebarFooter = () => {
               ) : (
                 // No org route (no role row) — still surface the env badge so
                 // dev/preview is marked everywhere the account block shows.
-                <div className="flex items-center gap-1.5">
+                <div className="mt-1 flex items-center gap-1.5">
                   <DeployEnvBadge />
                 </div>
               )}
