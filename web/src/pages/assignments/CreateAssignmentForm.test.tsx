@@ -353,10 +353,8 @@ describe("assignment setup timeout", () => {
   })
 })
 
-// After a successful save, the edit form re-baselines to the saved values so
-// the "Save Changes" button returns to disabled (nothing pending), then
-// re-enables once the teacher edits again. Create mode navigates away on
-// success, so this reset is edit-only.
+// After a successful save the edit form re-baselines to the saved values, so
+// the "Save Changes" button re-disables (nothing pending) until the next edit.
 describe("edit form re-disables Save after a successful save", () => {
   const renderForm = (
     onSubmit: (values: CreateAssignmentFormValues) => void | Promise<void>,
@@ -384,7 +382,6 @@ describe("edit form re-disables Save after a successful save", () => {
     const name = screen.getByRole("textbox", {
       name: "assignments.form.name",
     })
-    // Unchanged form -> Save disabled (isDefaultValue).
     expect(saveButton().disabled).toBe(true)
 
     await user.type(name, " updated")
@@ -393,11 +390,8 @@ describe("edit form re-disables Save after a successful save", () => {
     await user.click(saveButton())
     expect(onSubmit).toHaveBeenCalledTimes(1)
 
-    // Saved values are the new baseline, so Save falls back to disabled without
-    // navigating away.
     await vi.waitFor(() => expect(saveButton().disabled).toBe(true))
 
-    // A further edit re-enables it.
     await user.type(name, " again")
     expect(saveButton().disabled).toBe(false)
   })
@@ -414,7 +408,7 @@ describe("edit form re-disables Save after a successful save", () => {
     await user.click(saveButton())
     expect(onSubmit).toHaveBeenCalledTimes(1)
 
-    // A rejected write must NOT re-baseline, so the button stays enabled.
+    // A rejected write must not re-baseline, so Save stays enabled.
     await vi.waitFor(() => expect(saveButton().disabled).toBe(false))
   })
 })

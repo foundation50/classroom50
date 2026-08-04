@@ -470,13 +470,10 @@ export const useAssignmentForm = (
     },
     onSubmit: async ({ value, formApi }) => {
       await onSubmit(toSubmitValues(value))
-      // Edit mode: re-baseline to what we just saved so `isDefaultValue` reads
-      // true again — the Save button returns to disabled, and a later edit
-      // re-enables it. `reset(value)` keeps the raw form values (not the
-      // submit-shaped ones) as the new pristine baseline, so the visible fields
-      // are unchanged. Skipped on create, where the page navigates away on
-      // success. Only runs when the awaited onSubmit resolves, so a failed write
-      // (which rejects) leaves the form dirty and re-submittable.
+      // Re-baseline to the just-saved values so `isDefaultValue` reads true
+      // again — the Save button re-disables until the next edit. Awaited, so a
+      // failed write (which rejects) leaves the form dirty and re-submittable.
+      // Create navigates away on success, so this is edit-only.
       if (slugContext?.edit) {
         formApi.reset(value)
       }

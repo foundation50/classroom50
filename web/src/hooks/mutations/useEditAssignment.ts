@@ -11,13 +11,13 @@ import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwne
 import { CONFIG_REPO } from "@/util/configRepo"
 
 // Save an assignment's settings. The hook owns the assignments.json listing
-// invalidate (unmount-safe — the edited values must reload even if the editor
-// navigates away, since the persistent app shell no longer remounts the page to
-// force a refetch) plus the unmount-safe deploy-tracking `onWrite` follow-up (its
-// translated label comes from the call site, keeping the hook t()-free).
-// `onMutate` is hook-level (React Query forbids it as a call-site option) so the
-// caller's pre-flight banner reset runs before the write. UI (success/warning
-// banners, scroll) stays at the call site — see ./README.md.
+// invalidate (unmount-safe — the persistent app shell no longer remounts the
+// page, so a stale cache would otherwise linger until a hard refresh) plus the
+// unmount-safe deploy-tracking `onWrite` follow-up (its translated label comes
+// from the call site, keeping the hook t()-free). `onMutate` is hook-level
+// (React Query forbids it as a call-site option) so the caller's pre-flight
+// banner reset runs before the write. UI (success/warning banners, scroll)
+// stays at the call site — see ./README.md.
 export function useEditAssignment(opts?: {
   onWrite?: (
     result: CreateAssignmentResult,
