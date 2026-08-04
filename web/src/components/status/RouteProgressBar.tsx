@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react"
 import { useIsFetching } from "@tanstack/react-query"
-import { AnimatePresence, motion, useMotionValue, animate } from "motion/react"
+import {
+  AnimatePresence,
+  motion,
+  useMotionValue,
+  animate,
+  type AnimationPlaybackControls,
+} from "motion/react"
 import { EASE_OUT } from "@/lib/motion"
 
 // A thin top-of-viewport progress bar bound to React Query's global in-flight
@@ -26,6 +32,8 @@ export function RouteProgressBar() {
   const progress = useMotionValue(0)
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The running fill tween, held so unmount can stop its frame loop.
+  const anim = useRef<AnimationPlaybackControls | null>(null)
 
   useEffect(() => {
     if (active) {
@@ -44,7 +52,7 @@ export function RouteProgressBar() {
           setVisible(true)
           // Trickle toward 90% — never reaches 100% until fetches settle, so a
           // long request keeps advancing without ever "finishing" early.
-          animate(progress, 0.9, { duration: 8, ease: EASE_OUT })
+          anim.current = animate(progress, 0.9, { duration: 8, ease: EASE_OUT })
         }, SHOW_DELAY_MS)
       }
       return
@@ -57,7 +65,7 @@ export function RouteProgressBar() {
     }
     // Complete + fade a shown bar, armed once via the hide-timer ref guard.
     if (visible && !hideTimer.current) {
-      animate(progress, 1, { duration: 0.2, ease: EASE_OUT })
+      anim.current = animate(progress, 1, { duration: 0.2, ease: EASE_OUT })
       hideTimer.current = setTimeout(() => {
         hideTimer.current = null
         setVisible(false)
@@ -66,11 +74,13 @@ export function RouteProgressBar() {
     }
   }, [active, visible, progress])
 
-  // Clear timers only on unmount — never in a per-run cleanup (see above).
+  // Clear timers and stop the fill tween only on unmount — never in a per-run
+  // cleanup (see above), which would defeat the churn-proof reveal.
   useEffect(
     () => () => {
       if (showTimer.current) clearTimeout(showTimer.current)
       if (hideTimer.current) clearTimeout(hideTimer.current)
+      anim.current?.stop()
     },
     [],
   )

@@ -139,10 +139,11 @@ export const sidebarLevelVariants: Variants = {
 }
 
 // Page-content entrance for a route swap in the persistent shell: a gentle
-// fade + short rise so a new view eases in rather than snapping. Deliberately
-// enter-only (no exit) with mode="popLayout"/"sync" so the incoming page isn't
-// held behind an outgoing one — keeps navigation feeling instant, not gated on
-// an exit animation. Kept subtle so it layers cleanly over per-page skeletons.
+// fade + short rise so a new view eases in rather than snapping. Enter-only (no
+// exit): the consumer (PageTransition) remounts it per route via a `key` rather
+// than wrapping it in AnimatePresence, so there's no exit to wait on and the
+// incoming page is never held behind an outgoing one. Kept subtle so it layers
+// cleanly over per-page skeletons.
 export const pageContentVariants: Variants = {
   initial: { opacity: 0, y: 6 },
   animate: {

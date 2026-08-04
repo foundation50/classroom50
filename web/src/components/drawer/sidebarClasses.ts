@@ -3,7 +3,6 @@
 // Row layout only. The active surface (accent border + filled background) is a
 // separate shared-`layoutId` pill (see `sidebarActivePillClass`) that glides
 // between rows, so the row keeps just its box + a hover hint for inactive rows.
-// `relative` anchors the absolutely-positioned pill; `z` lifts icon/label above it.
 export const navItemClass = (active: boolean, collapsed: boolean) =>
   `relative flex items-center gap-2 rounded-box px-2 py-2 ${
     collapsed ? "justify-center" : ""

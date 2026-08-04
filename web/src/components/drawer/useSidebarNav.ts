@@ -22,32 +22,35 @@ export type SidebarNav = {
 // source of truth, matched by route id so a renamed path fails loudly rather
 // than silently mis-highlighting.
 
-// Route id -> active row for the org "classes" level. The settings route also
-// flips the `settings` flag; every other row is a plain selection. Missing from
-// the table (classes list, create, import, setup) falls through to the home row.
-const CLASSES_ROW: Record<string, { selected: string; settings?: boolean }> = {
-  "/_authed/$org/settings/": { selected: "settings", settings: true },
-  "/_authed/$org/published/": { selected: "published" },
-  "/_authed/$org/members/": { selected: "members" },
-  "/_authed/$org/activity/": { selected: "activity" },
-}
+// Route id -> active row for the org "classes" level, as ordered [id, row]
+// tuples (built once at module scope, not per render). The settings route also
+// flips the `settings` flag; every other row is a plain selection. A route
+// missing from the table (classes list, create, import, setup) falls through to
+// the home row.
+const CLASSES_ROWS: [string, { selected: string; settings?: boolean }][] = [
+  ["/_authed/$org/settings/", { selected: "settings", settings: true }],
+  ["/_authed/$org/published/", { selected: "published" }],
+  ["/_authed/$org/members/", { selected: "members" }],
+  ["/_authed/$org/activity/", { selected: "activity" }],
+]
 
 // Route id -> active row for the classroom level. Inside an assignment the
 // AssignmentSidebarMenu self-derives its own active row, so only these
 // classroom-scoped rows need mapping here; the default is the assignments list.
-const CLASSROOM_ROW: Record<string, string> = {
-  "/_authed/$org/$classroom/roster/": "roster",
-  "/_authed/$org/$classroom/settings/": "settings",
-}
+const CLASSROOM_ROWS: [string, string][] = [
+  ["/_authed/$org/$classroom/roster/", "roster"],
+  ["/_authed/$org/$classroom/settings/", "settings"],
+]
 
 export const useSidebarNav = (): SidebarNav => {
   const { org, classroom, assignment } = useParams({ strict: false })
-  // Keep the selector returning an array (router structural-sharing compares it
-  // by value, avoiding needless re-renders); build the Set for O(1) lookups here.
+  // The selector returns an array (router structural-sharing compares it by
+  // value, avoiding needless re-renders). It's tiny (a handful of matched route
+  // ids), so a direct `.includes` against the small route tables is cheaper than
+  // allocating a Set per render.
   const routeIds = useRouterState({
     select: (s) => s.matches.map((m) => m.routeId as string),
   })
-  const matched = new Set(routeIds)
 
   // Level: no org -> the orgs list; org but no classroom -> the class/admin
   // menu; inside a classroom -> the classroom/assignment menu (page "").
@@ -68,13 +71,13 @@ export const useSidebarNav = (): SidebarNav => {
   // Orgs level (top): only the account Settings page is "selected"; the orgs
   // list itself is the default row.
   if (page === "orgs") {
-    const settings = matched.has("/_authed/settings/")
+    const settings = routeIds.includes("/_authed/settings/")
     return { page, selected: settings ? "settings" : "", settings, levelKey }
   }
 
   // Classes level ($org/*): the org admin menu.
   if (page === "classes") {
-    const hit = Object.entries(CLASSES_ROW).find(([id]) => matched.has(id))?.[1]
+    const hit = CLASSES_ROWS.find(([id]) => routeIds.includes(id))?.[1]
     return {
       page,
       selected: hit?.selected ?? "",
@@ -84,9 +87,7 @@ export const useSidebarNav = (): SidebarNav => {
   }
 
   // Classroom level ($org/$classroom/*): the classroom/assignment menu.
-  const classroomRow = Object.entries(CLASSROOM_ROW).find(([id]) =>
-    matched.has(id),
-  )?.[1]
+  const classroomRow = CLASSROOM_ROWS.find(([id]) => routeIds.includes(id))?.[1]
   return {
     page,
     selected: classroomRow ?? "assignments",

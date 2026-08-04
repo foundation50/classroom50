@@ -20,7 +20,6 @@ const useGetClasses = (org: string | undefined) => {
     // empty state: an empty `classes` array during the fetch is otherwise
     // indistinguishable from a genuinely empty org.
     isLoading: classesQuery.isLoading,
-    isError: classesQuery.isError,
   }
 }
 

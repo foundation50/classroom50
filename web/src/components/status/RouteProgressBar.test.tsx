@@ -12,9 +12,9 @@ vi.mock("@tanstack/react-query", () => ({
 }))
 
 // Render the animated bar as a plain element and no-op the motion value/animate
-// helpers; the test targets the timer + visibility logic (Finding #1), not the
-// tween. AnimatePresence just renders its children so `visible` maps to DOM
-// presence synchronously.
+// helpers; the test targets the timer + visibility logic, not the tween.
+// AnimatePresence just renders its children so `visible` maps to DOM presence
+// synchronously.
 vi.mock("motion/react", () => ({
   AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
   motion: {
@@ -80,7 +80,7 @@ describe("RouteProgressBar", () => {
     expect(bar()).not.toBeNull()
   })
 
-  it("reveals on schedule even as the fetch count churns (Finding #1 regression)", () => {
+  it("reveals on schedule even as the fetch count churns", () => {
     mount()
     setFetching(1)
     // A staggered burst: the count keeps changing before the 120ms reveal.
