@@ -2,13 +2,17 @@ import { Menu } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { type ReactNode } from "react"
 import { Outlet } from "@tanstack/react-router"
+import { AnimatePresence, motion } from "motion/react"
 import Drawer, { MOBILE_DRAWER_ID, useSidebarCollapse } from "./collapseContext"
 import {
   SidebarContent,
   SidebarContentClasses,
   SidebarContentOrgs,
 } from "./SidebarContent"
+import { ClassroomLogo, ExpandSidebarButton } from "./primitives"
+import { SidebarFooter } from "./SidebarFooter"
 import { useSidebarNav } from "./useSidebarNav"
+import { sidebarLevelVariants } from "@/lib/motion"
 
 // Persistent app shell: the drawer chrome + rail mount ONCE here and page
 // content flows through <Outlet/>, so navigating between pages swaps only the
@@ -55,13 +59,18 @@ export const DrawerToggle = () => (
 )
 
 // The rail lives in the persistent `_authed` shell, so it derives its active
-// state from the current route (see useSidebarNav) rather than per-page props —
-// this keeps the single motion `layoutId` highlight element mounted across
-// navigations so it glides between rows instead of remounting.
+// state from the current route (see useSidebarNav) rather than per-page props.
+// Two coordinated animations live here:
+//   - The active-row highlight is a single motion `layoutId` pill that stays
+//     mounted across navigations and glides between rows (see SidebarItemBody).
+//   - The menu BODY swaps on a level change (orgs -> classes -> classroom ->
+//     assignment) via one AnimatePresence keyed by `levelKey`. The chrome (logo,
+//     expand button, footer) sits OUTSIDE that presence so it stays put while
+//     only the menu cross-fades/slides.
 export const DrawerSidebar = () => {
   const { collapsed } = useSidebarCollapse()
   const { t } = useTranslation()
-  const { page, selected, settings } = useSidebarNav()
+  const { page, selected, settings, levelKey } = useSidebarNav()
   return (
     <div className="drawer-side z-40">
       <label
@@ -77,13 +86,26 @@ export const DrawerSidebar = () => {
             : "w-60 min-w-30 [&>div]:px-6"
         }`}
       >
-        {page === "classes" ? (
-          <SidebarContentClasses selected={selected} settings={settings} />
-        ) : page === "orgs" ? (
-          <SidebarContentOrgs selected={selected} />
-        ) : (
-          <SidebarContent selected={selected} />
-        )}
+        <ClassroomLogo />
+        <ExpandSidebarButton />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={levelKey}
+            variants={sidebarLevelVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
+            {page === "classes" ? (
+              <SidebarContentClasses selected={selected} settings={settings} />
+            ) : page === "orgs" ? (
+              <SidebarContentOrgs selected={selected} />
+            ) : (
+              <SidebarContent selected={selected} />
+            )}
+          </motion.div>
+        </AnimatePresence>
+        <SidebarFooter />
       </nav>
     </div>
   )
