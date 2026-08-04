@@ -1,4 +1,33 @@
 {
+  "accessibility": {
+    "title": "Color contrast audit",
+    "subtitle": "WCAG 2.2 conformance for the app's color palette, checked automatically on every build.",
+    "download": "Download report (.md)",
+    "loadError": "Couldn't load the contrast audit report.",
+    "summaryPass": "All {{total}} audited color pairs meet their WCAG contrast floor. {{margin}} sit within the stricter safety margin (reported, not required).",
+    "summaryFail": "{{failures}} color pair(s) are below the WCAG contrast floor.",
+    "standard": "Standard: WCAG 2.2 — 1.4.6 Contrast (Enhanced, AAA) for text, 1.4.11 Non-text Contrast for UI components. Thresholds: body text ≥ {{body}}:1, large text ≥ {{large}}:1, non-text ≥ {{nonText}}:1. Generated {{generated}}.",
+    "col": {
+      "pair": "Pair",
+      "description": "Foreground / surface",
+      "size": "Size",
+      "ratio": "Ratio",
+      "floor": "Floor",
+      "status": "Status"
+    },
+    "status": {
+      "pass": "Pass",
+      "margin": "Margin",
+      "fail": "Fail",
+      "exempt": "Exempt"
+    },
+    "legend": {
+      "pass": "meets the floor and the safety margin",
+      "margin": "meets the floor; within the aspirational margin",
+      "fail": "below the WCAG floor",
+      "exempt": "outside WCAG scope (decorative / disabled)"
+    }
+  },
   "actionsBanner": {
     "totalActions_one": "{{count}} action",
     "totalActions_other": "{{count}} actions",

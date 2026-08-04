@@ -10,10 +10,20 @@ import { writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { renderContrastReport } from "../src/util/contrastReport"
+import {
+  renderContrastJson,
+  renderContrastReport,
+} from "../src/util/contrastReport"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const outPath = path.resolve(here, "..", "CONTRAST-AUDIT.md")
+const dir = path.resolve(here, "..")
 
-writeFileSync(outPath, renderContrastReport(), "utf8")
-console.log(`Wrote ${outPath}`)
+const outputs: [string, string][] = [
+  ["contrast-audit.json", renderContrastJson()],
+  ["CONTRAST-AUDIT.md", renderContrastReport()],
+]
+for (const [name, body] of outputs) {
+  const outPath = path.join(dir, name)
+  writeFileSync(outPath, body, "utf8")
+  console.log(`Wrote ${outPath}`)
+}

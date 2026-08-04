@@ -9,7 +9,10 @@ import path from "node:path"
 import { execSync } from "node:child_process"
 import { createRequire } from "node:module"
 
-import { renderContrastReport } from "./src/util/contrastReport"
+import {
+  renderContrastJson,
+  renderContrastReport,
+} from "./src/util/contrastReport"
 
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
@@ -72,27 +75,38 @@ function versionJsonPlugin(): Plugin {
   }
 }
 
-// Publishes the WCAG contrast audit report as /CONTRAST-AUDIT.md in the built
-// site (a stable public URL an accessibility/ADA reviewer can cite), and serves
-// it in dev. Generated from src/util/contrastModel.ts at build time — never
-// committed — so it is always current with the shipped palette. The contrast
-// guard tests are the enforcement; this file is the human-readable rendering.
+// Publishes the WCAG contrast audit in the built site: contrast-audit.json (the
+// source of truth the /accessibility page fetches) and CONTRAST-AUDIT.md (the
+// human-readable download, derived from the same data). Both are served in dev
+// too, so `npm run dev` shows a live report at /accessibility. Generated from
+// src/util/contrastModel.ts at build time — never committed — so they are always
+// current with the shipped palette. The contrast guard tests are the
+// enforcement; these files are renderings.
 function contrastAuditPlugin(): Plugin {
-  const body = renderContrastReport()
+  const json = renderContrastJson()
+  const md = renderContrastReport()
+  const assets: { fileName: string; source: string; type: string }[] = [
+    { fileName: "contrast-audit.json", source: json, type: "application/json" },
+    {
+      fileName: "CONTRAST-AUDIT.md",
+      source: md,
+      type: "text/markdown; charset=utf-8",
+    },
+  ]
   return {
     name: "classroom50:contrast-audit",
     generateBundle() {
-      this.emitFile({
-        type: "asset",
-        fileName: "CONTRAST-AUDIT.md",
-        source: body,
-      })
+      for (const a of assets) {
+        this.emitFile({ type: "asset", fileName: a.fileName, source: a.source })
+      }
     },
     configureServer(server) {
-      server.middlewares.use("/CONTRAST-AUDIT.md", (_req, res) => {
-        res.setHeader("Content-Type", "text/markdown; charset=utf-8")
-        res.end(body)
-      })
+      for (const a of assets) {
+        server.middlewares.use(`/${a.fileName}`, (_req, res) => {
+          res.setHeader("Content-Type", a.type)
+          res.end(a.source)
+        })
+      }
     },
   }
 }
