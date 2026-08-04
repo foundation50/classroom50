@@ -22,6 +22,16 @@ export const staggerTransition = (index: number): Transition => ({
   delay: Math.min(index, 8) * 0.06,
 })
 
+// Parent container that orchestrates a staggered entrance for its motion
+// children WITHOUT threading an index into each: set on a `motion` wrapper with
+// `initial="initial" animate="animate"`, and children using `enterExit` (same
+// variant keys) cascade in. Preferred over per-child `staggerTransition` when
+// the children can't take a `transition` prop (e.g. wrapped in a typed <Card>).
+export const listStagger: Variants = {
+  initial: {},
+  animate: { transition: { staggerChildren: 0.06 } },
+}
+
 export const enterExit: Variants = {
   initial: { opacity: 0, scale: 0.96 },
   animate: {
