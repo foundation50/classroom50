@@ -51,8 +51,8 @@ export type ContrastAuditJson = {
 }
 
 const THEME_LABEL: Record<Theme, string> = {
-  sumi: "Light (sumi)",
-  "sumi-dark": "Dark (sumi-dark)",
+  sumi: "Light",
+  "sumi-dark": "Dark",
 }
 
 function statusOf(

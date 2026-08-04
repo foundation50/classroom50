@@ -165,14 +165,36 @@ export default function AccessibilityPage() {
                 })}
           </Alert>
 
-          <p className="text-sm text-base-content/70">
-            {t("accessibility.standard", {
-              body: audit.thresholds.body,
-              large: audit.thresholds.large,
-              nonText: audit.thresholds.nonText,
-              generated: audit.generated,
-            })}
-          </p>
+          <details className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
+            <summary className="collapse-title text-sm font-medium">
+              {t("accessibility.criteria.toggle")}
+            </summary>
+            <div className="collapse-content text-sm text-base-content/70">
+              <p>{t("accessibility.criteria.standardText")}</p>
+              <ul className="mt-2 list-disc ps-5">
+                <li>
+                  {t("accessibility.criteria.bodyText", {
+                    body: audit.thresholds.body,
+                  })}
+                </li>
+                <li>
+                  {t("accessibility.criteria.largeText", {
+                    large: audit.thresholds.large,
+                  })}
+                </li>
+                <li>
+                  {t("accessibility.criteria.nonText", {
+                    nonText: audit.thresholds.nonText,
+                  })}
+                </li>
+              </ul>
+              <p className="mt-2">
+                {t("accessibility.criteria.generated", {
+                  generated: audit.generated,
+                })}
+              </p>
+            </div>
+          </details>
 
           {audit.themes.map((theme) => (
             <ThemeTable key={theme.theme} theme={theme} />

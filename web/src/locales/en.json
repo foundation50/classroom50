@@ -4,9 +4,16 @@
     "subtitle": "WCAG 2.2 conformance for the app's color palette, checked automatically on every build.",
     "download": "Download report (.md)",
     "loadError": "Couldn't load the contrast audit report.",
-    "summaryPass": "All {{total}} audited color pairs meet their WCAG contrast floor. {{margin}} sit within the stricter safety margin (reported, not required).",
+    "summaryPass": "All {{total}} audited color pairs meet their WCAG contrast floor. {{margin}} sit within the stricter safety margin.",
     "summaryFail": "{{failures}} color pair(s) are below the WCAG contrast floor.",
-    "standard": "Standard: WCAG 2.2 — 1.4.6 Contrast (Enhanced, AAA) for text, 1.4.11 Non-text Contrast for UI components. Thresholds: body text ≥ {{body}}:1, large text ≥ {{large}}:1, non-text ≥ {{nonText}}:1. Generated {{generated}}.",
+    "criteria": {
+      "toggle": "Standard and thresholds",
+      "standardText": "WCAG 2.2 — 1.4.6 Contrast (Enhanced, AAA) for text, 1.4.11 Non-text Contrast for UI components.",
+      "bodyText": "Body text ≥ {{body}}:1",
+      "largeText": "Large text ≥ {{large}}:1",
+      "nonText": "Non-text (UI components) ≥ {{nonText}}:1",
+      "generated": "Generated {{generated}}"
+    },
     "col": {
       "pair": "Pair",
       "description": "Foreground / surface",

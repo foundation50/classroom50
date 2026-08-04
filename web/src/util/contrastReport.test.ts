@@ -23,8 +23,8 @@ describe("renderContrastReport", () => {
   })
 
   it("includes a table for each theme", () => {
-    expect(md).toContain("## Light (sumi)")
-    expect(md).toContain("## Dark (sumi-dark)")
+    expect(md).toContain("## Light")
+    expect(md).toContain("## Dark")
   })
 
   it("is deterministic for a fixed date", () => {
