@@ -17,6 +17,7 @@ import {
   mixColor,
   parseColor,
   ratioOver,
+  toHex,
   type LinearRgb,
 } from "./contrast"
 
@@ -331,6 +332,10 @@ export type Evaluated = Pair & {
   margin: number
   passesFloor: boolean
   passesMargin: boolean
+  /** The bg as an opaque sRGB hex (the surface behind the text). */
+  bgHex: string
+  /** The fg as actually displayed: flattened over the opaque bg, as sRGB hex. */
+  fgHex: string
 }
 
 /** Evaluate one pair against its spec floor and design margin. */
@@ -339,6 +344,10 @@ export function evaluate(p: Pair): Evaluated {
   const floor = p.kind === "nonText" ? SPEC_FLOOR.nonText : SPEC_FLOOR[p.size]
   const margin =
     p.kind === "nonText" ? MARGIN_TARGET.nonText : MARGIN_TARGET[p.size]
+  // Resolve the displayed colors: the bg is flattened to opaque (over white if
+  // itself translucent), and the fg is composited over that bg — matching what
+  // ratioOver scores and what a viewer actually sees.
+  const opaqueBg = p.bg.a < 1 ? flattenOver(p.bg, parseColor("#ffffff")) : p.bg
   return {
     ...p,
     ratio,
@@ -346,6 +355,8 @@ export function evaluate(p: Pair): Evaluated {
     margin,
     passesFloor: p.exempt || ratio >= floor,
     passesMargin: p.exempt || ratio >= margin,
+    bgHex: toHex(opaqueBg),
+    fgHex: toHex(flattenOver(p.fg, opaqueBg)),
   }
 }
 

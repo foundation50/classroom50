@@ -15,7 +15,7 @@ import {
   type Theme,
 } from "./contrastModel"
 
-export type ContrastStatus = "pass" | "margin" | "fail" | "exempt"
+export type ContrastStatus = "pass" | "fail" | "exempt"
 
 export type ContrastAuditRow = {
   id: string
@@ -26,6 +26,12 @@ export type ContrastAuditRow = {
   floor: number
   margin: number
   status: ContrastStatus
+  /** Clears the WCAG floor (a Pass) but sits below the recommended margin. */
+  withinMargin: boolean
+  /** Displayed foreground (fg composited over the opaque surface), sRGB hex. */
+  fgHex: string
+  /** Opaque surface behind the text, sRGB hex. */
+  bgHex: string
 }
 
 export type ContrastAuditTheme = {
@@ -58,11 +64,9 @@ const THEME_LABEL: Record<Theme, string> = {
 function statusOf(
   exempt: boolean | undefined,
   passesFloor: boolean,
-  passesMargin: boolean,
 ): ContrastStatus {
   if (exempt) return "exempt"
-  if (!passesFloor) return "fail"
-  return passesMargin ? "pass" : "margin"
+  return passesFloor ? "pass" : "fail"
 }
 
 /** The canonical structured audit. Deterministic for a given palette + date. */
@@ -87,7 +91,10 @@ export function buildContrastAudit(now = new Date()): ContrastAuditJson {
           ratio: Number(r.ratio.toFixed(2)),
           floor: r.floor,
           margin: r.margin,
-          status: statusOf(r.exempt, r.passesFloor, r.passesMargin),
+          status: statusOf(r.exempt, r.passesFloor),
+          withinMargin: !r.exempt && r.passesFloor && !r.passesMargin,
+          fgHex: r.fgHex,
+          bgHex: r.bgHex,
         })),
     }),
   )
@@ -113,11 +120,14 @@ export function renderContrastJson(now = new Date()): string {
   return JSON.stringify(buildContrastAudit(now), null, 2) + "\n"
 }
 
-const STATUS_CELL: Record<ContrastStatus, string> = {
-  pass: "✅ pass",
-  margin: "⚠️ margin",
-  fail: "❌ FAIL",
-  exempt: "— exempt",
+// Markdown status cell. A pair that clears the WCAG floor is a pass; the
+// `withinMargin` flag adds a note that it sits below the recommended target.
+function statusCell(row: ContrastAuditRow): string {
+  if (row.status === "exempt") return "— exempt"
+  if (row.status === "fail") return "❌ FAIL"
+  return row.withinMargin
+    ? `✅ pass (below ${row.margin}:1 recommended)`
+    : "✅ pass"
 }
 
 /** Render the Markdown report — derived from the same structured audit. */
@@ -144,11 +154,11 @@ export function renderContrastReport(now = new Date()): string {
     `- **Thresholds:** body text ≥ ${t.body}:1, large text ≥ ${t.large}:1, non-text ≥ ${t.nonText}:1.`,
   )
   out.push(
-    `- **Design-safety margin (aspirational, non-blocking):** body ≥ ${m.body}:1, large ≥ ${m.large}:1, non-text ≥ ${m.nonText}:1.`,
+    `- **Recommended safety margin (above the WCAG minimum):** body ≥ ${m.body}:1, large ≥ ${m.large}:1, non-text ≥ ${m.nonText}:1. Extra headroom for anti-aliasing, sub-pixel rendering, and future palette tweaks; not required for conformance.`,
   )
   out.push(
-    `- **Result:** ${summary.allPass ? "**All enforced pairs meet their WCAG floor.**" : `**${summary.failures} pair(s) below the WCAG floor.**`}` +
-      ` ${summary.marginMisses} pair(s) clear the floor but sit inside the safety margin (reported, not enforced).`,
+    `- **Result:** ${summary.allPass ? "**All audited pairs meet their WCAG floor.**" : `**${summary.failures} pair(s) below the WCAG floor.**`}` +
+      ` ${summary.marginMisses} pass but sit below the recommended margin.`,
   )
   out.push("")
   out.push(
@@ -164,12 +174,13 @@ export function renderContrastReport(now = new Date()): string {
     out.push(`## ${theme.label}`)
     out.push("")
     out.push(
-      "| Pair | Foreground / surface | Size | Kind | Ratio | Floor | Status |",
+      "| Pair | Foreground / surface | Colors | Size | Ratio | Floor | Status |",
     )
     out.push("| --- | --- | --- | --- | ---: | ---: | --- |")
     for (const r of theme.rows) {
+      const colors = `text \`${r.fgHex}\` on \`${r.bgHex}\``
       out.push(
-        `| \`${r.id}\` | ${r.label} | ${r.size} | ${r.kind} | ${r.ratio.toFixed(2)}:1 | ${r.floor}:1 | ${STATUS_CELL[r.status]} |`,
+        `| \`${r.id}\` | ${r.label} | ${colors} | ${r.size} | ${r.ratio.toFixed(2)}:1 | ${r.floor}:1 | ${statusCell(r)} |`,
       )
     }
     out.push("")
@@ -177,11 +188,12 @@ export function renderContrastReport(now = new Date()): string {
 
   out.push("### Legend")
   out.push("")
-  out.push("- ✅ pass — meets the WCAG floor and the design-safety margin.")
   out.push(
-    "- ⚠️ margin — meets the WCAG floor; below the aspirational margin (not a failure).",
+    "- ✅ pass — meets the WCAG floor. A `(below X:1 recommended)` note means it " +
+      "clears the WCAG minimum but sits under our stricter recommended target " +
+      "(see the safety-margin bullet above) — still a pass, just less headroom.",
   )
-  out.push("- ❌ FAIL — below the WCAG floor (fails CI).")
+  out.push("- ❌ FAIL — below the WCAG floor.")
   out.push(
     "- — exempt — outside WCAG scope (logotypes, disabled/inactive controls, " +
       "structural dividers that are not the sole means of identifying a component).",

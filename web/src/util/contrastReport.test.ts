@@ -16,10 +16,14 @@ describe("renderContrastReport", () => {
     expect(md).toContain("non-text ≥ 3:1")
   })
 
-  it("reports all enforced pairs meet their floor for the current palette", () => {
-    expect(md).toContain("All enforced pairs meet their WCAG floor.")
-    // No table row carries a FAIL status cell (the Legend mentions FAIL in prose).
-    expect(md).not.toMatch(/\| ❌ FAIL \|/)
+  it("reports all audited pairs meet their floor for the current palette", () => {
+    expect(md).toContain("All audited pairs meet their WCAG floor.")
+    // No FAIL status appears in a row (the intro/legend may mention FAIL in prose).
+    expect(md).not.toMatch(/❌ FAIL \|/)
+  })
+
+  it("shows resolved fg/bg hex colors in the table", () => {
+    expect(md).toMatch(/text `#[0-9a-f]{6}` on `#[0-9a-f]{6}`/)
   })
 
   it("includes a table for each theme", () => {
@@ -43,13 +47,31 @@ describe("buildContrastAudit (JSON source of truth)", () => {
     expect(audit.summary.allPass).toBe(audit.summary.failures === 0)
   })
 
-  it("has both themes with rows and valid statuses", () => {
+  it("has both themes with rows, valid statuses, and resolved colors", () => {
     const themes = audit.themes.map((t) => t.theme)
     expect(themes).toEqual(["sumi", "sumi-dark"])
-    const valid = new Set(["pass", "margin", "fail", "exempt"])
+    const valid = new Set(["pass", "fail", "exempt"])
+    const hex = /^#[0-9a-f]{6}$/
     for (const theme of audit.themes) {
       expect(theme.rows.length).toBeGreaterThan(0)
-      for (const r of theme.rows) expect(valid.has(r.status)).toBe(true)
+      for (const r of theme.rows) {
+        expect(valid.has(r.status)).toBe(true)
+        expect(r.fgHex).toMatch(hex)
+        expect(r.bgHex).toMatch(hex)
+        // withinMargin only annotates a pass, never a fail/exempt.
+        if (r.withinMargin) expect(r.status).toBe("pass")
+      }
+    }
+  })
+
+  it("marks margin-band passes with withinMargin, matching the summary count", () => {
+    const flagged = audit.themes.flatMap((t) =>
+      t.rows.filter((r) => r.withinMargin),
+    )
+    expect(flagged.length).toBe(audit.summary.marginMisses)
+    for (const r of flagged) {
+      expect(r.ratio).toBeGreaterThanOrEqual(r.floor)
+      expect(r.ratio).toBeLessThan(r.margin)
     }
   })
 

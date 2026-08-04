@@ -4,34 +4,55 @@
     "subtitle": "WCAG 2.2 conformance for the app's color palette, checked automatically on every build.",
     "download": "Download report (.md)",
     "loadError": "Couldn't load the contrast audit report.",
-    "summaryPass": "All {{total}} audited color pairs meet their WCAG contrast floor. {{margin}} sit within the stricter safety margin.",
+    "summaryPass": "All {{total}} audited color pairs meet their WCAG contrast floor.",
+    "summaryPassMargin_one": "All {{total}} audited color pairs meet their WCAG contrast floor. {{count}} passes but sits below our recommended safety margin (see below).",
+    "summaryPassMargin_other": "All {{total}} audited color pairs meet their WCAG contrast floor. {{count}} pass but sit below our recommended safety margin (see below).",
     "summaryFail": "{{failures}} color pair(s) are below the WCAG contrast floor.",
+    "themeToggle": "Theme",
     "criteria": {
-      "toggle": "Standard and thresholds",
+      "toggle": "Standard, thresholds, and safety margin",
       "standardText": "WCAG 2.2 — 1.4.6 Contrast (Enhanced, AAA) for text, 1.4.11 Non-text Contrast for UI components.",
+      "thresholdsHeading": "Required minimums (WCAG floor):",
       "bodyText": "Body text ≥ {{body}}:1",
       "largeText": "Large text ≥ {{large}}:1",
       "nonText": "Non-text (UI components) ≥ {{nonText}}:1",
+      "marginHeading": "Recommended safety margin (above the minimum):",
+      "marginBody": "Body text ≥ {{body}}:1",
+      "marginLarge": "Large text ≥ {{large}}:1",
+      "marginNonText": "Non-text ≥ {{nonText}}:1",
+      "marginWhy": "The margin is extra headroom above the WCAG minimum — it absorbs anti-aliasing, sub-pixel rendering, and future palette tweaks. It is a recommendation, not required for conformance.",
       "generated": "Generated {{generated}}"
     },
     "col": {
       "pair": "Pair",
       "description": "Foreground / surface",
-      "size": "Size",
+      "preview": "Preview",
       "ratio": "Ratio",
-      "floor": "Floor",
+      "floor": "Minimum",
       "status": "Status"
+    },
+    "preview": {
+      "open": "View color details",
+      "openFor": "View color details for {{pair}}"
+    },
+    "detail": {
+      "foreground": "Foreground (text)",
+      "background": "Background (surface)",
+      "sampleHeading": "Sample text",
+      "sampleBody": "The quick brown fox jumps over the lazy dog.",
+      "ratio": "Contrast ratio",
+      "minimum": "WCAG minimum ({{floor}}:1)"
     },
     "status": {
       "pass": "Pass",
-      "margin": "Margin",
       "fail": "Fail",
       "exempt": "Exempt"
     },
+    "marginInfo": "{{ratio}}:1 meets the {{floor}}:1 WCAG minimum, but is below our recommended {{margin}}:1 target — still a pass, with less headroom.",
     "legend": {
-      "pass": "meets the floor and the safety margin",
-      "margin": "meets the floor; within the aspirational margin",
-      "fail": "below the WCAG floor",
+      "pass": "meets the WCAG minimum",
+      "passMargin": "passes, but below the recommended margin (info icon shows the numbers)",
+      "fail": "below the WCAG minimum",
       "exempt": "outside WCAG scope (decorative / disabled)"
     }
   },
