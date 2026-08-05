@@ -56,7 +56,9 @@ jobs:
       # parity test / buildSkeletonFiles throw detects a drifted bundle. Gating
       # the deploy on it keeps a broken skeleton from shipping even if web-ci
       # was skipped (the deploy is path-scoped to web/**, same as web-ci).
-      - run: npm test
+      # test:node only: the browser a11y guards gate every PR via web-ci and need
+      # Chromium; the deploy gate doesn't re-run them (no ~90MB browser install).
+      - run: npm run test:node
 
       # `npm run build` runs `tsc -b && vite build`; the type-check is
       # blocking, so a regression fails the deploy instead of silently
