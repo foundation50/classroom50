@@ -1,35 +1,65 @@
-name: gh-student CI
+name: CLI CI
+
+# Unified Go CI for the three CLI modules (cli/shared, cli/gh-student,
+# cli/gh-teacher). They ran as three near-identical workflows; this is one
+# workflow with a module matrix — the shared gate (tidy, lint, fmt, build, test)
+# is defined once, and the per-module bits (working directory, the go-gh importer
+# guard) are matrix data.
+#
+# The go-gh importer guard runs only for gh-student/gh-teacher: cli/shared is the
+# API-seam module that MAY import go-gh, so the guard does not apply to it.
+#
+# Path fan-out: gh-student and gh-teacher depend on cli/shared, so a cli/shared/**
+# change must exercise all three modules. The matrix runs every module on any
+# trigger, which preserves that guarantee (each leg is a fast Go build+test).
 
 on:
   push:
     branches: [main]
     paths:
-      - 'cli/gh-student/**'
       - 'cli/shared/**'
-      - '.github/workflows/gh-student-ci.yaml'
+      - 'cli/gh-student/**'
+      - 'cli/gh-teacher/**'
+      - '.github/workflows/cli-ci.yaml'
   pull_request:
     paths:
-      - 'cli/gh-student/**'
       - 'cli/shared/**'
-      - '.github/workflows/gh-student-ci.yaml'
+      - 'cli/gh-student/**'
+      - 'cli/gh-teacher/**'
+      - '.github/workflows/cli-ci.yaml'
 
 permissions:
   contents: read
 
 jobs:
   build:
+    name: ${{ matrix.module }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # cli/shared is the go-gh API seam — the importer guard does not apply.
+          - module: shared
+            dir: cli/shared
+            gh_guard: false
+          - module: gh-student
+            dir: cli/gh-student
+            gh_guard: true
+          - module: gh-teacher
+            dir: cli/gh-teacher
+            gh_guard: true
     defaults:
       run:
-        working-directory: cli/gh-student
+        working-directory: ${{ matrix.dir }}
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v7
         with:
-          go-version-file: cli/gh-student/go.mod
-          cache-dependency-path: cli/gh-student/go.sum
+          go-version-file: ${{ matrix.dir }}/go.mod
+          cache-dependency-path: ${{ matrix.dir }}/go.sum
 
       - name: Verify go.mod / go.sum are tidy
         run: |
@@ -39,7 +69,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          working-directory: cli/gh-student
+          working-directory: ${{ matrix.dir }}
           version: v2.12.2
 
       - name: Format (gofmt + goimports)
@@ -59,7 +89,9 @@ jobs:
         # package allowed to import go-gh; internal/githubtest may too
         # because it constructs real clients for white-box tests. Any
         # other non-test file importing it means a domain package
-        # reached around the seam — fail the build.
+        # reached around the seam — fail the build. Only the gh-* modules
+        # have this seam; cli/shared is exempt (gh_guard=false).
+        if: ${{ matrix.gh_guard }}
         run: |
           offenders=$(grep -rl --include='*.go' 'github.com/cli/go-gh/v2/pkg/api' . \
             | grep -v '_test\.go$' \
