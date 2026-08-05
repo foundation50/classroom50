@@ -17,6 +17,14 @@ Requires Node/npm.
 
 3. `npm run dev` and open http://localhost:5173
 
+To skip the sign-in screen during local development, set a classic GitHub PAT in
+`.env.local` as `VITE_GITHUB_PAT` — the dev server validates it (same required
+scopes as the manual paste flow) and auto-signs-in on load. `vite.config.ts`
+hard-blanks this value for any non-development build, so it can never be inlined
+into a deployed bundle. It also never overrides an existing signed-in session.
+Still, don't set it for a production build you ship — a `VITE_*` value is inlined
+verbatim into the bundle, and that build-time strip is the only guard.
+
 ### GitHub OAuth app
 
 Sign-in requires a [GitHub OAuth app](https://github.com/settings/developers):
