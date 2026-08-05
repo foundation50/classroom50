@@ -184,23 +184,7 @@ export const SidebarFooter = () => {
       ) : null}
       <div
         ref={footerRef}
-        className={`relative cursor-pointer border-t border-neutral-content/20 py-3 transition-colors hover:bg-[var(--sidebar-surface)]/60 ${org ? "" : "mt-auto"}`}
-        onClick={() => setMenuOpen((open) => !open)}
-        role="button"
-        tabIndex={0}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        aria-label={t("nav.accountMenu")}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault()
-            setMenuOpen((open) => !open)
-          }
-
-          if (event.key === "Escape") {
-            setMenuOpen(false)
-          }
-        }}
+        className={`relative border-t border-neutral-content/20 ${org ? "" : "mt-auto"}`}
       >
         <div
           className={`
@@ -215,7 +199,6 @@ export const SidebarFooter = () => {
             : "pointer-events-none translate-y-2 scale-95 opacity-0"
         }
       `}
-          onClick={(event) => event.stopPropagation()}
         >
           <ul className="menu w-full rounded-box border border-base-300 bg-base-100 p-2 text-base-content shadow-xl">
             {canPreviewRoles && (
@@ -359,8 +342,17 @@ export const SidebarFooter = () => {
           </ul>
         </div>
 
-        <div
-          className={`flex w-full items-center gap-2.5 text-start ${collapsed ? "flex-col justify-center" : "justify-start"}`}
+        <button
+          type="button"
+          onClick={() => setMenuOpen((open) => !open)}
+          onKeyDown={(event) => {
+            // Native <button> handles Enter/Space; Escape-to-close is not native.
+            if (event.key === "Escape") setMenuOpen(false)
+          }}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-label={t("nav.accountMenu")}
+          className={`flex w-full cursor-pointer items-center gap-2.5 py-3 text-start transition-colors hover:bg-[var(--sidebar-surface)]/60 ${collapsed ? "flex-col justify-center" : "justify-start"}`}
           title={collapsed ? name : undefined}
         >
           <div className="avatar avatar-placeholder">
@@ -407,7 +399,7 @@ export const SidebarFooter = () => {
               )}
             </div>
           )}
-        </div>
+        </button>
       </div>
 
       {createPortal(

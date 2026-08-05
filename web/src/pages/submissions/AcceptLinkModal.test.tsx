@@ -16,7 +16,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>()
   return {
     ...actual,
-    Link: ({ children }: { children?: ReactNode }) => <a>{children}</a>,
+    Link: ({ children }: { children?: ReactNode }) => (
+      <a href="/mock">{children}</a>
+    ),
   }
 })
 
@@ -43,7 +45,9 @@ vi.mock("@/components/ui", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/components/ui")>()
   return {
     ...actual,
-    RouterButton: ({ children }: { children?: ReactNode }) => <a>{children}</a>,
+    RouterButton: ({ children }: { children?: ReactNode }) => (
+      <a href="/mock">{children}</a>
+    ),
   }
 })
 

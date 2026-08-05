@@ -59,18 +59,21 @@ export default defineConfig([
       // advisory-warning convention (react-hooks/no-console above).
       "jsx-a11y/alt-text": "warn",
       "jsx-a11y/anchor-ambiguous-text": "warn",
-      // Blocking (ratcheted): these three labeling rules are at zero and a
-      // regression is a real a11y defect (an unnamed control/link/label). The
-      // rest of the jsx-a11y set stays advisory until its own remediation lands.
+      // Blocking (ratcheted): labeling rules (anchor-has-content,
+      // control-has-associated-label, label-has-associated-control) and
+      // keyboard/focus rules (anchor-is-valid, click-events-have-key-events,
+      // no-static-element-interactions, no-noninteractive-tabindex) are at zero;
+      // a regression is a real a11y defect. The rest stays advisory until its
+      // own remediation lands.
       "jsx-a11y/anchor-has-content": "error",
-      "jsx-a11y/anchor-is-valid": "warn",
+      "jsx-a11y/anchor-is-valid": "error",
       "jsx-a11y/aria-activedescendant-has-tabindex": "warn",
       "jsx-a11y/aria-props": "warn",
       "jsx-a11y/aria-proptypes": "warn",
       "jsx-a11y/aria-role": "warn",
       "jsx-a11y/aria-unsupported-elements": "warn",
       "jsx-a11y/autocomplete-valid": "warn",
-      "jsx-a11y/click-events-have-key-events": "warn",
+      "jsx-a11y/click-events-have-key-events": "error",
       "jsx-a11y/control-has-associated-label": "error",
       "jsx-a11y/heading-has-content": "warn",
       "jsx-a11y/html-has-lang": "warn",
@@ -88,9 +91,9 @@ export default defineConfig([
       "jsx-a11y/no-interactive-element-to-noninteractive-role": "warn",
       "jsx-a11y/no-noninteractive-element-interactions": "warn",
       "jsx-a11y/no-noninteractive-element-to-interactive-role": "warn",
-      "jsx-a11y/no-noninteractive-tabindex": "warn",
+      "jsx-a11y/no-noninteractive-tabindex": "error",
       "jsx-a11y/no-redundant-roles": "warn",
-      "jsx-a11y/no-static-element-interactions": "warn",
+      "jsx-a11y/no-static-element-interactions": "error",
       "jsx-a11y/role-has-required-aria-props": "warn",
       "jsx-a11y/role-supports-aria-props": "warn",
       "jsx-a11y/scope": "warn",

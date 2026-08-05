@@ -163,6 +163,7 @@ export const LanguageVersionField = ({
               {!disabled && (
                 <ul
                   tabIndex={0}
+                  role="menu"
                   className="dropdown-content menu z-10 mt-1 w-full rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
                 >
                   {meta.versions.map((version) => (
