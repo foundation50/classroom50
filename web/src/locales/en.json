@@ -8,6 +8,11 @@
       "contrast": "Color contrast",
       "vpat": "Conformance report"
     },
+    "stat": {
+      "pairs": "Color pairs",
+      "pass": "Pass",
+      "withinMargin": "Within margin"
+    },
     "download": "Download report (.md)",
     "loadError": "Couldn't load the contrast audit report.",
     "summaryPass": "All {{total}} audited color pairs meet their WCAG contrast floor.",
@@ -66,8 +71,15 @@
       "loadError": "Couldn't load the conformance report.",
       "downloadWcag": "Download VPAT — WCAG (.md)",
       "downloadInt": "Download VPAT — INT / 508 (.md)",
-      "summary": "{{total}} applicable criteria: {{supports}} Supports, {{notEvaluated}} Not Evaluated.",
       "generated": "Report date {{generated}}",
+      "notEvaluatedNote": "Criteria marked “Not Evaluated” haven't been formally assessed yet. Automated checks establish a floor; a manual keyboard and screen-reader pass on the primary flows will set their final conformance level.",
+      "empty": "No criteria match this filter.",
+      "clearFilter": "Clear filter",
+      "sortBy": "Sort by",
+      "sort": {
+        "criterion": "Criterion",
+        "status": "Conformance"
+      },
       "col": {
         "criterion": "Criterion",
         "level": "Level",

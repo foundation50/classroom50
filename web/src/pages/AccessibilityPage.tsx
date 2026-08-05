@@ -1,8 +1,17 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Info } from "lucide-react"
+import { Info, CircleDashed } from "lucide-react"
 
-import { Alert, Badge, Button, Card, Modal } from "@/components/ui"
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Modal,
+  Select,
+  StatCard,
+  cx,
+} from "@/components/ui"
 import type { BadgeTone } from "@/types/badgeTone"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
@@ -279,30 +288,84 @@ function ThemeTable({
   )
 }
 
-function VpatConformanceTable({ vpat }: { vpat: Vpat }) {
+// Whether a remark is a real, criterion-specific note worth showing per-row, or
+// the generic "not yet assessed" boilerplate (shown once above the table
+// instead, so 27 identical rows don't drown the specific ones).
+function isGenericRemark(remark: string): boolean {
+  return remark.startsWith("Not yet formally assessed")
+}
+
+type VpatFilter = VpatConformance | "all"
+type VpatSort = "criterion" | "status"
+
+const STATUS_SORT_WEIGHT: Record<VpatConformance, number> = {
+  doesNotSupport: 0,
+  partially: 1,
+  supports: 2,
+  notApplicable: 3,
+  notEvaluated: 4,
+}
+
+function PrincipleProgress({ rows }: { rows: VpatCriterion[] }) {
+  const evaluated = rows.filter((c) => c.status !== "notEvaluated").length
+  const pct =
+    rows.length === 0 ? 0 : Math.round((evaluated / rows.length) * 100)
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="h-1.5 w-24 overflow-hidden rounded-full bg-base-300"
+        role="presentation"
+      >
+        <div
+          className="h-full rounded-full bg-success transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-xs tabular-nums text-base-content/60">
+        {evaluated}/{rows.length}
+      </span>
+    </div>
+  )
+}
+
+function VpatConformanceTable({ criteria }: { criteria: VpatCriterion[] }) {
   const { t } = useTranslation()
   const byPrinciple = PRINCIPLE_ORDER.map((principle) => ({
     principle,
-    rows: vpat.criteria.filter((c) => c.principle === principle),
+    rows: criteria.filter((c) => c.principle === principle),
   })).filter((g) => g.rows.length > 0)
+
+  if (byPrinciple.length === 0) {
+    return (
+      <Card radius="xl" shadow={false}>
+        <Card.Body className="items-center gap-2 p-8 text-center text-sm text-base-content/60">
+          <CircleDashed aria-hidden="true" className="size-5" />
+          {t("accessibility.vpat.empty")}
+        </Card.Body>
+      </Card>
+    )
+  }
 
   return (
     <Card radius="xl" shadow={false}>
-      <Card.Body className="gap-4 p-4">
+      <Card.Body className="gap-5 p-4">
         {byPrinciple.map(({ principle, rows }) => (
           <div key={principle} className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold">{principle}</h3>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold">{principle}</h3>
+              <PrincipleProgress rows={rows} />
+            </div>
             <div className="overflow-x-auto">
               <table className="table table-sm w-full">
                 <thead>
                   <tr>
-                    <th className="w-64">
+                    <th className="w-72">
                       {t("accessibility.vpat.col.criterion")}
                     </th>
                     <th className="w-16">
                       {t("accessibility.vpat.col.level")}
                     </th>
-                    <th className="w-40">
+                    <th className="w-44">
                       {t("accessibility.vpat.col.conformance")}
                     </th>
                     <th>{t("accessibility.vpat.col.remarks")}</th>
@@ -312,7 +375,9 @@ function VpatConformanceTable({ vpat }: { vpat: Vpat }) {
                   {rows.map((c) => (
                     <tr key={c.id}>
                       <td className="align-top">
-                        <span className="font-mono text-xs">{c.id}</span>{" "}
+                        <span className="font-mono text-xs text-base-content/60">
+                          {c.id}
+                        </span>{" "}
                         {c.name}
                       </td>
                       <td className="align-top font-mono text-xs">{c.level}</td>
@@ -322,7 +387,11 @@ function VpatConformanceTable({ vpat }: { vpat: Vpat }) {
                         </Badge>
                       </td>
                       <td className="align-top text-xs text-base-content/70">
-                        {c.remark}
+                        {isGenericRemark(c.remark) ? (
+                          <span className="text-base-content/40">—</span>
+                        ) : (
+                          c.remark
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -336,10 +405,59 @@ function VpatConformanceTable({ vpat }: { vpat: Vpat }) {
   )
 }
 
+// One summary stat that doubles as a status filter toggle. Clicking filters the
+// table to that status (or clears it back to "all" when re-clicked).
+function VpatStatCard({
+  label,
+  value,
+  tone,
+  active,
+  onClick,
+}: {
+  label: string
+  value: number
+  tone?: BadgeTone
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cx(
+        "rounded-box border p-4 text-start transition-colors",
+        active
+          ? "border-primary bg-primary/5"
+          : "border-base-300 bg-base-100 hover:border-primary/40",
+      )}
+    >
+      <span className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-base-content/70">
+        {tone && (
+          <span
+            className={cx(
+              "size-2 rounded-full",
+              tone === "success" && "bg-success",
+              tone === "warning" && "bg-warning",
+              tone === "error" && "bg-error",
+              tone === "neutral" && "bg-base-content/40",
+            )}
+            aria-hidden="true"
+          />
+        )}
+        {label}
+      </span>
+      <span className="mt-1 block text-2xl font-bold">{value}</span>
+    </button>
+  )
+}
+
 function VpatSection() {
   const { t } = useTranslation()
   const [vpat, setVpat] = useState<Vpat | null>(null)
   const [error, setError] = useState(false)
+  const [filter, setFilter] = useState<VpatFilter>("all")
+  const [sort, setSort] = useState<VpatSort>("criterion")
 
   useEffect(() => {
     let active = true
@@ -358,6 +476,23 @@ function VpatSection() {
       active = false
     }
   }, [])
+
+  const visibleCriteria = useMemo(() => {
+    if (!vpat) return []
+    const filtered =
+      filter === "all"
+        ? vpat.criteria
+        : vpat.criteria.filter((c) => c.status === filter)
+    if (sort === "status") {
+      return [...filtered].sort(
+        (a, b) => STATUS_SORT_WEIGHT[a.status] - STATUS_SORT_WEIGHT[b.status],
+      )
+    }
+    return filtered
+  }, [vpat, filter, sort])
+
+  const toggleFilter = (next: VpatConformance) =>
+    setFilter((cur) => (cur === next ? "all" : next))
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="vpat-heading">
@@ -396,15 +531,78 @@ function VpatSection() {
 
       {vpat && (
         <>
-          <div className="text-sm text-base-content/70">
-            {t("accessibility.vpat.summary", {
-              total: vpat.summary.total,
-              supports: vpat.summary.byStatus.supports,
-              notEvaluated: vpat.summary.byStatus.notEvaluated,
-            })}{" "}
-            · {t("accessibility.vpat.generated", { generated: vpat.generated })}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <VpatStatCard
+              label={t("accessibility.vpat.status.supports")}
+              value={vpat.summary.byStatus.supports}
+              tone="success"
+              active={filter === "supports"}
+              onClick={() => toggleFilter("supports")}
+            />
+            <VpatStatCard
+              label={t("accessibility.vpat.status.partially")}
+              value={vpat.summary.byStatus.partially}
+              tone="warning"
+              active={filter === "partially"}
+              onClick={() => toggleFilter("partially")}
+            />
+            <VpatStatCard
+              label={t("accessibility.vpat.status.notApplicable")}
+              value={vpat.summary.byStatus.notApplicable}
+              tone="neutral"
+              active={filter === "notApplicable"}
+              onClick={() => toggleFilter("notApplicable")}
+            />
+            <VpatStatCard
+              label={t("accessibility.vpat.status.notEvaluated")}
+              value={vpat.summary.byStatus.notEvaluated}
+              tone="neutral"
+              active={filter === "notEvaluated"}
+              onClick={() => toggleFilter("notEvaluated")}
+            />
           </div>
-          <VpatConformanceTable vpat={vpat} />
+
+          <Alert tone="info" className="items-start text-sm">
+            <Info aria-hidden="true" className="size-4 shrink-0" />
+            <span>{t("accessibility.vpat.notEvaluatedNote")}</span>
+          </Alert>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-base-content/70">
+              {t("accessibility.vpat.generated", {
+                generated: vpat.generated,
+              })}
+            </div>
+            <div className="flex items-center gap-2">
+              {filter !== "all" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setFilter("all")}
+                >
+                  {t("accessibility.vpat.clearFilter")}
+                </Button>
+              )}
+              <label className="flex items-center gap-2 text-sm text-base-content/70">
+                {t("accessibility.vpat.sortBy")}
+                <Select
+                  selectSize="sm"
+                  className="w-auto"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as VpatSort)}
+                >
+                  <option value="criterion">
+                    {t("accessibility.vpat.sort.criterion")}
+                  </option>
+                  <option value="status">
+                    {t("accessibility.vpat.sort.status")}
+                  </option>
+                </Select>
+              </label>
+            </div>
+          </div>
+
+          <VpatConformanceTable criteria={visibleCriteria} />
         </>
       )}
     </section>
@@ -474,6 +672,22 @@ function ContrastSection() {
 
       {audit && (
         <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <StatCard
+              label={t("accessibility.stat.pairs")}
+              value={audit.summary.total}
+            />
+            <StatCard
+              label={t("accessibility.stat.pass")}
+              value={audit.summary.total - audit.summary.failures}
+              outOf={audit.summary.total}
+            />
+            <StatCard
+              label={t("accessibility.stat.withinMargin")}
+              value={audit.summary.marginMisses}
+            />
+          </div>
+
           <details className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
             <summary className="collapse-title text-sm font-medium">
               {!audit.summary.allPass
