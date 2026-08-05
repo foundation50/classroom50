@@ -7,14 +7,12 @@ import {
   Languages,
   Info,
   BookOpen,
-  Accessibility,
 } from "lucide-react"
 import {
   useParams,
   useMatchRoute,
   useMatch,
   useNavigate,
-  Link,
 } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { createPortal } from "react-dom"
@@ -322,20 +320,6 @@ export const SidebarFooter = () => {
                 <Languages aria-hidden="true" className="size-4" />
                 <span className="flex-1 text-start">{t("nav.language")}</span>
               </button>
-            </li>
-            <li>
-              <Link
-                to="/accessibility"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  setMenuOpen(false)
-                }}
-              >
-                <Accessibility aria-hidden="true" className="size-4" />
-                <span className="flex-1 text-start">
-                  {t("nav.accessibility")}
-                </span>
-              </Link>
             </li>
             <div className="divider my-1" />
             <li>

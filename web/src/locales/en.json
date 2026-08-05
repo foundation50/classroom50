@@ -364,6 +364,8 @@
     "aboutReportIssueHint": "Found a bug or have a feature request?",
     "aboutAskQuestion": "Ask a question",
     "aboutAskQuestionHint": "Get help from the community.",
+    "aboutAccessibilityTitle": "Accessibility",
+    "aboutAccessibilityHint": "WCAG 2.2 contrast audit and conformance report (VPAT), opens in a new tab.",
     "aboutDiagnosticsTitle": "Diagnostics",
     "aboutDiagnosticsHint": "Copy technical details to include in a bug report or support thread. No data is sent anywhere; it only fills your clipboard.",
     "aboutDiagnosticsShow": "Show diagnostics",

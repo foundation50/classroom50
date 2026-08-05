@@ -151,6 +151,19 @@ export const AboutDialog = forwardRef<
 
       <div className="divider my-4" />
 
+      <h4 className="mb-3 text-sm font-semibold">
+        {t("nav.aboutAccessibilityTitle")}
+      </h4>
+      <div className="flex flex-col gap-2">
+        <SupportLink
+          href="/accessibility"
+          title={t("nav.accessibility")}
+          hint={t("nav.aboutAccessibilityHint")}
+        />
+      </div>
+
+      <div className="divider my-4" />
+
       <h4 className="mb-1 text-sm font-semibold">
         {t("nav.aboutDiagnosticsTitle")}
       </h4>
