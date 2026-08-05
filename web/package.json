@@ -11,6 +11,8 @@
     "arch:validate": "depcruise src --config .dependency-cruiser.cjs",
     "audit:contrast": "npx vite-node scripts/genContrastAudit.ts",
     "audit:vpat": "npx vite-node scripts/genVpatReport.ts",
+    "audit:a11y": "vitest run src/test/axe.test.tsx src/test/a11yStructural.test.tsx src/util/vpatAutomated.test.ts",
+    "audit:a11y:inventory": "npx vite-node scripts/genA11yInventory.ts",
     "arch:graph": "depcruise src --config .dependency-cruiser.cjs --output-type dot | dot -T svg > dependency-graph.svg",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -56,6 +58,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
+    "axe-core": "^4.12.1",
     "babel-plugin-react-compiler": "^1.0.0",
     "daisyui": "^5.7.14",
     "dependency-cruiser": "^18.1.0",
@@ -74,7 +77,8 @@
     "typescript-eslint": "^8.65.0",
     "vite": "^8.2.0",
     "vite-plugin-svgr": "^5.2.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "vitest-axe": "^0.1.0"
   },
   "overrides": {
     "eslint-plugin-jsx-a11y": {
