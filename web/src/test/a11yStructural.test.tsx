@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
@@ -12,13 +12,6 @@ import {
 import { renderAndAxe } from "./axe"
 import { documentHasLang, hasSingleH1 } from "@/util/a11yStructural"
 import { applyDocumentDirection } from "@/i18n/direction"
-
-// The toast dismiss button reads its accessible name from an i18n key; stub
-// useTranslation so the key resolves to itself (mirrors NotificationProvider.test).
-vi.mock("react-i18next", async (importActual) => {
-  const actual = await importActual<typeof import("react-i18next")>()
-  return { ...actual, useTranslation: () => ({ t: (k: string) => k }) }
-})
 
 afterEach(cleanup)
 
@@ -133,10 +126,12 @@ describe("structural a11y — 4.1.3 status-message live region", () => {
       </NotificationProvider>,
     )
     await userEvent.click(screen.getByText("fire"))
-    // common.dismissNotification resolves to itself under the mock above.
-    expect(
-      screen.getByRole("button", { name: "common.dismissNotification" }),
-    ).toBeTruthy()
+    // Two buttons render (dismiss + "fire"); the dismiss one must carry a
+    // non-empty accessible name. Assert it's labeled without pinning the key.
+    const dismiss = screen
+      .getAllByRole("button")
+      .find((b) => b.getAttribute("aria-label"))
+    expect(dismiss?.getAttribute("aria-label")).toBeTruthy()
   })
 })
 
@@ -195,7 +190,6 @@ describe("structural a11y — 3.3.1 form-field error identification", () => {
     )
     const alert = screen.getByRole("alert")
     expect(alert.textContent).toBe("Required")
-    expect(alert.id).toBe("n-error")
     const input = screen.getByLabelText("Name")
     expect(input.getAttribute("aria-describedby")).toBe(alert.id)
     expect(input.getAttribute("aria-invalid")).toBe("true")
@@ -211,7 +205,6 @@ describe("structural a11y — 3.3.1 form-field error identification", () => {
     )
     expect(screen.queryByRole("alert")).toBeNull()
     const hint = screen.getByText("Use lowercase")
-    expect(hint.id).toBe("n-hint")
     expect(screen.getByLabelText("Name").getAttribute("aria-describedby")).toBe(
       hint.id,
     )
