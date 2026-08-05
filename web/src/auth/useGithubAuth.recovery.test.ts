@@ -6,6 +6,7 @@ import {
   isValidationStuck,
   recoverStrandedExchange,
   resolveAuthStatus,
+  resolveDevAutoLoginPat,
   shouldExpireOnUserError,
   type AuthStatusInput,
 } from "./useGithubAuth"
@@ -94,6 +95,34 @@ describe("classifyPatResult", () => {
   })
 })
 
+// Dev-only VITE_GITHUB_PAT auto-login gate. It must be inert unless it's a dev
+// build with no stored session, so both a non-dev build and a present stored
+// token suppress it. A blank/whitespace var is a no-op; a real token is trimmed
+// to tolerate a trailing newline from a `.env.local` value.
+describe("resolveDevAutoLoginPat", () => {
+  const base = { isDev: true, hasStoredToken: false, envPat: "ghp_abc123" }
+
+  it("returns the trimmed token in a dev build with no stored token", () => {
+    expect(resolveDevAutoLoginPat({ ...base, envPat: "  ghp_abc123\n" })).toBe(
+      "ghp_abc123",
+    )
+  })
+
+  it("returns null in a production build even with a PAT set (never ship a bundled token)", () => {
+    expect(resolveDevAutoLoginPat({ ...base, isDev: false })).toBeNull()
+  })
+
+  it("returns null when a token is already stored (don't override a hand-signed-in session)", () => {
+    expect(resolveDevAutoLoginPat({ ...base, hasStoredToken: true })).toBeNull()
+  })
+
+  it("returns null when the var is unset, empty, or whitespace-only", () => {
+    expect(resolveDevAutoLoginPat({ ...base, envPat: undefined })).toBeNull()
+    expect(resolveDevAutoLoginPat({ ...base, envPat: "" })).toBeNull()
+    expect(resolveDevAutoLoginPat({ ...base, envPat: "   " })).toBeNull()
+  })
+})
+
 // The auth-status verdict for the router guard. Headline invariants (#185, #187):
 //   - An offline cold reload with a stored token but no cached user HOLDS at
 //     "loading" (session preserved) rather than bouncing to /login.
@@ -113,6 +142,7 @@ describe("resolveAuthStatus", () => {
     userErrorExpiresToken: false,
     userErrorIsTransient: false,
     hasUser: true,
+    autoLoginPending: false,
   }
 
   it("is 'loading' until stored auth has been read", () => {
@@ -124,6 +154,31 @@ describe("resolveAuthStatus", () => {
   it("is 'unauthenticated' with no token (even offline)", () => {
     expect(
       resolveAuthStatus({ ...authed, hasToken: false, isOnline: false }),
+    ).toBe("unauthenticated")
+  })
+
+  it("HOLDS at 'loading' while a dev auto-login is validating with no token yet (don't bounce a deep link to /login)", () => {
+    // The VITE_GITHUB_PAT token lands async in the mutation's onSuccess; between
+    // startup and sign-in there's a window with hasToken:false. autoLoginPending
+    // holds "loading" so the _authed guard doesn't eject a deep-linked dev load.
+    expect(
+      resolveAuthStatus({
+        ...authed,
+        hasToken: false,
+        hasUser: false,
+        autoLoginPending: true,
+      }),
+    ).toBe("loading")
+  })
+
+  it("is 'unauthenticated' once a rejected auto-login settles (autoLoginPending back to false, still no token)", () => {
+    expect(
+      resolveAuthStatus({
+        ...authed,
+        hasToken: false,
+        hasUser: false,
+        autoLoginPending: false,
+      }),
     ).toBe("unauthenticated")
   })
 

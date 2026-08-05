@@ -120,6 +120,9 @@ export type AuthStatusInput = {
   // clear on its own, so holding would strand the user on a spinner forever.
   userErrorIsTransient: boolean
   hasUser: boolean
+  // A dev VITE_GITHUB_PAT auto-login is validating; its token lands async, so
+  // hold at "loading" rather than "unauthenticated" (see resolveAuthStatus).
+  autoLoginPending: boolean
 }
 
 // Whether a token holder is stranded on the loading hold with no way forward:
@@ -175,6 +178,9 @@ export function isValidationStuck(input: {
 // no branch can mask a truly dead token.
 export function resolveAuthStatus(input: AuthStatusInput): AuthStatus {
   if (!input.hasLoadedStoredAuth) return "loading"
+  // A dev auto-login's token lands async: hold "loading" in the startup gap so
+  // the guard doesn't bounce a deep link to /login. Never set in a prod build.
+  if (input.autoLoginPending && !input.hasToken) return "loading"
   if (!input.hasToken) return "unauthenticated"
   if (input.hasUser) return "authenticated"
   if (input.userErrorExpiresToken) return "unauthenticated"
@@ -213,6 +219,21 @@ export function classifyPatResult(scopes: string | null): PatResult {
   return { kind: "ok", scopes }
 }
 
+// Dev-only convenience: whether to auto-login from VITE_GITHUB_PAT on cold start.
+// Gated on DEV and no stored token, so it never overrides a hand-signed-in
+// session; the build-time token strip lives in vite.config.ts. Trimmed so a
+// trailing newline in a `.env.local` value still works; blank/whitespace is a no-op.
+export function resolveDevAutoLoginPat(input: {
+  isDev: boolean
+  hasStoredToken: boolean
+  envPat: string | undefined
+}): string | null {
+  if (!input.isDev) return null
+  if (input.hasStoredToken) return null
+  const token = input.envPat?.trim()
+  return token ? token : null
+}
+
 function sleep(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve) => {
     const timer = window.setTimeout(resolve, ms)
@@ -238,6 +259,9 @@ function useGithubAuthState() {
   // Deep link (#71) stashed at code-exchange, consumed by the status-driven
   // effect below so navigation runs against an authenticated router context.
   const pendingReturnToRef = useRef<string | null>(null)
+  // Latches so a StrictMode double-mount (or HMR re-mount) can't fire a second
+  // dev auto-login before the first token lands async. Never set in a prod build.
+  const didAutoLoginRef = useRef(false)
 
   const [screen, setScreen] = useState<GithubAuthScreen>("config")
   const [clientId, setClientId] = useState(GITHUB_OAUTH_CLIENT_ID)
@@ -250,6 +274,9 @@ function useGithubAuthState() {
   const [device, setDevice] = useState<DeviceAuthState | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [hasLoadedStoredAuth, setHasLoadedStoredAuth] = useState(false)
+  // Holds status at "loading" while a dev auto-login validates (see
+  // resolveAuthStatus). Dev-only; stays false in prod builds.
+  const [autoLoginPending, setAutoLoginPending] = useState(false)
   // Set when a live API 401 (revoked/expired token) tears the session down, so
   // /login can explain why the user was signed out. A deliberate signOut()
   // clears it.
@@ -317,6 +344,61 @@ function useGithubAuthState() {
     [queryClient],
   )
 
+  // Validate a token against GET /user + its X-OAuth-Scopes, then sign in or
+  // report why it was rejected. Shared by the manual PAT prompt (submitPat) and
+  // the dev auto-login so both apply identical scope rules. `onReject` gets an
+  // already-translated message; `onSettled` (optional) fires once either way, so
+  // the auto-login can release its loading hold.
+  const validateAndSignInWithPat = useCallback(
+    (
+      token: string,
+      onReject: (message: string) => void,
+      onSettled?: () => void,
+    ) => {
+      log.info("validating personal access token")
+      validatePatMutation.mutate(token, {
+        onSuccess: ({ scopes }) => {
+          const result = classifyPatResult(scopes)
+
+          // A fine-grained PAT (null header) carries no verifiable scopes; its
+          // per-resource permissions can't be checked here and typically fail
+          // mid-operation, so block it at entry rather than sign in on a token
+          // we can't vet.
+          if (result.kind === "fine-grained") {
+            log.warn("PAT rejected: fine-grained (unverifiable scopes)")
+            onReject(t("auth.errorPatFineGrained"))
+            return
+          }
+
+          if (result.kind === "missing") {
+            log.warn("PAT rejected: missing required scopes", {
+              missing: result.missing,
+            })
+            onReject(
+              t("auth.errorPatMissingScopes", {
+                scopes: result.missing.join(", "),
+              }),
+            )
+            return
+          }
+
+          completeSignIn({ access_token: token, scope: result.scopes })
+        },
+        onError: (err) => {
+          if (err instanceof GitHubUserFetchError && err.status === 401) {
+            log.warn("PAT rejected: 401 (invalid token)")
+            onReject(t("auth.errorPatRejected401"))
+            return
+          }
+          log.error("PAT validation failed", { err, record: true })
+          onReject(formatError(t, err, "api.github.com"))
+        },
+        onSettled,
+      })
+    },
+    [completeSignIn, validatePatMutation, t],
+  )
+
   // On unmount mid-flow, abort the device poll loop so it doesn't run after
   // teardown.
   useEffect(
@@ -341,9 +423,41 @@ function useGithubAuthState() {
       log.info("restored stored session")
       setToken(storedToken)
       setScreen("authed")
+    } else {
+      // Dev-only: skip the sign-in screen when VITE_GITHUB_PAT holds a valid PAT
+      // (see resolveDevAutoLoginPat), validated like the manual paste flow but
+      // logged instead of prompted. Two guards: didAutoLoginRef stops a
+      // StrictMode double-mount firing twice before the token lands, and a ?code
+      // on the URL means a returning OAuth redirect owns this load, so we defer
+      // to the code-exchange effect rather than both driving completeSignIn.
+      const hasOAuthCallback = new URLSearchParams(window.location.search).has(
+        "code",
+      )
+      const envPat = resolveDevAutoLoginPat({
+        isDev: import.meta.env.DEV,
+        hasStoredToken: false,
+        envPat: import.meta.env.VITE_GITHUB_PAT,
+      })
+      if (envPat && !hasOAuthCallback && !didAutoLoginRef.current) {
+        didAutoLoginRef.current = true
+        log.info("dev auto-login from VITE_GITHUB_PAT")
+        setAutoLoginPending(true)
+        validateAndSignInWithPat(
+          envPat,
+          (message) =>
+            log.warn("VITE_GITHUB_PAT auto-login rejected", { message }),
+          // Release the loading hold once validation settles either way, so a
+          // rejected token drops to the login screen instead of spinning.
+          () => setAutoLoginPending(false),
+        )
+      }
     }
 
     setHasLoadedStoredAuth(true)
+    // Mount-once: reads one-time startup state (stored session / env PAT).
+    // validateAndSignInWithPat is excluded so a later identity change can't
+    // re-fire the auto-login.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -691,48 +805,9 @@ function useGithubAuthState() {
       if (!token) return
 
       setPatError(null)
-
-      log.info("validating personal access token")
-      validatePatMutation.mutate(token, {
-        onSuccess: ({ scopes }) => {
-          const result = classifyPatResult(scopes)
-
-          // A fine-grained PAT (null header) carries no verifiable scopes; its
-          // per-resource permissions can't be checked here and typically fail
-          // mid-operation, so block it at entry rather than sign in on a token
-          // we can't vet.
-          if (result.kind === "fine-grained") {
-            log.warn("PAT rejected: fine-grained (unverifiable scopes)")
-            setPatError(t("auth.errorPatFineGrained"))
-            return
-          }
-
-          if (result.kind === "missing") {
-            log.warn("PAT rejected: missing required scopes", {
-              missing: result.missing,
-            })
-            setPatError(
-              t("auth.errorPatMissingScopes", {
-                scopes: result.missing.join(", "),
-              }),
-            )
-            return
-          }
-
-          completeSignIn({ access_token: token, scope: result.scopes })
-        },
-        onError: (err) => {
-          if (err instanceof GitHubUserFetchError && err.status === 401) {
-            log.warn("PAT rejected: 401 (invalid token)")
-            setPatError(t("auth.errorPatRejected401"))
-            return
-          }
-          log.error("PAT validation failed", { err, record: true })
-          setPatError(formatError(t, err, "api.github.com"))
-        },
-      })
+      validateAndSignInWithPat(token, setPatError)
     },
-    [completeSignIn, validatePatMutation, t],
+    [validateAndSignInWithPat],
   )
 
   // Shared teardown for both a deliberate sign-out and an involuntary expiry.
@@ -817,6 +892,7 @@ function useGithubAuthState() {
         userErrorExpiresToken: shouldExpireOnUserError(githubUserQuery.error),
         userErrorIsTransient: isTransientUserError(githubUserQuery.error),
         hasUser: Boolean(githubUserQuery.data),
+        autoLoginPending,
       }),
     [
       hasLoadedStoredAuth,
@@ -827,6 +903,7 @@ function useGithubAuthState() {
       githubUserQuery.isError,
       githubUserQuery.error,
       githubUserQuery.data,
+      autoLoginPending,
     ],
   )
 

@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config"
+import { loadEnv } from "vite"
 import { playwright } from "@vitest/browser-playwright"
 import type { Plugin } from "vite"
 import react, { reactCompilerPreset } from "@vitejs/plugin-react"
@@ -339,11 +340,22 @@ function assessmentApiPlugin(): Plugin {
     },
   }
 }
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   define: {
     __APP_VERSION__: JSON.stringify(release.version),
     __APP_COMMIT__: JSON.stringify(release.commit),
     __APP_BUILD_DATE__: JSON.stringify(release.buildDate),
+    // VITE_GITHUB_PAT is a dev-only auto-login convenience (see
+    // resolveDevAutoLoginPat). Vite inlines every VITE_* value into the bundle,
+    // so a token left in .env.local during `vite build` would ship to every
+    // visitor — the runtime DEV guard stops *use*, not *embedding*. Hard-blank
+    // the literal for any non-development build so it can never leak.
+    "import.meta.env.VITE_GITHUB_PAT":
+      mode === "development"
+        ? JSON.stringify(
+            loadEnv(mode, path.resolve(__dirname), "").VITE_GITHUB_PAT ?? "",
+          )
+        : JSON.stringify(""),
   },
   plugins: [
     tanstackRouter({
@@ -402,4 +414,4 @@ export default defineConfig({
       },
     ],
   },
-})
+}))
