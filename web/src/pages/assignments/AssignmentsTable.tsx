@@ -27,7 +27,7 @@ import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-import { Badge, Button, EmphasisLtr } from "@/components/ui"
+import { Badge, Button, EmphasisLtr, SkeletonCell } from "@/components/ui"
 
 const DeleteAssignmentButton = ({
   org,
@@ -312,27 +312,18 @@ const ReleaseDateBadge = ({ assignment }: { assignment: Assignment }) => {
   )
 }
 
-// One decorative skeleton cell. `aria-hidden` is on the <td> itself (not just
-// the row) because jsx-a11y/control-has-associated-label inspects the cell — the
-// attribute both hides the placeholder from AT and satisfies the rule.
-const SkeletonCell = ({ className }: { className: string }) => (
-  <td aria-hidden="true">
-    <div className={`skeleton skeleton-shimmer ${className}`} />
-  </td>
-)
-
 const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
   <>
     {Array.from({ length: rows }).map((_, i) => (
       // Decorative loading placeholder — hidden from assistive tech so a screen
       // reader announces the table's busy state, not rows of empty cells.
       <tr key={i} aria-hidden="true">
-        <SkeletonCell className="h-4 w-40" />
-        <SkeletonCell className="h-4 w-24" />
-        <SkeletonCell className="h-6 w-28" />
-        <SkeletonCell className="h-6 w-28" />
-        <SkeletonCell className="h-4 w-56" />
-        <SkeletonCell className="ms-auto h-8 w-16" />
+        <SkeletonCell bar="h-4 w-40" />
+        <SkeletonCell bar="h-4 w-24" />
+        <SkeletonCell bar="h-6 w-28" />
+        <SkeletonCell bar="h-6 w-28" />
+        <SkeletonCell bar="h-4 w-56" />
+        <SkeletonCell bar="ms-auto h-8 w-16" />
       </tr>
     ))}
   </>

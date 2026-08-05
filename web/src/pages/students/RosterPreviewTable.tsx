@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Select } from "@/components/ui"
+import { Select, SkeletonCell } from "@/components/ui"
 import type { ImportRosterRow } from "@/domain/students"
 import type { ClassroomRole } from "@/util/teamRoster"
 import {
@@ -124,18 +124,10 @@ export const RosterPreviewTable = ({
                   <td>
                     <code>{row.username}</code>
                   </td>
-                  <td aria-hidden="true">
-                    <div className="skeleton skeleton-shimmer h-4 w-28" />
-                  </td>
-                  <td aria-hidden="true">
-                    <div className="skeleton skeleton-shimmer h-4 w-40" />
-                  </td>
-                  <td aria-hidden="true">
-                    <div className="skeleton skeleton-shimmer h-4 w-16" />
-                  </td>
-                  <td aria-hidden="true">
-                    <div className="skeleton skeleton-shimmer h-8 w-32" />
-                  </td>
+                  <SkeletonCell bar="h-4 w-28" />
+                  <SkeletonCell bar="h-4 w-40" />
+                  <SkeletonCell bar="h-4 w-16" />
+                  <SkeletonCell bar="h-8 w-32" />
                 </tr>
               ))
             : rows.map((row, index) => {
