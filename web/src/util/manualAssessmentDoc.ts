@@ -10,7 +10,12 @@
 // committed markdown equals this renderer's output (a "generated file is fresh"
 // guard, like the contrast/VPAT renderers).
 
-import { CRITERIA, hasGenericRemark, PRINCIPLE_ORDER } from "./vpatModel"
+import {
+  CRITERIA,
+  hasGenericRemark,
+  PRINCIPLE_ORDER,
+  type Criterion,
+} from "./vpatModel"
 
 /** One assessor guidance bullet: a bold lead-in label and its instruction. */
 export type GuidanceBullet = { label: string; text: string }
@@ -293,8 +298,8 @@ export const ASSESSMENT_GUIDANCE: Guidance[] = [
 const GUIDANCE_BY_ID = new Map(ASSESSMENT_GUIDANCE.map((g) => [g.id, g]))
 
 /** The still-outstanding criteria a human must assess, in model order. */
-export function outstandingCriteria() {
-  return CRITERIA.filter(hasGenericRemark)
+export function outstandingCriteria(criteria: Criterion[] = CRITERIA) {
+  return criteria.filter(hasGenericRemark)
 }
 
 const HEADER = `# Manual accessibility assessment — WCAG 2.2 AA
@@ -343,8 +348,10 @@ CI.
  * output is what accessibility/manual-assessment.md must contain; the freshness
  * test compares them byte-for-byte.
  */
-export function renderManualAssessment(): string {
-  const outstanding = outstandingCriteria()
+export function renderManualAssessment(
+  criteria: Criterion[] = CRITERIA,
+): string {
+  const outstanding = outstandingCriteria(criteria)
   const lines: string[] = [HEADER]
   for (const principle of PRINCIPLE_ORDER) {
     const inPrinciple = outstanding.filter((c) => c.principle === principle)

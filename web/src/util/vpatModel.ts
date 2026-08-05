@@ -419,7 +419,9 @@ export function applyVerdicts(
   }
   return base.map((c) => {
     const v = overlay[c.id]
-    return v ? { ...c, status: v.status, evidence: v.evidence, remark: v.remark } : c
+    return v
+      ? { ...c, status: v.status, evidence: v.evidence, remark: v.remark }
+      : c
   })
 }
 
@@ -431,3 +433,12 @@ export const CRITERIA: Criterion[] = applyVerdicts(
   BASE_CRITERIA,
   verdicts as VerdictOverlay,
 )
+
+/**
+ * Build the criteria from an arbitrary verdict overlay (not the committed JSON).
+ * The dev-only assessment endpoint uses this to render fresh output right after
+ * it writes a new verdict, since the module-level CRITERIA is frozen at import.
+ */
+export function buildCriteria(overlay: VerdictOverlay): Criterion[] {
+  return applyVerdicts(BASE_CRITERIA, overlay)
+}

@@ -7,6 +7,7 @@ import tailwindcss from "@tailwindcss/vite"
 import { tanstackRouter } from "@tanstack/router-plugin/vite"
 import svgr from "vite-plugin-svgr"
 import path from "node:path"
+import { readFileSync, writeFileSync } from "node:fs"
 import { execSync } from "node:child_process"
 import { createRequire } from "node:module"
 
@@ -15,6 +16,15 @@ import {
   renderContrastReport,
 } from "./src/util/contrastReport"
 import { renderVpatJson, renderVpatReport } from "./src/util/vpatReport"
+import {
+  buildCriteria,
+  type ManualVerdict,
+  type VerdictOverlay,
+} from "./src/util/vpatModel"
+import {
+  ASSESSMENT_GUIDANCE,
+  renderManualAssessment,
+} from "./src/util/manualAssessmentDoc"
 
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
@@ -156,7 +166,115 @@ function vpatReportPlugin(): Plugin {
   }
 }
 
-// https://vite.dev/config/
+// Dev-only bridge for the interactive WCAG assessment tool (/_assess). The app
+// is client-side only, so recording a verdict to the repo needs a dev endpoint;
+// `apply: "serve"` keeps this middleware out of every production build (the
+// endpoint simply does not exist there, and the /_assess route redirects away
+// unless import.meta.env.DEV). It reads/writes two repo files:
+//   - src/util/vpatVerdicts.json — the machine-writable verdict overlay
+//   - accessibility/manual-assessment.md — regenerated from the fresh overlay
+// Writes are confined to those two known paths and ids/enums are validated
+// server-side, so a stray request can't write arbitrary files or overwrite a
+// machine-established (automated/contrast) row.
+function assessmentApiPlugin(): Plugin {
+  const verdictsPath = path.resolve(__dirname, "src/util/vpatVerdicts.json")
+  const checklistPath = path.resolve(
+    __dirname,
+    "accessibility/manual-assessment.md",
+  )
+
+  const readVerdicts = (): VerdictOverlay =>
+    JSON.parse(readFileSync(verdictsPath, "utf8")) as VerdictOverlay
+
+  // The criteria + guidance the /_assess UI renders from, computed fresh from
+  // whatever verdicts are on disk right now.
+  const dataPayload = () => {
+    const overlay = readVerdicts()
+    return JSON.stringify({
+      criteria: buildCriteria(overlay),
+      guidance: ASSESSMENT_GUIDANCE,
+      verdicts: overlay,
+    })
+  }
+
+  const readBody = (req: import("node:http").IncomingMessage) =>
+    new Promise<string>((resolve, reject) => {
+      let data = ""
+      req.on("data", (c) => {
+        data += c
+        if (data.length > 1_000_000) reject(new Error("payload too large"))
+      })
+      req.on("end", () => resolve(data))
+      req.on("error", reject)
+    })
+
+  const VALID_STATUS = new Set(["supports", "partially", "doesNotSupport"])
+
+  return {
+    name: "classroom50:assessment-api",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use("/_assess/data", (_req, res) => {
+        res.setHeader("Content-Type", "application/json")
+        res.end(dataPayload())
+      })
+
+      server.middlewares.use("/_assess/save", (req, res) => {
+        if (req.method !== "POST") {
+          res.statusCode = 405
+          res.end("method not allowed")
+          return
+        }
+        void (async () => {
+          try {
+            const { id, status, remark, clear } = JSON.parse(
+              await readBody(req),
+            )
+            const overlay = readVerdicts()
+
+            if (clear) {
+              delete overlay[id]
+            } else {
+              if (typeof id !== "string" || !VALID_STATUS.has(status)) {
+                res.statusCode = 400
+                res.end(JSON.stringify({ error: "invalid id or status" }))
+                return
+              }
+              const verdict: ManualVerdict = {
+                status,
+                evidence: "manual",
+                remark: typeof remark === "string" ? remark : "",
+              }
+              overlay[id] = verdict
+            }
+
+            // buildCriteria throws if the id is unknown or targets a
+            // non-notEvaluated row — surfaces as a 400 rather than a bad write.
+            const criteria = buildCriteria(overlay)
+
+            const sorted = Object.fromEntries(
+              Object.keys(overlay)
+                .sort()
+                .map((k) => [k, overlay[k]]),
+            )
+            writeFileSync(verdictsPath, JSON.stringify(sorted, null, 2) + "\n")
+            writeFileSync(checklistPath, renderManualAssessment(criteria))
+
+            res.setHeader("Content-Type", "application/json")
+            res.end(dataPayload())
+          } catch (err) {
+            res.statusCode = 400
+            res.end(
+              JSON.stringify({
+                error: err instanceof Error ? err.message : "bad request",
+              }),
+            )
+          }
+        })()
+      })
+    },
+  }
+}
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(release.version),
@@ -175,6 +293,7 @@ export default defineConfig({
     versionJsonPlugin(),
     contrastAuditPlugin(),
     vpatReportPlugin(),
+    assessmentApiPlugin(),
   ],
   resolve: {
     alias: {
