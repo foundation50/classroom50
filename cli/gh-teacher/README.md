@@ -44,7 +44,7 @@ Run all CI checks locally before pushing:
 golangci-lint fmt && go mod tidy && golangci-lint run && go build ./... && go test ./...
 ```
 
-If that exits 0, CI will pass. `golangci-lint fmt` applies both `gofmt` and `goimports` (configured in [`.golangci.yaml`](.golangci.yaml)) so import grouping stays consistent across files. The same checks run in [`gh-teacher-ci.yaml`](../../.github/workflows/gh-teacher-ci.yaml).
+If that exits 0, CI will pass. `golangci-lint fmt` applies both `gofmt` and `goimports` (configured in [`.golangci.yaml`](.golangci.yaml)) so import grouping stays consistent across files. The same checks run in [`cli-ci.yaml`](../../.github/workflows/cli-ci.yaml).
 
 VSCode users: install the [Go extension](https://marketplace.visualstudio.com/items?itemName=golang.Go) and add this to `.vscode/settings.json` for format-and-lint on save:
 
@@ -67,7 +67,7 @@ New commands should prefer the extracted form. Currently extracted: `internal/au
 
 ### GitHub API seam (`internal/githubapi`)
 
-All GitHub REST access goes through `internal/githubapi`, the **only** package permitted to import [`go-gh`](https://github.com/cli/go-gh)'s `pkg/api` (the test-client helper `internal/githubtest` is the one other exception, since it constructs real clients for white-box tests). Domain code depends on the transport-verb `githubapi.Client` interface (`Get` / `Post` / `Request`), never on the concrete `*api.RESTClient`. Generic pagination (`githubapi.PaginateAll`/`GetPage`) and the shared-module operations that need the concrete client (`CommitWithRebase`, `SetCollaborator`, `WaitForStableBranch`, …) plus the typed org read `OrgPlan` are wrapped here too. This boundary is **enforced in CI** by the "Single go-gh importer guard" step in [`gh-teacher-ci.yaml`](../../.github/workflows/gh-teacher-ci.yaml) — a non-test file outside `internal/githubapi/` that imports `go-gh/v2/pkg/api` fails the build. It is a lint/CI invariant, not a compiler-enforced boundary (sibling `internal/*` packages can import each other freely).
+All GitHub REST access goes through `internal/githubapi`, the **only** package permitted to import [`go-gh`](https://github.com/cli/go-gh)'s `pkg/api` (the test-client helper `internal/githubtest` is the one other exception, since it constructs real clients for white-box tests). Domain code depends on the transport-verb `githubapi.Client` interface (`Get` / `Post` / `Request`), never on the concrete `*api.RESTClient`. Generic pagination (`githubapi.PaginateAll`/`GetPage`) and the shared-module operations that need the concrete client (`CommitWithRebase`, `SetCollaborator`, `WaitForStableBranch`, …) plus the typed org read `OrgPlan` are wrapped here too. This boundary is **enforced in CI** by the "Single go-gh importer guard" step in [`cli-ci.yaml`](../../.github/workflows/cli-ci.yaml) — a non-test file outside `internal/githubapi/` that imports `go-gh/v2/pkg/api` fails the build. It is a lint/CI invariant, not a compiler-enforced boundary (sibling `internal/*` packages can import each other freely).
 
 Cross-cutting CLI helpers that are not GitHub-API logic live in `internal/cliutil` (`RequireAuthClient` is in `githubapi` since it builds a client; `IsHTTPStatus` is in `cliutil`). The shared JSON encoder behind every `--json` view and every config-repo file written to disk lives in `internal/output` as `output.JSONPretty` (2-space indent, no HTML escaping, trailing newline — a byte contract pinned by `internal/output/output_test.go`).
 
