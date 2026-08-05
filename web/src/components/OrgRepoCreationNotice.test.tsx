@@ -179,5 +179,9 @@ describe("OrgRepoCreationNotice", () => {
         el.getAttribute("href")?.includes("/settings/member_privileges"),
       )
     expect(manual?.getAttribute("href")).toContain("acme")
+    // The Trans-injected anchor carries an explicit accessible name (it has no
+    // JSX children), so a screen reader announces its purpose + new-tab hint.
+    expect(manual?.getAttribute("aria-label")).toMatch(/member privileges/i)
+    expect(manual?.getAttribute("aria-label")).toMatch(/new tab/i)
   })
 })

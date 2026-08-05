@@ -177,5 +177,26 @@ describe("RosterPreviewTable change highlighting", () => {
     expect(screen.getByText("ada")).toBeTruthy()
     // ...but no role Select renders while loading (its change is unknown yet).
     expect(container.querySelector("select")).toBeNull()
+    // The table announces its busy state, and the decorative skeleton rows are
+    // hidden from assistive tech (no rows of empty cells read aloud).
+    expect(container.querySelector("table")?.getAttribute("aria-busy")).toBe(
+      "true",
+    )
+    for (const tr of container.querySelectorAll("tbody tr")) {
+      expect(tr.getAttribute("aria-hidden")).toBe("true")
+    }
+  })
+
+  it("clears aria-busy once loaded", () => {
+    const { container } = render(
+      <RosterPreviewTable
+        rows={rows}
+        rolesByUser={{}}
+        onRoleChange={vi.fn()}
+      />,
+    )
+    expect(container.querySelector("table")?.getAttribute("aria-busy")).toBe(
+      "false",
+    )
   })
 })

@@ -104,7 +104,7 @@ export const RosterPreviewTable = ({
   const { t } = useTranslation()
   return (
     <div className="max-h-80 overflow-auto rounded-box border border-base-300">
-      <table className="table table-sm">
+      <table className="table table-sm" aria-busy={loading}>
         <thead>
           <tr>
             <th scope="col">#</th>
@@ -118,7 +118,8 @@ export const RosterPreviewTable = ({
         <tbody>
           {loading
             ? rows.map((row, index) => (
-                <tr key={row.username.toLowerCase()}>
+                // Decorative loading placeholder — hidden from assistive tech.
+                <tr key={row.username.toLowerCase()} aria-hidden="true">
                   <td>{index + 1}</td>
                   <td>
                     <code>{row.username}</code>

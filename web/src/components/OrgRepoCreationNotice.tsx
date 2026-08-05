@@ -54,6 +54,9 @@ export const OrgRepoCreationNotice = ({
                   href={memberPrivilegesUrl(org)}
                   target="_blank"
                   rel="noreferrer"
+                  aria-label={t(
+                    "components.notices.orgRepoCreation.memberPrivilegesLabel",
+                  )}
                 />
               ),
             }}
