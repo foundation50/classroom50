@@ -1,5 +1,6 @@
 import { AlertTriangle, GraduationCap } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { Link } from "@tanstack/react-router"
 import GitHub from "@/assets/github.svg?react"
 
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -177,6 +178,9 @@ export function GitHubAuthCard() {
           <span>{t("auth.footerTagline")}</span>
           <div className="flex shrink-0 items-center gap-3">
             <AppVersionBadge className="tabular-nums text-base-content/50" />
+            <Link className="link link-info link-hover" to="/accessibility">
+              {t("auth.accessibility")}
+            </Link>
             <a
               className="link link-info link-hover"
               href={WIKI_URL}
