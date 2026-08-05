@@ -46,42 +46,49 @@ jobs:
       any: ${{ steps.assemble.outputs.any }}
     steps:
       - uses: actions/checkout@v7
-
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: changes
         with:
-          filters: |
-            shared:
-              - 'cli/shared/**'
-              - '.github/workflows/cli-ci.yaml'
-            student:
-              - 'cli/gh-student/**'
-            teacher:
-              - 'cli/gh-teacher/**'
+          # Need the base commit to diff against (fetch-depth: 0 keeps it simple
+          # across PR/push without extra fetches).
+          fetch-depth: 0
 
       - id: assemble
         env:
-          SHARED: ${{ steps.changes.outputs.shared }}
-          STUDENT: ${{ steps.changes.outputs.student }}
-          TEACHER: ${{ steps.changes.outputs.teacher }}
+          # PR: diff the merge base of the PR. Push: diff the before-SHA. Either
+          # may be empty/unresolvable (first push, force-push) — then fail safe.
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
+
           # Module leg definitions (dir + whether the go-gh importer guard applies).
           shared='{"module":"shared","dir":"cli/shared","gh_guard":false}'
           student='{"module":"gh-student","dir":"cli/gh-student","gh_guard":true}'
           teacher='{"module":"gh-teacher","dir":"cli/gh-teacher","gh_guard":true}'
 
+          # Resolve the changed-file list. If the base can't be resolved (empty,
+          # all-zeros, or not present locally), fail safe: treat as a shared
+          # change so all three legs run — never silently skip a module's gate.
+          changed=""
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ] \
+             && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            changed=$(git diff --name-only "$BASE_SHA" HEAD)
+          else
+            echo "Base ref unresolvable ('$BASE_SHA') — running all legs (fail-safe)."
+            changed="cli/shared/FAILSAFE"
+          fi
+
+          # A cli/shared change (or a change to this workflow) exercises all
+          # dependents; otherwise run only the gh-* modules whose files changed.
+          grep_q() { printf '%s\n' "$changed" | grep -qE "$1"; }
           legs=()
-          if [ "$SHARED" = "true" ]; then
-            # A shared change (or a workflow change) must exercise all dependents.
+          if grep_q '^cli/shared/' || grep_q '^\.github/workflows/cli-ci\.yaml$'; then
             legs=("$shared" "$student" "$teacher")
           else
-            [ "$STUDENT" = "true" ] && legs+=("$student")
-            [ "$TEACHER" = "true" ] && legs+=("$teacher")
+            grep_q '^cli/gh-student/' && legs+=("$student")
+            grep_q '^cli/gh-teacher/' && legs+=("$teacher")
           fi
 
           if [ "${#legs[@]}" -eq 0 ]; then
-            # Nothing matched (e.g. a paths edge case) — nothing to build.
+            # No CLI module changed (e.g. only path-adjacent files) — nothing to build.
             echo "any=false" >> "$GITHUB_OUTPUT"
             echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
           else
