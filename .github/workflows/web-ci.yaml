@@ -74,11 +74,13 @@ jobs:
       - name: Format check
         run: npm run format:check
 
-  # The fast node/happy-dom test suite (the bulk of the tests). Sharded across a
-  # matrix because the suite is CPU-bound on the 4-vCPU runner (locally it runs in
-  # ~17s on 18 cores; ~96s here) — splitting the files across parallel runners
-  # halves the wall-clock. Needs no browser, so it never pays the Chromium
-  # download. Blob reports from each shard are merged in `test-merge` below.
+  # The fast node/happy-dom test suite (the bulk of the tests). Sharded 4x across
+  # a matrix because the suite is CPU-bound on the 4-vCPU runner (locally ~17s on
+  # 18 cores; ~96s here) — splitting the files across parallel runners cuts the
+  # wall-clock roughly 4x. Each shard is its own pass/fail gate: if any shard's
+  # tests fail, this job is `failure` and the ci gate goes red. No merge job — the
+  # merged report had no consumer (no coverage gate), so it was pure overhead.
+  # Needs no browser, so it never pays the Chromium download.
   test:
     name: Unit tests (node)
     runs-on: ubuntu-latest
@@ -86,43 +88,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-web
-      - name: Test (node project, shard ${{ matrix.shard }}/2)
-        # blob feeds the merge job; default keeps per-file logs visible in the
-        # shard (a bare --reporter=blob would silence them).
-        run: npm run test:node -- --reporter=blob --reporter=default --shard=${{ matrix.shard }}/2
-      - name: Upload blob report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: vitest-blob-${{ matrix.shard }}
-          path: web/.vitest-reports/*
-          include-hidden-files: true
-          retention-days: 1
-
-  # Fan-in for the sharded unit tests: merge the per-shard blob reports into one
-  # result so downstream sees a single unit-test verdict. Runs even if a shard
-  # went red (if: always) so the merged report reflects the real outcome.
-  test-merge:
-    name: Unit tests (merge shards)
-    if: ${{ !cancelled() }}
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-web
-      - name: Download shard blob reports
-        uses: actions/download-artifact@v8
-        with:
-          path: web/.vitest-reports
-          pattern: vitest-blob-*
-          merge-multiple: true
-      - name: Merge reports
-        run: npx vitest --merge-reports
+      - name: Test (node project, shard ${{ matrix.shard }}/4)
+        run: npm run test:node -- --shard=${{ matrix.shard }}/4
 
   # The a11y layout guards (*.browser.test.tsx: target size, reflow, resize text,
   # text spacing) run in real Chromium via the vitest browser project. Isolated
@@ -251,7 +222,7 @@ jobs:
   ci:
     name: CI gate
     if: always()
-    needs: [static, test, test-merge, browser, locale, audits]
+    needs: [static, test, browser, locale, audits]
     runs-on: ubuntu-latest
     # No checkout — this is a pure aggregation job — so override the workflow-level
     # `web` working-directory default (that dir doesn't exist here) to the runner
@@ -263,9 +234,8 @@ jobs:
       - name: Verify all lanes succeeded
         run: |
           # `test` is the sharded matrix — it is `failure` if ANY shard's tests
-          # failed, so depending on it directly is the real unit-test gate.
-          # `test-merge` only produces the merged report; both must be green.
-          results="${{ needs.static.result }} ${{ needs.test.result }} ${{ needs.test-merge.result }} ${{ needs.browser.result }} ${{ needs.locale.result }} ${{ needs.audits.result }}"
+          # failed, so depending on it directly is the unit-test gate.
+          results="${{ needs.static.result }} ${{ needs.test.result }} ${{ needs.browser.result }} ${{ needs.locale.result }} ${{ needs.audits.result }}"
           echo "lane results: $results"
           for r in $results; do
             if [ "$r" != "success" ]; then
