@@ -293,29 +293,35 @@ function VpatConformanceTable({ vpat }: { vpat: Vpat }) {
           <div key={principle} className="flex flex-col gap-2">
             <h3 className="text-sm font-semibold">{principle}</h3>
             <div className="overflow-x-auto">
-              <table className="table table-sm">
+              <table className="table table-sm w-full">
                 <thead>
                   <tr>
-                    <th>{t("accessibility.vpat.col.criterion")}</th>
-                    <th>{t("accessibility.vpat.col.level")}</th>
-                    <th>{t("accessibility.vpat.col.conformance")}</th>
+                    <th className="w-64">
+                      {t("accessibility.vpat.col.criterion")}
+                    </th>
+                    <th className="w-16">
+                      {t("accessibility.vpat.col.level")}
+                    </th>
+                    <th className="w-40">
+                      {t("accessibility.vpat.col.conformance")}
+                    </th>
                     <th>{t("accessibility.vpat.col.remarks")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((c) => (
                     <tr key={c.id}>
-                      <td className="whitespace-nowrap">
+                      <td className="align-top">
                         <span className="font-mono text-xs">{c.id}</span>{" "}
                         {c.name}
                       </td>
-                      <td className="font-mono text-xs">{c.level}</td>
-                      <td>
+                      <td className="align-top font-mono text-xs">{c.level}</td>
+                      <td className="align-top">
                         <Badge tone={VPAT_TONE[c.status]}>
                           {t(`accessibility.vpat.status.${c.status}`)}
                         </Badge>
                       </td>
-                      <td className="text-xs text-base-content/70">
+                      <td className="align-top text-xs text-base-content/70">
                         {c.remark}
                       </td>
                     </tr>
@@ -405,9 +411,8 @@ function VpatSection() {
   )
 }
 
-export default function AccessibilityPage() {
+function ContrastSection() {
   const { t } = useTranslation()
-  useDocumentTitle(t("accessibility.title"))
   const [audit, setAudit] = useState<Audit | null>(null)
   const [error, setError] = useState(false)
   const [activeTheme, setActiveTheme] = useState<string | null>(null)
@@ -437,12 +442,15 @@ export default function AccessibilityPage() {
   const marginCount = audit?.summary.marginMisses ?? 0
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6 2xl:px-8">
+    <section className="flex flex-col gap-6" aria-labelledby="contrast-heading">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h2
+            id="contrast-heading"
+            className="text-xl font-bold tracking-tight"
+          >
             {t("accessibility.title")}
-          </h1>
+          </h2>
           <div className="mt-1 text-sm text-base-content/70">
             {t("accessibility.subtitle")}
           </div>
@@ -591,10 +599,49 @@ export default function AccessibilityPage() {
           onClose={() => setSelectedRow(null)}
         />
       )}
+    </section>
+  )
+}
 
-      <div className="divider" role="separator" />
+type PanelKey = "contrast" | "vpat"
 
-      <VpatSection />
+export default function AccessibilityPage() {
+  const { t } = useTranslation()
+  useDocumentTitle(t("accessibility.pageTitle"))
+  const [panel, setPanel] = useState<PanelKey>("contrast")
+
+  const tabs: { key: PanelKey; label: string }[] = [
+    { key: "contrast", label: t("accessibility.tab.contrast") },
+    { key: "vpat", label: t("accessibility.tab.vpat") },
+  ]
+
+  return (
+    <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6 2xl:max-w-7xl 2xl:px-8">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold tracking-tight">
+          {t("accessibility.pageTitle")}
+        </h1>
+        <div className="mt-1 text-sm text-base-content/70">
+          {t("accessibility.pageSubtitle")}
+        </div>
+      </div>
+
+      <div role="tablist" className="tabs-boxed tabs w-fit">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={tab.key === panel}
+            className={`tab ${tab.key === panel ? "tab-active" : ""}`}
+            onClick={() => setPanel(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {panel === "contrast" ? <ContrastSection /> : <VpatSection />}
     </div>
   )
 }

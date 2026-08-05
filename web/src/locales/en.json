@@ -2,6 +2,12 @@
   "accessibility": {
     "title": "Color contrast audit",
     "subtitle": "WCAG 2.2 conformance for the app's color palette, checked automatically on every build.",
+    "pageTitle": "Accessibility",
+    "pageSubtitle": "How the Classroom50 web app conforms to WCAG 2.2, checked automatically on every build.",
+    "tab": {
+      "contrast": "Color contrast",
+      "vpat": "Conformance report"
+    },
     "download": "Download report (.md)",
     "loadError": "Couldn't load the contrast audit report.",
     "summaryPass": "All {{total}} audited color pairs meet their WCAG contrast floor.",
