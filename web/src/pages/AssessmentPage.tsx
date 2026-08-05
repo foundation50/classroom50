@@ -16,8 +16,8 @@ import {
   type Criterion,
   type EvidenceKind,
   type ManualVerdict,
-} from "@/util/vpatModel"
-import type { Guidance } from "@/util/assessmentGuidance"
+} from "@/util/a11y/vpatModel"
+import type { Guidance } from "@/util/a11y/assessmentGuidance"
 
 // Dev-only interactive WCAG assessment tool (route: /assess). It pulls in the
 // full VPAT report: the manually-assessed criteria are editable (record, then

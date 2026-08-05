@@ -5,16 +5,20 @@
 // the contrast guard enforce the facts). CI uploads them as build artifacts, and
 // the Vite build emits them into dist/ (served at /vpat-report.json, /VPAT.md,
 // /VPAT-INT.md); this script is the local + CI generator. Content is built by
-// src/util/vpatReport.ts.
+// src/util/a11y/vpatReport.ts.
 
 import { writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { renderVpatJson, renderVpatReport } from "../src/util/vpatReport"
+import {
+  renderVpatJson,
+  renderVpatReport,
+} from "../../src/util/a11y/vpatReport"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const dir = path.resolve(here, "..")
+// scripts/a11y/ -> web/ (two levels up): outputs land at the web root.
+const dir = path.resolve(here, "..", "..")
 
 const outputs: [string, string][] = [
   ["vpat-report.json", renderVpatJson()],

@@ -14,7 +14,7 @@
 // audit in vpatReport.ts (KTD4), so the two reports can never disagree.
 
 import type { BadgeTone } from "@/types/badgeTone"
-import verdicts from "../../accessibility/vpatVerdicts.json"
+import verdicts from "../../../accessibility/vpatVerdicts.json"
 
 export type WcagPrinciple =
   "Perceivable" | "Operable" | "Understandable" | "Robust"
@@ -65,6 +65,13 @@ export type Criterion = {
   /** Required whenever status is `supports` (the overclaim guard enforces this). */
   evidence?: EvidenceKind
   remark: string
+  /**
+   * ISO date (YYYY-MM-DD) the verdict was recorded. Rendered as its own column
+   * in the ACR so the remark carries only the finding, not the date. Present on
+   * manually-assessed rows (set by the /assess tool); the contrast rows get the
+   * report's generation date at render time (they're re-derived every build).
+   */
+  assessed?: string
 }
 
 /**
@@ -410,6 +417,8 @@ export type ManualVerdict = {
   status: "supports" | "partially" | "doesNotSupport"
   evidence: "manual"
   remark: string
+  /** ISO date (YYYY-MM-DD) the verdict was recorded, rendered in its own column. */
+  assessed?: string
 }
 
 export type VerdictOverlay = Record<string, ManualVerdict>
@@ -465,11 +474,23 @@ export function applyVerdicts(
     if (typeof v.remark !== "string" || v.remark.trim() === "") {
       throw new Error(`Manual verdict for "${id}" requires a non-empty remark.`)
     }
+    if (v.assessed !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(v.assessed)) {
+      throw new Error(
+        `Manual verdict for "${id}" has an invalid assessed date ` +
+          `"${v.assessed}"; expected ISO YYYY-MM-DD.`,
+      )
+    }
   }
   return base.map((c) => {
     const v = overlay[c.id]
     return v
-      ? { ...c, status: v.status, evidence: v.evidence, remark: v.remark }
+      ? {
+          ...c,
+          status: v.status,
+          evidence: v.evidence,
+          remark: v.remark,
+          assessed: v.assessed,
+        }
       : c
   })
 }

@@ -19,7 +19,8 @@ import {
 // green. vitest runs in node, so reading the files here is legitimate.
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const repoWeb = path.resolve(here, "..", "..")
+// src/util/a11y/ -> web/ (three levels up).
+const repoWeb = path.resolve(here, "..", "..", "..")
 const cssText = readFileSync(path.join(repoWeb, "src/index.css"), "utf8")
 
 // Read a CSS custom property for a theme. A token can appear twice (daisyUI

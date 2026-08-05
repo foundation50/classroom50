@@ -13,7 +13,7 @@ import {
   cx,
 } from "@/components/ui"
 import type { BadgeTone } from "@/types/badgeTone"
-import { CONFORMANCE_TONE, hasGenericRemark } from "@/util/vpatModel"
+import { CONFORMANCE_TONE, hasGenericRemark } from "@/util/a11y/vpatModel"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
 // Public /accessibility page: renders the build-emitted contrast-audit.json (the
@@ -70,6 +70,7 @@ type VpatCriterion = {
   status: VpatConformance
   evidence?: "contrast" | "automated" | "manual" | "architectural"
   remark: string
+  assessed?: string
 }
 
 type Vpat = {
@@ -336,7 +337,13 @@ function PrincipleProgress({ rows }: { rows: VpatCriterion[] }) {
   )
 }
 
-function VpatConformanceTable({ criteria }: { criteria: VpatCriterion[] }) {
+function VpatConformanceTable({
+  criteria,
+  generated,
+}: {
+  criteria: VpatCriterion[]
+  generated: string
+}) {
   const { t } = useTranslation()
   const byPrinciple = PRINCIPLE_ORDER.map((principle) => ({
     principle,
@@ -376,6 +383,9 @@ function VpatConformanceTable({ criteria }: { criteria: VpatCriterion[] }) {
                     <th className="w-44">
                       {t("accessibility.vpat.col.conformance")}
                     </th>
+                    <th className="w-28">
+                      {t("accessibility.vpat.col.assessed")}
+                    </th>
                     <th>{t("accessibility.vpat.col.remarks")}</th>
                   </tr>
                 </thead>
@@ -393,6 +403,9 @@ function VpatConformanceTable({ criteria }: { criteria: VpatCriterion[] }) {
                         <Badge tone={CONFORMANCE_TONE[c.status]}>
                           {t(`accessibility.vpat.status.${c.status}`)}
                         </Badge>
+                      </td>
+                      <td className="align-top font-mono text-xs whitespace-nowrap text-base-content/60">
+                        {c.assessed ?? generated}
                       </td>
                       <td className="align-top text-xs text-base-content/70">
                         {hasGenericRemark(c) ? (
@@ -586,7 +599,10 @@ function VpatSection() {
             </div>
           </div>
 
-          <VpatConformanceTable criteria={visibleCriteria} />
+          <VpatConformanceTable
+            criteria={visibleCriteria}
+            generated={vpat.generated}
+          />
         </>
       )}
     </section>

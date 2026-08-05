@@ -58,7 +58,8 @@ describe("per-criterion binding guard (U5)", () => {
   // The actual backing check for 3.1.1: the shipped index.html declares lang.
   it("3.1.1 — index.html declares a non-empty <html lang>", () => {
     const here = path.dirname(fileURLToPath(import.meta.url))
-    const repoWeb = path.resolve(here, "..", "..")
+    // src/util/a11y/ -> web/ (three levels up).
+    const repoWeb = path.resolve(here, "..", "..", "..")
     const html = readFileSync(path.join(repoWeb, "index.html"), "utf8")
     const match = /<html[^>]*\blang="([^"]*)"/i.exec(html)
     expect(match, "no <html lang> in index.html").not.toBeNull()

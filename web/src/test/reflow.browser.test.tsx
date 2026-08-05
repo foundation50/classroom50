@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { Button, Card } from "@/components/ui"
-import { fitsViewportWidth } from "@/util/a11yStructural"
+import { fitsViewportWidth } from "@/util/a11y/a11yStructural"
 import {
   descendantWidths,
   renderInViewport,

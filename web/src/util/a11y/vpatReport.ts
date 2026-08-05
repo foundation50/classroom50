@@ -134,9 +134,12 @@ function criteriaFor(
   return report.criteria.filter((c) => c.principle === principle)
 }
 
-function criterionRow(c: Criterion): string {
+function criterionRow(c: Criterion, fallbackDate: string): string {
   const remark = c.remark.replace(/\|/g, "\\|")
-  return `| ${c.id} ${c.name} | ${c.level} | ${CONFORMANCE_LABEL[c.status]} | ${remark} |`
+  // Manual rows carry their own assessed date; the contrast rows are re-derived
+  // every build, so they take the report's generation date.
+  const date = c.assessed ?? fallbackDate
+  return `| ${c.id} ${c.name} | ${c.level} | ${CONFORMANCE_LABEL[c.status]} | ${date} | ${remark} |`
 }
 
 // Preamble shared by both editions: product, date, evaluation methods, and the
@@ -187,10 +190,10 @@ function renderWcagEdition(report: VpatReportJson): string {
     out.push(`## ${principle}`)
     out.push("")
     out.push(
-      "| Criterion | Level | Conformance Level | Remarks and Explanations |",
+      "| Criterion | Level | Conformance Level | Assessed | Remarks and Explanations |",
     )
-    out.push("| --- | --- | --- | --- |")
-    for (const c of rows) out.push(criterionRow(c))
+    out.push("| --- | --- | --- | --- | --- |")
+    for (const c of rows) out.push(criterionRow(c, report.generated))
     out.push("")
   }
   return out.join("\n") + "\n"
@@ -223,10 +226,10 @@ function renderIntEdition(report: VpatReportJson): string {
     out.push(`## ${principle}`)
     out.push("")
     out.push(
-      "| Criterion | Level | Conformance Level | Remarks and Explanations |",
+      "| Criterion | Level | Conformance Level | Assessed | Remarks and Explanations |",
     )
-    out.push("| --- | --- | --- | --- |")
-    for (const c of rows) out.push(criterionRow(c))
+    out.push("| --- | --- | --- | --- | --- |")
+    for (const c of rows) out.push(criterionRow(c, report.generated))
     out.push("")
   }
   return out.join("\n") + "\n"

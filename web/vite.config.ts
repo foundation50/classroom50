@@ -15,14 +15,14 @@ import { createRequire } from "node:module"
 import {
   renderContrastJson,
   renderContrastReport,
-} from "./src/util/contrastReport"
-import { renderVpatJson, renderVpatReport } from "./src/util/vpatReport"
+} from "./src/util/a11y/contrastReport"
+import { renderVpatJson, renderVpatReport } from "./src/util/a11y/vpatReport"
 import {
   buildCriteria,
   type ManualVerdict,
   type VerdictOverlay,
-} from "./src/util/vpatModel"
-import { ASSESSMENT_GUIDANCE } from "./src/util/assessmentGuidance"
+} from "./src/util/a11y/vpatModel"
+import { ASSESSMENT_GUIDANCE } from "./src/util/a11y/assessmentGuidance"
 
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
@@ -283,7 +283,7 @@ function assessmentApiPlugin(): Plugin {
         }
         void (async () => {
           try {
-            const { id, status, remark, clear } = JSON.parse(
+            const { id, status, remark, assessed, clear } = JSON.parse(
               await readBody(req),
             )
             if (typeof id !== "string") {
@@ -306,9 +306,18 @@ function assessmentApiPlugin(): Plugin {
                 res.end(JSON.stringify({ error: "remark is required" }))
                 return
               }
+              // Stamp the assessment date so the remark carries only the finding
+              // (rendered in its own column). Accept a caller-supplied ISO date
+              // for reproducible fixtures, else default to today (UTC).
+              const isoDate =
+                typeof assessed === "string" &&
+                /^\d{4}-\d{2}-\d{2}$/.test(assessed)
+                  ? assessed
+                  : new Date().toISOString().slice(0, 10)
               const verdict: ManualVerdict = {
                 status,
                 evidence: "manual",
+                assessed: isoDate,
                 remark,
               }
               overlay[id] = verdict

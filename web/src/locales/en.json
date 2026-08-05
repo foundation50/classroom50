@@ -98,6 +98,7 @@
         "criterion": "Criterion",
         "level": "Level",
         "conformance": "Conformance",
+        "assessed": "Assessed",
         "remarks": "Remarks"
       },
       "status": {

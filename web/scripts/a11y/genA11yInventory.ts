@@ -9,8 +9,8 @@ import { writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { buildVpatReport } from "../src/util/vpatReport"
-import { AUTOMATED_CRITERIA } from "../src/util/vpatAutomated"
+import { buildVpatReport } from "../../src/util/a11y/vpatReport"
+import { AUTOMATED_CRITERIA } from "../../src/util/a11y/vpatAutomated"
 
 const report = buildVpatReport()
 const inventory = {
@@ -27,6 +27,7 @@ const inventory = {
 }
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const outPath = path.join(path.resolve(here, ".."), "a11y-inventory.json")
+// scripts/a11y/ -> web/ (two levels up): output lands at the web root.
+const outPath = path.join(path.resolve(here, "..", ".."), "a11y-inventory.json")
 writeFileSync(outPath, JSON.stringify(inventory, null, 2) + "\n", "utf8")
 console.log(`Wrote ${outPath}`)
