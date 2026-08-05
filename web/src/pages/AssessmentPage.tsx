@@ -11,14 +11,20 @@ import {
 } from "@/components/ui"
 import type { BadgeTone } from "@/types/badgeTone"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import type { Criterion } from "@/util/vpatModel"
+import type {
+  ConformanceLevel,
+  Criterion,
+  EvidenceKind,
+} from "@/util/vpatModel"
 import type { Guidance } from "@/util/assessmentGuidance"
 
-// Dev-only interactive WCAG assessment tool (route: /_assess). Click through the
-// still-outstanding success criteria, record a verdict + remark, and the dev
-// endpoint (assessmentApiPlugin in vite.config.ts) writes it back to
-// vpatVerdicts.json (the VPAT overlay). Never shipped: the route
-// redirects away unless import.meta.env.DEV and the endpoint is serve-only.
+// Dev-only interactive WCAG assessment tool (route: /assess). It pulls in the
+// full VPAT report: the manually-assessed criteria are editable (record, then
+// override or reopen a saved verdict), and the automated/contrast/architectural
+// rows are shown read-only for context. Saving posts to the dev endpoint
+// (assessmentApiPlugin in vite.config.ts), which writes vpatVerdicts.json (the
+// VPAT overlay). Never shipped: the route redirects away unless
+// import.meta.env.DEV and the endpoint is serve-only.
 
 type ManualStatus = "supports" | "partially" | "doesNotSupport"
 
@@ -30,17 +36,34 @@ type AssessData = {
   verdicts: Record<string, Verdict>
 }
 
-const STATUS_TONE: Record<ManualStatus, BadgeTone> = {
+const STATUS_TONE: Record<ConformanceLevel, BadgeTone> = {
   supports: "success",
   partially: "warning",
   doesNotSupport: "error",
+  notApplicable: "neutral",
+  notEvaluated: "neutral",
 }
 
-const STATUS_LABEL: Record<ManualStatus, string> = {
+const STATUS_LABEL: Record<ConformanceLevel, string> = {
   supports: "Supports",
   partially: "Partially Supports",
   doesNotSupport: "Does Not Support",
+  notApplicable: "Not Applicable",
+  notEvaluated: "Not Evaluated",
 }
+
+const EVIDENCE_LABEL: Record<EvidenceKind, string> = {
+  contrast: "Automated (contrast)",
+  automated: "Automated",
+  manual: "Manual",
+  architectural: "Architectural (N/A)",
+}
+
+// A criterion is manually-owned when it is still notEvaluated with no evidence,
+// or already carries a recorded manual verdict.
+const isManual = (c: Criterion, verdicts: Record<string, Verdict>) =>
+  (c.status === "notEvaluated" && c.evidence === undefined) ||
+  verdicts[c.id] !== undefined
 
 export default function AssessmentPage() {
   useDocumentTitle("Assessment mode — WCAG 2.2 AA")
@@ -64,25 +87,20 @@ export default function AssessmentPage() {
     [data],
   )
 
-  // Outstanding = notEvaluated with no evidence (the manual-owned rows). The
-  // endpoint returns the merged criteria, so a recorded verdict already shows
-  // its status here.
-  const outstanding = useMemo(
-    () =>
-      (data?.criteria ?? []).filter(
-        (c) => c.status === "notEvaluated" && c.evidence === undefined,
-      ),
-    [data],
-  )
-  const assessed = useMemo(
-    () =>
-      (data?.criteria ?? []).filter(
-        (c) => data?.verdicts && data.verdicts[c.id] !== undefined,
-      ),
-    [data],
-  )
+  const verdicts = useMemo(() => data?.verdicts ?? {}, [data])
+  const criteria = useMemo(() => data?.criteria ?? [], [data])
 
-  const total = outstanding.length + assessed.length
+  const manual = useMemo(
+    () => criteria.filter((c) => isManual(c, verdicts)),
+    [criteria, verdicts],
+  )
+  const outstanding = manual.filter((c) => verdicts[c.id] === undefined)
+  const recorded = manual.filter((c) => verdicts[c.id] !== undefined)
+  // Everything else is machine-established (automated/contrast) or N/A: context.
+  const readOnly = useMemo(
+    () => criteria.filter((c) => !isManual(c, verdicts)),
+    [criteria, verdicts],
+  )
 
   const save = useCallback(async (body: Record<string, unknown>) => {
     setError(null)
@@ -131,7 +149,8 @@ export default function AssessmentPage() {
           This tool runs only in local development.
         </p>
         <p className="text-sm font-medium" aria-live="polite">
-          {assessed.length} of {total} assessed · {outstanding.length} remaining
+          {recorded.length} of {manual.length} manual criteria assessed ·{" "}
+          {outstanding.length} remaining · {readOnly.length} automated / N/A
         </p>
       </header>
 
@@ -143,31 +162,55 @@ export default function AssessmentPage() {
         </Alert>
       )}
 
-      <ol className="space-y-4">
-        {outstanding.map((c) => (
-          <CriterionCard
-            key={c.id}
-            criterion={c}
-            guidance={guidanceById.get(c.id)}
-            verdict={data.verdicts[c.id]}
-            onSave={save}
-          />
-        ))}
-      </ol>
-
-      {assessed.length > 0 && (
+      {outstanding.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Recorded verdicts</h2>
+          <h2 className="text-lg font-semibold">Outstanding</h2>
           <ol className="space-y-4">
-            {assessed.map((c) => (
-              <CriterionCard
+            {outstanding.map((c) => (
+              <EditableCriterionCard
                 key={c.id}
                 criterion={c}
                 guidance={guidanceById.get(c.id)}
-                verdict={data.verdicts[c.id]}
+                verdict={undefined}
+                onSave={save}
+              />
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {recorded.length > 0 && (
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold">Recorded verdicts</h2>
+          <ol className="space-y-4">
+            {recorded.map((c) => (
+              <EditableCriterionCard
+                // Re-key on the recorded verdict so the card re-initializes its
+                // prefilled fields after an override lands.
+                key={`${c.id}:${verdicts[c.id].status}:${verdicts[c.id].remark}`}
+                criterion={c}
+                guidance={guidanceById.get(c.id)}
+                verdict={verdicts[c.id]}
                 onSave={save}
                 recorded
               />
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {readOnly.length > 0 && (
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold">
+            Automated &amp; not-applicable (read-only)
+          </h2>
+          <p className="text-sm text-base-content/70">
+            Established by tooling or the client-side-only architecture. Shown
+            for the full VPAT picture; not manually editable.
+          </p>
+          <ol className="space-y-3">
+            {readOnly.map((c) => (
+              <ReadOnlyCriterionCard key={c.id} criterion={c} />
             ))}
           </ol>
         </section>
@@ -176,7 +219,7 @@ export default function AssessmentPage() {
   )
 }
 
-function CriterionCard({
+function EditableCriterionCard({
   criterion,
   guidance,
   verdict,
@@ -287,6 +330,30 @@ function CriterionCard({
           )}
         </div>
       </div>
+    </Card>
+  )
+}
+
+function ReadOnlyCriterionCard({ criterion }: { criterion: Criterion }) {
+  return (
+    <Card as="li" className="p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-base font-semibold">
+          {criterion.id} {criterion.name}
+        </h3>
+        <Badge tone="neutral" soft>
+          {criterion.level}
+        </Badge>
+        <Badge tone={STATUS_TONE[criterion.status]}>
+          {STATUS_LABEL[criterion.status]}
+        </Badge>
+        {criterion.evidence && (
+          <Badge tone="neutral" soft>
+            {EVIDENCE_LABEL[criterion.evidence]}
+          </Badge>
+        )}
+      </div>
+      <p className="mt-2 text-sm text-base-content/70">{criterion.remark}</p>
     </Card>
   )
 }
