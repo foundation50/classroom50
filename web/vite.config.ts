@@ -210,16 +210,43 @@ function assessmentApiPlugin(): Plugin {
 
   const VALID_STATUS = new Set(["supports", "partially", "doesNotSupport"])
 
+  // The endpoint writes repo files with no auth, so refuse any request whose
+  // Host isn't loopback — `vite --host` on an untrusted network must not expose
+  // an unauthenticated write endpoint. Loopback-only keeps it a local dev tool.
+  const isLoopbackHost = (req: import("node:http").IncomingMessage) => {
+    const host = (req.headers.host ?? "").replace(/:\d+$/, "")
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]"
+  }
+
   return {
     name: "classroom50:assessment-api",
     apply: "serve",
     configureServer(server) {
-      server.middlewares.use("/_assess/data", (_req, res) => {
-        res.setHeader("Content-Type", "application/json")
-        res.end(dataPayload())
+      server.middlewares.use("/_assess/data", (req, res) => {
+        if (!isLoopbackHost(req)) {
+          res.statusCode = 403
+          res.end("forbidden")
+          return
+        }
+        try {
+          res.setHeader("Content-Type", "application/json")
+          res.end(dataPayload())
+        } catch (err) {
+          res.statusCode = 500
+          res.end(
+            JSON.stringify({
+              error: err instanceof Error ? err.message : "read failed",
+            }),
+          )
+        }
       })
 
       server.middlewares.use("/_assess/save", (req, res) => {
+        if (!isLoopbackHost(req)) {
+          res.statusCode = 403
+          res.end("forbidden")
+          return
+        }
         if (req.method !== "POST") {
           res.statusCode = 405
           res.end("method not allowed")
@@ -230,14 +257,19 @@ function assessmentApiPlugin(): Plugin {
             const { id, status, remark, clear } = JSON.parse(
               await readBody(req),
             )
+            if (typeof id !== "string") {
+              res.statusCode = 400
+              res.end(JSON.stringify({ error: "invalid id" }))
+              return
+            }
             const overlay = readVerdicts()
 
             if (clear) {
               delete overlay[id]
             } else {
-              if (typeof id !== "string" || !VALID_STATUS.has(status)) {
+              if (!VALID_STATUS.has(status)) {
                 res.statusCode = 400
-                res.end(JSON.stringify({ error: "invalid id or status" }))
+                res.end(JSON.stringify({ error: "invalid status" }))
                 return
               }
               const verdict: ManualVerdict = {
