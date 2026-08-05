@@ -1,0 +1,161 @@
+name: CLI CI
+
+# Unified Go CI for the three CLI modules (cli/shared, cli/gh-student,
+# cli/gh-teacher). They ran as three near-identical workflows; this is one
+# workflow with a module matrix — the shared gate (tidy, lint, fmt, build, test)
+# is defined once, and the per-module bits (working directory, the go-gh importer
+# guard) are matrix data.
+#
+# The go-gh importer guard runs only for gh-student/gh-teacher: cli/shared is the
+# API-seam module that MAY import go-gh, so the guard does not apply to it.
+#
+# Change-aware fan-out: a `detect` job uses paths-filter to run only the legs
+# whose files changed — EXCEPT a cli/shared change (or a change to this workflow)
+# runs all three, since gh-student and gh-teacher depend on cli/shared. This keeps
+# the "a shared change exercises its dependents" guarantee while not running a
+# module's build+test when nothing it depends on changed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cli/shared/**'
+      - 'cli/gh-student/**'
+      - 'cli/gh-teacher/**'
+      - '.github/workflows/cli-ci.yaml'
+  pull_request:
+    paths:
+      - 'cli/shared/**'
+      - 'cli/gh-student/**'
+      - 'cli/gh-teacher/**'
+      - '.github/workflows/cli-ci.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  # Decide which module legs to run based on what changed. cli/shared is a
+  # dependency of both gh-* modules, so a shared change (or a change to this
+  # workflow) runs all three; otherwise only the gh-* modules whose own files
+  # changed run. Emits a matrix `include` list consumed by `build`.
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.assemble.outputs.matrix }}
+      any: ${{ steps.assemble.outputs.any }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Need the base commit to diff against (fetch-depth: 0 keeps it simple
+          # across PR/push without extra fetches).
+          fetch-depth: 0
+
+      - id: assemble
+        env:
+          # PR: diff the merge base of the PR. Push: diff the before-SHA. Either
+          # may be empty/unresolvable (first push, force-push) — then fail safe.
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+
+          # Module leg definitions (dir + whether the go-gh importer guard applies).
+          shared='{"module":"shared","dir":"cli/shared","gh_guard":false}'
+          student='{"module":"gh-student","dir":"cli/gh-student","gh_guard":true}'
+          teacher='{"module":"gh-teacher","dir":"cli/gh-teacher","gh_guard":true}'
+
+          # Resolve the changed-file list. If the base can't be resolved (empty,
+          # all-zeros, or not present locally), fail safe: treat as a shared
+          # change so all three legs run — never silently skip a module's gate.
+          changed=""
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ] \
+             && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            changed=$(git diff --name-only "$BASE_SHA" HEAD)
+          else
+            echo "Base ref unresolvable ('$BASE_SHA') — running all legs (fail-safe)."
+            changed="cli/shared/FAILSAFE"
+          fi
+
+          # A cli/shared change (or a change to this workflow) exercises all
+          # dependents; otherwise run only the gh-* modules whose files changed.
+          grep_q() { printf '%s\n' "$changed" | grep -qE "$1"; }
+          legs=()
+          if grep_q '^cli/shared/' || grep_q '^\.github/workflows/cli-ci\.yaml$'; then
+            legs=("$shared" "$student" "$teacher")
+          else
+            grep_q '^cli/gh-student/' && legs+=("$student")
+            grep_q '^cli/gh-teacher/' && legs+=("$teacher")
+          fi
+
+          if [ "${#legs[@]}" -eq 0 ]; then
+            # No CLI module changed (e.g. only path-adjacent files) — nothing to build.
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+          else
+            echo "any=true" >> "$GITHUB_OUTPUT"
+            printf 'matrix={"include":[%s]}\n' "$(IFS=,; echo "${legs[*]}")" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: detect
+    if: needs.detect.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: ${{ matrix.dir }}/go.mod
+          cache-dependency-path: ${{ matrix.dir }}/go.sum
+
+      - name: Verify go.mod / go.sum are tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          working-directory: ${{ matrix.dir }}
+          version: v2.12.2
+
+      - name: Format (gofmt + goimports)
+        run: |
+          diff=$(golangci-lint fmt --diff)
+          if [ -n "$diff" ]; then
+            echo "::error::Formatter diffs detected (run \`golangci-lint fmt\` locally to apply):"
+            echo "$diff"
+            exit 1
+          fi
+
+      - name: Build
+        run: go build ./...
+
+      - name: Single go-gh importer guard
+        # The GitHub REST API seam (internal/githubapi) is the ONLY
+        # package allowed to import go-gh; internal/githubtest may too
+        # because it constructs real clients for white-box tests. Any
+        # other non-test file importing it means a domain package
+        # reached around the seam — fail the build. Only the gh-* modules
+        # have this seam; cli/shared is exempt (gh_guard=false).
+        if: ${{ matrix.gh_guard }}
+        run: |
+          offenders=$(grep -rl --include='*.go' 'github.com/cli/go-gh/v2/pkg/api' . \
+            | grep -v '_test\.go$' \
+            | grep -v '^\./internal/githubapi/' \
+            | grep -v '^\./internal/githubtest/' || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::go-gh/api may only be imported by internal/githubapi (and internal/githubtest for test clients). Offending files:"
+            echo "$offenders"
+            exit 1
+          fi
+
+      - name: Test
+        run: go test ./...

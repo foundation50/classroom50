@@ -1,0 +1,28 @@
+name: Web build gate
+description: >
+  The shared pre-build/pre-deploy gate for the web app: set up Node + restore
+  deps (via the setup-web composite), then run the node test suite (incl. the
+  skeleton-parity guard). Used by web-ci's callers and every deploy/release
+  workflow so the gate is defined once — a change to what "gate the deploy on"
+  means is a single edit here, not four.
+
+  Checkout is the caller's responsibility (each deploy workflow checks out a
+  ref-specific tree — inputs.ref, the release tag, or the default), and this
+  composite runs in that checkout so the later build/publish steps see the same
+  tree. It is a COMPOSITE (steps within the caller's job), not a reusable
+  workflow: the gate is interleaved with each caller's ref-specific checkout and
+  its own build/publish steps in one job, which a separate workflow_call job
+  could not share.
+
+  test:node only — the browser a11y guards need Chromium and already gate every
+  PR via web-ci's dedicated browser lane; re-running them to gate a deploy would
+  add the ~90MB browser install for no extra safety.
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-web
+    - name: Test (node project)
+      shell: bash
+      working-directory: web
+      run: npm run test:node
