@@ -229,6 +229,12 @@ jobs:
     if: always()
     needs: [static, test, browser, locale, audits]
     runs-on: ubuntu-latest
+    # No checkout — this is a pure aggregation job — so override the workflow-level
+    # `web` working-directory default (that dir doesn't exist here) to the runner
+    # workspace, or bash can't start.
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
     steps:
       - name: Verify all lanes succeeded
         run: |
