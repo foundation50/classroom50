@@ -6,21 +6,26 @@ down each section and record the verdict in the VPAT model.
 
 ## How to record a result
 
-For each SC below, after assessing it, edit its entry in
-`web/src/util/vpatModel.ts`:
+Use the dev-only assessment tool — run `npm run dev` and open `/_assess` — to
+click through each SC, pick a verdict, and enter a remark; it writes the verdict
+to `web/src/util/vpatVerdicts.json` and regenerates this checklist. (You can also
+edit `vpatVerdicts.json` by hand.) Each recorded verdict:
 
-- set `status` to `supports`, `partially`, or `doesNotSupport`;
-- add `evidence: "manual"`;
-- replace the remark with a specific, dated note (what you tested + the outcome),
-  e.g. `"2026-08-05 — VoiceOver/Safari + NVDA/Firefox: focus order on login,
-accept, submit follows visual order; no traps. Supports."`;
+- sets `status` to `supports`, `partially`, or `doesNotSupport`;
+- carries `evidence: "manual"`;
+- has a specific, dated remark (what you tested + the outcome), e.g.
+  `"2026-08-05 — VoiceOver/Safari + NVDA/Firefox: focus order on login, accept,
+submit follows visual order; no traps. Supports."`;
 - for any `partially` / `doesNotSupport`, open a tracked remediation follow-up.
 
-The VPAT integrity guard (`vpatGuard.test.ts`) already enforces that a `supports`
-verdict carries evidence, and the progress guard
-(`vpatManualAssessment.test.ts`) checks this checklist stays in lockstep with the
-model's still-outstanding set — so removing a section here while its SC is still
-`notEvaluated` (or vice versa) fails CI.
+After a session, ask the AI agent to standardize the remark wording in
+`vpatVerdicts.json` into that dated format for consistency.
+
+The VPAT integrity guard (`vpatGuard.test.ts`) enforces that a `supports` verdict
+carries evidence, and the progress guard (`vpatManualAssessment.test.ts`) checks
+this checklist stays in lockstep with the model's still-outstanding set — so a
+verdict removes its section here automatically and a hand-edit that drifts fails
+CI.
 
 ## Test matrix
 
