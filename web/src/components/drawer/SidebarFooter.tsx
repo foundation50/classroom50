@@ -323,21 +323,6 @@ export const SidebarFooter = () => {
                 <span className="flex-1 text-start">{t("nav.language")}</span>
               </button>
             </li>
-            <div className="divider my-1" />
-            <li>
-              <a
-                href={WIKI_URL}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  setMenuOpen(false)
-                }}
-              >
-                <BookOpen aria-hidden="true" className="size-4" />
-                <span className="flex-1 text-start">{t("nav.docs")}</span>
-              </a>
-            </li>
             <li>
               <Link
                 to="/accessibility"
@@ -352,6 +337,7 @@ export const SidebarFooter = () => {
                 </span>
               </Link>
             </li>
+            <div className="divider my-1" />
             <li>
               <button
                 type="button"
@@ -365,7 +351,21 @@ export const SidebarFooter = () => {
                 <span className="flex-1 text-start">{t("nav.about")}</span>
               </button>
             </li>
-
+            <li>
+              <a
+                href={WIKI_URL}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setMenuOpen(false)
+                }}
+              >
+                <BookOpen aria-hidden="true" className="size-4" />
+                <span className="flex-1 text-start">{t("nav.docs")}</span>
+              </a>
+            </li>
+            <div className="divider my-1" />
             <li>
               <button type="button" className="text-error" onClick={signOut}>
                 <LogOut aria-hidden="true" className="size-4" />
