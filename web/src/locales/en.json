@@ -6,7 +6,21 @@
     "pageSubtitle": "How the Classroom50 web app conforms to WCAG 2.2, checked automatically on every build.",
     "tab": {
       "contrast": "Color contrast",
-      "vpat": "Conformance report"
+      "vpat": "Conformance report",
+      "statement": "Statement"
+    },
+    "statement": {
+      "heading": "Accessibility statement",
+      "intro": "Classroom50 is committed to making its web app usable by everyone, including people who rely on assistive technology.",
+      "targetHeading": "Conformance target",
+      "target": "We aim to conform to the Web Content Accessibility Guidelines (WCAG) 2.2 at Level AA.",
+      "evidenceHeading": "How we evidence it",
+      "evidence": "Color contrast is verified by an automated audit on every build, and structural and layout criteria (labels, status messages, target size, reflow, resize, and text spacing) are enforced by automated checks in continuous integration. The remaining criteria are assessed by a manual keyboard and screen-reader pass.",
+      "limitationsHeading": "Known limitations",
+      "limitations": "Some success criteria that require human judgement are still awaiting their manual assessment and are reported as \"Not Evaluated\" in the conformance report until that pass is complete.",
+      "feedbackHeading": "Feedback",
+      "feedback": "If you encounter an accessibility barrier, please let us know via",
+      "feedbackLink": "the accessibility discussion"
     },
     "stat": {
       "pairs": "Color pairs",

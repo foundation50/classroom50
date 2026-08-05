@@ -809,7 +809,40 @@ function ContrastSection() {
   )
 }
 
-type PanelKey = "contrast" | "vpat"
+type PanelKey = "contrast" | "vpat" | "statement"
+
+// The public accessibility statement: conformance target, how it's evidenced,
+// known limitations, and a feedback path. Prose is i18n-backed; the discussion
+// link is the feedback route (issue #493).
+function StatementSection() {
+  const { t } = useTranslation()
+  return (
+    <Card>
+      <Card.Body className="prose prose-sm max-w-none">
+        <h2>{t("accessibility.statement.heading")}</h2>
+        <p>{t("accessibility.statement.intro")}</p>
+        <h3>{t("accessibility.statement.targetHeading")}</h3>
+        <p>{t("accessibility.statement.target")}</p>
+        <h3>{t("accessibility.statement.evidenceHeading")}</h3>
+        <p>{t("accessibility.statement.evidence")}</p>
+        <h3>{t("accessibility.statement.limitationsHeading")}</h3>
+        <p>{t("accessibility.statement.limitations")}</p>
+        <h3>{t("accessibility.statement.feedbackHeading")}</h3>
+        <p>
+          {t("accessibility.statement.feedback")}{" "}
+          <a
+            href="https://github.com/foundation50/classroom50/discussions/493"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t("accessibility.statement.feedbackLink")}
+          </a>
+          .
+        </p>
+      </Card.Body>
+    </Card>
+  )
+}
 
 export default function AccessibilityPage() {
   const { t } = useTranslation()
@@ -819,6 +852,7 @@ export default function AccessibilityPage() {
   const tabs: { key: PanelKey; label: string }[] = [
     { key: "contrast", label: t("accessibility.tab.contrast") },
     { key: "vpat", label: t("accessibility.tab.vpat") },
+    { key: "statement", label: t("accessibility.tab.statement") },
   ]
 
   return (
@@ -847,7 +881,13 @@ export default function AccessibilityPage() {
         ))}
       </div>
 
-      {panel === "contrast" ? <ContrastSection /> : <VpatSection />}
+      {panel === "contrast" ? (
+        <ContrastSection />
+      ) : panel === "vpat" ? (
+        <VpatSection />
+      ) : (
+        <StatementSection />
+      )}
     </div>
   )
 }
