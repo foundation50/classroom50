@@ -315,7 +315,9 @@ const ReleaseDateBadge = ({ assignment }: { assignment: Assignment }) => {
 const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
   <>
     {Array.from({ length: rows }).map((_, i) => (
-      <tr key={i}>
+      // Decorative loading placeholder — hidden from assistive tech so a screen
+      // reader announces the table's busy state, not rows of empty cells.
+      <tr key={i} aria-hidden="true">
         <td>
           <div className="skeleton skeleton-shimmer h-4 w-40" />
         </td>
@@ -376,7 +378,7 @@ const AssignmentsTable = ({
       key={loading ? "loading" : "loaded"}
       className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100"
     >
-      <table className="table">
+      <table className="table" aria-busy={loading}>
         <caption className="sr-only">{t("assignments.table.caption")}</caption>
         <thead>
           <tr>

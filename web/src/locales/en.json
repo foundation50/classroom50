@@ -2720,6 +2720,7 @@
       "orgRepoCreation": {
         "master": "<org>{{org}}</org> doesn't allow members to create repositories, so no student can accept an assignment. Re-run organization setup, or allow private (not public) repository creation under <memberPrivileges>Member privileges</memberPrivileges>. An enterprise policy can override this setting.",
         "private": "<org>{{org}}</org> doesn't allow members to create private repositories, so no student can accept an assignment. Re-run organization setup, or allow private (not public) repository creation under <memberPrivileges>Member privileges</memberPrivileges>. An enterprise policy can override this setting.",
+        "memberPrivilegesLabel": "Member privileges (opens GitHub organization settings in a new tab)",
         "action": "Organization settings"
       }
     },
