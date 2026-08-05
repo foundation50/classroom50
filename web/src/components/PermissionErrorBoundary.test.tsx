@@ -15,7 +15,7 @@ vi.mock("@/components/ui", async (importOriginal) => {
   return {
     ...actual,
     RouterButton: ({ children }: { children: React.ReactNode }) => (
-      <a>{children}</a>
+      <a href="/mock">{children}</a>
     ),
   }
 })

@@ -256,6 +256,7 @@ const ClassroomList = ({
             </Button>
             <ul
               tabIndex={0}
+              role="menu"
               className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
             >
               {/* FEATURE: github-classroom-migration — removable entry point (#312) */}

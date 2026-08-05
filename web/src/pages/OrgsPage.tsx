@@ -249,6 +249,7 @@ function HideOrgMenu({
         </Button>
         <ul
           tabIndex={0}
+          role="menu"
           className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
         >
           {canManageToken && (
