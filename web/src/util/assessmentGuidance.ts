@@ -1,21 +1,8 @@
-// Renders the committed manual-assessment checklist (accessibility/
-// manual-assessment.md) from data, so the doc and the dev-only assessment tool
-// (see vite.config.ts) share one source of guidance. A pure leaf: data + string
-// building only, reading criterion metadata from vpatModel.
-//
-// The rendered body lists exactly the still-outstanding SCs (hasGenericRemark),
-// grouped by principle. As a human records a verdict in vpatVerdicts.json that
-// SC drops out of the outstanding set and out of this doc automatically, so the
-// checklist never drifts from the model. manualAssessmentDoc.test.ts asserts the
-// committed markdown equals this renderer's output (a "generated file is fresh"
-// guard, like the contrast/VPAT renderers).
-
-import {
-  CRITERIA,
-  hasGenericRemark,
-  PRINCIPLE_ORDER,
-  type Criterion,
-} from "./vpatModel"
+// Per-success-criterion assessor guidance for the dev-only WCAG assessment tool
+// (the /assess page). A pure data leaf: the guidance is human-process prose (how
+// to test each SC), separate from the conformance model (vpatModel owns the
+// id/name/level/principle and the verdict). The interactive tool renders these
+// bullets next to each outstanding criterion.
 
 /** One assessor guidance bullet: a bold lead-in label and its instruction. */
 export type GuidanceBullet = { label: string; text: string }
@@ -294,82 +281,3 @@ export const ASSESSMENT_GUIDANCE: Guidance[] = [
     ],
   },
 ]
-
-const GUIDANCE_BY_ID = new Map(ASSESSMENT_GUIDANCE.map((g) => [g.id, g]))
-
-/** The still-outstanding criteria a human must assess, in model order. */
-export function outstandingCriteria(criteria: Criterion[] = CRITERIA) {
-  return criteria.filter(hasGenericRemark)
-}
-
-const HEADER = `# Manual accessibility assessment — WCAG 2.2 AA
-
-Committed assessor checklist for the WCAG 2.2 success criteria that automated
-checks can't establish. These need a human keyboard + screen-reader pass; work
-down each section and record the verdict in the VPAT model.
-
-## How to record a result
-
-Use the dev-only assessment tool — run \`npm run dev\` and open \`/assess\` — to
-click through each SC, pick a verdict, and enter a remark; it writes the verdict
-to \`web/src/util/vpatVerdicts.json\` and regenerates this checklist. (You can also
-edit \`vpatVerdicts.json\` by hand.) Each recorded verdict:
-
-- sets \`status\` to \`supports\`, \`partially\`, or \`doesNotSupport\`;
-- carries \`evidence: "manual"\`;
-- has a specific, dated remark (what you tested + the outcome), e.g.
-  \`"2026-08-05 — VoiceOver/Safari + NVDA/Firefox: focus order on login, accept,
-submit follows visual order; no traps. Supports."\`;
-- for any \`partially\` / \`doesNotSupport\`, open a tracked remediation follow-up.
-
-After a session, ask the AI agent to standardize the remark wording in
-\`vpatVerdicts.json\` into that dated format for consistency.
-
-The VPAT integrity guard (\`vpatGuard.test.ts\`) enforces that a \`supports\` verdict
-carries evidence, and the progress guard (\`vpatManualAssessment.test.ts\`) checks
-this checklist stays in lockstep with the model's still-outstanding set — so a
-verdict removes its section here automatically and a hand-edit that drifts fails
-CI.
-
-## Test matrix
-
-- **Keyboard-only:** Tab / Shift+Tab / Enter / Space / arrow keys / Esc; no mouse.
-- **Screen readers (minimum):** VoiceOver + Safari (macOS), NVDA + Firefox
-  (Windows). JAWS is an open question (see plan \`-004-\`); add it if the committee
-  requires it.
-- **Primary flows to exercise each SC on:** login, accept assignment, submit,
-  roster management, org settings.
-
----
-`
-
-/**
- * Render the checklist markdown from the model's outstanding set + guidance. The
- * output is what accessibility/manual-assessment.md must contain; the freshness
- * test compares them byte-for-byte.
- */
-export function renderManualAssessment(
-  criteria: Criterion[] = CRITERIA,
-): string {
-  const outstanding = outstandingCriteria(criteria)
-  const lines: string[] = [HEADER]
-  for (const principle of PRINCIPLE_ORDER) {
-    const inPrinciple = outstanding.filter((c) => c.principle === principle)
-    if (inPrinciple.length === 0) continue
-    lines.push(`## ${principle}\n`)
-    for (const c of inPrinciple) {
-      lines.push(`### ${c.id} ${c.name} (${c.level})\n`)
-      const guidance = GUIDANCE_BY_ID.get(c.id)
-      if (!guidance) {
-        throw new Error(
-          `No assessor guidance for outstanding criterion ${c.id}.`,
-        )
-      }
-      for (const b of guidance.bullets) {
-        lines.push(`- **${b.label}:** ${b.text}`)
-      }
-      lines.push("")
-    }
-  }
-  return lines.join("\n").trimEnd() + "\n"
-}

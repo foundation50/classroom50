@@ -21,10 +21,7 @@ import {
   type ManualVerdict,
   type VerdictOverlay,
 } from "./src/util/vpatModel"
-import {
-  ASSESSMENT_GUIDANCE,
-  renderManualAssessment,
-} from "./src/util/manualAssessmentDoc"
+import { ASSESSMENT_GUIDANCE } from "./src/util/assessmentGuidance"
 
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
@@ -170,23 +167,21 @@ function vpatReportPlugin(): Plugin {
 // is client-side only, so recording a verdict to the repo needs a dev endpoint;
 // `apply: "serve"` keeps this middleware out of every production build (the
 // endpoint simply does not exist there, and the /assess route redirects away
-// unless import.meta.env.DEV). It reads/writes two repo files:
-//   - src/util/vpatVerdicts.json — the machine-writable verdict overlay
-//   - accessibility/manual-assessment.md — regenerated from the fresh overlay
-// Writes are confined to those two known paths and ids/enums are validated
-// server-side, so a stray request can't write arbitrary files or overwrite a
-// machine-established (automated/contrast) row.
+// unless import.meta.env.DEV). It reads/writes a single repo file,
+// accessibility/vpatVerdicts.json — the machine-writable verdict overlay. The
+// path is a fixed constant and ids/enums are validated server-side, so a stray
+// request can't write arbitrary files or overwrite a machine-established
+// (automated/contrast) row.
 function assessmentApiPlugin(): Plugin {
-  const verdictsPath = path.resolve(__dirname, "src/util/vpatVerdicts.json")
-  const checklistPath = path.resolve(
+  const verdictsPath = path.resolve(
     __dirname,
-    "accessibility/manual-assessment.md",
+    "accessibility/vpatVerdicts.json",
   )
 
   const readVerdicts = (): VerdictOverlay =>
     JSON.parse(readFileSync(verdictsPath, "utf8")) as VerdictOverlay
 
-  // The criteria + guidance the /_assess UI renders from, computed fresh from
+  // The criteria + guidance the /assess UI renders from, computed fresh from
   // whatever verdicts are on disk right now.
   const dataPayload = () => {
     const overlay = readVerdicts()
@@ -222,6 +217,12 @@ function assessmentApiPlugin(): Plugin {
     name: "classroom50:assessment-api",
     apply: "serve",
     configureServer(server) {
+      // Saving a verdict writes verdictsPath; without this, Vite's file watcher
+      // sees the change (vpatModel imports it) and full-reloads the page mid-
+      // edit. The /assess page already updates itself from the POST response,
+      // so stop watching the file — a manual hand-edit just needs a refresh.
+      server.watcher.unwatch(verdictsPath)
+
       server.middlewares.use("/_assess/data", (req, res) => {
         if (!isLoopbackHost(req)) {
           res.statusCode = 403
@@ -272,17 +273,22 @@ function assessmentApiPlugin(): Plugin {
                 res.end(JSON.stringify({ error: "invalid status" }))
                 return
               }
+              if (typeof remark !== "string" || remark.trim() === "") {
+                res.statusCode = 400
+                res.end(JSON.stringify({ error: "remark is required" }))
+                return
+              }
               const verdict: ManualVerdict = {
                 status,
                 evidence: "manual",
-                remark: typeof remark === "string" ? remark : "",
+                remark,
               }
               overlay[id] = verdict
             }
 
             // buildCriteria throws if the id is unknown or targets a
             // non-notEvaluated row — surfaces as a 400 rather than a bad write.
-            const criteria = buildCriteria(overlay)
+            buildCriteria(overlay)
 
             const sorted = Object.fromEntries(
               Object.keys(overlay)
@@ -290,7 +296,6 @@ function assessmentApiPlugin(): Plugin {
                 .map((k) => [k, overlay[k]]),
             )
             writeFileSync(verdictsPath, JSON.stringify(sorted, null, 2) + "\n")
-            writeFileSync(checklistPath, renderManualAssessment(criteria))
 
             res.setHeader("Content-Type", "application/json")
             res.end(dataPayload())

@@ -12,12 +12,12 @@ import {
 import type { BadgeTone } from "@/types/badgeTone"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { Criterion } from "@/util/vpatModel"
-import type { Guidance } from "@/util/manualAssessmentDoc"
+import type { Guidance } from "@/util/assessmentGuidance"
 
 // Dev-only interactive WCAG assessment tool (route: /_assess). Click through the
 // still-outstanding success criteria, record a verdict + remark, and the dev
 // endpoint (assessmentApiPlugin in vite.config.ts) writes it back to
-// vpatVerdicts.json and regenerates the checklist. Never shipped: the route
+// vpatVerdicts.json (the VPAT overlay). Never shipped: the route
 // redirects away unless import.meta.env.DEV and the endpoint is serve-only.
 
 type ManualStatus = "supports" | "partially" | "doesNotSupport"
@@ -127,7 +127,7 @@ export default function AssessmentPage() {
         <h1 className="text-2xl font-bold">Assessment mode — WCAG 2.2 AA</h1>
         <p className="text-base-content/70">
           Record a verdict for each manually-assessed success criterion. Saving
-          writes <code>vpatVerdicts.json</code> and regenerates the checklist.
+          writes <code>vpatVerdicts.json</code>, which feeds the VPAT report.
           This tool runs only in local development.
         </p>
         <p className="text-sm font-medium" aria-live="polite">
@@ -270,7 +270,7 @@ function CriterionCard({
             variant="primary"
             size="sm"
             onClick={() => void submit()}
-            disabled={busy}
+            disabled={busy || remark.trim() === ""}
           >
             {recorded ? "Update" : "Save verdict"}
           </Button>

@@ -13,7 +13,7 @@
 // a `contrast`-evidence placeholder here and RESOLVED from the live contrast
 // audit in vpatReport.ts (KTD4), so the two reports can never disagree.
 
-import verdicts from "./vpatVerdicts.json"
+import verdicts from "../../accessibility/vpatVerdicts.json"
 
 export type WcagPrinciple =
   "Perceivable" | "Operable" | "Understandable" | "Robust"
