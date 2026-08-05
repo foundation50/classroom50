@@ -368,6 +368,7 @@ export const LanguageSwitcher = ({
             <input
               type="url"
               className="input input-bordered input-sm flex-1 min-w-0"
+              aria-label={t("language.urlLabel")}
               placeholder={t("language.urlPlaceholder")}
               value={url}
               onChange={(e) => setUrl(e.target.value)}

@@ -803,6 +803,7 @@
     "codeOptionalLabel": "Language code (optional)",
     "uploadFile": "Upload JSON file",
     "urlPlaceholder": "…or paste a URL",
+    "urlLabel": "Import a language pack from a URL",
     "fetch": "Fetch",
     "removePack": "Remove {{code}} language pack",
     "previewTitle": "Preview: {{code}}",
