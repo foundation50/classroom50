@@ -24,7 +24,7 @@ function descendantWidths(root: Element): number[] {
 }
 
 describe("1.4.10 Reflow — shared layout primitives at 320px", () => {
-  it("a representative Card layout has no element wider than 320px", () => {
+  it("a representative page composition has no element wider than 320px", () => {
     const { container } = render(
       <div style={{ width: VIEWPORT }}>
         <Card>
@@ -34,12 +34,26 @@ describe("1.4.10 Reflow — shared layout primitives at 320px", () => {
               A longer paragraph of body copy that must wrap within the narrow
               viewport rather than forcing the layout to scroll horizontally.
             </p>
+            {/* A long unbroken token is the classic reflow trap — it must wrap or
+                clip, not push the layout wider than the viewport. */}
+            <p className="break-words">
+              supercalifragilisticexpialidocious-antidisestablishmentarianism-pneumonoultramicroscopicsilicovolcanoconiosis
+            </p>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm">Save</Button>
+              <Button size="sm">Save changes</Button>
               <Button size="sm" variant="ghost">
                 Cancel
               </Button>
             </div>
+          </Card.Body>
+        </Card>
+        <Card>
+          <Card.Body>
+            <h2>A second stacked card</h2>
+            <p>
+              Stacked cards mirror how the real pages compose sections; both
+              must stay within the viewport width.
+            </p>
           </Card.Body>
         </Card>
       </div>,
