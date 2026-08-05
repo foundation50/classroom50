@@ -9,11 +9,10 @@ import {
   Textarea,
   cx,
 } from "@/components/ui"
-import type { BadgeTone } from "@/types/badgeTone"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import {
   CONFORMANCE_LABEL,
-  type ConformanceLevel,
+  CONFORMANCE_TONE,
   type Criterion,
   type EvidenceKind,
   type ManualVerdict,
@@ -28,18 +27,17 @@ import type { Guidance } from "@/util/assessmentGuidance"
 // VPAT overlay). Never shipped: the route redirects away unless
 // import.meta.env.DEV and the endpoint is serve-only.
 
+// The two save-body shapes the /_assess/save endpoint accepts: record/update a
+// verdict, or clear (reopen) one. Documents the client contract; the endpoint
+// re-validates.
+type SavePayload =
+  | { id: string; status: ManualVerdict["status"]; remark: string }
+  | { id: string; clear: true }
+
 type AssessData = {
   criteria: Criterion[]
   guidance: Guidance[]
   verdicts: Record<string, ManualVerdict>
-}
-
-const STATUS_TONE: Record<ConformanceLevel, BadgeTone> = {
-  supports: "success",
-  partially: "warning",
-  doesNotSupport: "error",
-  notApplicable: "neutral",
-  notEvaluated: "neutral",
 }
 
 const EVIDENCE_LABEL: Record<EvidenceKind, string> = {
@@ -74,25 +72,31 @@ export default function AssessmentPage() {
 
   const guidanceById = useMemo(
     () => new Map((data?.guidance ?? []).map((g) => [g.id, g])),
-    [data],
+    [data?.guidance],
   )
 
-  const verdicts = useMemo(() => data?.verdicts ?? {}, [data])
-  const criteria = useMemo(() => data?.criteria ?? [], [data])
+  const verdicts = useMemo(() => data?.verdicts ?? {}, [data?.verdicts])
+  const criteria = useMemo(() => data?.criteria ?? [], [data?.criteria])
 
   const manual = useMemo(
     () => criteria.filter((c) => isManual(c, verdicts)),
     [criteria, verdicts],
   )
-  const outstanding = manual.filter((c) => verdicts[c.id] === undefined)
-  const recorded = manual.filter((c) => verdicts[c.id] !== undefined)
+  const outstanding = useMemo(
+    () => manual.filter((c) => verdicts[c.id] === undefined),
+    [manual, verdicts],
+  )
+  const recorded = useMemo(
+    () => manual.filter((c) => verdicts[c.id] !== undefined),
+    [manual, verdicts],
+  )
   // Everything else is machine-established (automated/contrast) or N/A: context.
   const readOnly = useMemo(
     () => criteria.filter((c) => !isManual(c, verdicts)),
     [criteria, verdicts],
   )
 
-  const save = useCallback(async (body: Record<string, unknown>) => {
+  const save = useCallback(async (body: SavePayload) => {
     setError(null)
     try {
       const res = await fetch("/_assess/save", {
@@ -219,7 +223,7 @@ function EditableCriterionCard({
   criterion: Criterion
   guidance: Guidance | undefined
   verdict: ManualVerdict | undefined
-  onSave: (body: Record<string, unknown>) => Promise<void>
+  onSave: (body: SavePayload) => Promise<void>
   recorded?: boolean
 }) {
   const [status, setStatus] = useState<ManualVerdict["status"]>(
@@ -253,7 +257,7 @@ function EditableCriterionCard({
           {criterion.level}
         </Badge>
         {recorded && verdict && (
-          <Badge tone={STATUS_TONE[verdict.status]}>
+          <Badge tone={CONFORMANCE_TONE[verdict.status]}>
             {CONFORMANCE_LABEL[verdict.status]}
           </Badge>
         )}
@@ -336,7 +340,7 @@ function ReadOnlyCriterionCard({ criterion }: { criterion: Criterion }) {
         <Badge tone="neutral" soft>
           {criterion.level}
         </Badge>
-        <Badge tone={STATUS_TONE[criterion.status]}>
+        <Badge tone={CONFORMANCE_TONE[criterion.status]}>
           {CONFORMANCE_LABEL[criterion.status]}
         </Badge>
         {criterion.evidence && (

@@ -13,6 +13,7 @@
 // a `contrast`-evidence placeholder here and RESOLVED from the live contrast
 // audit in vpatReport.ts (KTD4), so the two reports can never disagree.
 
+import type { BadgeTone } from "@/types/badgeTone"
 import verdicts from "../../accessibility/vpatVerdicts.json"
 
 export type WcagPrinciple =
@@ -33,6 +34,17 @@ export const CONFORMANCE_LABEL: Record<ConformanceLevel, string> = {
   doesNotSupport: "Does Not Support",
   notApplicable: "Not Applicable",
   notEvaluated: "Not Evaluated",
+}
+
+// Conformance status -> Badge tone, shared by the /accessibility VPAT page and
+// the dev-only /assess tool so the two never drift (same rationale as the label
+// map above).
+export const CONFORMANCE_TONE: Record<ConformanceLevel, BadgeTone> = {
+  supports: "success",
+  partially: "warning",
+  doesNotSupport: "error",
+  notApplicable: "neutral",
+  notEvaluated: "neutral",
 }
 
 /**
@@ -402,6 +414,12 @@ export type ManualVerdict = {
 
 export type VerdictOverlay = Record<string, ManualVerdict>
 
+const MANUAL_STATUSES = new Set<ManualVerdict["status"]>([
+  "supports",
+  "partially",
+  "doesNotSupport",
+])
+
 /**
  * Overlay human verdicts onto the base criteria. A verdict may only land on a
  * criterion that is still `notEvaluated` — the manual-owned rows. Targeting an
@@ -418,11 +436,6 @@ export function applyVerdicts(
   base: Criterion[],
   overlay: VerdictOverlay,
 ): Criterion[] {
-  const MANUAL_STATUSES = new Set<ManualVerdict["status"]>([
-    "supports",
-    "partially",
-    "doesNotSupport",
-  ])
   const byId = new Map(base.map((c) => [c.id, c]))
   for (const id of Object.keys(overlay)) {
     const target = byId.get(id)

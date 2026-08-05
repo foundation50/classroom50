@@ -13,7 +13,7 @@ import {
   cx,
 } from "@/components/ui"
 import type { BadgeTone } from "@/types/badgeTone"
-import { hasGenericRemark } from "@/util/vpatModel"
+import { CONFORMANCE_TONE, hasGenericRemark } from "@/util/vpatModel"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
 // Public /accessibility page: renders the build-emitted contrast-audit.json (the
@@ -81,14 +81,6 @@ type Vpat = {
     byStatus: Record<VpatConformance, number>
   }
   criteria: VpatCriterion[]
-}
-
-const VPAT_TONE: Record<VpatConformance, BadgeTone> = {
-  supports: "success",
-  partially: "warning",
-  doesNotSupport: "error",
-  notApplicable: "neutral",
-  notEvaluated: "neutral",
 }
 
 // Tone -> the small status-dot swatch class. One source, shared by the VPAT stat
@@ -398,7 +390,7 @@ function VpatConformanceTable({ criteria }: { criteria: VpatCriterion[] }) {
                       </td>
                       <td className="align-top font-mono text-xs">{c.level}</td>
                       <td className="align-top">
-                        <Badge tone={VPAT_TONE[c.status]}>
+                        <Badge tone={CONFORMANCE_TONE[c.status]}>
                           {t(`accessibility.vpat.status.${c.status}`)}
                         </Badge>
                       </td>
@@ -452,7 +444,7 @@ function VpatStatCard({
         <span
           className={cx(
             "size-2 rounded-full",
-            TONE_DOT_CLASS[VPAT_TONE[status]],
+            TONE_DOT_CLASS[CONFORMANCE_TONE[status]],
           )}
           aria-hidden="true"
         />
