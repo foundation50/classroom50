@@ -424,6 +424,12 @@ function useGithubAuthState() {
         },
       },
     )
+    // Mount-once by design: this consumes the one-time OAuth redirect (code +
+    // state from the URL) and fires the single-use code exchange. Re-running on
+    // completeSignIn/exchangeCodeMutation/t identity changes would re-attempt the
+    // exchange with an already-spent code and fail — so the empty deps are
+    // intentional, not an omission.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // A bfcache restore freezes React state as-is with no effect re-run, so the
