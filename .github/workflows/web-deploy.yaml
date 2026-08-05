@@ -43,22 +43,10 @@ jobs:
           # branch/SHA); empty falls back to the ref the run was dispatched on.
           ref: ${{ inputs.ref }}
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - run: npm ci
-
-      # Run the test suite (incl. skeleton.test.ts) before building: vite build
-      # does not fail when the skeleton glob matches fewer files, so only the
-      # parity test / buildSkeletonFiles throw detects a drifted bundle. Gating
-      # the deploy on it keeps a broken skeleton from shipping even if web-ci
-      # was skipped (the deploy is path-scoped to web/**, same as web-ci).
-      # test:node only: the browser a11y guards gate every PR via web-ci and need
-      # Chromium; the deploy gate doesn't re-run them (no ~90MB browser install).
-      - run: npm run test:node
+      # Shared gate: setup + deps + node test suite (incl. skeleton parity). See
+      # .github/actions/web-build-gate. Runs in this checkout so the build below
+      # sees the same tree.
+      - uses: ./.github/actions/web-build-gate
 
       # `npm run build` runs `tsc -b && vite build`; the type-check is
       # blocking, so a regression fails the deploy instead of silently
