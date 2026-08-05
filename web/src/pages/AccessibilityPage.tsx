@@ -371,12 +371,12 @@ function VpatSection() {
             </Button>
             <Button
               as="a"
-              href="/VPAT-508.md"
+              href="/VPAT-INT.md"
               download
               variant="outline"
               size="sm"
             >
-              {t("accessibility.vpat.download508")}
+              {t("accessibility.vpat.downloadInt")}
             </Button>
           </div>
         )}

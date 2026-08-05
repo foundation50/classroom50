@@ -4,10 +4,13 @@
 // contrast criteria (1.4.3/1.4.6/1.4.11) DERIVED from the live contrast audit
 // (KTD4) rather than hand-set — so the VPAT and the contrast report can never
 // disagree. `renderVpatReport(edition)` renders the same criteria set as either
-// the VPAT 2.5 WCAG edition or the Section 508 edition (KTD6); both are views
-// over one model, never a second assessment. Pure (no fs, no app imports) so it
-// stays a util/ leaf; the integrity guard (vpatGuard.test.ts) enforces the same
-// facts, so every rendering reflects guarded state.
+// the VPAT 2.5Rev WCAG edition or the INT edition (KTD6); both are views over
+// one model, never a second assessment. The INT edition (not 508) is the second
+// edition because ITI's 508 edition incorporates WCAG 2.0, while INT carries
+// WCAG 2.2 alongside 508 + EN 301 549 — so our WCAG 2.2 work maps correctly to
+// INT and still serves a US procurement office. Pure (no fs, no app imports) so
+// it stays a util/ leaf; the integrity guard (vpatGuard.test.ts) enforces the
+// same facts, so every rendering reflects guarded state.
 
 import { buildContrastAudit } from "./contrastReport"
 import {
@@ -19,13 +22,13 @@ import {
   type WcagPrinciple,
 } from "./vpatModel"
 
-export type VpatEdition = "wcag" | "508"
+export type VpatEdition = "wcag" | "int"
 
 export type VpatReportJson = {
   /** Bump when the JSON shape changes so consumers can guard. */
   schema: "vpat-report/v1"
   standard: "WCAG 2.2"
-  editions: ["2.5-wcag", "2.5-508"]
+  editions: ["2.5Rev-wcag", "2.5Rev-int"]
   target: "AA"
   product: string
   generated: string
@@ -110,7 +113,7 @@ export function buildVpatReport(
   return {
     schema: "vpat-report/v1",
     standard: "WCAG 2.2",
-    editions: ["2.5-wcag", "2.5-508"],
+    editions: ["2.5Rev-wcag", "2.5Rev-int"],
     target: "AA",
     product: PRODUCT,
     generated: now.toISOString().slice(0, 10),
@@ -142,7 +145,7 @@ function preamble(report: VpatReportJson, editionLabel: string): string[] {
   return [
     `# Accessibility Conformance Report — ${report.product}`,
     "",
-    `**Format:** VPAT® 2.5 — ${editionLabel}`,
+    `**Format:** VPAT® 2.5Rev — ${editionLabel}`,
     `**Standard:** WCAG ${report.standard.replace("WCAG ", "")}, target Level ${report.target}`,
     `**Product:** ${report.product}`,
     `**Report date:** ${report.generated}`,
@@ -193,60 +196,37 @@ function renderWcagEdition(report: VpatReportJson): string {
   return out.join("\n") + "\n"
 }
 
-// Section 508 chapter → the WCAG criteria that satisfy it. The 508 edition
-// re-presents the SAME criterion verdicts under the 508 chapter structure; no
-// criterion is re-assessed (KTD6). Chapter 4 (Hardware) has no web analog.
-const SECTION_508_CHAPTERS: {
-  chapter: string
-  criterionIds: string[]
-  hardwareNa?: boolean
-}[] = [
-  {
-    chapter: "Chapter 3: Functional Performance Criteria",
-    // Reported via the WCAG criteria that carry them for a web app.
-    criterionIds: ["1.1.1", "1.4.3", "1.4.11", "2.1.1", "2.4.7"],
-  },
-  { chapter: "Chapter 4: Hardware", criterionIds: [], hardwareNa: true },
-  {
-    chapter: "Chapter 5: Software",
-    criterionIds: CRITERIA.map((c) => c.id),
-  },
-  {
-    chapter: "Chapter 6: Support Documentation and Services",
-    criterionIds: ["3.1.1", "3.2.3", "3.2.4"],
-  },
-]
-
-function renderSection508Edition(report: VpatReportJson): string {
-  const byId = new Map(report.criteria.map((c) => [c.id, c]))
+// The INT edition (VPAT 2.5Rev INT) incorporates Section 508, EN 301 549, and
+// WCAG 2.2 in one report. Because our conformance evidence is expressed against
+// WCAG 2.2 (the standard the app is actually tested to), the INT edition
+// presents the same per-principle WCAG 2.2 tables as the WCAG edition, under an
+// INT framing that states how the three standards relate. No criterion is
+// re-assessed (KTD6) — a US 508 / EU procurement office reads the same verdicts.
+function renderIntEdition(report: VpatReportJson): string {
   const out: string[] = [
-    ...preamble(report, "Section 508 Edition"),
+    ...preamble(report, "INT Edition (Section 508 + EN 301 549 + WCAG 2.2)"),
     summaryLine(report),
     "",
-    "Section 508 incorporates WCAG 2.2 by reference; each chapter below reports " +
-      "the same criterion verdicts as the WCAG edition, re-presented under the " +
-      "508 chapter structure.",
+    "The INT edition incorporates three standards. This report expresses " +
+      "conformance against **WCAG 2.2** — the standard the product is tested " +
+      "to — which the other two reference: **Section 508** (US) incorporates " +
+      "WCAG 2.0 Level A/AA and **EN 301 549** (EU) incorporates WCAG 2.1; both " +
+      "are subsets of the WCAG 2.2 criteria reported below, so each verdict " +
+      "applies to the corresponding 508 / EN 301 549 provision. Chapter 4 " +
+      "(Hardware) of Section 508 is Not Applicable — Classroom50 is a " +
+      "browser-based web application with no hardware component.",
     "",
   ]
-  for (const { chapter, criterionIds, hardwareNa } of SECTION_508_CHAPTERS) {
-    out.push(`## ${chapter}`)
+  for (const principle of PRINCIPLE_ORDER) {
+    const rows = criteriaFor(report, principle)
+    if (rows.length === 0) continue
+    out.push(`## ${principle}`)
     out.push("")
-    if (hardwareNa) {
-      out.push(
-        "Not Applicable — Classroom50 is a browser-based web application with " +
-          "no hardware component.",
-      )
-      out.push("")
-      continue
-    }
     out.push(
       "| Criterion | Level | Conformance Level | Remarks and Explanations |",
     )
     out.push("| --- | --- | --- | --- |")
-    for (const id of criterionIds) {
-      const c = byId.get(id)
-      if (c) out.push(criterionRow(c))
-    }
+    for (const c of rows) out.push(criterionRow(c))
     out.push("")
   }
   return out.join("\n") + "\n"
@@ -260,5 +240,5 @@ export function renderVpatReport(
   const report = buildVpatReport(now)
   return edition === "wcag"
     ? renderWcagEdition(report)
-    : renderSection508Edition(report)
+    : renderIntEdition(report)
 }

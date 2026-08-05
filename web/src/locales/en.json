@@ -59,7 +59,7 @@
       "subtitle": "WCAG 2.2 Level AA conformance, criterion by criterion. Contrast is verified automatically; the rest is assessed and updated as work lands.",
       "loadError": "Couldn't load the conformance report.",
       "downloadWcag": "Download VPAT — WCAG (.md)",
-      "download508": "Download VPAT — Section 508 (.md)",
+      "downloadInt": "Download VPAT — INT / 508 (.md)",
       "summary": "{{total}} applicable criteria: {{supports}} Supports, {{notEvaluated}} Not Evaluated.",
       "generated": "Report date {{generated}}",
       "col": {

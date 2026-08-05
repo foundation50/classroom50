@@ -38,7 +38,7 @@ contrast-audit.json
 # guard enforce the facts), emitted into dist/ and uploaded as CI artifacts, so
 # never committed.
 VPAT.md
-VPAT-508.md
+VPAT-INT.md
 vpat-report.json
 
 # Local dev launcher (machine-specific paths)

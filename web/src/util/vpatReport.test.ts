@@ -11,7 +11,7 @@ describe("buildVpatReport (JSON source of truth)", () => {
   it("carries schema, standard, editions, target, product, and date", () => {
     expect(report.schema).toBe("vpat-report/v1")
     expect(report.standard).toBe("WCAG 2.2")
-    expect(report.editions).toEqual(["2.5-wcag", "2.5-508"])
+    expect(report.editions).toEqual(["2.5Rev-wcag", "2.5Rev-int"])
     expect(report.target).toBe("AA")
     expect(report.product.length).toBeGreaterThan(0)
     expect(report.generated).toBe("2026-08-04")
@@ -60,7 +60,7 @@ describe("renderVpatReport — WCAG edition", () => {
   const md = renderVpatReport("wcag", FIXED)
 
   it("states the format, standard, and date", () => {
-    expect(md).toContain("VPAT® 2.5 — WCAG Edition")
+    expect(md).toContain("VPAT® 2.5Rev — WCAG Edition")
     expect(md).toContain("WCAG 2.2, target Level AA")
     expect(md).toContain("Report date:** 2026-08-04")
   })
@@ -84,33 +84,39 @@ describe("renderVpatReport — WCAG edition", () => {
   })
 })
 
-describe("renderVpatReport — Section 508 edition", () => {
-  const md = renderVpatReport("508", FIXED)
+describe("renderVpatReport — INT edition", () => {
+  const md = renderVpatReport("int", FIXED)
 
-  it("states the 508 format and shows the four chapter headings", () => {
-    expect(md).toContain("VPAT® 2.5 — Section 508 Edition")
-    expect(md).toContain("Chapter 3: Functional Performance Criteria")
-    expect(md).toContain("Chapter 4: Hardware")
-    expect(md).toContain("Chapter 5: Software")
-    expect(md).toContain("Chapter 6: Support Documentation and Services")
+  it("states the INT format and names the three incorporated standards", () => {
+    expect(md).toContain(
+      "VPAT® 2.5Rev — INT Edition (Section 508 + EN 301 549 + WCAG 2.2)",
+    )
+    expect(md).toContain("Section 508")
+    expect(md).toContain("EN 301 549")
+    expect(md).toContain("WCAG 2.2")
   })
 
-  it("marks the Hardware chapter Not Applicable (no web analog)", () => {
-    const hardwareIdx = md.indexOf("Chapter 4: Hardware")
-    const softwareIdx = md.indexOf("Chapter 5: Software")
-    const between = md.slice(hardwareIdx, softwareIdx)
-    expect(between).toContain("Not Applicable")
+  it("notes Section 508 Hardware is Not Applicable for a web app", () => {
+    expect(md).toContain("Chapter 4")
+    expect(md).toContain("Not Applicable")
   })
 
-  it("shows each mapped 508 row with the same conformance word as WCAG (single-source)", () => {
+  it("shows each criterion with the same conformance word as the WCAG edition (single-source)", () => {
     const wcag = renderVpatReport("wcag", FIXED)
     // 1.4.3 (contrast) resolves to Supports in both editions from one verdict.
     expect(wcag).toContain("| 1.4.3 Contrast (Minimum) | AA | Supports |")
     expect(md).toContain("| 1.4.3 Contrast (Minimum) | AA | Supports |")
   })
 
+  it("renders a row for every criterion in the report", () => {
+    const report = buildVpatReport(FIXED)
+    for (const c of report.criteria) {
+      expect(md, `INT row for ${c.id}`).toContain(`| ${c.id} ${c.name} |`)
+    }
+  })
+
   it("is deterministic for a fixed date", () => {
-    expect(renderVpatReport("508", FIXED)).toBe(md)
+    expect(renderVpatReport("int", FIXED)).toBe(md)
   })
 })
 

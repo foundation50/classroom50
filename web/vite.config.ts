@@ -114,10 +114,11 @@ function contrastAuditPlugin(): Plugin {
 
 // Publishes the WCAG 2.2 VPAT / ACR in the built site: vpat-report.json (the
 // source of truth the /accessibility page fetches) plus VPAT.md (WCAG edition)
-// and VPAT-508.md (Section 508 edition), the human-readable downloads. All three
-// derive from src/util/vpatModel.ts at build time — never committed — so they
-// stay current with the shipped app; vpatGuard.test.ts is the enforcement. Same
-// dev + build wiring as the contrast audit above.
+// and VPAT-INT.md (INT edition: Section 508 + EN 301 549 + WCAG 2.2), the
+// human-readable downloads. All three derive from src/util/vpatModel.ts at build
+// time — never committed — so they stay current with the shipped app;
+// vpatGuard.test.ts is the enforcement. Same dev + build wiring as the contrast
+// audit above.
 function vpatReportPlugin(): Plugin {
   const assets: { fileName: string; source: string; type: string }[] = [
     {
@@ -131,8 +132,8 @@ function vpatReportPlugin(): Plugin {
       type: "text/markdown; charset=utf-8",
     },
     {
-      fileName: "VPAT-508.md",
-      source: renderVpatReport("508"),
+      fileName: "VPAT-INT.md",
+      source: renderVpatReport("int"),
       type: "text/markdown; charset=utf-8",
     },
   ]
