@@ -51,15 +51,25 @@ describe("1.4.4 Resize Text — 200% scaling on shared primitives", () => {
   it("enlarging the root font to 200% actually scales text (relative units)", () => {
     document.documentElement.style.fontSize = `${ROOT_PX}px`
     const { getByTestId, rerender } = render(sample())
-    const before = getByTestId("copy").getBoundingClientRect().height
+    const copyBefore = getByTestId("copy")
+    const before = copyBefore.getBoundingClientRect().height
+    const fontBefore = parseFloat(getComputedStyle(copyBefore).fontSize)
 
     document.documentElement.style.fontSize = `${ROOT_PX * ZOOM}px`
     rerender(sample())
-    const after = getByTestId("copy").getBoundingClientRect().height
+    const copyAfter = getByTestId("copy")
+    const after = copyAfter.getBoundingClientRect().height
+    const fontAfter = parseFloat(getComputedStyle(copyAfter).fontSize)
 
     // rem/em text grows with the root; a fixed-px design would not. Height, not
     // width — the paragraph is width-constrained by the viewport and reflows down.
     expect(after, `${before} -> ${after}`).toBeGreaterThan(before)
+    // Pin that the text is genuinely relative-unit: the computed font-size must
+    // track the root (a px-hardcoded primitive would stay flat and fail here,
+    // catching a future regression away from rem/em text sizing).
+    expect(fontAfter, `font ${fontBefore} -> ${fontAfter}`).toBeGreaterThan(
+      fontBefore * 1.5,
+    )
   })
 
   it("at 200% the sample still fits the viewport without horizontal overflow", () => {

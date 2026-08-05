@@ -30,10 +30,44 @@ function isNotClipped(el: HTMLElement): boolean {
   return el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth
 }
 
+function spacedSample(spacing: CSSProperties) {
+  return (
+    <div data-testid="host" style={{ width: 360, ...spacing }}>
+      <Card>
+        <Card.Body>
+          <h2 style={spacing}>Accessibility</h2>
+          <p style={{ marginBottom: "2em", ...spacing }}>
+            A paragraph of body copy that must stay fully visible when the
+            reader applies the WCAG text-spacing overrides — the container grows
+            to fit rather than clipping the text.
+          </p>
+        </Card.Body>
+      </Card>
+    </div>
+  )
+}
+
 describe("1.4.12 Text Spacing — WCAG author overrides on shared primitives", () => {
-  it("the sample absorbs the spacing overrides without clipping content", () => {
+  it("the overrides actually take effect (taller layout than un-spaced)", () => {
+    // Guard against a tautological pass: prove the spacing changes layout at all.
+    // If TEXT_SPACING were a no-op (or silently dropped), these heights would be
+    // equal and this assertion would fail — so the constrained test below is real.
+    const bare = render(spacedSample({}))
+    const bareHeight = bare.getByTestId("host").scrollHeight
+    bare.unmount()
+
+    const { getByTestId } = render(spacedSample(TEXT_SPACING))
+    expect(getByTestId("host").scrollHeight).toBeGreaterThan(bareHeight)
+  })
+
+  it("a height-constrained container still shows all content with the overrides", () => {
+    // A realistically-sized container (not unbounded): tall enough for the spaced
+    // text, so a clip here would be a real 1.4.12 failure, not a tautology.
     const { getByTestId } = render(
-      <div data-testid="host" style={{ width: 360, ...TEXT_SPACING }}>
+      <div
+        data-testid="host"
+        style={{ width: 360, height: 320, overflow: "auto", ...TEXT_SPACING }}
+      >
         <Card>
           <Card.Body>
             <h2 style={TEXT_SPACING}>Accessibility</h2>
@@ -46,8 +80,6 @@ describe("1.4.12 Text Spacing — WCAG author overrides on shared primitives", (
         </Card>
       </div>,
     )
-    // The host is unconstrained in height, so applied spacing grows it rather than
-    // clipping: no descendant should overflow a fixed-size clipping ancestor.
     const host = getByTestId("host")
     expect(
       isNotClipped(host),
