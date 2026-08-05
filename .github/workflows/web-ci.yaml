@@ -49,6 +49,7 @@ jobs:
   # cheap gates grouped into one lane so each doesn't pay a separate cold-runner
   # startup.
   static:
+    name: Static analysis (types, lint, arch, format)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -81,6 +82,7 @@ jobs:
   # The fast node/happy-dom test suite (the bulk of the tests). Needs no browser,
   # so it never pays the Chromium download.
   test:
+    name: Unit tests (node)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -99,6 +101,7 @@ jobs:
   # into its own lane so the ~90MB Playwright browser install is off the critical
   # path of every other check, and cached so repeat runs skip the download.
   browser:
+    name: A11y layout guards (Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -139,6 +142,7 @@ jobs:
   # strict key-coverage audit. Runs from the repo root (paths are repo-relative),
   # overriding the workflow-level `web` working-directory default.
   locale:
+    name: i18n locale audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -172,6 +176,7 @@ jobs:
   # and uploads them for download. Independent of the gates; its own lane so the
   # artifacts are always produced.
   audits:
+    name: Accessibility reports (contrast, VPAT, inventory)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -226,6 +231,7 @@ jobs:
   # skipped or failed lane fails the gate (a bare `needs` would let a skipped
   # lane pass). Pin THIS check in branch protection if required checks are added.
   ci:
+    name: CI gate
     if: always()
     needs: [static, test, browser, locale, audits]
     runs-on: ubuntu-latest
