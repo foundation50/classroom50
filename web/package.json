@@ -19,6 +19,8 @@
     "check": "tsc -b && eslint . && prettier --check . && npm run arch:validate && vitest run",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:node": "vitest run --project node",
+    "test:browser": "vitest run --project browser",
     "test:watch": "vitest",
     "missing": "tsc -p tsconfig.app.json --pretty false 2>&1 | grep -E \"TS(2304|2305|2307|2503|2552)\""
   },

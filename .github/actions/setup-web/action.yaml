@@ -1,0 +1,43 @@
+name: Setup web
+description: >
+  Check out is assumed done by the caller. Sets up Node and restores node_modules
+  from cache keyed on the lockfile, running `npm ci` only on a cache miss. Shared
+  by every web-ci lane so the install cost is paid once per lockfile, not re-run
+  cold in each parallel job.
+
+runs:
+  using: composite
+  steps:
+    - id: node
+      uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        # npm's own download cache — complements the node_modules cache below
+        # (a node_modules miss still gets warm tarballs to install from).
+        cache: npm
+        cache-dependency-path: web/package-lock.json
+
+    # Cache the installed tree keyed on the RESOLVED Node version + the exact
+    # lockfile. Keying on setup-node's resolved version (not a hardcoded string)
+    # means a runner Node bump automatically busts the cache, so a node_modules
+    # built against a different Node ABI can never be restored. On a hit,
+    # node_modules is restored directly and `npm ci` is skipped; on a miss, install
+    # and let the cache repopulate. restore-keys lets a lockfile-only change warm-
+    # start from the previous same-Node tree, while a Node change fully busts.
+    - name: Cache node_modules
+      id: node-modules-cache
+      uses: actions/cache@v6
+      with:
+        path: web/node_modules
+        key: ${{ runner.os }}-node${{ steps.node.outputs.node-version }}-modules-${{ hashFiles('web/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node${{ steps.node.outputs.node-version }}-modules-
+
+    - name: Install dependencies
+      # A restore-keys prefix hit sets cache-hit=false but still restores a (stale)
+      # node_modules, so gate the install on an EXACT-key hit only; npm ci is
+      # idempotent and reconciles a warm-but-outdated tree against the lockfile.
+      if: steps.node-modules-cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: web
+      run: npm ci

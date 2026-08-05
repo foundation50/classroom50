@@ -30,6 +30,9 @@ dist-ssr
 .vitest-attachments
 src/test/__screenshots__
 
+# Vitest blob reports (--reporter=blob, used for CI shard merging). Transient.
+.vitest-reports
+
 # Generated WCAG contrast audit artifacts. Never committed — renderings of
 # guaranteed-green state (the contrast guard tests enforce the facts). Produced
 # fresh as CI artifacts and emitted into dist/ by the Vite build (the JSON is the

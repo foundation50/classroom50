@@ -1,9 +1,9 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest"
-import { cleanup, render } from "@testing-library/react"
+import { afterEach, describe, expect, it } from "vitest"
+import { render } from "@testing-library/react"
 
-import "@/index.css"
 import { Card } from "@/components/ui"
 import { fitsViewportWidth } from "@/util/a11yStructural"
+import { descendantWidths, setupBrowserA11y, VIEWPORT } from "./browserA11y"
 
 // 1.4.4 Resize Text: text scales to 200% without loss of content. The browser-
 // testable proxy is that the app's text sizing is relative (rem/em), so bumping
@@ -12,24 +12,16 @@ import { fitsViewportWidth } from "@/util/a11yStructural"
 // so font-size changes never reflow and the check would silently pass). This is
 // the representative-sample scope (KTD5): it proves the shared primitives scale,
 // not every route.
-const VIEWPORT = 320
 const ROOT_PX = 16
 const ZOOM = 2 // 200%
 
-beforeAll(() => {
-  document.documentElement.setAttribute("data-theme", "sumi")
-})
+setupBrowserA11y()
 
+// This guard mutates the root font-size, so it needs a reset beyond the shared
+// harness's cleanup (the harness owns theme + tree cleanup).
 afterEach(() => {
-  cleanup()
   document.documentElement.style.fontSize = ""
 })
-
-function descendantWidths(root: Element): number[] {
-  return Array.from(root.querySelectorAll("*")).map(
-    (el) => el.getBoundingClientRect().width,
-  )
-}
 
 function sample() {
   return (

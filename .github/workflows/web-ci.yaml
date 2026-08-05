@@ -2,10 +2,15 @@ name: web CI
 
 # Quality gate for the web app (web/): type-check, lint, format, tests, and an
 # i18n key audit (missing t() keys fail; dead/hardcoded strings are advisory).
-# The audit tool has its own pytest suite (i18n audit tests) that runs first so
-# a regex regression can't silently turn the audit into a permanent PASS.
-# Blocks merge and can't be bypassed like a local hook. Scoped to web/** so
-# it only runs when the frontend changes, independent of the Go/Python CI.
+# Fanned out into parallel role-jobs (static / test / browser / locale / audits)
+# joined by a single `ci` gate, so the Actions graph reads as a pipeline and the
+# expensive Playwright Chromium install is isolated to the one lane that needs it
+# instead of sitting on every run's critical path.
+#
+# The i18n audit tool has its own pytest suite (in the `locale` job) that runs
+# ahead of the gate it pins so a regex regression can't silently turn the audit
+# into a permanent PASS. Scoped to web/** so it only runs when the frontend
+# changes, independent of the Go/Python CI.
 #
 # Also triggered by the CLI-owned skeleton source (cli/gh-teacher/skeleton/
 # dotgithub/**): the web build bundles that tree, and skeleton.test.ts is the
@@ -35,31 +40,27 @@ concurrency:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: web
+
 jobs:
-  check:
+  # Static analysis: type-check, lint, architecture boundaries, formatting. The
+  # cheap gates grouped into one lane so each doesn't pay a separate cold-runner
+  # startup.
+  static:
+    name: Static analysis (types, lint, arch, format)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: web
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-web
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - run: npm ci
-
-      # Full project type-check (tsc -b). Blocking: the build depends on this
-      # staying green.
+      # Full project type-check (tsc -b). Blocking: the build depends on this.
       - name: Typecheck
         run: npm run typecheck
 
-      # ESLint. Fails on errors; advisory rules are configured as warnings in
-      # eslint.config.js and do not block.
+      # ESLint. Fails on errors; advisory rules are warnings and do not block.
       - name: Lint
         run: npm run lint
 
@@ -73,25 +74,112 @@ jobs:
       - name: Format check
         run: npm run format:check
 
-      # The a11y layout guards (*.browser.test.tsx: 2.5.8 target size, 1.4.10
-      # reflow) run in a real Chromium via the vitest browser project, which needs
-      # Playwright's browser binary. Installed here, right before the tests that
-      # use it, so an earlier lint/type failure fails fast without the download.
+  # The fast node/happy-dom test suite (the bulk of the tests). Sharded 4x across
+  # a matrix because the suite is CPU-bound on the 4-vCPU runner (locally ~17s on
+  # 18 cores; ~96s here) — splitting the files across parallel runners cuts the
+  # wall-clock roughly 4x. Each shard is its own pass/fail gate: if any shard's
+  # tests fail, this job is `failure` and the ci gate goes red. No merge job — the
+  # merged report had no consumer (no coverage gate), so it was pure overhead.
+  # Needs no browser, so it never pays the Chromium download.
+  test:
+    name: Unit tests (node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-web
+      - name: Test (node project, shard ${{ matrix.shard }}/4)
+        run: npm run test:node -- --shard=${{ matrix.shard }}/4
+
+  # The a11y layout guards (*.browser.test.tsx: target size, reflow, resize text,
+  # text spacing) run in real Chromium via the vitest browser project. Isolated
+  # into its own lane so the ~90MB Playwright browser install is off the critical
+  # path of every other check, and cached so repeat runs skip the download.
+  browser:
+    name: A11y layout guards (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-web
+
+      # Resolve the installed Playwright version to key the browser-binary cache;
+      # a version bump invalidates the cache so the matching browser is fetched.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+
+      # On a cache hit the browser binary is present but its OS deps may not be;
+      # `install-deps` is cheap and idempotent. On a miss, install the browser too.
+      - name: Install Playwright browser deps
+        run: npx playwright install-deps chromium
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
 
-      - name: Test
-        run: npm test
+      - name: Test (browser project)
+        run: npm run test:browser
 
-      # Generate the WCAG contrast audit report and attach it as a build
-      # artifact (never committed — it's a rendering of guaranteed-green state
-      # the contrast guard tests enforce). Downloadable from the run summary so
-      # a reviewer always has the current per-pair ratios. `if: always()` so the
-      # report is still produced when a later non-contrast step fails.
+  # i18n locale tooling: the audit tool's own pytest suites run ahead of the gate
+  # they pin (so a regex regression can't turn the audit into a no-op), then the
+  # strict key-coverage audit. Runs from the repo root (paths are repo-relative),
+  # overriding the workflow-level `web` working-directory default.
+  locale:
+    name: i18n locale audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install audit test deps
+        run: python -m pip install --quiet pytest
+
+      # Both locale-tooling pytest suites run ahead of the gates they pin
+      # (audit_i18n.py below; verify_locale.py in translate-locales.yaml) so a
+      # regex regression can't silently turn either gate into a no-op.
+      - name: i18n audit tests
+        run: python -m pytest web/src/locales/ -v
+
+      # i18n coverage gate (--strict): fails on MISSING/DEAD/SPLIT keys, physical
+      # directional classes, and hardcoded user-facing prose. See audit_i18n.py's
+      # module docstring for the coverage limits (green here is NOT "no hardcoded
+      # prose anywhere"). Uses the runner's python3; run from the repo root since
+      # the script resolves web/src relative to itself.
+      - name: i18n key audit
+        run: python3 web/src/locales/audit_i18n.py --strict
+
+  # Audit-report generation: renders the contrast / VPAT / a11y-inventory
+  # artifacts (never committed — renderings of guarded state the tests enforce)
+  # and uploads them for download. Independent of the gates; its own lane so the
+  # artifacts are always produced.
+  audits:
+    name: Accessibility reports (contrast, VPAT, inventory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-web
+
       - name: Generate contrast audit report
         if: always()
         run: npm run audit:contrast
-
       - name: Upload contrast audit report
         if: always()
         uses: actions/upload-artifact@v7
@@ -102,15 +190,9 @@ jobs:
             web/CONTRAST-AUDIT.md
           if-no-files-found: warn
 
-      # Generate the WCAG 2.2 VPAT / ACR (WCAG + INT editions) and attach it as
-      # a build artifact. Same discipline as the contrast report above: never
-      # committed — a rendering of guarded state (vpatGuard.test.ts + the
-      # contrast guard enforce the facts). `if: always()` so it's produced even
-      # when a later non-VPAT step fails.
       - name: Generate VPAT report
         if: always()
         run: npm run audit:vpat
-
       - name: Upload VPAT report
         if: always()
         uses: actions/upload-artifact@v7
@@ -122,14 +204,9 @@ jobs:
             web/VPAT-INT.md
           if-no-files-found: warn
 
-      # Emit the criterion-tagged accessibility inventory (status + bound checks)
-      # and upload it. The bindings themselves are enforced by the a11y tests in
-      # `npm test`; this artifact is a downloadable rendering of that guarded
-      # state. `if: always()` so it's produced even when a later step fails.
       - name: Generate a11y inventory
         if: always()
         run: npm run audit:a11y:inventory
-
       - name: Upload a11y inventory
         if: always()
         uses: actions/upload-artifact@v7
@@ -138,50 +215,31 @@ jobs:
           path: web/a11y-inventory.json
           if-no-files-found: warn
 
-      # Unit tests for the i18n audit tool itself. Its detection logic is
-      # entirely regex-driven, so these lock down the source-of-truth behavior
-      # (missing-key hard-fail, --strict flip, key-form capture, plural base,
-      # flatten/PLURAL_SUFFIXES parity with verify_locale.py) on inline
-      # fixtures -- a regex regression that silently stops catching a missing
-      # key fails here before it can turn the gate below into a permanent PASS.
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
-
-      - name: Install audit test deps
+  # Fan-in gate: a single required-status-friendly node that is green only when
+  # every lane succeeded. `if: always()` + explicit result inspection so a
+  # skipped or failed lane fails the gate (a bare `needs` would let a skipped
+  # lane pass). Pin THIS check in branch protection if required checks are added.
+  ci:
+    name: CI gate
+    if: always()
+    needs: [static, test, browser, locale, audits]
+    runs-on: ubuntu-latest
+    # No checkout — this is a pure aggregation job — so override the workflow-level
+    # `web` working-directory default (that dir doesn't exist here) to the runner
+    # workspace, or bash can't start.
+    defaults:
+      run:
         working-directory: ${{ github.workspace }}
-        run: python -m pip install --quiet pytest
-
-      # Both locale-tooling pytest suites run ahead of the gates they pin
-      # (audit_i18n.py below; verify_locale.py in translate-locales.yaml) so a
-      # regex regression can't silently turn either gate into a no-op.
-      - name: i18n audit tests
-        working-directory: ${{ github.workspace }}
-        run: python -m pytest web/src/locales/ -v
-
-      # i18n coverage gate (--strict): fails on any of
-      #   1. MISSING keys  — a t("...") referencing a key absent from en.json
-      #      (renders the raw key / English fallback in every language),
-      #   2. DEAD keys      — an en.json key no source literal/prefix references
-      #      (translation dead weight; drifts packs),
-      #   3. SPLIT keys     — retired _prefix/_suffix sentence-fragment keys
-      #      (break word order in RTL and many LTR languages; always fails),
-      #   4. PHYSICAL directional classes — Tailwind utilities that don't
-      #      mirror under dir="rtl" (backstop behind the eslint rule), and
-      #   5. HARDCODED prose — user-facing string literals bypassing i18n.
-      # Dev-only UI (components/dev/) and a tiny allowlist of format examples are
-      # exempt from (5); see HARDCODED_IGNORE_PREFIXES / _ALLOWED_VALUES; a
-      # same-line `physical-ok` comment exempts a deliberate physical edge
-      # from (4).
-      # Coverage limits (green here is NOT "no hardcoded prose anywhere"): (5) is
-      # a heuristic over double-quoted aria-label/alt/title/placeholder + raw
-      # toast/setError/failDeviceFlow args only — it misses JSX children text,
-      # brace/template-literal attributes, and single-quoted attributes; (1)/(2)
-      # don't hold inside dynamic t(`prefix.${x}`) subtrees. See audit_i18n.py's
-      # module docstring. Uses the runner's preinstalled python3 (no third-party
-      # deps); run from the repo root since the script resolves web/src relative
-      # to itself.
-      - name: i18n key audit
-        working-directory: ${{ github.workspace }}
-        run: python3 web/src/locales/audit_i18n.py --strict
+    steps:
+      - name: Verify all lanes succeeded
+        run: |
+          # `test` is the sharded matrix — it is `failure` if ANY shard's tests
+          # failed, so depending on it directly is the unit-test gate.
+          results="${{ needs.static.result }} ${{ needs.test.result }} ${{ needs.browser.result }} ${{ needs.locale.result }} ${{ needs.audits.result }}"
+          echo "lane results: $results"
+          for r in $results; do
+            if [ "$r" != "success" ]; then
+              echo "::error::a required lane did not succeed ($r)"
+              exit 1
+            fi
+          done
