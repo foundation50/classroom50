@@ -29,7 +29,9 @@ vi.mock("@/components/RoleResolvingFallback", () => ({
 }))
 vi.mock("@/components/QueryErrorAlert", () => ({
   QueryErrorAlert: ({ onRetry }: { onRetry: () => void }) => (
-    <button data-testid="error-retry" onClick={onRetry} />
+    <button data-testid="error-retry" onClick={onRetry}>
+      Retry
+    </button>
   ),
 }))
 vi.mock("react-i18next", () => ({

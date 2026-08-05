@@ -27,7 +27,7 @@ import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-import { Badge, Button, EmphasisLtr } from "@/components/ui"
+import { Badge, Button, EmphasisLtr, SkeletonCell } from "@/components/ui"
 
 const DeleteAssignmentButton = ({
   org,
@@ -318,24 +318,12 @@ const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
       // Decorative loading placeholder — hidden from assistive tech so a screen
       // reader announces the table's busy state, not rows of empty cells.
       <tr key={i} aria-hidden="true">
-        <td>
-          <div className="skeleton skeleton-shimmer h-4 w-40" />
-        </td>
-        <td>
-          <div className="skeleton skeleton-shimmer h-4 w-24" />
-        </td>
-        <td>
-          <div className="skeleton skeleton-shimmer h-6 w-28" />
-        </td>
-        <td>
-          <div className="skeleton skeleton-shimmer h-6 w-28" />
-        </td>
-        <td>
-          <div className="skeleton skeleton-shimmer h-4 w-56" />
-        </td>
-        <td>
-          <div className="skeleton skeleton-shimmer ms-auto h-8 w-16" />
-        </td>
+        <SkeletonCell bar="h-4 w-40" />
+        <SkeletonCell bar="h-4 w-24" />
+        <SkeletonCell bar="h-6 w-28" />
+        <SkeletonCell bar="h-6 w-28" />
+        <SkeletonCell bar="h-4 w-56" />
+        <SkeletonCell bar="ms-auto h-8 w-16" />
       </tr>
     ))}
   </>

@@ -524,11 +524,9 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                         </td>
 
                         <td>
-                          <div className="max-w-xs">
-                            <pre className="max-w-[12rem] truncate rounded bg-base-200 p-2 text-xs">
-                              {test.run || "-"}
-                            </pre>
-                          </div>
+                          <pre className="max-w-[12rem] truncate rounded bg-base-200 p-2 text-xs">
+                            {test.run || "-"}
+                          </pre>
                         </td>
 
                         <td>

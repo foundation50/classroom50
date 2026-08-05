@@ -53,6 +53,9 @@ export type { FileDropzoneProps, PickedFile } from "./FileDropzone"
 export { StatCard } from "./StatCard"
 export type { StatCardProps } from "./StatCard"
 
+export { SkeletonCell } from "./SkeletonCell"
+export type { SkeletonCellProps } from "./SkeletonCell"
+
 export { TablePagination } from "./TablePagination"
 export type { TablePaginationProps } from "./TablePagination"
 

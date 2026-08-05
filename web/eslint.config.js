@@ -59,7 +59,10 @@ export default defineConfig([
       // advisory-warning convention (react-hooks/no-console above).
       "jsx-a11y/alt-text": "warn",
       "jsx-a11y/anchor-ambiguous-text": "warn",
-      "jsx-a11y/anchor-has-content": "warn",
+      // Blocking (ratcheted): these three labeling rules are at zero and a
+      // regression is a real a11y defect (an unnamed control/link/label). The
+      // rest of the jsx-a11y set stays advisory until its own remediation lands.
+      "jsx-a11y/anchor-has-content": "error",
       "jsx-a11y/anchor-is-valid": "warn",
       "jsx-a11y/aria-activedescendant-has-tabindex": "warn",
       "jsx-a11y/aria-props": "warn",
@@ -68,13 +71,13 @@ export default defineConfig([
       "jsx-a11y/aria-unsupported-elements": "warn",
       "jsx-a11y/autocomplete-valid": "warn",
       "jsx-a11y/click-events-have-key-events": "warn",
-      "jsx-a11y/control-has-associated-label": "warn",
+      "jsx-a11y/control-has-associated-label": "error",
       "jsx-a11y/heading-has-content": "warn",
       "jsx-a11y/html-has-lang": "warn",
       "jsx-a11y/iframe-has-title": "warn",
       "jsx-a11y/img-redundant-alt": "warn",
       "jsx-a11y/interactive-supports-focus": "warn",
-      "jsx-a11y/label-has-associated-control": "warn",
+      "jsx-a11y/label-has-associated-control": "error",
       "jsx-a11y/media-has-caption": "warn",
       "jsx-a11y/mouse-events-have-key-events": "warn",
       "jsx-a11y/no-access-key": "warn",

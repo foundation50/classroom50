@@ -207,6 +207,11 @@ const CreateClassroomForm = ({
         <form.Field name="protectPages">
           {(field) => (
             <div className="mt-2 rounded-box border border-base-200 p-4">
+              {/* Valid wrapping label: it contains its checkbox control and
+                  visible text. jsx-a11y can't see the text past its default
+                  depth (it sits in a nested <span>), so this is a false
+                  positive — the control IS associated. */}
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
               <label className="flex cursor-pointer items-start gap-3">
                 <input
                   type="checkbox"
