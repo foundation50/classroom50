@@ -107,11 +107,15 @@ export const DrawerSidebar = () => {
   const { page, selected, settings, levelKey } = useSidebarNav()
   return (
     <div className="drawer-side z-40">
-      <label
-        htmlFor={MOBILE_DRAWER_ID}
-        aria-label={t("nav.closeMenu")}
-        className="drawer-overlay"
-      />
+      {/* DaisyUI click-outside scrim to close the mobile drawer (the htmlFor
+          toggles the drawer checkbox with no JS). A bare <label> has
+          role=generic, which prohibits aria-label (axe aria-prohibited-attr);
+          give it visually-hidden text instead so it has an accessible name via
+          real content and stays associated with its control (eslint
+          label-has-associated-control). */}
+      <label htmlFor={MOBILE_DRAWER_ID} className="drawer-overlay">
+        <span className="sr-only">{t("nav.closeMenu")}</span>
+      </label>
       <nav
         aria-label={t("nav.primary")}
         className={`flex flex-col min-h-full bg-neutral text-neutral-content transition-[width] duration-200 ease-out ${
