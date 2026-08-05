@@ -32,4 +32,36 @@ export const AUTOMATED_CRITERIA: Record<string, AutomatedBinding> = {
       "automatically (index.html carries lang; the i18n layer keeps " +
       "document.documentElement.lang in sync).",
   },
+  "3.3.1": {
+    check:
+      "FormField renders role=alert error text, wires it to the control via " +
+      "aria-describedby, and marks the control aria-invalid (a11yStructural.test.tsx)",
+    remark:
+      "Form fields identify errors in text: the shared FormField wrapper renders " +
+      "the error as a role=alert message, links it to the control via " +
+      "aria-describedby, and sets aria-invalid on the control. Verified " +
+      "automatically on the field primitive; per-form error copy is a manual " +
+      "content check.",
+  },
+  "3.3.2": {
+    check:
+      "FormField associates <label htmlFor> with the control id and exposes the " +
+      "help affordance's accessible name (a11yStructural.test.tsx)",
+    remark:
+      "Inputs carry programmatic labels: the shared FormField wrapper binds a " +
+      "<label htmlFor> to the control id and exposes required/help affordances. " +
+      "Verified automatically on the field primitive; per-form instruction copy " +
+      "is a manual content check.",
+  },
+  "4.1.3": {
+    check:
+      "the toast viewport exposes role=alert with tone-mapped aria-live " +
+      "(assertive for errors, polite otherwise) (a11yStructural.test.tsx)",
+    remark:
+      "Status changes are announced through a live region: toasts render as " +
+      "role=alert with aria-live tone-mapped (assertive for errors, polite " +
+      "otherwise), so assistive tech announces them without moving focus. " +
+      "Verified automatically on the toast surface (structure only; timing and " +
+      "visibility are not machine-checked).",
+  },
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   CONTRAST_CRITERION_IDS,
   CRITERIA,
+  hasGenericRemark,
   PRINCIPLE_ORDER,
   type ConformanceLevel,
   type EvidenceKind,
@@ -114,4 +115,14 @@ describe("vpatModel — criteria integrity", () => {
     expect(c?.status).toBe("supports")
     expect(c?.evidence).toBe("automated")
   })
+
+  it.each(["3.3.1", "3.3.2", "4.1.3"])(
+    "marks %s as automated Supports with a specific remark",
+    (id) => {
+      const c = CRITERIA.find((x) => x.id === id)
+      expect(c?.status).toBe("supports")
+      expect(c?.evidence).toBe("automated")
+      expect(hasGenericRemark(c!)).toBe(false)
+    },
+  )
 })

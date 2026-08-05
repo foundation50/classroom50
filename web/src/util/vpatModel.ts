@@ -279,16 +279,27 @@ export const CRITERIA: Criterion[] = [
     name: "Error Identification",
     level: "A",
     principle: "Understandable",
-    status: "notEvaluated",
-    remark: NOT_EVALUATED_REMARK,
+    status: "supports",
+    evidence: "automated",
+    remark:
+      "Form fields identify errors in text: the shared FormField wrapper renders " +
+      "the error as a role=alert message, links it to the control via " +
+      "aria-describedby, and sets aria-invalid on the control. Verified " +
+      "automatically on the field primitive; per-form error copy is a manual " +
+      "content check.",
   },
   {
     id: "3.3.2",
     name: "Labels or Instructions",
     level: "A",
     principle: "Understandable",
-    status: "notEvaluated",
-    remark: NOT_EVALUATED_REMARK,
+    status: "supports",
+    evidence: "automated",
+    remark:
+      "Inputs carry programmatic labels: the shared FormField wrapper binds a " +
+      "<label htmlFor> to the control id and exposes required/help affordances. " +
+      "Verified automatically on the field primitive; per-form instruction copy " +
+      "is a manual content check.",
   },
   {
     id: "3.3.7",
@@ -324,8 +335,14 @@ export const CRITERIA: Criterion[] = [
     name: "Status Messages",
     level: "AA",
     principle: "Robust",
-    status: "notEvaluated",
-    remark: NOT_EVALUATED_REMARK,
+    status: "supports",
+    evidence: "automated",
+    remark:
+      "Status changes are announced through a live region: toasts render as " +
+      "role=alert with aria-live tone-mapped (assertive for errors, polite " +
+      "otherwise), so assistive tech announces them without moving focus. " +
+      "Verified automatically on the toast surface (structure only; timing and " +
+      "visibility are not machine-checked).",
   },
 ]
 
