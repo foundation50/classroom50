@@ -38,3 +38,15 @@ export function documentHasLang(langAttr: string | null | undefined): boolean {
 export function meetsTargetSize(width: number, height: number): boolean {
   return width >= TARGET_SIZE_MIN && height >= TARGET_SIZE_MIN
 }
+
+/**
+ * True when no element is wider than the viewport (1.4.10 Reflow: content fits a
+ * narrow viewport without horizontal scroll). An empty list is vacuously true.
+ * The browser guard feeds this real measured widths at a 320px viewport.
+ */
+export function fitsViewportWidth(
+  elementWidths: number[],
+  viewportWidth: number,
+): boolean {
+  return elementWidths.every((w) => w <= viewportWidth)
+}

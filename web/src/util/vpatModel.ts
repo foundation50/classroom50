@@ -144,8 +144,13 @@ export const CRITERIA: Criterion[] = [
     name: "Reflow",
     level: "AA",
     principle: "Perceivable",
-    status: "notEvaluated",
-    remark: NOT_EVALUATED_REMARK,
+    status: "supports",
+    evidence: "automated",
+    remark:
+      "Content reflows without horizontal scroll: a representative layout of the " +
+      "shared Card/Button primitives is measured at a 320px viewport in a real " +
+      "browser and no element exceeds the width. Verified automatically on the " +
+      "shared layout primitives; a per-route reflow sweep is a manual follow-up.",
   },
   {
     id: "1.4.12",
@@ -241,8 +246,13 @@ export const CRITERIA: Criterion[] = [
     name: "Target Size (Minimum)",
     level: "AA",
     principle: "Operable",
-    status: "notEvaluated",
-    remark: NOT_EVALUATED_REMARK,
+    status: "supports",
+    evidence: "automated",
+    remark:
+      "Interactive targets meet the 24x24 CSS px minimum: the shared Button " +
+      "primitive's action sizes and icon-only shape are measured in a real " +
+      "browser layout engine. Verified automatically on the shared primitives; " +
+      "an exhaustive per-site target sweep is a manual follow-up.",
   },
   // ── Understandable ─────────────────────────────────────────────────────────
   {

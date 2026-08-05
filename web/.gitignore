@@ -25,6 +25,11 @@ dist-ssr
 
 .tanstack/tmp
 
+# Vitest browser-mode (Playwright) run output: attachments + failure/diff
+# screenshots. Regenerated per run, never committed.
+.vitest-attachments
+src/test/__screenshots__
+
 # Generated WCAG contrast audit artifacts. Never committed — renderings of
 # guaranteed-green state (the contrast guard tests enforce the facts). Produced
 # fresh as CI artifacts and emitted into dist/ by the Vite build (the JSON is the

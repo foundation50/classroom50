@@ -73,6 +73,13 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      # The a11y layout guards (*.browser.test.tsx: 2.5.8 target size, 1.4.10
+      # reflow) run in a real Chromium via the vitest browser project, which needs
+      # Playwright's browser binary. Installed here, right before the tests that
+      # use it, so an earlier lint/type failure fails fast without the download.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
       - name: Test
         run: npm test
 
