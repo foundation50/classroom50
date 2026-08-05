@@ -11,10 +11,12 @@ import {
 } from "@/components/ui"
 import type { BadgeTone } from "@/types/badgeTone"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import type {
-  ConformanceLevel,
-  Criterion,
-  EvidenceKind,
+import {
+  CONFORMANCE_LABEL,
+  type ConformanceLevel,
+  type Criterion,
+  type EvidenceKind,
+  type ManualVerdict,
 } from "@/util/vpatModel"
 import type { Guidance } from "@/util/assessmentGuidance"
 
@@ -26,14 +28,10 @@ import type { Guidance } from "@/util/assessmentGuidance"
 // VPAT overlay). Never shipped: the route redirects away unless
 // import.meta.env.DEV and the endpoint is serve-only.
 
-type ManualStatus = "supports" | "partially" | "doesNotSupport"
-
-type Verdict = { status: ManualStatus; evidence: "manual"; remark: string }
-
 type AssessData = {
   criteria: Criterion[]
   guidance: Guidance[]
-  verdicts: Record<string, Verdict>
+  verdicts: Record<string, ManualVerdict>
 }
 
 const STATUS_TONE: Record<ConformanceLevel, BadgeTone> = {
@@ -42,14 +40,6 @@ const STATUS_TONE: Record<ConformanceLevel, BadgeTone> = {
   doesNotSupport: "error",
   notApplicable: "neutral",
   notEvaluated: "neutral",
-}
-
-const STATUS_LABEL: Record<ConformanceLevel, string> = {
-  supports: "Supports",
-  partially: "Partially Supports",
-  doesNotSupport: "Does Not Support",
-  notApplicable: "Not Applicable",
-  notEvaluated: "Not Evaluated",
 }
 
 const EVIDENCE_LABEL: Record<EvidenceKind, string> = {
@@ -61,7 +51,7 @@ const EVIDENCE_LABEL: Record<EvidenceKind, string> = {
 
 // A criterion is manually-owned when it is still notEvaluated with no evidence,
 // or already carries a recorded manual verdict.
-const isManual = (c: Criterion, verdicts: Record<string, Verdict>) =>
+const isManual = (c: Criterion, verdicts: Record<string, ManualVerdict>) =>
   (c.status === "notEvaluated" && c.evidence === undefined) ||
   verdicts[c.id] !== undefined
 
@@ -228,11 +218,11 @@ function EditableCriterionCard({
 }: {
   criterion: Criterion
   guidance: Guidance | undefined
-  verdict: Verdict | undefined
+  verdict: ManualVerdict | undefined
   onSave: (body: Record<string, unknown>) => Promise<void>
   recorded?: boolean
 }) {
-  const [status, setStatus] = useState<ManualStatus>(
+  const [status, setStatus] = useState<ManualVerdict["status"]>(
     verdict?.status ?? "supports",
   )
   const [remark, setRemark] = useState(verdict?.remark ?? "")
@@ -264,7 +254,7 @@ function EditableCriterionCard({
         </Badge>
         {recorded && verdict && (
           <Badge tone={STATUS_TONE[verdict.status]}>
-            {STATUS_LABEL[verdict.status]}
+            {CONFORMANCE_LABEL[verdict.status]}
           </Badge>
         )}
       </div>
@@ -288,7 +278,9 @@ function EditableCriterionCard({
             id={statusId}
             selectSize="sm"
             value={status}
-            onChange={(e) => setStatus(e.target.value as ManualStatus)}
+            onChange={(e) =>
+              setStatus(e.target.value as ManualVerdict["status"])
+            }
           >
             <option value="supports">Supports</option>
             <option value="partially">Partially Supports</option>
@@ -345,7 +337,7 @@ function ReadOnlyCriterionCard({ criterion }: { criterion: Criterion }) {
           {criterion.level}
         </Badge>
         <Badge tone={STATUS_TONE[criterion.status]}>
-          {STATUS_LABEL[criterion.status]}
+          {CONFORMANCE_LABEL[criterion.status]}
         </Badge>
         {criterion.evidence && (
           <Badge tone="neutral" soft>

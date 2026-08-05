@@ -24,6 +24,17 @@ export type WcagLevel = "A" | "AA" | "AAA"
 export type ConformanceLevel =
   "supports" | "partially" | "doesNotSupport" | "notApplicable" | "notEvaluated"
 
+// Human-readable conformance words (VPAT 2.5 vocabulary). The single source for
+// both the rendered VPAT report (vpatReport.ts) and the dev-only assessment UI
+// (AssessmentPage.tsx), so the two never drift.
+export const CONFORMANCE_LABEL: Record<ConformanceLevel, string> = {
+  supports: "Supports",
+  partially: "Partially Supports",
+  doesNotSupport: "Does Not Support",
+  notApplicable: "Not Applicable",
+  notEvaluated: "Not Evaluated",
+}
+
 /**
  * What backs a status. `contrast` is computed from the contrast audit;
  * `automated` is a zero-violation tooling category; `manual` is a human
@@ -396,13 +407,22 @@ export type VerdictOverlay = Record<string, ManualVerdict>
  * criterion that is still `notEvaluated` — the manual-owned rows. Targeting an
  * automated/contrast/architectural row (already decided by tooling or design)
  * is a wiring error and throws, so the JSON can never silently overwrite a
- * machine-established verdict. Unknown ids also throw. Pure: no fs, no mutation
- * of the input.
+ * machine-established verdict. Unknown ids also throw. The verdict payload
+ * itself is validated too — a manual verdict must carry `evidence: "manual"`, a
+ * real manual status, and a non-empty remark — because `vpatVerdicts.json` is a
+ * plain JSON overlay whose `as VerdictOverlay` cast is compile-time only; a
+ * hand-edited `evidence: "automated"` would otherwise ship as an automated
+ * overclaim in the public VPAT. Pure: no fs, no mutation of the input.
  */
 export function applyVerdicts(
   base: Criterion[],
   overlay: VerdictOverlay,
 ): Criterion[] {
+  const MANUAL_STATUSES = new Set<ManualVerdict["status"]>([
+    "supports",
+    "partially",
+    "doesNotSupport",
+  ])
   const byId = new Map(base.map((c) => [c.id, c]))
   for (const id of Object.keys(overlay)) {
     const target = byId.get(id)
@@ -415,6 +435,22 @@ export function applyVerdicts(
           `(${target.evidence ?? "no"}-evidence) row; only notEvaluated ` +
           `criteria accept a manual verdict.`,
       )
+    }
+    const v = overlay[id]
+    if (v.evidence !== "manual") {
+      throw new Error(
+        `Manual verdict for "${id}" must carry evidence "manual", not ` +
+          `"${v.evidence}"; a manual overlay cannot claim automated evidence.`,
+      )
+    }
+    if (!MANUAL_STATUSES.has(v.status)) {
+      throw new Error(
+        `Manual verdict for "${id}" has invalid status "${v.status}"; ` +
+          `expected supports, partially, or doesNotSupport.`,
+      )
+    }
+    if (typeof v.remark !== "string" || v.remark.trim() === "") {
+      throw new Error(`Manual verdict for "${id}" requires a non-empty remark.`)
     }
   }
   return base.map((c) => {

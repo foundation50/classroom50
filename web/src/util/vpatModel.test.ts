@@ -186,4 +186,30 @@ describe("vpatModel — applyVerdicts overlay", () => {
     }
     expect(() => applyVerdicts(base, overlay)).toThrow(/unknown/)
   })
+
+  // vpatVerdicts.json is a plain JSON overlay whose `as VerdictOverlay` cast is
+  // compile-time only, so a hand-edited entry can carry any shape at runtime.
+  // applyVerdicts must reject a payload that would overclaim — an automated
+  // evidence tag, a non-manual status, or an empty remark — not just guard the
+  // target row.
+  it("throws if a verdict claims non-manual evidence (overclaim guard)", () => {
+    const overlay = {
+      "9.9.9": { status: "supports", evidence: "automated", remark: "x" },
+    } as unknown as VerdictOverlay
+    expect(() => applyVerdicts(base, overlay)).toThrow(/manual/)
+  })
+
+  it("throws if a verdict carries an invalid status", () => {
+    const overlay = {
+      "9.9.9": { status: "notEvaluated", evidence: "manual", remark: "x" },
+    } as unknown as VerdictOverlay
+    expect(() => applyVerdicts(base, overlay)).toThrow(/status/)
+  })
+
+  it("throws if a verdict has an empty remark", () => {
+    const overlay: VerdictOverlay = {
+      "9.9.9": { status: "supports", evidence: "manual", remark: "   " },
+    }
+    expect(() => applyVerdicts(base, overlay)).toThrow(/remark/)
+  })
 })

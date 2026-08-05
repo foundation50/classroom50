@@ -205,12 +205,39 @@ function assessmentApiPlugin(): Plugin {
 
   const VALID_STATUS = new Set(["supports", "partially", "doesNotSupport"])
 
-  // The endpoint writes repo files with no auth, so refuse any request whose
-  // Host isn't loopback — `vite --host` on an untrusted network must not expose
-  // an unauthenticated write endpoint. Loopback-only keeps it a local dev tool.
-  const isLoopbackHost = (req: import("node:http").IncomingMessage) => {
-    const host = (req.headers.host ?? "").replace(/:\d+$/, "")
-    return host === "localhost" || host === "127.0.0.1" || host === "[::1]"
+  // The endpoint writes repo files with no auth, so it must reject anything that
+  // isn't a genuine same-origin request from a loopback client. The Host header
+  // is attacker-controlled, so it can't be the boundary: `vite --host` on an
+  // untrusted network would expose the writer to anyone sending Host: localhost,
+  // and a malicious tab in the dev's own browser could POST a text/plain simple
+  // request (Host: localhost) as a blind CSRF write. Guard on facts the client
+  // can't forge instead — the actual socket address plus a same-origin fetch
+  // signal and a JSON content type (which forces a cross-origin preflight this
+  // middleware never answers).
+  const isLoopbackAddr = (addr: string | undefined) =>
+    addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1"
+
+  // Sec-Fetch-Site is set by the browser and can't be spoofed by page JS:
+  // "same-origin"/"none" (a direct navigation or a non-browser tool) is allowed,
+  // cross-site is not. This is the CSRF gate the loopback bind alone can't give.
+  const isSameOriginRequest = (req: import("node:http").IncomingMessage) => {
+    const site = req.headers["sec-fetch-site"]
+    return site === undefined || site === "same-origin" || site === "none"
+  }
+
+  // GET /_assess/data has no body, so it only needs the loopback + origin checks.
+  const isAllowedRead = (req: import("node:http").IncomingMessage) =>
+    isLoopbackAddr(req.socket.remoteAddress) && isSameOriginRequest(req)
+
+  // The write path additionally requires application/json, so a cross-origin
+  // simple request (text/plain, no preflight) can't reach the body parser.
+  const isAllowedWrite = (req: import("node:http").IncomingMessage) => {
+    const contentType = (req.headers["content-type"] ?? "").split(";")[0].trim()
+    return (
+      isLoopbackAddr(req.socket.remoteAddress) &&
+      isSameOriginRequest(req) &&
+      contentType === "application/json"
+    )
   }
 
   return {
@@ -224,7 +251,7 @@ function assessmentApiPlugin(): Plugin {
       server.watcher.unwatch(verdictsPath)
 
       server.middlewares.use("/_assess/data", (req, res) => {
-        if (!isLoopbackHost(req)) {
+        if (!isAllowedRead(req)) {
           res.statusCode = 403
           res.end("forbidden")
           return
@@ -243,7 +270,7 @@ function assessmentApiPlugin(): Plugin {
       })
 
       server.middlewares.use("/_assess/save", (req, res) => {
-        if (!isLoopbackHost(req)) {
+        if (!isAllowedWrite(req)) {
           res.statusCode = 403
           res.end("forbidden")
           return
