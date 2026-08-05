@@ -42,6 +42,18 @@ export type Criterion = {
   remark: string
 }
 
+/**
+ * True when a criterion carries only the generic "not yet assessed" boilerplate
+ * (no specific, criterion-level note). Structural, not prose-based: a criterion
+ * is generic when it is `notEvaluated` with no evidence tag. The report page
+ * uses this to collapse the repeated boilerplate remark to a single banner
+ * rather than repeating it on every row. Keeping the test structural means
+ * rewording NOT_EVALUATED_REMARK can't silently break the collapse.
+ */
+export function hasGenericRemark(c: Pick<Criterion, "status" | "evidence">) {
+  return c.status === "notEvaluated" && c.evidence === undefined
+}
+
 // The three contrast criteria whose status vpatReport.ts overwrites from the
 // live contrast audit. Listed here so the guard can assert the wiring and so a
 // reader sees they are intentionally derived, not hand-set.

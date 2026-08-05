@@ -13,6 +13,7 @@ import {
   cx,
 } from "@/components/ui"
 import type { BadgeTone } from "@/types/badgeTone"
+import { hasGenericRemark } from "@/util/vpatModel"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
 // Public /accessibility page: renders the build-emitted contrast-audit.json (the
@@ -67,6 +68,7 @@ type VpatCriterion = {
   level: "A" | "AA" | "AAA"
   principle: string
   status: VpatConformance
+  evidence?: "contrast" | "automated" | "manual" | "architectural"
   remark: string
 }
 
@@ -88,6 +90,27 @@ const VPAT_TONE: Record<VpatConformance, BadgeTone> = {
   notApplicable: "neutral",
   notEvaluated: "neutral",
 }
+
+// Tone -> the small status-dot swatch class. One source, shared by the VPAT stat
+// chips (Badge owns the badge recipe; this is only the bare dot).
+const TONE_DOT_CLASS: Record<BadgeTone, string> = {
+  success: "bg-success",
+  warning: "bg-warning",
+  error: "bg-error",
+  neutral: "bg-base-content/40",
+  info: "bg-info",
+  primary: "bg-primary",
+  secondary: "bg-secondary",
+}
+
+// The order the VPAT summary chips render in — worst-first so failures lead.
+const VPAT_STATUS_ORDER: VpatConformance[] = [
+  "doesNotSupport",
+  "partially",
+  "supports",
+  "notApplicable",
+  "notEvaluated",
+]
 
 const PRINCIPLE_ORDER = [
   "Perceivable",
@@ -288,13 +311,6 @@ function ThemeTable({
   )
 }
 
-// Whether a remark is a real, criterion-specific note worth showing per-row, or
-// the generic "not yet assessed" boilerplate (shown once above the table
-// instead, so 27 identical rows don't drown the specific ones).
-function isGenericRemark(remark: string): boolean {
-  return remark.startsWith("Not yet formally assessed")
-}
-
 type VpatFilter = VpatConformance | "all"
 type VpatSort = "criterion" | "status"
 
@@ -387,7 +403,7 @@ function VpatConformanceTable({ criteria }: { criteria: VpatCriterion[] }) {
                         </Badge>
                       </td>
                       <td className="align-top text-xs text-base-content/70">
-                        {isGenericRemark(c.remark) ? (
+                        {hasGenericRemark(c) ? (
                           <span className="text-base-content/40">—</span>
                         ) : (
                           c.remark
@@ -406,20 +422,20 @@ function VpatConformanceTable({ criteria }: { criteria: VpatCriterion[] }) {
 }
 
 // One summary stat that doubles as a status filter toggle. Clicking filters the
-// table to that status (or clears it back to "all" when re-clicked).
+// table to that status (or clears it back to "all" when re-clicked). Rendered
+// for every status so a non-zero count can never be hidden from the summary.
 function VpatStatCard({
-  label,
+  status,
   value,
-  tone,
   active,
   onClick,
 }: {
-  label: string
+  status: VpatConformance
   value: number
-  tone?: BadgeTone
   active: boolean
   onClick: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <button
       type="button"
@@ -433,19 +449,14 @@ function VpatStatCard({
       )}
     >
       <span className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-base-content/70">
-        {tone && (
-          <span
-            className={cx(
-              "size-2 rounded-full",
-              tone === "success" && "bg-success",
-              tone === "warning" && "bg-warning",
-              tone === "error" && "bg-error",
-              tone === "neutral" && "bg-base-content/40",
-            )}
-            aria-hidden="true"
-          />
-        )}
-        {label}
+        <span
+          className={cx(
+            "size-2 rounded-full",
+            TONE_DOT_CLASS[VPAT_TONE[status]],
+          )}
+          aria-hidden="true"
+        />
+        {t(`accessibility.vpat.status.${status}`)}
       </span>
       <span className="mt-1 block text-2xl font-bold">{value}</span>
     </button>
@@ -531,35 +542,16 @@ function VpatSection() {
 
       {vpat && (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <VpatStatCard
-              label={t("accessibility.vpat.status.supports")}
-              value={vpat.summary.byStatus.supports}
-              tone="success"
-              active={filter === "supports"}
-              onClick={() => toggleFilter("supports")}
-            />
-            <VpatStatCard
-              label={t("accessibility.vpat.status.partially")}
-              value={vpat.summary.byStatus.partially}
-              tone="warning"
-              active={filter === "partially"}
-              onClick={() => toggleFilter("partially")}
-            />
-            <VpatStatCard
-              label={t("accessibility.vpat.status.notApplicable")}
-              value={vpat.summary.byStatus.notApplicable}
-              tone="neutral"
-              active={filter === "notApplicable"}
-              onClick={() => toggleFilter("notApplicable")}
-            />
-            <VpatStatCard
-              label={t("accessibility.vpat.status.notEvaluated")}
-              value={vpat.summary.byStatus.notEvaluated}
-              tone="neutral"
-              active={filter === "notEvaluated"}
-              onClick={() => toggleFilter("notEvaluated")}
-            />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {VPAT_STATUS_ORDER.map((status) => (
+              <VpatStatCard
+                key={status}
+                status={status}
+                value={vpat.summary.byStatus[status]}
+                active={filter === status}
+                onClick={() => toggleFilter(status)}
+              />
+            ))}
           </div>
 
           <Alert tone="info" className="items-start text-sm">

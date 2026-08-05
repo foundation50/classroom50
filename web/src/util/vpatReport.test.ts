@@ -30,7 +30,7 @@ describe("buildVpatReport (JSON source of truth)", () => {
   })
 
   it("derives the contrast criteria from the audit — passing → Supports", () => {
-    const passing = buildVpatReport(FIXED, true)
+    const passing = buildVpatReport(FIXED, { allPass: true, failures: 0 })
     for (const id of CONTRAST_CRITERION_IDS) {
       const c = passing.criteria.find((x) => x.id === id)
       expect(c?.status, `${id} on passing audit`).toBe("supports")
@@ -39,10 +39,11 @@ describe("buildVpatReport (JSON source of truth)", () => {
   })
 
   it("flips the contrast criteria when the audit fails (proves KTD4 wiring)", () => {
-    const failing = buildVpatReport(FIXED, false)
+    const failing = buildVpatReport(FIXED, { allPass: false, failures: 2 })
     for (const id of CONTRAST_CRITERION_IDS) {
       const c = failing.criteria.find((x) => x.id === id)
       expect(c?.status, `${id} on failing audit`).toBe("partially")
+      expect(c?.remark, `${id} names the failing count`).toContain("2 pairs")
     }
     // A non-contrast criterion is unaffected by the audit result.
     const nonContrast = failing.criteria.find((x) => x.id === "2.1.1")

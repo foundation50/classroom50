@@ -16,6 +16,10 @@ describe("assessAltText", () => {
     expect(issues("diagram.svg")).toContain("filename")
   })
 
+  it("flags a filename embedded mid-string", () => {
+    expect(issues("see banner.png here")).toContain("filename")
+  })
+
   it("flags generic placeholder values", () => {
     expect(issues("image")).toContain("placeholder")
     expect(issues("Logo")).toContain("placeholder")

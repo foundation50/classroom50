@@ -19,10 +19,11 @@ export type AltTextFinding = {
 }
 
 // Common raster/vector extensions that betray a raw filename used as alt.
-const FILENAME_RE = /\.(png|jpe?g|gif|svg|webp|avif|bmp|ico|tiff?)$/i
-// A bare token that looks like a filename even without a dir separator.
-const FILENAME_LIKE_RE =
-  /^[\w\-. ]+\.(png|jpe?g|gif|svg|webp|avif|bmp|ico|tiff?)$/i
+// Matches a filename-looking token (word chars/dots/hyphens ending in a known
+// image extension) anywhere in the string, not just end-to-end — so both a bare
+// "IMG_1234.png" and an embedded "see banner.png here" are caught.
+const FILENAME_RE =
+  /(^|\s)[\w-]+\.(png|jpe?g|gif|svg|webp|avif|bmp|ico|tiff?)\b/i
 
 // Vague/placeholder values that carry no information.
 const PLACEHOLDER_VALUES = new Set([
@@ -64,7 +65,7 @@ export function assessAltText(
 
   const lower = normalize(value)
 
-  if (FILENAME_RE.test(value) || FILENAME_LIKE_RE.test(value)) {
+  if (FILENAME_RE.test(value)) {
     findings.push({
       issue: "filename",
       detail: `alt "${value}" looks like a filename, not a description`,

@@ -53,10 +53,14 @@ const CONFORMANCE_WORD: Record<ConformanceLevel, string> = {
 /**
  * Derive the contrast criteria's conformance from the live contrast audit.
  * `allPass` → Supports (the audit guarantees every enforced pair meets its
- * floor); otherwise Partially Supports with the failing count. This is the only
- * place the contrast criteria's status is set (KTD4). Injectable for testing.
+ * floor); otherwise Partially Supports, naming the failing-pair count. This is
+ * the only place the contrast criteria's status is set (KTD4). Injectable for
+ * testing.
  */
-function contrastStatus(allPass: boolean): {
+function contrastStatus(
+  allPass: boolean,
+  failures: number,
+): {
   status: ConformanceLevel
   remark: string
 } {
@@ -69,20 +73,24 @@ function contrastStatus(allPass: boolean): {
         "level). See the live report at /accessibility. Guarded in CI.",
     }
   }
+  const pairs = failures === 1 ? "pair" : "pairs"
   return {
     status: "partially",
     remark:
-      "The automated contrast audit reports one or more pairs below the WCAG " +
-      "floor. See /accessibility for the failing pairs.",
+      `The automated contrast audit reports ${failures} ${pairs} below the ` +
+      "WCAG floor. See /accessibility for the failing pairs.",
   }
 }
 
 /** The canonical structured VPAT. Deterministic for a given model + date. */
 export function buildVpatReport(
   now = new Date(),
-  contrastAllPass = buildContrastAudit(now).summary.allPass,
+  contrast: { allPass: boolean; failures: number } = (() => {
+    const s = buildContrastAudit(now).summary
+    return { allPass: s.allPass, failures: s.failures }
+  })(),
 ): VpatReportJson {
-  const derived = contrastStatus(contrastAllPass)
+  const derived = contrastStatus(contrast.allPass, contrast.failures)
   const contrastIds = new Set<string>(CONTRAST_CRITERION_IDS)
 
   const criteria: Criterion[] = CRITERIA.map((c) =>

@@ -48,6 +48,14 @@ describe("VPAT integrity guard", () => {
     }
   })
 
+  it("uses contrast evidence on exactly the contrast criteria (no stray tags)", () => {
+    const contrastEvidenced = report.criteria
+      .filter((c) => c.evidence === "contrast")
+      .map((c) => c.id)
+      .sort()
+    expect(contrastEvidenced).toEqual([...CONTRAST_CRITERION_IDS].sort())
+  })
+
   it("has a summary whose byStatus counts sum to total", () => {
     const s = report.summary.byStatus
     const sum =
