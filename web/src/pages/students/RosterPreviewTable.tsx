@@ -124,16 +124,16 @@ export const RosterPreviewTable = ({
                   <td>
                     <code>{row.username}</code>
                   </td>
-                  <td>
+                  <td aria-hidden="true">
                     <div className="skeleton skeleton-shimmer h-4 w-28" />
                   </td>
-                  <td>
+                  <td aria-hidden="true">
                     <div className="skeleton skeleton-shimmer h-4 w-40" />
                   </td>
-                  <td>
+                  <td aria-hidden="true">
                     <div className="skeleton skeleton-shimmer h-4 w-16" />
                   </td>
-                  <td>
+                  <td aria-hidden="true">
                     <div className="skeleton skeleton-shimmer h-8 w-32" />
                   </td>
                 </tr>
