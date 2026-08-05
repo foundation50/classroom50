@@ -29,18 +29,23 @@ describe("Modal", () => {
     const box = container.querySelector(".modal-box")
     expect(box?.className).toContain("max-w-md")
     expect(screen.getByText("hi")).toBeDefined()
-    // one close X + one backdrop close button
-    expect(screen.getAllByRole("button").length).toBeGreaterThanOrEqual(2)
+    // The close X is an exposed button; the backdrop close button is
+    // aria-hidden + tabIndex=-1 (mouse-only), so only the X has button role.
+    expect(screen.getAllByRole("button")).toHaveLength(1)
+    // The backdrop close control still exists in the DOM as a click target.
+    expect(container.querySelector(".modal-backdrop button")).not.toBeNull()
   })
 
   it("hides the close X when hideCloseButton", () => {
-    render(
+    const { container } = render(
       <Modal open hideCloseButton aria-label="dlg">
         x
       </Modal>,
     )
-    // only the backdrop close button remains
-    expect(screen.getAllByRole("button")).toHaveLength(1)
+    // The X is gone; the only remaining control is the aria-hidden backdrop
+    // button, which is not exposed with a button role.
+    expect(screen.queryAllByRole("button")).toHaveLength(0)
+    expect(container.querySelector(".modal-backdrop button")).not.toBeNull()
   })
 
   it("opens the native dialog when open flips true", () => {
@@ -66,7 +71,7 @@ describe("Modal", () => {
   })
 
   it("disables the close controls when closeDisabled", () => {
-    render(
+    const { container } = render(
       <Modal open closeDisabled aria-label="dlg">
         x
       </Modal>,
@@ -74,6 +79,11 @@ describe("Modal", () => {
     for (const btn of screen.getAllByRole("button")) {
       expect((btn as HTMLButtonElement).disabled).toBe(true)
     }
+    // The aria-hidden backdrop button (not role-exposed) is disabled too.
+    const backdropBtn = container.querySelector(
+      ".modal-backdrop button",
+    ) as HTMLButtonElement
+    expect(backdropBtn.disabled).toBe(true)
   })
 
   it("vetoes Esc (cancel) when closeDisabled", () => {

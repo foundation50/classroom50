@@ -478,10 +478,12 @@ export function ClassroomStats({ org, slug }: { org: string; slug: string }) {
 function ViewAssignmentsButton({
   org,
   slug,
+  classroomName,
   block,
 }: {
   org: string
   slug: string
+  classroomName: string
   block?: boolean
 }) {
   const { t } = useTranslation()
@@ -490,6 +492,9 @@ function ViewAssignmentsButton({
       type="button"
       to="/$org/$classroom/assignments"
       params={{ org, classroom: slug }}
+      aria-label={t("classes.viewAssignmentsAria", {
+        classroom: classroomName,
+      })}
       className={`btn btn-outline btn-primary btn-sm ${block ? "w-full" : ""}`}
     >
       {t("classes.viewAssignments")}
@@ -526,7 +531,12 @@ export function ClassroomCard({
         </div>
         <h2 className="truncate text-xl font-semibold">{name}</h2>
         <ClassroomStats org={org} slug={summary.path} />
-        <ViewAssignmentsButton org={org} slug={summary.path} block />
+        <ViewAssignmentsButton
+          org={org}
+          slug={summary.path}
+          classroomName={name}
+          block
+        />
       </Card.Body>
     </Card>
   )
@@ -551,7 +561,11 @@ export function ClassroomRow({
         <ClassroomStats org={org} slug={summary.path} />
       </div>
       <div className="flex shrink-0 items-center justify-end gap-2">
-        <ViewAssignmentsButton org={org} slug={summary.path} />
+        <ViewAssignmentsButton
+          org={org}
+          slug={summary.path}
+          classroomName={name}
+        />
         {canManage && (
           <ClassroomMenu
             summary={summary}

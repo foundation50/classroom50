@@ -78,8 +78,18 @@ export const DrawerContent = ({ children }: { children: ReactNode }) => {
   )
 }
 
+// DaisyUI's drawer state lives in this checkbox, toggled by the labeled
+// open/close buttons above (which carry their own aria-labels). The input
+// itself is a headless layout control, so hide it from assistive tech and keep
+// it out of the tab order — otherwise it surfaces as a stray unlabeled checkbox.
 export const DrawerToggle = () => (
-  <input id={MOBILE_DRAWER_ID} type="checkbox" className="drawer-toggle" />
+  <input
+    id={MOBILE_DRAWER_ID}
+    type="checkbox"
+    className="drawer-toggle"
+    aria-hidden="true"
+    tabIndex={-1}
+  />
 )
 
 // The rail lives in the persistent `_authed` shell, so it derives its active
