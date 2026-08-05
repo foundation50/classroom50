@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config"
+import { playwright } from "@vitest/browser-playwright"
 import type { Plugin } from "vite"
 import react, { reactCompilerPreset } from "@vitejs/plugin-react"
 import babel from "@rolldown/plugin-babel"
@@ -189,7 +190,33 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "node",
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // Two projects: the fast node/happy-dom suite (the bulk of the tests) and a
+    // Playwright/Chromium browser suite for the handful of checks that need a real
+    // layout engine (target-size + reflow, *.browser.test.tsx). `vitest run` runs
+    // both; browser tests need `npx playwright install chromium` once locally.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["src/**/*.{test,spec}.{ts,tsx}"],
+          exclude: ["src/**/*.browser.test.tsx"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "browser",
+          include: ["src/**/*.browser.test.tsx"],
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            headless: true,
+            instances: [{ browser: "chromium" }],
+          },
+        },
+      },
+    ],
   },
 })

@@ -73,6 +73,13 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      # The a11y layout guards (*.browser.test.tsx: 2.5.8 target size, 1.4.10
+      # reflow) run in a real Chromium via the vitest browser project, which needs
+      # Playwright's browser binary. Installed here, right before the tests that
+      # use it, so an earlier lint/type failure fails fast without the download.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
       - name: Test
         run: npm test
 
@@ -87,7 +94,7 @@ jobs:
 
       - name: Upload contrast audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: contrast-audit
           path: |
@@ -106,7 +113,7 @@ jobs:
 
       - name: Upload VPAT report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vpat-report
           path: |
@@ -125,7 +132,7 @@ jobs:
 
       - name: Upload a11y inventory
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: a11y-inventory
           path: web/a11y-inventory.json

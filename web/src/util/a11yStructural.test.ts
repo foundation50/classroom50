@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   documentHasLang,
+  fitsViewportWidth,
   hasNoSkippedHeadingLevels,
   hasSingleH1,
   meetsTargetSize,
@@ -36,5 +37,11 @@ describe("a11yStructural predicates", () => {
     expect(meetsTargetSize(40, 40)).toBe(true)
     expect(meetsTargetSize(20, 44)).toBe(false)
     expect(meetsTargetSize(44, 20)).toBe(false)
+  })
+
+  it("fitsViewportWidth: no element wider than the viewport", () => {
+    expect(fitsViewportWidth([100, 200, 320], 320)).toBe(true) // <= is fine
+    expect(fitsViewportWidth([100, 500], 320)).toBe(false) // one overflows
+    expect(fitsViewportWidth([], 320)).toBe(true) // vacuously true
   })
 })

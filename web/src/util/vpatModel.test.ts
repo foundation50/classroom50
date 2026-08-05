@@ -116,7 +116,7 @@ describe("vpatModel — criteria integrity", () => {
     expect(c?.evidence).toBe("automated")
   })
 
-  it.each(["3.3.1", "3.3.2", "4.1.3"])(
+  it.each(["3.3.1", "3.3.2", "4.1.3", "2.5.8", "1.4.10"])(
     "marks %s as automated Supports with a specific remark",
     (id) => {
       const c = CRITERIA.find((x) => x.id === id)

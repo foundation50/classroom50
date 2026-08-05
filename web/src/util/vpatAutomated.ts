@@ -64,4 +64,24 @@ export const AUTOMATED_CRITERIA: Record<string, AutomatedBinding> = {
       "Verified automatically on the toast surface (structure only; timing and " +
       "visibility are not machine-checked).",
   },
+  "2.5.8": {
+    check:
+      "shared Button sizes + an icon-only Button measure >= 24x24 CSS px in real " +
+      "Chromium (targetSize.browser.test.tsx)",
+    remark:
+      "Interactive targets meet the 24x24 CSS px minimum: the shared Button " +
+      "primitive's action sizes and icon-only shape are measured in a real " +
+      "browser layout engine. Verified automatically on the shared primitives; " +
+      "an exhaustive per-site target sweep is a manual follow-up.",
+  },
+  "1.4.10": {
+    check:
+      "a representative Card layout has no element wider than a 320px viewport in " +
+      "real Chromium (reflow.browser.test.tsx)",
+    remark:
+      "Content reflows without horizontal scroll: a representative layout of the " +
+      "shared Card/Button primitives is measured at a 320px viewport in a real " +
+      "browser and no element exceeds the width. Verified automatically on the " +
+      "shared layout primitives; a per-route reflow sweep is a manual follow-up.",
+  },
 }
