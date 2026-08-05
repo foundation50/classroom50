@@ -35,6 +35,29 @@ import { WIKI_URL } from "@/version"
 import { useSidebarCollapse } from "./collapseContext"
 import { DeployEnvBadge } from "./DeployEnvBadge"
 
+// Presentational theme-toggle switch: plain <span>s (never a form <input>), so
+// it can't be a focusable control nested inside the theme <button> (which would
+// re-introduce the axe nested-interactive violation). DaisyUI's `.toggle` keys
+// its knob/track off `input:checked`, which a non-input can't set, so the on/off
+// look is hand-rolled here from `on`. The button owns state via aria-pressed;
+// this is aria-hidden decoration. Exported for a focused unit test.
+export const ThemeToggleTrack = ({ on }: { on: boolean }) => (
+  <span
+    aria-hidden="true"
+    data-testid="theme-toggle-track"
+    className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${
+      on ? "bg-primary" : "bg-base-content/30"
+    }`}
+  >
+    <span
+      data-testid="theme-toggle-knob"
+      className={`size-4 rounded-full bg-base-100 shadow transition-transform ${
+        on ? "translate-x-4 rtl:-translate-x-4" : ""
+      }`}
+    />
+  </span>
+)
+
 export const SidebarFooter = () => {
   const { signOut, user } = useGithubAuth()
   const { t } = useTranslation()
@@ -281,17 +304,7 @@ export const SidebarFooter = () => {
                 <span className="flex-1 text-start">
                   {isDark ? t("nav.darkMode") : t("nav.lightMode")}
                 </span>
-                {/* Presentational toggle: a plain <span>, not a form <input>,
-                    so it can't be a focusable control nested inside this button
-                    (axe nested-interactive). The button owns the state via
-                    aria-pressed; this just mirrors the on/off look. */}
-                <span
-                  aria-hidden="true"
-                  className={`toggle toggle-sm toggle-primary pointer-events-none ${
-                    isDark ? "[--tglbg:var(--color-primary)]" : ""
-                  }`}
-                  data-checked={isDark}
-                />
+                <ThemeToggleTrack on={isDark} />
               </button>
             </li>
             <li>

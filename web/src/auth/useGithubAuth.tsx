@@ -267,6 +267,8 @@ function runDevAutoLoginOnce(
       const { scopes } = await fetchGithubUserWithScopes(envPat)
       const result = classifyPatResult(scopes)
       if (result.kind !== "ok") {
+        // A definitive rejection (fine-grained / missing scopes): keep it
+        // cached — the same token won't pass on a retry this page load.
         log.warn("VITE_GITHUB_PAT auto-login rejected", { kind: result.kind })
         return null
       }
@@ -276,7 +278,11 @@ function runDevAutoLoginOnce(
       log.info("dev auto-login validated; token persisted")
       return { token: envPat, scope: result.scopes }
     } catch (err) {
+      // A transient failure (network blip / timeout / 5xx) is not the token's
+      // fault. Clear the cached promise so the next mount re-attempts rather
+      // than being stranded on the login screen for the rest of the page load.
       log.warn("VITE_GITHUB_PAT auto-login failed to validate", { err })
+      devAutoLoginPromise = null
       return null
     }
   })()

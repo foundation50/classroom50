@@ -213,6 +213,40 @@ describe("dev auto-login effect wiring", () => {
     )
   })
 
+  // Regression: a transient validation failure (network blip / 5xx / timeout)
+  // must NOT be cached as a permanent null — otherwise every later mount in the
+  // same page load returns the cached null and the dev is stranded on the login
+  // screen until a full reload. A second mount must re-attempt the validation.
+  it("re-attempts validation after a transient failure (does not cache the null)", async () => {
+    setEnv({ DEV: true, pat: "ghp_valid" })
+    // First attempt: transient network error. Second attempt: succeeds.
+    fetchGithubUserWithScopes
+      .mockRejectedValueOnce(new Error("network blip"))
+      .mockResolvedValueOnce({
+        user: { login: "octocat" },
+        scopes: FULL_SCOPES,
+      })
+    fetchGithubUser.mockResolvedValue({ login: "octocat" })
+
+    const first = renderHook(() => useGithubAuth(), { wrapper: wrapper() })
+    await waitFor(() =>
+      expect(fetchGithubUserWithScopes).toHaveBeenCalledTimes(1),
+    )
+    // The transient failure did not sign in and did not persist a token.
+    expect(persistGithubToken).not.toHaveBeenCalled()
+    first.unmount()
+
+    // A fresh mount (e.g. an HMR reload) must retry rather than reuse the
+    // cached null, and this time it succeeds.
+    renderHook(() => useGithubAuth(), { wrapper: wrapper() })
+    await waitFor(() =>
+      expect(fetchGithubUserWithScopes).toHaveBeenCalledTimes(2),
+    )
+    await waitFor(() =>
+      expect(persistGithubToken).toHaveBeenCalledWith("ghp_valid", FULL_SCOPES),
+    )
+  })
+
   // #5: a returning OAuth ?code owns sign-in for that load; the PAT auto-login
   // must stand down so the two paths don't both drive completeSignIn.
   it("skips the env-PAT auto-login when a ?code OAuth callback is present", async () => {
