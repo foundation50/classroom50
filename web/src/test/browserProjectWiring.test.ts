@@ -39,10 +39,11 @@ describe("vitest browser-project wiring (a11y layout guards)", () => {
     )
   })
 
-  it("at least two browser guard files exist to be collected", () => {
+  it("at least four browser guard files exist to be collected", () => {
     const files = globSync("src/**/*.browser.test.tsx", { cwd: webRoot })
-    // 2.5.8 target size + 1.4.10 reflow. Fewer means a guard was renamed out of
-    // the collected glob and its VPAT criterion lost its backing check.
-    expect(files.length).toBeGreaterThanOrEqual(2)
+    // 2.5.8 target size, 1.4.10 reflow, 1.4.4 resize text, 1.4.12 text spacing.
+    // Fewer means a guard was renamed out of the collected glob and its VPAT
+    // criterion lost its backing check.
+    expect(files.length).toBeGreaterThanOrEqual(4)
   })
 })
