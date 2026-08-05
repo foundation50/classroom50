@@ -166,10 +166,10 @@ function vpatReportPlugin(): Plugin {
   }
 }
 
-// Dev-only bridge for the interactive WCAG assessment tool (/_assess). The app
+// Dev-only bridge for the interactive WCAG assessment tool (/assess). The app
 // is client-side only, so recording a verdict to the repo needs a dev endpoint;
 // `apply: "serve"` keeps this middleware out of every production build (the
-// endpoint simply does not exist there, and the /_assess route redirects away
+// endpoint simply does not exist there, and the /assess route redirects away
 // unless import.meta.env.DEV). It reads/writes two repo files:
 //   - src/util/vpatVerdicts.json — the machine-writable verdict overlay
 //   - accessibility/manual-assessment.md — regenerated from the fresh overlay

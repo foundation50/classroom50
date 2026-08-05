@@ -6,7 +6,7 @@ down each section and record the verdict in the VPAT model.
 
 ## How to record a result
 
-Use the dev-only assessment tool — run `npm run dev` and open `/_assess` — to
+Use the dev-only assessment tool — run `npm run dev` and open `/assess` — to
 click through each SC, pick a verdict, and enter a remark; it writes the verdict
 to `web/src/util/vpatVerdicts.json` and regenerates this checklist. (You can also
 edit `vpatVerdicts.json` by hand.) Each recorded verdict:
