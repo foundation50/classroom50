@@ -1,30 +1,21 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest"
-import { cleanup, render } from "@testing-library/react"
+import { describe, expect, it } from "vitest"
 
-import "@/index.css"
 import { Button } from "@/components/ui"
 import { meetsTargetSize, TARGET_SIZE_MIN } from "@/util/a11yStructural"
+import { rect, renderInViewport, setupBrowserA11y } from "./browserA11y"
 
 // 2.5.8 Target Size (Minimum): interactive targets are >= 24x24 CSS px. Measured
 // in a real Chromium layout engine (happy-dom reports 0 for every box, so this
 // check can only live in the browser project). daisyUI sizes come from the real
-// stylesheet, so the theme must be applied to <html>.
-beforeAll(() => {
-  document.documentElement.setAttribute("data-theme", "sumi")
-})
-afterEach(cleanup)
-
-function rect(el: Element) {
-  const r = el.getBoundingClientRect()
-  return { width: r.width, height: r.height }
-}
+// stylesheet + theme, both applied by the shared harness.
+setupBrowserA11y()
 
 describe("2.5.8 Target Size — shared Button primitive", () => {
   // md and sm are the default action sizes across the app; both must clear 24px.
   it.each(["md", "sm"] as const)(
     "a %s Button meets the 24x24 minimum",
     (size) => {
-      const { getByRole } = render(<Button size={size}>Save</Button>)
+      const { getByRole } = renderInViewport(<Button size={size}>Save</Button>)
       const { width, height } = rect(getByRole("button"))
       expect(
         meetsTargetSize(width, height),
@@ -34,7 +25,7 @@ describe("2.5.8 Target Size — shared Button primitive", () => {
   )
 
   it("an icon-only circle Button meets the 24x24 minimum", () => {
-    const { getByRole } = render(
+    const { getByRole } = renderInViewport(
       <Button shape="circle" aria-label="Settings">
         <span aria-hidden="true" className="size-4" />
       </Button>,
@@ -46,7 +37,7 @@ describe("2.5.8 Target Size — shared Button primitive", () => {
   // Fidelity: a deliberately tiny box must fail, so a future measurement-logic
   // regression can't silently pass every element.
   it("a 10x10 target fails the minimum (guard bites)", () => {
-    const { getByTestId } = render(
+    const { getByTestId } = renderInViewport(
       <div data-testid="tiny" style={{ width: 10, height: 10 }} />,
     )
     const { width, height } = rect(getByTestId("tiny"))

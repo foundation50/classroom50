@@ -1,9 +1,9 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest"
-import { cleanup, render } from "@testing-library/react"
+import { describe, expect, it } from "vitest"
+import { render } from "@testing-library/react"
 import type { CSSProperties } from "react"
 
-import "@/index.css"
 import { Card } from "@/components/ui"
+import { setupBrowserA11y } from "./browserA11y"
 
 // 1.4.12 Text Spacing: no loss of content when the user overrides line-height to
 // 1.5x, paragraph spacing to 2x, letter-spacing to 0.12em, and word-spacing to
@@ -19,10 +19,7 @@ const TEXT_SPACING: CSSProperties = {
   wordSpacing: "0.16em",
 }
 
-beforeAll(() => {
-  document.documentElement.setAttribute("data-theme", "sumi")
-})
-afterEach(cleanup)
+setupBrowserA11y()
 
 // A container with no clipping is one whose content isn't cut off by a fixed size:
 // scroll size never exceeds client size on either axis.
