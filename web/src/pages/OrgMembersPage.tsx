@@ -502,19 +502,11 @@ const OrgMembersPage = () => {
                     <ClickableRow
                       key={row.key}
                       className="group/row flex cursor-pointer items-center justify-between gap-4 px-6 py-4 hover:bg-base-200"
-                      role="button"
-                      tabIndex={0}
                       onClick={() => setSelectedKey(row.key)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault()
-                          setSelectedKey(row.key)
-                        }
-                      }}
                     >
                       <input
                         type="checkbox"
-                        className="checkbox checkbox-sm shrink-0"
+                        className="checkbox checkbox-sm size-6 shrink-0"
                         aria-label={
                           isSelf(row)
                             ? t("orgMembers.bulk.selfNotSelectable")
@@ -541,6 +533,7 @@ const OrgMembersPage = () => {
                           github={row.username}
                           initials={initialsFor(row)}
                           subtitle={<GitHubIdentity row={row} />}
+                          onClick={() => setSelectedKey(row.key)}
                         />
                       </div>
                       <div className="flex shrink-0 items-center gap-3">

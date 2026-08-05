@@ -261,7 +261,7 @@ export const SidebarFooter = () => {
                     </ul>
                   </details>
                 </li>
-                <div className="divider my-1" />
+                <li aria-hidden="true" className="divider my-1" />
               </>
             )}
             <li>
@@ -304,7 +304,7 @@ export const SidebarFooter = () => {
                 <span className="flex-1 text-start">{t("nav.language")}</span>
               </button>
             </li>
-            <div className="divider my-1" />
+            <li aria-hidden="true" className="divider my-1" />
             <li>
               <button
                 type="button"
@@ -332,7 +332,7 @@ export const SidebarFooter = () => {
                 <span className="flex-1 text-start">{t("nav.docs")}</span>
               </a>
             </li>
-            <div className="divider my-1" />
+            <li aria-hidden="true" className="divider my-1" />
             <li>
               <button type="button" className="text-error" onClick={signOut}>
                 <LogOut aria-hidden="true" className="size-4" />

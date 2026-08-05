@@ -1,14 +1,14 @@
 import { BookText, Settings } from "lucide-react"
 import { Link } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
-import { Tip, SidebarItemBody } from "./primitives"
+import { SidebarItemBody, SidebarNavItem } from "./primitives"
 
 export const MyOrgs = ({ settings = false }) => {
   const { t } = useTranslation()
   return (
     <div className="py-4">
       <ul className="flex flex-col gap-1">
-        <Tip label={t("nav.organizations")}>
+        <SidebarNavItem label={t("nav.organizations")}>
           <Link to="/">
             <SidebarItemBody
               label={t("nav.organizations")}
@@ -17,8 +17,8 @@ export const MyOrgs = ({ settings = false }) => {
               groupId="orgs"
             />
           </Link>
-        </Tip>
-        <Tip label={t("nav.settings")}>
+        </SidebarNavItem>
+        <SidebarNavItem label={t("nav.settings")}>
           <Link to="/settings">
             <SidebarItemBody
               label={t("nav.settings")}
@@ -27,7 +27,7 @@ export const MyOrgs = ({ settings = false }) => {
               groupId="orgs"
             />
           </Link>
-        </Tip>
+        </SidebarNavItem>
       </ul>
     </div>
   )

@@ -16,7 +16,7 @@ import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import { studentRepoName } from "@/util/studentRepo"
-import { Tip, SidebarItemBody } from "./primitives"
+import { SidebarItemBody, SidebarNavItem } from "./primitives"
 import { sidebarIconButton } from "./sidebarClasses"
 import { rtlFlip } from "@/components/ui"
 import { useSidebarCollapse } from "./collapseContext"
@@ -159,7 +159,7 @@ export const AssignmentSidebarMenu = ({
             </>
           ) : showTeacherUi ? (
             <>
-              <Tip label={t("nav.submissions")}>
+              <SidebarNavItem label={t("nav.submissions")}>
                 <Link
                   to="/$org/$classroom/assignments/$assignment/submissions"
                   params={{ org, classroom, assignment }}
@@ -171,8 +171,8 @@ export const AssignmentSidebarMenu = ({
                     groupId="assignment"
                   />
                 </Link>
-              </Tip>
-              <Tip label={t("nav.settings")}>
+              </SidebarNavItem>
+              <SidebarNavItem label={t("nav.settings")}>
                 <Link
                   to="/$org/$classroom/assignments/$assignment/settings"
                   params={{ org, classroom, assignment }}
@@ -184,12 +184,12 @@ export const AssignmentSidebarMenu = ({
                     groupId="assignment"
                   />
                 </Link>
-              </Tip>
+              </SidebarNavItem>
             </>
           ) : (
             <>
               {showAccept && (
-                <Tip label={t("nav.acceptAssignment")}>
+                <SidebarNavItem label={t("nav.acceptAssignment")}>
                   <Link
                     to="/$org/$classroom/assignments/$assignment/accept"
                     params={{ org, classroom, assignment }}
@@ -202,9 +202,9 @@ export const AssignmentSidebarMenu = ({
                       groupId="assignment"
                     />
                   </Link>
-                </Tip>
+                </SidebarNavItem>
               )}
-              <Tip label={t("nav.mySubmission")}>
+              <SidebarNavItem label={t("nav.mySubmission")}>
                 <Link
                   to="/$org/$classroom/assignments/$assignment/submission"
                   params={{ org, classroom, assignment }}
@@ -216,9 +216,9 @@ export const AssignmentSidebarMenu = ({
                     groupId="assignment"
                   />
                 </Link>
-              </Tip>
+              </SidebarNavItem>
               {isGroupAssignment && (
-                <Tip label={t("nav.manageGroup")}>
+                <SidebarNavItem label={t("nav.manageGroup")}>
                   <Link
                     to="/$org/$classroom/assignments/$assignment/settings"
                     params={{ org, classroom, assignment }}
@@ -230,7 +230,7 @@ export const AssignmentSidebarMenu = ({
                       groupId="assignment"
                     />
                   </Link>
-                </Tip>
+                </SidebarNavItem>
               )}
             </>
           )}

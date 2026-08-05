@@ -35,8 +35,12 @@ export const Tip = ({
   )
 }
 
-// Inner markup of a sidebar nav row. Callers keep their own typed <Link to
-// params> around this so router type inference stays intact.
+// Inner markup of a sidebar nav row. Callers wrap this in `<li><Link>…` so the
+// list structure stays valid (an `<li>` must be a direct child of the `<ul>`,
+// with the `<Link>`/`<a>` inside it — not the other way around).
+//
+// Renders a plain block element (not `<li>`): the caller owns the `<li>`, so
+// this must not emit a second one. `aria-current` still marks the active row.
 //
 // The active highlight is a single shared-`layoutId` pill per menu (`groupId`),
 // so moving `active` between rows FLIP-glides it rather than snapping. The
@@ -55,9 +59,9 @@ export const SidebarItemBody = ({
 }) => {
   const { collapsed } = useSidebarCollapse()
   return (
-    <li
+    <span
       aria-current={active ? "page" : undefined}
-      className={navItemClass(active, collapsed)}
+      className={`${navItemClass(active, collapsed)} w-full`}
     >
       {active && (
         <motion.span
@@ -69,9 +73,26 @@ export const SidebarItemBody = ({
       )}
       <span className="relative z-10 shrink-0">{icon}</span>
       {!collapsed && <span className="relative z-10 truncate">{label}</span>}
-    </li>
+    </span>
   )
 }
+
+// A complete sidebar nav row: the `<li>` list item wrapping the collapse tooltip
+// and its typed `<Link>`. Callers pass the `<Link>` as children so router type
+// inference stays intact; this owns the valid `<ul> > <li> > <a>` structure.
+// The `[&_a]` rules stretch the inner Link (and the Tip wrapper) to the row
+// width so the row keeps its full-width hit area and layout.
+export const SidebarNavItem = ({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) => (
+  <li className="flex [&>div]:w-full [&_a]:flex [&_a]:w-full [&_a]:min-w-0">
+    <Tip label={label}>{children}</Tip>
+  </li>
+)
 
 export const ClassroomLogo = () => {
   const { collapsed, toggle } = useSidebarCollapse()
