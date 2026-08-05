@@ -50,9 +50,12 @@ vi.mock("./storage", () => ({
   }),
 }))
 
-import { GitHubAuthProvider, useGithubAuth } from "./useGithubAuth"
+import {
+  GitHubAuthProvider,
+  useGithubAuth,
+  __resetDevAutoLoginForTests,
+} from "./useGithubAuth"
 import { GitHubUserFetchError } from "./github-user-api"
-
 const FULL_SCOPES = "read:user repo workflow admin:org delete_repo"
 
 function freshClient() {
@@ -80,6 +83,7 @@ function setEnv(env: { DEV?: boolean; pat?: string }) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  __resetDevAutoLoginForTests()
   storage.token = null
   storage.clientId = ""
   storage.scope = ""
@@ -160,7 +164,7 @@ describe("dev auto-login effect wiring", () => {
   })
 
   // #3: StrictMode double-invoke must not fire two validations before the async
-  // token lands (the didAutoLoginRef sentinel).
+  // token lands (runDevAutoLoginOnce caches the single module-scoped promise).
   it("fires exactly one validation under StrictMode double-mount", async () => {
     setEnv({ DEV: true, pat: "ghp_valid" })
     fetchGithubUserWithScopes.mockResolvedValue({
@@ -172,9 +176,41 @@ describe("dev auto-login effect wiring", () => {
     renderHook(() => useGithubAuth(), { wrapper: wrapper(true) })
 
     await waitFor(() => expect(fetchGithubUserWithScopes).toHaveBeenCalled())
-    // The ref sentinel guards the second StrictMode pass; only one GET /user
-    // validation is dispatched despite the double-invoke.
+    // The module-scoped promise guards the second StrictMode pass; only one
+    // GET /user validation is dispatched despite the double-invoke.
     expect(fetchGithubUserWithScopes).toHaveBeenCalledTimes(1)
+  })
+
+  // Regression: the mount that starts the async validation can be discarded
+  // (StrictMode unmount, or a Vite HMR remount) before GET /user resolves, so
+  // the resolving instance's completeSignIn is dropped. The dev auto-login must
+  // still persist the validated token so the next/surviving mount restores the
+  // session — otherwise the app hangs forever on the loading gate even though
+  // the token is valid (the real bug this path fixes).
+  it("persists the validated token even if the initiating mount unmounts before it resolves", async () => {
+    setEnv({ DEV: true, pat: "ghp_valid" })
+    let resolveValidation!: (v: { user: unknown; scopes: string }) => void
+    fetchGithubUserWithScopes.mockReturnValue(
+      new Promise((res) => {
+        resolveValidation = res
+      }),
+    )
+
+    // Mount, then unmount before the validation resolves (mimics StrictMode's
+    // discard / an HMR swap mid-flight).
+    const { unmount } = renderHook(() => useGithubAuth(), {
+      wrapper: wrapper(),
+    })
+    await waitFor(() =>
+      expect(fetchGithubUserWithScopes).toHaveBeenCalledTimes(1),
+    )
+    unmount()
+
+    // Validation resolves after the initiating instance is gone.
+    resolveValidation({ user: { login: "octocat" }, scopes: FULL_SCOPES })
+    await waitFor(() =>
+      expect(persistGithubToken).toHaveBeenCalledWith("ghp_valid", FULL_SCOPES),
+    )
   })
 
   // #5: a returning OAuth ?code owns sign-in for that load; the PAT auto-login

@@ -234,6 +234,62 @@ export function resolveDevAutoLoginPat(input: {
   return token ? token : null
 }
 
+// Dev-only auto-login, hoisted to module scope so it runs exactly once per page
+// load and survives StrictMode's mount→unmount→mount and Vite HMR remounts.
+//
+// A per-instance ref (or a bare module boolean) is not enough: the async PAT
+// validation is kicked off from a mount effect, but StrictMode unmounts that
+// instance before the fetch resolves, so the mutation's onSuccess lands on a
+// discarded component and its completeSignIn is dropped — the token never
+// reaches the surviving tree and the app hangs on the loading gate.
+//
+// The fix decouples the *credential* from the React lifecycle: this runs the
+// validation once, and on success persists the token to localStorage right
+// away. Whichever provider instance is mounted then reads it back via the
+// normal "restored stored session" path (getStoredGithubToken), so a lost
+// in-flight callback can't strand the app. The shared promise lets a live mount
+// also complete sign-in immediately without waiting for the next render.
+//
+// Returns the validated { token, scope } on success, or null when auto-login
+// does not apply / the token is rejected. Never runs in a prod build (gated on
+// import.meta.env.DEV + an env PAT by the caller).
+let devAutoLoginPromise: Promise<{
+  token: string
+  scope: string
+} | null> | null = null
+
+function runDevAutoLoginOnce(
+  envPat: string,
+): Promise<{ token: string; scope: string } | null> {
+  if (devAutoLoginPromise) return devAutoLoginPromise
+  devAutoLoginPromise = (async () => {
+    try {
+      const { scopes } = await fetchGithubUserWithScopes(envPat)
+      const result = classifyPatResult(scopes)
+      if (result.kind !== "ok") {
+        log.warn("VITE_GITHUB_PAT auto-login rejected", { kind: result.kind })
+        return null
+      }
+      // Persist immediately so a remount restores the session even if the mount
+      // that started this validation was already torn down.
+      persistGithubToken(envPat, result.scopes)
+      log.info("dev auto-login validated; token persisted")
+      return { token: envPat, scope: result.scopes }
+    } catch (err) {
+      log.warn("VITE_GITHUB_PAT auto-login failed to validate", { err })
+      return null
+    }
+  })()
+  return devAutoLoginPromise
+}
+
+// Test-only: reset the once-per-page-load auto-login promise between renders, so
+// each renderHook starts from a cold page-load state (the module promise
+// otherwise persists across tests in the same file). Never called in app code.
+export function __resetDevAutoLoginForTests() {
+  devAutoLoginPromise = null
+}
+
 function sleep(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve) => {
     const timer = window.setTimeout(resolve, ms)
@@ -259,9 +315,6 @@ function useGithubAuthState() {
   // Deep link (#71) stashed at code-exchange, consumed by the status-driven
   // effect below so navigation runs against an authenticated router context.
   const pendingReturnToRef = useRef<string | null>(null)
-  // Latches so a StrictMode double-mount (or HMR re-mount) can't fire a second
-  // dev auto-login before the first token lands async. Never set in a prod build.
-  const didAutoLoginRef = useRef(false)
 
   const [screen, setScreen] = useState<GithubAuthScreen>("config")
   const [clientId, setClientId] = useState(GITHUB_OAUTH_CLIENT_ID)
@@ -426,10 +479,11 @@ function useGithubAuthState() {
     } else {
       // Dev-only: skip the sign-in screen when VITE_GITHUB_PAT holds a valid PAT
       // (see resolveDevAutoLoginPat), validated like the manual paste flow but
-      // logged instead of prompted. Two guards: didAutoLoginRef stops a
-      // StrictMode double-mount firing twice before the token lands, and a ?code
-      // on the URL means a returning OAuth redirect owns this load, so we defer
-      // to the code-exchange effect rather than both driving completeSignIn.
+      // logged instead of prompted. runDevAutoLoginOnce is module-scoped (fires
+      // once per page load and persists on success, surviving StrictMode/HMR
+      // remounts); a ?code on the URL means a returning OAuth redirect owns this
+      // load, so we defer to the code-exchange effect rather than both driving
+      // completeSignIn.
       const hasOAuthCallback = new URLSearchParams(window.location.search).has(
         "code",
       )
@@ -438,25 +492,26 @@ function useGithubAuthState() {
         hasStoredToken: false,
         envPat: import.meta.env.VITE_GITHUB_PAT,
       })
-      if (envPat && !hasOAuthCallback && !didAutoLoginRef.current) {
-        didAutoLoginRef.current = true
+      if (envPat && !hasOAuthCallback) {
         log.info("dev auto-login from VITE_GITHUB_PAT")
         setAutoLoginPending(true)
-        validateAndSignInWithPat(
-          envPat,
-          (message) =>
-            log.warn("VITE_GITHUB_PAT auto-login rejected", { message }),
-          // Release the loading hold once validation settles either way, so a
-          // rejected token drops to the login screen instead of spinning.
-          () => setAutoLoginPending(false),
-        )
+        // Runs once per page load (module-scoped) and persists the token on
+        // success, so this completeSignIn is a fast path for the live mount, not
+        // the only delivery mechanism — a remount that missed this callback
+        // still restores the persisted session on its next startup read.
+        void runDevAutoLoginOnce(envPat)
+          .then((res) => {
+            if (res)
+              completeSignIn({ access_token: res.token, scope: res.scope })
+          })
+          .finally(() => setAutoLoginPending(false))
       }
     }
 
     setHasLoadedStoredAuth(true)
-    // Mount-once: reads one-time startup state (stored session / env PAT).
-    // validateAndSignInWithPat is excluded so a later identity change can't
-    // re-fire the auto-login.
+    // Mount-once: reads one-time startup state (stored session / env PAT). The
+    // dev auto-login is module-scoped (runDevAutoLoginOnce), so re-running this
+    // effect can't re-fire it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
