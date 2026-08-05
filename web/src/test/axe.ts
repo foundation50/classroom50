@@ -22,6 +22,7 @@ import type { AxeResults, RunOptions } from "axe-core"
 // accepts `expect(results).toHaveNoViolations()` (the runtime extend alone
 // doesn't add the type). Interface-merge onto vitest's own interfaces; the
 // empty-body merge is an interface extension, not a redundant declaration.
+// (Drop this block if a future vitest-axe ships its own extend-expect types.)
 declare module "vitest" {
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   interface Assertion extends AxeMatchers {}

@@ -23,7 +23,9 @@ export type AutomatedBinding = {
 
 export const AUTOMATED_CRITERIA: Record<string, AutomatedBinding> = {
   "3.1.1": {
-    check: "documentHasLang(index.html + runtime <html lang>)",
+    check:
+      "index.html declares <html lang> (vpatAutomated.test.ts) + i18n keeps " +
+      "document.documentElement.lang in sync (a11yStructural.test.tsx)",
     remark:
       "The page ships with a valid `lang` on the root <html> element and the " +
       "app updates it to match the active language at runtime. Verified " +

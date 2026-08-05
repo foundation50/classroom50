@@ -15,6 +15,10 @@ export function hasSingleH1(headingLevels: number[]): boolean {
 /**
  * True when heading levels never jump deeper by more than one at a time
  * (a well-formed outline; supports 1.3.1). An empty list is vacuously true.
+ *
+ * Staged for the heading-remediation unit (umbrella U7): not yet bound to a
+ * criterion in AUTOMATED_CRITERIA — it becomes the check behind 1.3.1 / 2.4.6
+ * once the heading structure across the app's views is clean.
  */
 export function hasNoSkippedHeadingLevels(headingLevels: number[]): boolean {
   let prev = 0

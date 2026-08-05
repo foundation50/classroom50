@@ -4,7 +4,8 @@ import { cleanup, render } from "@testing-library/react"
 
 import { Alert, Button, Card } from "@/components/ui"
 import { renderAndAxe } from "./axe"
-import { hasSingleH1 } from "@/util/a11yStructural"
+import { documentHasLang, hasSingleH1 } from "@/util/a11yStructural"
+import { applyDocumentDirection } from "@/i18n/direction"
 
 afterEach(cleanup)
 
@@ -53,5 +54,22 @@ describe("structural a11y — axe-clean primitives (4.1.2 Name, Role, Value)", (
       </Card>,
     )
     expect(results).toHaveNoViolations()
+  })
+})
+
+// The runtime half of the 3.1.1 (Language of Page) binding: the static <html
+// lang> in index.html is checked in vpatAutomated.test.ts; this proves the
+// i18n layer keeps document.documentElement.lang in sync, so the criterion's
+// remark ("...updates it to match the active language at runtime") is fully
+// backed by a check and can't silently drift (adversarial finding #1).
+describe("structural a11y — 3.1.1 runtime <html lang> sync", () => {
+  it("applyDocumentDirection sets a non-empty lang on <html>", () => {
+    applyDocumentDirection("en")
+    expect(documentHasLang(document.documentElement.lang)).toBe(true)
+    expect(document.documentElement.lang).toBe("en")
+
+    applyDocumentDirection("ar-EG")
+    expect(documentHasLang(document.documentElement.lang)).toBe(true)
+    expect(document.documentElement.lang).toBe("ar-EG")
   })
 })
