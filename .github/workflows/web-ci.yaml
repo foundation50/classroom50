@@ -54,12 +54,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
+      - uses: ./.github/actions/setup-web
 
       # Full project type-check (tsc -b). Blocking: the build depends on this.
       - name: Typecheck
@@ -87,12 +82,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
+      - uses: ./.github/actions/setup-web
       - name: Test (node project)
         run: npm run test:node
 
@@ -106,12 +96,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
+      - uses: ./.github/actions/setup-web
 
       # Resolve the installed Playwright version to key the browser-binary cache;
       # a version bump invalidates the cache so the matching browser is fetched.
@@ -181,12 +166,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
+      - uses: ./.github/actions/setup-web
 
       - name: Generate contrast audit report
         if: always()
