@@ -161,8 +161,10 @@ jobs:
       - run: npm ci
 
       # Gate the deploy on the same suite as web-deploy.yaml (incl. the skeleton
-      # parity test that vite build can't catch).
-      - run: npm test
+      # parity test that vite build can't catch). test:node only — the browser
+      # a11y guards gate every PR via web-ci and need Chromium; the release
+      # deploy gate doesn't re-run them (no ~90MB browser install).
+      - run: npm run test:node
 
       # Resolve the SHA of the checked-out tag so the build stamps the commit
       # that was actually released, not github.sha (the main tip that triggered
