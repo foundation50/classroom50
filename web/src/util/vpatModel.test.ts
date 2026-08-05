@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  applyVerdicts,
   CONTRAST_CRITERION_IDS,
   CRITERIA,
   hasGenericRemark,
   PRINCIPLE_ORDER,
+  type Criterion,
   type ConformanceLevel,
   type EvidenceKind,
+  type VerdictOverlay,
   type WcagLevel,
   type WcagPrinciple,
 } from "./vpatModel"
@@ -125,4 +128,88 @@ describe("vpatModel — criteria integrity", () => {
       expect(hasGenericRemark(c!)).toBe(false)
     },
   )
+})
+
+describe("vpatModel — applyVerdicts overlay", () => {
+  const base: Criterion[] = [
+    {
+      id: "9.9.9",
+      name: "Sample Outstanding",
+      level: "A",
+      principle: "Perceivable",
+      status: "notEvaluated",
+      remark: "not yet assessed",
+    },
+    {
+      id: "8.8.8",
+      name: "Sample Automated",
+      level: "AA",
+      principle: "Robust",
+      status: "supports",
+      evidence: "automated",
+      remark: "machine-verified",
+    },
+  ]
+
+  it("overlays a manual verdict onto a notEvaluated row", () => {
+    const overlay: VerdictOverlay = {
+      "9.9.9": { status: "supports", evidence: "manual", remark: "tested; ok" },
+    }
+    const [row] = applyVerdicts(base, overlay)
+    expect(row).toMatchObject({
+      id: "9.9.9",
+      status: "supports",
+      evidence: "manual",
+      remark: "tested; ok",
+    })
+  })
+
+  it("leaves rows without a verdict untouched and does not mutate the input", () => {
+    const overlay: VerdictOverlay = {
+      "9.9.9": { status: "partially", evidence: "manual", remark: "partial" },
+    }
+    const out = applyVerdicts(base, overlay)
+    expect(out[1]).toEqual(base[1])
+    expect(base[0].status).toBe("notEvaluated") // input unchanged
+  })
+
+  it("throws if a verdict targets a non-notEvaluated row (overwrite guard)", () => {
+    const overlay: VerdictOverlay = {
+      "8.8.8": { status: "supports", evidence: "manual", remark: "x" },
+    }
+    expect(() => applyVerdicts(base, overlay)).toThrow(/8\.8\.8/)
+  })
+
+  it("throws on a verdict for an unknown criterion id", () => {
+    const overlay: VerdictOverlay = {
+      "0.0.0": { status: "supports", evidence: "manual", remark: "x" },
+    }
+    expect(() => applyVerdicts(base, overlay)).toThrow(/unknown/)
+  })
+
+  // vpatVerdicts.json is a plain JSON overlay whose `as VerdictOverlay` cast is
+  // compile-time only, so a hand-edited entry can carry any shape at runtime.
+  // applyVerdicts must reject a payload that would overclaim — an automated
+  // evidence tag, a non-manual status, or an empty remark — not just guard the
+  // target row.
+  it("throws if a verdict claims non-manual evidence (overclaim guard)", () => {
+    const overlay = {
+      "9.9.9": { status: "supports", evidence: "automated", remark: "x" },
+    } as unknown as VerdictOverlay
+    expect(() => applyVerdicts(base, overlay)).toThrow(/manual/)
+  })
+
+  it("throws if a verdict carries an invalid status", () => {
+    const overlay = {
+      "9.9.9": { status: "notEvaluated", evidence: "manual", remark: "x" },
+    } as unknown as VerdictOverlay
+    expect(() => applyVerdicts(base, overlay)).toThrow(/status/)
+  })
+
+  it("throws if a verdict has an empty remark", () => {
+    const overlay: VerdictOverlay = {
+      "9.9.9": { status: "supports", evidence: "manual", remark: "   " },
+    }
+    expect(() => applyVerdicts(base, overlay)).toThrow(/remark/)
+  })
 })

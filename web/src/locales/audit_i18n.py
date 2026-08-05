@@ -150,7 +150,10 @@ PHYSICAL_OK_MARKER = "physical-ok"
 # ships to end users (gated behind import.meta.env.DEV), so translating its
 # labels would be dead weight. Relative to the repo root, matched with
 # str.startswith on the rel() path (forward slashes).
-HARDCODED_IGNORE_PREFIXES = ("web/src/components/dev/",)
+HARDCODED_IGNORE_PREFIXES = (
+    "web/src/components/dev/",
+    "web/src/pages/AssessmentPage.tsx",
+)
 
 # Specific literal values that are NOT translatable prose despite matching a
 # user-facing-attribute pattern — a format example / code sample identical in

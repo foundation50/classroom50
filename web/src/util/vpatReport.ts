@@ -14,6 +14,7 @@
 
 import { buildContrastAudit } from "./contrastReport"
 import {
+  CONFORMANCE_LABEL,
   CONTRAST_CRITERION_IDS,
   CRITERIA,
   PRINCIPLE_ORDER,
@@ -40,15 +41,6 @@ export type VpatReportJson = {
 }
 
 const PRODUCT = "Classroom50 web app"
-
-// Human-readable conformance words for both editions (VPAT 2.5 vocabulary).
-const CONFORMANCE_WORD: Record<ConformanceLevel, string> = {
-  supports: "Supports",
-  partially: "Partially Supports",
-  doesNotSupport: "Does Not Support",
-  notApplicable: "Not Applicable",
-  notEvaluated: "Not Evaluated",
-}
 
 /**
  * Derive the contrast criteria's conformance from the live contrast audit.
@@ -144,7 +136,7 @@ function criteriaFor(
 
 function criterionRow(c: Criterion): string {
   const remark = c.remark.replace(/\|/g, "\\|")
-  return `| ${c.id} ${c.name} | ${c.level} | ${CONFORMANCE_WORD[c.status]} | ${remark} |`
+  return `| ${c.id} ${c.name} | ${c.level} | ${CONFORMANCE_LABEL[c.status]} | ${remark} |`
 }
 
 // Preamble shared by both editions: product, date, evaluation methods, and the

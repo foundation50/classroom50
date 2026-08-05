@@ -13,6 +13,9 @@
 // a `contrast`-evidence placeholder here and RESOLVED from the live contrast
 // audit in vpatReport.ts (KTD4), so the two reports can never disagree.
 
+import type { BadgeTone } from "@/types/badgeTone"
+import verdicts from "../../accessibility/vpatVerdicts.json"
+
 export type WcagPrinciple =
   "Perceivable" | "Operable" | "Understandable" | "Robust"
 
@@ -21,6 +24,28 @@ export type WcagLevel = "A" | "AA" | "AAA"
 /** VPAT conformance verdict for one criterion. */
 export type ConformanceLevel =
   "supports" | "partially" | "doesNotSupport" | "notApplicable" | "notEvaluated"
+
+// Human-readable conformance words (VPAT 2.5 vocabulary). The single source for
+// both the rendered VPAT report (vpatReport.ts) and the dev-only assessment UI
+// (AssessmentPage.tsx), so the two never drift.
+export const CONFORMANCE_LABEL: Record<ConformanceLevel, string> = {
+  supports: "Supports",
+  partially: "Partially Supports",
+  doesNotSupport: "Does Not Support",
+  notApplicable: "Not Applicable",
+  notEvaluated: "Not Evaluated",
+}
+
+// Conformance status -> Badge tone, shared by the /accessibility VPAT page and
+// the dev-only /assess tool so the two never drift (same rationale as the label
+// map above).
+export const CONFORMANCE_TONE: Record<ConformanceLevel, BadgeTone> = {
+  supports: "success",
+  partially: "warning",
+  doesNotSupport: "error",
+  notApplicable: "neutral",
+  notEvaluated: "neutral",
+}
 
 /**
  * What backs a status. `contrast` is computed from the contrast audit;
@@ -69,7 +94,7 @@ const NOT_EVALUATED_REMARK =
 // carry a placeholder status/evidence that vpatReport.ts replaces from the live
 // audit; client-side-only rows are notApplicable with an architectural remark;
 // the rest start notEvaluated until the manual assessment sets them.
-export const CRITERIA: Criterion[] = [
+const BASE_CRITERIA: Criterion[] = [
   // ── Perceivable ────────────────────────────────────────────────────────────
   {
     id: "1.1.1",
@@ -374,3 +399,95 @@ export const PRINCIPLE_ORDER: WcagPrinciple[] = [
   "Understandable",
   "Robust",
 ]
+
+/**
+ * One human-recorded manual verdict, keyed by SC id in vpatVerdicts.json. Only
+ * the fields a manual assessor sets — the id, name, level, and principle come
+ * from BASE_CRITERIA, so the JSON stays a thin, machine-writable overlay the
+ * dev-only assessment tool (see vite.config.ts) appends to.
+ */
+export type ManualVerdict = {
+  status: "supports" | "partially" | "doesNotSupport"
+  evidence: "manual"
+  remark: string
+}
+
+export type VerdictOverlay = Record<string, ManualVerdict>
+
+const MANUAL_STATUSES = new Set<ManualVerdict["status"]>([
+  "supports",
+  "partially",
+  "doesNotSupport",
+])
+
+/**
+ * Overlay human verdicts onto the base criteria. A verdict may only land on a
+ * criterion that is still `notEvaluated` — the manual-owned rows. Targeting an
+ * automated/contrast/architectural row (already decided by tooling or design)
+ * is a wiring error and throws, so the JSON can never silently overwrite a
+ * machine-established verdict. Unknown ids also throw. The verdict payload
+ * itself is validated too — a manual verdict must carry `evidence: "manual"`, a
+ * real manual status, and a non-empty remark — because `vpatVerdicts.json` is a
+ * plain JSON overlay whose `as VerdictOverlay` cast is compile-time only; a
+ * hand-edited `evidence: "automated"` would otherwise ship as an automated
+ * overclaim in the public VPAT. Pure: no fs, no mutation of the input.
+ */
+export function applyVerdicts(
+  base: Criterion[],
+  overlay: VerdictOverlay,
+): Criterion[] {
+  const byId = new Map(base.map((c) => [c.id, c]))
+  for (const id of Object.keys(overlay)) {
+    const target = byId.get(id)
+    if (!target) {
+      throw new Error(`Manual verdict for unknown criterion "${id}".`)
+    }
+    if (target.status !== "notEvaluated") {
+      throw new Error(
+        `Manual verdict for "${id}" would overwrite a ${target.status} ` +
+          `(${target.evidence ?? "no"}-evidence) row; only notEvaluated ` +
+          `criteria accept a manual verdict.`,
+      )
+    }
+    const v = overlay[id]
+    if (v.evidence !== "manual") {
+      throw new Error(
+        `Manual verdict for "${id}" must carry evidence "manual", not ` +
+          `"${v.evidence}"; a manual overlay cannot claim automated evidence.`,
+      )
+    }
+    if (!MANUAL_STATUSES.has(v.status)) {
+      throw new Error(
+        `Manual verdict for "${id}" has invalid status "${v.status}"; ` +
+          `expected supports, partially, or doesNotSupport.`,
+      )
+    }
+    if (typeof v.remark !== "string" || v.remark.trim() === "") {
+      throw new Error(`Manual verdict for "${id}" requires a non-empty remark.`)
+    }
+  }
+  return base.map((c) => {
+    const v = overlay[c.id]
+    return v
+      ? { ...c, status: v.status, evidence: v.evidence, remark: v.remark }
+      : c
+  })
+}
+
+// The applicable criteria with any recorded manual verdicts overlaid. This is
+// what vpatReport.ts, the /accessibility page, and the guards consume; the base
+// array above stays the readable spine and vpatVerdicts.json carries the
+// human-owned deltas.
+export const CRITERIA: Criterion[] = applyVerdicts(
+  BASE_CRITERIA,
+  verdicts as VerdictOverlay,
+)
+
+/**
+ * Build the criteria from an arbitrary verdict overlay (not the committed JSON).
+ * The dev-only assessment endpoint uses this to render fresh output right after
+ * it writes a new verdict, since the module-level CRITERIA is frozen at import.
+ */
+export function buildCriteria(overlay: VerdictOverlay): Criterion[] {
+  return applyVerdicts(BASE_CRITERIA, overlay)
+}

@@ -7,6 +7,7 @@ import tailwindcss from "@tailwindcss/vite"
 import { tanstackRouter } from "@tanstack/router-plugin/vite"
 import svgr from "vite-plugin-svgr"
 import path from "node:path"
+import { readFileSync, writeFileSync } from "node:fs"
 import { execSync } from "node:child_process"
 import { createRequire } from "node:module"
 
@@ -15,6 +16,12 @@ import {
   renderContrastReport,
 } from "./src/util/contrastReport"
 import { renderVpatJson, renderVpatReport } from "./src/util/vpatReport"
+import {
+  buildCriteria,
+  type ManualVerdict,
+  type VerdictOverlay,
+} from "./src/util/vpatModel"
+import { ASSESSMENT_GUIDANCE } from "./src/util/assessmentGuidance"
 
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
@@ -156,7 +163,182 @@ function vpatReportPlugin(): Plugin {
   }
 }
 
-// https://vite.dev/config/
+// Dev-only bridge for the interactive WCAG assessment tool (/assess). The app
+// is client-side only, so recording a verdict to the repo needs a dev endpoint;
+// `apply: "serve"` keeps this middleware out of every production build (the
+// endpoint simply does not exist there, and the /assess route redirects away
+// unless import.meta.env.DEV). It reads/writes a single repo file,
+// accessibility/vpatVerdicts.json — the machine-writable verdict overlay. The
+// path is a fixed constant and ids/enums are validated server-side, so a stray
+// request can't write arbitrary files or overwrite a machine-established
+// (automated/contrast) row.
+function assessmentApiPlugin(): Plugin {
+  const verdictsPath = path.resolve(
+    __dirname,
+    "accessibility/vpatVerdicts.json",
+  )
+
+  const readVerdicts = (): VerdictOverlay =>
+    JSON.parse(readFileSync(verdictsPath, "utf8")) as VerdictOverlay
+
+  // The criteria + guidance the /assess UI renders from, computed fresh from
+  // whatever verdicts are on disk right now.
+  const dataPayload = () => {
+    const overlay = readVerdicts()
+    return JSON.stringify({
+      criteria: buildCriteria(overlay),
+      guidance: ASSESSMENT_GUIDANCE,
+      verdicts: overlay,
+    })
+  }
+
+  const readBody = (req: import("node:http").IncomingMessage) =>
+    new Promise<string>((resolve, reject) => {
+      let data = ""
+      req.on("data", (c) => {
+        data += c
+        if (data.length > 1_000_000) reject(new Error("payload too large"))
+      })
+      req.on("end", () => resolve(data))
+      req.on("error", reject)
+    })
+
+  const VALID_STATUS = new Set(["supports", "partially", "doesNotSupport"])
+
+  // The endpoint writes repo files with no auth, so it must reject anything that
+  // isn't a genuine same-origin request from a loopback client. The Host header
+  // is attacker-controlled, so it can't be the boundary: `vite --host` on an
+  // untrusted network would expose the writer to anyone sending Host: localhost,
+  // and a malicious tab in the dev's own browser could POST a text/plain simple
+  // request (Host: localhost) as a blind CSRF write. Guard on facts the client
+  // can't forge instead — the actual socket address plus a same-origin fetch
+  // signal and a JSON content type (which forces a cross-origin preflight this
+  // middleware never answers).
+  const isLoopbackAddr = (addr: string | undefined) =>
+    addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1"
+
+  // Sec-Fetch-Site is set by the browser and can't be spoofed by page JS:
+  // "same-origin"/"none" (a direct navigation or a non-browser tool) is allowed,
+  // cross-site is not. This is the CSRF gate the loopback bind alone can't give.
+  const isSameOriginRequest = (req: import("node:http").IncomingMessage) => {
+    const site = req.headers["sec-fetch-site"]
+    return site === undefined || site === "same-origin" || site === "none"
+  }
+
+  // GET /_assess/data has no body, so it only needs the loopback + origin checks.
+  const isAllowedRead = (req: import("node:http").IncomingMessage) =>
+    isLoopbackAddr(req.socket.remoteAddress) && isSameOriginRequest(req)
+
+  // The write path additionally requires application/json, so a cross-origin
+  // simple request (text/plain, no preflight) can't reach the body parser.
+  const isAllowedWrite = (req: import("node:http").IncomingMessage) => {
+    const contentType = (req.headers["content-type"] ?? "").split(";")[0].trim()
+    return (
+      isLoopbackAddr(req.socket.remoteAddress) &&
+      isSameOriginRequest(req) &&
+      contentType === "application/json"
+    )
+  }
+
+  return {
+    name: "classroom50:assessment-api",
+    apply: "serve",
+    configureServer(server) {
+      // Saving a verdict writes verdictsPath; without this, Vite's file watcher
+      // sees the change (vpatModel imports it) and full-reloads the page mid-
+      // edit. The /assess page already updates itself from the POST response,
+      // so stop watching the file — a manual hand-edit just needs a refresh.
+      server.watcher.unwatch(verdictsPath)
+
+      server.middlewares.use("/_assess/data", (req, res) => {
+        if (!isAllowedRead(req)) {
+          res.statusCode = 403
+          res.end("forbidden")
+          return
+        }
+        try {
+          res.setHeader("Content-Type", "application/json")
+          res.end(dataPayload())
+        } catch (err) {
+          res.statusCode = 500
+          res.end(
+            JSON.stringify({
+              error: err instanceof Error ? err.message : "read failed",
+            }),
+          )
+        }
+      })
+
+      server.middlewares.use("/_assess/save", (req, res) => {
+        if (!isAllowedWrite(req)) {
+          res.statusCode = 403
+          res.end("forbidden")
+          return
+        }
+        if (req.method !== "POST") {
+          res.statusCode = 405
+          res.end("method not allowed")
+          return
+        }
+        void (async () => {
+          try {
+            const { id, status, remark, clear } = JSON.parse(
+              await readBody(req),
+            )
+            if (typeof id !== "string") {
+              res.statusCode = 400
+              res.end(JSON.stringify({ error: "invalid id" }))
+              return
+            }
+            const overlay = readVerdicts()
+
+            if (clear) {
+              delete overlay[id]
+            } else {
+              if (!VALID_STATUS.has(status)) {
+                res.statusCode = 400
+                res.end(JSON.stringify({ error: "invalid status" }))
+                return
+              }
+              if (typeof remark !== "string" || remark.trim() === "") {
+                res.statusCode = 400
+                res.end(JSON.stringify({ error: "remark is required" }))
+                return
+              }
+              const verdict: ManualVerdict = {
+                status,
+                evidence: "manual",
+                remark,
+              }
+              overlay[id] = verdict
+            }
+
+            // buildCriteria throws if the id is unknown or targets a
+            // non-notEvaluated row — surfaces as a 400 rather than a bad write.
+            buildCriteria(overlay)
+
+            const sorted = Object.fromEntries(
+              Object.keys(overlay)
+                .sort()
+                .map((k) => [k, overlay[k]]),
+            )
+            writeFileSync(verdictsPath, JSON.stringify(sorted, null, 2) + "\n")
+
+            res.setHeader("Content-Type", "application/json")
+            res.end(dataPayload())
+          } catch (err) {
+            res.statusCode = 400
+            res.end(
+              JSON.stringify({
+                error: err instanceof Error ? err.message : "bad request",
+              }),
+            )
+          }
+        })()
+      })
+    },
+  }
+}
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(release.version),
@@ -175,6 +357,7 @@ export default defineConfig({
     versionJsonPlugin(),
     contrastAuditPlugin(),
     vpatReportPlugin(),
+    assessmentApiPlugin(),
   ],
   resolve: {
     alias: {
