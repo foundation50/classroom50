@@ -281,13 +281,16 @@ export const SidebarFooter = () => {
                 <span className="flex-1 text-start">
                   {isDark ? t("nav.darkMode") : t("nav.lightMode")}
                 </span>
-                <input
-                  type="checkbox"
-                  className="toggle toggle-sm toggle-primary pointer-events-none"
-                  checked={isDark}
-                  readOnly
-                  tabIndex={-1}
+                {/* Presentational toggle: a plain <span>, not a form <input>,
+                    so it can't be a focusable control nested inside this button
+                    (axe nested-interactive). The button owns the state via
+                    aria-pressed; this just mirrors the on/off look. */}
+                <span
                   aria-hidden="true"
+                  className={`toggle toggle-sm toggle-primary pointer-events-none ${
+                    isDark ? "[--tglbg:var(--color-primary)]" : ""
+                  }`}
+                  data-checked={isDark}
                 />
               </button>
             </li>
