@@ -94,7 +94,7 @@ jobs:
 
       - name: Upload contrast audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: contrast-audit
           path: |
@@ -113,7 +113,7 @@ jobs:
 
       - name: Upload VPAT report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vpat-report
           path: |
@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload a11y inventory
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: a11y-inventory
           path: web/a11y-inventory.json
