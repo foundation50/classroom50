@@ -323,6 +323,19 @@ export const SidebarFooter = () => {
             </li>
             <div className="divider my-1" />
             <li>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setMenuOpen(false)
+                  aboutDialogRef.current?.showModal()
+                }}
+              >
+                <Info aria-hidden="true" className="size-4" />
+                <span className="flex-1 text-start">{t("nav.about")}</span>
+              </button>
+            </li>
+            <li>
               <a
                 href={WIKI_URL}
                 target="_blank"
@@ -336,20 +349,7 @@ export const SidebarFooter = () => {
                 <span className="flex-1 text-start">{t("nav.docs")}</span>
               </a>
             </li>
-            <li>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  setMenuOpen(false)
-                  aboutDialogRef.current?.showModal()
-                }}
-              >
-                <Info aria-hidden="true" className="size-4" />
-                <span className="flex-1 text-start">{t("nav.about")}</span>
-              </button>
-            </li>
-
+            <div className="divider my-1" />
             <li>
               <button type="button" className="text-error" onClick={signOut}>
                 <LogOut aria-hidden="true" className="size-4" />

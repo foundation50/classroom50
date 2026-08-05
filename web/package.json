@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "arch:validate": "depcruise src --config .dependency-cruiser.cjs",
     "audit:contrast": "npx vite-node scripts/genContrastAudit.ts",
+    "audit:vpat": "npx vite-node scripts/genVpatReport.ts",
     "arch:graph": "depcruise src --config .dependency-cruiser.cjs --output-type dot | dot -T svg > dependency-graph.svg",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

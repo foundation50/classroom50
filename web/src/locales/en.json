@@ -2,6 +2,17 @@
   "accessibility": {
     "title": "Color contrast audit",
     "subtitle": "WCAG 2.2 conformance for the app's color palette, checked automatically on every build.",
+    "pageTitle": "Accessibility",
+    "pageSubtitle": "How the Classroom50 web app conforms to WCAG 2.2, checked automatically on every build.",
+    "tab": {
+      "contrast": "Color contrast",
+      "vpat": "Conformance report"
+    },
+    "stat": {
+      "pairs": "Color pairs",
+      "pass": "Pass",
+      "withinMargin": "Within margin"
+    },
     "download": "Download report (.md)",
     "loadError": "Couldn't load the contrast audit report.",
     "summaryPass": "All {{total}} audited color pairs meet their WCAG contrast floor.",
@@ -53,6 +64,35 @@
       "passMargin": "passes, but below the recommended margin (info icon shows the numbers)",
       "fail": "below the WCAG minimum",
       "exempt": "outside WCAG scope (decorative / disabled)"
+    },
+    "vpat": {
+      "heading": "Conformance report (VPAT)",
+      "subtitle": "WCAG 2.2 Level AA conformance, criterion by criterion. Contrast is verified automatically; the rest is assessed and updated as work lands.",
+      "loadError": "Couldn't load the conformance report.",
+      "downloadWcag": "Download VPAT — WCAG (.md)",
+      "downloadInt": "Download VPAT — INT / 508 (.md)",
+      "generated": "Report date {{generated}}",
+      "notEvaluatedNote": "Criteria marked “Not Evaluated” haven't been formally assessed yet. Automated checks establish a floor; a manual keyboard and screen-reader pass on the primary flows will set their final conformance level.",
+      "empty": "No criteria match this filter.",
+      "clearFilter": "Clear filter",
+      "sortBy": "Sort by",
+      "sort": {
+        "criterion": "Criterion",
+        "status": "Conformance"
+      },
+      "col": {
+        "criterion": "Criterion",
+        "level": "Level",
+        "conformance": "Conformance",
+        "remarks": "Remarks"
+      },
+      "status": {
+        "supports": "Supports",
+        "partially": "Partially Supports",
+        "doesNotSupport": "Does Not Support",
+        "notApplicable": "Not Applicable",
+        "notEvaluated": "Not Evaluated"
+      }
     }
   },
   "actionsBanner": {
@@ -325,6 +365,7 @@
     "signOut": "Sign out",
     "about": "About",
     "docs": "Docs",
+    "accessibility": "Accessibility",
     "aboutDialogTitle": "Classroom 50",
     "aboutDialogDescription": "Build and version information for this app.",
     "aboutVersion": "Version",
@@ -335,6 +376,8 @@
     "aboutReportIssueHint": "Found a bug or have a feature request?",
     "aboutAskQuestion": "Ask a question",
     "aboutAskQuestionHint": "Get help from the community.",
+    "aboutAccessibilityTitle": "Accessibility",
+    "aboutAccessibilityHint": "WCAG 2.2 contrast audit and conformance report (VPAT), opens in a new tab.",
     "aboutDiagnosticsTitle": "Diagnostics",
     "aboutDiagnosticsHint": "Copy technical details to include in a bug report or support thread. No data is sent anywhere; it only fills your clipboard.",
     "aboutDiagnosticsShow": "Show diagnostics",
@@ -351,6 +394,7 @@
     "usePersonalAccessToken": "Use a personal access token",
     "footerTagline": "Manage assignments and submissions via GitHub.",
     "visitDocs": "Visit Classroom 50's docs",
+    "accessibility": "Accessibility",
     "signedInConfirmed": "Signed in - your session is active",
     "verifyingSession": "Verifying your session...",
     "profileUnavailable": "Profile unavailable",

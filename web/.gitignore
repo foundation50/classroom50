@@ -33,6 +33,14 @@ dist-ssr
 CONTRAST-AUDIT.md
 contrast-audit.json
 
+# Generated WCAG 2.2 VPAT / ACR artifacts. Same discipline as the contrast
+# report above — renderings of guarded state (vpatGuard.test.ts + the contrast
+# guard enforce the facts), emitted into dist/ and uploaded as CI artifacts, so
+# never committed.
+VPAT.md
+VPAT-INT.md
+vpat-report.json
+
 # Local dev launcher (machine-specific paths)
 dev.sh
 
