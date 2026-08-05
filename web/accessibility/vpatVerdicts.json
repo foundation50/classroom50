@@ -1,8 +1,23 @@
 {
+  "1.1.1": {
+    "status": "supports",
+    "evidence": "manual",
+    "remark": "2026-08-05 — guided visual + a11y-tree review: org avatars use alt=\"\" (decorative; the org name beside them is the real label), decorative icons are aria-hidden (94/96 on the org page), and the only bare SVGs are inside the dev-only devtools widget. Informative non-text content has appropriate text alternatives on the reviewed flows."
+  },
   "1.3.1": {
     "status": "partially",
     "evidence": "manual",
     "remark": "2026-08-05 — agent-browser (Chromium) + axe accessibility-tree inspection: landmarks are present (main, nav 'Primary'), form controls are labeled, and the sidebar list markup is now valid (<ul> > <li> > <a>; axe list/listitem clean). Still Partially: the heading hierarchy is inconsistent — an H3 ('Update workflow files...') appears before the page H1, and each org card exposes both an H2 and an H3 with the same text — so the programmatic structure does not yet cleanly match the visual structure."
+  },
+  "1.3.2": {
+    "status": "supports",
+    "evidence": "manual",
+    "remark": "2026-08-05 — guided visual + DOM-order review on the Organizations grid and the assignments table: the DOM/reading order matches the visual order (sidebar -> breadcrumb -> heading -> toolbar -> rows top-to-bottom, each row left-to-right). Card grids read left-then-right in source order; no CSS reordering scrambles the sequence."
+  },
+  "1.3.5": {
+    "status": "supports",
+    "evidence": "manual",
+    "remark": "2026-08-05 — guided review: the app collects almost no information about the user themselves — text inputs capture classroom data (org/assignment/section) or a THIRD party's details (a student's name/username/email on the roster form), for which autocomplete tokens are inappropriate. The user's own identity is delegated to GitHub OAuth/device-code. So 1.3.5 is met by not applying self-autofill where it doesn't belong."
   },
   "1.4.13": {
     "status": "partially",
@@ -24,6 +39,11 @@
     "evidence": "manual",
     "remark": "2026-08-05 — agent-browser (Chromium) keyboard test: a 'Skip to main content' link is the first focusable element and has a visible focus outline, and its target main#main-content precedes the nav in DOM order. However, activating it did not move keyboard focus into main (focus fell to <body>); main lacks tabindex=\"-1\", so the skip does not reliably relocate keyboard focus past the repeated blocks."
   },
+  "2.4.11": {
+    "status": "supports",
+    "evidence": "manual",
+    "remark": "2026-08-05 — guided visual + layout review: the only sticky element is the left sidebar column (0-240px), which sits beside main content rather than over it, and the top banner is position:static (not floating). No sticky top/bottom bar overlays focus, so a keyboard-focused control is never entirely hidden on the desktop layout."
+  },
   "2.4.3": {
     "status": "supports",
     "evidence": "manual",
@@ -34,6 +54,11 @@
     "evidence": "manual",
     "remark": "2026-08-05 — agent-browser (Chromium) keyboard + accessibility-tree pass on the authenticated Organizations flow: all 33 visible links carry meaningful accessible names (e.g. 'Open', 'Review the service token for <org>'); no bare 'click here'/'link'/empty-name links found. Verified via the a11y tree, not a speaking screen reader."
   },
+  "2.4.6": {
+    "status": "supports",
+    "evidence": "manual",
+    "remark": "2026-08-05 — guided review of the heading outline and form labels (Roster, Organizations, Assignments): headings describe their topic ('Add member', 'Invite students', 'Unenroll N students?', 'Accessibility') and form labels are descriptive ('Role', 'GitHub username', 'Upload JSON file'); no vague or empty headings/labels. (Heading LEVEL ordering is tracked separately under 1.3.1; 2.4.6 descriptiveness is met.)"
+  },
   "2.4.7": {
     "status": "supports",
     "evidence": "manual",
@@ -43,6 +68,26 @@
     "status": "partially",
     "evidence": "manual",
     "remark": "2026-08-05 — agent-browser (Chromium) accessibility-tree inspection: several controls' accessible names do not contain their visible label text — e.g. links whose visible chip reads 'No service token' / 'Expiry not tracked' are named 'Review the service token for <org>', and the account button shows the user's name visually but is named 'Account menu'. This can break voice-control ('click <visible text>')."
+  },
+  "3.2.3": {
+    "status": "supports",
+    "evidence": "manual",
+    "remark": "2026-08-05 — guided review comparing the sidebar across org, classroom, and assignment routes: repeated navigation keeps a consistent relative order everywhere (logo -> collapse -> level nav -> GitHub org -> footer: Dark mode -> Language -> About -> Docs -> Sign out -> Account menu). Contextual middle items change with scope as expected, but items that repeat never reorder."
+  },
+  "3.2.4": {
+    "status": "supports",
+    "evidence": "manual",
+    "remark": "2026-08-05 — guided review of repeated actions across flows: same-function components are identified consistently — 'Settings'/'Sign out' are worded identically everywhere, overflow menus follow 'More actions for {name}', row actions follow '{verb} {item}' ('Delete/Lock {assignment}'), and the card links use 'Open {org}' / 'View assignments for {classroom}'. No same-function control is labeled inconsistently."
+  },
+  "3.3.7": {
+    "status": "supports",
+    "evidence": "manual",
+    "remark": "2026-08-05 — guided review of the creation flows: the create-assignment form does not re-request context already known (org/classroom come from the route, not re-typed), the slug auto-derives from the name, and flows are single-step forms rather than multi-step wizards that re-ask prior data. Information already available isn't redundantly requested."
+  },
+  "3.3.8": {
+    "status": "supports",
+    "evidence": "manual",
+    "remark": "2026-08-05 — guided live review of the login screen: the primary 'Sign in with GitHub' OAuth path requires no cognitive-function test (no code to memorize/transcribe; GitHub's own flow supports password managers/passkeys), and it is the default. 'Use a device code' and 'Use a personal access token' are offered as additional methods, so the transcription-based device-code path always has a no-transcription alternative (OAuth). The app stores no password (zero password fields). Meets 3.3.8's no-cognitive-test-without-alternative requirement."
   },
   "4.1.2": {
     "status": "supports",
