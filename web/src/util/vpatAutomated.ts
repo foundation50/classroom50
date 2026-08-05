@@ -84,4 +84,27 @@ export const AUTOMATED_CRITERIA: Record<string, AutomatedBinding> = {
       "browser and no element exceeds the width. Verified automatically on the " +
       "shared layout primitives; a per-route reflow sweep is a manual follow-up.",
   },
+  "1.4.4": {
+    check:
+      "enlarging the root font to 200% scales text (relative units) and the " +
+      "sample still fits the viewport in real Chromium (resizeText.browser.test.tsx)",
+    remark:
+      "Text resizes to 200% without loss of content: with the root font enlarged " +
+      "to 200% in a real browser, the shared primitives' text scales (relative " +
+      "units) and the layout still fits without clipping or horizontal overflow. " +
+      "Verified automatically on the shared primitives; a per-route zoom sweep is " +
+      "a manual follow-up.",
+  },
+  "1.4.12": {
+    check:
+      "the WCAG text-spacing overrides (line-height 1.5, letter 0.12em, word " +
+      "0.16em, paragraph 2em) apply without clipping in real Chromium " +
+      "(textSpacing.browser.test.tsx)",
+    remark:
+      "Content survives the WCAG 1.4.12 text-spacing overrides (line-height 1.5x, " +
+      "letter-spacing 0.12em, word-spacing 0.16em, paragraph spacing 2em): applied " +
+      "to the shared primitives in a real browser, the container grows to fit " +
+      "rather than clipping. Verified automatically on the shared primitives; a " +
+      "per-route sweep is a manual follow-up.",
+  },
 }

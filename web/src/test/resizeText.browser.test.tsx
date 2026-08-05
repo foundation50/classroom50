@@ -1,0 +1,90 @@
+import { afterEach, beforeAll, describe, expect, it } from "vitest"
+import { cleanup, render } from "@testing-library/react"
+
+import "@/index.css"
+import { Card } from "@/components/ui"
+import { fitsViewportWidth } from "@/util/a11yStructural"
+
+// 1.4.4 Resize Text: text scales to 200% without loss of content. The browser-
+// testable proxy is that the app's text sizing is relative (rem/em), so bumping
+// the root font-size actually enlarges text AND the layout still fits its
+// container without clipping. Measured in real Chromium (happy-dom has no layout,
+// so font-size changes never reflow and the check would silently pass). This is
+// the representative-sample scope (KTD5): it proves the shared primitives scale,
+// not every route.
+const VIEWPORT = 320
+const ROOT_PX = 16
+const ZOOM = 2 // 200%
+
+beforeAll(() => {
+  document.documentElement.setAttribute("data-theme", "sumi")
+})
+
+afterEach(() => {
+  cleanup()
+  document.documentElement.style.fontSize = ""
+})
+
+function descendantWidths(root: Element): number[] {
+  return Array.from(root.querySelectorAll("*")).map(
+    (el) => el.getBoundingClientRect().width,
+  )
+}
+
+function sample() {
+  return (
+    <div style={{ width: VIEWPORT }}>
+      <Card>
+        <Card.Body>
+          <h2>Accessibility</h2>
+          <p data-testid="copy">
+            A paragraph of body copy that must remain fully visible when text is
+            enlarged to 200%, wrapping rather than clipping or overflowing.
+          </p>
+        </Card.Body>
+      </Card>
+    </div>
+  )
+}
+
+describe("1.4.4 Resize Text — 200% scaling on shared primitives", () => {
+  it("enlarging the root font to 200% actually scales text (relative units)", () => {
+    document.documentElement.style.fontSize = `${ROOT_PX}px`
+    const { getByTestId, rerender } = render(sample())
+    const before = getByTestId("copy").getBoundingClientRect().height
+
+    document.documentElement.style.fontSize = `${ROOT_PX * ZOOM}px`
+    rerender(sample())
+    const after = getByTestId("copy").getBoundingClientRect().height
+
+    // rem/em text grows with the root; a fixed-px design would not. Height, not
+    // width — the paragraph is width-constrained by the viewport and reflows down.
+    expect(after, `${before} -> ${after}`).toBeGreaterThan(before)
+  })
+
+  it("at 200% the sample still fits the viewport without horizontal overflow", () => {
+    document.documentElement.style.fontSize = `${ROOT_PX * ZOOM}px`
+    const { container } = render(sample())
+    const widths = descendantWidths(container)
+    const widest = Math.max(...widths)
+    expect(fitsViewportWidth(widths, VIEWPORT), `widest: ${widest}px`).toBe(
+      true,
+    )
+  })
+
+  // Fidelity: a fixed-height clipping box whose text overflows when enlarged must
+  // be detected, so a future measurement regression can't silently pass.
+  it("detects clipping when enlarged text overflows a fixed-height box (guard bites)", () => {
+    document.documentElement.style.fontSize = `${ROOT_PX * ZOOM}px`
+    const { getByTestId } = render(
+      <div
+        data-testid="clip"
+        style={{ height: 16, overflow: "hidden", width: VIEWPORT }}
+      >
+        <span style={{ fontSize: "2rem" }}>Text taller than its 16px box</span>
+      </div>,
+    )
+    const box = getByTestId("clip")
+    expect(box.scrollHeight).toBeGreaterThan(box.clientHeight)
+  })
+})

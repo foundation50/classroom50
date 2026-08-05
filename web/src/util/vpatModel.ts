@@ -136,8 +136,14 @@ export const CRITERIA: Criterion[] = [
     name: "Resize Text",
     level: "AA",
     principle: "Perceivable",
-    status: "notEvaluated",
-    remark: NOT_EVALUATED_REMARK,
+    status: "supports",
+    evidence: "automated",
+    remark:
+      "Text resizes to 200% without loss of content: with the root font enlarged " +
+      "to 200% in a real browser, the shared primitives' text scales (relative " +
+      "units) and the layout still fits without clipping or horizontal overflow. " +
+      "Verified automatically on the shared primitives; a per-route zoom sweep is " +
+      "a manual follow-up.",
   },
   {
     id: "1.4.10",
@@ -157,8 +163,14 @@ export const CRITERIA: Criterion[] = [
     name: "Text Spacing",
     level: "AA",
     principle: "Perceivable",
-    status: "notEvaluated",
-    remark: NOT_EVALUATED_REMARK,
+    status: "supports",
+    evidence: "automated",
+    remark:
+      "Content survives the WCAG 1.4.12 text-spacing overrides (line-height 1.5x, " +
+      "letter-spacing 0.12em, word-spacing 0.16em, paragraph spacing 2em): applied " +
+      "to the shared primitives in a real browser, the container grows to fit " +
+      "rather than clipping. Verified automatically on the shared primitives; a " +
+      "per-route sweep is a manual follow-up.",
   },
   {
     id: "1.4.13",
