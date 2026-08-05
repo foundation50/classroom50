@@ -90,7 +90,6 @@ jobs:
           fi
 
   build:
-    name: ${{ matrix.module }}
     needs: detect
     if: needs.detect.outputs.any == 'true'
     runs-on: ubuntu-latest
