@@ -45,9 +45,20 @@ describe("buildVpatReport (JSON source of truth)", () => {
       expect(c?.status, `${id} on failing audit`).toBe("partially")
       expect(c?.remark, `${id} names the failing count`).toContain("2 pairs")
     }
-    // A non-contrast criterion is unaffected by the audit result.
-    const nonContrast = failing.criteria.find((x) => x.id === "2.1.1")
-    expect(nonContrast?.status).toBe("notEvaluated")
+    // A non-contrast criterion is unaffected by the audit result: its status is
+    // identical whether the contrast audit passes or fails (only the contrast
+    // rows are audit-derived). Asserted as an invariant so it survives the
+    // manual assessment filling in non-contrast verdicts over time.
+    const passing = buildVpatReport(FIXED, { allPass: true, failures: 0 })
+    const nonContrastId = "2.4.6" // not a contrast criterion; audit-independent
+    expect(CONTRAST_CRITERION_IDS).not.toContain(nonContrastId)
+    const failingStatus = failing.criteria.find(
+      (x) => x.id === nonContrastId,
+    )?.status
+    const passingStatus = passing.criteria.find(
+      (x) => x.id === nonContrastId,
+    )?.status
+    expect(failingStatus).toBe(passingStatus)
   })
 
   it("never claims supports without evidence", () => {

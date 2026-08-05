@@ -2,12 +2,17 @@
   "1.3.1": {
     "status": "partially",
     "evidence": "manual",
-    "remark": "2026-08-05 — agent-browser (Chromium) accessibility-tree inspection: landmarks are present (main, nav 'Primary') and form controls are labeled, but the heading hierarchy is inconsistent — an H3 ('Update workflow files...') appears before the page H1, and each org card exposes both an H2 and an H3 with the same text, so the programmatic structure does not cleanly match the visual structure."
+    "remark": "2026-08-05 — agent-browser (Chromium) + axe accessibility-tree inspection: landmarks are present (main, nav 'Primary'), form controls are labeled, and the sidebar list markup is now valid (<ul> > <li> > <a>; axe list/listitem clean). Still Partially: the heading hierarchy is inconsistent — an H3 ('Update workflow files...') appears before the page H1, and each org card exposes both an H2 and an H3 with the same text — so the programmatic structure does not yet cleanly match the visual structure."
   },
   "1.4.13": {
     "status": "partially",
     "evidence": "manual",
     "remark": "2026-08-05 — agent-browser (Chromium) inspection of the tooltips on /accessibility: they are DaisyUI CSS .tooltip on non-focusable <span> elements, so they appear on mouse hover only (not keyboard focus), have no Escape-to-dismiss, and are not hoverable (CSS pseudo-content). They elaborate on already-visible values, so essential info is not lost, but the hover/focus content itself is not dismissable/hoverable/keyboard-reachable per 1.4.13."
+  },
+  "2.1.1": {
+    "status": "partially",
+    "evidence": "manual",
+    "remark": "2026-08-05 — agent-browser (Chromium) keyboard-only pass after the a11y fixes: the Organizations, classrooms, assignment-table, and Members/Roster flows are operable without a mouse — every control is reachable by Tab and actuatable, assignment/member/roster rows now open via a real focusable name button (Enter opens the detail modal, verified), and modals trap focus + close on Escape. Marked Partially because a keyboard-only sweep of every remaining flow (submissions dashboard, roster import, student accept/submit, org setup) and a speaking-screen-reader pass are not yet done."
   },
   "2.1.2": {
     "status": "supports",
