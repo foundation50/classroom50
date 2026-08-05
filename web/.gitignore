@@ -41,6 +41,11 @@ VPAT.md
 VPAT-INT.md
 vpat-report.json
 
+# Generated accessibility inventory (criterion status + bound checks). Rendering
+# of guarded state (vpatAutomated.test.ts enforces the bindings); CI artifact,
+# never committed.
+a11y-inventory.json
+
 # Local dev launcher (machine-specific paths)
 dev.sh
 

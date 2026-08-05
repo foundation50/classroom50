@@ -108,4 +108,10 @@ describe("vpatModel — criteria integrity", () => {
       expect(c?.evidence, `${id} evidence`).toBe("contrast")
     }
   })
+
+  it("marks 3.1.1 Language of Page as automated Supports (U4)", () => {
+    const c = CRITERIA.find((x) => x.id === "3.1.1")
+    expect(c?.status).toBe("supports")
+    expect(c?.evidence).toBe("automated")
+  })
 })

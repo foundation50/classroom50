@@ -250,8 +250,13 @@ export const CRITERIA: Criterion[] = [
     name: "Language of Page",
     level: "A",
     principle: "Understandable",
-    status: "notEvaluated",
-    remark: NOT_EVALUATED_REMARK,
+    status: "supports",
+    evidence: "automated",
+    remark:
+      "The page ships with a valid `lang` on the root <html> element and the " +
+      "app updates it to match the active language at runtime. Verified " +
+      "automatically (index.html carries lang; the i18n layer keeps " +
+      "document.documentElement.lang in sync).",
   },
   {
     id: "3.2.3",

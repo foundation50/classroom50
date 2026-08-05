@@ -115,6 +115,22 @@ jobs:
             web/VPAT-INT.md
           if-no-files-found: warn
 
+      # Emit the criterion-tagged accessibility inventory (status + bound checks)
+      # and upload it. The bindings themselves are enforced by the a11y tests in
+      # `npm test`; this artifact is a downloadable rendering of that guarded
+      # state. `if: always()` so it's produced even when a later step fails.
+      - name: Generate a11y inventory
+        if: always()
+        run: npm run audit:a11y:inventory
+
+      - name: Upload a11y inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-inventory
+          path: web/a11y-inventory.json
+          if-no-files-found: warn
+
       # Unit tests for the i18n audit tool itself. Its detection logic is
       # entirely regex-driven, so these lock down the source-of-truth behavior
       # (missing-key hard-fail, --strict flip, key-form capture, plural base,
