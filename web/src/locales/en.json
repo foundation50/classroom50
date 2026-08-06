@@ -7,7 +7,7 @@
       "contrast": "Color contrast",
       "vpat": "Conformance",
       "statement": "Statement",
-      "downloads": "Downloads"
+      "downloads": "Reports"
     },
     "statement": {
       "heading": "Accessibility statement",
@@ -22,8 +22,9 @@
       "updated": "Last reviewed {{date}}."
     },
     "downloads": {
-      "heading": "Download reports",
-      "action": "Download (.md)",
+      "heading": "Reports",
+      "markdownAction": "Markdown",
+      "pdfAction": "PDF",
       "vpatWcagTitle": "VPAT — WCAG edition",
       "vpatWcagDesc": "Accessibility Conformance Report against WCAG 2.2 (VPAT 2.5Rev).",
       "vpatIntTitle": "VPAT — INT / 508 edition",
@@ -31,13 +32,11 @@
       "contrastTitle": "Color contrast audit",
       "contrastDesc": "Per-pair contrast ratios for every audited color, both themes.",
       "fullTitle": "Full report",
-      "fullDesc": "Both VPAT editions and the color contrast audit combined into one file.",
-      "pdfTitle": "Full report (PDF)",
-      "pdfDesc": "Print or save the full report as a PDF using your browser's print dialog.",
-      "pdfAction": "Print / Save as PDF"
+      "fullDesc": "Both VPAT editions and the color contrast audit in one document."
     },
     "print": {
       "reportTitle": "Accessibility Conformance Report — {{product}}",
+      "reportIntTitle": "Accessibility Conformance Report (INT: Section 508 + EN 301 549 + WCAG 2.2) — {{product}}",
       "reportMeta": "Standard: WCAG {{standard}}, target Level {{target}}. Report date: {{date}}.",
       "vpatSummary": "Summary ({{total}} applicable criteria): {{supports}} Supports, {{partially}} Partially Supports, {{doesNotSupport}} Does Not Support, {{notApplicable}} Not Applicable, {{notEvaluated}} Not Evaluated.",
       "contrastTitle": "Color contrast audit",
