@@ -268,7 +268,7 @@ body {
 
 /* ── WCAG 2.2 AAA contrast overrides ───────────────────────────────────────
    Targets 1.4.6 (7:1 body / 4.5:1 large text) and 1.4.11 (3:1 non-text; no AAA
-   tier). src/util/contrastGuard.test.ts recomputes every pair, so a value
+   tier). src/util/a11y/contrastGuard.test.ts recomputes every pair, so a value
    changed here that drops below the floor fails CI. Hues are preserved
    (lightness moved) to keep the sumi identity. */
 [data-theme="sumi"] {

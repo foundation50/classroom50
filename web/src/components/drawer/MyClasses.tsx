@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useOrgStaff } from "@/hooks/useOrgStaff"
 import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/authz"
-import { Tip, SidebarItemBody } from "./primitives"
+import { SidebarItemBody, SidebarNavItem } from "./primitives"
 
 export const MyClasses = ({ settings = false, selected = "" }) => {
   const { org } = useParams({ strict: false })
@@ -34,7 +34,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
             <span className="skeleton inline-block h-4 w-24 align-middle bg-neutral-content/10" />
           </li>
         ) : (
-          <Tip label={classesLabel}>
+          <SidebarNavItem label={classesLabel}>
             <Link to="/$org" params={{ org }}>
               <SidebarItemBody
                 label={classesLabel}
@@ -45,10 +45,10 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
                 groupId="org"
               />
             </Link>
-          </Tip>
+          </SidebarNavItem>
         )}
         {isStaff && (
-          <Tip label={t("nav.published")}>
+          <SidebarNavItem label={t("nav.published")}>
             <Link to="/$org/published" params={{ org }}>
               <SidebarItemBody
                 label={t("nav.published")}
@@ -57,10 +57,10 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
                 groupId="org"
               />
             </Link>
-          </Tip>
+          </SidebarNavItem>
         )}
         {isStaff && isOwner && (
-          <Tip label={t("nav.members")}>
+          <SidebarNavItem label={t("nav.members")}>
             <Link to="/$org/members" params={{ org }}>
               <SidebarItemBody
                 label={t("nav.members")}
@@ -69,10 +69,10 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
                 groupId="org"
               />
             </Link>
-          </Tip>
+          </SidebarNavItem>
         )}
         {isStaff && isOwner && (
-          <Tip label={t("nav.activity")}>
+          <SidebarNavItem label={t("nav.activity")}>
             <Link to="/$org/activity" params={{ org }}>
               <SidebarItemBody
                 label={t("nav.activity")}
@@ -81,10 +81,10 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
                 groupId="org"
               />
             </Link>
-          </Tip>
+          </SidebarNavItem>
         )}
         {isStaff && isOwner && (
-          <Tip label={t("nav.settings")}>
+          <SidebarNavItem label={t("nav.settings")}>
             <Link to="/$org/settings" params={{ org }}>
               <SidebarItemBody
                 label={t("nav.settings")}
@@ -93,7 +93,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
                 groupId="org"
               />
             </Link>
-          </Tip>
+          </SidebarNavItem>
         )}
       </ul>
     </div>

@@ -15,14 +15,15 @@ import { createRequire } from "node:module"
 import {
   renderContrastJson,
   renderContrastReport,
-} from "./src/util/contrastReport"
-import { renderVpatJson, renderVpatReport } from "./src/util/vpatReport"
+} from "./src/util/a11y/contrastReport"
+import { renderVpatJson, renderVpatReport } from "./src/util/a11y/vpatReport"
 import {
   buildCriteria,
+  isValidAssessedDate,
   type ManualVerdict,
   type VerdictOverlay,
-} from "./src/util/vpatModel"
-import { ASSESSMENT_GUIDANCE } from "./src/util/assessmentGuidance"
+} from "./src/util/a11y/vpatModel"
+import { ASSESSMENT_GUIDANCE } from "./src/util/a11y/assessmentGuidance"
 
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
@@ -89,7 +90,7 @@ function versionJsonPlugin(): Plugin {
 // source of truth the /accessibility page fetches) and CONTRAST-AUDIT.md (the
 // human-readable download, derived from the same data). Both are served in dev
 // too, so `npm run dev` shows a live report at /accessibility. Generated from
-// src/util/contrastModel.ts at build time — never committed — so they are always
+// src/util/a11y/contrastModel.ts at build time — never committed — so they are always
 // current with the shipped palette. The contrast guard tests are the
 // enforcement; these files are renderings.
 function contrastAuditPlugin(): Plugin {
@@ -124,7 +125,7 @@ function contrastAuditPlugin(): Plugin {
 // Publishes the WCAG 2.2 VPAT / ACR in the built site: vpat-report.json (the
 // source of truth the /accessibility page fetches) plus VPAT.md (WCAG edition)
 // and VPAT-INT.md (INT edition: Section 508 + EN 301 549 + WCAG 2.2), the
-// human-readable downloads. All three derive from src/util/vpatModel.ts at build
+// human-readable downloads. All three derive from src/util/a11y/vpatModel.ts at build
 // time — never committed — so they stay current with the shipped app;
 // vpatGuard.test.ts is the enforcement. Same dev + build wiring as the contrast
 // audit above.
@@ -283,10 +284,22 @@ function assessmentApiPlugin(): Plugin {
         }
         void (async () => {
           try {
-            const { id, status, remark, clear } = JSON.parse(
+            const { id, status, remark, assessed, clear } = JSON.parse(
               await readBody(req),
             )
             if (typeof id !== "string") {
+              res.statusCode = 400
+              res.end(JSON.stringify({ error: "invalid id" }))
+              return
+            }
+            // `overlay[id] = …` / `delete overlay[id]` with a prototype key like
+            // "__proto__" is a silent no-op that would let a write respond 200
+            // while discarding every recorded verdict — reject reserved keys.
+            if (
+              id === "__proto__" ||
+              id === "constructor" ||
+              id === "prototype"
+            ) {
               res.statusCode = 400
               res.end(JSON.stringify({ error: "invalid id" }))
               return
@@ -306,9 +319,17 @@ function assessmentApiPlugin(): Plugin {
                 res.end(JSON.stringify({ error: "remark is required" }))
                 return
               }
+              // Stamp the assessment date so the remark carries only the finding
+              // (rendered in its own column). Accept a caller-supplied real ISO
+              // date for reproducible fixtures, else default to today (UTC).
+              const isoDate =
+                typeof assessed === "string" && isValidAssessedDate(assessed)
+                  ? assessed
+                  : new Date().toISOString().slice(0, 10)
               const verdict: ManualVerdict = {
                 status,
                 evidence: "manual",
+                assessed: isoDate,
                 remark,
               }
               overlay[id] = verdict

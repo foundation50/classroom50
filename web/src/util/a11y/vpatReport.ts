@@ -134,9 +134,12 @@ function criteriaFor(
   return report.criteria.filter((c) => c.principle === principle)
 }
 
-function criterionRow(c: Criterion): string {
+function criterionRow(c: Criterion, fallbackDate: string): string {
   const remark = c.remark.replace(/\|/g, "\\|")
-  return `| ${c.id} ${c.name} | ${c.level} | ${CONFORMANCE_LABEL[c.status]} | ${remark} |`
+  // Manual rows carry their own assessed date; the contrast rows are re-derived
+  // every build, so they take the report's generation date.
+  const date = c.assessed ?? fallbackDate
+  return `| ${c.id} ${c.name} | ${c.level} | ${CONFORMANCE_LABEL[c.status]} | ${date} | ${remark} |`
 }
 
 // Preamble shared by both editions: product, date, evaluation methods, and the
@@ -175,25 +178,34 @@ function summaryLine(report: VpatReportJson): string {
   )
 }
 
-function renderWcagEdition(report: VpatReportJson): string {
-  const out: string[] = [
-    ...preamble(report, "WCAG Edition"),
-    summaryLine(report),
-    "",
-  ]
+// The per-principle WCAG 2.2 conformance tables, shared verbatim by both
+// editions — they differ only in preamble/intro, never in the verdicts.
+function principleTables(report: VpatReportJson): string[] {
+  const out: string[] = []
   for (const principle of PRINCIPLE_ORDER) {
     const rows = criteriaFor(report, principle)
     if (rows.length === 0) continue
     out.push(`## ${principle}`)
     out.push("")
     out.push(
-      "| Criterion | Level | Conformance Level | Remarks and Explanations |",
+      "| Criterion | Level | Conformance Level | Assessed | Remarks and Explanations |",
     )
-    out.push("| --- | --- | --- | --- |")
-    for (const c of rows) out.push(criterionRow(c))
+    out.push("| --- | --- | --- | --- | --- |")
+    for (const c of rows) out.push(criterionRow(c, report.generated))
     out.push("")
   }
-  return out.join("\n") + "\n"
+  return out
+}
+
+function renderWcagEdition(report: VpatReportJson): string {
+  return (
+    [
+      ...preamble(report, "WCAG Edition"),
+      summaryLine(report),
+      "",
+      ...principleTables(report),
+    ].join("\n") + "\n"
+  )
 }
 
 // The INT edition (VPAT 2.5Rev INT) incorporates Section 508, EN 301 549, and
@@ -203,33 +215,23 @@ function renderWcagEdition(report: VpatReportJson): string {
 // INT framing that states how the three standards relate. No criterion is
 // re-assessed (KTD6) — a US 508 / EU procurement office reads the same verdicts.
 function renderIntEdition(report: VpatReportJson): string {
-  const out: string[] = [
-    ...preamble(report, "INT Edition (Section 508 + EN 301 549 + WCAG 2.2)"),
-    summaryLine(report),
-    "",
-    "The INT edition incorporates three standards. This report expresses " +
-      "conformance against **WCAG 2.2** — the standard the product is tested " +
-      "to — which the other two reference: **Section 508** (US) incorporates " +
-      "WCAG 2.0 Level A/AA and **EN 301 549** (EU) incorporates WCAG 2.1; both " +
-      "are subsets of the WCAG 2.2 criteria reported below, so each verdict " +
-      "applies to the corresponding 508 / EN 301 549 provision. Chapter 4 " +
-      "(Hardware) of Section 508 is Not Applicable — Classroom50 is a " +
-      "browser-based web application with no hardware component.",
-    "",
-  ]
-  for (const principle of PRINCIPLE_ORDER) {
-    const rows = criteriaFor(report, principle)
-    if (rows.length === 0) continue
-    out.push(`## ${principle}`)
-    out.push("")
-    out.push(
-      "| Criterion | Level | Conformance Level | Remarks and Explanations |",
-    )
-    out.push("| --- | --- | --- | --- |")
-    for (const c of rows) out.push(criterionRow(c))
-    out.push("")
-  }
-  return out.join("\n") + "\n"
+  return (
+    [
+      ...preamble(report, "INT Edition (Section 508 + EN 301 549 + WCAG 2.2)"),
+      summaryLine(report),
+      "",
+      "The INT edition incorporates three standards. This report expresses " +
+        "conformance against **WCAG 2.2** — the standard the product is tested " +
+        "to — which the other two reference: **Section 508** (US) incorporates " +
+        "WCAG 2.0 Level A/AA and **EN 301 549** (EU) incorporates WCAG 2.1; both " +
+        "are subsets of the WCAG 2.2 criteria reported below, so each verdict " +
+        "applies to the corresponding 508 / EN 301 549 provision. Chapter 4 " +
+        "(Hardware) of Section 508 is Not Applicable — Classroom50 is a " +
+        "browser-based web application with no hardware component.",
+      "",
+      ...principleTables(report),
+    ].join("\n") + "\n"
+  )
 }
 
 /** Render the Markdown ACR for the requested edition — derived from one model. */

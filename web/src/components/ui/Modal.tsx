@@ -128,8 +128,14 @@ export function Modal({
         {children}
       </div>
 
+      {/* DaisyUI's click-outside-to-close backdrop. The button is a mouse
+          affordance only — keep it out of the tab order (Esc and the top-right
+          close X are the keyboard paths) so focus can't tab onto the backdrop
+          "behind" the modal box, which reads as leaving the dialog. */}
       <form method="dialog" className="modal-backdrop">
-        <button disabled={closeDisabled}>{t("common.close")}</button>
+        <button tabIndex={-1} aria-hidden="true" disabled={closeDisabled}>
+          {t("common.close")}
+        </button>
       </form>
     </dialog>
   )

@@ -10,7 +10,7 @@ import {
   type ToastTone,
 } from "@/context/notifications/NotificationProvider"
 import { renderAndAxe } from "./axe"
-import { documentHasLang, hasSingleH1 } from "@/util/a11yStructural"
+import { documentHasLang, hasSingleH1 } from "@/util/a11y/a11yStructural"
 import { applyDocumentDirection } from "@/i18n/direction"
 
 afterEach(cleanup)

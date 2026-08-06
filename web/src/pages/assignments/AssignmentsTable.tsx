@@ -406,9 +406,20 @@ const AssignmentsTable = ({
                   }
                   className="truncate"
                 >
-                  <div className="font-bold link link-info no-underline">
+                  {/* Real link (not a click-only div) so the row's primary
+                      action is keyboard-reachable and exposes a link role; the
+                      td onClick stays as a mouse convenience. */}
+                  <Link
+                    to="/$org/$classroom/assignments/$assignment/submissions"
+                    params={{ org, classroom, assignment: assignment.slug }}
+                    aria-label={t("assignments.table.openSubmissionsAria", {
+                      name: name(assignment),
+                    })}
+                    className="font-bold link link-info no-underline"
+                    onClick={(event) => event.stopPropagation()}
+                  >
                     {assignment.name}
-                  </div>
+                  </Link>
                   <div className="font-mono text-xs text-base-content/70">
                     {assignment.slug}
                   </div>

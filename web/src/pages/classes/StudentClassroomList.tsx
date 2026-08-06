@@ -35,10 +35,12 @@ function AcceptedStat({ count }: { count: number }) {
 function ViewAssignmentsLink({
   org,
   classroom,
+  classroomName,
   block,
 }: {
   org: string
   classroom: string
+  classroomName: string
   block?: boolean
 }) {
   const { t } = useTranslation()
@@ -47,6 +49,9 @@ function ViewAssignmentsLink({
       type="button"
       to="/$org/$classroom/assignments"
       params={{ org, classroom }}
+      aria-label={t("classes.viewAssignmentsAria", {
+        classroom: classroomName,
+      })}
       className={`btn btn-outline btn-primary btn-sm ${block ? "w-full" : ""}`}
     >
       {t("classes.viewAssignments")}
@@ -79,7 +84,12 @@ function StudentClassroomCard({
           {classroomTitle(summary)}
         </h2>
         <AcceptedStat count={summary.acceptedCount} />
-        <ViewAssignmentsLink org={org} classroom={summary.classroom} block />
+        <ViewAssignmentsLink
+          org={org}
+          classroom={summary.classroom}
+          classroomName={classroomTitle(summary)}
+          block
+        />
       </Card.Body>
     </Card>
   )
@@ -104,7 +114,11 @@ function StudentClassroomRow({
         <AcceptedStat count={summary.acceptedCount} />
       </div>
       <div className="flex shrink-0 items-center justify-end">
-        <ViewAssignmentsLink org={org} classroom={summary.classroom} />
+        <ViewAssignmentsLink
+          org={org}
+          classroom={summary.classroom}
+          classroomName={classroomTitle(summary)}
+        />
       </div>
     </EnterDiv>
   )

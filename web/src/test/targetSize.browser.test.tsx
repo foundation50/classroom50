@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { Button } from "@/components/ui"
-import { meetsTargetSize, TARGET_SIZE_MIN } from "@/util/a11yStructural"
+import { meetsTargetSize, TARGET_SIZE_MIN } from "@/util/a11y/a11yStructural"
 import { rect, renderInViewport, setupBrowserA11y } from "./browserA11y"
 
 // 2.5.8 Target Size (Minimum): interactive targets are >= 24x24 CSS px. Measured

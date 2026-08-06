@@ -39,19 +39,11 @@ export const RosterRow = ({
   return (
     <ClickableRow
       className="group/row flex cursor-pointer items-center justify-between gap-4 px-6 py-4 hover:bg-base-200"
-      role="button"
-      tabIndex={0}
       onClick={() => onOpen(row.key)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          onOpen(row.key)
-        }
-      }}
     >
       <input
         type="checkbox"
-        className="checkbox checkbox-sm shrink-0"
+        className="checkbox checkbox-sm size-6 shrink-0"
         aria-label={
           selfRow
             ? t("students.bulk.selfNotSelectable")
@@ -72,6 +64,7 @@ export const RosterRow = ({
           github={displayHandle}
           initials={displayInitials}
           subtitle={<GitHubIdentity row={member} />}
+          onClick={() => onOpen(row.key)}
         />
       </div>
       <div className="flex shrink-0 items-center gap-2">

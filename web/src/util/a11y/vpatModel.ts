@@ -14,7 +14,7 @@
 // audit in vpatReport.ts (KTD4), so the two reports can never disagree.
 
 import type { BadgeTone } from "@/types/badgeTone"
-import verdicts from "../../accessibility/vpatVerdicts.json"
+import verdicts from "../../../accessibility/vpatVerdicts.json"
 
 export type WcagPrinciple =
   "Perceivable" | "Operable" | "Understandable" | "Robust"
@@ -65,6 +65,13 @@ export type Criterion = {
   /** Required whenever status is `supports` (the overclaim guard enforces this). */
   evidence?: EvidenceKind
   remark: string
+  /**
+   * ISO date (YYYY-MM-DD) the verdict was recorded. Rendered as its own column
+   * in the ACR so the remark carries only the finding, not the date. Present on
+   * manually-assessed rows (set by the /assess tool); the contrast rows get the
+   * report's generation date at render time (they're re-derived every build).
+   */
+  assessed?: string
 }
 
 /**
@@ -410,9 +417,25 @@ export type ManualVerdict = {
   status: "supports" | "partially" | "doesNotSupport"
   evidence: "manual"
   remark: string
+  /** ISO date (YYYY-MM-DD) the verdict was recorded, rendered in its own column. */
+  assessed?: string
 }
 
 export type VerdictOverlay = Record<string, ManualVerdict>
+
+// True for a real calendar date in ISO YYYY-MM-DD form. A bare regex would
+// admit impossible dates (2026-13-40, 0000-00-00), so round-trip through Date:
+// a value survives only if it parses AND re-serializes to the same string.
+// Shared by applyVerdicts (below) and the dev-only /assess write endpoint
+// (vite.config.ts) so the accepted-date rule lives in exactly one place.
+export function isValidAssessedDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  )
+}
 
 const MANUAL_STATUSES = new Set<ManualVerdict["status"]>([
   "supports",
@@ -465,11 +488,23 @@ export function applyVerdicts(
     if (typeof v.remark !== "string" || v.remark.trim() === "") {
       throw new Error(`Manual verdict for "${id}" requires a non-empty remark.`)
     }
+    if (v.assessed !== undefined && !isValidAssessedDate(v.assessed)) {
+      throw new Error(
+        `Manual verdict for "${id}" has an invalid assessed date ` +
+          `"${v.assessed}"; expected a real ISO YYYY-MM-DD date.`,
+      )
+    }
   }
   return base.map((c) => {
     const v = overlay[c.id]
     return v
-      ? { ...c, status: v.status, evidence: v.evidence, remark: v.remark }
+      ? {
+          ...c,
+          status: v.status,
+          evidence: v.evidence,
+          remark: v.remark,
+          assessed: v.assessed,
+        }
       : c
   })
 }

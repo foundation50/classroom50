@@ -1,1 +1,116 @@
-{}
+{
+  "1.1.1": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "guided visual + a11y-tree review: org avatars use alt=\"\" (decorative; the org name beside them is the real label), decorative icons are aria-hidden (94/96 on the org page), and the only bare SVGs are inside the dev-only devtools widget. Informative non-text content has appropriate text alternatives on the reviewed flows."
+  },
+  "1.3.1": {
+    "status": "partially",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "Manual inspection in Chromium with the axe accessibility-tree scan: landmarks are present (main, nav 'Primary'), form controls are labeled, and the sidebar list markup is now valid (<ul> > <li> > <a>; axe list/listitem clean). Still Partially: the heading hierarchy is inconsistent — each org card exposes both an H2 and an H3 with the same text — so the programmatic structure does not yet cleanly match the visual structure."
+  },
+  "1.3.2": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "guided visual + DOM-order review on the Organizations grid and the assignments table: the DOM/reading order matches the visual order (sidebar -> breadcrumb -> heading -> toolbar -> rows top-to-bottom, each row left-to-right). Card grids read left-then-right in source order; no CSS reordering scrambles the sequence."
+  },
+  "1.3.5": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "guided review: the app collects almost no information about the user themselves — text inputs capture classroom data (org/assignment/section) or a THIRD party's details (a student's name/username/email on the roster form), for which autocomplete tokens are inappropriate. The user's own identity is delegated to GitHub OAuth/device-code. So 1.3.5 is met by not applying self-autofill where it doesn't belong."
+  },
+  "1.4.13": {
+    "status": "partially",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "Manual inspection in Chromium of the tooltips on /accessibility: they are DaisyUI CSS .tooltip on non-focusable <span> elements, so they appear on mouse hover only (not keyboard focus), have no Escape-to-dismiss, and are not hoverable (CSS pseudo-content). They elaborate on already-visible values, so essential info is not lost, but the hover/focus content itself is not dismissible/hoverable/keyboard-reachable per 1.4.13."
+  },
+  "2.1.1": {
+    "status": "partially",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "Manual keyboard-only pass in Chromium after the a11y fixes: the Organizations, classrooms, assignment-table, and Members/Roster flows are operable without a mouse — every control is reachable by Tab and actuatable, assignment/member/roster rows now open via a real focusable name button (Enter opens the detail modal, verified), and modals trap focus + close on Escape. Marked Partially because a keyboard-only sweep of every remaining flow (submissions dashboard, roster import, student accept/submit, org setup) and a speaking-screen-reader pass are not yet done."
+  },
+  "2.1.2": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "Manual keyboard test in Chromium of the About modal (native <dialog>): on open, focus moves into the dialog; Tab cycles only among the dialog's controls (focus stays contained across 6 presses); Escape closes it and focus returns to the triggering button. No keyboard trap; escape is always available."
+  },
+  "2.4.1": {
+    "status": "partially",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "Manual keyboard test in Chromium: a 'Skip to main content' link is the first focusable element and has a visible focus outline, and its target main#main-content precedes the nav in DOM order. However, activating it did not move keyboard focus into main (focus fell to <body>); main lacks tabindex=\"-1\", so the skip does not reliably relocate keyboard focus past the repeated blocks."
+  },
+  "2.4.11": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "guided visual + layout review: the only sticky element is the left sidebar column (0-240px), which sits beside main content rather than over it, and the top banner is position:static (not floating). No sticky top/bottom bar overlays focus, so a keyboard-focused control is never entirely hidden on the desktop layout."
+  },
+  "2.4.3": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "Manual keyboard pass in Chromium on the Organizations flow: Tab order follows the visual reading order (skip link -> search -> sort -> view toggles -> new-org -> per-card actions/links), with no illogical jumps. Verified on the primary authenticated flow."
+  },
+  "2.4.4": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "Manual keyboard + accessibility-tree pass in Chromium on the authenticated Organizations flow: all 33 visible links carry meaningful accessible names (e.g. 'Open', 'Review the service token for <org>'); no bare 'click here'/'link'/empty-name links found. Verified via the a11y tree, not a speaking screen reader."
+  },
+  "2.4.6": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "guided review of the heading outline and form labels (Roster, Organizations, Assignments): headings describe their topic ('Add member', 'Invite students', 'Unenroll N students?', 'Accessibility') and form labels are descriptive ('Role', 'GitHub username', 'Upload JSON file'); no vague or empty headings/labels. (Heading LEVEL ordering is tracked separately under 1.3.1; 2.4.6 descriptiveness is met.)"
+  },
+  "2.4.7": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "Manual keyboard pass + screenshots in Chromium on the Organizations flow: tabbing through search, sort, view toggles, action buttons, card links, and open dropdown-menu items shows a visible focus indicator on each (2px solid outline, plus a background change on menu items). Native inputs/selects confirmed visually focus-ringed. Verified on the primary authenticated flow; a full per-route sweep remains."
+  },
+  "2.5.3": {
+    "status": "partially",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "Manual accessibility-tree inspection in Chromium: several controls' accessible names do not contain their visible label text — e.g. links whose visible chip reads 'No service token' / 'Expiry not tracked' are named 'Review the service token for <org>', and the account button shows the user's name visually but is named 'Account menu'. This can break voice-control ('click <visible text>')."
+  },
+  "3.2.3": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "guided review comparing the sidebar across org, classroom, and assignment routes: repeated navigation keeps a consistent relative order everywhere (logo -> collapse -> level nav -> GitHub org -> footer: Dark mode -> Language -> About -> Docs -> Sign out -> Account menu). Contextual middle items change with scope as expected, but items that repeat never reorder."
+  },
+  "3.2.4": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "guided review of repeated actions across flows: same-function components are identified consistently — 'Settings'/'Sign out' are worded identically everywhere, overflow menus follow 'More actions for {name}', row actions follow '{verb} {item}' ('Delete/Lock {assignment}'), and the card links use 'Open {org}' / 'View assignments for {classroom}'. No same-function control is labeled inconsistently."
+  },
+  "3.3.7": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "guided review of the creation flows: the create-assignment form does not re-request context already known (org/classroom come from the route, not re-typed), the slug auto-derives from the name, and flows are single-step forms rather than multi-step wizards that re-ask prior data. Information already available isn't redundantly requested."
+  },
+  "3.3.8": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "guided live review of the login screen: the primary 'Sign in with GitHub' OAuth path requires no cognitive-function test (no code to memorize/transcribe; GitHub's own flow supports password managers/passkeys), and it is the default. 'Use a device code' and 'Use a personal access token' are offered as additional methods, so the transcription-based device-code path always has a no-transcription alternative (OAuth). The app stores no password (zero password fields). Meets 3.3.8's no-cognitive-test-without-alternative requirement."
+  },
+  "4.1.2": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-08-05",
+    "remark": "Manual accessibility-tree inspection in Chromium on the Organizations flow: every button/link exposes an accessible name (0 nameless interactive controls); comboboxes expose expanded state and options expose selected; the modal exposes its open state and manages focus. Minor exception: the card action dropdown uses role=menu with <button> children (not menuitem) and ArrowDown did not rove focus among items. Verified via the a11y tree, not a speaking screen reader."
+  }
+}

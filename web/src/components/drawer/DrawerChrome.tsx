@@ -11,6 +11,7 @@ import {
 } from "./SidebarContent"
 import { ClassroomLogo, ExpandSidebarButton } from "./primitives"
 import { SidebarFooter } from "./SidebarFooter"
+import { AccessibilitySidebarNav } from "./AccessibilitySidebarNav"
 import { useSidebarNav } from "./useSidebarNav"
 import { sidebarLevelVariants, pageContentVariants } from "@/lib/motion"
 
@@ -53,6 +54,19 @@ export const AppShell = ({ topSlot }: { topSlot?: ReactNode }) => (
   </div>
 )
 
+// The same drawer chrome as AppShell, but rendering `children` instead of an
+// <Outlet/>. Public routes (e.g. /accessibility) mount their page inside this
+// so they get the real, auth-aware drawer without being nested under _authed.
+export const DrawerShell = ({ children }: { children: ReactNode }) => (
+  <div className="min-h-screen">
+    <Drawer>
+      <DrawerToggle />
+      <DrawerContent>{children}</DrawerContent>
+      <DrawerSidebar />
+    </Drawer>
+  </div>
+)
+
 export const DrawerContent = ({ children }: { children: ReactNode }) => {
   const { t } = useTranslation()
   return (
@@ -78,8 +92,18 @@ export const DrawerContent = ({ children }: { children: ReactNode }) => {
   )
 }
 
+// DaisyUI's drawer state lives in this checkbox, toggled by the labeled
+// open/close buttons above (which carry their own aria-labels). The input
+// itself is a headless layout control, so hide it from assistive tech and keep
+// it out of the tab order — otherwise it surfaces as a stray unlabeled checkbox.
 export const DrawerToggle = () => (
-  <input id={MOBILE_DRAWER_ID} type="checkbox" className="drawer-toggle" />
+  <input
+    id={MOBILE_DRAWER_ID}
+    type="checkbox"
+    className="drawer-toggle"
+    aria-hidden="true"
+    tabIndex={-1}
+  />
 )
 
 // The rail lives in the persistent `_authed` shell, so it derives its active
@@ -94,14 +118,23 @@ export const DrawerToggle = () => (
 export const DrawerSidebar = () => {
   const { collapsed } = useSidebarCollapse()
   const { t } = useTranslation()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  // The accessibility page is public and section-navigated, so its rail shows
+  // the section deep links (not the org/class menus) for every visitor —
+  // signed-in users still get a "Back to app" row and the full account footer.
+  const onAccessibility = pathname.replace(/\/$/, "") === "/accessibility"
   const { page, selected, settings, levelKey } = useSidebarNav()
   return (
     <div className="drawer-side z-40">
-      <label
-        htmlFor={MOBILE_DRAWER_ID}
-        aria-label={t("nav.closeMenu")}
-        className="drawer-overlay"
-      />
+      {/* DaisyUI click-outside scrim to close the mobile drawer (the htmlFor
+          toggles the drawer checkbox with no JS). A bare <label> has
+          role=generic, which prohibits aria-label (axe aria-prohibited-attr);
+          give it visually-hidden text instead so it has an accessible name via
+          real content and stays associated with its control (eslint
+          label-has-associated-control). */}
+      <label htmlFor={MOBILE_DRAWER_ID} className="drawer-overlay">
+        <span className="sr-only">{t("nav.closeMenu")}</span>
+      </label>
       <nav
         aria-label={t("nav.primary")}
         className={`flex flex-col min-h-full bg-neutral text-neutral-content transition-[width] duration-200 ease-out ${
@@ -112,23 +145,30 @@ export const DrawerSidebar = () => {
       >
         <ClassroomLogo />
         <ExpandSidebarButton />
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={levelKey}
-            variants={sidebarLevelVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-          >
-            {page === "classes" ? (
-              <SidebarContentClasses selected={selected} settings={settings} />
-            ) : page === "orgs" ? (
-              <SidebarContentOrgs selected={selected} />
-            ) : (
-              <SidebarContent selected={selected} />
-            )}
-          </motion.div>
-        </AnimatePresence>
+        {onAccessibility ? (
+          <AccessibilitySidebarNav />
+        ) : (
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={levelKey}
+              variants={sidebarLevelVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              {page === "classes" ? (
+                <SidebarContentClasses
+                  selected={selected}
+                  settings={settings}
+                />
+              ) : page === "orgs" ? (
+                <SidebarContentOrgs selected={selected} />
+              ) : (
+                <SidebarContent selected={selected} />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        )}
         <SidebarFooter />
       </nav>
     </div>

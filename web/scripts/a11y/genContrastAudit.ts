@@ -13,10 +13,12 @@ import { fileURLToPath } from "node:url"
 import {
   renderContrastJson,
   renderContrastReport,
-} from "../src/util/contrastReport"
+} from "../../src/util/a11y/contrastReport"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const dir = path.resolve(here, "..")
+// scripts/a11y/ -> web/ (two levels up): outputs land at the web root, served
+// from dist/ and uploaded as CI artifacts.
+const dir = path.resolve(here, "..", "..")
 
 const outputs: [string, string][] = [
   ["contrast-audit.json", renderContrastJson()],

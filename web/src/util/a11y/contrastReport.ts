@@ -139,9 +139,9 @@ export function renderContrastReport(now = new Date()): string {
   out.push("# WCAG 2.2 Contrast Audit — Classroom50 web app")
   out.push("")
   out.push(
-    "Derived from `contrast-audit.json` (built from `src/util/contrastModel.ts`). " +
+    "Derived from `contrast-audit.json` (built from `src/util/a11y/contrastModel.ts`). " +
       "Not committed and not hand-edited — regenerate it. The machine guard " +
-      "(`src/util/contrastGuard.test.ts`) fails CI if any enforced pair drops " +
+      "(`src/util/a11y/contrastGuard.test.ts`) fails CI if any enforced pair drops " +
       "below its spec floor, so this report always reflects guaranteed-green state.",
   )
   out.push("")

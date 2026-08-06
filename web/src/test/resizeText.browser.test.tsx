@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { render } from "@testing-library/react"
 
 import { Card } from "@/components/ui"
-import { fitsViewportWidth } from "@/util/a11yStructural"
+import { fitsViewportWidth } from "@/util/a11y/a11yStructural"
 import { descendantWidths, setupBrowserA11y, VIEWPORT } from "./browserA11y"
 
 // 1.4.4 Resize Text: text scales to 200% without loss of content. The browser-

@@ -304,6 +304,7 @@ function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
     <Link
       to="/$org"
       params={{ org: org.login }}
+      aria-label={t("orgs.card.openAria", { org: org.login })}
       className="btn btn-primary btn-sm"
     >
       {t("orgs.card.open")}

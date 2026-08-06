@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { can } from "@/authz"
-import { Tip, SidebarItemBody } from "./primitives"
+import { SidebarItemBody, SidebarNavItem } from "./primitives"
 
 export const StaffSidebarMenu = ({
   org,
@@ -29,7 +29,7 @@ export const StaffSidebarMenu = ({
   return (
     <div className="py-4">
       <ul className="flex flex-col gap-1">
-        <Tip label={t("nav.assignments")}>
+        <SidebarNavItem label={t("nav.assignments")}>
           <Link to="/$org/$classroom/assignments" params={{ org, classroom }}>
             <SidebarItemBody
               label={t("nav.assignments")}
@@ -38,7 +38,7 @@ export const StaffSidebarMenu = ({
               groupId="staff"
             />
           </Link>
-        </Tip>
+        </SidebarNavItem>
         {!roleResolved ? (
           <>
             {[0, 1].map((i) => (
@@ -50,7 +50,7 @@ export const StaffSidebarMenu = ({
         ) : (
           showStaffItems && (
             <>
-              <Tip label={t("nav.roster")}>
+              <SidebarNavItem label={t("nav.roster")}>
                 <Link to="/$org/$classroom/roster" params={{ org, classroom }}>
                   <SidebarItemBody
                     label={t("nav.roster")}
@@ -59,9 +59,9 @@ export const StaffSidebarMenu = ({
                     groupId="staff"
                   />
                 </Link>
-              </Tip>
+              </SidebarNavItem>
               {canEditSettings && (
-                <Tip label={t("nav.settings")}>
+                <SidebarNavItem label={t("nav.settings")}>
                   <Link
                     to="/$org/$classroom/settings"
                     params={{ org, classroom }}
@@ -73,7 +73,7 @@ export const StaffSidebarMenu = ({
                       groupId="staff"
                     />
                   </Link>
-                </Tip>
+                </SidebarNavItem>
               )}
             </>
           )
