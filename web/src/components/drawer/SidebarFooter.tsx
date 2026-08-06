@@ -60,7 +60,111 @@ export const ThemeToggleTrack = ({ on }: { on: boolean }) => (
   </span>
 )
 
+// The account footer picks an auth-aware variant: signed-in users get the full
+// account menu (role, View-as, sign-out) below; signed-out visitors get a
+// minimal footer with no GitHub-client hooks (so it renders on public pages
+// like /accessibility without a client or org-role providers).
 export const SidebarFooter = () => {
+  const { status } = useGithubAuth()
+  return status === "authenticated" ? (
+    <AuthedSidebarFooter />
+  ) : (
+    <PublicSidebarFooter />
+  )
+}
+
+// The signed-out footer: the shared info controls (theme, language, about,
+// accessibility, docs) plus a Sign in action — no avatar/role/View-as/sign-out
+// and, crucially, none of the GitHub-client hooks the authed footer calls.
+function PublicSidebarFooter() {
+  const { t } = useTranslation()
+  const { collapsed } = useSidebarCollapse()
+  const { isDark, toggleTheme } = useTheme()
+  const langDialogRef = useRef<HTMLDialogElement | null>(null)
+  const langDialogTitleId = useId()
+  const aboutDialogRef = useRef<HTMLDialogElement | null>(null)
+  const aboutDialogTitleId = useId()
+
+  return (
+    <div className="mt-auto border-t border-neutral-content/20 py-2">
+      <ul className="menu w-full gap-1">
+        <li>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-pressed={isDark}
+            title={
+              collapsed
+                ? t(isDark ? "nav.darkMode" : "nav.lightMode")
+                : undefined
+            }
+          >
+            {isDark ? (
+              <Moon aria-hidden="true" className="size-4" />
+            ) : (
+              <Sun aria-hidden="true" className="size-4" />
+            )}
+            {!collapsed && (
+              <>
+                <span className="flex-1 text-start">
+                  {isDark ? t("nav.darkMode") : t("nav.lightMode")}
+                </span>
+                <ThemeToggleTrack on={isDark} />
+              </>
+            )}
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => langDialogRef.current?.showModal()}
+            title={collapsed ? t("nav.language") : undefined}
+          >
+            <Languages aria-hidden="true" className="size-4" />
+            {!collapsed && (
+              <span className="flex-1 text-start">{t("nav.language")}</span>
+            )}
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => aboutDialogRef.current?.showModal()}
+            title={collapsed ? t("nav.about") : undefined}
+          >
+            <Info aria-hidden="true" className="size-4" />
+            {!collapsed && (
+              <span className="flex-1 text-start">{t("nav.about")}</span>
+            )}
+          </button>
+        </li>
+        <li>
+          <a
+            href={WIKI_URL}
+            target="_blank"
+            rel="noreferrer"
+            title={collapsed ? t("nav.docs") : undefined}
+          >
+            <BookOpen aria-hidden="true" className="size-4" />
+            {!collapsed && (
+              <span className="flex-1 text-start">{t("nav.docs")}</span>
+            )}
+          </a>
+        </li>
+      </ul>
+
+      {createPortal(
+        <>
+          <LanguageDialog ref={langDialogRef} titleId={langDialogTitleId} />
+          <AboutDialog ref={aboutDialogRef} titleId={aboutDialogTitleId} />
+        </>,
+        document.body,
+      )}
+    </div>
+  )
+}
+
+const AuthedSidebarFooter = () => {
   const { signOut, user } = useGithubAuth()
   const { t } = useTranslation()
   const avatar_img = user?.avatar_url || duck

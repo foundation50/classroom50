@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useRouterState } from "@tanstack/react-router"
 import { Info, CircleDashed, Download } from "lucide-react"
 
 import { Alert, Badge, Button, Card, Modal, Toolbar, cx } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
-import { PublicAppShell } from "@/components/drawer/PublicAppShell"
+import { DrawerShell } from "@/components/drawer"
+import { sectionFromHash } from "@/util/a11y/accessibilitySections"
 import type { BadgeTone } from "@/types/badgeTone"
 import { CONFORMANCE_TONE, hasGenericRemark } from "@/util/a11y/vpatModel"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -751,8 +753,6 @@ function ContrastSection() {
   )
 }
 
-type PanelKey = "contrast" | "vpat" | "statement" | "downloads"
-
 // The public accessibility statement (W3C best practice): commitment +
 // conformance target, the current known limitations, and a feedback path. Prose
 // is i18n-backed; the discussion link is the feedback route (issue #493).
@@ -855,52 +855,29 @@ function DownloadsSection() {
 export default function AccessibilityPage() {
   const { t } = useTranslation()
   useDocumentTitle(t("accessibility.pageTitle"))
-  const [panel, setPanel] = useState<PanelKey>("vpat")
-
-  const tabs: { key: PanelKey; label: string }[] = [
-    { key: "vpat", label: t("accessibility.tab.vpat") },
-    { key: "contrast", label: t("accessibility.tab.contrast") },
-    { key: "statement", label: t("accessibility.tab.statement") },
-    { key: "downloads", label: t("accessibility.tab.downloads") },
-  ]
+  // The URL hash is the single source of truth for the active section, so the
+  // public drawer's section links (and shared/bookmarked deep links) drive it.
+  const hash = useRouterState({ select: (s) => s.location.hash })
+  const section = sectionFromHash(hash)
 
   return (
-    <PublicAppShell>
-      <PageShell contentClassName="mx-auto max-w-6xl p-6 2xl:px-8">
+    <DrawerShell>
+      <PageShell>
         <PageHeader
           title={t("accessibility.pageTitle")}
           subtitle={t("accessibility.pageSubtitle")}
         />
 
-        <div
-          role="tablist"
-          aria-label={t("accessibility.pageTitle")}
-          className="tabs-boxed tabs w-fit"
-        >
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              role="tab"
-              aria-selected={tab.key === panel}
-              className={cx("tab", tab.key === panel && "tab-active")}
-              onClick={() => setPanel(tab.key)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {panel === "vpat" ? (
+        {section === "conformance" ? (
           <VpatSection />
-        ) : panel === "contrast" ? (
+        ) : section === "color-contrast" ? (
           <ContrastSection />
-        ) : panel === "statement" ? (
+        ) : section === "statement" ? (
           <StatementSection />
         ) : (
           <DownloadsSection />
         )}
       </PageShell>
-    </PublicAppShell>
+    </DrawerShell>
   )
 }

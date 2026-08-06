@@ -5,6 +5,7 @@
 export { default } from "./collapseContext"
 export {
   AppShell,
+  DrawerShell,
   DrawerContent,
   DrawerToggle,
   DrawerSidebar,
