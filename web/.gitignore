@@ -48,6 +48,7 @@ contrast-audit.json
 VPAT.md
 VPAT-INT.md
 vpat-report.json
+ACCESSIBILITY-REPORT.md
 
 # Generated accessibility inventory (criterion status + bound checks). Rendering
 # of guarded state (vpatAutomated.test.ts enforces the bindings); CI artifact,

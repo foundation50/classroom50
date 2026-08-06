@@ -1,5 +1,6 @@
 // Writes vpat-report.json + VPAT.md (WCAG) + VPAT-INT.md (INT: Section 508 +
-// EN 301 549 + WCAG 2.2) from the pure renderers. Run via `npm run audit:vpat`
+// EN 301 549 + WCAG 2.2) + ACCESSIBILITY-REPORT.md (both editions + the contrast
+// audit in one file) from the pure renderers. Run via `npm run audit:vpat`
 // (vite-node resolves the `@/` alias + TS). The outputs are gitignored — never
 // committed — because they are renderings of guarded state (vpatGuard.test.ts +
 // the contrast guard enforce the facts). CI uploads them as build artifacts, and
@@ -12,6 +13,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import {
+  renderCombinedReport,
   renderVpatJson,
   renderVpatReport,
 } from "../../src/util/a11y/vpatReport"
@@ -24,6 +26,7 @@ const outputs: [string, string][] = [
   ["vpat-report.json", renderVpatJson()],
   ["VPAT.md", renderVpatReport("wcag")],
   ["VPAT-INT.md", renderVpatReport("int")],
+  ["ACCESSIBILITY-REPORT.md", renderCombinedReport()],
 ]
 for (const [name, body] of outputs) {
   const outPath = path.join(dir, name)

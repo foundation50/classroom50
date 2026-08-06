@@ -29,7 +29,21 @@
       "vpatIntTitle": "VPAT — INT / 508 edition",
       "vpatIntDesc": "The same conformance report framed for Section 508 and EN 301 549 procurement.",
       "contrastTitle": "Color contrast audit",
-      "contrastDesc": "Per-pair contrast ratios for every audited color, both themes."
+      "contrastDesc": "Per-pair contrast ratios for every audited color, both themes.",
+      "fullTitle": "Full report",
+      "fullDesc": "Both VPAT editions and the color contrast audit combined into one file.",
+      "pdfTitle": "Full report (PDF)",
+      "pdfDesc": "Print or save the full report as a PDF using your browser's print dialog.",
+      "pdfAction": "Print / Save as PDF"
+    },
+    "print": {
+      "reportTitle": "Accessibility Conformance Report — {{product}}",
+      "reportMeta": "Standard: WCAG {{standard}}, target Level {{target}}. Report date: {{date}}.",
+      "vpatSummary": "Summary ({{total}} applicable criteria): {{supports}} Supports, {{partially}} Partially Supports, {{doesNotSupport}} Does Not Support, {{notApplicable}} Not Applicable, {{notEvaluated}} Not Evaluated.",
+      "contrastTitle": "Color contrast audit",
+      "contrastMeta": "Per-pair WCAG contrast ratios for every audited color, both themes. Generated {{date}}.",
+      "colColors": "Colors (fg / bg)",
+      "belowMargin": "(below {{margin}}:1 recommended)"
     },
     "loadError": "Couldn't load the contrast audit report.",
     "summaryPass": "All {{total}} audited color pairs meet their WCAG contrast floor.",

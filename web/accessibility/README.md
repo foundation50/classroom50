@@ -21,8 +21,9 @@ overclaim — e.g. a `supports` with no evidence — so the rendered report can
 never drift from this file.
 
 Do **not** hand-edit the generated artifacts (`VPAT.md`, `VPAT-INT.md`,
-`vpat-report.json`, `contrast-audit.json`, `a11y-inventory.json`) — they are
-gitignored renderings. Edit `vpatVerdicts.json` (via the tool below) instead.
+`ACCESSIBILITY-REPORT.md`, `vpat-report.json`, `contrast-audit.json`,
+`a11y-inventory.json`) — they are gitignored renderings. Edit `vpatVerdicts.json`
+(via the tool below) instead.
 
 ## Verdict shape
 
@@ -93,10 +94,11 @@ redirects away and its write endpoint does not exist in a production build.
 
 From `web/` (outputs are gitignored; CI uploads them as artifacts and the Vite
 build emits them into `dist/`, served at `/VPAT.md`, `/VPAT-INT.md`,
-`/vpat-report.json`, `/CONTRAST-AUDIT.md`, `/contrast-audit.json`):
+`/ACCESSIBILITY-REPORT.md`, `/vpat-report.json`, `/CONTRAST-AUDIT.md`,
+`/contrast-audit.json`):
 
 ```bash
-npm run audit:vpat            # VPAT.md (WCAG) + VPAT-INT.md (508/EN 301 549) + vpat-report.json
+npm run audit:vpat            # VPAT.md (WCAG) + VPAT-INT.md (508/EN 301 549) + ACCESSIBILITY-REPORT.md (combined) + vpat-report.json
 npm run audit:contrast        # CONTRAST-AUDIT.md + contrast-audit.json
 npm run audit:a11y            # the automated a11y checks (axe + structural + bindings)
 npm run audit:a11y:inventory  # a11y-inventory.json (what each verdict is backed by)

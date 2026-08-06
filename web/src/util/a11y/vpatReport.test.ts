@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest"
 
 import { CONTRAST_CRITERION_IDS } from "./vpatModel"
-import { buildVpatReport, renderVpatJson, renderVpatReport } from "./vpatReport"
+import {
+  buildVpatReport,
+  renderCombinedReport,
+  renderVpatJson,
+  renderVpatReport,
+} from "./vpatReport"
 
 const FIXED = new Date("2026-08-04T00:00:00Z")
 
@@ -137,5 +142,26 @@ describe("renderVpatJson", () => {
     const parsed = JSON.parse(renderVpatJson(FIXED))
     expect(parsed.summary).toEqual(buildVpatReport(FIXED).summary)
     expect(parsed.generated).toBe("2026-08-04")
+  })
+})
+
+describe("renderCombinedReport", () => {
+  const md = renderCombinedReport(FIXED)
+
+  it("bundles both VPAT editions and the contrast audit", () => {
+    expect(md).toContain("VPAT® 2.5Rev — WCAG Edition")
+    expect(md).toContain(
+      "VPAT® 2.5Rev — INT Edition (Section 508 + EN 301 549 + WCAG 2.2)",
+    )
+    expect(md).toContain("# WCAG 2.2 Contrast Audit — Classroom50 web app")
+  })
+
+  it("separates the three documents with a horizontal rule", () => {
+    // Two rules join the three sections; more would signal an extra doc slipped in.
+    expect(md.match(/^---$/gm)?.length).toBe(2)
+  })
+
+  it("is deterministic for a fixed date", () => {
+    expect(renderCombinedReport(FIXED)).toBe(md)
   })
 })

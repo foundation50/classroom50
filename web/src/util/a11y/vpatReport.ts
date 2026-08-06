@@ -12,7 +12,7 @@
 // it stays a util/ leaf; the integrity guard (vpatGuard.test.ts) enforces the
 // same facts, so every rendering reflects guarded state.
 
-import { buildContrastAudit } from "./contrastReport"
+import { buildContrastAudit, renderContrastReport } from "./contrastReport"
 import {
   CONFORMANCE_LABEL,
   CONTRAST_CRITERION_IDS,
@@ -243,4 +243,20 @@ export function renderVpatReport(
   return edition === "wcag"
     ? renderWcagEdition(report)
     : renderIntEdition(report)
+}
+
+// The complete accessibility report in one file: both VPAT editions and the
+// contrast audit, in the order a reviewer reads them (conformance first, the
+// 508/EN framing, then the contrast evidence the contrast criteria derive from).
+// A rendering over the same single sources as the individual downloads — never a
+// separate assessment — so it can't disagree with them.
+export function renderCombinedReport(now = new Date()): string {
+  const sections = [
+    renderVpatReport("wcag", now),
+    renderVpatReport("int", now),
+    renderContrastReport(now),
+  ]
+  // A horizontal rule between the three documents so their headings don't read
+  // as one continuous report when concatenated.
+  return sections.join("\n---\n\n")
 }

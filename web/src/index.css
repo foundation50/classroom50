@@ -422,3 +422,141 @@ textarea::placeholder {
 [data-theme="sumi-dark"] .text-neutral-content\/70 {
   color: color-mix(in oklab, var(--color-neutral-content) 85%, transparent);
 }
+
+/* Print / Save-as-PDF of the full accessibility report. The report content is
+   portaled to <body> as a sibling of #root (see AccessibilityPage) and stays
+   hidden on screen; during print we hide #root (the app chrome — drawer, tabs,
+   buttons) and reveal the report so the PDF is just the report. Printed on white
+   with black text and visible table borders so the VPAT/contrast tables read as
+   a clean document regardless of the active theme. */
+.report-print {
+  display: none;
+}
+
+@media print {
+  /* A comfortable document margin; the swatch previews and status backgrounds
+     must survive the browser's default "don't print backgrounds" behavior. */
+  @page {
+    margin: 16mm 14mm;
+  }
+
+  /* Hide the whole app UI; only the portaled report prints. */
+  #root {
+    display: none !important;
+  }
+
+  .report-print {
+    display: block !important;
+    color: #111;
+    background: #fff;
+    font-size: 10pt;
+    line-height: 1.45;
+    /* Print the color swatches and any tinted cells, not just white boxes. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .report-print h1 {
+    font-size: 16pt;
+    font-weight: 700;
+    margin: 0 0 4pt;
+  }
+
+  .report-print h2 {
+    font-size: 12pt;
+    font-weight: 600;
+    margin: 14pt 0 5pt;
+    padding-bottom: 2pt;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .report-print p {
+    margin: 0 0 6pt;
+  }
+
+  /* Muted preamble/date lines under a heading. */
+  .report-print .report-meta,
+  .report-print .report-sub {
+    color: #555;
+  }
+
+  .report-print .report-summary {
+    font-weight: 600;
+    margin-bottom: 10pt;
+  }
+
+  .report-print .mono {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+
+  .report-print table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 8pt;
+    page-break-inside: auto;
+  }
+
+  .report-print th,
+  .report-print td {
+    border: 1px solid #bbb;
+    padding: 3pt 5pt;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .report-print th {
+    background: #f0f0f0;
+    font-weight: 600;
+  }
+
+  /* Right-align the numeric contrast columns. */
+  .report-print th.num,
+  .report-print td.num {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* Zebra striping for scanability across long conformance tables. */
+  .report-print tbody tr:nth-child(even) td {
+    background: #f7f7f7;
+  }
+
+  /* The live foreground-on-surface contrast preview, mirroring the on-screen
+     swatch so the PDF shows the actual rendered pair, not just hex codes. */
+  .report-print .contrast-swatch {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 22px;
+    border: 1px solid #999;
+    border-radius: 3px;
+    font-size: 9pt;
+    font-weight: 600;
+  }
+
+  /* Keep the preview cells tight so the swatch column doesn't sprawl. */
+  .report-print .contrast-table td:first-child,
+  .report-print .contrast-table th:first-child {
+    width: 1%;
+    white-space: nowrap;
+  }
+
+  .report-print thead {
+    display: table-header-group;
+  }
+
+  .report-print tr {
+    page-break-inside: avoid;
+  }
+
+  .report-print h1,
+  .report-print h2 {
+    page-break-after: avoid;
+  }
+
+  /* Start each major report document on a fresh page. */
+  .report-print .report-doc + .report-doc {
+    page-break-before: always;
+  }
+}

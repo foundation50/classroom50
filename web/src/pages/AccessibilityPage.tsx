@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { ReactElement } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { useRouterState } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
-import { Info, CircleDashed, Download } from "lucide-react"
+import { Info, CircleDashed, Download, Printer } from "lucide-react"
 
 import { Alert, Badge, Button, Card, Modal, Toolbar, cx } from "@/components/ui"
 import PageShell from "@/components/PageShell"
@@ -16,6 +17,7 @@ import {
 import type { BadgeTone } from "@/types/badgeTone"
 import {
   CONFORMANCE_TONE,
+  CONFORMANCE_LABEL,
   hasGenericRemark,
   PRINCIPLE_ORDER,
   type ConformanceLevel,
@@ -71,7 +73,13 @@ const STATUS_TONE: Record<ContrastStatus, BadgeTone> = {
 
 type Vpat = Pick<
   VpatReportJson,
-  "schema" | "product" | "generated" | "summary" | "criteria"
+  | "schema"
+  | "product"
+  | "generated"
+  | "summary"
+  | "criteria"
+  | "standard"
+  | "target"
 >
 
 // One shared fetch of the build-emitted vpat-report.json, so the conformance
@@ -85,6 +93,20 @@ function useVpatReport() {
       const res = await fetch("/vpat-report.json")
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return res.json() as Promise<Vpat>
+    },
+    staleTime: Infinity,
+  })
+}
+
+// One shared fetch of the build-emitted contrast-audit.json (static asset), so
+// the contrast table and the printable full report read from a single request.
+function useContrastAudit() {
+  return useQuery({
+    queryKey: ["contrast-audit"],
+    queryFn: async (): Promise<Audit> => {
+      const res = await fetch("/contrast-audit.json")
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res.json() as Promise<Audit>
     },
     staleTime: Infinity,
   })
@@ -612,31 +634,14 @@ function VpatSection() {
 
 function ContrastSection() {
   const { t } = useTranslation()
-  const [audit, setAudit] = useState<Audit | null>(null)
-  const [error, setError] = useState(false)
-  const [activeTheme, setActiveTheme] = useState<string | null>(null)
+  const { data: audit = null, isError: error } = useContrastAudit()
+  // null = "no explicit pick yet"; the shown theme then defaults to the first.
+  // Deriving the shown theme (rather than syncing it in an effect) keeps the
+  // user's later choice sticky without a setState-in-effect.
+  const [pickedTheme, setPickedTheme] = useState<string | null>(null)
   const [selectedRow, setSelectedRow] = useState<Row | null>(null)
 
-  useEffect(() => {
-    let active = true
-    fetch("/contrast-audit.json")
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return res.json() as Promise<Audit>
-      })
-      .then((data) => {
-        if (!active) return
-        setAudit(data)
-        setActiveTheme(data.themes[0]?.theme ?? null)
-      })
-      .catch(() => {
-        if (active) setError(true)
-      })
-    return () => {
-      active = false
-    }
-  }, [])
-
+  const activeTheme = pickedTheme ?? audit?.themes[0]?.theme ?? null
   const shownTheme = audit?.themes.find((th) => th.theme === activeTheme)
   const marginCount = audit?.summary.marginMisses ?? 0
 
@@ -678,7 +683,7 @@ function ContrastSection() {
                   role="tab"
                   aria-selected={th.theme === activeTheme}
                   className={tabClass(th.theme === activeTheme)}
-                  onClick={() => setActiveTheme(th.theme)}
+                  onClick={() => setPickedTheme(th.theme)}
                 >
                   {th.label}
                 </button>
@@ -874,6 +879,34 @@ function DownloadRow({
   )
 }
 
+// The full report as a browser print / Save-as-PDF, using the same row layout as
+// the download rows. The printable DOM is always mounted (hidden on screen); the
+// button just opens the browser print dialog, where the user picks "Save as PDF".
+function PrintReportRow() {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="font-medium">
+          {t("accessibility.downloads.pdfTitle")}
+        </div>
+        <p className="text-sm text-base-content/70">
+          {t("accessibility.downloads.pdfDesc")}
+        </p>
+      </div>
+      <Button
+        onClick={() => window.print()}
+        variant="outline"
+        size="sm"
+        className="shrink-0"
+      >
+        <Printer aria-hidden="true" className="size-4" />
+        {t("accessibility.downloads.pdfAction")}
+      </Button>
+    </div>
+  )
+}
+
 // A single place to find and download every report, so the report tabs stay
 // focused on reading rather than repeating download controls.
 function DownloadsSection() {
@@ -903,9 +936,164 @@ function DownloadsSection() {
             title={t("accessibility.downloads.contrastTitle")}
             description={t("accessibility.downloads.contrastDesc")}
           />
+          <DownloadRow
+            href="/ACCESSIBILITY-REPORT.md"
+            title={t("accessibility.downloads.fullTitle")}
+            description={t("accessibility.downloads.fullDesc")}
+          />
+          <PrintReportRow />
         </Card.Body>
       </Card>
     </section>
+  )
+}
+
+// The full report, rendered as plain semantic HTML for browser print / Save as
+// PDF. Kept in the DOM but hidden on screen (`.report-print` is display:none
+// except under @media print); the "Print / Save as PDF" control just calls
+// window.print(). Built from the same JSON the page already fetches — the VPAT
+// The full report, rendered as plain semantic HTML for browser print / Save as
+// PDF. Portaled to <body> (a sibling of #root) and hidden on screen; the "Print
+// / Save as PDF" control just calls window.print(). Portaling matters: the print
+// CSS hides #root, and if this lived inside #root a display:none ancestor would
+// hide it too (an ancestor's display:none can't be overridden by a descendant),
+// leaving a blank PDF. Built from the same JSON the page already fetches — the
+// VPAT (both editions share one criteria set) and the contrast audit — so the
+// PDF is a rendering of the single source, never a separate assessment.
+// Deliberately theme-agnostic (black on white, bordered tables) so the PDF reads
+// as a clean document regardless of the active theme.
+function PrintableReport() {
+  const { t } = useTranslation()
+  const { data: vpat = null } = useVpatReport()
+  const { data: contrast = null } = useContrastAudit()
+
+  const criteriaByPrinciple = useMemo(() => {
+    const map = {} as Record<WcagPrinciple, Criterion[]>
+    for (const p of PRINCIPLE_ORDER) map[p] = []
+    for (const c of vpat?.criteria ?? []) map[c.principle].push(c)
+    return map
+  }, [vpat])
+
+  // Not ready yet: nothing to print (and nothing to portal).
+  if (!vpat || !contrast) return null
+
+  return createPortal(
+    <div className="report-print" aria-hidden="true">
+      <section className="report-doc">
+        <h1>
+          {t("accessibility.print.reportTitle", { product: vpat.product })}
+        </h1>
+        <p className="report-meta">
+          {t("accessibility.print.reportMeta", {
+            standard: vpat.standard,
+            target: vpat.target,
+            date: vpat.generated,
+          })}
+        </p>
+        <p className="report-summary">
+          {t("accessibility.print.vpatSummary", {
+            total: vpat.summary.total,
+            supports: vpat.summary.byStatus.supports,
+            partially: vpat.summary.byStatus.partially,
+            doesNotSupport: vpat.summary.byStatus.doesNotSupport,
+            notApplicable: vpat.summary.byStatus.notApplicable,
+            notEvaluated: vpat.summary.byStatus.notEvaluated,
+          })}
+        </p>
+        {PRINCIPLE_ORDER.filter((p) => criteriaByPrinciple[p].length > 0).map(
+          (principle) => (
+            <div key={principle}>
+              <h2>{principle}</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("accessibility.vpat.col.criterion")}</th>
+                    <th>{t("accessibility.vpat.col.level")}</th>
+                    <th>{t("accessibility.vpat.col.conformance")}</th>
+                    <th>{t("accessibility.vpat.col.assessed")}</th>
+                    <th>{t("accessibility.vpat.col.remarks")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {criteriaByPrinciple[principle].map((c) => (
+                    <tr key={c.id}>
+                      <td>
+                        <span className="mono report-sub">{c.id}</span> {c.name}
+                      </td>
+                      <td className="mono">{c.level}</td>
+                      <td>{CONFORMANCE_LABEL[c.status]}</td>
+                      <td className="mono report-sub">
+                        {c.assessed ?? vpat.generated}
+                      </td>
+                      <td>{hasGenericRemark(c) ? "—" : c.remark}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ),
+        )}
+      </section>
+
+      <section className="report-doc">
+        <h1>{t("accessibility.print.contrastTitle")}</h1>
+        <p className="report-meta">
+          {t("accessibility.print.contrastMeta", { date: contrast.generated })}
+        </p>
+        {contrast.themes.map((th) => (
+          <div key={th.theme}>
+            <h2>{th.label}</h2>
+            <table className="contrast-table">
+              <thead>
+                <tr>
+                  <th>{t("accessibility.col.preview")}</th>
+                  <th>{t("accessibility.col.pair")}</th>
+                  <th>{t("accessibility.col.description")}</th>
+                  <th>{t("accessibility.print.colColors")}</th>
+                  <th className="num">{t("accessibility.col.ratio")}</th>
+                  <th className="num">{t("accessibility.col.floor")}</th>
+                  <th>{t("accessibility.col.status")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {th.rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <span
+                        className="contrast-swatch"
+                        style={{
+                          backgroundColor: r.bgHex,
+                          color: r.fgHex,
+                        }}
+                      >
+                        {r.kind === "text" ? "Aa" : "▭"}
+                      </span>
+                    </td>
+                    <td className="mono">{r.id}</td>
+                    <td>
+                      {r.label}
+                      <span className="report-sub"> ({r.size})</span>
+                    </td>
+                    <td className="mono report-sub">
+                      {r.fgHex} / {r.bgHex}
+                    </td>
+                    <td className="num mono">{r.ratio.toFixed(2)}:1</td>
+                    <td className="num mono">{r.floor}:1</td>
+                    <td>
+                      {t(`accessibility.status.${r.status}`)}
+                      {r.withinMargin
+                        ? ` ${t("accessibility.print.belowMargin", { margin: r.margin })}`
+                        : ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </section>
+    </div>,
+    document.body,
   )
 }
 
@@ -927,6 +1115,7 @@ export default function AccessibilityPage() {
 
         <SectionPanel section={section} />
       </PageShell>
+      <PrintableReport />
     </DrawerShell>
   )
 }
