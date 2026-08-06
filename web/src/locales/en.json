@@ -383,6 +383,8 @@
     "about": "About",
     "docs": "Docs",
     "accessibility": "Accessibility",
+    "backToApp": "Back to app",
+    "signIn": "Sign in",
     "aboutDialogTitle": "Classroom 50",
     "aboutDialogDescription": "Build and version information for this app.",
     "aboutVersion": "Version",

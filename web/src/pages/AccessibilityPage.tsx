@@ -5,6 +5,7 @@ import { Info, CircleDashed, Download } from "lucide-react"
 import { Alert, Badge, Button, Card, Modal, Toolbar, cx } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
+import { PublicAppShell } from "@/components/drawer/PublicAppShell"
 import type { BadgeTone } from "@/types/badgeTone"
 import { CONFORMANCE_TONE, hasGenericRemark } from "@/util/a11y/vpatModel"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -864,40 +865,42 @@ export default function AccessibilityPage() {
   ]
 
   return (
-    <PageShell contentClassName="mx-auto max-w-6xl p-6 2xl:px-8">
-      <PageHeader
-        title={t("accessibility.pageTitle")}
-        subtitle={t("accessibility.pageSubtitle")}
-      />
+    <PublicAppShell>
+      <PageShell contentClassName="mx-auto max-w-6xl p-6 2xl:px-8">
+        <PageHeader
+          title={t("accessibility.pageTitle")}
+          subtitle={t("accessibility.pageSubtitle")}
+        />
 
-      <div
-        role="tablist"
-        aria-label={t("accessibility.pageTitle")}
-        className="tabs-boxed tabs w-fit"
-      >
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            role="tab"
-            aria-selected={tab.key === panel}
-            className={cx("tab", tab.key === panel && "tab-active")}
-            onClick={() => setPanel(tab.key)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+        <div
+          role="tablist"
+          aria-label={t("accessibility.pageTitle")}
+          className="tabs-boxed tabs w-fit"
+        >
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={tab.key === panel}
+              className={cx("tab", tab.key === panel && "tab-active")}
+              onClick={() => setPanel(tab.key)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-      {panel === "vpat" ? (
-        <VpatSection />
-      ) : panel === "contrast" ? (
-        <ContrastSection />
-      ) : panel === "statement" ? (
-        <StatementSection />
-      ) : (
-        <DownloadsSection />
-      )}
-    </PageShell>
+        {panel === "vpat" ? (
+          <VpatSection />
+        ) : panel === "contrast" ? (
+          <ContrastSection />
+        ) : panel === "statement" ? (
+          <StatementSection />
+        ) : (
+          <DownloadsSection />
+        )}
+      </PageShell>
+    </PublicAppShell>
   )
 }
