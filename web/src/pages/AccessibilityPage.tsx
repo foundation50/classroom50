@@ -10,6 +10,7 @@ import { DrawerShell } from "@/components/drawer"
 import { sectionFromHash } from "@/util/a11y/accessibilitySections"
 import type { BadgeTone } from "@/types/badgeTone"
 import { CONFORMANCE_TONE, hasGenericRemark } from "@/util/a11y/vpatModel"
+import { ACCESSIBILITY_ISSUE_URL } from "@/version"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
 // Public /accessibility page: renders the build-emitted contrast-audit.json (the
@@ -788,34 +789,85 @@ function ContrastSection() {
   )
 }
 
-// The public accessibility statement (W3C best practice): commitment +
-// conformance target, the current known limitations, and a feedback path. Prose
-// is i18n-backed; the discussion link is the feedback route (issue #493).
+// The public accessibility statement, following the plain-language shape W3C
+// recommends: who it's for, how we measure up, known limitations, and how to
+// give feedback. The "last reviewed" date reuses the VPAT report's generation
+// date so it can't drift from the actual assessment.
 function StatementSection() {
   const { t } = useTranslation()
+  const [generated, setGenerated] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    fetch("/vpat-report.json")
+      .then((res) => (res.ok ? (res.json() as Promise<Vpat>) : null))
+      .then((data) => {
+        if (active && data) setGenerated(data.generated)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
+
   return (
-    <Card>
-      <Card.Body className="prose prose-sm max-w-none">
-        <h2>{t("accessibility.statement.heading")}</h2>
-        <p>{t("accessibility.statement.intro")}</p>
-        <h3>{t("accessibility.statement.targetHeading")}</h3>
-        <p>{t("accessibility.statement.target")}</p>
-        <h3>{t("accessibility.statement.limitationsHeading")}</h3>
-        <p>{t("accessibility.statement.limitations")}</p>
-        <h3>{t("accessibility.statement.feedbackHeading")}</h3>
-        <p>
-          {t("accessibility.statement.feedback")}{" "}
-          <a
-            href="https://github.com/foundation50/classroom50/discussions/493"
-            target="_blank"
-            rel="noopener noreferrer"
+    <section aria-labelledby="statement-heading">
+      <Card radius="xl" shadow={false}>
+        <Card.Body className="max-w-2xl gap-6 p-6">
+          <h2
+            id="statement-heading"
+            className="text-2xl font-bold tracking-tight"
           >
-            {t("accessibility.statement.feedbackLink")}
-          </a>
-          .
-        </p>
-      </Card.Body>
-    </Card>
+            {t("accessibility.statement.heading")}
+          </h2>
+          <p className="text-base-content/80">
+            {t("accessibility.statement.intro")}
+          </p>
+
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-base-content/60">
+              {t("accessibility.statement.targetHeading")}
+            </h3>
+            <p className="text-base-content/80">
+              {t("accessibility.statement.target")}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-base-content/60">
+              {t("accessibility.statement.limitationsHeading")}
+            </h3>
+            <p className="text-base-content/80">
+              {t("accessibility.statement.limitations")}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-base-content/60">
+              {t("accessibility.statement.feedbackHeading")}
+            </h3>
+            <p className="text-base-content/80">
+              {t("accessibility.statement.feedback")}{" "}
+              <a
+                href={ACCESSIBILITY_ISSUE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="link link-primary"
+              >
+                {t("accessibility.statement.feedbackLink")}
+              </a>
+              .
+            </p>
+          </div>
+
+          {generated && (
+            <p className="text-xs text-base-content/50">
+              {t("accessibility.statement.updated", { date: generated })}
+            </p>
+          )}
+        </Card.Body>
+      </Card>
+    </section>
   )
 }
 

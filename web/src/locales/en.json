@@ -11,14 +11,15 @@
     },
     "statement": {
       "heading": "Accessibility statement",
-      "intro": "Classroom 50 is committed to making its web app usable by everyone, including people who rely on assistive technology. Color contrast is verified automatically on every build; the remaining criteria are assessed by a manual keyboard and screen-reader pass.",
-      "targetHeading": "Conformance target",
-      "target": "We aim to conform to the Web Content Accessibility Guidelines (WCAG) 2.2 at Level AA.",
+      "intro": "We want everyone to be able to use Classroom 50, including people who use a keyboard, a screen reader, or other assistive technology.",
+      "targetHeading": "How we measure up",
+      "target": "We aim to meet WCAG 2.2 Level AA. Color contrast is checked on every build; the rest is checked by hand with a keyboard and a screen reader. The conformance report lists where we stand on each criterion.",
       "limitationsHeading": "Known limitations",
-      "limitations": "A few criteria are marked \"Partially Supports\" in the conformance report, each with a note on the remaining gap. We fix these as work lands.",
-      "feedbackHeading": "Feedback",
-      "feedback": "If you encounter an accessibility barrier, please let us know via",
-      "feedbackLink": "the accessibility discussion"
+      "limitations": "A few criteria are marked \"Partially Supports\" in the conformance report, each with a note on what's left to do. We fix these as work lands.",
+      "feedbackHeading": "Give us feedback",
+      "feedback": "Found something hard to use? Please",
+      "feedbackLink": "open an accessibility issue",
+      "updated": "Last reviewed {{date}}."
     },
     "downloads": {
       "heading": "Download reports",

@@ -1,0 +1,74 @@
+name: Accessibility report
+description: Report an accessibility barrier — something hard or impossible to use with a keyboard, screen reader, or other assistive technology.
+labels: ["accessibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make Classroom 50 usable by everyone. Please search
+        [existing issues](https://github.com/foundation50/classroom50/issues?q=is%3Aissue+label%3Aaccessibility)
+        first — someone may have already reported this.
+
+        The conformance report and color-contrast audit live at
+        [classroom50.org/accessibility](https://classroom50.org/accessibility).
+
+  - type: textarea
+    id: barrier
+    attributes:
+      label: What's the barrier?
+      description: What were you trying to do, and what got in the way?
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: Where did it happen?
+      description: The page or screen — a URL is ideal (e.g. classroom50.org/…).
+    validations:
+      required: true
+
+  - type: dropdown
+    id: assistive-tech
+    attributes:
+      label: How were you using the app?
+      description: Select all that apply.
+      multiple: true
+      options:
+        - Keyboard only
+        - Screen reader
+        - Screen magnifier / zoom
+        - Voice control
+        - Reduced motion
+        - High contrast / custom colors
+        - Other assistive technology
+        - Not using assistive technology
+    validations:
+      required: true
+
+  - type: input
+    id: assistive-tech-details
+    attributes:
+      label: Which assistive technology and version?
+      description: If you used one, name it — it helps us reproduce (e.g. VoiceOver on macOS 15, NVDA 2024.4, Dragon 16).
+      placeholder: VoiceOver on macOS 15 / Safari 18
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: How should it have worked instead?
+
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and OS
+      placeholder: Firefox 128 on Windows 11
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true

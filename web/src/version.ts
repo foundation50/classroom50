@@ -25,6 +25,12 @@ export const REPO_URL = "https://github.com/foundation50/classroom50"
 
 export const ISSUES_URL = `${REPO_URL}/issues`
 
+// Opens a new issue pre-filled with the accessibility report template
+// (.github/ISSUE_TEMPLATE/accessibility_report.yml) — the feedback path on the
+// public /accessibility page, so we link to a structured report rather than a
+// hand-maintained discussion thread.
+export const ACCESSIBILITY_ISSUE_URL = `${ISSUES_URL}/new?template=accessibility_report.yml`
+
 export const DISCUSSIONS_URL = `${REPO_URL}/discussions`
 
 export const WIKI_URL = `${REPO_URL}/wiki`
