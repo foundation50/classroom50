@@ -1818,7 +1818,7 @@
   },
   "offline": {
     "title": "You're offline",
-    "body": "Classroom 50 works with live data from GitHub, so it needs a connection. This banner clears automatically when you're back online."
+    "body": "This device isn't connected to the internet. Classroom 50 needs a live connection to work. This banner clears automatically once you're back online."
   },
   "githubStatus": {
     "title": "GitHub may be having problems",
