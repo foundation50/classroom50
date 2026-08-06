@@ -2,16 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Info, CircleDashed } from "lucide-react"
 
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Modal,
-  Select,
-  StatCard,
-  cx,
-} from "@/components/ui"
+import { Alert, Badge, Button, Card, Modal, Toolbar, cx } from "@/components/ui"
+import PageShell from "@/components/PageShell"
+import PageHeader from "@/components/PageHeader"
 import type { BadgeTone } from "@/types/badgeTone"
 import { CONFORMANCE_TONE, hasGenericRemark } from "@/util/a11y/vpatModel"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -426,45 +419,31 @@ function VpatConformanceTable({
   )
 }
 
-// One summary stat that doubles as a status filter toggle. Clicking filters the
-// table to that status (or clears it back to "all" when re-clicked). Rendered
-// for every status so a non-zero count can never be hidden from the summary.
-function VpatStatCard({
+// One compact summary chip: a status dot, its label, and the count. Purely a
+// readout (not a filter toggle now — the Toolbar's status select owns
+// filtering), so the summary stays a quiet strip rather than five large cards.
+function VpatSummaryChip({
   status,
   value,
-  active,
-  onClick,
 }: {
   status: VpatConformance
   value: number
-  active: boolean
-  onClick: () => void
 }) {
   const { t } = useTranslation()
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cx(
-        "rounded-box border p-4 text-start transition-colors",
-        active
-          ? "border-primary bg-primary/5"
-          : "border-base-300 bg-base-100 hover:border-primary/40",
-      )}
-    >
-      <span className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-base-content/70">
-        <span
-          className={cx(
-            "size-2 rounded-full",
-            TONE_DOT_CLASS[CONFORMANCE_TONE[status]],
-          )}
-          aria-hidden="true"
-        />
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-base-300 px-2.5 py-1 text-xs">
+      <span
+        className={cx(
+          "size-2 rounded-full",
+          TONE_DOT_CLASS[CONFORMANCE_TONE[status]],
+        )}
+        aria-hidden="true"
+      />
+      <span className="tabular-nums font-semibold">{value}</span>
+      <span className="text-base-content/70">
         {t(`accessibility.vpat.status.${status}`)}
       </span>
-      <span className="mt-1 block text-2xl font-bold">{value}</span>
-    </button>
+    </span>
   )
 }
 
@@ -472,6 +451,7 @@ function VpatSection() {
   const { t } = useTranslation()
   const [vpat, setVpat] = useState<Vpat | null>(null)
   const [error, setError] = useState(false)
+  const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<VpatFilter>("all")
   const [sort, setSort] = useState<VpatSort>("criterion")
 
@@ -495,48 +475,59 @@ function VpatSection() {
 
   const visibleCriteria = useMemo(() => {
     if (!vpat) return []
-    const filtered =
-      filter === "all"
-        ? vpat.criteria
-        : vpat.criteria.filter((c) => c.status === filter)
+    const q = query.trim().toLowerCase()
+    const filtered = vpat.criteria.filter((c) => {
+      if (filter !== "all" && c.status !== filter) return false
+      if (!q) return true
+      return (
+        c.id.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q) ||
+        c.remark.toLowerCase().includes(q)
+      )
+    })
     if (sort === "status") {
       return [...filtered].sort(
         (a, b) => STATUS_SORT_WEIGHT[a.status] - STATUS_SORT_WEIGHT[b.status],
       )
     }
     return filtered
-  }, [vpat, filter, sort])
+  }, [vpat, query, filter, sort])
 
-  const toggleFilter = (next: VpatConformance) =>
-    setFilter((cur) => (cur === next ? "all" : next))
+  const hasActiveFilter = query.trim() !== "" || filter !== "all"
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="vpat-heading">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h2 id="vpat-heading" className="text-xl font-bold tracking-tight">
-            {t("accessibility.vpat.heading")}
-          </h2>
-          <div className="mt-1 text-sm text-base-content/70">
-            {t("accessibility.vpat.subtitle")}
-          </div>
-        </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 id="vpat-heading" className="sr-only">
+          {t("accessibility.vpat.heading")}
+        </h2>
         {vpat && (
-          <div className="flex flex-wrap gap-2">
-            <Button as="a" href="/VPAT.md" download variant="outline" size="sm">
-              {t("accessibility.vpat.downloadWcag")}
-            </Button>
-            <Button
-              as="a"
-              href="/VPAT-INT.md"
-              download
-              variant="outline"
-              size="sm"
-            >
-              {t("accessibility.vpat.downloadInt")}
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {VPAT_STATUS_ORDER.filter((s) => vpat.summary.byStatus[s] > 0).map(
+              (status) => (
+                <VpatSummaryChip
+                  key={status}
+                  status={status}
+                  value={vpat.summary.byStatus[status]}
+                />
+              ),
+            )}
           </div>
         )}
+        <div className="flex flex-wrap gap-2 sm:ms-auto">
+          <Button as="a" href="/VPAT.md" download variant="outline" size="sm">
+            {t("accessibility.vpat.downloadWcag")}
+          </Button>
+          <Button
+            as="a"
+            href="/VPAT-INT.md"
+            download
+            variant="outline"
+            size="sm"
+          >
+            {t("accessibility.vpat.downloadInt")}
+          </Button>
+        </div>
       </div>
 
       {error && <Alert tone="error">{t("accessibility.vpat.loadError")}</Alert>}
@@ -547,62 +538,63 @@ function VpatSection() {
 
       {vpat && (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {VPAT_STATUS_ORDER.map((status) => (
-              <VpatStatCard
-                key={status}
-                status={status}
-                value={vpat.summary.byStatus[status]}
-                active={filter === status}
-                onClick={() => toggleFilter(status)}
-              />
-            ))}
-          </div>
-
-          <Alert tone="info" className="items-start text-sm">
-            <Info aria-hidden="true" className="size-4 shrink-0" />
-            <span>{t("accessibility.vpat.notEvaluatedNote")}</span>
-          </Alert>
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-base-content/70">
-              {t("accessibility.vpat.generated", {
-                generated: vpat.generated,
-              })}
-            </div>
-            <div className="flex items-center gap-2">
-              {filter !== "all" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setFilter("all")}
-                >
-                  {t("accessibility.vpat.clearFilter")}
-                </Button>
-              )}
-              <label className="flex items-center gap-2 text-sm text-base-content/70">
-                {t("accessibility.vpat.sortBy")}
-                <Select
-                  selectSize="sm"
-                  className="w-auto"
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as VpatSort)}
-                >
-                  <option value="criterion">
-                    {t("accessibility.vpat.sort.criterion")}
-                  </option>
-                  <option value="status">
-                    {t("accessibility.vpat.sort.status")}
-                  </option>
-                </Select>
-              </label>
-            </div>
-          </div>
+          <Toolbar>
+            <Toolbar.Search
+              placeholder={t("accessibility.vpat.searchPlaceholder")}
+              value={query}
+              onChange={setQuery}
+              ariaLabel={t("accessibility.vpat.searchAria")}
+            />
+            <Toolbar.FilterSelect
+              label={t("accessibility.vpat.filterLabel")}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as VpatFilter)}
+              aria-label={t("accessibility.vpat.filterAria")}
+            >
+              <option value="all">{t("accessibility.vpat.filterAll")}</option>
+              {VPAT_STATUS_ORDER.map((status) => (
+                <option key={status} value={status}>
+                  {t(`accessibility.vpat.status.${status}`)}
+                </option>
+              ))}
+            </Toolbar.FilterSelect>
+            {hasActiveFilter && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setQuery("")
+                  setFilter("all")
+                }}
+              >
+                {t("accessibility.vpat.clearFilter")}
+              </Button>
+            )}
+            <Toolbar.Trailing>
+              <Toolbar.FilterSelect
+                label={t("accessibility.vpat.sortBy")}
+                value={sort}
+                onChange={(e) => setSort(e.target.value as VpatSort)}
+                aria-label={t("accessibility.vpat.sortBy")}
+              >
+                <option value="criterion">
+                  {t("accessibility.vpat.sort.criterion")}
+                </option>
+                <option value="status">
+                  {t("accessibility.vpat.sort.status")}
+                </option>
+              </Toolbar.FilterSelect>
+            </Toolbar.Trailing>
+          </Toolbar>
 
           <VpatConformanceTable
             criteria={visibleCriteria}
             generated={vpat.generated}
           />
+
+          <p className="text-xs text-base-content/60">
+            {t("accessibility.vpat.generated", { generated: vpat.generated })}
+          </p>
         </>
       )}
     </section>
@@ -640,25 +632,18 @@ function ContrastSection() {
   const marginCount = audit?.summary.marginMisses ?? 0
 
   return (
-    <section className="flex flex-col gap-6" aria-labelledby="contrast-heading">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h2
-            id="contrast-heading"
-            className="text-xl font-bold tracking-tight"
-          >
-            {t("accessibility.title")}
-          </h2>
-          <div className="mt-1 text-sm text-base-content/70">
-            {t("accessibility.subtitle")}
-          </div>
-        </div>
+    <section className="flex flex-col gap-4" aria-labelledby="contrast-heading">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 id="contrast-heading" className="sr-only">
+          {t("accessibility.title")}
+        </h2>
         <Button
           as="a"
           href="/CONTRAST-AUDIT.md"
           download
           variant="outline"
           size="sm"
+          className="sm:ms-auto"
         >
           {t("accessibility.download")}
         </Button>
@@ -672,36 +657,48 @@ function ContrastSection() {
 
       {audit && (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <StatCard
-              label={t("accessibility.stat.pairs")}
-              value={audit.summary.total}
-            />
-            <StatCard
-              label={t("accessibility.stat.pass")}
-              value={audit.summary.total - audit.summary.failures}
-              outOf={audit.summary.total}
-            />
-            <StatCard
-              label={t("accessibility.stat.withinMargin")}
-              value={audit.summary.marginMisses}
-            />
+          <p className="text-sm text-base-content/70">
+            {!audit.summary.allPass
+              ? t("accessibility.summaryFail", {
+                  failures: audit.summary.failures,
+                })
+              : marginCount > 0
+                ? t("accessibility.summaryPassMargin", {
+                    total: audit.summary.total,
+                    count: marginCount,
+                  })
+                : t("accessibility.summaryPass", {
+                    total: audit.summary.total,
+                  })}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div role="tablist" className="tabs-boxed tabs w-fit">
+              {audit.themes.map((th) => (
+                <button
+                  key={th.theme}
+                  type="button"
+                  role="tab"
+                  aria-selected={th.theme === activeTheme}
+                  className={cx(
+                    "tab",
+                    th.theme === activeTheme && "tab-active",
+                  )}
+                  onClick={() => setActiveTheme(th.theme)}
+                >
+                  {th.label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {shownTheme && (
+            <ThemeTable theme={shownTheme} onOpenRow={setSelectedRow} />
+          )}
 
           <details className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">
             <summary className="collapse-title text-sm font-medium">
-              {!audit.summary.allPass
-                ? t("accessibility.summaryFail", {
-                    failures: audit.summary.failures,
-                  })
-                : marginCount > 0
-                  ? t("accessibility.summaryPassMargin", {
-                      total: audit.summary.total,
-                      count: marginCount,
-                    })
-                  : t("accessibility.summaryPass", {
-                      total: audit.summary.total,
-                    })}
+              {t("accessibility.criteria.aboutHeading")}
             </summary>
             <div className="collapse-content flex flex-col gap-4 text-sm text-base-content/70">
               <p>{t("accessibility.criteria.standardText")}</p>
@@ -731,23 +728,6 @@ function ContrastSection() {
                 <p className="font-medium text-base-content">
                   {t("accessibility.criteria.marginHeading")}
                 </p>
-                <ul className="mt-1 list-disc ps-5">
-                  <li>
-                    {t("accessibility.criteria.marginBody", {
-                      body: audit.margins.body,
-                    })}
-                  </li>
-                  <li>
-                    {t("accessibility.criteria.marginLarge", {
-                      large: audit.margins.large,
-                    })}
-                  </li>
-                  <li>
-                    {t("accessibility.criteria.marginNonText", {
-                      nonText: audit.margins.nonText,
-                    })}
-                  </li>
-                </ul>
                 <p className="mt-1">{t("accessibility.criteria.marginWhy")}</p>
               </div>
               <div>
@@ -777,32 +757,13 @@ function ContrastSection() {
                   </span>
                 </div>
               </div>
-              <p>
+              <p className="text-xs">
                 {t("accessibility.criteria.generated", {
                   generated: audit.generated,
                 })}
               </p>
             </div>
           </details>
-
-          <div role="tablist" className="tabs-boxed tabs w-fit">
-            {audit.themes.map((th) => (
-              <button
-                key={th.theme}
-                type="button"
-                role="tab"
-                aria-selected={th.theme === activeTheme}
-                className={`tab ${th.theme === activeTheme ? "tab-active" : ""}`}
-                onClick={() => setActiveTheme(th.theme)}
-              >
-                {th.label}
-              </button>
-            ))}
-          </div>
-
-          {shownTheme && (
-            <ThemeTable theme={shownTheme} onOpenRow={setSelectedRow} />
-          )}
         </>
       )}
 
@@ -819,9 +780,9 @@ function ContrastSection() {
 
 type PanelKey = "contrast" | "vpat" | "statement"
 
-// The public accessibility statement: conformance target, how it's evidenced,
-// known limitations, and a feedback path. Prose is i18n-backed; the discussion
-// link is the feedback route (issue #493).
+// The public accessibility statement (W3C best practice): commitment +
+// conformance target, the current known limitations, and a feedback path. Prose
+// is i18n-backed; the discussion link is the feedback route (issue #493).
 function StatementSection() {
   const { t } = useTranslation()
   return (
@@ -831,8 +792,6 @@ function StatementSection() {
         <p>{t("accessibility.statement.intro")}</p>
         <h3>{t("accessibility.statement.targetHeading")}</h3>
         <p>{t("accessibility.statement.target")}</p>
-        <h3>{t("accessibility.statement.evidenceHeading")}</h3>
-        <p>{t("accessibility.statement.evidence")}</p>
         <h3>{t("accessibility.statement.limitationsHeading")}</h3>
         <p>{t("accessibility.statement.limitations")}</p>
         <h3>{t("accessibility.statement.feedbackHeading")}</h3>
@@ -855,33 +814,33 @@ function StatementSection() {
 export default function AccessibilityPage() {
   const { t } = useTranslation()
   useDocumentTitle(t("accessibility.pageTitle"))
-  const [panel, setPanel] = useState<PanelKey>("contrast")
+  const [panel, setPanel] = useState<PanelKey>("vpat")
 
   const tabs: { key: PanelKey; label: string }[] = [
-    { key: "contrast", label: t("accessibility.tab.contrast") },
     { key: "vpat", label: t("accessibility.tab.vpat") },
+    { key: "contrast", label: t("accessibility.tab.contrast") },
     { key: "statement", label: t("accessibility.tab.statement") },
   ]
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6 2xl:max-w-7xl 2xl:px-8">
-      <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-tight">
-          {t("accessibility.pageTitle")}
-        </h1>
-        <div className="mt-1 text-sm text-base-content/70">
-          {t("accessibility.pageSubtitle")}
-        </div>
-      </div>
+    <PageShell contentClassName="mx-auto max-w-5xl p-6 2xl:px-8">
+      <PageHeader
+        title={t("accessibility.pageTitle")}
+        subtitle={t("accessibility.pageSubtitle")}
+      />
 
-      <div role="tablist" className="tabs-boxed tabs w-fit">
+      <div
+        role="tablist"
+        aria-label={t("accessibility.pageTitle")}
+        className="tabs-boxed tabs w-fit"
+      >
         {tabs.map((tab) => (
           <button
             key={tab.key}
             type="button"
             role="tab"
             aria-selected={tab.key === panel}
-            className={`tab ${tab.key === panel ? "tab-active" : ""}`}
+            className={cx("tab", tab.key === panel && "tab-active")}
             onClick={() => setPanel(tab.key)}
           >
             {tab.label}
@@ -889,13 +848,13 @@ export default function AccessibilityPage() {
         ))}
       </div>
 
-      {panel === "contrast" ? (
-        <ContrastSection />
-      ) : panel === "vpat" ? (
+      {panel === "vpat" ? (
         <VpatSection />
+      ) : panel === "contrast" ? (
+        <ContrastSection />
       ) : (
         <StatementSection />
       )}
-    </div>
+    </PageShell>
   )
 }
