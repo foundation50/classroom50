@@ -13,7 +13,7 @@ import {
   SPEC_FLOOR,
   type SizeClass,
   type Theme,
-} from "./contrastModel"
+} from "./contrastModel.ts"
 
 export type ContrastStatus = "pass" | "fail" | "exempt"
 

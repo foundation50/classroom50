@@ -14,7 +14,7 @@
 // audit in vpatReport.ts (KTD4), so the two reports can never disagree.
 
 import type { BadgeTone } from "@/types/badgeTone"
-import verdicts from "../../../accessibility/vpatVerdicts.json"
+import verdicts from "../../../accessibility/vpatVerdicts.json" with { type: "json" }
 
 export type WcagPrinciple =
   "Perceivable" | "Operable" | "Understandable" | "Robust"
