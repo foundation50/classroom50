@@ -440,8 +440,13 @@ textarea::placeholder {
     margin: 16mm 14mm;
   }
 
-  /* Hide the whole app UI; only the portaled report prints. */
-  #root {
+  /* Hide the whole app UI; only the portaled report prints. The TanStack Query
+     devtools ("debug dashboard") mount their own container (and a floating
+     toggle) that can sit outside #root, so hide those explicitly too — dev-only,
+     but they'd otherwise leak into the PDF during `npm run dev`. */
+  #root,
+  .tsqd-parent-container,
+  .tsqd-open-btn-container {
     display: none !important;
   }
 
