@@ -54,6 +54,26 @@ export function commitUrl(v: AppVersion = appVersion): string {
 }
 
 /**
+ * Build timestamp as a human-friendly UTC string, e.g. "Aug 6, 2026, 02:03 UTC"
+ * — the ISO `buildDate` is precise but hard to read at a glance. Falls back to
+ * the raw value if it isn't a parseable date.
+ */
+export function formatBuildDate(v: AppVersion = appVersion): string {
+  const parsed = new Date(v.buildDate)
+  if (Number.isNaN(parsed.getTime())) return v.buildDate
+  const date = parsed.toLocaleString("en-US", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+  return `${date} UTC`
+}
+
+/**
  * Link to the GitHub Release for this build's `web-v<version>` tag. Returns null
  * for untagged/dev builds (version at package.json's placeholder or non-release),
  * where no release page exists.

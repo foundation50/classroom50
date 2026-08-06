@@ -43,6 +43,17 @@ import { DeployEnvBadge } from "./DeployEnvBadge"
 // its knob/track off `input:checked`, which a non-input can't set, so the on/off
 // look is hand-rolled here from `on`. The button owns state via aria-pressed;
 // this is aria-hidden decoration. Exported for a focused unit test.
+
+// A thin, non-interactive rule between menu groups. DaisyUI's `.divider` is a
+// flex helper with its own min-height and heavy color, which renders as a stray
+// dark bar inside a compact `.menu`; a bordered spacer is the clean separator.
+const MenuSeparator = () => (
+  <li
+    aria-hidden="true"
+    className="pointer-events-none my-1 border-t border-base-content/20"
+  />
+)
+
 export const ThemeToggleTrack = ({ on }: { on: boolean }) => (
   <span
     aria-hidden="true"
@@ -73,12 +84,13 @@ export const SidebarFooter = () => {
   )
 }
 
-// The info controls both footers share (theme, language, about, accessibility,
-// docs) as `<li>` rows, so the two footers never hand-sync a second copy. The
-// caller supplies the pieces that legitimately differ: `onActivate` closes the
-// authed account menu after a click (the public footer has no menu to close),
-// `collapsed` drives the rail tooltips, and `showAccessibility` hides the
-// Accessibility row on the /accessibility page itself.
+// The info controls both footers share as `<li>` rows, so the two footers never
+// hand-sync a second copy. Ordered by intent: preferences (theme, language),
+// then help/reference (accessibility, docs), then the least-used info (about).
+// The caller supplies the pieces that legitimately differ: `onActivate` closes
+// the authed account menu after a click (the public footer has no menu to
+// close), `collapsed` drives the rail tooltips, and `showAccessibility` hides
+// the Accessibility row on the /accessibility page itself.
 function SidebarInfoControls({
   isDark,
   toggleTheme,
@@ -143,18 +155,6 @@ function SidebarInfoControls({
           )}
         </button>
       </li>
-      <li>
-        <button
-          type="button"
-          onClick={activate(onOpenAbout)}
-          title={collapsed ? t("nav.about") : undefined}
-        >
-          <Info aria-hidden="true" className="size-4" />
-          {!collapsed && (
-            <span className="flex-1 text-start">{t("nav.about")}</span>
-          )}
-        </button>
-      </li>
       {showAccessibility && (
         <li>
           <Link to="/accessibility" onClick={activate(() => {})}>
@@ -180,6 +180,18 @@ function SidebarInfoControls({
             <span className="flex-1 text-start">{t("nav.docs")}</span>
           )}
         </a>
+      </li>
+      <li>
+        <button
+          type="button"
+          onClick={activate(onOpenAbout)}
+          title={collapsed ? t("nav.about") : undefined}
+        >
+          <Info aria-hidden="true" className="size-4" />
+          {!collapsed && (
+            <span className="flex-1 text-start">{t("nav.about")}</span>
+          )}
+        </button>
       </li>
     </>
   )
@@ -368,7 +380,7 @@ const AuthedSidebarFooter = () => {
       ) : null}
       <div
         ref={footerRef}
-        className={`relative border-t border-neutral-content/20 ${org ? "" : "mt-auto"}`}
+        className={`relative border-t border-neutral-content/20 ${collapsed ? "!px-2" : "!px-0"} ${org ? "" : "mt-auto"}`}
       >
         <div
           className={`
@@ -445,7 +457,7 @@ const AuthedSidebarFooter = () => {
                     </ul>
                   </details>
                 </li>
-                <li aria-hidden="true" className="divider my-1" />
+                <MenuSeparator />
               </>
             )}
             <SidebarInfoControls
@@ -455,7 +467,7 @@ const AuthedSidebarFooter = () => {
               onOpenAbout={() => aboutDialogRef.current?.showModal()}
               onActivate={() => setMenuOpen(false)}
             />
-            <li aria-hidden="true" className="divider my-1" />
+            <MenuSeparator />
             <li>
               <button type="button" className="text-error" onClick={signOut}>
                 <LogOut aria-hidden="true" className="size-4" />
@@ -475,7 +487,7 @@ const AuthedSidebarFooter = () => {
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           aria-label={t("nav.accountMenu")}
-          className={`flex w-full cursor-pointer items-center gap-2.5 py-3 text-start transition-colors hover:bg-[var(--sidebar-surface)]/60 ${collapsed ? "flex-col justify-center" : "justify-start"}`}
+          className={`flex w-full cursor-pointer items-center gap-2.5 py-3 text-start transition-colors hover:bg-[var(--sidebar-surface)]/60 ${collapsed ? "flex-col justify-center px-2" : "justify-start px-6"}`}
           title={collapsed ? name : undefined}
         >
           <div className="avatar avatar-placeholder">
