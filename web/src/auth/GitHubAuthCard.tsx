@@ -1,4 +1,4 @@
-import { AlertTriangle, GraduationCap } from "lucide-react"
+import { AlertTriangle, GraduationCap, Info } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 import GitHub from "@/assets/github.svg?react"
@@ -116,13 +116,14 @@ export function GitHubAuthCard() {
                     ? t("auth.offlineHold")
                     : alert === "error"
                       ? auth.error
-                      : "Your session expired — sign in again to continue."
+                      : t("auth.sessionExpired")
+                // "expired" is an informational "please sign in again" prompt,
+                // not a fault; the warning triangle overstates it, so only the
+                // offline/error tones carry the alert icon.
+                const Icon = alert === "expired" ? Info : AlertTriangle
                 return (
                   <Alert tone={tone} className="items-start text-sm">
-                    <AlertTriangle
-                      aria-hidden="true"
-                      className="size-4 shrink-0"
-                    />
+                    <Icon aria-hidden="true" className="size-4 shrink-0" />
                     <span>{message}</span>
                   </Alert>
                 )
@@ -148,6 +149,9 @@ export function GitHubAuthCard() {
                   </summary>
 
                   <div className="collapse-content space-y-3">
+                    <p className="text-xs text-base-content/60">
+                      {t("auth.otherSignInMethodsHint")}
+                    </p>
                     <Button
                       variant="outline"
                       className="w-full"
@@ -174,9 +178,9 @@ export function GitHubAuthCard() {
           )}
         </Card.Body>
 
-        <footer className="flex items-center justify-between gap-3 border-t border-base-200 px-7 py-4 text-xs text-base-content/70">
-          <span>{t("auth.footerTagline")}</span>
-          <div className="flex shrink-0 items-center gap-3">
+        <footer className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-base-200 px-7 py-4 text-xs text-base-content/70">
+          <span className="min-w-0">{t("auth.footerTagline")}</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <AppVersionBadge className="tabular-nums text-base-content/50" />
             <Link className="link link-info link-hover" to="/accessibility">
               {t("auth.accessibility")}
