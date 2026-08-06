@@ -10,8 +10,8 @@ import svgr from "vite-plugin-svgr"
 import path from "node:path"
 import { readFileSync, writeFileSync } from "node:fs"
 import { execSync } from "node:child_process"
-import { createRequire } from "node:module"
 
+import pkg from "./package.json" with { type: "json" }
 import {
   renderContrastJson,
   renderContrastReport,
@@ -35,8 +35,6 @@ import { ASSESSMENT_GUIDANCE } from "./src/util/a11y/assessmentGuidance.ts"
 // overrides it so a tagged production build reports its exact release. Commit +
 // date come from CI env when present, else git, so local builds still stamp.
 function resolveReleaseInfo() {
-  const require = createRequire(import.meta.url)
-  const pkg = require("./package.json") as { version: string }
   // A `web-v*` release tag arrives as the full ref name (web-v1.0.0); strip the
   // prefix so the app reports a bare semver. Empty/unset falls back to
   // package.json, the source of truth for untagged (main push / local) builds.
