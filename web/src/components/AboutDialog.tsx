@@ -1,5 +1,6 @@
 import { forwardRef } from "react"
 import { useTranslation } from "react-i18next"
+import { Link } from "@tanstack/react-router"
 import { ExternalLink } from "lucide-react"
 
 import { CopyableDetails, Modal } from "@/components/ui"
@@ -10,6 +11,7 @@ import {
   commitUrl,
   releaseUrl,
   shortCommit,
+  formatBuildDate,
   ISSUES_URL,
   DISCUSSIONS_URL,
 } from "@/version"
@@ -125,28 +127,22 @@ export const AboutDialog = forwardRef<
             {shortCommit()}
             <ExternalLink aria-hidden="true" className="size-3" />
           </a>
+          <span className="ms-1 text-base-content/60">
+            ({formatBuildDate()})
+          </span>
         </dd>
-
-        <dt className="text-base-content/60">{t("nav.aboutBuilt")}</dt>
-        <dd className="font-mono tabular-nums">{appVersion.buildDate}</dd>
       </dl>
 
-      <div className="divider my-4" />
-
-      <h4 className="mb-3 text-sm font-semibold">
-        {t("nav.aboutAccessibilityTitle")}
-      </h4>
-      <div className="flex flex-col gap-2">
-        {/* Intentionally a plain new-tab link (SupportLink opens target=_blank),
-            not a router <Link>: the accessibility report is a standalone reference
-            an ADA reviewer keeps open beside the app, so a full-load new tab is
-            the desired behavior here. */}
-        <SupportLink
-          href="/accessibility"
-          title={t("nav.accessibility")}
-          hint={t("nav.aboutAccessibilityHint")}
-        />
-      </div>
+      {/* In-app link (router <Link>, not target=_blank): navigating closes the
+          dialog by hand since a router transition doesn't dismiss a native
+          <dialog>. */}
+      <Link
+        to="/accessibility"
+        onClick={(event) => event.currentTarget.closest("dialog")?.close()}
+        className="link link-info link-hover mt-3 inline-block text-sm"
+      >
+        {t("nav.aboutViewAccessibility")}
+      </Link>
 
       <div className="divider my-4" />
 
