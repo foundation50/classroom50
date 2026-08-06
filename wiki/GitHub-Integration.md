@@ -164,6 +164,63 @@ Side-effect free.
 
 ---
 
+## Network and allowed domains
+
+If your school or district filters web traffic, allow the domains below so
+Classroom 50 works end to end. The web app runs entirely in the browser, so the
+browser itself must reach these hosts.
+
+| Domain | Used by | For |
+|--------|---------|-----|
+| `classroom50.org`, `preview.classroom50.org` | Web app | Loading the app. |
+| `classroom50.fifty-foundation.workers.dev` | Web app | The GitHub proxy (OAuth sign-in and repo downloads). See [The GitHub proxy](#the-github-proxy) below. |
+| `github.com` | Web app, CLI | OAuth sign-in and CLI authentication. |
+| `api.github.com` | Web app, CLI, Actions | All GitHub REST API calls (classrooms, rosters, assignments, grading). |
+| `*.github.io` | Web app, Actions | The org's Pages config (`<org>.github.io/classroom50/…`): the assignment manifest, autograders, and the runner. |
+| `codeload.github.com` | Web app | Repo archive (zip) downloads, reached through the proxy. |
+| `www.githubstatus.com` | Web app | GitHub status check for the outage banner (best-effort). |
+
+### The GitHub proxy
+
+A browser can't do everything GitHub requires directly, so the web app sends two
+operations through a small proxy. It defaults to the Fifty Foundation Cloudflare
+Worker at `classroom50.fifty-foundation.workers.dev`:
+
+1. **OAuth sign-in.** Exchanging the login code for an access token needs the
+   OAuth client secret, which can't be shipped in browser JavaScript. The proxy
+   holds the secret and performs the exchange.
+2. **Repo downloads.** GitHub's archive endpoint redirects to
+   `codeload.github.com`, which doesn't send the CORS headers a browser needs to
+   follow the redirect. The proxy follows it server-side and streams the zip
+   back.
+
+The proxy is configurable: set `VITE_GITHUB_PROXY_BASE` at build time to point
+the app at your own proxy instead of the default worker. Everything else the web
+app does talks to `api.github.com` directly and doesn't involve the proxy.
+
+### If the proxy domain is blocked
+
+Some networks can't allow `workers.dev`. When the proxy is unreachable:
+
+- **What still works:** everything except the two operations above. All other
+  GitHub calls go straight to `api.github.com`, so browsing classrooms, rosters,
+  and assignments is unaffected.
+- **What breaks:** the normal "Sign in with GitHub" button (its token exchange
+  goes through the proxy) and in-app repo downloads.
+- **Signing in anyway:** paste a **classic** personal access token instead. On
+  the sign-in card, open **Other sign-in methods → Use a personal access token**.
+  This validates the token directly against `api.github.com`, so it never touches
+  the proxy. The prompt links to a token page with the required scopes
+  pre-checked. Fine-grained tokens aren't accepted here — use a classic token.
+  (This sign-in token is a **classic** token you paste into the web app; it is
+  separate from the fine-grained `CLASSROOM50_SERVICE_TOKEN` used for
+  [score collection](#4-fine-grained-pat-for-score-collection).)
+- **A fuller fix:** host the proxy yourself on a domain your network already
+  allows and point `VITE_GITHUB_PROXY_BASE` at it. This restores both the normal
+  sign-in and repo downloads.
+
+---
+
 ## REST API reference
 
 The CLIs call GitHub through [`go-gh`](https://github.com/cli/go-gh);
