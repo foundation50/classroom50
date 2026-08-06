@@ -8,7 +8,7 @@
    Our own custom daisyUI theme (not a stock one). A minimalist, ink-on-paper
    palette on neutral surfaces: neutral off-white base (no warm tint) — soft,
    not clinical white; near-black neutral ink for strong text contrast; a single
-   calm indigo accent (#3e5da8). Semantic hues sit at a deliberate mid chroma —
+   calm indigo accent (#375396). Semantic hues sit at a deliberate mid chroma —
    saturated enough to read as distinct at a glance, low enough to stay in
    harmony so the palette never tires the eye (each pairs with a soft tint via
    daisyUI). A warm vermilion is the secondary pop. Flat, near-square shapes
@@ -23,11 +23,11 @@
   --color-base-300: #e3e3e3;
   --color-base-content: #232323;
 
-  --color-primary: #3e5da8;
+  --color-primary: #375396;
   --color-primary-content: #fafafa;
-  --color-secondary: #5a5a5a;
+  --color-secondary: #565656;
   --color-secondary-content: #fafafa;
-  --color-accent: #c04a2b;
+  --color-accent: #923821;
   --color-accent-content: #fafafa;
 
   /* Sidebar rail follows `neutral`: a deep charcoal so the rail reads as a
@@ -35,9 +35,9 @@
   --color-neutral: #232323;
   --color-neutral-content: #f1f1f1;
 
-  --color-info: #2f7d8a;
+  --color-info: #235c66;
   --color-info-content: #fafafa;
-  --color-success: #3f7d54;
+  --color-success: #305f40;
   --color-success-content: #fafafa;
   --color-warning: #a4741d;
   /* Light content so a SOLID warning fill (btn-warning / non-soft badge) reads
@@ -46,7 +46,7 @@
      unaffected (they use --color-warning as foreground, not the content token).
      The fill itself is darkened for text use in the AA-override block below. */
   --color-warning-content: #fafafa;
-  --color-error: #b0392f;
+  --color-error: #993229;
   --color-error-content: #fafafa;
 
   --radius-selector: 0.25rem;
@@ -62,7 +62,7 @@
 /* ── Dark theme: "sumi-dark" ──────────────────────────────────────────────────
    The night side of our custom sumi theme. Neutral dark surfaces with soft
    off-white ink; the accent and semantics lift to lighter, still-saturated
-   hues (indigo #8ba3d4, etc.) so they pop against the dark ground while keeping
+   hues (indigo #90a7d6, etc.) so they pop against the dark ground while keeping
    the same identity — and the same restrained harmony — as light mode. */
 @plugin "daisyui/theme" {
   name: "sumi-dark";
@@ -75,11 +75,11 @@
   --color-base-300: #100f11;
   --color-base-content: #ececee;
 
-  --color-primary: #8ba3d4;
+  --color-primary: #90a7d6;
   --color-primary-content: #14181c;
   --color-secondary: #a8a8ac;
   --color-secondary-content: #14181c;
-  --color-accent: #e08a6f;
+  --color-accent: #e29279;
   --color-accent-content: #14181c;
 
   /* Sidebar surface: a slightly lighter panel than base so the rail reads
@@ -93,7 +93,7 @@
   --color-success-content: #14181c;
   --color-warning: #d0ad6e;
   --color-warning-content: #14181c;
-  --color-error: #d08a82;
+  --color-error: #d5968f;
   --color-error-content: #14181c;
 
   --radius-selector: 0.25rem;
@@ -112,7 +112,7 @@
    indigo accent over a neutral charcoal surface; dark reuses the theme primary
    over a translucent sheet. Consumed via arbitrary values in components/drawer. */
 [data-theme="sumi"] {
-  --sidebar-accent: #8ba3d4;
+  --sidebar-accent: #90a7d6;
   --sidebar-surface: #3a3a3a;
 }
 [data-theme="sumi-dark"] {
@@ -274,8 +274,8 @@ body {
 [data-theme="sumi"] {
   /* Deeper ink lifts every base-content tier toward AAA, still "soft" (was #232323). */
   --color-base-content: #1a1a1a;
-  --color-warning: #7a5012; /* warning-as-text: 7:1 body on base-100 */
-  --color-warning-fill: #7a5012; /* solid warning button: white label >=4.5 large */
+  --color-warning: #754d11; /* warning-as-text: >=7:1 body on base-100 (AAA) */
+  --color-warning-fill: #754d11; /* solid warning button: white label >=4.5 large */
 }
 
 /* daisyUI derives .btn-warning / non-soft .badge-warning from --color-warning;

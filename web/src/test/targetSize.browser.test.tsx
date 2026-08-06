@@ -11,8 +11,9 @@ import { rect, renderInViewport, setupBrowserA11y } from "./browserA11y"
 setupBrowserA11y()
 
 describe("2.5.8 Target Size — shared Button primitive", () => {
-  // md and sm are the default action sizes across the app; both must clear 24px.
-  it.each(["md", "sm"] as const)(
+  // Measure every shipped action size, not just the defaults: the 2.5.8
+  // "Supports" claim covers all of them, so an unmeasured size would overclaim.
+  it.each(["md", "sm", "xs"] as const)(
     "a %s Button meets the 24x24 minimum",
     (size) => {
       const { getByRole } = renderInViewport(<Button size={size}>Save</Button>)
@@ -23,6 +24,18 @@ describe("2.5.8 Target Size — shared Button primitive", () => {
       ).toBe(true)
     },
   )
+
+  // The smallest icon-only target the app renders: an xs circle. Icon-only + the
+  // smallest size is the worst case for the 24x24 floor, so pin it explicitly.
+  it("an icon-only xs circle Button meets the 24x24 minimum", () => {
+    const { getByRole } = renderInViewport(
+      <Button shape="circle" size="xs" aria-label="Remove">
+        <span aria-hidden="true" className="size-3" />
+      </Button>,
+    )
+    const { width, height } = rect(getByRole("button"))
+    expect(meetsTargetSize(width, height), `${width}x${height}`).toBe(true)
+  })
 
   it("an icon-only circle Button meets the 24x24 minimum", () => {
     const { getByRole } = renderInViewport(
