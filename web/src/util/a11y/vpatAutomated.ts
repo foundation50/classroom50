@@ -19,7 +19,22 @@ export type AutomatedBinding = {
   check: string
   /** The VPAT remark stating what was machine-checked (and any residual gap). */
   remark: string
+  /**
+   * True when the backing check lives in the browser project (needs real
+   * Chromium), so it runs on the PR CI browser lane but NOT in the
+   * `test:node`-only deploy/release gate (see .github/actions/web-build-gate).
+   * The guard (vpatAutomated.test.ts) requires these to disclose that CI
+   * dependency in their remark, so the public "Supports" claim never silently
+   * outruns a check that a manual redeploy of an un-CI'd ref would skip.
+   */
+  browserBacked?: boolean
 }
+
+// Disclosure every browser-backed remark must carry (asserted by the guard), so
+// a reader knows the criterion is verified on the PR CI browser lane and not
+// re-measured by the browser-free deploy gate.
+export const BROWSER_CI_DISCLOSURE =
+  "verified on the CI browser lane (not re-run by the browser-free deploy gate)"
 
 export const AUTOMATED_CRITERIA: Record<string, AutomatedBinding> = {
   "3.1.1": {
@@ -68,43 +83,50 @@ export const AUTOMATED_CRITERIA: Record<string, AutomatedBinding> = {
     check:
       "shared Button sizes + an icon-only Button measure >= 24x24 CSS px in real " +
       "Chromium (targetSize.browser.test.tsx)",
+    browserBacked: true,
     remark:
       "Interactive targets meet the 24x24 CSS px minimum: the shared Button " +
-      "primitive's action sizes and icon-only shape are measured in a real " +
-      "browser layout engine. Verified automatically on the shared primitives; " +
-      "an exhaustive per-site target sweep is a manual follow-up.",
+      "primitive's action sizes (including xs) and icon-only shape are measured " +
+      "in a real browser layout engine — " +
+      BROWSER_CI_DISCLOSURE +
+      ". An exhaustive per-site target sweep is a manual follow-up.",
   },
   "1.4.10": {
     check:
       "a representative Card layout has no element wider than a 320px viewport in " +
       "real Chromium (reflow.browser.test.tsx)",
+    browserBacked: true,
     remark:
       "Content reflows without horizontal scroll: a representative layout of the " +
       "shared Card/Button primitives is measured at a 320px viewport in a real " +
-      "browser and no element exceeds the width. Verified automatically on the " +
-      "shared layout primitives; a per-route reflow sweep is a manual follow-up.",
+      "browser and no element exceeds the width — " +
+      BROWSER_CI_DISCLOSURE +
+      ". A per-route reflow sweep is a manual follow-up.",
   },
   "1.4.4": {
     check:
       "enlarging the root font to 200% scales text (relative units) and the " +
       "sample still fits the viewport in real Chromium (resizeText.browser.test.tsx)",
+    browserBacked: true,
     remark:
       "Text resizes to 200% without loss of content: with the root font enlarged " +
       "to 200% in a real browser, the shared primitives' text scales (relative " +
-      "units) and the layout still fits without clipping or horizontal overflow. " +
-      "Verified automatically on the shared primitives; a per-route zoom sweep is " +
-      "a manual follow-up.",
+      "units) and the layout still fits without clipping or horizontal overflow — " +
+      BROWSER_CI_DISCLOSURE +
+      ". A per-route zoom sweep is a manual follow-up.",
   },
   "1.4.12": {
     check:
       "the WCAG text-spacing overrides (line-height 1.5, letter 0.12em, word " +
       "0.16em, paragraph 2em) apply without clipping in real Chromium " +
       "(textSpacing.browser.test.tsx)",
+    browserBacked: true,
     remark:
       "Content survives the WCAG 1.4.12 text-spacing overrides (line-height 1.5x, " +
       "letter-spacing 0.12em, word-spacing 0.16em, paragraph spacing 2em): applied " +
       "to the shared primitives in a real browser, the container grows to fit " +
-      "rather than clipping. Verified automatically on the shared primitives; a " +
-      "per-route sweep is a manual follow-up.",
+      "rather than clipping — " +
+      BROWSER_CI_DISCLOSURE +
+      ". A per-route sweep is a manual follow-up.",
   },
 }

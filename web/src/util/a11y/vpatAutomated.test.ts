@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest"
 
 import { CONTRAST_CRITERION_IDS, CRITERIA } from "./vpatModel"
 import { buildVpatReport } from "./vpatReport"
-import { AUTOMATED_CRITERIA } from "./vpatAutomated"
+import { AUTOMATED_CRITERIA, BROWSER_CI_DISCLOSURE } from "./vpatAutomated"
 import { documentHasLang } from "./a11yStructural"
 
 // U3 (map integrity) + U5 (per-criterion binding guard) for the `automated`
@@ -36,6 +36,37 @@ describe("AUTOMATED_CRITERIA map integrity (U3)", () => {
     for (const [id, b] of Object.entries(AUTOMATED_CRITERIA)) {
       expect(b.check.length, `${id} check`).toBeGreaterThan(0)
       expect(b.remark.length, `${id} remark`).toBeGreaterThan(0)
+    }
+  })
+
+  // Deploy-gate fidelity guard (finding #3): the deploy/release path runs the
+  // browser-free `test:node` gate (see .github/actions/web-build-gate), so a
+  // criterion whose only backing check is a browser test is NOT re-verified for
+  // the exact ref a manual redeploy publishes. This node-project test — which
+  // therefore runs in that same deploy gate — pins two things so the public
+  // "Supports" claim can't silently outrun the check:
+  //   1. the four browser-only criteria are flagged browserBacked, and
+  //   2. every browserBacked remark discloses the CI-lane dependency,
+  // so tightening or removing a browser guard, or dropping the disclosure, fails
+  // the gate that actually runs at deploy.
+  const BROWSER_BACKED_IDS = ["2.5.8", "1.4.10", "1.4.4", "1.4.12"]
+
+  it("the known browser-only criteria are flagged browserBacked", () => {
+    for (const id of BROWSER_BACKED_IDS) {
+      expect(
+        AUTOMATED_CRITERIA[id]?.browserBacked,
+        `${id} is backed only by a browser test but is not flagged browserBacked`,
+      ).toBe(true)
+    }
+  })
+
+  it("every browserBacked criterion discloses the CI-lane dependency in its remark", () => {
+    for (const [id, b] of Object.entries(AUTOMATED_CRITERIA)) {
+      if (!b.browserBacked) continue
+      expect(
+        b.remark.includes(BROWSER_CI_DISCLOSURE),
+        `${id} is browserBacked but its remark omits the CI-lane disclosure — a manual redeploy of an un-CI'd ref would ship this Supports claim unverified`,
+      ).toBe(true)
     }
   })
 })

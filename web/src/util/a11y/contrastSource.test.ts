@@ -8,6 +8,7 @@ import {
   DARK,
   MODELED_BASE_CONTENT_TIERS,
   MODELED_NEUTRAL_CONTENT_TIERS,
+  MODELED_TEXT_SEMANTICS,
   SUMI,
 } from "./contrastModel"
 
@@ -155,6 +156,50 @@ describe("every muted tier used on text is modeled (coverage guard)", () => {
     expect(
       unmodeled,
       `text-neutral-content/${unmodeled.join(",")} used in src/** but not modeled/remapped for the sidebar rail.`,
+    ).toEqual([])
+  })
+})
+
+// ── Coverage guard: every semantic text color used on text in src/** is modeled ──
+// Beyond the muted base/neutral tiers above, a semantic `text-error` /
+// `text-primary` / `text-success` etc. rendered as plain text on a base surface
+// is its own (foreground, surface) pair. Without this scan the audit would keep
+// claiming contrast "Supports" while an inline status color drifts low-contrast.
+// Excludes `-content` foregrounds (those sit on a matching fill, a different
+// modeled pair) and the muted `/NN` variants already covered above.
+function usedTextSemantics(): Set<string> {
+  const out = new Set<string>()
+  const names = MODELED_TEXT_SEMANTICS.join("|")
+  // `text-error` / `text-primary`, but NOT `text-error-content`, `text-primary/40`,
+  // or a longer word like `text-primaryish` (word-boundary the tail).
+  const re = new RegExp(`text-(${names})(?![\\w/-])`, "g")
+  const srcDir = path.join(repoWeb, "src")
+  const walk = (dir: string): string[] => {
+    const files: string[] = []
+    for (const e of readdirSync(dir)) {
+      const full = path.join(dir, e)
+      if (statSync(full).isDirectory()) files.push(...walk(full))
+      else if (e.endsWith(".tsx") || e.endsWith(".ts")) files.push(full)
+    }
+    return files
+  }
+  for (const file of walk(srcDir)) {
+    if (file.endsWith(".test.ts") || file.endsWith(".test.tsx")) continue
+    const text = readFileSync(file, "utf8")
+    let m: RegExpExecArray | null
+    while ((m = re.exec(text)) !== null) out.add(m[1])
+  }
+  return out
+}
+
+describe("every semantic text color used on text is modeled (coverage guard)", () => {
+  it("text-<semantic> utilities used in src/** are all audited", () => {
+    const used = usedTextSemantics()
+    const modeled = new Set<string>(MODELED_TEXT_SEMANTICS)
+    const unmodeled = [...used].filter((name) => !modeled.has(name))
+    expect(
+      unmodeled,
+      `text-${unmodeled.join(", text-")} used in src/** but not audited. Add the token to MODELED_TEXT_SEMANTICS + a text-<name> pair in contrastModel.ts (or, if only ever decorative/large, exempt it explicitly).`,
     ).toEqual([])
   })
 })

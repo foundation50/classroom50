@@ -34,6 +34,20 @@ export type Kind = "text" | "nonText"
 export const MODELED_BASE_CONTENT_TIERS = [30, 40, 50, 60, 70, 80, 90] as const
 export const MODELED_NEUTRAL_CONTENT_TIERS = [50, 60, 70] as const
 
+// Semantic text tokens modeled as body text on a base surface (the `text-<name>`
+// pairs built in buildTheme). The coverage guard (contrastSource.test.ts) scans
+// src/** for `text-<name>` utilities and fails if a used one is absent here, so
+// a new low-contrast semantic text color can't ship while the audit stays green.
+export const MODELED_TEXT_SEMANTICS = [
+  "primary",
+  "secondary",
+  "accent",
+  "info",
+  "success",
+  "error",
+  "warning",
+] as const
+
 export type Pair = {
   /** Stable id for reporting. */
   id: string
@@ -59,23 +73,23 @@ export const SUMI = {
   base200: "#f1f1f1",
   base300: "#e3e3e3",
   baseContent: "#1a1a1a",
-  primary: "#3e5da8",
+  primary: "#375396",
   primaryContent: "#fafafa",
-  secondary: "#5a5a5a",
+  secondary: "#565656",
   secondaryContent: "#fafafa",
-  accent: "#c04a2b",
+  accent: "#923821",
   accentContent: "#fafafa",
   neutral: "#232323",
   neutralContent: "#f1f1f1",
-  info: "#2f7d8a",
+  info: "#235c66",
   infoContent: "#fafafa",
-  success: "#3f7d54",
+  success: "#305f40",
   successContent: "#fafafa",
   // AAA override: warning darkened for text use AND fill (white label >=4.5).
-  warningText: "#7a5012",
-  warningFill: "#7a5012",
+  warningText: "#754d11",
+  warningFill: "#754d11",
   warningContent: "#fafafa",
-  error: "#b0392f",
+  error: "#993229",
   errorContent: "#fafafa",
   // Sidebar: opaque charcoal panel over the light canvas.
   sidebarSurface: "#3a3a3a",
@@ -95,11 +109,11 @@ export const DARK = {
   base200: "#161618",
   base300: "#100f11",
   baseContent: "#ececee",
-  primary: "#8ba3d4",
+  primary: "#90a7d6",
   primaryContent: "#14181c",
   secondary: "#a8a8ac",
   secondaryContent: "#14181c",
-  accent: "#e08a6f",
+  accent: "#e29279",
   accentContent: "#14181c",
   neutral: "#26262a",
   neutralContent: "#ececee",
@@ -109,7 +123,7 @@ export const DARK = {
   successContent: "#14181c",
   warning: "#d0ad6e",
   warningContent: "#14181c",
-  error: "#d08a82",
+  error: "#d5968f",
   errorContent: "#14181c",
   // Per-theme link color and muted-tier opacity floors (index.css overrides).
   link: "#9bb0dc",
@@ -246,6 +260,35 @@ function buildTheme(theme: Theme): Pair[] {
       `${name} soft-badge text`,
       badgeSoftFg(theme, token),
       softGround(token, T.base100),
+      "body",
+    )
+  }
+
+  // Semantic text colors used directly as body text on a base surface — an
+  // inline `text-error` validation message, a `text-success` confirmation, etc.
+  // Distinct from the soft-badge pairs above (nudged token on a tinted ground):
+  // here the raw token sits on the plain base-100 canvas, the realistic worst
+  // case for an inline status message. The coverage guard scans src/** for
+  // `text-<token>` utilities and fails if any used one has no pair here.
+  const textSemanticToken: Record<
+    (typeof MODELED_TEXT_SEMANTICS)[number],
+    string
+  > = {
+    primary: T.primary,
+    secondary: T.secondary,
+    accent: T.accent,
+    info: T.info,
+    success: T.success,
+    error: T.error,
+    // warning text uses the AAA-darkened warningText (light) / warning (dark).
+    warning: theme === "sumi" ? SUMI.warningText : DARK.warning,
+  }
+  for (const name of MODELED_TEXT_SEMANTICS) {
+    add(
+      `text-${name}`,
+      `${name} text on base-100`,
+      opaque(textSemanticToken[name]),
+      opaque(T.base100),
       "body",
     )
   }

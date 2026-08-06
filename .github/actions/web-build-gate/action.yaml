@@ -18,6 +18,16 @@ description: >
   PR via web-ci's dedicated browser lane; re-running them to gate a deploy would
   add the ~90MB browser install for no extra safety.
 
+  DEPLOY-GATE FIDELITY (finding #3): because this gate is browser-free, the four
+  browser-backed VPAT criteria (2.5.8, 1.4.10, 1.4.4, 1.4.12) are NOT re-measured
+  for the exact ref a deploy publishes — they are trusted to have passed on the
+  PR browser lane. Two guardrails keep the public /accessibility "Supports" claim
+  honest: (a) their VPAT remarks disclose the CI-lane dependency, pinned by a
+  node-project test that DOES run here (vpatAutomated.test.ts), and (b) branch
+  protection must require the web-ci `ci` fan-in check on the default branch, and
+  manual web-deploy runs should target an already-CI'd ref, so an un-verified ref
+  can't reach production. Keep both in place before relying on this optimization.
+
 runs:
   using: composite
   steps:
