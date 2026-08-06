@@ -54,4 +54,14 @@ describe("checkInternetLiveness", () => {
     expect(urls.some((url) => url.includes("cloudflare"))).toBe(true)
     expect(urls.every((url) => !url.includes("github"))).toBe(true)
   })
+
+  it("passes an abort signal and a no-store cache policy to every probe", async () => {
+    fetchMock.mockResolvedValue(reachable())
+    await checkInternetLiveness()
+    for (const call of fetchMock.mock.calls) {
+      const init = call[1] as RequestInit
+      expect(init.cache).toBe("no-store")
+      expect(init.signal).toBeInstanceOf(AbortSignal)
+    }
+  })
 })

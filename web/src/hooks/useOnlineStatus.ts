@@ -14,16 +14,29 @@ import { checkInternetLiveness } from "@/lib/internetLiveness"
 //              a VPN/proxy flap) while the device is actually still online.
 //
 // That false-positive `offline` is what made a GitHub incident surface as
-// "You're offline". So we no longer trust `false` blindly: on an offline signal
-// we corroborate with an independent internet-liveness probe (see
+// "You're offline". So we no longer trust a *live* `offline` event blindly: we
+// corroborate with an independent internet-liveness probe (see
 // internetLiveness.ts) and only report offline when the probe also fails. An
 // `online` event is trusted immediately — it can only clear an offline state.
+//
+// The one signal we DO trust synchronously is the initial page-load reading:
+// `navigator.onLine === false` at mount seeds `confirmedOffline` so a cold load
+// on a hard-offline device (Wi-Fi off) reads offline on the very first render.
+// This preserves the auth guard's #187 contract — resolveAuthStatus depends on
+// useOnlineStatus() being false synchronously on an offline cold reload to hold
+// a valid session at "loading" instead of bouncing it to /login. The async
+// probe then only ever *clears* this seed (a captive portal that actually
+// reaches the internet), never newly asserts offline mid-session without the
+// probe confirming it.
 //
 // Module-level store (not React state) so every subscriber reads one source via
 // useSyncExternalStore, and so the async probe result is shared rather than
 // re-run per component.
 
-let confirmedOffline = false
+// Seed from the synchronous page-load reading (see above). SSR has no
+// navigator, so default to online there.
+let confirmedOffline =
+  typeof navigator !== "undefined" ? !navigator.onLine : false
 // Bumped on every online/offline transition so a probe that resolves after the
 // state already moved on can't apply its stale verdict.
 let probeEpoch = 0
@@ -63,8 +76,9 @@ function subscribe(onChange: () => void) {
   listeners.add(onChange)
   window.addEventListener("online", handleOnline)
   window.addEventListener("offline", handleOffline)
-  // Seed from a cold load that started offline: navigator.onLine is synchronous,
-  // but confirmation is async, so kick the same corroborated path.
+  // A cold load that started offline already read offline synchronously (the
+  // `confirmedOffline` seed above). Still run the probe so a captive portal /
+  // spurious seed that actually reaches the internet gets cleared.
   if (typeof navigator !== "undefined" && !navigator.onLine) handleOffline()
   return () => {
     listeners.delete(onChange)
@@ -90,9 +104,12 @@ export function useOnlineStatus(): boolean {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }
 
-// Test-only reset so the module-level state doesn't leak between cases.
+// Test-only reset so the module-level state doesn't leak between cases. Re-seeds
+// `confirmedOffline` from the current navigator.onLine, mirroring module load so
+// a test can stage a cold-offline start by setting navigator.onLine then reset.
 export function __resetOnlineStatusForTest(): void {
-  confirmedOffline = false
+  confirmedOffline =
+    typeof navigator !== "undefined" ? !navigator.onLine : false
   probeEpoch = 0
 }
 
