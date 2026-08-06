@@ -1,15 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import type { ReactElement } from "react"
 import { useTranslation } from "react-i18next"
 import { useRouterState } from "@tanstack/react-router"
+import { useQuery } from "@tanstack/react-query"
 import { Info, CircleDashed, Download } from "lucide-react"
 
 import { Alert, Badge, Button, Card, Modal, Toolbar, cx } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { DrawerShell } from "@/components/drawer"
-import { sectionFromHash } from "@/util/a11y/accessibilitySections"
+import {
+  sectionFromHash,
+  type AccessibilitySection,
+} from "@/util/a11y/accessibilitySections"
 import type { BadgeTone } from "@/types/badgeTone"
-import { CONFORMANCE_TONE, hasGenericRemark } from "@/util/a11y/vpatModel"
+import {
+  CONFORMANCE_TONE,
+  hasGenericRemark,
+  PRINCIPLE_ORDER,
+  type ConformanceLevel,
+  type Criterion,
+  type WcagPrinciple,
+} from "@/util/a11y/vpatModel"
+import type { VpatReportJson } from "@/util/a11y/vpatReport"
 import { ACCESSIBILITY_ISSUE_URL } from "@/version"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
@@ -56,29 +69,25 @@ const STATUS_TONE: Record<ContrastStatus, BadgeTone> = {
   exempt: "neutral",
 }
 
-type VpatConformance =
-  "supports" | "partially" | "doesNotSupport" | "notApplicable" | "notEvaluated"
+type Vpat = Pick<
+  VpatReportJson,
+  "schema" | "product" | "generated" | "summary" | "criteria"
+>
 
-type VpatCriterion = {
-  id: string
-  name: string
-  level: "A" | "AA" | "AAA"
-  principle: string
-  status: VpatConformance
-  evidence?: "contrast" | "automated" | "manual" | "architectural"
-  remark: string
-  assessed?: string
-}
-
-type Vpat = {
-  schema: string
-  product: string
-  generated: string
-  summary: {
-    total: number
-    byStatus: Record<VpatConformance, number>
-  }
-  criteria: VpatCriterion[]
+// One shared fetch of the build-emitted vpat-report.json, so the conformance
+// table and the statement's "last reviewed" date read from a single request
+// (the sections are hash-routed, so a plain useEffect fetch would re-download
+// on every switch between them). Static asset, so cache indefinitely.
+function useVpatReport() {
+  return useQuery({
+    queryKey: ["vpat-report"],
+    queryFn: async (): Promise<Vpat> => {
+      const res = await fetch("/vpat-report.json")
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res.json() as Promise<Vpat>
+    },
+    staleTime: Infinity,
+  })
 }
 
 // Tone -> the small status-dot swatch class. One source, shared by the VPAT stat
@@ -95,20 +104,13 @@ const TONE_DOT_CLASS: Record<BadgeTone, string> = {
 
 // The order the VPAT summary chips + status filter render in: best-first, then
 // the out-of-band statuses (not applicable, not evaluated) last.
-const VPAT_STATUS_ORDER: VpatConformance[] = [
+const VPAT_STATUS_ORDER: ConformanceLevel[] = [
   "supports",
   "partially",
   "doesNotSupport",
   "notApplicable",
   "notEvaluated",
 ]
-
-const PRINCIPLE_ORDER = [
-  "Perceivable",
-  "Operable",
-  "Understandable",
-  "Robust",
-] as const
 
 // Shared boxed-tab recipe so the active tab reads unambiguously (solid primary
 // fill) and inactive tabs stay clickable-looking. One source for both the
@@ -314,10 +316,10 @@ function ThemeTable({
   )
 }
 
-type VpatFilter = VpatConformance | "all"
+type VpatFilter = ConformanceLevel | "all"
 type VpatSort = "criterion" | "status"
 
-const STATUS_SORT_WEIGHT: Record<VpatConformance, number> = {
+const STATUS_SORT_WEIGHT: Record<ConformanceLevel, number> = {
   supports: 0,
   partially: 1,
   doesNotSupport: 2,
@@ -329,17 +331,17 @@ function VpatConformanceTable({
   criteria,
   generated,
 }: {
-  criteria: VpatCriterion[]
+  criteria: Criterion[]
   generated: string
 }) {
   const { t } = useTranslation()
   const [activePrinciple, setActivePrinciple] =
-    useState<(typeof PRINCIPLE_ORDER)[number]>("Perceivable")
+    useState<WcagPrinciple>("Perceivable")
 
   // Counts per principle reflect the current search/filter so a tab shows how
   // many rows it holds (and an emptied tab reads 0 rather than looking broken).
   const countByPrinciple = useMemo(() => {
-    const counts = {} as Record<(typeof PRINCIPLE_ORDER)[number], number>
+    const counts = {} as Record<WcagPrinciple, number>
     for (const p of PRINCIPLE_ORDER)
       counts[p] = criteria.filter((c) => c.principle === p).length
     return counts
@@ -449,7 +451,7 @@ function VpatSummaryChip({
   active,
   onClick,
 }: {
-  status: VpatConformance
+  status: ConformanceLevel
   value: number
   active: boolean
   onClick: () => void
@@ -484,29 +486,10 @@ function VpatSummaryChip({
 
 function VpatSection() {
   const { t } = useTranslation()
-  const [vpat, setVpat] = useState<Vpat | null>(null)
-  const [error, setError] = useState(false)
+  const { data: vpat = null, isError: error } = useVpatReport()
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<VpatFilter>("all")
   const [sort, setSort] = useState<VpatSort>("criterion")
-
-  useEffect(() => {
-    let active = true
-    fetch("/vpat-report.json")
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return res.json() as Promise<Vpat>
-      })
-      .then((data) => {
-        if (active) setVpat(data)
-      })
-      .catch(() => {
-        if (active) setError(true)
-      })
-    return () => {
-      active = false
-    }
-  }, [])
 
   const visibleCriteria = useMemo(() => {
     if (!vpat) return []
@@ -532,7 +515,7 @@ function VpatSection() {
 
   // Clicking a summary chip filters to that status, or clears back to "all" when
   // the already-active chip is clicked again.
-  const toggleFilter = (status: VpatConformance) =>
+  const toggleFilter = (status: ConformanceLevel) =>
     setFilter((cur) => (cur === status ? "all" : status))
 
   return (
@@ -795,20 +778,7 @@ function ContrastSection() {
 // date so it can't drift from the actual assessment.
 function StatementSection() {
   const { t } = useTranslation()
-  const [generated, setGenerated] = useState<string | null>(null)
-
-  useEffect(() => {
-    let active = true
-    fetch("/vpat-report.json")
-      .then((res) => (res.ok ? (res.json() as Promise<Vpat>) : null))
-      .then((data) => {
-        if (active && data) setGenerated(data.generated)
-      })
-      .catch(() => {})
-    return () => {
-      active = false
-    }
-  }, [])
+  const generated = useVpatReport().data?.generated ?? null
 
   return (
     <section aria-labelledby="statement-heading">
@@ -955,16 +925,22 @@ export default function AccessibilityPage() {
           subtitle={t("accessibility.pageSubtitle")}
         />
 
-        {section === "conformance" ? (
-          <VpatSection />
-        ) : section === "color-contrast" ? (
-          <ContrastSection />
-        ) : section === "statement" ? (
-          <StatementSection />
-        ) : (
-          <DownloadsSection />
-        )}
+        <SectionPanel section={section} />
       </PageShell>
     </DrawerShell>
   )
+}
+
+// Route the active section to its panel via a lookup so a new AccessibilitySection
+// must register one here (the old ternary chain silently fell through to Downloads).
+const SECTION_PANEL: Record<AccessibilitySection, () => ReactElement> = {
+  conformance: VpatSection,
+  "color-contrast": ContrastSection,
+  statement: StatementSection,
+  downloads: DownloadsSection,
+}
+
+function SectionPanel({ section }: { section: AccessibilitySection }) {
+  const Panel = SECTION_PANEL[section]
+  return <Panel />
 }
