@@ -3,14 +3,11 @@
 // `buildVpatReport()` produces the canonical JSON from vpatModel.ts, with the
 // contrast criteria (1.4.3/1.4.6/1.4.11) DERIVED from the live contrast audit
 // (KTD4) rather than hand-set — so the VPAT and the contrast report can never
-// disagree. `renderVpatReport(edition)` renders the same criteria set as either
-// the VPAT 2.5Rev WCAG edition or the INT edition (KTD6); both are views over
-// one model, never a second assessment. The INT edition (not 508) is the second
-// edition because ITI's 508 edition incorporates WCAG 2.0, while INT carries
-// WCAG 2.2 alongside 508 + EN 301 549 — so our WCAG 2.2 work maps correctly to
-// INT and still serves a US procurement office. Pure (no fs, no app imports) so
-// it stays a util/ leaf; the integrity guard (vpatGuard.test.ts) enforces the
-// same facts, so every rendering reflects guarded state.
+// disagree. `renderVpatReport()` renders that criteria set as the VPAT 2.5Rev
+// WCAG edition — a view over the model, never a second assessment. Pure (no fs,
+// no app imports) so it stays a util/ leaf; the integrity guard
+// (vpatGuard.test.ts) enforces the same facts, so every rendering reflects
+// guarded state.
 
 import { buildContrastAudit, renderContrastReport } from "./contrastReport"
 import {
@@ -23,13 +20,11 @@ import {
   type WcagPrinciple,
 } from "./vpatModel"
 
-export type VpatEdition = "wcag" | "int"
-
 export type VpatReportJson = {
   /** Bump when the JSON shape changes so consumers can guard. */
   schema: "vpat-report/v1"
   standard: "WCAG 2.2"
-  editions: ["2.5Rev-wcag", "2.5Rev-int"]
+  editions: ["2.5Rev-wcag"]
   target: "AA"
   product: string
   generated: string
@@ -113,7 +108,7 @@ export function buildVpatReport(
   return {
     schema: "vpat-report/v1",
     standard: "WCAG 2.2",
-    editions: ["2.5Rev-wcag", "2.5Rev-int"],
+    editions: ["2.5Rev-wcag"],
     target: "AA",
     product: PRODUCT,
     generated: now.toISOString().slice(0, 10),
@@ -142,13 +137,13 @@ function criterionRow(c: Criterion, fallbackDate: string): string {
   return `| ${c.id} ${c.name} | ${c.level} | ${CONFORMANCE_LABEL[c.status]} | ${date} | ${remark} |`
 }
 
-// Preamble shared by both editions: product, date, evaluation methods, and the
-// honest automated-vs-manual boundary a reviewer needs to weight the claims.
-function preamble(report: VpatReportJson, editionLabel: string): string[] {
+// Preamble: product, date, evaluation methods, and the honest automated-vs-
+// manual boundary a reviewer needs to weight the claims.
+function preamble(report: VpatReportJson): string[] {
   return [
     `# Accessibility Conformance Report — ${report.product}`,
     "",
-    `**Format:** VPAT® 2.5Rev — ${editionLabel}`,
+    `**Format:** VPAT® 2.5Rev — WCAG Edition`,
     `**Standard:** WCAG ${report.standard.replace("WCAG ", "")}, target Level ${report.target}`,
     `**Product:** ${report.product}`,
     `**Report date:** ${report.generated}`,
@@ -178,8 +173,7 @@ function summaryLine(report: VpatReportJson): string {
   )
 }
 
-// The per-principle WCAG 2.2 conformance tables, shared verbatim by both
-// editions — they differ only in preamble/intro, never in the verdicts.
+// The per-principle WCAG 2.2 conformance tables.
 function principleTables(report: VpatReportJson): string[] {
   const out: string[] = []
   for (const principle of PRINCIPLE_ORDER) {
@@ -197,66 +191,27 @@ function principleTables(report: VpatReportJson): string[] {
   return out
 }
 
-function renderWcagEdition(report: VpatReportJson): string {
-  return (
-    [
-      ...preamble(report, "WCAG Edition"),
-      summaryLine(report),
-      "",
-      ...principleTables(report),
-    ].join("\n") + "\n"
-  )
-}
-
-// The INT edition (VPAT 2.5Rev INT) incorporates Section 508, EN 301 549, and
-// WCAG 2.2 in one report. Because our conformance evidence is expressed against
-// WCAG 2.2 (the standard the app is actually tested to), the INT edition
-// presents the same per-principle WCAG 2.2 tables as the WCAG edition, under an
-// INT framing that states how the three standards relate. No criterion is
-// re-assessed (KTD6) — a US 508 / EU procurement office reads the same verdicts.
-function renderIntEdition(report: VpatReportJson): string {
-  return (
-    [
-      ...preamble(report, "INT Edition (Section 508 + EN 301 549 + WCAG 2.2)"),
-      summaryLine(report),
-      "",
-      "The INT edition incorporates three standards. This report expresses " +
-        "conformance against **WCAG 2.2** — the standard the product is tested " +
-        "to — which the other two reference: **Section 508** (US) incorporates " +
-        "WCAG 2.0 Level A/AA and **EN 301 549** (EU) incorporates WCAG 2.1; both " +
-        "are subsets of the WCAG 2.2 criteria reported below, so each verdict " +
-        "applies to the corresponding 508 / EN 301 549 provision. Chapter 4 " +
-        "(Hardware) of Section 508 is Not Applicable — Classroom50 is a " +
-        "browser-based web application with no hardware component.",
-      "",
-      ...principleTables(report),
-    ].join("\n") + "\n"
-  )
-}
-
-/** Render the Markdown ACR for the requested edition — derived from one model. */
-export function renderVpatReport(
-  edition: VpatEdition,
-  now = new Date(),
-): string {
+/** Render the Markdown ACR (VPAT 2.5Rev WCAG edition) — derived from one model. */
+export function renderVpatReport(now = new Date()): string {
   const report = buildVpatReport(now)
-  return edition === "wcag"
-    ? renderWcagEdition(report)
-    : renderIntEdition(report)
+  return (
+    [
+      ...preamble(report),
+      summaryLine(report),
+      "",
+      ...principleTables(report),
+    ].join("\n") + "\n"
+  )
 }
 
-// The complete accessibility report in one file: both VPAT editions and the
-// contrast audit, in the order a reviewer reads them (conformance first, the
-// 508/EN framing, then the contrast evidence the contrast criteria derive from).
-// A rendering over the same single sources as the individual downloads — never a
-// separate assessment — so it can't disagree with them.
+// The complete accessibility report in one file: the VPAT and the contrast
+// audit, in the order a reviewer reads them (conformance first, then the
+// contrast evidence the contrast criteria derive from). A rendering over the
+// same single sources as the individual downloads — never a separate assessment
+// — so it can't disagree with them.
 export function renderCombinedReport(now = new Date()): string {
-  const sections = [
-    renderVpatReport("wcag", now),
-    renderVpatReport("int", now),
-    renderContrastReport(now),
-  ]
-  // A horizontal rule between the three documents so their headings don't read
+  const sections = [renderVpatReport(now), renderContrastReport(now)]
+  // A horizontal rule between the two documents so their headings don't read
   // as one continuous report when concatenated.
   return sections.join("\n---\n\n")
 }

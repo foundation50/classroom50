@@ -46,7 +46,6 @@ contrast-audit.json
 # guard enforce the facts), emitted into dist/ and uploaded as CI artifacts, so
 # never committed.
 VPAT.md
-VPAT-INT.md
 vpat-report.json
 ACCESSIBILITY-REPORT.md
 

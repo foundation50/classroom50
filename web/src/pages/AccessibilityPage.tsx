@@ -916,13 +916,7 @@ function DownloadsSection() {
             href="/VPAT.md"
             title={t("accessibility.downloads.vpatWcagTitle")}
             description={t("accessibility.downloads.vpatWcagDesc")}
-            onPrint={() => setPrintTarget("vpat-wcag")}
-          />
-          <DownloadRow
-            href="/VPAT-INT.md"
-            title={t("accessibility.downloads.vpatIntTitle")}
-            description={t("accessibility.downloads.vpatIntDesc")}
-            onPrint={() => setPrintTarget("vpat-int")}
+            onPrint={() => setPrintTarget("vpat")}
           />
           <DownloadRow
             href="/CONTRAST-AUDIT.md"
@@ -949,12 +943,10 @@ function DownloadsSection() {
 // window.print(). Built from the same JSON the page already fetches — the VPAT
 // Which report the browser print / Save-as-PDF should render. The full report
 // prints both documents; the others print just their own.
-type PrintTarget = "vpat-wcag" | "vpat-int" | "contrast" | "full"
+type PrintTarget = "vpat" | "contrast" | "full"
 
-// The VPAT conformance tables as print HTML, for one edition. Both editions
-// share one criteria set (the INT edition is a framing, not a re-assessment), so
-// only the title/framing differs — the verdicts are identical.
-function PrintableVpat({ vpat, title }: { vpat: Vpat; title: string }) {
+// The VPAT conformance tables as print HTML.
+function PrintableVpat({ vpat }: { vpat: Vpat }) {
   const { t } = useTranslation()
   const criteriaByPrinciple = useMemo(() => {
     const map = {} as Record<WcagPrinciple, Criterion[]>
@@ -965,7 +957,7 @@ function PrintableVpat({ vpat, title }: { vpat: Vpat; title: string }) {
 
   return (
     <section className="report-doc">
-      <h1>{title}</h1>
+      <h1>{t("accessibility.print.reportTitle", { product: vpat.product })}</h1>
       <p className="report-meta">
         {t("accessibility.print.reportMeta", {
           standard: vpat.standard,
@@ -1092,35 +1084,18 @@ function PrintableContrast({ contrast }: { contrast: Audit }) {
 // single source, never a separate assessment. Theme-agnostic (black on white,
 // bordered tables) so the PDF reads as a clean document regardless of theme.
 function PrintableReport({ target }: { target: PrintTarget | null }) {
-  const { t } = useTranslation()
   const { data: vpat = null } = useVpatReport()
   const { data: contrast = null } = useContrastAudit()
 
   // Nothing requested, or data not ready: nothing to print (and nothing to portal).
   if (!target || !vpat || !contrast) return null
 
-  const showWcag = target === "vpat-wcag" || target === "full"
-  const showInt = target === "vpat-int" || target === "full"
+  const showVpat = target === "vpat" || target === "full"
   const showContrast = target === "contrast" || target === "full"
 
   return createPortal(
     <div className="report-print" aria-hidden="true">
-      {showWcag && (
-        <PrintableVpat
-          vpat={vpat}
-          title={t("accessibility.print.reportTitle", {
-            product: vpat.product,
-          })}
-        />
-      )}
-      {showInt && (
-        <PrintableVpat
-          vpat={vpat}
-          title={t("accessibility.print.reportIntTitle", {
-            product: vpat.product,
-          })}
-        />
-      )}
+      {showVpat && <PrintableVpat vpat={vpat} />}
       {showContrast && <PrintableContrast contrast={contrast} />}
     </div>,
     document.body,
