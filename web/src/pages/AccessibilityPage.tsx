@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Info, CircleDashed } from "lucide-react"
+import { Info, CircleDashed, Download } from "lucide-react"
 
 import { Alert, Badge, Button, Card, Modal, Toolbar, cx } from "@/components/ui"
 import PageShell from "@/components/PageShell"
@@ -308,28 +308,6 @@ const STATUS_SORT_WEIGHT: Record<VpatConformance, number> = {
   notEvaluated: 4,
 }
 
-function PrincipleProgress({ rows }: { rows: VpatCriterion[] }) {
-  const evaluated = rows.filter((c) => c.status !== "notEvaluated").length
-  const pct =
-    rows.length === 0 ? 0 : Math.round((evaluated / rows.length) * 100)
-  return (
-    <div className="flex items-center gap-2">
-      <div
-        className="h-1.5 w-24 overflow-hidden rounded-full bg-base-300"
-        role="presentation"
-      >
-        <div
-          className="h-full rounded-full bg-success transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-xs tabular-nums text-base-content/60">
-        {evaluated}/{rows.length}
-      </span>
-    </div>
-  )
-}
-
 function VpatConformanceTable({
   criteria,
   generated,
@@ -338,82 +316,104 @@ function VpatConformanceTable({
   generated: string
 }) {
   const { t } = useTranslation()
-  const byPrinciple = PRINCIPLE_ORDER.map((principle) => ({
-    principle,
-    rows: criteria.filter((c) => c.principle === principle),
-  })).filter((g) => g.rows.length > 0)
+  const [activePrinciple, setActivePrinciple] =
+    useState<(typeof PRINCIPLE_ORDER)[number]>("Perceivable")
 
-  if (byPrinciple.length === 0) {
-    return (
-      <Card radius="xl" shadow={false}>
-        <Card.Body className="items-center gap-2 p-8 text-center text-sm text-base-content/60">
-          <CircleDashed aria-hidden="true" className="size-5" />
-          {t("accessibility.vpat.empty")}
-        </Card.Body>
-      </Card>
-    )
-  }
+  // Counts per principle reflect the current search/filter so a tab shows how
+  // many rows it holds (and an emptied tab reads 0 rather than looking broken).
+  const countByPrinciple = useMemo(() => {
+    const counts = {} as Record<(typeof PRINCIPLE_ORDER)[number], number>
+    for (const p of PRINCIPLE_ORDER)
+      counts[p] = criteria.filter((c) => c.principle === p).length
+    return counts
+  }, [criteria])
+
+  const rows = criteria.filter((c) => c.principle === activePrinciple)
 
   return (
     <Card radius="xl" shadow={false}>
-      <Card.Body className="gap-5 p-4">
-        {byPrinciple.map(({ principle, rows }) => (
-          <div key={principle} className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold">{principle}</h3>
-              <PrincipleProgress rows={rows} />
-            </div>
-            <div className="overflow-x-auto">
-              <table className="table table-sm w-full">
-                <thead>
-                  <tr>
-                    <th className="w-72">
-                      {t("accessibility.vpat.col.criterion")}
-                    </th>
-                    <th className="w-16">
-                      {t("accessibility.vpat.col.level")}
-                    </th>
-                    <th className="w-44">
-                      {t("accessibility.vpat.col.conformance")}
-                    </th>
-                    <th className="w-28">
-                      {t("accessibility.vpat.col.assessed")}
-                    </th>
-                    <th>{t("accessibility.vpat.col.remarks")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((c) => (
-                    <tr key={c.id}>
-                      <td className="align-top">
-                        <span className="font-mono text-xs text-base-content/60">
-                          {c.id}
-                        </span>{" "}
-                        {c.name}
-                      </td>
-                      <td className="align-top font-mono text-xs">{c.level}</td>
-                      <td className="align-top">
-                        <Badge tone={CONFORMANCE_TONE[c.status]}>
-                          {t(`accessibility.vpat.status.${c.status}`)}
-                        </Badge>
-                      </td>
-                      <td className="align-top font-mono text-xs whitespace-nowrap text-base-content/60">
-                        {c.assessed ?? generated}
-                      </td>
-                      <td className="align-top text-xs text-base-content/70">
-                        {hasGenericRemark(c) ? (
-                          <span className="text-base-content/40">—</span>
-                        ) : (
-                          c.remark
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      <Card.Body className="gap-4 p-4">
+        <div
+          role="tablist"
+          aria-label={t("accessibility.vpat.principleTabsAria")}
+          className="tabs-boxed tabs w-fit"
+        >
+          {PRINCIPLE_ORDER.map((principle) => (
+            <button
+              key={principle}
+              type="button"
+              role="tab"
+              aria-selected={principle === activePrinciple}
+              className={cx(
+                "tab gap-1.5",
+                principle === activePrinciple && "tab-active",
+              )}
+              onClick={() => setActivePrinciple(principle)}
+            >
+              {principle}
+              <span className="text-xs tabular-nums text-base-content/50">
+                {countByPrinciple[principle]}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-base-content/60">
+            <CircleDashed aria-hidden="true" className="size-5" />
+            {t("accessibility.vpat.empty")}
           </div>
-        ))}
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table w-full">
+              <thead>
+                <tr>
+                  <th className="w-64">
+                    {t("accessibility.vpat.col.criterion")}
+                  </th>
+                  <th className="w-14">{t("accessibility.vpat.col.level")}</th>
+                  <th className="w-40">
+                    {t("accessibility.vpat.col.conformance")}
+                  </th>
+                  <th className="w-28">
+                    {t("accessibility.vpat.col.assessed")}
+                  </th>
+                  <th className="min-w-[24rem]">
+                    {t("accessibility.vpat.col.remarks")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => (
+                  <tr key={c.id}>
+                    <td className="align-top">
+                      <span className="font-mono text-xs text-base-content/60">
+                        {c.id}
+                      </span>{" "}
+                      {c.name}
+                    </td>
+                    <td className="align-top font-mono text-xs">{c.level}</td>
+                    <td className="align-top">
+                      <Badge tone={CONFORMANCE_TONE[c.status]}>
+                        {t(`accessibility.vpat.status.${c.status}`)}
+                      </Badge>
+                    </td>
+                    <td className="align-top font-mono text-xs whitespace-nowrap text-base-content/60">
+                      {c.assessed ?? generated}
+                    </td>
+                    <td className="align-top text-sm text-base-content/70">
+                      {hasGenericRemark(c) ? (
+                        <span className="text-base-content/40">—</span>
+                      ) : (
+                        c.remark
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card.Body>
     </Card>
   )
@@ -497,38 +497,22 @@ function VpatSection() {
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="vpat-heading">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 id="vpat-heading" className="sr-only">
-          {t("accessibility.vpat.heading")}
-        </h2>
-        {vpat && (
-          <div className="flex flex-wrap items-center gap-2">
-            {VPAT_STATUS_ORDER.filter((s) => vpat.summary.byStatus[s] > 0).map(
-              (status) => (
-                <VpatSummaryChip
-                  key={status}
-                  status={status}
-                  value={vpat.summary.byStatus[status]}
-                />
-              ),
-            )}
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2 sm:ms-auto">
-          <Button as="a" href="/VPAT.md" download variant="outline" size="sm">
-            {t("accessibility.vpat.downloadWcag")}
-          </Button>
-          <Button
-            as="a"
-            href="/VPAT-INT.md"
-            download
-            variant="outline"
-            size="sm"
-          >
-            {t("accessibility.vpat.downloadInt")}
-          </Button>
+      <h2 id="vpat-heading" className="sr-only">
+        {t("accessibility.vpat.heading")}
+      </h2>
+      {vpat && (
+        <div className="flex flex-wrap items-center gap-2">
+          {VPAT_STATUS_ORDER.filter((s) => vpat.summary.byStatus[s] > 0).map(
+            (status) => (
+              <VpatSummaryChip
+                key={status}
+                status={status}
+                value={vpat.summary.byStatus[status]}
+              />
+            ),
+          )}
         </div>
-      </div>
+      )}
 
       {error && <Alert tone="error">{t("accessibility.vpat.loadError")}</Alert>}
 
@@ -633,21 +617,9 @@ function ContrastSection() {
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="contrast-heading">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 id="contrast-heading" className="sr-only">
-          {t("accessibility.title")}
-        </h2>
-        <Button
-          as="a"
-          href="/CONTRAST-AUDIT.md"
-          download
-          variant="outline"
-          size="sm"
-          className="sm:ms-auto"
-        >
-          {t("accessibility.download")}
-        </Button>
-      </div>
+      <h2 id="contrast-heading" className="sr-only">
+        {t("accessibility.title")}
+      </h2>
 
       {error && <Alert tone="error">{t("accessibility.loadError")}</Alert>}
 
@@ -778,7 +750,7 @@ function ContrastSection() {
   )
 }
 
-type PanelKey = "contrast" | "vpat" | "statement"
+type PanelKey = "contrast" | "vpat" | "statement" | "downloads"
 
 // The public accessibility statement (W3C best practice): commitment +
 // conformance target, the current known limitations, and a feedback path. Prose
@@ -811,6 +783,74 @@ function StatementSection() {
   )
 }
 
+// One downloadable report row: title + description + a download button. The
+// files are build-emitted into dist/ and served at their root path.
+function DownloadRow({
+  href,
+  title,
+  description,
+}: {
+  href: string
+  title: string
+  description: string
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="font-medium">{title}</div>
+        <p className="text-sm text-base-content/70">{description}</p>
+      </div>
+      <Button
+        as="a"
+        href={href}
+        download
+        variant="outline"
+        size="sm"
+        className="shrink-0"
+      >
+        <Download aria-hidden="true" className="size-4" />
+        {t("accessibility.downloads.action")}
+      </Button>
+    </div>
+  )
+}
+
+// A single place to find and download every report, so the report tabs stay
+// focused on reading rather than repeating download controls.
+function DownloadsSection() {
+  const { t } = useTranslation()
+  return (
+    <section
+      className="flex flex-col gap-4"
+      aria-labelledby="downloads-heading"
+    >
+      <h2 id="downloads-heading" className="sr-only">
+        {t("accessibility.downloads.heading")}
+      </h2>
+      <Card radius="xl" shadow={false}>
+        <Card.Body className="divide-y divide-base-300 p-4">
+          <DownloadRow
+            href="/VPAT.md"
+            title={t("accessibility.downloads.vpatWcagTitle")}
+            description={t("accessibility.downloads.vpatWcagDesc")}
+          />
+          <DownloadRow
+            href="/VPAT-INT.md"
+            title={t("accessibility.downloads.vpatIntTitle")}
+            description={t("accessibility.downloads.vpatIntDesc")}
+          />
+          <DownloadRow
+            href="/CONTRAST-AUDIT.md"
+            title={t("accessibility.downloads.contrastTitle")}
+            description={t("accessibility.downloads.contrastDesc")}
+          />
+        </Card.Body>
+      </Card>
+    </section>
+  )
+}
+
 export default function AccessibilityPage() {
   const { t } = useTranslation()
   useDocumentTitle(t("accessibility.pageTitle"))
@@ -820,10 +860,11 @@ export default function AccessibilityPage() {
     { key: "vpat", label: t("accessibility.tab.vpat") },
     { key: "contrast", label: t("accessibility.tab.contrast") },
     { key: "statement", label: t("accessibility.tab.statement") },
+    { key: "downloads", label: t("accessibility.tab.downloads") },
   ]
 
   return (
-    <PageShell contentClassName="mx-auto max-w-5xl p-6 2xl:px-8">
+    <PageShell contentClassName="mx-auto max-w-6xl p-6 2xl:px-8">
       <PageHeader
         title={t("accessibility.pageTitle")}
         subtitle={t("accessibility.pageSubtitle")}
@@ -852,8 +893,10 @@ export default function AccessibilityPage() {
         <VpatSection />
       ) : panel === "contrast" ? (
         <ContrastSection />
-      ) : (
+      ) : panel === "statement" ? (
         <StatementSection />
+      ) : (
+        <DownloadsSection />
       )}
     </PageShell>
   )

@@ -6,7 +6,8 @@
     "tab": {
       "contrast": "Color contrast",
       "vpat": "Conformance report",
-      "statement": "Statement"
+      "statement": "Statement",
+      "downloads": "Download reports"
     },
     "statement": {
       "heading": "Accessibility statement",
@@ -19,7 +20,16 @@
       "feedback": "If you encounter an accessibility barrier, please let us know via",
       "feedbackLink": "the accessibility discussion"
     },
-    "download": "Download report (.md)",
+    "downloads": {
+      "heading": "Download reports",
+      "action": "Download (.md)",
+      "vpatWcagTitle": "VPAT — WCAG edition",
+      "vpatWcagDesc": "Accessibility Conformance Report against WCAG 2.2 (VPAT 2.5Rev).",
+      "vpatIntTitle": "VPAT — INT / 508 edition",
+      "vpatIntDesc": "The same conformance report framed for Section 508 and EN 301 549 procurement.",
+      "contrastTitle": "Color contrast audit",
+      "contrastDesc": "Per-pair contrast ratios for every audited color, both themes."
+    },
     "loadError": "Couldn't load the contrast audit report.",
     "summaryPass": "All {{total}} audited color pairs meet their WCAG contrast floor.",
     "summaryPassMargin_one": "All {{total}} audited color pairs meet their WCAG contrast floor. {{count}} passes but sits below our recommended safety margin.",
@@ -72,9 +82,8 @@
     "vpat": {
       "heading": "Conformance report (VPAT)",
       "loadError": "Couldn't load the conformance report.",
-      "downloadWcag": "Download VPAT — WCAG (.md)",
-      "downloadInt": "Download VPAT — INT / 508 (.md)",
       "generated": "Report date {{generated}}",
+      "principleTabsAria": "WCAG principle",
       "searchPlaceholder": "Search criteria…",
       "searchAria": "Search conformance criteria",
       "filterLabel": "Status",
