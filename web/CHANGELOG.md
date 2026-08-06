@@ -17,6 +17,33 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.26.0](https://github.com/foundation50/classroom50/compare/web-v1.25.1...web-v1.26.0) (2026-08-06)
+
+
+### Features
+
+* **web:** add a motion preference and consolidate browser settings ([#491](https://github.com/foundation50/classroom50/issues/491)) ([f330e52](https://github.com/foundation50/classroom50/commit/f330e52cb89210b6922e46ef13ead27f8cbbf77b))
+* **web:** add axe-in-render a11y harness and back VPAT 3.1.1 automatically ([#497](https://github.com/foundation50/classroom50/issues/497)) ([5d65509](https://github.com/foundation50/classroom50/commit/5d65509ed636f842357b54e9dbe6b98a7fba6b4f))
+* **web:** add full-report and PDF downloads to the accessibility page ([#518](https://github.com/foundation50/classroom50/issues/518)) ([494b72c](https://github.com/foundation50/classroom50/commit/494b72c3d4612cf8c0aa113a9a512901e35ad43d))
+* **web:** automate the WCAG 2.2 VPAT report and surface it at /accessibility ([#496](https://github.com/foundation50/classroom50/issues/496)) ([9f47865](https://github.com/foundation50/classroom50/commit/9f478657d1783de81c992eedb8190c83d8a61f62))
+* **web:** dev-only auto-login from VITE_GITHUB_PAT ([#514](https://github.com/foundation50/classroom50/issues/514)) ([1b4e759](https://github.com/foundation50/classroom50/commit/1b4e75979c3ad8e778e4cb18e7c8f565b97d4779))
+* **web:** interactive dev-only WCAG assessment tool ([#513](https://github.com/foundation50/classroom50/issues/513)) ([33a0915](https://github.com/foundation50/classroom50/commit/33a09159839654146d09678dff6a5cf8ced553ed))
+* **web:** public accessibility report with WCAG 2.2 AA conformance ([#515](https://github.com/foundation50/classroom50/issues/515)) ([5e62b9f](https://github.com/foundation50/classroom50/commit/5e62b9f77a09da793bfc0a5ff8df9d6ee81b4e29))
+* **web:** ratchet the jsx-a11y label rules to blocking ([#499](https://github.com/foundation50/classroom50/issues/499)) ([9347b04](https://github.com/foundation50/classroom50/commit/9347b04e297018093af235cc206b7685a1ad97b8))
+* **web:** remediate keyboard/focus a11y and ratchet those rules ([#500](https://github.com/foundation50/classroom50/issues/500)) ([8ac2f74](https://github.com/foundation50/classroom50/commit/8ac2f74eefa08576d96ec13d556a97abf23ecb8c))
+* **web:** report resize text and text spacing as automated Supports (1.4.4/1.4.12) ([#505](https://github.com/foundation50/classroom50/issues/505)) ([cfeadca](https://github.com/foundation50/classroom50/commit/cfeadcae6bc32f20c5a606cc12f63c9e4ed4fe16))
+* **web:** report status-message and form-field a11y as automated Supports ([#501](https://github.com/foundation50/classroom50/issues/501)) ([7eac44f](https://github.com/foundation50/classroom50/commit/7eac44fc82a2a2aac73f5553bc7881a1f82cd43e))
+* **web:** report target size and reflow as automated Supports (2.5.8/1.4.10) ([#504](https://github.com/foundation50/classroom50/issues/504)) ([d654107](https://github.com/foundation50/classroom50/commit/d654107da27e6b3cbbfc455e026389960f725e5c))
+
+
+### Bug Fixes
+
+* **web:** hide decorative loading skeletons from AT and name the org-notice link ([#498](https://github.com/foundation50/classroom50/issues/498)) ([526f028](https://github.com/foundation50/classroom50/commit/526f028f11df2b1a0f24ae35056c5de120703237))
+* **web:** polish profile menu and About dialog ([#516](https://github.com/foundation50/classroom50/issues/516)) ([82d594c](https://github.com/foundation50/classroom50/commit/82d594c1152e166c6e9f52303ac12c77ffb24c4c))
+* **web:** raise theme color contrast to WCAG 2.2 AAA and guard it in CI ([#494](https://github.com/foundation50/classroom50/issues/494)) ([5482089](https://github.com/foundation50/classroom50/commit/54820890561798f1c9fca6f42fbbf69ac8381cf4))
+* **web:** tighten a11y conformance guards and split oversized modules ([#519](https://github.com/foundation50/classroom50/issues/519)) ([054d307](https://github.com/foundation50/classroom50/commit/054d3071a6d842a3fe9f57d36d16c3ade5ce4caa))
+* **web:** translate login session-expired notice and polish sign-in card ([#517](https://github.com/foundation50/classroom50/issues/517)) ([e83b506](https://github.com/foundation50/classroom50/commit/e83b5064b67a1040fc312c368a43e8d72314240c))
+
 ## [1.25.1](https://github.com/foundation50/classroom50/compare/web-v1.25.0...web-v1.25.1) (2026-08-04)
 
 
