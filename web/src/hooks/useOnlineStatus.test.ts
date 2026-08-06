@@ -68,10 +68,8 @@ describe("useOnlineStatus", () => {
   })
 
   it("reads offline synchronously on a cold load that started hard-offline (#187)", () => {
-    // Guards the auth contract: resolveAuthStatus depends on useOnlineStatus()
-    // being false on the FIRST render of an offline cold reload (no waiting for
-    // a probe) so it holds a valid session at "loading" instead of bouncing to
-    // /login. A pending probe must not delay this.
+    // resolveAuthStatus depends on this being false on the FIRST render (no
+    // waiting for the probe) to hold a valid session instead of redirecting.
     livenessSpy.mockReturnValue(new Promise<boolean>(() => {}))
     coldStart(false)
     const { result } = renderHook(() => useOnlineStatus())
