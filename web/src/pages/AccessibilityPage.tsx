@@ -92,11 +92,12 @@ const TONE_DOT_CLASS: Record<BadgeTone, string> = {
   secondary: "bg-secondary",
 }
 
-// The order the VPAT summary chips render in — worst-first so failures lead.
+// The order the VPAT summary chips + status filter render in: best-first, then
+// the out-of-band statuses (not applicable, not evaluated) last.
 const VPAT_STATUS_ORDER: VpatConformance[] = [
-  "doesNotSupport",
-  "partially",
   "supports",
+  "partially",
+  "doesNotSupport",
   "notApplicable",
   "notEvaluated",
 ]
@@ -107,6 +108,18 @@ const PRINCIPLE_ORDER = [
   "Understandable",
   "Robust",
 ] as const
+
+// Shared boxed-tab recipe so the active tab reads unambiguously (solid primary
+// fill) and inactive tabs stay clickable-looking. One source for both the
+// principle tabs and the theme tabs.
+function tabClass(active: boolean): string {
+  return cx(
+    "tab cursor-pointer gap-1.5",
+    active
+      ? "tab-active rounded-box !bg-primary font-semibold !text-primary-content"
+      : "text-base-content/60 hover:text-base-content",
+  )
+}
 
 // A live preview of the pair — the actual foreground text on the actual
 // surface. Rendered as a button that opens the detail modal.
@@ -304,9 +317,9 @@ type VpatFilter = VpatConformance | "all"
 type VpatSort = "criterion" | "status"
 
 const STATUS_SORT_WEIGHT: Record<VpatConformance, number> = {
-  doesNotSupport: 0,
+  supports: 0,
   partially: 1,
-  supports: 2,
+  doesNotSupport: 2,
   notApplicable: 3,
   notEvaluated: 4,
 }
@@ -347,14 +360,18 @@ function VpatConformanceTable({
               type="button"
               role="tab"
               aria-selected={principle === activePrinciple}
-              className={cx(
-                "tab gap-1.5",
-                principle === activePrinciple && "tab-active",
-              )}
+              className={tabClass(principle === activePrinciple)}
               onClick={() => setActivePrinciple(principle)}
             >
               {principle}
-              <span className="text-xs tabular-nums text-base-content/50">
+              <span
+                className={cx(
+                  "text-xs tabular-nums",
+                  principle === activePrinciple
+                    ? "text-primary-content/70"
+                    : "text-base-content/50",
+                )}
+              >
                 {countByPrinciple[principle]}
               </span>
             </button>
@@ -422,19 +439,33 @@ function VpatConformanceTable({
   )
 }
 
-// One compact summary chip: a status dot, its label, and the count. Purely a
-// readout (not a filter toggle now — the Toolbar's status select owns
-// filtering), so the summary stays a quiet strip rather than five large cards.
+// One compact summary chip that doubles as a status filter toggle: a status
+// dot, count, and label. Clicking filters the table to that status (and toggles
+// back to "all" when the active chip is re-clicked); the active chip is ringed.
 function VpatSummaryChip({
   status,
   value,
+  active,
+  onClick,
 }: {
   status: VpatConformance
   value: number
+  active: boolean
+  onClick: () => void
 }) {
   const { t } = useTranslation()
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-base-300 px-2.5 py-1 text-xs">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cx(
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
+        active
+          ? "border-primary bg-primary/10 ring-1 ring-primary"
+          : "border-base-300 hover:border-primary/50 hover:bg-base-200",
+      )}
+    >
       <span
         className={cx(
           "size-2 rounded-full",
@@ -446,7 +477,7 @@ function VpatSummaryChip({
       <span className="text-base-content/70">
         {t(`accessibility.vpat.status.${status}`)}
       </span>
-    </span>
+    </button>
   )
 }
 
@@ -498,6 +529,11 @@ function VpatSection() {
 
   const hasActiveFilter = query.trim() !== "" || filter !== "all"
 
+  // Clicking a summary chip filters to that status, or clears back to "all" when
+  // the already-active chip is clicked again.
+  const toggleFilter = (status: VpatConformance) =>
+    setFilter((cur) => (cur === status ? "all" : status))
+
   return (
     <section className="flex flex-col gap-4" aria-labelledby="vpat-heading">
       <h2 id="vpat-heading" className="sr-only">
@@ -511,6 +547,8 @@ function VpatSection() {
                 key={status}
                 status={status}
                 value={vpat.summary.byStatus[status]}
+                active={filter === status}
+                onClick={() => toggleFilter(status)}
               />
             ),
           )}
@@ -655,10 +693,7 @@ function ContrastSection() {
                   type="button"
                   role="tab"
                   aria-selected={th.theme === activeTheme}
-                  className={cx(
-                    "tab",
-                    th.theme === activeTheme && "tab-active",
-                  )}
+                  className={tabClass(th.theme === activeTheme)}
                   onClick={() => setActiveTheme(th.theme)}
                 >
                   {th.label}
