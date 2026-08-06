@@ -937,12 +937,8 @@ function DownloadsSection() {
   )
 }
 
-// The full report, rendered as plain semantic HTML for browser print / Save as
-// PDF. Kept in the DOM but hidden on screen (`.report-print` is display:none
-// except under @media print); the "Print / Save as PDF" control just calls
-// window.print(). Built from the same JSON the page already fetches — the VPAT
 // Which report the browser print / Save-as-PDF should render. The full report
-// prints both documents; the others print just their own.
+// prints every document; the others print just their own.
 type PrintTarget = "vpat" | "contrast" | "full"
 
 // The VPAT conformance tables as print HTML.
@@ -1079,10 +1075,10 @@ function PrintableContrast({ contrast }: { contrast: Audit }) {
 // hidden on screen. Portaling matters: the print CSS hides #root, and if this
 // lived inside #root a display:none ancestor would hide it too (an ancestor's
 // display:none can't be overridden by a descendant), leaving a blank PDF. Built
-// from the same JSON the page already fetches — the VPAT (both editions share
-// one criteria set) and the contrast audit — so the PDF is a rendering of the
-// single source, never a separate assessment. Theme-agnostic (black on white,
-// bordered tables) so the PDF reads as a clean document regardless of theme.
+// from the same JSON the page already fetches — the VPAT and the contrast audit
+// — so the PDF is a rendering of the single source, never a separate assessment.
+// Theme-agnostic (black on white, bordered tables) so the PDF reads as a clean
+// document regardless of theme.
 function PrintableReport({ target }: { target: PrintTarget | null }) {
   const { data: vpat = null } = useVpatReport()
   const { data: contrast = null } = useContrastAudit()
