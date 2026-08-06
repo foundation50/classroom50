@@ -11,33 +11,27 @@
 export type AccessibilitySection =
   "conformance" | "color-contrast" | "statement" | "downloads"
 
-// Ordered for both the drawer nav and the (removed) tab order. The hash IS the
-// section id, so no separate mapping is needed — a readable hash per section.
-// `labelKey` is the full/descriptive label (page context); `navLabelKey` is a
-// shorter form for the narrow drawer rail so long labels don't truncate.
+// Ordered for both the drawer nav and back/forward-friendly deep links. The
+// hash IS the section id, so no separate mapping is needed. `navLabelKey` is a
+// short form for the narrow drawer rail so long labels don't truncate.
 export const ACCESSIBILITY_SECTIONS: {
   id: AccessibilitySection
-  labelKey: string
   navLabelKey: string
 }[] = [
   {
     id: "conformance",
-    labelKey: "accessibility.tab.vpat",
     navLabelKey: "accessibility.nav.vpat",
   },
   {
     id: "color-contrast",
-    labelKey: "accessibility.tab.contrast",
     navLabelKey: "accessibility.nav.contrast",
   },
   {
     id: "statement",
-    labelKey: "accessibility.tab.statement",
     navLabelKey: "accessibility.nav.statement",
   },
   {
     id: "downloads",
-    labelKey: "accessibility.tab.downloads",
     navLabelKey: "accessibility.nav.downloads",
   },
 ]

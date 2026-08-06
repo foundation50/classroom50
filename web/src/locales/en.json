@@ -3,12 +3,6 @@
     "title": "Color contrast audit",
     "pageTitle": "Accessibility",
     "pageSubtitle": "How the Classroom 50 web app conforms to WCAG 2.2 Level AA, checked automatically on every build.",
-    "tab": {
-      "contrast": "Color contrast",
-      "vpat": "Conformance report",
-      "statement": "Statement",
-      "downloads": "Download reports"
-    },
     "nav": {
       "contrast": "Color contrast",
       "vpat": "Conformance",

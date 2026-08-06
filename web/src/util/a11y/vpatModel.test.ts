@@ -212,4 +212,39 @@ describe("vpatModel — applyVerdicts overlay", () => {
     }
     expect(() => applyVerdicts(base, overlay)).toThrow(/remark/)
   })
+
+  it("accepts a valid ISO assessed date and passes it through", () => {
+    const overlay: VerdictOverlay = {
+      "9.9.9": {
+        status: "supports",
+        evidence: "manual",
+        remark: "ok",
+        assessed: "2026-08-05",
+      },
+    }
+    const [row] = applyVerdicts(base, overlay)
+    expect(row.assessed).toBe("2026-08-05")
+  })
+
+  it("throws on a malformed or impossible assessed date", () => {
+    for (const assessed of [
+      "2026-8-5",
+      "Aug 5 2026",
+      "2026-13-40",
+      "0000-00-00",
+    ]) {
+      const overlay: VerdictOverlay = {
+        "9.9.9": {
+          status: "supports",
+          evidence: "manual",
+          remark: "ok",
+          assessed,
+        },
+      }
+      expect(
+        () => applyVerdicts(base, overlay),
+        `expected "${assessed}" to be rejected`,
+      ).toThrow(/assessed/)
+    }
+  })
 })

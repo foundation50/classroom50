@@ -19,13 +19,8 @@ import {
 import { sidebarPillTransition } from "@/lib/motion"
 import { rtlFlip } from "@/components/ui"
 
-export const Tip = ({
-  label,
-  children,
-}: {
-  label: string
-  children: ReactNode
-}) => {
+// Collapse-only tooltip wrapper, used internally by SidebarNavItem below.
+const Tip = ({ label, children }: { label: string; children: ReactNode }) => {
   const { collapsed } = useSidebarCollapse()
   if (!collapsed) return <>{children}</>
   return (

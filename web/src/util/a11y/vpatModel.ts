@@ -423,6 +423,20 @@ export type ManualVerdict = {
 
 export type VerdictOverlay = Record<string, ManualVerdict>
 
+// True for a real calendar date in ISO YYYY-MM-DD form. A bare regex would
+// admit impossible dates (2026-13-40, 0000-00-00), so round-trip through Date:
+// a value survives only if it parses AND re-serializes to the same string.
+// Shared by applyVerdicts (below) and the dev-only /assess write endpoint
+// (vite.config.ts) so the accepted-date rule lives in exactly one place.
+export function isValidAssessedDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  )
+}
+
 const MANUAL_STATUSES = new Set<ManualVerdict["status"]>([
   "supports",
   "partially",
@@ -474,10 +488,10 @@ export function applyVerdicts(
     if (typeof v.remark !== "string" || v.remark.trim() === "") {
       throw new Error(`Manual verdict for "${id}" requires a non-empty remark.`)
     }
-    if (v.assessed !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(v.assessed)) {
+    if (v.assessed !== undefined && !isValidAssessedDate(v.assessed)) {
       throw new Error(
         `Manual verdict for "${id}" has an invalid assessed date ` +
-          `"${v.assessed}"; expected ISO YYYY-MM-DD.`,
+          `"${v.assessed}"; expected a real ISO YYYY-MM-DD date.`,
       )
     }
   }
