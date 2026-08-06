@@ -20,19 +20,16 @@ export type AutomatedBinding = {
   /** The VPAT remark stating what was machine-checked (and any residual gap). */
   remark: string
   /**
-   * True when the backing check lives in the browser project (needs real
-   * Chromium), so it runs on the PR CI browser lane but NOT in the
-   * `test:node`-only deploy/release gate (see .github/actions/web-build-gate).
-   * The guard (vpatAutomated.test.ts) requires these to disclose that CI
-   * dependency in their remark, so the public "Supports" claim never silently
-   * outruns a check that a manual redeploy of an un-CI'd ref would skip.
+   * The backing check needs real Chromium, so it runs on the PR CI browser lane
+   * but not in the `test:node`-only deploy gate. The guard below then requires
+   * the remark to disclose that (see BROWSER_CI_DISCLOSURE).
    */
   browserBacked?: boolean
 }
 
-// Disclosure every browser-backed remark must carry (asserted by the guard), so
-// a reader knows the criterion is verified on the PR CI browser lane and not
-// re-measured by the browser-free deploy gate.
+// The disclosure every browserBacked remark must carry so a manual redeploy of
+// an un-CI'd ref can't ship a "Supports" claim the browser-free deploy gate
+// never re-verified. Asserted by vpatAutomated.test.ts (which runs in that gate).
 export const BROWSER_CI_DISCLOSURE =
   "verified on the CI browser lane (not re-run by the browser-free deploy gate)"
 

@@ -40,15 +40,10 @@ describe("AUTOMATED_CRITERIA map integrity (U3)", () => {
   })
 
   // Deploy-gate fidelity guard (finding #3): the deploy/release path runs the
-  // browser-free `test:node` gate (see .github/actions/web-build-gate), so a
-  // criterion whose only backing check is a browser test is NOT re-verified for
-  // the exact ref a manual redeploy publishes. This node-project test — which
-  // therefore runs in that same deploy gate — pins two things so the public
-  // "Supports" claim can't silently outrun the check:
-  //   1. the four browser-only criteria are flagged browserBacked, and
-  //   2. every browserBacked remark discloses the CI-lane dependency,
-  // so tightening or removing a browser guard, or dropping the disclosure, fails
-  // the gate that actually runs at deploy.
+  // browser-free `test:node` gate, so a browser-only criterion isn't re-verified
+  // for the ref a manual redeploy publishes. This node-project test runs in that
+  // gate, so it fails if a browser-only criterion loses its browserBacked flag
+  // or its remark drops the CI-lane disclosure.
   const BROWSER_BACKED_IDS = ["2.5.8", "1.4.10", "1.4.4", "1.4.12"]
 
   it("the known browser-only criteria are flagged browserBacked", () => {

@@ -19,7 +19,7 @@ export type ContrastAuditRow =
   ContrastAuditJson["themes"][number]["rows"][number]
 export type ContrastAuditTheme = ContrastAuditJson["themes"][number]
 
-// Named for readability at call sites; the row/theme aliases keep the JSX terse.
+// Terse aliases for the JSX call sites.
 export type Row = ContrastAuditRow
 export type AuditTheme = ContrastAuditTheme
 export type Audit = ContrastAuditJson

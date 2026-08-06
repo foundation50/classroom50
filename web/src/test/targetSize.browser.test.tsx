@@ -11,10 +11,8 @@ import { rect, renderInViewport, setupBrowserA11y } from "./browserA11y"
 setupBrowserA11y()
 
 describe("2.5.8 Target Size — shared Button primitive", () => {
-  // xs/sm/md are the action sizes the app ships; every one must clear 24px, so
-  // measure them all (not just the defaults) — the VPAT 2.5.8 "Supports" claim
-  // covers the primitive's action sizes, so an unmeasured shipped size would
-  // let the claim outrun the check.
+  // Measure every shipped action size, not just the defaults: the 2.5.8
+  // "Supports" claim covers all of them, so an unmeasured size would overclaim.
   it.each(["md", "sm", "xs"] as const)(
     "a %s Button meets the 24x24 minimum",
     (size) => {
