@@ -440,13 +440,13 @@ textarea::placeholder {
     margin: 16mm 14mm;
   }
 
-  /* Hide the whole app UI; only the portaled report prints. The TanStack Query
-     devtools ("debug dashboard") mount their own container (and a floating
-     toggle) that can sit outside #root, so hide those explicitly too — dev-only,
-     but they'd otherwise leak into the PDF during `npm run dev`. */
+  /* Hide the whole app UI; only the portaled report prints. Dev-only overlays
+     (the rate-limit "debug dashboard" and the query devtools) portal to <body>
+     outside #root, so hiding #root alone leaves them in the PDF — hide the
+     dev-overlay marker and the devtools container explicitly too. */
   #root,
-  .tsqd-parent-container,
-  .tsqd-open-btn-container {
+  .dev-overlay,
+  .tsqd-parent-container {
     display: none !important;
   }
 
