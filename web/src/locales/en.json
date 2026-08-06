@@ -9,6 +9,12 @@
       "statement": "Statement",
       "downloads": "Download reports"
     },
+    "nav": {
+      "contrast": "Color contrast",
+      "vpat": "Conformance",
+      "statement": "Statement",
+      "downloads": "Downloads"
+    },
     "statement": {
       "heading": "Accessibility statement",
       "intro": "Classroom 50 is committed to making its web app usable by everyone, including people who rely on assistive technology. Color contrast is verified automatically on every build; the remaining criteria are assessed by a manual keyboard and screen-reader pass.",

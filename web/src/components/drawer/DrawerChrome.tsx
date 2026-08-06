@@ -11,9 +11,8 @@ import {
 } from "./SidebarContent"
 import { ClassroomLogo, ExpandSidebarButton } from "./primitives"
 import { SidebarFooter } from "./SidebarFooter"
-import { PublicSidebarNav } from "./PublicSidebarNav"
+import { AccessibilitySidebarNav } from "./AccessibilitySidebarNav"
 import { useSidebarNav } from "./useSidebarNav"
-import { useGithubAuth } from "@/auth/useGithubAuth"
 import { sidebarLevelVariants, pageContentVariants } from "@/lib/motion"
 
 // Replays a subtle enter animation on each route swap. Keying the motion element
@@ -119,8 +118,11 @@ export const DrawerToggle = () => (
 export const DrawerSidebar = () => {
   const { collapsed } = useSidebarCollapse()
   const { t } = useTranslation()
-  const { status } = useGithubAuth()
-  const signedIn = status === "authenticated"
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  // The accessibility page is public and section-navigated, so its rail shows
+  // the section deep links (not the org/class menus) for every visitor —
+  // signed-in users still get a "Back to app" row and the full account footer.
+  const onAccessibility = pathname.replace(/\/$/, "") === "/accessibility"
   const { page, selected, settings, levelKey } = useSidebarNav()
   return (
     <div className="drawer-side z-40">
@@ -143,7 +145,9 @@ export const DrawerSidebar = () => {
       >
         <ClassroomLogo />
         <ExpandSidebarButton />
-        {signedIn ? (
+        {onAccessibility ? (
+          <AccessibilitySidebarNav />
+        ) : (
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={levelKey}
@@ -164,10 +168,6 @@ export const DrawerSidebar = () => {
               )}
             </motion.div>
           </AnimatePresence>
-        ) : (
-          // Signed-out (public pages): no org/class menus — they need a GitHub
-          // client. Show the public section nav instead.
-          <PublicSidebarNav />
         )}
         <SidebarFooter />
       </nav>
