@@ -201,7 +201,7 @@ jobs:
           path: |
             web/vpat-report.json
             web/VPAT.md
-            web/VPAT-INT.md
+            web/ACCESSIBILITY-REPORT.md
           if-no-files-found: warn
 
       - name: Generate a11y inventory

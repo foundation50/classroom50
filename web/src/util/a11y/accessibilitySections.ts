@@ -19,20 +19,20 @@ export const ACCESSIBILITY_SECTIONS: {
   navLabelKey: string
 }[] = [
   {
-    id: "conformance",
-    navLabelKey: "accessibility.nav.vpat",
-  },
-  {
     id: "color-contrast",
     navLabelKey: "accessibility.nav.contrast",
   },
   {
-    id: "statement",
-    navLabelKey: "accessibility.nav.statement",
+    id: "conformance",
+    navLabelKey: "accessibility.nav.vpat",
   },
   {
     id: "downloads",
     navLabelKey: "accessibility.nav.downloads",
+  },
+  {
+    id: "statement",
+    navLabelKey: "accessibility.nav.statement",
   },
 ]
 

@@ -6,7 +6,9 @@
 // Rendered through a portal onto document.body (NOT inside the app's React root
 // subtree) and position:fixed, so from the website's perspective it doesn't
 // exist: it's outside the app's DOM tree, reserves no layout space, and can't be
-// matched by the app's own scroll containers or :has()/descendant selectors.
+// matched by the app's own scroll containers or :has()/descendant selectors. The
+// `dev-overlay` class lets the print stylesheet hide it (it sits outside #root,
+// so hiding #root alone wouldn't keep it out of a Save-as-PDF).
 
 import { useSyncExternalStore, useState, useEffect } from "react"
 import { createPortal } from "react-dom"
@@ -86,7 +88,7 @@ export function RateLimitOverlay() {
 
   return createPortal(
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-[9999] flex justify-center"
+      className="dev-overlay pointer-events-none fixed inset-x-0 bottom-0 z-[9999] flex justify-center"
       role="status"
       aria-label="GitHub rate limit (dev)"
     >

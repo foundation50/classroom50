@@ -11,7 +11,7 @@ source of truth, rendered into several views.
 | **Manual verdicts**    | `accessibility/vpatVerdicts.json` (this dir) | The only hand-edited file: per-criterion human verdicts (`status`, `evidence: "manual"`, `assessed` date, `remark`).                                              |
 | **Base model**         | `src/util/a11y/vpatModel.ts`                 | The applicable WCAG 2.2 A/AA criteria + the overlay logic (`applyVerdicts`). Contrast rows are re-derived from the live audit; automated rows are set by tooling. |
 | **Assessor guidance**  | `src/util/a11y/assessmentGuidance.ts`        | The "how to test each SC" prose the `/assess` tool shows.                                                                                                         |
-| **Report renderer**    | `src/util/a11y/vpatReport.ts`                | Renders the ACR (VPAT 2.5Rev, WCAG + INT editions) and the canonical JSON from the model.                                                                         |
+| **Report renderer**    | `src/util/a11y/vpatReport.ts`                | Renders the ACR (VPAT 2.5Rev, WCAG edition) and the canonical JSON from the model.                                                                                |
 | **Automated bindings** | `src/util/a11y/vpatAutomated.ts`             | Ties each `automated` verdict to the hermetic check that establishes it.                                                                                          |
 
 All the a11y model/report code lives under `src/util/a11y/` (a pure leaf layer —
@@ -20,9 +20,10 @@ no app imports); the report generators live under `scripts/a11y/`. The guards
 overclaim — e.g. a `supports` with no evidence — so the rendered report can
 never drift from this file.
 
-Do **not** hand-edit the generated artifacts (`VPAT.md`, `VPAT-INT.md`,
-`vpat-report.json`, `contrast-audit.json`, `a11y-inventory.json`) — they are
-gitignored renderings. Edit `vpatVerdicts.json` (via the tool below) instead.
+Do **not** hand-edit the generated artifacts (`VPAT.md`,
+`ACCESSIBILITY-REPORT.md`, `vpat-report.json`, `contrast-audit.json`,
+`a11y-inventory.json`) — they are gitignored renderings. Edit `vpatVerdicts.json`
+(via the tool below) instead.
 
 ## Verdict shape
 
@@ -92,11 +93,12 @@ redirects away and its write endpoint does not exist in a production build.
 ## Regenerate the reports
 
 From `web/` (outputs are gitignored; CI uploads them as artifacts and the Vite
-build emits them into `dist/`, served at `/VPAT.md`, `/VPAT-INT.md`,
-`/vpat-report.json`, `/CONTRAST-AUDIT.md`, `/contrast-audit.json`):
+build emits them into `dist/`, served at `/VPAT.md`,
+`/ACCESSIBILITY-REPORT.md`, `/vpat-report.json`, `/CONTRAST-AUDIT.md`,
+`/contrast-audit.json`):
 
 ```bash
-npm run audit:vpat            # VPAT.md (WCAG) + VPAT-INT.md (508/EN 301 549) + vpat-report.json
+npm run audit:vpat            # VPAT.md (WCAG) + ACCESSIBILITY-REPORT.md (combined) + vpat-report.json
 npm run audit:contrast        # CONTRAST-AUDIT.md + contrast-audit.json
 npm run audit:a11y            # the automated a11y checks (axe + structural + bindings)
 npm run audit:a11y:inventory  # a11y-inventory.json (what each verdict is backed by)
@@ -106,9 +108,8 @@ The live, no-auth report is always at `/accessibility` in the running app.
 
 ## Report format
 
-The ACR follows **VPAT® 2.5Rev** (the ITI industry-standard template) in two
-editions — WCAG and INT (Section 508 + EN 301 549 + WCAG 2.2) — kept concise:
-a short preamble (product, date, evaluation methods, conformance terms), a
-one-line summary, and per-principle tables with columns **Criterion · Level ·
-Conformance Level · Assessed · Remarks**. The `Assessed` column carries each
-verdict's date so remarks stay focused on the finding.
+The ACR follows **VPAT® 2.5Rev** (the ITI industry-standard template), WCAG
+edition, kept concise: a short preamble (product, date, evaluation methods,
+conformance terms), a one-line summary, and per-principle tables with columns
+**Criterion · Level · Conformance Level · Assessed · Remarks**. The `Assessed`
+column carries each verdict's date so remarks stay focused on the finding.

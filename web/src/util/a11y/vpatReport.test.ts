@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest"
 
 import { CONTRAST_CRITERION_IDS } from "./vpatModel"
-import { buildVpatReport, renderVpatJson, renderVpatReport } from "./vpatReport"
+import {
+  buildVpatReport,
+  renderCombinedReport,
+  renderVpatJson,
+  renderVpatReport,
+} from "./vpatReport"
 
 const FIXED = new Date("2026-08-04T00:00:00Z")
 
@@ -11,7 +16,7 @@ describe("buildVpatReport (JSON source of truth)", () => {
   it("carries schema, standard, editions, target, product, and date", () => {
     expect(report.schema).toBe("vpat-report/v1")
     expect(report.standard).toBe("WCAG 2.2")
-    expect(report.editions).toEqual(["2.5Rev-wcag", "2.5Rev-int"])
+    expect(report.editions).toEqual(["2.5Rev-wcag"])
     expect(report.target).toBe("AA")
     expect(report.product.length).toBeGreaterThan(0)
     expect(report.generated).toBe("2026-08-04")
@@ -68,8 +73,8 @@ describe("buildVpatReport (JSON source of truth)", () => {
   })
 })
 
-describe("renderVpatReport — WCAG edition", () => {
-  const md = renderVpatReport("wcag", FIXED)
+describe("renderVpatReport (WCAG edition)", () => {
+  const md = renderVpatReport(FIXED)
 
   it("states the format, standard, and date", () => {
     expect(md).toContain("VPAT® 2.5Rev — WCAG Edition")
@@ -84,6 +89,10 @@ describe("renderVpatReport — WCAG edition", () => {
     expect(md).toContain("## Robust")
   })
 
+  it("resolves the contrast criterion 1.4.3 to Supports from its single verdict", () => {
+    expect(md).toContain("| 1.4.3 Contrast (Minimum) | AA | Supports |")
+  })
+
   it("renders a row for every criterion in the report", () => {
     const report = buildVpatReport(FIXED)
     for (const c of report.criteria) {
@@ -92,43 +101,7 @@ describe("renderVpatReport — WCAG edition", () => {
   })
 
   it("is deterministic for a fixed date", () => {
-    expect(renderVpatReport("wcag", FIXED)).toBe(md)
-  })
-})
-
-describe("renderVpatReport — INT edition", () => {
-  const md = renderVpatReport("int", FIXED)
-
-  it("states the INT format and names the three incorporated standards", () => {
-    expect(md).toContain(
-      "VPAT® 2.5Rev — INT Edition (Section 508 + EN 301 549 + WCAG 2.2)",
-    )
-    expect(md).toContain("Section 508")
-    expect(md).toContain("EN 301 549")
-    expect(md).toContain("WCAG 2.2")
-  })
-
-  it("notes Section 508 Hardware is Not Applicable for a web app", () => {
-    expect(md).toContain("Chapter 4")
-    expect(md).toContain("Not Applicable")
-  })
-
-  it("shows each criterion with the same conformance word as the WCAG edition (single-source)", () => {
-    const wcag = renderVpatReport("wcag", FIXED)
-    // 1.4.3 (contrast) resolves to Supports in both editions from one verdict.
-    expect(wcag).toContain("| 1.4.3 Contrast (Minimum) | AA | Supports |")
-    expect(md).toContain("| 1.4.3 Contrast (Minimum) | AA | Supports |")
-  })
-
-  it("renders a row for every criterion in the report", () => {
-    const report = buildVpatReport(FIXED)
-    for (const c of report.criteria) {
-      expect(md, `INT row for ${c.id}`).toContain(`| ${c.id} ${c.name} |`)
-    }
-  })
-
-  it("is deterministic for a fixed date", () => {
-    expect(renderVpatReport("int", FIXED)).toBe(md)
+    expect(renderVpatReport(FIXED)).toBe(md)
   })
 })
 
@@ -137,5 +110,28 @@ describe("renderVpatJson", () => {
     const parsed = JSON.parse(renderVpatJson(FIXED))
     expect(parsed.summary).toEqual(buildVpatReport(FIXED).summary)
     expect(parsed.generated).toBe("2026-08-04")
+  })
+})
+
+describe("renderCombinedReport", () => {
+  const md = renderCombinedReport(FIXED)
+
+  it("bundles the VPAT and the contrast audit", () => {
+    expect(md).toContain("VPAT® 2.5Rev — WCAG Edition")
+    expect(md).toContain("# WCAG 2.2 Contrast Audit — Classroom50 web app")
+  })
+
+  it("does not include the dropped INT / 508 edition", () => {
+    expect(md).not.toContain("INT Edition")
+    expect(md).not.toContain("Section 508")
+  })
+
+  it("separates the two documents with a horizontal rule", () => {
+    // One rule joins the two sections; more would signal an extra doc slipped in.
+    expect(md.match(/^---$/gm)?.length).toBe(1)
+  })
+
+  it("is deterministic for a fixed date", () => {
+    expect(renderCombinedReport(FIXED)).toBe(md)
   })
 })
