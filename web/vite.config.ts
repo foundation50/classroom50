@@ -15,19 +15,19 @@ import { createRequire } from "node:module"
 import {
   renderContrastJson,
   renderContrastReport,
-} from "./src/util/a11y/contrastReport"
+} from "./src/util/a11y/contrastReport.ts"
 import {
   renderCombinedReport,
   renderVpatJson,
   renderVpatReport,
-} from "./src/util/a11y/vpatReport"
+} from "./src/util/a11y/vpatReport.ts"
 import {
   buildCriteria,
   isValidAssessedDate,
   type ManualVerdict,
   type VerdictOverlay,
-} from "./src/util/a11y/vpatModel"
-import { ASSESSMENT_GUIDANCE } from "./src/util/a11y/assessmentGuidance"
+} from "./src/util/a11y/vpatModel.ts"
+import { ASSESSMENT_GUIDANCE } from "./src/util/a11y/assessmentGuidance.ts"
 
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
@@ -180,7 +180,7 @@ function vpatReportPlugin(): Plugin {
 // (automated/contrast) row.
 function assessmentApiPlugin(): Plugin {
   const verdictsPath = path.resolve(
-    __dirname,
+    import.meta.dirname,
     "accessibility/vpatVerdicts.json",
   )
 
@@ -378,7 +378,8 @@ export default defineConfig(({ mode }) => ({
     "import.meta.env.VITE_GITHUB_PAT":
       mode === "development"
         ? JSON.stringify(
-            loadEnv(mode, path.resolve(__dirname), "").VITE_GITHUB_PAT ?? "",
+            loadEnv(mode, path.resolve(import.meta.dirname), "")
+              .VITE_GITHUB_PAT ?? "",
           )
         : JSON.stringify(""),
   },
@@ -398,7 +399,7 @@ export default defineConfig(({ mode }) => ({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
   server: {
@@ -406,7 +407,7 @@ export default defineConfig(({ mode }) => ({
       // src/skeleton/skeleton.ts imports the skeleton from
       // cli/gh-teacher/skeleton (outside web/), so the dev server must read the
       // monorepo root. `vite build` inlines the files regardless.
-      allow: [path.resolve(__dirname, "..")],
+      allow: [path.resolve(import.meta.dirname, "..")],
     },
   },
   test: {

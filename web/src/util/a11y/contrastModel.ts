@@ -15,7 +15,7 @@ import {
   ratioOver,
   toHex,
   type LinearRgb,
-} from "./contrast"
+} from "./contrast.ts"
 
 export type SizeClass = "body" | "large"
 export type Theme = "sumi" | "sumi-dark"

@@ -9,7 +9,7 @@
 // (vpatGuard.test.ts) enforces the same facts, so every rendering reflects
 // guarded state.
 
-import { buildContrastAudit, renderContrastReport } from "./contrastReport"
+import { buildContrastAudit, renderContrastReport } from "./contrastReport.ts"
 import {
   CONFORMANCE_LABEL,
   CONTRAST_CRITERION_IDS,
@@ -18,7 +18,7 @@ import {
   type ConformanceLevel,
   type Criterion,
   type WcagPrinciple,
-} from "./vpatModel"
+} from "./vpatModel.ts"
 
 export type VpatReportJson = {
   /** Bump when the JSON shape changes so consumers can guard. */
