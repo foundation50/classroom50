@@ -41,9 +41,7 @@ const CREATE_TOKEN_URL = `https://github.com/settings/tokens/new?${new URLSearch
   },
 ).toString()}`
 
-// Fine-grained alternative: resource owner is left blank (the teacher picks
-// their org on GitHub, since sign-in happens before org selection).
-const CREATE_FINE_GRAINED_URL = buildFineGrainedSigninUrl()
+type TokenType = "classic" | "fine-grained"
 
 export function GitHubPatPrompt({
   onSubmit,
@@ -58,7 +56,12 @@ export function GitHubPatPrompt({
 }) {
   const { t } = useTranslation()
   const [token, setToken] = useState("")
+  // Classic is the default: it spans every org the teacher owns, so it's the
+  // right choice for the multi-org norm. Fine-grained is the single-org option.
+  const [tokenType, setTokenType] = useState<TokenType>("classic")
+  const [org, setOrg] = useState("")
   const trimmed = token.trim()
+  const trimmedOrg = org.trim()
 
   return (
     <form
@@ -76,45 +79,100 @@ export function GitHubPatPrompt({
         </Alert>
       ) : null}
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         <h2 className="text-sm font-semibold">{t("auth.patTitle")}</h2>
         <p className="text-xs leading-relaxed text-base-content/70">
           {t("auth.patInstructions")}
         </p>
-        <ul className="grid gap-1 rounded-lg border border-base-300 bg-base-200 px-4 py-3 font-mono text-xs">
-          {REQUIRED_PAT_SCOPES.map((scope) => (
-            <li key={scope}>{scope}</li>
-          ))}
-        </ul>
-        <a
-          className="link link-info link-hover inline-flex items-center gap-1 text-xs"
-          href={CREATE_TOKEN_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <ExternalLink aria-hidden="true" className="size-3" />
-          {t("auth.patCreateTokenLink")}
-        </a>
-        <p className="text-xs leading-relaxed text-base-content/60">
-          {t("auth.patFineGrainedNote")}
-        </p>
-        <p className="text-xs leading-relaxed text-base-content/60">
-          {t("auth.patFineGrainedPermissionsIntro")}
-        </p>
-        <ul className="grid gap-1 rounded-lg border border-base-300 bg-base-200 px-4 py-3 text-xs">
-          {FINE_GRAINED_SIGNIN_PERMISSION_LABELS.map((label) => (
-            <li key={label}>{label}</li>
-          ))}
-        </ul>
-        <a
-          className="link link-info link-hover inline-flex items-center gap-1 text-xs"
-          href={CREATE_FINE_GRAINED_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <ExternalLink aria-hidden="true" className="size-3" />
-          {t("auth.patFineGrainedLink")}
-        </a>
+
+        <div className="join w-full" role="tablist">
+          <Button
+            type="button"
+            variant={tokenType === "classic" ? "primary" : "outline"}
+            className="join-item flex-1"
+            role="tab"
+            aria-selected={tokenType === "classic"}
+            onClick={() => setTokenType("classic")}
+          >
+            {t("auth.patTypeClassicRecommended")}
+          </Button>
+          <Button
+            type="button"
+            variant={tokenType === "fine-grained" ? "primary" : "outline"}
+            className="join-item flex-1"
+            role="tab"
+            aria-selected={tokenType === "fine-grained"}
+            onClick={() => setTokenType("fine-grained")}
+          >
+            {t("auth.patTypeFineGrained")}
+          </Button>
+        </div>
+
+        {tokenType === "classic" ? (
+          <div className="space-y-2">
+            <p className="text-xs leading-relaxed text-base-content/70">
+              {t("auth.patClassicIntro")}
+            </p>
+            <ul className="grid gap-1 rounded-lg border border-base-300 bg-base-200 px-4 py-3 font-mono text-xs">
+              {REQUIRED_PAT_SCOPES.map((scope) => (
+                <li key={scope}>{scope}</li>
+              ))}
+            </ul>
+            <a
+              className="link link-info link-hover inline-flex items-center gap-1 text-xs"
+              href={CREATE_TOKEN_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink aria-hidden="true" className="size-3" />
+              {t("auth.patCreateTokenLink")}
+            </a>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs leading-relaxed text-base-content/70">
+              {t("auth.patFineGrainedIntro")}
+            </p>
+            <label className="form-control w-full">
+              <span className="label-text text-xs">
+                {t("auth.patFineGrainedOrgLabel")}
+              </span>
+              <Input
+                className="text-sm"
+                inputSize="sm"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={t("auth.patFineGrainedOrgPlaceholder")}
+                value={org}
+                onChange={(event) => setOrg(event.target.value)}
+                disabled={isValidating}
+              />
+            </label>
+            <p className="text-xs leading-relaxed text-base-content/60">
+              {t("auth.patFineGrainedPermissionsIntro")}
+            </p>
+            <ul className="grid gap-1 rounded-lg border border-base-300 bg-base-200 px-4 py-3 text-xs">
+              {FINE_GRAINED_SIGNIN_PERMISSION_LABELS.map((label) => (
+                <li key={label}>{label}</li>
+              ))}
+            </ul>
+            {trimmedOrg ? (
+              <a
+                className="link link-info link-hover inline-flex items-center gap-1 text-xs"
+                href={buildFineGrainedSigninUrl(trimmedOrg)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink aria-hidden="true" className="size-3" />
+                {t("auth.patFineGrainedLink")}
+              </a>
+            ) : (
+              <p className="text-xs leading-relaxed text-base-content/50">
+                {t("auth.patFineGrainedNeedsOrg")}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <label className="form-control w-full">
