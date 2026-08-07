@@ -917,6 +917,7 @@ describe("editAssignment (preserved-entry integration)", () => {
       [{ allowed_files: "*.py" }, /restrict allowed files/],
       [{ release_assets: "report.pdf" }, /release/],
       [{ pass_threshold: 70 }, /passing threshold/],
+      [{ submission_mode: "tag" }, /no autograde shim/],
     ]
     for (const [overrides, want] of cases) {
       const { client } = makeBareClient(bareEntry)
@@ -924,6 +925,34 @@ describe("editAssignment (preserved-entry integration)", () => {
         editAssignment(client, editInput({ empty_repo: true, ...overrides })),
       ).rejects.toThrow(want)
     }
+  })
+
+  // The write path's submission_mode branches (buildAssignmentEntry is not
+  // exported — assert through editAssignment, like the sibling tests above):
+  // "tag" lands in the entry; the wire default (explicit or absent) is
+  // omitted, mirroring the CLI's omitempty collapse; junk is rejected before
+  // a file the CLI would refuse to parse can be written.
+  it("writes submission_mode tag and omits the every-push wire default", async () => {
+    for (const [input, want] of [
+      ["tag", "tag"],
+      ["every-push", undefined],
+      [undefined, undefined],
+    ] as const) {
+      const { client, committedContent } = makeClient()
+      await editAssignment(client, editInput({ submission_mode: input }))
+      const written = JSON.parse(committedContent()) as {
+        assignments: Assignment[]
+      }
+      const edited = written.assignments.find((a) => a.slug === SLUG)!
+      expect(edited.submission_mode).toBe(want)
+    }
+  })
+
+  it("rejects an out-of-enum submission_mode before writing", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(client, editInput({ submission_mode: "on-demand" })),
+    ).rejects.toThrow(/submission_mode: must be one of every-push, tag/)
   })
 
   // Route-table client like makeClient(), but seeded with a caller-supplied
@@ -3350,5 +3379,76 @@ describe("setAssignmentLock", () => {
     expect(result.locked).toBe(true)
     expect(result.templateAccessWarning).toBeDefined()
     expect(result.templateAccessWarning).toContain("tmpl")
+  })
+})
+
+describe("defaultAutograderWorkflow — milestone submission_tags", () => {
+  it("widens the tags trigger to the union with submit/*", () => {
+    const yaml = defaultAutograderWorkflow("cs50", "main", "main", undefined, [
+      "phase1",
+      "v*",
+    ])
+    expect(yaml).toContain('tags: ["phase1", "v*", "submit/*"]')
+    expect(yaml).toContain('branches: ["main"]')
+  })
+
+  it("tag mode + patterns drops branches and widens tags", () => {
+    const yaml = defaultAutograderWorkflow("cs50", "main", "main", "tag", [
+      "phase1",
+    ])
+    expect(yaml).not.toContain("branches:")
+    expect(yaml).toContain('tags: ["phase1", "submit/*"]')
+  })
+
+  it("no patterns renders byte-identical output (empty and undefined)", () => {
+    const base = defaultAutograderWorkflow("cs50", "main", "main")
+    expect(
+      defaultAutograderWorkflow("cs50", "main", "main", undefined, []),
+    ).toBe(base)
+    expect(
+      defaultAutograderWorkflow("cs50", "main", "main", undefined, undefined),
+    ).toBe(base)
+  })
+})
+
+// CLI-vs-web shim trigger parity: both accept clients must render the SAME
+// on: block for the same inputs — the retrofit rewriters (Go shimTriggerBlock
+// and the TS SHIM_TRIGGER_BLOCK) do line surgery on this exact shape, so a
+// drift on either side would make one client's shims "unrecognized" to the
+// retrofit. The CLI side is pinned against the embed by
+// TestShimTagsTriggerLine_MatchesEmbed / TestShimBranchTriggerLine_MatchesEmbed;
+// this pins the web render against the embed file itself.
+describe("web shim trigger block parity with the CLI embed", () => {
+  const embedUrl = new URL(
+    "../../../cli/gh-student/embed/autograde-shim.yaml",
+    import.meta.url,
+  )
+  const embed = readFileSync(fileURLToPath(embedUrl), "utf-8")
+
+  function triggerBlock(yaml: string): string {
+    const match =
+      /^on:\n {2}push:\n(?: {4}branches: \[[^\n]*\]\n)?(?: {4}tags: \[[^\n]*\]\n)/m.exec(
+        yaml,
+      )
+    if (!match) throw new Error(`no trigger block in:\n${yaml}`)
+    return match[0]
+  }
+
+  it("default render matches the embed's trigger block (branch substituted)", () => {
+    const embedBlock = triggerBlock(embed).replace("{{BRANCH}}", "main")
+    expect(triggerBlock(defaultAutograderWorkflow("o", "main", "main"))).toBe(
+      embedBlock,
+    )
+  })
+
+  it("tags render matches the embed's block with only the tags line widened", () => {
+    const embedBlock = triggerBlock(embed)
+      .replace("{{BRANCH}}", "main")
+      .replace('tags: ["submit/*"]', 'tags: ["phase1", "submit/*"]')
+    expect(
+      triggerBlock(
+        defaultAutograderWorkflow("o", "main", "main", undefined, ["phase1"]),
+      ),
+    ).toBe(embedBlock)
   })
 })

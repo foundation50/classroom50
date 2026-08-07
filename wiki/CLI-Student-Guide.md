@@ -133,6 +133,11 @@ grades it, and publishes a GitHub Release with your score a minute or two later.
 > `gh student submit` pushes the `submit/…` tag that triggers grading — or tag
 > a commit yourself: `git tag submit/final && git push origin submit/final`.
 > Any tag under `submit/` grades.
+>
+> Some assignments also name **milestone tags** (e.g. `phase1`, `phase2`,
+> `complete` — your teacher will tell you). Push one to grade that commit:
+> `git tag phase1 && git push origin phase1`. The graded result appears as a
+> normal `submit/…` release.
 
 When submit finishes, it prints two URLs:
 

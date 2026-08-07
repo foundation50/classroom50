@@ -23,6 +23,7 @@ import { useOutageHint } from "@/lib/githubHealth"
 import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { parseSubmissionTags } from "@/util/submissionTags"
 
 const log = logger.scope("CreateAssignmentPage")
 
@@ -146,6 +147,7 @@ const CreateAssignmentPage = () => {
                   : undefined,
                 student_permission: values.student_permission || undefined,
                 submission_mode: values.submission_mode,
+                submission_tags: parseSubmissionTags(values.submission_tags),
                 repo_features: formValuesToRepoFeatures(values),
                 classroom,
                 tests: values.tests,

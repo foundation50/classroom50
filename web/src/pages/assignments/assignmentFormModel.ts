@@ -20,6 +20,11 @@ import {
   releaseAssetsToText,
   validateReleaseAssets,
 } from "@/util/releaseAssets"
+import {
+  parseSubmissionTags,
+  submissionTagsToText,
+  validateSubmissionTags,
+} from "@/util/submissionTags"
 import { parseRunnerLabels } from "@/util/runners"
 import {
   RUNTIME_LANGUAGES,
@@ -112,6 +117,9 @@ export type CreateAssignmentFormValues = {
   // repo's shim at accept time; editing it later requires retrofitting
   // existing repos (submissions-page bulk action or the CLI).
   submission_mode: SubmissionMode
+  // Raw textarea text (one milestone tag pattern per line); parsed to
+  // string[] on save, joined back on read. Empty = no milestone tags.
+  submission_tags: string
   // Per-feature repo override, tri-state (one control shape regardless of
   // template): "inherit" writes no key (absent = inherit the template when
   // templated, else GitHub's own create default), "on"/"off" force the feature.
@@ -374,6 +382,15 @@ export function validateAssignmentForm(
     )
   }
 
+  // Mirror the CLI's ValidateSubmissionTags so a bad pattern can't reach the
+  // file (the util returns its own user-readable message).
+  const submissionTagsError = validateSubmissionTags(
+    parseSubmissionTags(value.submission_tags),
+  )
+  if (submissionTagsError) {
+    errors.submission_tags = submissionTagsError
+  }
+
   return errors
 }
 
@@ -424,6 +441,7 @@ export function toSubmitValues(
     // A bare repo has no shim to trigger; clear a stale pick on submit
     // (mirrors the other grading-adjacent clears above).
     submission_mode: isEmptyRepo ? "every-push" : value.submission_mode,
+    submission_tags: isEmptyRepo ? "" : value.submission_tags,
     // Uniform tri-state controls; "inherit" is the default and resolves to the
     // template's feature (templated) or GitHub's own create default (template-
     // less) at accept time, so no template-dependent default-flip is needed here.
@@ -474,6 +492,7 @@ export const useAssignmentForm = (
       pass_threshold: defaultValues?.pass_threshold ?? DEFAULT_PASS_THRESHOLD,
       student_permission: defaultValues?.student_permission ?? "",
       submission_mode: defaultValues?.submission_mode ?? "every-push",
+      submission_tags: defaultValues?.submission_tags || "",
       repo_feature_issues: defaultValues?.repo_feature_issues ?? "inherit",
       repo_feature_wiki: defaultValues?.repo_feature_wiki ?? "inherit",
       repo_feature_projects: defaultValues?.repo_feature_projects ?? "inherit",
@@ -564,6 +583,8 @@ export const assignmentToFormValues = (
     student_permission: assignment.student_permission ?? "",
     // Absent means every-push (the wire default, collapsed by writers).
     submission_mode: assignment.submission_mode ?? "every-push",
+    // Milestone tag patterns, joined one-per-line for the textarea.
+    submission_tags: submissionTagsToText(assignment.submission_tags),
     // Read mapping: absent object/key -> "inherit", true -> "on", false ->
     // "off", per key, so a stored "off" round-trips instead of reverting.
     repo_feature_issues: repoFeatureChoice(assignment.repo_features?.issues),

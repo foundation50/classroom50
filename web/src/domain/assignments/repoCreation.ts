@@ -364,6 +364,11 @@ export type CreateAssignmentInput = {
   // pushes. Mutually exclusive with empty_repo. Mirrors the CLI's
   // --submission-mode.
   submission_mode?: SubmissionMode
+  // Teacher-named milestone tag patterns that also trigger grading (union
+  // with the always-on submit/* namespace in the shim). Empty/undefined =
+  // none (buildAssignmentEntry omits the key). Mutually exclusive with
+  // empty_repo. Mirrors the CLI's --submission-tag.
+  submission_tags?: string[]
   // Per-assignment repo feature overrides (tri-state per key: undefined =
   // inherit, true = force on, false = force off). buildAssignmentEntry omits
   // the block when no key is set; accept resolves + applies it at fresh create.

@@ -358,7 +358,8 @@ shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--max-group-size <N>` | Max collaborators on a group repo (2–100). Advisory, not hard-enforced. |
 | `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.14. See [Autograders](Autograders). |
 | `--autograder <name>` | Reserved for swapping the whole reusable workflow (rare). Use `--runtime` for language toolchains. |
-| `--submission-mode every-push\|tag` | When the autograder fires. `every-push` (default) grades every push; `tag` grades only on explicit submits (`gh student submit`, the web submit page, or a hand-pushed `submit/*` tag) — regular pushes cost no Actions minutes, the cost lever for large classes. |
+| `--submission-mode every-push\|tag` | When the autograder fires. `every-push` (default) grades every push; `tag` grades only on explicit submits (`gh student submit`, or a hand-pushed `submit/*` tag) — regular pushes cost no Actions minutes, the cost lever for large classes. |
+| `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading — e.g. `--submission-tag phase1 --submission-tag phase2`. Students grade a milestone with plain git: `git tag phase1 && git push origin phase1`. Works with either mode; the graded record still appears as a `submit/*` release. |
 
 > [!NOTE]
 > **Custom grading isn't registered here.** Drop an `autograder.py` at

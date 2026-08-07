@@ -69,11 +69,12 @@ you accepted. Using the CLI instead? See
 
 > [!NOTE]
 > Some assignments grade **only on submit**: pushing saves your work but
-> doesn't grade it (the commit's check says so). Submit from your assignment
-> page here, run `gh student submit`, or push a tag under `submit/` (for
-> example `git tag submit/final && git push origin submit/final`) to be
-> graded. And if your teacher changes an assignment's grading setup, run
-> `git pull` before your next push.
+> doesn't grade it (the commit's check says so). Run `gh student submit`, or
+> push a tag under `submit/` (for example `git tag submit/final && git push
+> origin submit/final`) to be graded. Some assignments also name **milestone
+> tags** (e.g. `phase1` — your teacher will tell you); push one to grade that
+> commit: `git tag phase1 && git push origin phase1`. And if your teacher
+> changes an assignment's grading setup, run `git pull` before your next push.
 
 ## Group assignments
 

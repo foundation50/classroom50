@@ -86,7 +86,10 @@ function makeClient(opts: {
         return { ref: "", object: { sha: body.sha, type: "commit", url: "" } }
       }
       // findSubmitTagAtSha
-      if (path.includes("/git/matching-refs/tags/submit%2F") && method === "GET") {
+      if (
+        path.includes("/git/matching-refs/tags/submit%2F") &&
+        method === "GET"
+      ) {
         return Object.entries(opts.existingSubmitTags ?? {}).map(
           ([tag, sha]) => ({
             ref: `refs/tags/${tag}`,
@@ -98,7 +101,10 @@ function makeClient(opts: {
       if (path.endsWith("/git/refs") && method === "POST") {
         const body = init?.body as { ref: string; sha: string }
         created.tagRefs.push({ ref: body.ref, sha: body.sha })
-        return { ref: body.ref, object: { sha: body.sha, type: "commit", url: "" } }
+        return {
+          ref: body.ref,
+          object: { sha: body.sha, type: "commit", url: "" },
+        }
       }
       throw new Error(`unexpected request: ${method} ${path}`)
     },
@@ -298,7 +304,7 @@ describe("submitAssignment", () => {
   })
 
   it("every-push mode (absent or explicit) never touches tag refs", async () => {
-    for (const submissionMode of [undefined, "every-push"]) {
+    for (const submissionMode of [undefined, "every-push"] as const) {
       const { client, created } = makeClient({
         defaultBranch: "main",
         existingTree: [],

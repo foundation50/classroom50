@@ -177,7 +177,18 @@
         },
         "submission_mode": {
           "enum": ["every-push", "tag"],
-          "description": "When the autograder fires. ABSENT or \"every-push\" (the default): the student-repo shim triggers on every push to the default branch AND on submit/* tag pushes (the runner mints the submit/<UTC-timestamp>-<short-sha> tag itself on branch pushes). \"tag\": the shim triggers ONLY on submit/* tag pushes — `gh student submit` and the web submit page push the tag after the branch commit, so a plain `git push` does not grade (the primary Actions-cost lever for large cohorts). Applied to the shim at ACCEPT TIME; changing it later requires retrofitting each existing student repo's shim (`gh teacher assignment submission-mode` or the gradebook bulk action) and students must re-pull afterward. Default-autograder assignments only for the retrofit — teacher-authored (non-default) shims are never rewritten, though the field still governs client tag-pushing. Meaningless for empty_repo (no shim exists) — mutually exclusive (see the conditional at the assignment level). On the wire it is collapsed like feedback_pr: writers omit \"every-push\" (the CLI normalizes it away), so readers must treat an absent field as \"every-push\"; accept an explicit \"every-push\" too. Additive room is reserved for a future custom tag/branch-pattern field."
+          "description": "When the autograder fires. ABSENT or \"every-push\" (the default): the student-repo shim triggers on every push to the default branch AND on submit/* tag pushes (the runner mints the submit/<UTC-timestamp>-<short-sha> tag itself on branch pushes). \"tag\": the shim triggers ONLY on submit/* tag pushes — `gh student submit` pushes the tag after the branch commit (a hand-pushed submit/* tag works too), so a plain `git push` does not grade (the primary Actions-cost lever for large cohorts). Applied to the shim at ACCEPT TIME; changing it later requires retrofitting each existing student repo's shim (`gh teacher assignment submission-mode` or the gradebook bulk action) and students must re-pull afterward. Default-autograder assignments only for the retrofit — teacher-authored (non-default) shims are never rewritten, though the field still governs client tag-pushing. Meaningless for empty_repo (no shim exists) — mutually exclusive (see the conditional at the assignment level). On the wire it is collapsed like feedback_pr: writers omit \"every-push\" (the CLI normalizes it away), so readers must treat an absent field as \"every-push\"; accept an explicit \"every-push\" too. See submission_tags for teacher-named milestone tags; additive room remains for future tags-ignore/branch-pattern fields."
+        },
+        "submission_tags": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._/*?+\\[\\]-]+$"
+          },
+          "description": "Teacher-named milestone tag patterns that ALSO trigger grading — e.g. [\"phase1\", \"phase2\", \"complete\"], or globs like \"v*\". A student pushing a matching tag (`git tag phase1 && git push origin phase1`) gets that commit graded. TRIGGERS, not records: the runner still mints/reuses the canonical submit/<UTC-timestamp>-<short-sha> tag at the triggering commit and publishes the Release there (immutable one-release-per-submission history; the Release title notes the triggering tag), so collection, regrade, download, and web reads are unaffected. The canonical submit/* namespace ALWAYS triggers too — the generated shim trigger is the union of these patterns and submit/*, and the field is orthogonal to submission_mode (an every-push assignment can also name milestone tags; tag mode drops only the branch trigger). Patterns are the supported subset of GitHub Actions tag filters (literal, `*` not crossing `/`, `**` crossing, `?`, `+`, `[...]`; NO `!` excludes — rejected by writers) rendered verbatim into the shim's on.push.tags, hence the restricted charset (no quotes/whitespace — the values are spliced into a quoted-YAML line). One rule this schema's items.pattern cannot express (it must stay Go-RE2-compilable): validators also reject a LEADING `?`/`+` and a `+` stacked on another quantifier (e.g. `v*+`) — those compile as possessive quantifiers in Python but are errors in Go/JS, so every matcher fails closed on them; clients must apply the same rule (Go ValidateSubmissionTags / web validateSubmissionTags). Like submission_mode, the trigger is baked into each repo's shim at ACCEPT TIME; changing patterns later requires the same shim retrofit, and students must re-pull. Empty/absent means no milestone tags (exactly today's behavior). Caution: a broad glob like \"v*\" grades every matching release tag a student pushes. Mutually exclusive with empty_repo (no shim exists)."
         },
         "repo_features": {
           "type": "object",
@@ -207,6 +218,7 @@
               { "not": { "required": ["release_assets"] } },
               { "not": { "required": ["pass_threshold"] } },
               { "not": { "required": ["submission_mode"] } },
+              { "not": { "required": ["submission_tags"] } },
               { "properties": { "feedback_pr": { "const": false } } }
             ]
           }

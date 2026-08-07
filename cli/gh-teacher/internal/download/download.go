@@ -40,7 +40,10 @@ const dirTimestampFormat = "2006_01_02_T_15_04_05"
 // Cross-binary contract with collect_scores.py and autograde-runner.yaml
 // (which creates the submit-tag releases): asset name, submit-tag prefix,
 // per-asset size cap. Keep aligned with RESULT_ASSET_NAME, SUBMIT_TAG_PREFIX,
-// and MAX_RESULT_BYTES in collect_scores.py.
+// and MAX_RESULT_BYTES in collect_scores.py. submit/ is the RECORD namespace
+// and stays fixed even with configurable submission_tags — milestone tags
+// only trigger runs; the runner mints the canonical submit/* tag it releases
+// at, so release discovery here never needs the pattern matcher.
 const (
 	resultAssetName = "result.json"
 	submitTagPrefix = "submit/"

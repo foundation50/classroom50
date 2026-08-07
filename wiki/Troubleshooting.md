@@ -188,17 +188,25 @@ workflow ran under the repo's Actions tab.
 
 The assignment is in **submit-only mode** (`submission_mode: tag`): plain
 pushes don't trigger the autograder there — that's the point (they cost no
-Actions minutes). The commit status
+Actions minutes). The `classroom50/autograde-skipped` commit status
 `tag-mode assignment — push not graded; run gh student submit` is the runner
-telling you exactly that. To be graded, submit explicitly:
+telling you exactly that (graded commits report under `classroom50/autograde`
+instead — a not-graded commit never shows green there). To be graded, submit explicitly:
 
-- `gh student submit` or the web submit page (both push the `submit/…` tag
-  that triggers grading), or
+- `gh student submit` (it pushes the `submit/…` tag that triggers grading), or
 - tag a commit yourself: `git tag submit/final && git push origin
-  submit/final` — any tag under `submit/` grades.
+  submit/final` — any tag under `submit/` grades, plus any milestone tag
+  your teacher named (e.g. `git tag phase1 && git push origin phase1`).
 
 If a push shows NO workflow run at all, that's normal for tag mode too: the
-repo's workflow only fires on `submit/*` tags.
+repo's workflow only fires on submission tags.
+
+## My tag ran but the check says "tag is not a submission trigger"
+
+The tag you pushed matches neither `submit/*` nor any milestone tag the
+teacher configured for this assignment, so nothing was graded. Check the
+milestone names with your teacher (they're case-sensitive), or use
+`gh student submit` / a `submit/*` tag, which always grade.
 
 Teachers: if a repo you *expected* to grade on push shows that status, the
 repo's shim is still on the every-push trigger while the assignment is

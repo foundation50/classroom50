@@ -66,22 +66,23 @@ func NewCmd() *cobra.Command {
 // students join (direct GitHub-UI invites can bypass it — documented).
 func assignmentAddCmd() *cobra.Command {
 	var (
-		name          string
-		template      string
-		description   string
-		due           string
-		availableFrom string
-		mode          string
-		maxGroupSize  int
-		autograder    string
-		runtimeFile   string
-		testsFile     string
-		feedbackPR    bool
-		emptyRepo     bool
-		allowedFiles  []string
-		passThreshold int
-		studentPerm   string
-		submissionMd  string
+		name           string
+		template       string
+		description    string
+		due            string
+		availableFrom  string
+		mode           string
+		maxGroupSize   int
+		autograder     string
+		runtimeFile    string
+		testsFile      string
+		feedbackPR     bool
+		emptyRepo      bool
+		allowedFiles   []string
+		passThreshold  int
+		studentPerm    string
+		submissionMd   string
+		submissionTags []string
 	)
 
 	cmd := &cobra.Command{
@@ -217,6 +218,14 @@ func assignmentAddCmd() *cobra.Command {
 					return errors.New("--empty-repo is mutually exclusive with --submission-mode: a bare repo has no autograde shim to trigger")
 				}
 			}
+			if len(submissionTags) > 0 {
+				if err := assignment.ValidateSubmissionTags(submissionTags); err != nil {
+					return err
+				}
+				if emptyRepo {
+					return errors.New("--empty-repo is mutually exclusive with --submission-tag: a bare repo has no autograde shim to trigger")
+				}
+			}
 			if err := autograderseam.ValidateName(autograderVal); err != nil {
 				return err
 			}
@@ -276,6 +285,8 @@ func assignmentAddCmd() *cobra.Command {
 					StudentPermission:     studentPermVal,
 					SubmissionMode:        submissionModeVal,
 					SubmissionModeChanged: cmd.Flags().Changed("submission-mode"),
+					SubmissionTags:        submissionTags,
+					SubmissionTagsChanged: cmd.Flags().Changed("submission-tag"),
 				})
 		},
 	}
@@ -295,7 +306,8 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&allowedFiles, "allowed-files", nil, "Ordered .gitignore-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. Pass `--allowed-files '*' --allowed-files '!hello.py'` to allow only hello.py. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file.")
 	cmd.Flags().IntVar(&passThreshold, "pass-threshold", 0, "Opt-in passing bar as a percentage of max score (0–100): at/above it a gradebook client shows a submission as passing. Advisory/display-only — it does not change a student's score. Omit to leave it off (no passing concept); pass --pass-threshold 0 for an explicit 0%.")
 	cmd.Flags().StringVar(&studentPerm, "student-permission", "", "Optional collaborator role each student gets on their OWN assignment repo at accept time: one of pull, triage, push, maintain, admin. Omit for the default (push for individual, admin for group). Choose admin to let students manage repo settings and enable GitHub Pages. Applies to students who accept from now on; existing repos are unchanged. Caution: admin on a private repo also lets the student change its visibility.")
-	cmd.Flags().StringVar(&submissionMd, "submission-mode", contract.SubmissionModeEveryPush, "When the autograder fires: `every-push` (default; every push to the default branch grades) or `tag` (only submit/* tag pushes grade — `gh student submit`, the web submit page, or a hand-pushed submit/* tag; plain `git push` costs no Actions minutes). Baked into each student repo's shim at accept time; change it later with `gh teacher assignment submission-mode`, which also retrofits existing repos. Mutually exclusive with --empty-repo.")
+	cmd.Flags().StringVar(&submissionMd, "submission-mode", contract.SubmissionModeEveryPush, "When the autograder fires: `every-push` (default; every push to the default branch grades) or `tag` (only submit/* tag pushes grade — `gh student submit` pushes the tag, or push any submit/* tag by hand; plain `git push` costs no Actions minutes). Baked into each student repo's shim at accept time; change it later with `gh teacher assignment submission-mode`, which also retrofits existing repos. Mutually exclusive with --empty-repo.")
+	cmd.Flags().StringArrayVar(&submissionTags, "submission-tag", nil, "Milestone tag pattern (repeatable) that ALSO triggers grading — e.g. --submission-tag phase1 --submission-tag phase2, or a glob like 'v*'. A student pushing a matching tag (`git tag phase1 && git push origin phase1`) gets that commit graded; the grading record still lives at the canonical submit/* tag the runner mints, so history and collection are unchanged. The canonical submit/* namespace always triggers too. Baked into the shim at accept time like --submission-mode (same retrofit to change later). Caution: a broad glob like 'v*' grades every matching tag a student pushes. Mutually exclusive with --empty-repo.")
 	return cmd
 }
 
@@ -577,6 +589,11 @@ type addAssignmentParams struct {
 	// every-push while its deployed shims still only fire on tags — submit
 	// would stop pushing tags and NOTHING would grade.
 	SubmissionModeChanged bool
+	SubmissionTags        []string
+	// Same omitted-vs-explicit distinction for --submission-tag: an omitted
+	// flag carries a prior entry's patterns forward (deployed shims were
+	// rendered with them); passing the flag replaces the set.
+	SubmissionTagsChanged bool
 }
 
 // runAssignmentAdd validates template visibility and entry shape before the
@@ -660,6 +677,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		PassThreshold:     passThreshold,
 		StudentPermission: p.StudentPermission,
 		SubmissionMode:    p.SubmissionMode,
+		SubmissionTags:    p.SubmissionTags,
 	}
 	if err := assignment.ValidateAssignmentEntry(entry); err != nil {
 		return err
@@ -787,6 +805,12 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			// teacher owns retrofitting via `assignment submission-mode`.
 			if !p.SubmissionModeChanged {
 				attemptEntry.SubmissionMode = previous.SubmissionMode
+			}
+			// submission_tags gets the same treatment: deployed shims were
+			// rendered with the prior patterns, so an omitted flag must not
+			// silently drop them (milestone tags would stop grading).
+			if !p.SubmissionTagsChanged {
+				attemptEntry.SubmissionTags = append([]string(nil), previous.SubmissionTags...)
 			}
 		}
 		committedLocked = attemptEntry.Locked

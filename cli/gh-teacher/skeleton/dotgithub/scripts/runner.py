@@ -468,6 +468,11 @@ def validate_result(
             f"want {expected_type!r}"
         )
 
+    # submit/* here is the RECORD namespace, deliberately not the configurable
+    # submission_tags patterns: a milestone-tag run (e.g. phase1) mints/reuses
+    # the canonical submit/<ts>-<sha> tag in the workflow's tag step BEFORE
+    # grading, so SUBMISSION_TAG — and thus result.json's `submission` — is
+    # always canonical. Custom tags trigger; submit/* records.
     submission = data.get("submission")
     if not isinstance(submission, str) or not submission.startswith("submit/"):
         return f"{RESULT_FILENAME} 'submission' must be a 'submit/*' string"

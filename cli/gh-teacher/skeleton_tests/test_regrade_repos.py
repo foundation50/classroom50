@@ -74,7 +74,7 @@ def test_regrade_repo_reruns_latest_run(monkeypatch):
         rr, "main_head_sha", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
     )
 
-    assert rr.regrade_repo("https://api", "cs50", "cs50-hello-alice", "tok") == "rerun"
+    assert rr.regrade_repo("https://api", "cs50", "cs50-hello-alice", "tok", False) == "rerun"
     assert calls["run_id"] == 4242
 
 
@@ -90,7 +90,7 @@ def test_regrade_repo_first_grades_when_no_prior_run(monkeypatch):
 
     monkeypatch.setattr(rr, "create_tag_ref", fake_create)
 
-    assert rr.regrade_repo("https://api", "cs50", "cs50-hello-alice", "tok") == "tagged"
+    assert rr.regrade_repo("https://api", "cs50", "cs50-hello-alice", "tok", False) == "tagged"
     assert calls["sha"] == "deadbeefcafe"
     assert calls["tag"].startswith("submit/")
 
@@ -106,7 +106,7 @@ def test_regrade_repo_first_grade_reuses_existing_tag(monkeypatch):
         raise AssertionError("create_tag_ref called despite an existing tag")
 
     monkeypatch.setattr(rr, "create_tag_ref", boom)
-    assert rr.regrade_repo("https://api", "cs50", "cs50-hello-alice", "tok") == "tagged"
+    assert rr.regrade_repo("https://api", "cs50", "cs50-hello-alice", "tok", False) == "tagged"
 
 
 def test_regrade_repo_missing_repo(monkeypatch):
@@ -115,7 +115,7 @@ def test_regrade_repo_missing_repo(monkeypatch):
     monkeypatch.setattr(
         rr, "existing_submit_tag_at", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
     )
-    assert rr.regrade_repo("https://api", "cs50", "cs50-hello-alice", "tok") == "missing"
+    assert rr.regrade_repo("https://api", "cs50", "cs50-hello-alice", "tok", False) == "missing"
 
 
 def test_latest_autograde_run_id_parses_newest(monkeypatch):
@@ -362,10 +362,10 @@ def test_main_returns_1_on_missing_required_input(monkeypatch, missing):
 
 def test_main_all_success_returns_0(monkeypatch):
     _set_main_env(monkeypatch)
-    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: ["alice", "bob"])
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
     outcomes = {"cs50-hello-alice": "rerun", "cs50-hello-bob": "tagged"}
 
-    def fake_regrade(api_url, org, repo, token):
+    def fake_regrade(api_url, org, repo, token, tag_mode, submission_tags=None):
         return outcomes[repo]
 
     monkeypatch.setattr(rr, "regrade_repo", fake_regrade)
@@ -374,10 +374,10 @@ def test_main_all_success_returns_0(monkeypatch):
 
 def test_main_hard_http_error_aborts_immediately(monkeypatch):
     _set_main_env(monkeypatch)
-    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: ["alice", "bob"])
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
     seen = []
 
-    def fake_regrade(api_url, org, repo, token):
+    def fake_regrade(api_url, org, repo, token, tag_mode, submission_tags=None):
         seen.append(repo)
         raise _http_error(403)  # hard error -> abort the whole run
 
@@ -389,9 +389,9 @@ def test_main_hard_http_error_aborts_immediately(monkeypatch):
 
 def test_main_soft_http_error_skips_and_exits_1(monkeypatch):
     _set_main_env(monkeypatch)
-    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: ["alice", "bob"])
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
 
-    def fake_regrade(api_url, org, repo, token):
+    def fake_regrade(api_url, org, repo, token, tag_mode, submission_tags=None):
         if repo.endswith("alice"):
             raise _http_error(500)  # non-hard -> warn-and-skip, continue
         return "rerun"
@@ -462,7 +462,7 @@ def test_main_empty_team_warns_and_exits_0(monkeypatch, capsys):
     # but emit an empty-team warning so a green 0-repo run isn't mistaken for a
     # real regrade.
     _set_main_env(monkeypatch)
-    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: [])
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: ([], {"slug": "hello"}))
     monkeypatch.setattr(
         rr, "regrade_repo", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
     )
@@ -473,9 +473,9 @@ def test_main_empty_team_warns_and_exits_0(monkeypatch, capsys):
 
 def test_main_skiprepo_counts_as_skipped_not_failed(monkeypatch):
     _set_main_env(monkeypatch)
-    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: ["alice", "bob"])
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
 
-    def fake_regrade(api_url, org, repo, token):
+    def fake_regrade(api_url, org, repo, token, tag_mode, submission_tags=None):
         if repo.endswith("alice"):
             raise rr._SkipRepo()  # benign per-repo skip
         return "rerun"
@@ -487,10 +487,10 @@ def test_main_skiprepo_counts_as_skipped_not_failed(monkeypatch):
 
 def test_main_owner_filter_narrows_to_one(monkeypatch):
     _set_main_env(monkeypatch, OWNER_FILTER="Bob")  # case-insensitive match
-    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: ["alice", "bob"])
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
     seen = []
 
-    def fake_regrade(api_url, org, repo, token):
+    def fake_regrade(api_url, org, repo, token, tag_mode, submission_tags=None):
         seen.append(repo)
         return "rerun"
 
@@ -501,7 +501,7 @@ def test_main_owner_filter_narrows_to_one(monkeypatch):
 
 def test_main_owner_filter_no_match_returns_1(monkeypatch):
     _set_main_env(monkeypatch, OWNER_FILTER="carol")
-    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: ["alice", "bob"])
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
     monkeypatch.setattr(
         rr, "regrade_repo", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
     )
@@ -513,7 +513,7 @@ def test_main_logs_incremental_progress(monkeypatch, capsys):
     # fan-out emits a progress line every PROGRESS_EVERY repos (and on the last).
     monkeypatch.setattr(rr, "PROGRESS_EVERY", 2)
     _set_main_env(monkeypatch)
-    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: ["a", "b", "c"])
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["a", "b", "c"], {"slug": "hello"}))
     monkeypatch.setattr(rr, "regrade_repo", lambda *a, **k: "rerun")
 
     assert rr.main() == 0
@@ -547,7 +547,7 @@ def _write_classroom(tmp_path: pathlib.Path, *, slug="hello", team=None):
 def test_load_roster_returns_team_members(monkeypatch, tmp_path):
     cdir = _write_classroom(tmp_path)
     monkeypatch.setattr(rr, "list_team_member_logins", lambda *a, **k: ["alice", "bob"])
-    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok") == ["alice", "bob"]
+    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok")[0] == ["alice", "bob"]
 
 
 def test_load_roster_uses_persisted_team_slug(monkeypatch, tmp_path):
@@ -561,7 +561,7 @@ def test_load_roster_uses_persisted_team_slug(monkeypatch, tmp_path):
         return ["alice"]
 
     monkeypatch.setattr(rr, "list_team_member_logins", fake_members)
-    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok") == ["alice"]
+    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok")[0] == ["alice"]
     assert seen["team_slug"] == "classroom50-cs-1"
 
 
@@ -584,7 +584,7 @@ def test_load_roster_dedupes_case_insensitively(monkeypatch, tmp_path):
         rr, "list_team_member_logins", lambda *a, **k: ["Alice", "alice", "BOB"]
     )
     # First-seen casing wins; the case-insensitive duplicate is dropped.
-    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok") == ["Alice", "BOB"]
+    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok")[0] == ["Alice", "BOB"]
 
 
 def test_load_roster_skips_malformed_login(monkeypatch, tmp_path):
@@ -593,7 +593,7 @@ def test_load_roster_skips_malformed_login(monkeypatch, tmp_path):
         rr, "list_team_member_logins", lambda *a, **k: ["alice", "bad/name", "bob"]
     )
     # A malformed login is skipped with a warning; valid members survive.
-    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok") == ["alice", "bob"]
+    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok")[0] == ["alice", "bob"]
 
 
 def test_load_roster_propagates_team_http_error(monkeypatch, tmp_path):
@@ -840,7 +840,7 @@ def test_load_roster_empty_repo_false_proceeds(monkeypatch, tmp_path):
         )
     )
     monkeypatch.setattr(rr, "list_team_member_logins", lambda *a, **k: ["alice"])
-    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok") == ["alice"]
+    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok")[0] == ["alice"]
 
 
 def test_main_empty_repo_assignment_is_successful_noop(monkeypatch, capsys):
@@ -860,3 +860,197 @@ def test_main_empty_repo_assignment_is_successful_noop(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "empty_repo" in out
     assert "nothing to regrade" in out
+
+
+# Tag-mode regrade: suppressed branch runs are never replayed ------------------
+
+
+def test_is_tag_submission_mode_strict():
+    # Strict equality mirroring Go's Entry.IsTagSubmissionMode: only the exact
+    # string "tag" counts; absent / every-push / junk fail open to every-push.
+    assert rr.is_tag_submission_mode({"submission_mode": "tag"}) is True
+    for entry in ({}, {"submission_mode": "every-push"}, {"submission_mode": "Tag"},
+                  {"submission_mode": True}, {"submission_mode": 1}):
+        assert rr.is_tag_submission_mode(entry) is False
+
+
+def test_latest_autograde_run_id_tag_only_skips_branch_runs(monkeypatch):
+    # Newest-first: the newest run is a suppressed branch push; the first
+    # submit/* run behind it is the real latest submission.
+    body = json.dumps({"workflow_runs": [
+        {"id": 1, "head_branch": "main"},
+        {"id": 2, "head_branch": "submit/2026-01-01T00-00-00Z-abcdefg"},
+        {"id": 3, "head_branch": "main"},
+        {"id": 4, "head_branch": "submit/2025-12-31T00-00-00Z-1234567"},
+    ]}).encode("utf-8")
+    monkeypatch.setattr(rr, "_http_get", lambda *a, **k: body)
+    assert rr.latest_autograde_run_id("https://api", "cs50", "repo", "tok", tag_only=True) == 2
+
+
+def test_latest_autograde_run_id_tag_only_none_when_only_branch_runs(monkeypatch):
+    body = json.dumps({"workflow_runs": [
+        {"id": 1, "head_branch": "main"},
+        {"id": 2, "head_branch": "main"},
+    ]}).encode("utf-8")
+    monkeypatch.setattr(rr, "_http_get", lambda *a, **k: body)
+    assert rr.latest_autograde_run_id("https://api", "cs50", "repo", "tok", tag_only=True) is None
+
+
+def test_latest_autograde_run_id_tag_only_tolerates_missing_head_branch(monkeypatch):
+    # Malformed rows (absent / None / non-str head_branch) are skipped, not
+    # crashed on; a later well-formed submit run still matches.
+    body = json.dumps({"workflow_runs": [
+        {"id": 1},
+        {"id": 2, "head_branch": None},
+        {"id": 3, "head_branch": 7},
+        {"id": 4, "head_branch": "submit/2026-01-01T00-00-00Z-abcdefg"},
+    ]}).encode("utf-8")
+    monkeypatch.setattr(rr, "_http_get", lambda *a, **k: body)
+    assert rr.latest_autograde_run_id("https://api", "cs50", "repo", "tok", tag_only=True) == 4
+    # All-malformed: no crash, no match.
+    body = json.dumps({"workflow_runs": [{"id": 1}, {"id": 2, "head_branch": None}]}).encode("utf-8")
+    monkeypatch.setattr(rr, "_http_get", lambda *a, **k: body)
+    assert rr.latest_autograde_run_id("https://api", "cs50", "repo", "tok", tag_only=True) is None
+
+
+def test_latest_autograde_run_id_request_shape_by_mode(monkeypatch):
+    # tag_only scans one 100-run page; the default keeps today's per_page=1
+    # request byte-identical (pins that every-push behavior didn't change).
+    seen = {}
+
+    def fake_get(url, token, *, accept, _retries=3):
+        seen["url"] = url
+        return json.dumps({"workflow_runs": []}).encode("utf-8")
+
+    monkeypatch.setattr(rr, "_http_get", fake_get)
+    rr.latest_autograde_run_id("https://api", "cs50", "repo", "tok", tag_only=True)
+    assert "per_page=100" in seen["url"]
+    rr.latest_autograde_run_id("https://api", "cs50", "repo", "tok")
+    assert "per_page=1" in seen["url"] and "per_page=100" not in seen["url"]
+
+
+def test_regrade_repo_tag_mode_reruns_latest_tag_run(monkeypatch):
+    calls = {}
+
+    def fake_latest(api_url, org, repo, token, *, tag_only=False, submission_tags=None):
+        assert tag_only is True
+        return 4242
+
+    def fake_rerun(api_url, org, repo, token, run_id):
+        calls["run_id"] = run_id
+
+    monkeypatch.setattr(rr, "latest_autograde_run_id", fake_latest)
+    monkeypatch.setattr(rr, "rerun_workflow_run", fake_rerun)
+    monkeypatch.setattr(
+        rr, "main_head_sha", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+    assert rr.regrade_repo("https://api", "cs50", "cs50-hello-alice", "tok", True) == "rerun"
+    assert calls["run_id"] == 4242
+
+
+def test_regrade_repo_tag_mode_suppressed_only_falls_to_tag_fallback(monkeypatch):
+    # A repo whose runs are ALL suppressed branch pushes must not replay one
+    # (it would re-suppress and grade nothing) — the tag-at-HEAD fallback
+    # fires a REAL tag run instead.
+    calls = {}
+
+    monkeypatch.setattr(rr, "latest_autograde_run_id", lambda *a, **k: None)
+    monkeypatch.setattr(
+        rr, "rerun_workflow_run", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+    monkeypatch.setattr(rr, "main_head_sha", lambda *a, **k: "deadbeefcafe")
+    monkeypatch.setattr(rr, "existing_submit_tag_at", lambda *a, **k: None)
+
+    def fake_create(api_url, org, repo, token, tag, sha):
+        calls["tag"] = tag
+
+    monkeypatch.setattr(rr, "create_tag_ref", fake_create)
+    assert rr.regrade_repo("https://api", "cs50", "cs50-hello-alice", "tok", True) == "tagged"
+    assert calls["tag"].startswith("submit/")
+
+
+def test_regrade_repo_every_push_uses_default_lookup(monkeypatch):
+    # Every-push must keep today's selection exactly: tag_only stays False.
+    def fake_latest(api_url, org, repo, token, *, tag_only=False, submission_tags=None):
+        assert tag_only is False
+        return 7
+
+    monkeypatch.setattr(rr, "latest_autograde_run_id", fake_latest)
+    monkeypatch.setattr(rr, "rerun_workflow_run", lambda *a, **k: None)
+    assert rr.regrade_repo("https://api", "cs50", "cs50-hello-alice", "tok", False) == "rerun"
+
+
+def test_main_threads_tag_mode_from_manifest(monkeypatch, capsys):
+    # main() derives tag_mode from the loaded entry and passes it to every
+    # regrade_repo call.
+    for entry, want in (
+        ({"slug": "hello", "submission_mode": "tag"}, True),
+        ({"slug": "hello"}, False),
+    ):
+        seen = {}
+        _set_main_env(monkeypatch)
+        monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice"], entry))
+
+        def fake_regrade(api_url, org, repo, token, tag_mode, submission_tags=None):
+            seen["tag_mode"] = tag_mode
+            return "rerun"
+
+        monkeypatch.setattr(rr, "regrade_repo", fake_regrade)
+        assert rr.main() == 0
+        capsys.readouterr()
+        assert seen["tag_mode"] is want
+
+
+# Submission-tag matcher: shared-fixture parity --------------------------------
+
+
+def test_matches_submission_tag_shared_fixture_parity():
+    # The Python half of the matcher lockstep: the same golden cases Go's
+    # contract.MatchesSubmissionTag and the web matchesSubmissionTag assert.
+    # The pattern strings go verbatim into the shim's on.push.tags, so every
+    # evaluator must agree on what fires.
+    fixture = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "shared"
+        / "testdata"
+        / "submission_tag_match_cases.json"
+    )
+    doc = json.loads(fixture.read_text())
+    cases = doc["cases"]
+    assert cases, "shared fixture has no cases; did the file move?"
+    for case in cases:
+        got = rr.matches_submission_tag(case["patterns"], case["tag"])
+        assert got is case["matches"], (
+            f"matches_submission_tag({case['patterns']}, {case['tag']!r}) = {got}, "
+            f"want {case['matches']}"
+        )
+
+
+def test_matches_submission_tag_fails_closed_on_bad_pattern():
+    # A reversed character-class range fails re.compile: the pattern matches
+    # nothing (never everything), and a later valid pattern still works.
+    assert rr.matches_submission_tag(["[z-a]"], "m") is False
+    assert rr.matches_submission_tag(["[z-a]", "good"], "good") is True
+
+
+def test_latest_autograde_run_id_tag_only_accepts_milestone_runs(monkeypatch):
+    # A milestone-tag run (head_branch = the teacher-named tag) is a REAL
+    # graded run — its record lives at the canonical submit/* tag the runner
+    # minted — so tag-mode regrade may replay it. Foreign tags still skip.
+    body = json.dumps({"workflow_runs": [
+        {"id": 1, "head_branch": "main"},
+        {"id": 2, "head_branch": "v1.0"},
+        {"id": 3, "head_branch": "phase1"},
+        {"id": 4, "head_branch": "submit/2025-12-31T00-00-00Z-1234567"},
+    ]}).encode("utf-8")
+    monkeypatch.setattr(rr, "_http_get", lambda *a, **k: body)
+    got = rr.latest_autograde_run_id(
+        "https://api", "cs50", "repo", "tok",
+        tag_only=True, submission_tags=["phase1", "phase2"],
+    )
+    assert got == 3
+    # Without patterns, only the canonical namespace counts.
+    got = rr.latest_autograde_run_id(
+        "https://api", "cs50", "repo", "tok", tag_only=True,
+    )
+    assert got == 4

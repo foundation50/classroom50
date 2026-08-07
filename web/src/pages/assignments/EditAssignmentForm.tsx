@@ -9,6 +9,7 @@ import { useTrackPublishDeploy } from "@/hooks/useTrackPublishDeploy"
 import { useEditAssignment } from "@/hooks/mutations/useEditAssignment"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import { Spinner } from "@/components/Spinner"
+import { parseSubmissionTags } from "@/util/submissionTags"
 
 const EditAssignmentForm = ({
   org,
@@ -96,6 +97,7 @@ const EditAssignmentForm = ({
                   : undefined,
                 student_permission: values.student_permission || undefined,
                 submission_mode: values.submission_mode,
+                submission_tags: parseSubmissionTags(values.submission_tags),
                 repo_features: formValuesToRepoFeatures(values),
                 classroom,
                 tests: values.tests,

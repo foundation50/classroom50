@@ -26,13 +26,15 @@ import (
 // — keep byte-identical.
 const autogradeShimPath = ".github/workflows/autograde.yaml"
 
-// shimTriggerBlock matches the default shim's `on:` block in either mode: the
-// optional `branches:` line (group 1) followed by the submit/* tags line. Both
-// accept clients emit exactly this shape (their comment headers differ, which
-// is why the retrofit is line surgery on the trigger block and never a full
-// re-render); anything else is teacher-/student-authored and is never touched.
+// shimTriggerBlock matches the default shim's `on:` block in any mode/tags
+// combination: the optional `branches:` line (group 1) followed by the tags
+// line (group 2 — `["submit/*"]` on a default shim, a milestone-pattern union
+// on a submission_tags one). Both accept clients emit exactly this shape
+// (their comment headers differ, which is why the retrofit is line surgery on
+// the trigger block and never a full re-render); anything else is teacher-/
+// student-authored and is never touched.
 var shimTriggerBlock = regexp.MustCompile(
-	`(?m)^on:\n  push:\n(    branches: \[[^\n]*\]\n)?    tags: \["submit/\*"\]\n`,
+	`(?m)^on:\n  push:\n(    branches: \[[^\n]*\]\n)?(    tags: \[[^\n]*\]\n)`,
 )
 
 // assignmentSubmissionModeCmd flips an assignment's `submission_mode` and, by
@@ -56,10 +58,10 @@ func assignmentSubmissionModeCmd() *cobra.Command {
 			"Modes:\n" +
 			"  --every-push  every push to the default branch grades (the default\n" +
 			"                behavior); submit/* tag pushes grade too\n" +
-			"  --tag         ONLY submit/* tag pushes grade. `gh student submit` and\n" +
-			"                the web submit page push the tag; a hand-pushed submit/*\n" +
-			"                tag works too. Plain `git push` costs no Actions minutes —\n" +
-			"                the cost lever for large cohorts.\n\n" +
+			"  --tag         ONLY submit/* tag pushes grade. `gh student submit`\n" +
+			"                pushes the tag; a hand-pushed submit/* tag works too.\n" +
+			"                Plain `git push` costs no Actions minutes — the cost\n" +
+			"                lever for large cohorts.\n\n" +
 			"The trigger lives in each student repo's shim (GitHub evaluates a\n" +
 			"workflow's `on:` block before any job runs), so changing the mode must\n" +
 			"rewrite `.github/workflows/autograde.yaml` across existing repos. That\n" +
@@ -201,7 +203,6 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 			_, _ = fmt.Fprintf(out, "dry run: would set submission_mode of %s to %s\n", p.slug, p.mode)
 		}
 	} else {
-		changed := false
 		build := func(parentSHA string) (map[string]string, error) {
 			file, err := loadAssignments(client, p.org, p.classroom, parentSHA)
 			if err != nil {
@@ -214,12 +215,10 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 			}
 			entry := file.Assignments[idx]
 			if entry.SubmissionMode == wireMode {
-				changed = false
 				return nil, nil // already in the desired state — no commit
 			}
 			entry.SubmissionMode = wireMode
 			file.Assignments[idx] = entry
-			changed = true
 			data, err := assignment.EncodeAssignments(file)
 			if err != nil {
 				return nil, err
@@ -227,11 +226,16 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 			return map[string]string{assignmentsFilePath(p.classroom): string(data)}, nil
 		}
 		message := contract.PrefixCommit(fmt.Sprintf("assignment: set submission_mode of %s to %s in %s (gh teacher assignment submission-mode)", p.slug, p.mode, p.classroom))
-		if _, err := configwrite.CommitTree(client, p.org, configrepo.ConfigRepoName, branch, message, build); err != nil {
+		// Report from the commit OUTCOME (did a commit land?), never from
+		// build-attempt state: a rebase retry can no-op after a stale first
+		// attempt, and the pre-write read can lag a just-landed write
+		// (run-2 misreport, observed live 2026-08-05).
+		commitSHA, err := configwrite.CommitTree(client, p.org, configrepo.ConfigRepoName, branch, message, build)
+		if err != nil {
 			return err
 		}
 		if !p.quiet {
-			if changed {
+			if commitSHA != "" {
 				_, _ = fmt.Fprintf(out, "%s/%s/%s: set submission_mode of %s to %s\n",
 					p.org, configrepo.ConfigRepoName, assignmentsFilePath(p.classroom), p.slug, p.mode)
 			} else {
@@ -262,7 +266,7 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 	var results []shimResult
 	notAccepted := 0
 	for _, repo := range repos {
-		res := retrofitShim(client, p.org, repo, p.mode, p.dryRun)
+		res := retrofitShim(client, p.org, repo, p.mode, preEntry.SubmissionTags, p.dryRun)
 		if res.outcome == shimNotAccepted {
 			// Enrolled but not accepted yet. On the explicit --user path the
 			// teacher named this repo, so report it unconditionally; the bulk
@@ -305,12 +309,12 @@ func submissionModeTargetRepos(client githubapi.Client, p submissionModeParams, 
 	return repos, nil
 }
 
-// retrofitShim rewrites one repo's shim trigger block to `mode`. Line surgery
-// only: the two accept clients' shim comment headers differ, so a full
-// re-render would churn repos accepted by the other client — instead the
-// known trigger block is swapped in place and everything else is preserved
-// byte-for-byte. Unrecognized content is never overwritten.
-func retrofitShim(client githubapi.Client, org, repo, mode string, dryRun bool) shimResult {
+// retrofitShim rewrites one repo's shim trigger block to `mode` + `tags`.
+// Line surgery only: the two accept clients' shim comment headers differ, so
+// a full re-render would churn repos accepted by the other client — instead
+// the known trigger block is swapped in place and everything else is
+// preserved byte-for-byte. Unrecognized content is never overwritten.
+func retrofitShim(client githubapi.Client, org, repo, mode string, tags []string, dryRun bool) shimResult {
 	branch, notFound, err := studentRepoDefaultBranch(client, org, repo)
 	if err != nil {
 		return shimResult{repo: repo, outcome: shimFailed, reason: err.Error()}
@@ -319,74 +323,108 @@ func retrofitShim(client githubapi.Client, org, repo, mode string, dryRun bool) 
 		return shimResult{repo: repo, outcome: shimNotAccepted}
 	}
 
-	current, exists, err := configrepo.ReadFileContents(client, org, repo, autogradeShimPath, branch)
-	if err != nil {
-		return shimResult{repo: repo, outcome: shimFailed, reason: err.Error()}
-	}
-	if !exists {
-		// Repo exists but the shim never landed (a mid-flow accept failure).
-		// Accept's self-heal owns that case; nothing safe to rewrite here.
-		return shimResult{repo: repo, outcome: shimUnrecognized, reason: "no " + autogradeShimPath + " — accept may not have completed; re-accept heals it"}
-	}
-
-	updated, changed, err := rewriteShimTrigger(string(current), mode, branch)
-	if err != nil {
-		return shimResult{repo: repo, outcome: shimUnrecognized, reason: err.Error()}
-	}
-	if !changed {
-		return shimResult{repo: repo, outcome: shimCurrent}
-	}
-	if dryRun {
-		return shimResult{repo: repo, outcome: shimUpdated}
-	}
-
+	// The read+rewrite runs INSIDE the commit build, against the exact parent
+	// SHA of each attempt — never the branch name. A branch-name contents read
+	// seconds after a prior write can serve stale (pre-write) content
+	// (GitHub read-after-write lag, observed live 2026-08-05: an immediate
+	// re-run re-reported "updated" off the stale read while correctly
+	// committing nothing). Reading at the parent SHA makes the no-op check
+	// authoritative and the rewrite rebase-safe in one move.
+	var unrecognized error
 	build := func(parentSHA string) (map[string]string, error) {
+		unrecognized = nil
+		current, exists, err := configrepo.ReadFileContents(client, org, repo, autogradeShimPath, parentSHA)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			// Repo exists but the shim never landed (a mid-flow accept
+			// failure). Accept's self-heal owns that case; nothing safe to
+			// rewrite here.
+			unrecognized = errors.New("no " + autogradeShimPath + " — accept may not have completed; re-accept heals it")
+			return nil, nil
+		}
+		updated, changed, err := rewriteShimTrigger(string(current), mode, branch, tags)
+		if err != nil {
+			unrecognized = err
+			return nil, nil
+		}
+		if !changed {
+			return nil, nil // already on the target trigger — no commit
+		}
 		return map[string]string{autogradeShimPath: updated}, nil
 	}
-	if _, err := configwrite.CommitTree(client, org, repo, branch, contract.ShimUpdateCommitMessage(mode), build); err != nil {
+
+	if dryRun {
+		// One build pass against the current tip classifies without writing.
+		files, err := build(branch)
+		switch {
+		case err != nil:
+			return shimResult{repo: repo, outcome: shimFailed, reason: err.Error()}
+		case unrecognized != nil:
+			return shimResult{repo: repo, outcome: shimUnrecognized, reason: unrecognized.Error()}
+		case files == nil:
+			return shimResult{repo: repo, outcome: shimCurrent}
+		default:
+			return shimResult{repo: repo, outcome: shimUpdated}
+		}
+	}
+
+	commitSHA, err := configwrite.CommitTree(client, org, repo, branch, contract.ShimUpdateCommitMessage(mode), build)
+	if err != nil {
 		if errors.Is(err, configwrite.ErrMissingWorkflowScope) {
 			return shimResult{repo: repo, outcome: shimFailed, reason: "token lacks the `workflow` OAuth scope — run `gh auth refresh -s workflow` and re-run"}
 		}
 		return shimResult{repo: repo, outcome: shimFailed, reason: err.Error()}
 	}
+	if unrecognized != nil {
+		return shimResult{repo: repo, outcome: shimUnrecognized, reason: unrecognized.Error()}
+	}
+	if commitSHA == "" {
+		// The build no-opped: classify by what actually landed, not by the
+		// pre-write read (the run-2 misreport this rewrite exists to prevent).
+		return shimResult{repo: repo, outcome: shimCurrent}
+	}
 	return shimResult{repo: repo, outcome: shimUpdated}
 }
 
-// rewriteShimTrigger swaps the shim's trigger block to `mode`, returning the
-// rewritten content and whether anything changed. An error means the content
-// doesn't carry a recognizable default-shim trigger block.
+// rewriteShimTrigger swaps the shim's trigger block to `mode` + `tags`,
+// returning the rewritten content and whether anything changed. An error
+// means the content doesn't carry a recognizable default-shim trigger block.
 //
 // every-push → tag removes the `branches:` line; tag → every-push inserts it
 // with the repo's CURRENT default branch (better than any stale frozen name —
-// the shim must fire on the branch pushes actually land on).
-func rewriteShimTrigger(content, mode, branch string) (string, bool, error) {
+// the shim must fire on the branch pushes actually land on; an existing
+// branches line is kept verbatim for the same reason). The tags line is
+// reconciled to the union of the assignment's milestone patterns and submit/*
+// (contract.ShimTagsList) — so the same retrofit that flips the mode also
+// repairs a stale pattern set.
+func rewriteShimTrigger(content, mode string, branch string, tags []string) (string, bool, error) {
 	loc := shimTriggerBlock.FindStringSubmatchIndex(content)
 	if loc == nil {
 		return "", false, errors.New("shim does not carry a recognizable default trigger block — left untouched (student-edited?)")
 	}
 	hasBranches := loc[2] != -1
 
+	var branchesLine string
 	switch mode {
 	case contract.SubmissionModeTag:
-		if !hasBranches {
-			return content, false, nil
-		}
-		// Delete exactly the branches line (group 1).
-		return content[:loc[2]] + content[loc[3]:], true, nil
+		branchesLine = ""
 	case contract.SubmissionModeEveryPush:
 		if hasBranches {
-			// A branches line is already present; its (possibly stale) branch
+			// Keep the existing line verbatim: its (possibly stale) branch
 			// name is accept-time behavior, not this command's to correct.
-			return content, false, nil
+			branchesLine = content[loc[2]:loc[3]]
+		} else {
+			branchesLine = `    branches: ["` + branch + `"]` + "\n"
 		}
-		// Insert the branches line where group 1 would sit: right after
-		// "on:\n  push:\n" (the tags line starts there when absent).
-		insertAt := loc[0] + len("on:\n  push:\n")
-		line := `    branches: ["` + branch + `"]` + "\n"
-		return content[:insertAt] + line + content[insertAt:], true, nil
 	default:
 		return "", false, fmt.Errorf("unknown submission mode %q", mode)
 	}
+	tagsLine := "    tags: [" + contract.ShimTagsList(tags) + "]\n"
+
+	rebuilt := content[:loc[0]] + "on:\n  push:\n" + branchesLine + tagsLine + content[loc[1]:]
+	return rebuilt, rebuilt != content, nil
 }
 
 // studentRepoDefaultBranch reads the repo's settled default branch and

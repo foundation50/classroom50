@@ -205,6 +205,16 @@ export type Assignment = {
   // empty_repo (no shim exists). In lockstep with the CLI's assignments-v1
   // schema enum (`submission_mode`).
   submission_mode?: SubmissionMode
+  // Teacher-named milestone tag patterns (e.g. ["phase1", "v*"]) that ALSO
+  // trigger grading, alongside the always-on canonical submit/* namespace.
+  // TRIGGERS, not records: the runner still mints/reuses the canonical
+  // submit/* tag at the triggering commit and publishes the Release there.
+  // Baked into the shim at accept time (union with submit/*); changing
+  // patterns later requires the same shim retrofit as submission_mode.
+  // Empty/absent = no milestone tags. Mutually exclusive with empty_repo.
+  // In lockstep with the CLI's assignments-v1 schema (`submission_tags`);
+  // validation in @/util/submissionTags.
+  submission_tags?: string[]
   // Per-assignment repo feature overrides applied to each student repo at
   // accept time, on fresh create only. Each key is tri-state: absent = inherit
   // (a templated assignment carries the template's setting through GitHub's

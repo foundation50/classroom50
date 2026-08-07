@@ -15,7 +15,7 @@ func TestRenderEmbeddedShim(t *testing.T) {
 	// accept drops into every student repo. {{ORG}}, the submission branch, and
 	// the config-repo branch are the per-repo substitutions; everything else is
 	// fixed.
-	got := renderEmbeddedShim("cs50-fall-2026", "main", "main", "")
+	got := renderEmbeddedShim("cs50-fall-2026", "main", "main", "", nil)
 
 	// Trigger contract: branch pushes auto-grade; manual submit/* tag pushes
 	// still work (the runner detects which fired and creates or reuses the tag).
@@ -76,7 +76,7 @@ func TestRenderEmbeddedShim_OrgSubstitution(t *testing.T) {
 	// matching anything else.
 	for _, org := range []string{"cs50-fall-2026", "foundation50", "very-long-org-name-2026"} {
 		t.Run(org, func(t *testing.T) {
-			got := renderEmbeddedShim(org, "main", "main", "")
+			got := renderEmbeddedShim(org, "main", "main", "", nil)
 			wantUses := `uses: "` + org + `/classroom50/.github/workflows/autograde-runner.yaml@main"`
 			if !strings.Contains(got, wantUses) {
 				t.Errorf("expected %q in shim, got:\n%s", wantUses, got)
@@ -92,7 +92,7 @@ func TestRenderEmbeddedShim_BranchSubstitution(t *testing.T) {
 	// A master-default assignment repo must trigger on `master`; a config repo
 	// that stayed on `master` (rename didn't land) must be referenced via
 	// `@master` so the reusable-workflow ref resolves.
-	got := renderEmbeddedShim("cs50", "master", "master", "")
+	got := renderEmbeddedShim("cs50", "master", "master", "", nil)
 	if !strings.Contains(got, `branches: ["master"]`) {
 		t.Errorf("expected branches: [\"master\"], got:\n%s", got)
 	}
@@ -102,7 +102,7 @@ func TestRenderEmbeddedShim_BranchSubstitution(t *testing.T) {
 	}
 
 	// Empty branch/configBranch default to main.
-	def := renderEmbeddedShim("cs50", "", "", "")
+	def := renderEmbeddedShim("cs50", "", "", "", nil)
 	if !strings.Contains(def, `branches: ["main"]`) {
 		t.Errorf("empty branch should default to main, got:\n%s", def)
 	}
@@ -112,7 +112,7 @@ func TestRenderEmbeddedShim_BranchSubstitution(t *testing.T) {
 }
 
 func TestRenderEmbeddedShim_TagMode(t *testing.T) {
-	got := renderEmbeddedShim("cs50-fall-2026", "main", "main", contract.SubmissionModeTag)
+	got := renderEmbeddedShim("cs50-fall-2026", "main", "main", contract.SubmissionModeTag, nil)
 
 	// Tag mode keeps ONLY the submit/* tag trigger: a plain `git push` must
 	// not grade. The branch trigger line is removed whole — no leftover key.
@@ -141,7 +141,7 @@ func TestRenderEmbeddedShim_TagMode(t *testing.T) {
 
 	// The removal is exactly one line: tag-mode output equals every-push
 	// output minus the substituted branch trigger line.
-	everyPush := renderEmbeddedShim("cs50-fall-2026", "main", "main", "")
+	everyPush := renderEmbeddedShim("cs50-fall-2026", "main", "main", "", nil)
 	wantTag := strings.Replace(everyPush, "    branches: [\"main\"]\n", "", 1)
 	if got != wantTag {
 		t.Errorf("tag-mode shim is not every-push minus the branch line:\ngot:\n%s\nwant:\n%s", got, wantTag)
@@ -153,9 +153,9 @@ func TestRenderEmbeddedShim_TagMode(t *testing.T) {
 // renders the identical bytes, so introducing submission_mode changed nothing
 // for existing assignments.
 func TestRenderEmbeddedShim_EveryPushByteIdentical(t *testing.T) {
-	base := renderEmbeddedShim("cs50", "main", "main", "")
+	base := renderEmbeddedShim("cs50", "main", "main", "", nil)
 	for _, mode := range []string{contract.SubmissionModeEveryPush, "unvalidated-junk"} {
-		if got := renderEmbeddedShim("cs50", "main", "main", mode); got != base {
+		if got := renderEmbeddedShim("cs50", "main", "main", mode, nil); got != base {
 			t.Errorf("mode %q rendered different bytes than the default", mode)
 		}
 	}
@@ -216,4 +216,61 @@ func TestResolveConfigRepoBranch(t *testing.T) {
 			t.Fatal("expected an error on a failed config-repo read")
 		}
 	})
+}
+
+func TestRenderEmbeddedShim_SubmissionTags(t *testing.T) {
+	// Milestone patterns widen the tags trigger to their union with the
+	// always-on submit/* namespace — plain `git tag phase1 && git push origin
+	// phase1` grades, and `gh student submit` keeps working unchanged.
+	got := renderEmbeddedShim("cs50", "main", "main", "", []string{"phase1", "v*"})
+	wantTags := `tags: ["phase1", "v*", "submit/*"]`
+	if !strings.Contains(got, wantTags) {
+		t.Errorf("shim missing widened tags trigger %q\nfull:\n%s", wantTags, got)
+	}
+	// The branch trigger stays (every-push assignment with milestone tags).
+	if !strings.Contains(got, `branches: ["main"]`) {
+		t.Errorf("milestone tags must not drop the branch trigger:\n%s", got)
+	}
+
+	// Orthogonal to tag mode: both together drop the branch line AND widen
+	// the tags line.
+	both := renderEmbeddedShim("cs50", "main", "main", contract.SubmissionModeTag, []string{"phase1"})
+	if strings.Contains(both, "branches:") {
+		t.Errorf("tag mode + milestone tags must drop the branch trigger:\n%s", both)
+	}
+	if !strings.Contains(both, `tags: ["phase1", "submit/*"]`) {
+		t.Errorf("tag mode + milestone tags missing the widened trigger:\n%s", both)
+	}
+
+	// The widening is exactly one line: tags-mode output equals the default
+	// output with only the tags line swapped.
+	base := renderEmbeddedShim("cs50", "main", "main", "", nil)
+	want := strings.Replace(base, "    tags: [\"submit/*\"]\n",
+		"    tags: [\"phase1\", \"v*\", \"submit/*\"]\n", 1)
+	if got != want {
+		t.Errorf("submission-tags shim is not the default minus one line swap:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// TestRenderEmbeddedShim_NoTagsByteIdentical pins that an empty/nil pattern
+// list renders the identical bytes — introducing submission_tags changed
+// nothing for existing assignments.
+func TestRenderEmbeddedShim_NoTagsByteIdentical(t *testing.T) {
+	base := renderEmbeddedShim("cs50", "main", "main", "", nil)
+	if got := renderEmbeddedShim("cs50", "main", "main", "", []string{}); got != base {
+		t.Error("empty submission_tags rendered different bytes than nil")
+	}
+}
+
+// TestShimTagsTriggerLine_MatchesEmbed guards the tags line-surgery constant
+// against embed drift, exactly like TestShimBranchTriggerLine_MatchesEmbed:
+// if the embed's tags line changes shape, milestone patterns would silently
+// stop being rendered (falling back to submit/*-only). Fail here instead.
+func TestShimTagsTriggerLine_MatchesEmbed(t *testing.T) {
+	if !strings.Contains(embeddedShimContent, shimTagsTriggerLine) {
+		t.Fatalf("embed/autograde-shim.yaml no longer contains the exact tags trigger line %q — update shimTagsTriggerLine in lockstep", shimTagsTriggerLine)
+	}
+	if strings.Count(embeddedShimContent, shimTagsTriggerLine) != 1 {
+		t.Fatalf("tags trigger line appears more than once in the embed; single-occurrence surgery would replace the wrong one")
+	}
 }

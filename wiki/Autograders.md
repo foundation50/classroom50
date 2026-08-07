@@ -42,16 +42,35 @@ submission-mode`):
 `git push` runs nothing and costs no Actions minutes — the cost lever for
 large cohorts. Submissions become an explicit act:
 
-- `gh student submit` and the web submit page push a
-  `submit/<UTC-timestamp>-<short-sha>` tag after the branch commit — that tag
-  push is what grades.
+- `gh student submit` pushes a `submit/<UTC-timestamp>-<short-sha>` tag after
+  the branch commit — that tag push is what grades.
 - A hand-pushed tag works exactly the same: `git tag submit/anything && git
   push origin submit/anything`. Any tag under `submit/` grades; no CLI
   required.
 
+**Milestone submission tags** — with either mode, the assignment can also
+name **milestone tags** (`submission_tags` in assignments.json, e.g.
+`["phase1", "phase2", "complete"]`, settable at creation or from the
+assignment settings / `gh teacher assignment add --submission-tag`). Pushing
+a matching tag grades that commit — plain git, no CLI required:
+
+```sh
+git tag phase1
+git push origin phase1
+```
+
+Simple globs work too (`v*`), though exact milestone names are safer — a
+broad glob grades every matching tag a student pushes. The milestone tag
+**triggers** grading; the graded **record** still lives at the canonical
+`submit/<UTC-timestamp>-<short-sha>` tag the runner mints at that commit (its
+Release title notes *"via phase1"*), so history stays one-immutable-release-
+per-submission and collection, regrade, and the gradebook are unaffected. The
+`submit/*` namespace always keeps working alongside milestone tags.
+
 Because the trigger lives in each student repo's shim (GitHub evaluates a
-workflow's `on:` block before any job runs), **changing the mode after repos
-exist requires retrofitting each repo's shim** — see
+workflow's `on:` block before any job runs), **changing the mode or the
+milestone patterns after repos exist requires retrofitting each repo's
+shim** — see
 [Changing the trigger on existing repos](#changing-the-trigger-on-existing-repos).
 
 <details>
@@ -75,7 +94,7 @@ Two guards keep tag mode honest even when a repo's shim is stale:
   `tag` (or whose retrofit failed) still carries the every-push trigger. The
   runner reads `submission_mode` from the published assignments.json at setup
   time and, when the assignment is tag-mode but the run was branch-triggered,
-  skips tagging and grading, posting an explicit `classroom50/autograde`
+  skips tagging and grading, posting a `classroom50/autograde-skipped`
   success status: *"tag-mode assignment — push not graded; run gh student
   submit"*.
 - **Retrofit-commit skip** — the teacher-side shim update commits with
@@ -83,6 +102,18 @@ Two guards keep tag mode honest even when a repo's shim is stale:
   dropped the marker), the runner also recognizes a tip commit touching ONLY
   `.github/workflows/autograde.yaml` and skips it with the status
   *"autograder trigger updated — nothing to grade"*.
+- **Foreign-tag suppression** — a pushed tag matching neither `submit/*` nor
+  any configured milestone pattern (possible only with a stale or hand-edited
+  shim) is skipped gracefully with the `classroom50/autograde-skipped` status
+  *"tag is not a submission trigger — not graded"*, never a failed run.
+
+The two suppression statuses use the separate `classroom50/autograde-skipped`
+context deliberately: in both cases the student's real work exists but was
+**not** graded, and a green `classroom50/autograde` would read as "graded
+successfully". Graded commits alone report under `classroom50/autograde`.
+(The nothing-to-grade skips — acceptance commit, shim-update commit, no
+autograder configured — stay on the main context: there is no work there to
+mistake for graded.)
 
 </details>
 
@@ -701,8 +732,16 @@ configured by `init`). The only PAT in the system is the teacher-side
   Per-command timeouts do not extend the job limit.
 - **Every push grades, every push gets a Release.** Five pushes in ten minutes
   produce five graded runs and five Releases.
-- **"Latest" follows commit time** — the pointer moves only when the new
-  submission's commit is newer than the current latest.
+- **"Latest" follows the submission, not the commit.** Each graded
+  submission's Release becomes the latest — also when the student submits an
+  OLDER commit on purpose (a milestone tag pointed at earlier work, or a
+  regrade). The gradebook and the web pages use the same rule, so the badge
+  and the score always agree.
+- **Immutable-release rulesets freeze regrade Releases.** Orgs enforcing
+  immutable releases (a GitHub ruleset) cannot refresh a submission's Release
+  on regrade; the regraded score appears in the commit status and the Actions
+  job summary, but the Release — and thus the collected gradebook score for
+  that submission — keeps the pre-regrade result.
 - **Pages CDN lag:** updated content can take ~10 minutes to serve, so a
   submission in that window may fetch the previous `runner.py` or bundle.
 - **Don't force-push or delete submit tags** — collection keys on them.

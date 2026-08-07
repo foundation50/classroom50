@@ -412,6 +412,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; immutable; mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode. |
 | `--pass-threshold <0–100>` | Advisory passing bar shown by gradebook clients. Off when omitted (distinct from `0`). |
 | `--submission-mode every-push\|tag` | When the autograder fires: `every-push` (default) grades every push; `tag` grades only `submit/*` tag pushes (the submit clients push the tag — plain `git push` costs no Actions minutes). Change it later with `assignment submission-mode`. |
+| `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading: `git tag phase1 && git push origin phase1` grades that commit. Simple globs (`v*`) work; exact names are safer. The record still lives at the canonical `submit/*` tag. Mutually exclusive with `--empty-repo`. |
 
 **Where grading logic lives** (increasing effort): declarative `--tests` → a
 per-assignment `<classroom>/autograders/<slug>/autograder.py` → a classroom
@@ -480,7 +481,7 @@ gh teacher assignment submission-mode cs50-fall-2026 cs-principles hello --every
 
 Sets when the autograder fires — `--every-push` (every default-branch push
 grades; the default behavior) or `--tag` (**only** `submit/*` tag pushes
-grade; `gh student submit`, the web submit page, or a hand-pushed `submit/*`
+grade; `gh student submit`, or a hand-pushed `submit/*`
 tag; plain `git push` costs no Actions minutes) — and, by default,
 **retrofits the autograde shim in every existing student repo** to match.
 The trigger lives in each repo's workflow file, so a mode change doesn't

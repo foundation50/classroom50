@@ -22,6 +22,7 @@ import { getBranchRefRepo, getCommitByRepo } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { decodeBase64Utf8 } from "@/util/github"
 import { prefixCommit } from "@/util/commit"
+import { safeShimTagPatterns } from "@/util/submissionTags"
 
 // The shim's path in every student repo. Byte-mirror of the CLI's
 // classroomcfg.AutogradeWorkflowPath and runner.py's SHIM_UPDATE_COMMIT_PATHS.
@@ -39,24 +40,41 @@ export function shimUpdateCommitMessage(mode: "every-push" | "tag"): string {
   )
 }
 
-// The default shim's `on:` block in either mode: an optional branches: line
-// (group 1) followed by the submit/* tags line. Mirror of the Go
+// The default shim's `on:` block in any mode/tags combination: an optional
+// branches: line (group 1) followed by the tags line (group 2 — the default
+// `["submit/*"]` or a milestone-pattern union). Mirror of the Go
 // shimTriggerBlock regex.
 const SHIM_TRIGGER_BLOCK =
-  /^on:\n {2}push:\n( {4}branches: \[[^\n]*\]\n)? {4}tags: \["submit\/\*"\]\n/m
+  /^on:\n {2}push:\n( {4}branches: \[[^\n]*\]\n)?( {4}tags: \[[^\n]*\]\n)/m
 
 export type ShimRewrite =
   | { kind: "changed"; content: string }
   | { kind: "current" }
   | { kind: "unrecognized"; reason: string }
 
-// Swap the shim's trigger block to `mode`. every-push → tag removes the
-// branches: line; tag → every-push inserts it with the repo's CURRENT default
-// branch (the branch pushes actually land on).
+// The shim's tags flow sequence: the milestone patterns (if any) union the
+// always-on submit/* namespace. Byte-format mirror of Go
+// contract.ShimTagsList and autograderYaml.ts's shimTagsList. FAIL CLOSED:
+// the retrofit writes workflow files into student repos with the teacher's
+// OAuth token from the (hand-editable) manifest, so unsafe patterns drop the
+// whole milestone set (see safeShimTagPatterns).
+function shimTagsList(tags: string[]): string {
+  return [...safeShimTagPatterns(tags), "submit/*"]
+    .map((p) => `"${p}"`)
+    .join(", ")
+}
+
+// Swap the shim's trigger block to `mode` + `tags`. every-push → tag removes
+// the branches: line; tag → every-push inserts it with the repo's CURRENT
+// default branch (the branch pushes actually land on; an existing line is
+// kept verbatim for the same reason). The tags line is reconciled to the
+// union of the assignment's milestone patterns and submit/*, so the same
+// retrofit that flips the mode also repairs a stale pattern set.
 export function rewriteShimTrigger(
   content: string,
   mode: "every-push" | "tag",
   branch: string,
+  tags: string[] = [],
 ): ShimRewrite {
   const match = SHIM_TRIGGER_BLOCK.exec(content)
   if (!match) {
@@ -65,25 +83,25 @@ export function rewriteShimTrigger(
       reason: "shim does not carry a recognizable default trigger block",
     }
   }
-  const hasBranches = match[1] !== undefined
+  const existingBranches = match[1]
 
-  if (mode === "tag") {
-    if (!hasBranches) return { kind: "current" }
-    const start = match.index + "on:\n  push:\n".length
-    return {
-      kind: "changed",
-      content: content.slice(0, start) + content.slice(start + match[1].length),
-    }
+  let branchesLine = ""
+  if (mode === "every-push") {
+    // Keep an existing line verbatim: its (possibly stale) branch name is
+    // accept-time behavior, not this action's to correct.
+    branchesLine = existingBranches ?? `    branches: ["${branch}"]\n`
   }
-  // every-push: insert the branches line unless one is already present (its
-  // possibly-stale branch name is accept-time behavior, not ours to correct).
-  if (hasBranches) return { kind: "current" }
-  const insertAt = match.index + "on:\n  push:\n".length
-  const line = `    branches: ["${branch}"]\n`
-  return {
-    kind: "changed",
-    content: content.slice(0, insertAt) + line + content.slice(insertAt),
-  }
+  const tagsLine = `    tags: [${shimTagsList(tags)}]\n`
+
+  const rebuilt =
+    content.slice(0, match.index) +
+    "on:\n  push:\n" +
+    branchesLine +
+    tagsLine +
+    content.slice(match.index + match[0].length)
+  return rebuilt === content
+    ? { kind: "current" }
+    : { kind: "changed", content: rebuilt }
 }
 
 export type ShimUpdateOutcome =
@@ -104,8 +122,11 @@ export async function updateShimSubmissionMode(params: {
   org: string
   repo: string
   mode: "every-push" | "tag"
+  // The assignment's milestone submission_tags; the rewrite reconciles the
+  // shim's tags line to their union with submit/*. Omit for none.
+  tags?: string[]
 }): Promise<ShimUpdateOutcome> {
-  const { client, org, repo, mode } = params
+  const { client, org, repo, mode, tags } = params
 
   let branch: string
   try {
@@ -143,7 +164,7 @@ export async function updateShimSubmissionMode(params: {
     throw err
   }
 
-  const rewrite = rewriteShimTrigger(current, mode, branch)
+  const rewrite = rewriteShimTrigger(current, mode, branch, tags ?? [])
   if (rewrite.kind === "current") return { status: "current" }
   if (rewrite.kind === "unrecognized") {
     return { status: "unrecognized", reason: rewrite.reason }

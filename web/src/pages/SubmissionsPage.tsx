@@ -1261,6 +1261,7 @@ const SubmissionsPageContent = () => {
         classroom={classroom}
         assignment={assignment}
         submissionMode={assignmentInfo?.submission_mode ?? "every-push"}
+        submissionTags={assignmentInfo?.submission_tags}
         owners={acceptedOwners}
         students={students}
       />

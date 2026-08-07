@@ -23,6 +23,10 @@ import {
   REPO_PERMISSIONS,
   defaultStudentPermission,
 } from "@/types/classroom"
+import {
+  parseSubmissionTags,
+  validateSubmissionTags,
+} from "@/util/submissionTags"
 import type { AssignmentForm } from "./assignmentFormModel"
 
 // GitHub's own reference for the repo role ladder (read/triage/write/maintain/
@@ -460,6 +464,126 @@ export const DetailsSection = ({
                       ) : null}
                     </div>
                   )}
+                </form.Field>
+              )}
+            </form.Subscribe>
+
+            {/* Milestone submission tags: teacher-named tag patterns (e.g.
+                phase1, phase2, complete) that ALSO trigger grading — a
+                student pushing a matching tag gets that commit graded, with
+                the record still living at the canonical submit/* tag the
+                runner mints. Union with submit/* in the shim, orthogonal to
+                the mode picker above; the same shim-retrofit warning applies
+                on edit. Locked like the mode picker for a bare repo. */}
+            <form.Subscribe selector={(state) => state.values.empty_repo}>
+              {(emptyRepo) => (
+                <form.Field name="submission_tags">
+                  {(field) => {
+                    const error = field.state.meta.errors[0] as
+                      string | undefined
+                    return (
+                      <div
+                        className={
+                          emptyRepo ? "pointer-events-none opacity-50" : ""
+                        }
+                        aria-disabled={emptyRepo}
+                      >
+                        <FormField
+                          htmlFor={field.name}
+                          label={t("assignments.form.submissionTags.label")}
+                          help={
+                            emptyRepo
+                              ? t(
+                                  "assignments.form.submissionMode.emptyRepoHelp",
+                                )
+                              : t("assignments.form.submissionTags.help")
+                          }
+                        >
+                          {({ id, describedById }) => (
+                            <Textarea
+                              id={id}
+                              name={field.name}
+                              className="font-mono w-full sm:max-w-xs"
+                              rows={3}
+                              spellCheck={false}
+                              placeholder={"phase1\nphase2\ncomplete"}
+                              aria-describedby={describedById}
+                              value={emptyRepo ? "" : field.state.value}
+                              onBlur={field.handleBlur}
+                              onChange={(e) =>
+                                field.handleChange(e.target.value)
+                              }
+                            />
+                          )}
+                        </FormField>
+                        {error ? (
+                          <p role="alert" className="mt-1.5 text-sm text-error">
+                            {error}
+                          </p>
+                        ) : null}
+                        <form.Subscribe
+                          selector={(state) => state.values.submission_tags}
+                        >
+                          {(tags) => {
+                            // Surface the same problems the save-time validator
+                            // catches, live and ahead of save (the form only
+                            // validates onSubmit). Priority, most to least
+                            // actionable:
+                            //   1. comma — the obvious wrong guess for a
+                            //      one-per-line field; its own friendly hint
+                            //      since the generic charset error wouldn't
+                            //      explain the real fix.
+                            //   2. a hard validation error (bad charset,
+                            //      duplicate, stacked quantifier) — the exact
+                            //      message the save path would show.
+                            //   3. broad-glob caution / edit-retrofit warning —
+                            //      advisory, not errors.
+                            const parsed = parseSubmissionTags(tags)
+                            const hasComma = (tags ?? "").includes(",")
+                            const validationError =
+                              validateSubmissionTags(parsed)
+                            const broad = parsed.some(
+                              (p) => p.includes("*") || p.includes("+"),
+                            )
+                            const changed =
+                              edit &&
+                              tags !==
+                                (form.options.defaultValues?.submission_tags ??
+                                  "")
+                            if (
+                              !hasComma &&
+                              !validationError &&
+                              !broad &&
+                              !changed
+                            )
+                              return null
+                            const message = hasComma
+                              ? t("assignments.form.submissionTags.commaHint")
+                              : (validationError ??
+                                (broad
+                                  ? t(
+                                      "assignments.form.submissionTags.wildcardCaution",
+                                    )
+                                  : t(
+                                      "assignments.form.submissionMode.editWarning",
+                                    )))
+                            // Errors read as errors; the advisory cautions stay
+                            // warning-toned.
+                            const isError = hasComma || Boolean(validationError)
+                            return (
+                              <Alert
+                                tone={isError ? "error" : "warning"}
+                                role="status"
+                                className="mt-2 text-sm"
+                              >
+                                <span>{message}</span>
+                              </Alert>
+                            )
+                          }}
+                        </form.Subscribe>
+                      </div>
+                    )
+                  }}
                 </form.Field>
               )}
             </form.Subscribe>

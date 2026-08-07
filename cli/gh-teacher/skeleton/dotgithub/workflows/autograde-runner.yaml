@@ -48,7 +48,13 @@ jobs:
       # branch-triggered (a stale every-push shim, or a hand-edited one);
       # skip tagging + grading so a plain `git push` costs nothing.
       branch-push-suppressed: ${{ steps.read.outputs.branch-push-suppressed }}
-      submission-mode: ${{ steps.read.outputs.submission-mode }}
+      # 'true' -> a pushed tag matched neither submit/* nor any configured
+      # submission_tags pattern (stale/hand-edited shim); skip tagging +
+      # grading — the tag is not a submission trigger.
+      foreign-tag-suppressed: ${{ steps.read.outputs.foreign-tag-suppressed }}
+      # The teacher-named milestone tag that triggered this run ('' for a
+      # branch or canonical submit/* trigger); surfaces in the Release title.
+      trigger-tag: ${{ steps.read.outputs.trigger-tag }}
       submission-tag: ${{ steps.tag.outputs.tag }}
       runs-on:        ${{ steps.read.outputs.runs-on }}
       container:      ${{ steps.read.outputs.container }}
@@ -157,6 +163,7 @@ jobs:
           steps.acceptance.outputs.is-shim-update != 'true'
         env:
           REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
           REPO_OWNER: ${{ github.repository_owner }}
         shell: python3 {0}
         run: |
@@ -543,12 +550,97 @@ jobs:
           # at all, so this only happens with a stale every-push shim (mode
           # changed, retrofit pending/failed) or a hand-edited one. Suppressing
           # here keeps a plain `git push` from grading — the cost lever the
-          # mode exists for — while a submit/* tag push always grades.
+          # mode exists for — while a submission-tag push always grades.
           submission_mode = entry.get("submission_mode") or "every-push"
           if submission_mode not in ("every-push", "tag"):
               fail(f"entry {assignment!r}: submission_mode {submission_mode!r} must be 'every-push' or 'tag'")
           is_branch_run = not os.environ.get("REF", "").startswith("refs/tags/")
           branch_push_suppressed = submission_mode == "tag" and is_branch_run
+
+          # === Submission tags (teacher-named milestone patterns) ===
+          # Validate like allowed_files (opaque pattern strings, charset
+          # mirrors the schema/Go/web validators), then classify a TAG run:
+          #   - submit/* tag        -> the canonical namespace, grades (reuse)
+          #   - matches a pattern   -> milestone submission; grades, and the
+          #                            tag step mints/reuses the canonical
+          #                            submit/* tag at this commit (the RECORD
+          #                            stays immutable one-release-per-
+          #                            submission; the trigger tag is only the
+          #                            trigger)
+          #   - matches nothing     -> not a submission trigger; suppress
+          #                            gracefully (stale/hand-edited shim —
+          #                            same defense-in-depth rationale as the
+          #                            stale-shim branch suppression; the shim
+          #                            normally pre-filters via on.push.tags)
+          # matches_submission_tag is a by-value copy of Go's
+          # contract.MatchesSubmissionTag / the web matchesSubmissionTag,
+          # pinned to identical output by the shared golden fixture
+          # cli/shared/testdata/submission_tag_match_cases.json — keep in
+          # lockstep.
+          submission_tags = entry.get("submission_tags") or []
+          if not isinstance(submission_tags, list):
+              fail(f"entry {assignment!r}: submission_tags must be an array")
+          _TAG_PATTERN = re.compile(r"^[A-Za-z0-9._/*?+\[\]-]+$")
+          # Stacked/leading quantifiers (`v*+`, `+lead`) compile as POSSESSIVE
+          # quantifiers in Python but are compile errors in Go/JS — the one
+          # construct where the four matcher copies would diverge, so reject
+          # like the write-side validators (contract.stackedQuantifierRE).
+          _STACKED_QUANTIFIER = re.compile(r"^[?+]|[*?+]\+")
+          for pattern in submission_tags:
+              if not isinstance(pattern, str) or not _TAG_PATTERN.fullmatch(pattern) or _STACKED_QUANTIFIER.search(pattern):
+                  fail(f"entry {assignment!r}: invalid submission_tags pattern {pattern!r}")
+
+          def _compile_tag_pattern(pattern):
+              out = ["^"]
+              i = 0
+              while i < len(pattern):
+                  ch = pattern[i]
+                  if ch == "*":
+                      if i + 1 < len(pattern) and pattern[i + 1] == "*":
+                          out.append(".*")
+                          i += 1
+                      else:
+                          out.append("[^/]*")
+                  elif ch in ("?", "+"):
+                      out.append(ch)
+                  elif ch == "[":
+                      close = pattern.find("]", i + 1)
+                      if close != -1:
+                          out.append(pattern[i : close + 1])
+                          i = close
+                      else:
+                          out.append(re.escape(ch))
+                  else:
+                      out.append(re.escape(ch))
+                  i += 1
+              out.append("$")
+              try:
+                  return re.compile("".join(out))
+              except re.error:
+                  return None
+
+          def matches_submission_tag(patterns, tag):
+              for pattern in patterns:
+                  if _STACKED_QUANTIFIER.search(pattern):
+                      continue  # fail closed like the Go/JS compile failure
+                  compiled = _compile_tag_pattern(pattern)
+                  if compiled is not None and compiled.fullmatch(tag) is not None:
+                      return True
+              return False
+
+          # REF_NAME with a defensive fallback derived from REF (both are
+          # set in a real Actions run; the fallback keeps the classification
+          # sound if the env plumbing ever drops one).
+          ref_name = os.environ.get("REF_NAME") or os.environ.get("REF", "").removeprefix("refs/tags/")
+          trigger_tag = ""
+          foreign_tag_suppressed = False
+          if not is_branch_run:
+              if ref_name.startswith("submit/"):
+                  pass  # canonical namespace; the tag step reuses it
+              elif matches_submission_tag(submission_tags, ref_name):
+                  trigger_tag = ref_name
+              else:
+                  foreign_tag_suppressed = True
 
           # === No-autograder detection ===
           # Skip grade + set-latest when nothing is configured to grade,
@@ -589,6 +681,8 @@ jobs:
 
           emit("submission-mode", submission_mode)
           emit("branch-push-suppressed", "true" if branch_push_suppressed else "false")
+          emit("foreign-tag-suppressed", "true" if foreign_tag_suppressed else "false")
+          emit("trigger-tag", trigger_tag)
           emit("runs-on", runs_on_json)
           emit("container", container_json)
           emit("python", python)
@@ -609,38 +703,51 @@ jobs:
 
       # === Tag the submission ===
       # Branch trigger: create submit/<UTC-timestamp>-<short-sha> at
-      # the pushed SHA. Tag trigger: reuse the pushed tag. Tags pushed
-      # with github.token don't fire workflows (anti-recursion). Runs
-      # AFTER the read step so a tag-mode branch push (stale shim) is
-      # suppressed before it can mint a tag for a run that won't grade.
+      # the pushed SHA. Canonical submit/* tag trigger: reuse the pushed
+      # tag. Milestone-tag trigger (a teacher-named submission_tags
+      # pattern): mint/reuse the canonical tag exactly like a branch run —
+      # the milestone tag TRIGGERS grading but the immutable submit/* tag
+      # IS the record (a reusable tag like `phase1` moves between commits;
+      # parking the release on it would overwrite prior submissions).
+      # Tags pushed with github.token don't fire workflows
+      # (anti-recursion). Runs AFTER the read step so a suppressed run
+      # (tag-mode branch push, or a tag matching no submission pattern)
+      # never mints a tag for a run that won't grade.
       - name: Tag submission
         id: tag
         if: >-
           steps.acceptance.outputs.is-acceptance != 'true' &&
           steps.acceptance.outputs.is-shim-update != 'true' &&
-          steps.read.outputs.branch-push-suppressed != 'true'
+          steps.read.outputs.branch-push-suppressed != 'true' &&
+          steps.read.outputs.foreign-tag-suppressed != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REF: ${{ github.ref }}
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
+          TRIGGER_TAG: ${{ steps.read.outputs.trigger-tag }}
         run: |
           set -euo pipefail
-          if [[ "$REF" == refs/tags/* ]]; then
+          # A canonical submit/* tag push IS the record — reuse it verbatim.
+          # A milestone-tag push (TRIGGER_TAG set) falls through to the
+          # mint/reuse path below, same as a branch push. Any other tag
+          # was suppressed by the read step (foreign-tag-suppressed), so
+          # reaching here with one is a wiring bug — fail loudly.
+          if [[ "$REF" == refs/tags/* && -z "$TRIGGER_TAG" ]]; then
             if [[ "$REF_NAME" != submit/* ]]; then
-              echo "::error::tag $REF_NAME does not match submit/* prefix" >&2
+              echo "::error::tag $REF_NAME reached the tag step without matching submit/* or a submission pattern" >&2
               exit 1
             fi
             echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # Idempotency: if a submit/* tag already points at this SHA
-          # (workflow re-run of the same commit, or a submit client that
-          # already tagged it), reuse it instead of racing on a fresh
-          # timestamp. `--refs` filters out the `refs/tags/X^{}`
-          # peeled-ref rows that annotated tags emit — without it, awk
-          # could capture e.g., `submit/foo^{}` and produce an invalid
-          # pseudo-tag.
+          # (workflow re-run of the same commit, a submit client that
+          # already tagged it, or a re-pushed milestone tag), reuse it
+          # instead of racing on a fresh timestamp. `--refs` filters out
+          # the `refs/tags/X^{}` peeled-ref rows that annotated tags emit
+          # — without it, awk could capture e.g., `submit/foo^{}` and
+          # produce an invalid pseudo-tag.
           EXISTING=$(git ls-remote --refs --tags origin \
                        | awk -v sha="$SHA" '$1 == sha && $2 ~ /^refs\/tags\/submit\// { sub("refs/tags/", "", $2); print $2; exit }')
           if [[ -n "$EXISTING" ]]; then
@@ -656,11 +763,38 @@ jobs:
           git push origin "refs/tags/$TAG"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
+      # === Foreign-tag commit status ===
+      # A pushed tag matched neither submit/* nor any configured
+      # submission_tags pattern (stale/hand-edited shim — the on.push.tags
+      # filter normally pre-empts this run entirely). Nothing tags or
+      # grades; say why. DISTINCT CONTEXT (classroom50/autograde-skipped),
+      # unlike the nothing-to-grade skips above: here the student's real
+      # work exists but was NOT graded, and a green classroom50/autograde
+      # would read as "graded successfully" to both humans and any client
+      # polling that context. The main context stays absent — accurate,
+      # since no grade will ever appear for this commit. Best-effort;
+      # never fails the job.
+      - name: Foreign-tag commit status
+        if: steps.read.outputs.foreign-tag-suppressed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="success" \
+            -f context="classroom50/autograde-skipped" \
+            -f description="tag is not a submission trigger — not graded" \
+            -f target_url="$RUN_URL" >/dev/null 2>&1 || true
+
       # === Suppressed-push commit status ===
       # A tag-mode assignment got a branch push (stale every-push shim or a
-      # hand-edited trigger): nothing tags or grades. Post an explicit
-      # success status so the student sees WHY nothing ran and what to do.
-      # Best-effort; never fails the job.
+      # hand-edited trigger): nothing tags or grades. Same DISTINCT CONTEXT
+      # rationale as the foreign-tag status: ungraded work must never show
+      # green under classroom50/autograde. state stays success (a red X on
+      # every work-in-progress push would teach students to ignore
+      # failures); the separate context is what keeps graded and not-graded
+      # machine-distinguishable. Best-effort; never fails the job.
       - name: Suppressed-push commit status
         if: steps.read.outputs.branch-push-suppressed == 'true'
         env:
@@ -670,7 +804,7 @@ jobs:
           set -euo pipefail
           gh api "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state="success" \
-            -f context="classroom50/autograde" \
+            -f context="classroom50/autograde-skipped" \
             -f description="tag-mode assignment — push not graded; run gh student submit" \
             -f target_url="$RUN_URL" >/dev/null 2>&1 || true
 
@@ -699,7 +833,8 @@ jobs:
       - name: Autograde-skipped commit status
         if: >-
           steps.read.outputs.no-autograder == 'true' &&
-          steps.read.outputs.branch-push-suppressed != 'true'
+          steps.read.outputs.branch-push-suppressed != 'true' &&
+          steps.read.outputs.foreign-tag-suppressed != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -714,12 +849,13 @@ jobs:
   grade:
     needs: setup
     # Skip the acceptance commit, a shim-retrofit commit, a suppressed
-    # tag-mode branch push, and the no-autograder case (set-latest needs
-    # grade, so it skips too).
+    # tag-mode branch push, a suppressed foreign tag, and the no-autograder
+    # case (set-latest needs grade, so it skips too).
     if: >-
       needs.setup.outputs.is-acceptance != 'true' &&
       needs.setup.outputs.is-shim-update != 'true' &&
       needs.setup.outputs.branch-push-suppressed != 'true' &&
+      needs.setup.outputs.foreign-tag-suppressed != 'true' &&
       needs.setup.outputs.no-autograder != 'true'
     runs-on:   ${{ fromJSON(needs.setup.outputs.runs-on) }}
     container: ${{ fromJSON(needs.setup.outputs.container) }}
@@ -866,6 +1002,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ env.SUBMISSION_TAG }}
+          # The milestone tag that triggered this run ('' otherwise); noted in
+          # the Release title so the teacher sees WHICH milestone was graded.
+          TRIGGER_TAG: ${{ needs.setup.outputs.trigger-tag }}
           # Distinct name from the job-level RELEASE_ASSETS (a JSON array fed to
           # runner.py): this is the comma-joined list of accepted basenames the
           # runner emits post-staging. Different wire shape, different name, so a
@@ -914,12 +1053,38 @@ jobs:
           # clobbered or new assets uploaded, so a re-run must delete and
           # recreate to attach the current result + extras atomically. Keep the
           # git tag (--cleanup-tag omitted) so the submission ref is unchanged.
+          #
+          # But an org ruleset enforcing immutable releases (same rule noted
+          # above for post-create uploads) ALSO rejects the delete itself with
+          # HTTP 422/403 — seen live on a teacher regrade 2026-08-07: the
+          # delete failed, this step went red, and set-latest was skipped even
+          # though grading PASSED and the commit status posted success. gh's
+          # exit codes can't reliably distinguish that ruleset rejection from
+          # a transient error, so re-check existence instead: if the delete
+          # failed and the release is STILL there, treat it as
+          # immutable-blocked — warn and keep the old release rather than
+          # failing the job over record-keeping GitHub forbids. If the delete
+          # failed but the release is GONE (a race removed it), proceed to
+          # create as usual.
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
+            if ! DELETE_ERR="$(gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes 2>&1)"; then
+              if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                echo "$DELETE_ERR"
+                echo "::warning::the release at $TAG is immutable (org ruleset) and cannot be refreshed; the regraded score is in the commit status and the job summary, but gradebook collection keeps reading the OLD release's result.json for this submission (GitHub's rule, not ours)"
+                exit 0
+              fi
+              # Release vanished between delete and re-check: surface why the
+              # delete complained, then create as if it had never existed.
+              echo "$DELETE_ERR"
+            fi
+          fi
+          TITLE="Submission $TAG"
+          if [[ -n "${TRIGGER_TAG:-}" ]]; then
+            TITLE="Submission $TAG (via $TRIGGER_TAG)"
           fi
           gh release create "$TAG" result.json ${EXTRA_ASSETS[@]+"${EXTRA_ASSETS[@]}"} \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Submission $TAG" \
+            --title "$TITLE" \
             --notes-file release-body.md \
             --latest=false
 
@@ -986,20 +1151,25 @@ jobs:
             -f target_url="$RUN_URL" >/dev/null 2>&1 || true
 
   # === Move the "latest" pointer forward ===
-  # Serialized across the whole repo so concurrent submissions can't
-  # race on the read-modify-write and leave an older release marked
-  # latest. The comparison is commit-time-based (not tag-name-based)
-  # so two pushes within the same UTC second still order correctly,
-  # and a non-submit/* release accidentally marked latest (e.g., a
-  # teacher upload) doesn't permanently block submissions from
-  # reclaiming latest.
+  # Latest = the most recent SUBMISSION EVENT, not the newest commit:
+  # every published submission release claims the badge, so grading an
+  # older commit on purpose (a milestone tag like phase1 re-pointed at
+  # earlier work, or a teacher regrade) makes THAT release latest. This
+  # matches the gradebook collector and the web submission views, which
+  # both order by release publish time — one definition everywhere.
+  # (An earlier commit-time comparator tried "newest code wins", but it
+  # read the just-published release back as the current latest, compared
+  # it against itself, and never acted — GitHub's default publish-order
+  # badge is what actually shipped, and it is the semantics we want.)
+  # Serialized per-repo so concurrent submissions can't interleave edits.
   set-latest:
     needs: [setup, grade]
-    # Explicit no-autograder / suppressed-push / shim-update guards,
-    # defensive against a future change to grade's result semantics.
+    # Explicit no-autograder / suppressed-push / foreign-tag / shim-update
+    # guards, defensive against a future change to grade's result semantics.
     if: >-
       needs.setup.outputs.no-autograder != 'true' &&
       needs.setup.outputs.branch-push-suppressed != 'true' &&
+      needs.setup.outputs.foreign-tag-suppressed != 'true' &&
       needs.setup.outputs.is-shim-update != 'true' &&
       needs.grade.result == 'success' &&
       (needs.grade.outputs.status == 'success' || needs.grade.outputs.status == 'failure')
@@ -1012,61 +1182,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.setup.outputs.submission-tag }}
-          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          # Locale-stable string compares (LC_COLLATE varies otherwise).
-          export LC_ALL=C
-
-          CURRENT=$(gh release view --repo "$GITHUB_REPOSITORY" \
-                      --json tagName -q .tagName 2>/dev/null || echo "")
-
-          # Empty CURRENT (no latest yet) or non-submit/* CURRENT (e.g.,
-          # a teacher hand-uploaded a release marked latest) — claim
-          # latest unconditionally so a sticky non-submit release can't
-          # block future grading from being visible.
-          if [[ -z "$CURRENT" || "$CURRENT" != submit/* ]]; then
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=true
-            exit 0
-          fi
-
-          # Both are submit/* tags. Compare by commit time (the SHA
-          # the tag points at) — tag names tie within a UTC second
-          # and the short-SHA suffix isn't chronologically meaningful.
-          OBJ_TYPE=$(gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$CURRENT" \
-                       --jq .object.type 2>/dev/null || echo "")
-          CURRENT_REF=$(gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$CURRENT" \
-                          --jq .object.sha 2>/dev/null || echo "")
-          # Annotated tags resolve to a tag-object SHA — dereference
-          # it to the actual commit.
-          if [[ "$OBJ_TYPE" == "tag" && -n "$CURRENT_REF" ]]; then
-            CURRENT_REF=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$CURRENT_REF" \
-                            --jq .object.sha 2>/dev/null || echo "$CURRENT_REF")
-          fi
-
-          if [[ -z "$CURRENT_REF" ]]; then
-            # Tag ref doesn't resolve (deleted, race, transient API).
-            # Fall back to claiming latest — same behavior as if the
-            # tag didn't exist.
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=true
-            exit 0
-          fi
-
-          CURRENT_TIME=$(gh api "repos/$GITHUB_REPOSITORY/commits/$CURRENT_REF" \
-                           --jq .commit.committer.date 2>/dev/null || echo "")
-          OUR_TIME=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA" \
-                       --jq .commit.committer.date 2>/dev/null || echo "")
-
-          if [[ -z "$CURRENT_TIME" || -z "$OUR_TIME" ]]; then
-            # Couldn't read both commit times. Conservative: leave the
-            # current latest alone rather than risk a wrong flip.
-            echo "::warning::could not resolve commit times (CURRENT='$CURRENT_TIME' OUR='$OUR_TIME'); leaving latest pointer unchanged"
-            exit 0
-          fi
-
-          # ISO 8601 UTC timestamps from GitHub are 'YYYY-MM-DDTHH:MM:SSZ'
-          # — pure ASCII digits + a couple of fixed separators, so
-          # lexical compare under LC_ALL=C is chronologically correct.
-          if [[ "$OUR_TIME" > "$CURRENT_TIME" ]]; then
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=true
+          # Best-effort: the badge is cosmetic and GitHub's own default
+          # (most recently published) already matches this rule, so a
+          # rejected edit must never fail the pipeline. Known rejection:
+          # an org ruleset enforcing immutable releases 422s any edit.
+          if ! gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=true; then
+            echo "::warning::could not mark $TAG as the latest release (immutable-release ruleset?); GitHub's default latest (most recently published) matches anyway"
           fi

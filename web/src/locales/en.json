@@ -1107,7 +1107,7 @@
       "dueDateTz": "Times are in your local timezone ({{tz}}).",
       "availableFrom": "Release date ({{tz}})",
       "setAvailableFrom": "Set a release date",
-      "setAvailableFromTip": "Assignments are hidden from the student assignments page by default \u2014 students can only accept via the invite link. Set a release date to list it for everyone once the date passes. Students who already accepted always see it. This controls listing only, not access.",
+      "setAvailableFromTip": "Assignments are hidden from the student assignments page by default — students can only accept via the invite link. Set a release date to list it for everyone once the date passes. Students who already accepted always see it. This controls listing only, not access.",
       "availableFromTz": "Times are in your local timezone ({{tz}}).",
       "type": "Assignment type",
       "typeIndividual": "Individual",
@@ -1136,13 +1136,19 @@
       },
       "submissionMode": {
         "label": "Autograding trigger",
-        "help": "When the autograder runs. \"Every push\" grades each push to the default branch. \"On submit only\" grades only when a student submits (from here or with gh student submit) or pushes a submit/* tag — regular pushes cost no Actions minutes, which matters for large classes.",
+        "help": "When the autograder runs. \"Every push\" grades each push to the default branch. \"On submit only\" grades only when a student submits (with gh student submit) or pushes a submit/* tag — regular pushes cost no Actions minutes, which matters for large classes.",
         "emptyRepoHelp": "Unavailable for empty repositories — they carry no autograding workflow.",
         "editWarning": "Changing the trigger only affects repositories created from now on. Repositories students already accepted keep the old trigger until you update them — use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
         "choices": {
           "everyPush": "Every push (default)",
           "tag": "On submit only"
         }
+      },
+      "submissionTags": {
+        "label": "Milestone submission tags",
+        "help": "Optional tag names (one per line) that also trigger grading — e.g. phase1, phase2, complete. A student pushing a matching tag (git tag phase1 && git push origin phase1) gets that commit graded; the graded record still appears as a submit/* release. Simple globs like v* work too. Leave empty for none.",
+        "wildcardCaution": "A broad pattern like v* grades every matching tag a student pushes, including unrelated release tags. Prefer exact milestone names like phase1.",
+        "commaHint": "Put one tag per line, not a comma-separated list — a comma becomes part of the tag name and will be rejected."
       },
       "repoFeatures": {
         "heading": "Repository features",
@@ -1158,10 +1164,18 @@
           "on": "On",
           "off": "Off"
         },
-        "issues": { "label": "Issues" },
-        "wiki": { "label": "Wiki" },
-        "projects": { "label": "Projects" },
-        "pull_requests": { "label": "Pull requests" }
+        "issues": {
+          "label": "Issues"
+        },
+        "wiki": {
+          "label": "Wiki"
+        },
+        "projects": {
+          "label": "Projects"
+        },
+        "pull_requests": {
+          "label": "Pull requests"
+        }
       },
       "advanced": "Advanced settings",
       "advancedHelp": "Optional grading and runtime settings. Blank fields use their documented defaults.",
@@ -1606,7 +1620,7 @@
       "step2Label": "GitHub Access Token",
       "expiryLabel": "Token expiry",
       "days": "days",
-      "expiryRange": "Enter {{min}}\u2013{{max}} days",
+      "expiryRange": "Enter {{min}}–{{max}} days",
       "generateOnGitHub": "Generate new access token",
       "generateHelp": "Opens GitHub's token form with the name, expiry, and required scopes pre-filled. Set Repository access to All repositories.",
       "learnMore": "Learn about service tokens",
@@ -1618,7 +1632,7 @@
       "saveButton": "Save token",
       "saveError": "Could not validate or save the token.",
       "saved": "Service token saved.",
-      "savedNoMetadata": "Service token saved, but its expiry and name couldn't be recorded — the health chip may show \u201Cexpiry not tracked\u201D until you save again."
+      "savedNoMetadata": "Service token saved, but its expiry and name couldn't be recorded — the health chip may show “expiry not tracked” until you save again."
     },
     "audit": {
       "detail": {

@@ -229,6 +229,7 @@ const SubmissionsTable = ({
   onClearFilters,
   emptyRepo = false,
   submissionMode,
+  submissionTags,
   initialLoading = false,
   nonSubmittersLoading = false,
   page = 0,
@@ -270,6 +271,8 @@ const SubmissionsTable = ({
   // autograding trigger" action in the manage hub. Omitted (action hidden)
   // for custom-autograder assignments and non-owners.
   submissionMode?: SubmissionMode
+  // The assignment's milestone submission_tags for the same action.
+  submissionTags?: string[]
   // Core data (snapshot + roster) is still loading on first paint; render a
   // loading state rather than the "no submissions" empty state, which would
   // otherwise flash before data arrives.
@@ -839,6 +842,7 @@ const SubmissionsTable = ({
               ? undefined
               : () => setAccessOwner(manageSubmission.owner),
             submissionMode,
+            submissionTags,
           }}
         />
       )}

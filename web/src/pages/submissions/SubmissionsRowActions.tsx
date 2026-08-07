@@ -294,6 +294,8 @@ export type SubmissionActionListProps = {
   // Omitted (action hidden) for custom-autograder assignments — teacher-
   // authored shims are never rewritten — and for non-owners.
   submissionMode?: SubmissionMode
+  // The assignment's milestone submission_tags (if any) for the same action.
+  submissionTags?: string[]
 }
 
 export const SubmissionActionList = ({
@@ -311,6 +313,7 @@ export const SubmissionActionList = ({
   displayName,
   onManageAccess,
   submissionMode,
+  submissionTags,
 }: SubmissionActionListProps) => {
   const { t } = useTranslation()
   const commitHref = latestCommitHref ?? safeHttpUrl(commit)
@@ -369,6 +372,7 @@ export const SubmissionActionList = ({
               org={org}
               repo={repo}
               submissionMode={submissionMode}
+              submissionTags={submissionTags}
               noRepo={!hasRepo}
             />
           )}
@@ -393,11 +397,13 @@ const UpdateTriggerButton = ({
   org,
   repo,
   submissionMode,
+  submissionTags,
   noRepo,
 }: {
   org: string
   repo: string
   submissionMode: SubmissionMode
+  submissionTags?: string[]
   noRepo: boolean
 }) => {
   const { t } = useTranslation()
@@ -419,6 +425,7 @@ const UpdateTriggerButton = ({
         org,
         repo,
         mode: submissionMode,
+        tags: submissionTags,
       })
       notify({
         tone:

@@ -61,9 +61,9 @@ describe("rewriteShimTrigger", () => {
   it("is idempotent: already on target → current, no content", () => {
     const tagShim = defaultAutograderWorkflow("o", "main", "main", "tag")
     expect(rewriteShimTrigger(tagShim, "tag", "main").kind).toBe("current")
-    expect(rewriteShimTrigger(cliShimEveryPush, "every-push", "main").kind).toBe(
-      "current",
-    )
+    expect(
+      rewriteShimTrigger(cliShimEveryPush, "every-push", "main").kind,
+    ).toBe("current")
   })
 
   it("refuses unrecognized content (never rewrites custom shims)", () => {
@@ -95,5 +95,52 @@ describe("shimUpdateCommitMessage", () => {
     expect(shimUpdateCommitMessage("tag")).toBe(
       "[Classroom 50] Update autograder trigger to tag (submission-mode)\n\n[skip ci]",
     )
+  })
+})
+
+describe("rewriteShimTrigger — milestone submission_tags", () => {
+  it("widens the tags line to the union with submit/* (every-push kept)", () => {
+    const result = rewriteShimTrigger(cliShimEveryPush, "every-push", "main", [
+      "phase1",
+      "v*",
+    ])
+    if (result.kind !== "changed") throw new Error(`kind = ${result.kind}`)
+    expect(result.content).toContain('    tags: ["phase1", "v*", "submit/*"]')
+    expect(result.content).toContain('    branches: ["main"]')
+    // Only the tags line changed — everything around the trigger block is
+    // preserved byte-for-byte (the CLI shim's comment header included).
+    expect(result.content).toBe(
+      cliShimEveryPush.replace(
+        '    tags: ["submit/*"]\n',
+        '    tags: ["phase1", "v*", "submit/*"]\n',
+      ),
+    )
+  })
+
+  it("recognizes and narrows a pattern-bearing shim back to the default", () => {
+    const withTags = defaultAutograderWorkflow("o", "main", "main", undefined, [
+      "phase1",
+    ])
+    const result = rewriteShimTrigger(withTags, "every-push", "main", [])
+    if (result.kind !== "changed") throw new Error(`kind = ${result.kind}`)
+    expect(result.content).toBe(defaultAutograderWorkflow("o", "main", "main"))
+  })
+
+  it("tag mode + patterns drops branches and widens tags together", () => {
+    const result = rewriteShimTrigger(cliShimEveryPush, "tag", "main", [
+      "phase1",
+    ])
+    if (result.kind !== "changed") throw new Error(`kind = ${result.kind}`)
+    expect(result.content).not.toContain("branches:")
+    expect(result.content).toContain('    tags: ["phase1", "submit/*"]')
+  })
+
+  it("is idempotent with patterns: already-current is a no-op", () => {
+    const withTags = defaultAutograderWorkflow("o", "main", "main", undefined, [
+      "phase1",
+    ])
+    expect(
+      rewriteShimTrigger(withTags, "every-push", "main", ["phase1"]).kind,
+    ).toBe("current")
   })
 })

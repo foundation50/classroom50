@@ -241,11 +241,60 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		sp.Stop("Submission pushed")
 	}
 
-	// Tag-mode assignments grade ONLY on submit/* tag pushes, so push the tag
-	// with the user's token (user pushes fire workflows; the runner's own
-	// github.token pushes deliberately don't). Every-push assignments must NOT
-	// get a tag here — the branch push already grades, and a second push
-	// event would double-grade the same commit.
+	// Everything after the branch push — the retry of a failed manifest fetch,
+	// the tag-mode submit/* tag push, the stdout confirmation, and the
+	// mode-unknown warning — lives in finishSubmission so the ordering
+	// contract (warning strictly after the confirmation) is structural.
+	retryFetch := func(c context.Context) (*assignments.Entry, error) {
+		return fetchSubmitEntry(c, repoOwner, config, u, verbose)
+	}
+	announce := func() {
+		// Confirmation on stdout: the assignment's full name (falls back to
+		// the slug — see resolveAssignmentName), the local submission time,
+		// then a link to the submitted commit.
+		displayName := resolveAssignmentName(ctx, repoOwner, config.Classroom, config.Secret, config.Assignment)
+		localTime := time.Now().Local().Format("2006-01-02 15:04:05 MST")
+		_, _ = fmt.Fprintf(out, "Submitted assignment %q at %s\n", displayName, localTime)
+		_, _ = fmt.Fprintf(out, "View your submission at: %s/commit/%s\n", repoHTMLURL, sha)
+	}
+	return finishSubmission(ctx, entry, entryErr, retryFetch, gitDir, sha, repoHTMLURL, verbose, u, announce)
+}
+
+// finishSubmission is the post-push tail of submit. Order matters and is
+// enforced here, not at the call site:
+//
+//  1. If the pre-push manifest fetch failed, retry it ONCE — Pages blips and
+//     cold caches are common, and on a tag-mode assignment the entry decides
+//     whether the grading tag is pushed at all. The pre-push result is still
+//     fetched early (allowed_files filtering needs it before the snapshot).
+//  2. Tag-mode assignments grade ONLY on submit/* tag pushes, so push the tag
+//     with the user's token (user pushes fire workflows; the runner's own
+//     github.token pushes deliberately don't). Every-push assignments must
+//     NOT get a tag here — the branch push already grades, and a second push
+//     event would double-grade the same commit. A tag-push failure is fatal
+//     (no confirmation): the work is safe on the branch, and the error says
+//     how to retry.
+//  3. announce() prints the stdout success confirmation.
+//  4. If the mode is STILL unknown (both fetches failed), warn — after the
+//     confirmation, so it's the last thing a tag-mode student sees: their
+//     push may not grade. Never push a tag blind (double-grades every-push).
+func finishSubmission(
+	ctx context.Context,
+	entry *assignments.Entry,
+	entryErr error,
+	retryFetch func(context.Context) (*assignments.Entry, error),
+	gitDir, sha, repoHTMLURL string,
+	verbose bool,
+	u *ui.UI,
+	announce func(),
+) error {
+	if entry == nil && entryErr != nil {
+		if verbose {
+			u.Detail("Retrying assignment manifest fetch (pre-push attempt failed: %v)", entryErr)
+		}
+		entry, entryErr = retryFetch(ctx)
+	}
+
 	if entry != nil && entry.IsTagSubmissionMode() {
 		tag, err := pushSubmitTag(gitDir, sha)
 		if err != nil {
@@ -260,18 +309,9 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		}
 	}
 
-	// Confirmation on stdout: the assignment's full name (falls back to the
-	// slug — see resolveAssignmentName), the local submission time, then a
-	// link to the submitted commit.
-	displayName := resolveAssignmentName(ctx, repoOwner, config.Classroom, config.Secret, config.Assignment)
-	localTime := time.Now().Local().Format("2006-01-02 15:04:05 MST")
-	_, _ = fmt.Fprintf(out, "Submitted assignment %q at %s\n", displayName, localTime)
-	_, _ = fmt.Fprintf(out, "View your submission at: %s/commit/%s\n", repoHTMLURL, sha)
+	announce()
 
 	if entry == nil && entryErr != nil {
-		// Mode unknown: never push a tag blind (double-grades an every-push
-		// assignment). Warn AFTER the confirmation so it's the last thing a
-		// tag-mode student sees — their push may not grade.
 		u.Warn("could not determine the assignment's submission mode (%v); if this assignment grades on submit tags, re-run `gh student submit`", entryErr)
 	}
 

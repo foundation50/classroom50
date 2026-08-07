@@ -59,7 +59,7 @@ jobs:
 // ---------------------------------------------------------------------------
 
 func TestRewriteShimTrigger_EveryPushToTag(t *testing.T) {
-	got, changed, err := rewriteShimTrigger(cliShimEveryPush, contract.SubmissionModeTag, "main")
+	got, changed, err := rewriteShimTrigger(cliShimEveryPush, contract.SubmissionModeTag, "main", nil)
 	if err != nil || !changed {
 		t.Fatalf("rewrite = (changed=%v, err=%v), want changed", changed, err)
 	}
@@ -76,7 +76,7 @@ func TestRewriteShimTrigger_EveryPushToTag(t *testing.T) {
 func TestRewriteShimTrigger_TagToEveryPush(t *testing.T) {
 	// The branches line is inserted with the repo's CURRENT default branch
 	// (master here), not a hardcoded main.
-	got, changed, err := rewriteShimTrigger(webShimTagMode, contract.SubmissionModeEveryPush, "master")
+	got, changed, err := rewriteShimTrigger(webShimTagMode, contract.SubmissionModeEveryPush, "master", nil)
 	if err != nil || !changed {
 		t.Fatalf("rewrite = (changed=%v, err=%v), want changed", changed, err)
 	}
@@ -84,7 +84,7 @@ func TestRewriteShimTrigger_TagToEveryPush(t *testing.T) {
 		t.Errorf("every-push shim missing the inserted branches line:\n%s", got)
 	}
 	// Round trip: removing it again restores the original.
-	back, changed, err := rewriteShimTrigger(got, contract.SubmissionModeTag, "master")
+	back, changed, err := rewriteShimTrigger(got, contract.SubmissionModeTag, "master", nil)
 	if err != nil || !changed || back != webShimTagMode {
 		t.Errorf("round trip failed:\n%s", back)
 	}
@@ -92,10 +92,10 @@ func TestRewriteShimTrigger_TagToEveryPush(t *testing.T) {
 
 func TestRewriteShimTrigger_Idempotent(t *testing.T) {
 	// Already on target -> no change (no commit at the call site).
-	if _, changed, err := rewriteShimTrigger(webShimTagMode, contract.SubmissionModeTag, "main"); err != nil || changed {
+	if _, changed, err := rewriteShimTrigger(webShimTagMode, contract.SubmissionModeTag, "main", nil); err != nil || changed {
 		t.Errorf("tag->tag = (changed=%v, err=%v), want no change", changed, err)
 	}
-	if _, changed, err := rewriteShimTrigger(cliShimEveryPush, contract.SubmissionModeEveryPush, "main"); err != nil || changed {
+	if _, changed, err := rewriteShimTrigger(cliShimEveryPush, contract.SubmissionModeEveryPush, "main", nil); err != nil || changed {
 		t.Errorf("every-push->every-push = (changed=%v, err=%v), want no change", changed, err)
 	}
 }
@@ -107,7 +107,7 @@ func TestRewriteShimTrigger_UnrecognizedContent(t *testing.T) {
 		"on:\n  push:\n    branches: [\"main\"]\n", // no submit/* tags line
 		"",
 	} {
-		if _, _, err := rewriteShimTrigger(content, contract.SubmissionModeTag, "main"); err == nil {
+		if _, _, err := rewriteShimTrigger(content, contract.SubmissionModeTag, "main", nil); err == nil {
 			t.Errorf("rewriteShimTrigger accepted unrecognized content:\n%s", content)
 		}
 	}
@@ -115,7 +115,7 @@ func TestRewriteShimTrigger_UnrecognizedContent(t *testing.T) {
 
 func TestRewriteShimTrigger_QuotedYamlHostileBranch(t *testing.T) {
 	// A branch named `off` stays quoted (matching the accept clients' quoting).
-	got, changed, err := rewriteShimTrigger(webShimTagMode, contract.SubmissionModeEveryPush, "off")
+	got, changed, err := rewriteShimTrigger(webShimTagMode, contract.SubmissionModeEveryPush, "off", nil)
 	if err != nil || !changed {
 		t.Fatalf("rewrite = (changed=%v, err=%v)", changed, err)
 	}
@@ -522,5 +522,75 @@ func TestRunSubmissionMode_MissingSlugErrors(t *testing.T) {
 	var out, errOut bytes.Buffer
 	if err := runSubmissionMode(client, &out, &errOut, smParams(contract.SubmissionModeTag)); err == nil {
 		t.Fatal("missing slug must error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// rewriteShimTrigger — milestone submission_tags
+// ---------------------------------------------------------------------------
+
+// A shim rendered WITH milestone patterns must still be recognized (never
+// shimUnrecognized) and rewritable in both directions.
+const cliShimWithTags = `# Classroom50 autograder shim.
+#
+# This file should not be edited.
+
+name: Autograde
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["phase1", "v*", "submit/*"]
+
+jobs:
+  grade:
+    uses: "o/classroom50/.github/workflows/autograde-runner.yaml@main"
+    permissions:
+      contents: write
+      statuses: write
+      pull-requests: write
+`
+
+func TestRewriteShimTrigger_TagsReconciled(t *testing.T) {
+	// Retrofitting with a pattern set widens the tags line (union with
+	// submit/*) while the mode surgery behaves as before.
+	got, changed, err := rewriteShimTrigger(cliShimEveryPush, contract.SubmissionModeEveryPush, "main", []string{"phase1", "v*"})
+	if err != nil || !changed {
+		t.Fatalf("rewrite = (changed=%v, %v), want a change", changed, err)
+	}
+	if !strings.Contains(got, `    tags: ["phase1", "v*", "submit/*"]`) {
+		t.Errorf("tags line not widened:\n%s", got)
+	}
+	if !strings.Contains(got, `    branches: ["main"]`) {
+		t.Errorf("every-push branches line must be preserved:\n%s", got)
+	}
+
+	// A pattern-bearing shim is recognized and can be narrowed back to the
+	// default set (patterns removed from the assignment).
+	back, changed, err := rewriteShimTrigger(cliShimWithTags, contract.SubmissionModeEveryPush, "main", nil)
+	if err != nil || !changed {
+		t.Fatalf("narrow = (changed=%v, %v), want a change", changed, err)
+	}
+	if !strings.Contains(back, `    tags: ["submit/*"]`) {
+		t.Errorf("tags line not narrowed to the default:\n%s", back)
+	}
+
+	// Idempotent: rewriting a shim already in the target state is a no-op.
+	if _, changed, err := rewriteShimTrigger(cliShimWithTags, contract.SubmissionModeEveryPush, "main", []string{"phase1", "v*"}); err != nil || changed {
+		t.Errorf("already-current pattern shim must be a no-op (changed=%v, err=%v)", changed, err)
+	}
+}
+
+func TestRewriteShimTrigger_TagModeWithTags(t *testing.T) {
+	// Tag mode + milestone patterns: branch line dropped, tags widened.
+	got, changed, err := rewriteShimTrigger(cliShimEveryPush, contract.SubmissionModeTag, "main", []string{"phase1"})
+	if err != nil || !changed {
+		t.Fatalf("rewrite = (changed=%v, %v), want a change", changed, err)
+	}
+	if strings.Contains(got, "branches:") {
+		t.Errorf("tag mode must drop the branches line:\n%s", got)
+	}
+	if !strings.Contains(got, `    tags: ["phase1", "submit/*"]`) {
+		t.Errorf("tags line not widened:\n%s", got)
 	}
 }

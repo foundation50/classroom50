@@ -88,6 +88,68 @@ PROGRESS_EVERY = 25
 _USERNAME_BAD_CHARS = re.compile(r"[^A-Za-z0-9-]")
 
 
+def _compile_tag_pattern(pattern: str) -> re.Pattern[str] | None:
+    """One Actions tag-filter pattern -> an anchored regex, or None when it
+    can't compile (fail closed: matches nothing). Character by character so
+    `.` and other regex metacharacters in the pattern stay literal. Supported
+    subset: literal names, `*` (not crossing `/`), `**` (crossing), `?`/`+`
+    (zero-or-one / one-or-more of the preceding element), `[abc]` classes.
+    """
+    out = ["^"]
+    i = 0
+    while i < len(pattern):
+        ch = pattern[i]
+        if ch == "*":
+            if i + 1 < len(pattern) and pattern[i + 1] == "*":
+                out.append(".*")  # ** crosses /
+                i += 1
+            else:
+                out.append("[^/]*")  # * stops at /
+        elif ch in ("?", "+"):
+            out.append(ch)
+        elif ch == "[":
+            close = pattern.find("]", i + 1)
+            if close != -1:
+                out.append(pattern[i : close + 1])  # class verbatim
+                i = close
+            else:
+                out.append(re.escape(ch))  # unclosed [ is literal
+        else:
+            out.append(re.escape(ch))
+        i += 1
+    out.append("$")
+    try:
+        return re.compile("".join(out))
+    except re.error:
+        return None
+
+
+# A leading `?`/`+` (nothing to repeat) or a `+` stacked on another
+# quantifier (`v*+`, `a++`). LOAD-BEARING here in the Python mirror: those
+# translate to POSSESSIVE quantifiers, which Python 3.11+ compiles (and
+# matches!) while Go RE2 and JS reject — without this guard the four matcher
+# copies would diverge on exactly these patterns. Keep in lockstep with Go
+# contract.stackedQuantifierRE and the web copies.
+_STACKED_QUANTIFIER = re.compile(r"^[?+]|[*?+]\+")
+
+
+def matches_submission_tag(patterns: list[str], tag: str) -> bool:
+    """Whether `tag` matches ANY of the Actions tag-filter `patterns`; an
+    empty list matches nothing. By-value copy of Go's
+    contract.MatchesSubmissionTag and the web matchesSubmissionTag — all
+    pinned to identical output by the shared golden fixture
+    cli/shared/testdata/submission_tag_match_cases.json. The same strings are
+    rendered into the shim's on.push.tags, so this matcher and GitHub's own
+    filter evaluation must agree on what fires. Keep in lockstep."""
+    for pattern in patterns:
+        if _STACKED_QUANTIFIER.search(pattern):
+            continue  # fail closed, matching the Go/JS compile failure
+        compiled = _compile_tag_pattern(pattern)
+        if compiled is not None and compiled.fullmatch(tag) is not None:
+            return True
+    return False
+
+
 # Top-level dispatch ----------------------------------------------------------
 
 
@@ -130,7 +192,7 @@ def main() -> int:
 
     classroom_dir = base_dir / classroom_filter
     try:
-        roster = load_roster(classroom_dir, assignment_filter, api_url, org, service_token)
+        roster, entry = load_roster(classroom_dir, assignment_filter, api_url, org, service_token)
     except EmptyRepoAssignment:
         # Successful no-op, not a failure: the teacher (or a stale button)
         # targeted an assignment whose repos are deliberately bare.
@@ -189,6 +251,15 @@ def main() -> int:
             )
             return 1
 
+    # Tag-mode assignments introduce runs that complete green but grade
+    # nothing (a suppressed stale-shim branch push); regrade_repo must skip
+    # those when picking the run to replay. Milestone submission_tags runs
+    # are real graded runs, so the patterns ride along for the run filter.
+    tag_mode = is_tag_submission_mode(entry)
+    submission_tags = entry.get("submission_tags") or []
+    if not isinstance(submission_tags, list):
+        submission_tags = []
+
     regraded = 0   # rerun an existing run (the true regrade)
     tagged = 0     # first-grade fallback (no prior run, tagged main HEAD)
     skipped = 0    # nothing to do (not accepted) or benign skip
@@ -197,7 +268,9 @@ def main() -> int:
     for index, username in enumerate(targets, start=1):
         repo_name = assignment_repo_name(classroom_filter, assignment_filter, username)
         try:
-            outcome = regrade_repo(api_url, org, repo_name, service_token)
+            outcome = regrade_repo(
+                api_url, org, repo_name, service_token, tag_mode, submission_tags
+            )
         except _SkipRepo:
             # Benign per-repo skip (e.g., the latest run can't be re-run right
             # now); already warned at the source.
@@ -269,7 +342,14 @@ def main() -> int:
 AUTOGRADE_WORKFLOW = "autograde.yaml"
 
 
-def regrade_repo(api_url: str, org: str, repo: str, token: str) -> str:
+def regrade_repo(
+    api_url: str,
+    org: str,
+    repo: str,
+    token: str,
+    tag_mode: bool,
+    submission_tags: list[str] | None = None,
+) -> str:
     """Re-run grading for `repo` on its existing latest submission, without
     creating a new one. Returns one of:
 
@@ -277,18 +357,31 @@ def regrade_repo(api_url: str, org: str, repo: str, token: str) -> str:
                   (re-fetching the current autograder), and because the runner
                   stamps `datetime` from the commit's committer date, the
                   submission time / late flag DON'T change — only the score.
-      "tagged"  — no prior run, so a fresh submit/<ts>-<sha> tag was pushed to
-                  first-grade the main HEAD. (Submission time is still the
-                  commit's committer date; `graded_at` records the new run.)
+      "tagged"  — no (usable) prior run, so a fresh submit/<ts>-<sha> tag was
+                  pushed to first-grade the main HEAD. (Submission time is
+                  still the commit's committer date; `graded_at` records the
+                  new run.)
       "missing" — no prior run and no main HEAD (student hasn't
                   accepted/pushed); nothing to do.
+
+    tag_mode narrows which run counts as "the latest submission": on a
+    tag-mode assignment a branch-triggered run is a SUPPRESSED run (a stale
+    every-push shim fired; the runner tagged and graded nothing), and
+    replaying it would re-suppress — regrade would report success while
+    grading nothing. So in tag mode only submit/* tag runs are candidates;
+    a repo with none (only suppressed pushes, or no runs at all) falls
+    through to the tag-at-HEAD path, which fires a REAL tag run (the
+    service token's tag push fires workflows). Every-push keeps today's
+    behavior exactly — its branch runs are real graded runs.
 
     Raises urllib.error.HTTPError / ValueError on a hard failure the caller
     classifies (auth/network abort; other per-repo errors warn-and-skip).
     """
     # Prefer re-running the existing run: a true "regrade the same commit" with
     # no new tag and no new submission event.
-    run_id = latest_autograde_run_id(api_url, org, repo, token)
+    run_id = latest_autograde_run_id(
+        api_url, org, repo, token, tag_only=tag_mode, submission_tags=submission_tags
+    )
     if run_id is not None:
         rerun_workflow_run(api_url, org, repo, token, run_id)
         return "rerun"
@@ -310,14 +403,33 @@ def regrade_repo(api_url: str, org: str, repo: str, token: str) -> str:
 
 
 def latest_autograde_run_id(
-    api_url: str, org: str, repo: str, token: str
+    api_url: str,
+    org: str,
+    repo: str,
+    token: str,
+    *,
+    tag_only: bool = False,
+    submission_tags: list[str] | None = None,
 ) -> int | None:
     """The id of the most recent autograde run on `repo`, or None when it has
     never run (or doesn't exist yet). Run ids are newest-first from the API, so
-    the first entry is the latest run — the one a regrade re-runs."""
+    the first entry is the latest run — the one a regrade re-runs.
+
+    tag_only=True (tag-mode assignments) considers only runs whose head_branch
+    names a real submission tag (GitHub sets head_branch to the tag on
+    tag-push runs): the canonical submit/* namespace, or a teacher-named
+    milestone pattern from `submission_tags` (a milestone run grades for real
+    — its record lives at the canonical tag the runner mints). Branch-
+    triggered runs on a tag-mode assignment are suppressed no-ops that must
+    never be replayed. One 100-run page is scanned, no pagination: if the
+    newest submission run has scrolled past 100 suppressed pushes, we return
+    None and the caller's tag-at-HEAD fallback freshly grades HEAD instead —
+    acceptable for that degenerate case.
+    """
+    per_page = 100 if tag_only else 1
     url = (
         f"{_repo_url(api_url, org, repo)}/actions/workflows/"
-        f"{urllib.parse.quote(AUTOGRADE_WORKFLOW)}/runs?per_page=1"
+        f"{urllib.parse.quote(AUTOGRADE_WORKFLOW)}/runs?per_page={per_page}"
     )
     try:
         body = _http_get(url, token, accept="application/vnd.github+json")
@@ -330,7 +442,24 @@ def latest_autograde_run_id(
     runs = data.get("workflow_runs") if isinstance(data, dict) else None
     if not isinstance(runs, list) or not runs:
         return None
-    run = runs[0]
+    run: Any = None
+    if tag_only:
+        patterns = submission_tags or []
+        for candidate in runs:
+            if not isinstance(candidate, dict):
+                continue
+            head_branch = candidate.get("head_branch")
+            if not isinstance(head_branch, str):
+                continue
+            if head_branch.startswith(SUBMIT_TAG_PREFIX) or matches_submission_tag(
+                patterns, head_branch
+            ):
+                run = candidate
+                break
+        if run is None:
+            return None
+    else:
+        run = runs[0]
     run_id = run.get("id") if isinstance(run, dict) else None
     if not isinstance(run_id, int):
         raise ValueError("workflow run object missing an integer id")
@@ -563,20 +692,31 @@ def is_empty_repo(entry: dict[str, Any]) -> bool:
     return entry.get("empty_repo") is True
 
 
+def is_tag_submission_mode(entry: dict[str, Any]) -> bool:
+    """Whether the assignment grades ONLY on submit/* tag pushes. Strict
+    equality mirroring the Go Entry.IsTagSubmissionMode: absent, "every-push",
+    and any junk value all read as every-push (fail open to today's regrade
+    behavior; the runner polices invalid modes at grade time)."""
+    return entry.get("submission_mode") == "tag"
+
+
 def load_roster(
     classroom_dir: pathlib.Path,
     assignment_slug: str,
     api_url: str,
     org: str,
     token: str,
-) -> list[str]:
-    """Team members to regrade for an assignment registered in this classroom.
+) -> tuple[list[str], dict[str, Any]]:
+    """(team members to regrade, the assignment's manifest entry) for an
+    assignment registered in this classroom.
 
     Validates the assignments.json schema and that the target slug is
     registered (so a typo'd slug fails loudly rather than tagging nothing), then
     enumerates the classroom GitHub team — the source of truth for enrollment.
-    Config problems raise RegradeInputError; a team-listing HTTP error
-    propagates so main() can classify it (hard auth/network vs. transient).
+    The entry rides along so main() can read submission_mode (regrade must not
+    replay a suppressed tag-mode branch run — see regrade_repo). Config
+    problems raise RegradeInputError; a team-listing HTTP error propagates so
+    main() can classify it (hard auth/network vs. transient).
     """
     if not classroom_dir.is_dir():
         raise RegradeInputError(
@@ -645,7 +785,7 @@ def load_roster(
             continue
         seen.add(key)
         usernames.append(username)
-    return usernames
+    return usernames, entries[assignment_slug]
 
 
 def resolve_team_slug(classroom_meta: dict[str, Any], classroom_short: str) -> str:

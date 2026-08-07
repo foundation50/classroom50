@@ -33,6 +33,9 @@ type BulkSubmissionTriggerModalProps = {
   // The assignment's STORED submission_mode — the source of truth the retrofit
   // reconciles repos toward. Mode-setting itself lives on the settings form.
   submissionMode: SubmissionMode
+  // The assignment's STORED milestone submission_tags (if any); the rewrite
+  // reconciles each shim's tags line to their union with submit/*.
+  submissionTags?: string[]
   // Accepted students; each login is the owner segment of their own repo.
   owners: string[]
   students?: Student[]
@@ -61,6 +64,7 @@ export function BulkSubmissionTriggerModal({
   classroom,
   assignment,
   submissionMode,
+  submissionTags,
   owners,
   students = [],
 }: BulkSubmissionTriggerModalProps) {
@@ -138,6 +142,7 @@ export function BulkSubmissionTriggerModal({
             org,
             repo,
             mode: submissionMode,
+            tags: submissionTags,
           })
           if (outcome.status === "missingWorkflowScope") {
             missingScope = true

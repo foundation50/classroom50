@@ -82,6 +82,14 @@ type Entry struct {
 	// creates after the branch push. Consumed at accept time (shim rendering)
 	// and at submit time (tag push).
 	SubmissionMode string `json:"submission_mode,omitempty"`
+
+	// SubmissionTags is the teacher-named milestone tag patterns (e.g.
+	// phase1, v*) that ALSO trigger grading, alongside the always-on submit/*
+	// namespace. Consumed at accept time: the shim's tags trigger renders as
+	// the union of these patterns and submit/*. Empty/absent means no
+	// milestone tags (the default shim, byte-identical to before the field
+	// existed).
+	SubmissionTags []string `json:"submission_tags,omitempty"`
 }
 
 // IsTagSubmissionMode reports whether the entry grades only on submit/* tag

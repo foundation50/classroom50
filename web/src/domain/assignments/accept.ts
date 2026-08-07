@@ -652,6 +652,7 @@ export async function acceptAssignment(params: {
             // with the assignment repo's actual default branch (below).
             branch: sourceBranch || "main",
             submissionMode: assignment.submission_mode,
+            submissionTags: assignment.submission_tags,
           }),
       )
   if (isEmptyRepo) {
@@ -818,6 +819,7 @@ export async function acceptAssignment(params: {
       resolvedBranch,
       configBranch,
       assignment.submission_mode,
+      assignment.submission_tags,
     )
     rerenderShim = (branch: string) =>
       defaultAutograderWorkflow(
@@ -825,6 +827,7 @@ export async function acceptAssignment(params: {
         branch,
         configBranch,
         assignment.submission_mode,
+        assignment.submission_tags,
       )
   }
 

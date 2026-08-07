@@ -143,9 +143,15 @@ On the classroom page, click **+ Assignment**. Fill in:
   you can review changes and leave inline feedback.
 - **Autograding trigger** — when the autograder runs. **Every push** (the
   default) grades each push to the default branch. **On submit only** grades
-  only when a student submits (from the web or `gh student submit`) or pushes
-  a `submit/*` tag — regular pushes cost no Actions minutes, which matters at
-  scale.
+  only when a student submits (`gh student submit`) or pushes a `submit/*`
+  tag — regular pushes cost no Actions minutes, which matters at scale.
+- **Milestone submission tags** (optional) — tag names (e.g. `phase1`,
+  `phase2`, `complete`) that also trigger grading. A student pushes the tag
+  with plain git (`git tag phase1 && git push origin phase1`) and that commit
+  grades; the result appears as a normal `submit/*` release titled "via
+  phase1". Prefer exact names — a broad glob like `v*` grades every matching
+  tag. Changing them later requires the same trigger update as the mode (see
+  below).
 - **Empty repository** — creates each student's repository completely empty: no
   starter files, no autograding, no feedback pull request. Use it when students
   build everything from scratch, including their own GitHub Actions.

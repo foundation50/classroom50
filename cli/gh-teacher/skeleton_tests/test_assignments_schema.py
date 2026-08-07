@@ -107,6 +107,17 @@ class TestSchemaAccepts:
         assert _errors(_manifest(_entry(submission_mode="tag"))) == []
         assert _errors(_manifest(_entry(submission_mode="every-push"))) == []
 
+    def test_submission_tags_accepted(self):
+        # Milestone tag patterns: literal names and the supported glob
+        # characters. Absent is covered by test_minimal_manifest.
+        assert _errors(_manifest(_entry(submission_tags=["phase1", "phase2"]))) == []
+        assert (
+            _errors(
+                _manifest(_entry(submission_tags=["v*", "release-[0-9]", "a/b?", "m.**"]))
+            )
+            == []
+        )
+
     def test_container_with_ubuntu_runs_on(self):
         entry = _entry(runtime={"container": {"image": "x"}, "runs-on": "ubuntu-22.04"})
         assert _errors(_manifest(entry)) == []
@@ -364,6 +375,24 @@ class TestSchemaRejects:
         # values. Mirrors contract.SubmissionModes.
         assert _errors(_manifest(_entry(submission_mode=submission_mode))) != []
 
+    @pytest.mark.parametrize(
+        "submission_tags",
+        [
+            ["!v*"],          # excludes are deferred/rejected
+            ['ta"g'],         # quote breaks the YAML tags line
+            ["has space"],    # whitespace forbidden
+            [""],             # empty pattern
+            ["a", "a"],       # uniqueItems
+            "phase1",         # must be an array, not a bare string
+            [f"t{i}" for i in range(21)],  # over maxItems (20)
+        ],
+    )
+    def test_bad_submission_tags(self, submission_tags):
+        # Mirrors gh-teacher's ValidateSubmissionTags and the web
+        # validateSubmissionTags — the charset is restricted because the
+        # patterns are spliced into the shim's quoted-YAML tags line.
+        assert _errors(_manifest(_entry(submission_tags=submission_tags))) != []
+
 
 class TestEmptyRepo:
     def _bare_entry(self, **overrides):
@@ -415,6 +444,12 @@ class TestEmptyRepo:
         assert _errors(_manifest(self._bare_entry(submission_mode="tag"))) != []
         assert (
             _errors(_manifest(self._bare_entry(submission_mode="every-push"))) != []
+        )
+
+    def test_empty_repo_rejects_submission_tags(self):
+        # Same shim-less reasoning as submission_mode.
+        assert (
+            _errors(_manifest(self._bare_entry(submission_tags=["phase1"]))) != []
         )
 
 
