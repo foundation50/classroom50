@@ -47,15 +47,19 @@ func defaultHost() string {
 	return host
 }
 
-// RequireClient returns an authenticated REST client. It auto-runs
-// `gh auth login` (with opts.RequiredScopes) only when the host has no token,
-// OR when the existing token is a `gh`-managed OAuth token that lacks a
-// required scope — reusing an already-sufficient token so we never rewrite a
-// user's working `gh` auth config just to re-request scopes it already has
-// (issue #534). A token from a non-`gh` source (env var / keyring) that is
-// insufficient is not silently re-authed: `gh auth login` can't rewrite an
-// env token and clobbering a keyring token is surprising, so we point the user
-// at manual remediation instead. Non-interactive shells get a clear error.
+// RequireClient returns an authenticated REST client. It reuses an
+// already-sufficient token untouched so a working `gh` auth config is never
+// disturbed just to re-request scopes it already has (issue #534). Only when
+// the token is missing or under-scoped does it hand off to `gh`:
+//   - no token: `gh auth login` (a fresh sign-in; warns that it rewrites gh's
+//     stored auth).
+//   - `gh`-managed token missing a scope: `gh auth refresh -s <scopes>`, which
+//     ADDS the scopes to the existing credential without replacing its token or
+//     other hosts.yml settings — the non-clobbering path.
+//   - non-`gh` token (env var / PAT) missing a scope: not auto-fixed (`gh` can't
+//     widen an env/PAT token); returns an error pointing at manual remediation.
+//
+// Non-interactive shells get a clear error instead of a hung browser flow.
 func RequireClient(out, errOut writer, opts Options) (*api.RESTClient, error) {
 	host := defaultHost()
 	token, source := auth.TokenForHost(host)
@@ -80,15 +84,19 @@ func RequireClient(out, errOut writer, opts Options) (*api.RESTClient, error) {
 		return client, nil
 	}
 
-	// Insufficient. Only a `gh`-managed token is safe to fix with
-	// `gh auth login`; env/keyring tokens must be fixed by the user.
+	// Insufficient. Only a `gh`-managed token can be widened with
+	// `gh auth refresh`; env/PAT tokens must be fixed by the user.
 	if !isGhManagedToken(source) {
 		return nil, fmt.Errorf(
 			"your %s token (source: %s) is missing scopes %s needs (%s); it wasn't set by `gh auth login`, so re-run won't fix it — re-issue the token with those scopes, or unset it and run `%s login`",
 			host, source, opts.CommandName, strings.Join(opts.RequiredScopes, ", "), opts.CommandName)
 	}
-	_, _ = fmt.Fprintf(errOut, "Your %s login is missing scopes %s needs (%s); running `%s login` to add them...\n", host, opts.CommandName, strings.Join(opts.RequiredScopes, ", "), opts.CommandName)
-	if err := autoLogin(out, errOut, host, opts); err != nil {
+	if !IsInteractiveTTY() {
+		return nil, fmt.Errorf("your %s login is missing scopes %s needs (%s); run `gh auth refresh -h %s -s %s` (or `%s login`) from an interactive terminal to add them", host, opts.CommandName, strings.Join(opts.RequiredScopes, ", "), host, strings.Join(opts.RequiredScopes, ","), opts.CommandName)
+	}
+	// Widen the existing login in place — no fresh token, no config clobber.
+	_, _ = fmt.Fprintf(errOut, "Your %s login is missing scopes %s needs (%s); running `gh auth refresh` to add them (your existing token is kept, not replaced)...\n", host, opts.CommandName, strings.Join(opts.RequiredScopes, ", "))
+	if err := RunRefresh(out, errOut, host, opts.RequiredScopes, nil); err != nil {
 		return nil, err
 	}
 	return newDefaultClient()
@@ -156,25 +164,50 @@ func autoLogin(out, errOut writer, host string, opts Options) error {
 // RunLogin execs `gh auth login --hostname <host>` with the required scopes
 // plus any extra scopes, wiring stdio through. Shared by autoLogin and the
 // explicit `login` command. Warns first, prominently, that it hands control to
-// `gh`, which rewrites the stored auth for this host in `gh`'s config (issue
-// #534).
+// `gh`, which mints a fresh token and rewrites the stored auth for this host in
+// `gh`'s config (issue #534). Use this only for a FRESH sign-in (no token yet)
+// or an explicit user `login`; to widen an existing login's scopes without
+// replacing its token, prefer RunRefresh.
 func RunLogin(out, errOut writer, host string, requiredScopes, extraScopes []string) error {
 	printConfigRewriteWarning(errOut, host)
-	args := []string{"auth", "login", "--hostname", host}
+	return runGh(out, errOut, ghScopeArgs([]string{"auth", "login", "--hostname", host}, requiredScopes, extraScopes)...)
+}
+
+// RunRefresh execs `gh auth refresh --hostname <host> -s <scopes>` to ADD
+// scopes to the host's existing stored credential, rather than minting a fresh
+// token the way `gh auth login` does. This is the non-clobbering path: it
+// preserves the user's token identity, git-protocol, and other hosts.yml
+// settings, re-running only the OAuth consent to widen the grant (issue #534).
+// It only works for a `gh`-managed OAuth credential (not a PAT / env token),
+// which is why callers gate it behind isGhManagedToken.
+func RunRefresh(out, errOut writer, host string, requiredScopes, extraScopes []string) error {
+	return runGh(out, errOut, ghScopeArgs([]string{"auth", "refresh", "--hostname", host}, requiredScopes, extraScopes)...)
+}
+
+// ghScopeArgs appends `-s <scope>` for each required scope, then each non-empty
+// trimmed extra scope, to base. Shared by the login and refresh invocations so
+// both request scopes identically.
+func ghScopeArgs(base, requiredScopes, extraScopes []string) []string {
 	for _, s := range requiredScopes {
-		args = append(args, "-s", s)
+		base = append(base, "-s", s)
 	}
 	for _, s := range extraScopes {
 		if s = strings.TrimSpace(s); s != "" {
-			args = append(args, "-s", s)
+			base = append(base, "-s", s)
 		}
 	}
+	return base
+}
+
+// runGh execs `gh <args...>` with stdio wired through: stdin from the process
+// (the OAuth flow reads it), stdout/stderr to the caller's writers.
+func runGh(out, errOut writer, args ...string) error {
 	sub := exec.Command("gh", args...)
 	sub.Stdin = os.Stdin
 	sub.Stdout = out
 	sub.Stderr = errOut
 	if err := sub.Run(); err != nil {
-		return fmt.Errorf("gh auth login: %w", err)
+		return fmt.Errorf("gh %s: %w", strings.Join(args[:2], " "), err)
 	}
 	return nil
 }

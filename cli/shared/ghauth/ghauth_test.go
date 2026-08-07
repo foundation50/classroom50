@@ -43,6 +43,25 @@ func TestScopesSatisfy(t *testing.T) {
 	}
 }
 
+// TestGhScopeArgs pins the `gh auth login`/`refresh` argument builder shared by
+// the login and refresh paths: each required scope and each non-empty trimmed
+// extra scope becomes a `-s <scope>` pair appended to the base command.
+func TestGhScopeArgs(t *testing.T) {
+	got := ghScopeArgs(
+		[]string{"auth", "refresh", "--hostname", "github.com"},
+		[]string{"admin:org", "workflow"},
+		[]string{" gist ", "", "read:user"},
+	)
+	want := []string{
+		"auth", "refresh", "--hostname", "github.com",
+		"-s", "admin:org", "-s", "workflow",
+		"-s", "gist", "-s", "read:user",
+	}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Errorf("ghScopeArgs = %v, want %v", got, want)
+	}
+}
+
 // TestHostsConfigPath verifies the warning points at gh's real hosts file
 // resolved per-platform (via go-gh's config.ConfigDir), not a hardcoded
 // ~/.config/gh path: setting GH_CONFIG_DIR must move it, proving it isn't
