@@ -1859,6 +1859,28 @@ describe("verifyTemplateAccess", () => {
     expect(result.kind).toBe("empty-template")
   })
 
+  it("does not flag a fork as empty-template despite size 0 (regression #528)", async () => {
+    // GitHub reports size 0 for a fork sharing objects with its parent even when
+    // the fork has commits, so a fork must never be treated as commitless.
+    const client = clientReturning({
+      name: "cross-org-fork-template",
+      full_name: `${ORG}/cross-org-fork-template`,
+      private: false,
+      is_template: true,
+      fork: true,
+      default_branch: "main",
+      size: 0,
+    })
+
+    const result = await verifyTemplateAccess(
+      client,
+      ORG,
+      "cross-org-fork-template",
+    )
+
+    expect(result.kind).not.toBe("empty-template")
+  })
+
   it("prefers not-template over empty-template when both apply (ordering)", async () => {
     const client = clientReturning({
       name: "tmpl",
@@ -2099,6 +2121,32 @@ describe("resolveTemplate (create/edit blocking path)", () => {
     await expect(
       resolveTemplate(client, ORG, ref(ORG, "tmpl")),
     ).rejects.toThrow(/has no commits/)
+  })
+
+  it("does not reject a fork with reported size 0 as commitless (regression #528)", async () => {
+    // GitHub reports size 0 for a fork sharing objects with its parent even when
+    // the fork has commits, so a fork must resolve normally rather than throw.
+    const client = clientReturning({
+      name: "cross-org-fork-template",
+      full_name: `${ORG}/cross-org-fork-template`,
+      private: false,
+      is_template: true,
+      fork: true,
+      default_branch: "main",
+      size: 0,
+    })
+
+    const result = await resolveTemplate(
+      client,
+      ORG,
+      ref(ORG, "cross-org-fork-template"),
+    )
+
+    expect(result.template).toEqual({
+      owner: ORG,
+      repo: "cross-org-fork-template",
+      branch: "main",
+    })
   })
 
   it("resolves a template with commits (size > 0)", async () => {

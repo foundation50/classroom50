@@ -204,7 +204,9 @@ export type TemplateAccessVerification =
   | { kind: "not-template"; owner: string; repo: string }
   // Template with no commits (size 0): GitHub's generate 422s "is empty" at
   // accept. A commitless repo reports a phantom default_branch, so `no-branch`
-  // never catches it — size is the reliable signal. resolveTemplate rejects it.
+  // never catches it — size is the reliable signal for a NON-fork. Forks report
+  // size 0 while sharing objects with the parent, so they're exempt (a fork can
+  // only exist from a non-empty parent). resolveTemplate rejects it.
   | { kind: "empty-template"; owner: string; repo: string }
   // No usable branch: no @branch given and the repo has no default branch
   // (e.g., a commitless template). resolveTemplate rejects this too.
@@ -358,8 +360,11 @@ export async function verifyTemplateAccess(
     return { kind: "not-template", owner: parsed.owner, repo: parsed.repo }
   }
   // Caught before no-branch: a commitless repo reports a phantom default_branch
-  // (see the empty-template verdict). Fail open on an absent size.
-  if (repo.size === 0) {
+  // (see the empty-template verdict). Fail open on an absent size. Skip forks:
+  // GitHub reports size 0 for a fork that shares objects with its parent even
+  // when the fork has commits, so size is not a valid emptiness signal there —
+  // and a fork can only exist from a parent that already had commits.
+  if (repo.size === 0 && !repo.fork) {
     return { kind: "empty-template", owner: parsed.owner, repo: parsed.repo }
   }
 
@@ -447,8 +452,10 @@ export async function resolveTemplate(
   }
 
   // Fail closed: never write an assignment pointing at a commitless template
-  // (see the empty-template verdict for why size, not default_branch).
-  if (repo.size === 0) {
+  // (see the empty-template verdict for why size, not default_branch). Skip
+  // forks — GitHub reports size 0 for a fork sharing objects with its parent
+  // even when it has commits, and a fork can only exist from a non-empty parent.
+  if (repo.size === 0 && !repo.fork) {
     throw new Error(
       `Template "${parsed.owner}/${parsed.repo}" has no commits — add at least one commit (e.g. a README) so students can generate from it, then retry.`,
     )

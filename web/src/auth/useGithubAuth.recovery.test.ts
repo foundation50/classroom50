@@ -55,11 +55,12 @@ describe("recoverStrandedExchange", () => {
 
 // The PAT entry gate: submitPat routes a validated token's X-OAuth-Scopes
 // header through classifyPatResult before deciding sign-in vs error. A null
-// header (fine-grained PAT) is blocked, an under-scoped classic token is
-// rejected with the missing list, and a fully-scoped token signs in.
+// header (fine-grained PAT) is accepted without header verification, an
+// under-scoped classic token is rejected with the missing list, and a
+// fully-scoped classic token signs in.
 describe("classifyPatResult", () => {
-  it("blocks a fine-grained token (null header -> unverifiable)", () => {
-    expect(classifyPatResult(null)).toEqual({ kind: "fine-grained" })
+  it("accepts a fine-grained token (null header -> accepted-unverified)", () => {
+    expect(classifyPatResult(null)).toEqual({ kind: "fine-grained-ok" })
   })
 
   it("rejects a classic token missing required scopes, listing them", () => {

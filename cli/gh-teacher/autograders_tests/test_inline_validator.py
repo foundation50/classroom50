@@ -757,8 +757,9 @@ class TestReleaseAssetsValidation:
 
 
 # ---------------------------------------------------------------------------
-# No-autograder detection — emits no-autograder so grade/set-latest skip
-# when no autograder is configured.
+# No-autograder detection — emits no-autograder so the grade job can skip
+# language-toolchain setup (the submission is still recorded via runner.py's
+# vacuous pass; the grade job no longer skips outright).
 # ---------------------------------------------------------------------------
 
 

@@ -169,12 +169,14 @@ func TestNormalizeDueDate_UnresolvableTZ(t *testing.T) {
 func TestResolveTemplateBranch(t *testing.T) {
 	// Each row covers one branch of the post-HTTP decision tree so a
 	// change to validateTemplateRepo's response handling can't
-	// silently drop a guard: not-a-template, explicit-@branch
-	// retention, default_branch fallback, empty-default_branch error.
+	// silently drop a guard: not-a-template, empty-template (with the
+	// fork exemption), explicit-@branch retention, default_branch
+	// fallback, empty-default_branch error.
 	cases := []struct {
 		name        string
 		arg         templateArg
 		isTemplate  bool
+		isFork      bool
 		defaultBr   string
 		size        int
 		wantRef     assignment.TemplateRef
@@ -195,6 +197,17 @@ func TestResolveTemplateBranch(t *testing.T) {
 			defaultBr:   "main", // GitHub reports a phantom default_branch for a commitless repo
 			size:        0,
 			wantErrPart: "has no commits",
+		},
+		{
+			// A fork reports size 0 while sharing objects with its parent even when
+			// it has commits, so the emptiness guard must exempt it (regression #528).
+			name:       "fork with reported size 0 is not treated as empty",
+			arg:        templateArg{Owner: "cs50", Repo: "cross-org-fork-template"},
+			isTemplate: true,
+			isFork:     true,
+			defaultBr:  "main",
+			size:       0,
+			wantRef:    assignment.TemplateRef{Owner: "cs50", Repo: "cross-org-fork-template", Branch: "main"},
 		},
 		{
 			name:       "explicit @branch retained even when default_branch differs",
@@ -231,7 +244,7 @@ func TestResolveTemplateBranch(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := resolveTemplateBranch(tc.arg, tc.isTemplate, tc.defaultBr, tc.size)
+			got, err := resolveTemplateBranch(tc.arg, tc.isTemplate, tc.isFork, tc.defaultBr, tc.size)
 			if tc.wantErrPart != "" {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil (returned %#v)", tc.wantErrPart, got)

@@ -235,9 +235,11 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		// trigger-tag carries the milestone tag that triggered the run so
 		// the Release title can note it ("via phase1").
 		"trigger-tag",
-		// no-autograder gates the skip-when-nothing-configured path; a
-		// dropped output would read empty and grade every submission,
-		// re-spending Actions minutes on assignments with no autograder.
+		// no-autograder no longer skips the grade job (the submission is
+		// still recorded via runner.py's vacuous pass); the output is retained
+		// so the toolchain-setup steps can skip provisioning a toolchain the
+		// recording path won't use. A dropped output would read empty and
+		// re-provision toolchains on every no-autograder submission.
 		"no-autograder",
 	} {
 		if _, ok := outputsMap[out]; !ok {
@@ -255,21 +257,22 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// exactly what this guard exists to prevent.
 	//
 	// grade is gated at the job level (set-latest needs grade, so it skips
-	// transitively). The gate carries four skips: the acceptance commit, a
+	// transitively). The gate carries three skips: the acceptance commit, a
 	// teacher-side shim-retrofit commit (is-shim-update, the [skip ci]
-	// backstop), a suppressed tag-mode branch push (branch-push-suppressed,
-	// the stale-shim defense), and the no-autograder case: an assignment
-	// with no declarative tests, no per-assignment bundle, and no
-	// classroom-default autograder.py has nothing to grade, so setup emits
-	// no-autograder=true and the grade job skips (fail-open — any probe error
-	// emits false and grades).
+	// backstop), and a suppressed run (branch-push-suppressed /
+	// foreign-tag-suppressed, the stale-shim defenses). The no-autograder
+	// case still runs the grade job so the submission is recorded: runner.py
+	// synthesizes a vacuous-pass (0/0 success) result and the Release step
+	// publishes it, keeping the submission visible on the teacher dashboard
+	// (which reads submit/* releases). Toolchain setup is separately gated
+	// off no-autograder so the recording path spends no minutes provisioning
+	// unused toolchains.
 	wantGradeIf := "needs.setup.outputs.is-acceptance != 'true' && " +
 		"needs.setup.outputs.is-shim-update != 'true' && " +
 		"needs.setup.outputs.branch-push-suppressed != 'true' && " +
-		"needs.setup.outputs.foreign-tag-suppressed != 'true' && " +
-		"needs.setup.outputs.no-autograder != 'true'"
+		"needs.setup.outputs.foreign-tag-suppressed != 'true'"
 	if got, _ := nested(doc, "jobs", "grade", "if"); got != wantGradeIf {
-		t.Errorf("grade.if = %v, want the acceptance + shim-update + suppressed-push + foreign-tag + no-autograder skip gate", got)
+		t.Errorf("grade.if = %v, want the acceptance + shim-update + suppressed-push + foreign-tag skip gate", got)
 	}
 	// The setup checkout must use full history: _baseline_scan walks back
 	// to the commit that added .classroom50.yaml, and a shallow clone
@@ -421,20 +424,22 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		}
 	}
 
-	// Toolchain steps gated on matching setup outputs AND a hosted runner
-	// (`runner.environment != 'self-hosted'`); see the workflow comment / #369.
+	// Toolchain steps gated on matching setup outputs, NOT the no-autograder
+	// recording path, AND a hosted runner (`runner.environment !=
+	// 'self-hosted'`); see the workflow comment / #369. The no-autograder
+	// clause keeps the recording path from provisioning unused toolchains.
 	for _, want := range []string{
-		"if: needs.setup.outputs.python != '' && runner.environment != 'self-hosted'",
+		"if: needs.setup.outputs.python != '' && needs.setup.outputs.no-autograder != 'true' && runner.environment != 'self-hosted'",
 		"actions/setup-python@v7",
-		"if: needs.setup.outputs.node != '' && runner.environment != 'self-hosted'",
+		"if: needs.setup.outputs.node != '' && needs.setup.outputs.no-autograder != 'true' && runner.environment != 'self-hosted'",
 		"actions/setup-node@v7",
-		"if: needs.setup.outputs.java != '' && runner.environment != 'self-hosted'",
+		"if: needs.setup.outputs.java != '' && needs.setup.outputs.no-autograder != 'true' && runner.environment != 'self-hosted'",
 		"actions/setup-java@v5",
-		"if: needs.setup.outputs.go != '' && runner.environment != 'self-hosted'",
+		"if: needs.setup.outputs.go != '' && needs.setup.outputs.no-autograder != 'true' && runner.environment != 'self-hosted'",
 		"actions/setup-go@v7",
-		"if: needs.setup.outputs.rust != '' && runner.environment != 'self-hosted'",
+		"if: needs.setup.outputs.rust != '' && needs.setup.outputs.no-autograder != 'true' && runner.environment != 'self-hosted'",
 		"dtolnay/rust-toolchain@master",
-		"if: needs.setup.outputs.apt != '' && runner.os == 'Linux' && runner.environment != 'self-hosted'",
+		"if: needs.setup.outputs.apt != '' && needs.setup.outputs.no-autograder != 'true' && runner.os == 'Linux' && runner.environment != 'self-hosted'",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("autograde-runner.yaml missing toolchain dispatch %q", want)
