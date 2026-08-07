@@ -646,8 +646,54 @@ configured by `init`). The only PAT in the system is the teacher-side
 
 ## Custom runner workflow (rare)
 
-The `--autograder <name>` flag calls a different *reusable
-workflow*, not just a different `autograder.py`. Drop a shim at
-`<classroom>/autograders/<name>.yaml` (its `uses:` points at your workflow) and
-register it with `gh teacher assignment add ... --autograder <name>`. Most
-teachers never need this.
+Every earlier layer changes *what* grading does while keeping the built-in
+runner. When you need a different grading *pipeline* entirely — a
+[reusable workflow](https://docs.github.com/actions/using-workflows/reusing-workflows)
+you author yourself — `--autograder <name>` swaps the caller shim instead of the
+autograder script. Most teachers never need this.
+
+**How the swap works.** By default `gh student accept` writes a shim to
+`.github/workflows/autograde.yaml` whose `uses:` points at the built-in
+`autograde-runner.yaml`. With `--autograder <name>`, accept instead fetches your
+shim from `<classroom>/autograders/<name>.yaml` and writes it verbatim. Your
+shim owns its own `on:` triggers and `uses:` a reusable workflow you control, so
+your grading logic runs in place of the runner.
+
+**Set one up:**
+
+1. **Add the reusable workflow** to your config repo under `.github/workflows/`,
+   with a name other than the reserved `autograde-runner.yaml`. It must be
+   [callable](https://docs.github.com/actions/using-workflows/reusing-workflows#creating-a-reusable-workflow)
+   (`on: workflow_call`). Non-reserved names are never touched by Classroom 50.
+2. **Add a caller shim** at `<classroom>/autograders/<name>.yaml`. Give it your
+   trigger events and a `jobs.<id>.uses:` pointing at the workflow from step 1.
+   Because it's written verbatim, template `<org>`/branch refs to your own
+   values rather than relying on the built-in shim's substitution.
+3. **Register the assignment** with `gh teacher assignment add <org> <classroom>
+   <slug> --autograder <name>`.
+
+> [!NOTE]
+> Once an assignment uses a custom autograder, `gh teacher assignment
+> submission-mode` never rewrites its shim — trigger changes are yours to make.
+
+### Bringing a GitHub Classroom autograder along
+
+This is the intended path for keeping an `autograding.json`-driven workflow after
+[migrating](FAQ#migrating-from-github-classroom). Classroom 50 has no
+`.github/classroom/autograding.json` of its own — the built-in runner reads a
+[`tests` block](#declarative-tests) instead — but a custom runner workflow lets
+you keep your existing format:
+
+1. Put your grading action's workflow in the config repo's `.github/workflows/`
+   (any non-reserved name). Have it read `autograding.json` from the student
+   repo as before.
+2. Point a caller shim at it as above, and register assignments with
+   `--autograder <name>`.
+3. Ship `autograding.json` (and any fixtures) in the **assignment template**, not
+   the config repo — it travels with each student's starter code.
+
+> [!WARNING]
+> The template must **not** contain `.github/workflows/autograde.yaml`; that name
+> is reserved for the shim and would be clobbered on accept and submit (see
+> [Assignment Templates](Assignment-Templates#structure)). Use any other filename
+> for template-side workflows.
