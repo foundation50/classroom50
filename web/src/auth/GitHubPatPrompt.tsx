@@ -3,27 +3,29 @@ import { useTranslation } from "react-i18next"
 import { AlertTriangle, ExternalLink } from "lucide-react"
 
 import { REQUIRED_SCOPES } from "./scopes"
+import {
+  FINE_GRAINED_SIGNIN_PERMISSION_LABELS,
+  buildFineGrainedSigninUrl,
+} from "./fineGrainedSigninUrl"
 import { Alert, Button, Input } from "@/components/ui"
 
 // The classic-PAT checkboxes to tick, derived from REQUIRED_SCOPES (the same
 // source missingScopes() validates against) so the on-screen list and the
-// pre-checked token URL can't drift from DEFAULT_GITHUB_SCOPE. read:org is
-// dropped because admin:org already implies it (SCOPE_IMPLICATIONS in
-// scopes.ts) — it isn't a box the user ticks separately. Displayed in GitHub's
-// token-page order; scopes without an explicit rank sort to the end so a newly
-// added required scope still appears (just not perfectly ordered) instead of
-// silently vanishing.
-const IMPLIED_PAT_SCOPES = new Set(["read:org"])
+// pre-checked token URL can't drift from DEFAULT_GITHUB_SCOPE. We request the
+// full OAuth scope set verbatim — including read:org, even though admin:org
+// implies it — so a token created via this link grants exactly what the OAuth
+// flow would. Displayed in GitHub's token-page order; scopes without an
+// explicit rank sort to the end so a newly added required scope still appears
+// (just not perfectly ordered) instead of silently vanishing.
 const PAT_SCOPE_ORDER = [
   "repo",
   "workflow",
   "admin:org",
+  "read:org",
   "read:user",
   "delete_repo",
 ]
-const REQUIRED_PAT_SCOPES = REQUIRED_SCOPES.filter(
-  (scope) => !IMPLIED_PAT_SCOPES.has(scope),
-).sort((a, b) => {
+const REQUIRED_PAT_SCOPES = [...REQUIRED_SCOPES].sort((a, b) => {
   const ai = PAT_SCOPE_ORDER.indexOf(a)
   const bi = PAT_SCOPE_ORDER.indexOf(b)
   return (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi)
@@ -38,6 +40,10 @@ const CREATE_TOKEN_URL = `https://github.com/settings/tokens/new?${new URLSearch
     scopes: REQUIRED_PAT_SCOPES.join(","),
   },
 ).toString()}`
+
+// Fine-grained alternative: resource owner is left blank (the teacher picks
+// their org on GitHub, since sign-in happens before org selection).
+const CREATE_FINE_GRAINED_URL = buildFineGrainedSigninUrl()
 
 export function GitHubPatPrompt({
   onSubmit,
@@ -92,6 +98,23 @@ export function GitHubPatPrompt({
         <p className="text-xs leading-relaxed text-base-content/60">
           {t("auth.patFineGrainedNote")}
         </p>
+        <p className="text-xs leading-relaxed text-base-content/60">
+          {t("auth.patFineGrainedPermissionsIntro")}
+        </p>
+        <ul className="grid gap-1 rounded-lg border border-base-300 bg-base-200 px-4 py-3 text-xs">
+          {FINE_GRAINED_SIGNIN_PERMISSION_LABELS.map((label) => (
+            <li key={label}>{label}</li>
+          ))}
+        </ul>
+        <a
+          className="link link-info link-hover inline-flex items-center gap-1 text-xs"
+          href={CREATE_FINE_GRAINED_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <ExternalLink aria-hidden="true" className="size-3" />
+          {t("auth.patFineGrainedLink")}
+        </a>
       </div>
 
       <label className="form-control w-full">
@@ -101,7 +124,7 @@ export function GitHubPatPrompt({
           type="password"
           autoComplete="off"
           spellCheck={false}
-          placeholder="ghp_…"
+          placeholder="ghp_… or github_pat_…"
           value={token}
           onChange={(event) => setToken(event.target.value)}
           disabled={isValidating}
