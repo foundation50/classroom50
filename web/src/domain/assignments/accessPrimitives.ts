@@ -357,10 +357,8 @@ export async function verifyTemplateAccess(
   if (!repo.is_template) {
     return { kind: "not-template", owner: parsed.owner, repo: parsed.repo }
   }
-  // A template with no commits (size 0) reports a phantom default_branch, so
-  // the no-branch verdict below never catches it; generate would 422 at accept.
-  // GET /repos always returns size, so an absent value never reaches here; the
-  // strict === 0 only trips on an explicit 0 (fail open if GitHub ever omits it).
+  // Caught before no-branch: a commitless repo reports a phantom default_branch
+  // (see the empty-template verdict). Fail open on an absent size.
   if (repo.size === 0) {
     return { kind: "empty-template", owner: parsed.owner, repo: parsed.repo }
   }
@@ -448,9 +446,8 @@ export async function resolveTemplate(
     )
   }
 
-  // A commitless template (size 0) reports a phantom default_branch, so the
-  // no-default-branch guard below never fires; generate would 422 at accept.
-  // Fail closed here so the assignment is never written pointing at it.
+  // Fail closed: never write an assignment pointing at a commitless template
+  // (see the empty-template verdict for why size, not default_branch).
   if (repo.size === 0) {
     throw new Error(
       `Template "${parsed.owner}/${parsed.repo}" has no commits — add at least one commit (e.g. a README) so students can generate from it, then retry.`,
