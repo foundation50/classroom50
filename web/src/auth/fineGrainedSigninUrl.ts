@@ -7,6 +7,9 @@
 //   repo       -> Contents + Administration (create/archive/delete repos) + Workflows
 //   admin:org  -> Organization Administration + Members (team/invite management)
 //   delete_repo-> covered by repository Administration: write
+//   Pages      -> the org-setup pre-flight reads GET /repos/{org}/classroom50/pages
+//                 and setup PUTs the Pages config, so write is needed (a
+//                 read-only Pages permission 403s the pre-flight check).
 // Built with URLSearchParams (matching buildServiceTokenUrl in OrgSettingsPage)
 // so reserved characters encode correctly. Kept as one exported recipe so the
 // rendered permission list and the URL can't drift.
@@ -15,6 +18,7 @@ export const FINE_GRAINED_SIGNIN_PERMISSIONS = {
   administration: "write",
   contents: "write",
   workflows: "write",
+  pages: "write",
   organization_administration: "write",
   members: "read",
 } as const
@@ -25,6 +29,7 @@ export const FINE_GRAINED_SIGNIN_PERMISSION_LABELS = [
   "Repository — Administration: Read and write",
   "Repository — Contents: Read and write",
   "Repository — Workflows: Read and write",
+  "Repository — Pages: Read and write",
   "Organization — Administration: Read and write",
   "Organization — Members: Read",
 ] as const
