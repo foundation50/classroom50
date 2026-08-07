@@ -140,10 +140,24 @@ export async function updateShimSubmissionMode(params: {
     throw err
   }
 
+  // Pin the whole read-rewrite-commit cycle to one resolved tip SHA. Reading
+  // the shim at the branch NAME can lag a just-landed write (GitHub
+  // read-after-write lag — the misreport the Go retrofitShim fixed, observed
+  // live 2026-08-05), which would rewrite from stale content or misreport
+  // "current"; reading at the same SHA the commit builds on keeps the no-op
+  // check and the write consistent.
+  const ref = await getBranchRefRepo(client, org, repo, branch)
+  const parentSha = ref.object.sha
+  const parentCommit = await getCommitByRepo(client, org, repo, parentSha)
+  const baseTreeSha = parentCommit.tree?.sha
+  if (!parentSha || !baseTreeSha) {
+    throw new Error(`${org}/${repo}: could not resolve the branch tip`)
+  }
+
   let current: string
   try {
     const resp = await client.request<{ content?: string; encoding?: string }>(
-      `/repos/${org}/${repo}/contents/${AUTOGRADE_SHIM_PATH}?ref=${encodeURIComponent(branch)}`,
+      `/repos/${org}/${repo}/contents/${AUTOGRADE_SHIM_PATH}?ref=${encodeURIComponent(parentSha)}`,
     )
     if (!resp?.content || resp.encoding !== "base64") {
       return {
@@ -168,14 +182,6 @@ export async function updateShimSubmissionMode(params: {
   if (rewrite.kind === "current") return { status: "current" }
   if (rewrite.kind === "unrecognized") {
     return { status: "unrecognized", reason: rewrite.reason }
-  }
-
-  const ref = await getBranchRefRepo(client, org, repo, branch)
-  const parentSha = ref.object.sha
-  const parentCommit = await getCommitByRepo(client, org, repo, parentSha)
-  const baseTreeSha = parentCommit.tree?.sha
-  if (!parentSha || !baseTreeSha) {
-    throw new Error(`${org}/${repo}: could not resolve the branch tip`)
   }
 
   let tree: { sha: string }

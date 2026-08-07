@@ -15,6 +15,7 @@ export {
   isFreshRepoLagError,
   withFreshRepoRetry,
   REPO_READ_CONCURRENCY,
+  REPO_WRITE_CONCURRENCY,
   withGithubReadSlot,
   retryOnRateLimit,
   type FreshRepoRetryOptions,

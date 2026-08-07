@@ -1111,6 +1111,7 @@ const SubmissionsPageContent = () => {
             ? (assignmentInfo.submission_mode ?? "every-push")
             : undefined
         }
+        submissionTags={assignmentInfo?.submission_tags}
         initialLoading={initialLoading}
         nonSubmittersLoading={
           !nonSubmittersReady &&

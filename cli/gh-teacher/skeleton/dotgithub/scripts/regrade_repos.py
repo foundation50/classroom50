@@ -124,6 +124,11 @@ def _compile_tag_pattern(pattern: str) -> re.Pattern[str] | None:
         return None
 
 
+# The safe-pattern charset — literal-name characters plus the glob
+# metacharacters GitHub Actions tag filters support. Keep in lockstep with Go
+# contract.SubmissionTagCharsetRE and the web SUBMISSION_TAG_PATTERN_RE.
+_TAG_PATTERN = re.compile(r"^[A-Za-z0-9._/*?+\[\]-]+$")
+
 # A leading `?`/`+` (nothing to repeat) or a `+` stacked on another
 # quantifier (`v*+`, `a++`). LOAD-BEARING here in the Python mirror: those
 # translate to POSSESSIVE quantifiers, which Python 3.11+ compiles (and
@@ -142,8 +147,8 @@ def matches_submission_tag(patterns: list[str], tag: str) -> bool:
     rendered into the shim's on.push.tags, so this matcher and GitHub's own
     filter evaluation must agree on what fires. Keep in lockstep."""
     for pattern in patterns:
-        if _STACKED_QUANTIFIER.search(pattern):
-            continue  # fail closed, matching the Go/JS compile failure
+        if not _TAG_PATTERN.fullmatch(pattern) or _STACKED_QUANTIFIER.search(pattern):
+            continue  # fail closed, matching the Go/JS charset+compile guards
         compiled = _compile_tag_pattern(pattern)
         if compiled is not None and compiled.fullmatch(tag) is not None:
             return True

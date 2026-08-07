@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 
 import {
   SUBMISSION_TAGS_CAP,
+  SUBMISSION_TAG_PATTERN_RE,
   matchesSubmissionTag,
   parseSubmissionTags,
   safeShimTagPatterns,
@@ -100,5 +101,38 @@ describe("safeShimTagPatterns — render-time fail-closed gate", () => {
         Array.from({ length: SUBMISSION_TAGS_CAP + 1 }, (_, i) => `t${i}`),
       ),
     ).toEqual([])
+  })
+})
+
+// The web half of the constant lockstep: SUBMISSION_TAGS_CAP and
+// SUBMISSION_TAG_PATTERN_RE must mirror the schema (declared source of
+// truth). The Go half is TestSubmissionTagsSchemaParity
+// (cli/gh-teacher/internal/assignment/submission_tags_test.go).
+describe("submission_tags constants parity with assignments-v1 schema", () => {
+  const schemaUrl = new URL(
+    "../../../schemas/assignments-v1.schema.json",
+    import.meta.url,
+  )
+  const schema = JSON.parse(readFileSync(fileURLToPath(schemaUrl), "utf8")) as {
+    $defs: {
+      assignment: {
+        properties: {
+          submission_tags: { maxItems: number; items: { pattern: string } }
+        }
+      }
+    }
+  }
+  const st = schema.$defs.assignment.properties.submission_tags
+
+  it("matches the schema maxItems", () => {
+    expect(st.maxItems).toBe(SUBMISSION_TAGS_CAP)
+  })
+
+  it("matches the schema items.pattern charset (modulo JSON escaping)", () => {
+    // The schema escapes [ and ] inside the class; the JS literal doesn't
+    // need the escaped [. Normalize both to the same canonical string.
+    expect(st.items.pattern.replaceAll("\\[", "[")).toBe(
+      SUBMISSION_TAG_PATTERN_RE.source.replaceAll("\\[", "["),
+    )
   })
 })

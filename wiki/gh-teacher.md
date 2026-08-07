@@ -409,7 +409,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--tests <path>` | JSON array of declarative tests. Mutually exclusive with a per-assignment `autograder.py`. |
 | `--autograder <name>` | Swap the reusable workflow (rare). Default `default`. |
 | `--feedback-pr` | One review PR per student repo. **On by default**; `--feedback-pr=false` disables. |
-| `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; immutable; mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode. |
+| `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; immutable; mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode/submission-tag. |
 | `--pass-threshold <0–100>` | Advisory passing bar shown by gradebook clients. Off when omitted (distinct from `0`). |
 | `--submission-mode every-push\|tag` | When the autograder fires: `every-push` (default) grades every push; `tag` grades only `submit/*` tag pushes (the submit clients push the tag — plain `git push` costs no Actions minutes). Change it later with `assignment submission-mode`. |
 | `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading: `git tag phase1 && git push origin phase1` grades that commit. Simple globs (`v*`) work; exact names are safer. The record still lives at the canonical `submit/*` tag. Mutually exclusive with `--empty-repo`. |

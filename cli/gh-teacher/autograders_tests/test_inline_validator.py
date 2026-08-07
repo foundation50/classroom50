@@ -1104,9 +1104,13 @@ class TestInlineMatcherFixtureParity:
         import re as _re
         namespace: dict = {"re": _re}
         src = inline_script
-        # The matcher depends on the _STACKED_QUANTIFIER guard defined
-        # earlier in the read step (alongside _TAG_PATTERN) — extract that
-        # line first so the sliced functions run against the live regex.
+        # The matcher depends on the _TAG_PATTERN charset gate and the
+        # _STACKED_QUANTIFIER guard defined earlier in the read step —
+        # extract those lines first so the sliced functions run against the
+        # live regexes.
+        charset_match = _re.search(r"_TAG_PATTERN = re\.compile\([^\n]+\)", src)
+        assert charset_match, "inline validator lost its _TAG_PATTERN charset gate"
+        exec(charset_match.group(0), namespace)  # noqa: S102 — test-only, our own YAML
         quant_match = _re.search(r"_STACKED_QUANTIFIER = re\.compile\([^\n]+\)", src)
         assert quant_match, "inline validator lost its _STACKED_QUANTIFIER guard"
         exec(quant_match.group(0), namespace)  # noqa: S102 — test-only, our own YAML

@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared golden fixture pinning the submission-tag matcher to identical output across the three parallel implementations: Go contract.MatchesSubmissionTag (cli/shared/contract/contract.go), TS matchesSubmissionTag (web/src/util/submissionTags.ts), and the Python matches_submission_tag copies (autograde-runner.yaml read step + regrade_repos.py). Semantics are the supported subset of GitHub Actions tag-filter patterns, because the same strings are rendered into the shim's on.push.tags — the matcher and GitHub must agree on what fires: literal names match exactly; '*' matches any run (including empty) NOT crossing '/'; '**' matches across '/'; '?' matches zero or one OF THE PRECEDING character (regex-like, NOT glob single-char: 'ab?' matches 'a' and 'ab', never 'ax'); '+' matches one or more of the preceding character; '[abc]'/'[a-z]' character classes. Matching is case-sensitive. An empty pattern list matches nothing ('!' negation and tags-ignore are deferred). Each case is (patterns, tag -> matches), asserted by all three sides so the copies can't drift.",
+  "_comment": "Shared golden fixture pinning the submission-tag matcher to identical output across the four parallel implementations: Go contract.MatchesSubmissionTag (cli/shared/contract/submissiontags.go), TS matchesSubmissionTag (web/src/util/submissionTags.ts), and the Python matches_submission_tag copies (autograde-runner.yaml read step + regrade_repos.py). Semantics are the supported subset of GitHub Actions tag-filter patterns, because the same strings are rendered into the shim's on.push.tags — the matcher and GitHub must agree on what fires: literal names match exactly; '*' matches any run (including empty) NOT crossing '/'; '**' matches across '/'; '?' matches zero or one OF THE PRECEDING character (regex-like, NOT glob single-char: 'ab?' matches 'a' and 'ab', never 'ax'); '+' matches one or more of the preceding character; '[abc]'/'[a-z]' character classes. Matching is case-sensitive. An empty pattern list matches nothing ('!' negation and tags-ignore are deferred). Each case is (patterns, tag -> matches), asserted by all four sides so the copies can't drift. Charset-unsafe patterns (anything outside the schema charset [A-Za-z0-9._/*?+\\[\\]-], e.g. quotes or spaces — reachable only via a hand-edited manifest) fail closed and match nothing, mirroring the Go/TS IsSafeSubmissionTagPattern guard.",
   "_stacked_quantifiers": "The v*+/a++/x?+/m**+/+lead/?lead cases pin the fail-closed guard for stacked or leading quantifiers: without it Python 3.11+ compiles them as POSSESSIVE quantifiers (v*+ would match v1) while Go RE2 and JS reject them — the one construct where the four copies diverge. All four implementations short-circuit these patterns to no-match before compiling.",
   "cases": [
     { "patterns": ["submission"], "tag": "submission", "matches": true },
@@ -50,6 +50,14 @@
     { "patterns": ["m**+"], "tag": "m/anything", "matches": false },
     { "patterns": ["+lead"], "tag": "lead", "matches": false },
     { "patterns": ["?lead"], "tag": "lead", "matches": false },
-    { "patterns": ["v*+", "phase1"], "tag": "phase1", "matches": true }
+    { "patterns": ["v*+", "phase1"], "tag": "phase1", "matches": true },
+    { "patterns": ["ta\"g"], "tag": "ta\"g", "matches": false },
+    { "patterns": ["pha se"], "tag": "pha se", "matches": false },
+    { "patterns": ["v\"*"], "tag": "v1", "matches": false },
+    { "patterns": ["ta\"g", "good"], "tag": "good", "matches": true },
+    { "patterns": ["pha[se"], "tag": "pha[se", "matches": true },
+    { "patterns": ["pha[se"], "tag": "phase", "matches": false },
+    { "patterns": ["[z-a]"], "tag": "m", "matches": false },
+    { "patterns": ["[z-a]", "good"], "tag": "good", "matches": true }
   ]
 }

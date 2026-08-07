@@ -621,8 +621,8 @@ jobs:
 
           def matches_submission_tag(patterns, tag):
               for pattern in patterns:
-                  if _STACKED_QUANTIFIER.search(pattern):
-                      continue  # fail closed like the Go/JS compile failure
+                  if not _TAG_PATTERN.fullmatch(pattern) or _STACKED_QUANTIFIER.search(pattern):
+                      continue  # fail closed like the Go/JS charset+compile guards
                   compiled = _compile_tag_pattern(pattern)
                   if compiled is not None and compiled.fullmatch(tag) is not None:
                       return True

@@ -16,7 +16,7 @@ import {
   type ShimUpdateOutcome,
 } from "@/domain/assignments/submissionTrigger"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
+import { REPO_WRITE_CONCURRENCY } from "@/github-core/queries"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { studentRepoName } from "@/util/studentRepo"
 import { getName } from "@/util/students"
@@ -126,7 +126,12 @@ export function BulkSubmissionTriggerModal({
 
     const outcomes = await mapWithConcurrency(
       owners,
-      REPO_READ_CONCURRENCY,
+      // Each iteration is a 3-step git-data WRITE (tree + commit + ref) into
+      // a different repo — GitHub's secondary-rate-limit guidance is to avoid
+      // concurrent content writes (the CLI retrofit loop is serial for the
+      // same reason), unlike the sibling bulk modals' single PATCH/PUT calls,
+      // which safely share REPO_READ_CONCURRENCY.
+      REPO_WRITE_CONCURRENCY,
       async (owner): Promise<Outcome> => {
         if (rateLimited || missingScope || !mountedRef.current) {
           processed += 1

@@ -32,7 +32,9 @@ const autogradeShimPath = ".github/workflows/autograde.yaml"
 // on a submission_tags one). Both accept clients emit exactly this shape
 // (their comment headers differ, which is why the retrofit is line surgery on
 // the trigger block and never a full re-render); anything else is teacher-/
-// student-authored and is never touched.
+// student-authored and is never touched. Hand-mirrored with NO compile-time
+// link in the web SHIM_TRIGGER_BLOCK
+// (web/src/domain/assignments/submissionTrigger.ts) — keep in lockstep.
 var shimTriggerBlock = regexp.MustCompile(
 	`(?m)^on:\n  push:\n(    branches: \[[^\n]*\]\n)?(    tags: \[[^\n]*\]\n)`,
 )
