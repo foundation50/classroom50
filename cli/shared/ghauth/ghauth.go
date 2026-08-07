@@ -1,19 +1,26 @@
 // Package ghauth holds the auth scaffolding shared by the gh-teacher and
 // gh-student CLIs: resolving an authenticated go-gh REST client (auto-running
-// `gh auth login` when no token is present), the interactive-TTY guard, and the
-// `gh auth login` shell-out used by both the auto-login path and the explicit
-// `login` command. The two CLIs differ only in required OAuth scopes and
-// command name ("gh teacher" vs "gh student"), passed in via Options.
+// `gh auth login` when no token is present, OR when a gh-managed token lacks a
+// required scope — reusing an already-sufficient token so a working `gh` auth
+// config is never rewritten just to re-request scopes it already has, issue
+// #534), the interactive-TTY guard, and the `gh auth login` shell-out used by
+// both the auto-login path and the explicit `login` command. The two CLIs
+// differ only in required OAuth scopes and command name ("gh teacher" vs
+// "gh student"), passed in via Options.
 package ghauth
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/cli/go-gh/v2/pkg/auth"
+
+	"github.com/foundation50/classroom50-cli-shared/contract"
 )
 
 // Options carries the per-CLI auth configuration.
@@ -38,22 +45,107 @@ func defaultHost() string {
 	return host
 }
 
-// RequireClient returns an authenticated REST client, auto-running
-// `gh auth login` (with opts.RequiredScopes) when no token is set for the
-// default host, turning the cryptic "token not found" failure into a guided
-// login. Non-interactive shells get a clear error instead.
+// RequireClient returns an authenticated REST client. It auto-runs
+// `gh auth login` (with opts.RequiredScopes) only when the host has no token,
+// OR when the existing token is a `gh`-managed OAuth token that lacks a
+// required scope — reusing an already-sufficient token so we never rewrite a
+// user's working `gh` auth config just to re-request scopes it already has
+// (issue #534). A token from a non-`gh` source (env var / keyring) that is
+// insufficient is not silently re-authed: `gh auth login` can't rewrite an
+// env token and clobbering a keyring token is surprising, so we point the user
+// at manual remediation instead. Non-interactive shells get a clear error.
 func RequireClient(out, errOut writer, opts Options) (*api.RESTClient, error) {
 	host := defaultHost()
-	if token, _ := auth.TokenForHost(host); token == "" {
+	token, source := auth.TokenForHost(host)
+
+	if token == "" {
 		if err := autoLogin(out, errOut, host, opts); err != nil {
 			return nil, err
 		}
+		return newDefaultClient()
 	}
+
+	client, err := newDefaultClient()
+	if err != nil {
+		return nil, err
+	}
+
+	// A present token might still lack a scope we need. Probe it; on an
+	// inconclusive probe (network/transport error) proceed with the token
+	// rather than forcing a disruptive re-login on a transient failure.
+	ok, probeErr := tokenHasScopes(client, opts.RequiredScopes)
+	if probeErr != nil || ok {
+		return client, nil
+	}
+
+	// Insufficient. Only a `gh`-managed token is safe to fix with
+	// `gh auth login`; env/keyring tokens must be fixed by the user.
+	if !isGhManagedToken(source) {
+		return nil, fmt.Errorf(
+			"your %s token (source: %s) is missing scopes %s needs (%s); it wasn't set by `gh auth login`, so re-run won't fix it — re-issue the token with those scopes, or unset it and run `%s login`",
+			host, source, opts.CommandName, strings.Join(opts.RequiredScopes, ", "), opts.CommandName)
+	}
+	_, _ = fmt.Fprintf(errOut, "Your %s login is missing scopes %s needs (%s); running `%s login` to add them...\n", host, opts.CommandName, strings.Join(opts.RequiredScopes, ", "), opts.CommandName)
+	if err := autoLogin(out, errOut, host, opts); err != nil {
+		return nil, err
+	}
+	return newDefaultClient()
+}
+
+// newDefaultClient builds go-gh's default REST client (reads the ambient gh
+// auth/host config), wrapping the error for callers.
+func newDefaultClient() (*api.RESTClient, error) {
 	client, err := api.DefaultRESTClient()
 	if err != nil {
 		return nil, fmt.Errorf("REST client: %w", err)
 	}
 	return client, nil
+}
+
+// isGhManagedToken reports whether TokenForHost's source string denotes a token
+// `gh auth login` owns — the hosts.yml `oauth_token` (config-file storage) or
+// `gh` (the default OS-keyring / secure-storage path, which go-gh reports by
+// shelling out to `gh auth token`). These are the only cases where re-running
+// `gh auth login` can add scopes without clobbering something the user set by
+// hand. An env-var source (GH_TOKEN / GITHUB_TOKEN) is user-managed → false.
+func isGhManagedToken(source string) bool {
+	s := strings.ToLower(strings.TrimSpace(source))
+	return s == "oauth_token" || s == "gh"
+}
+
+// parseScopesHeader splits GitHub's X-OAuth-Scopes header (a comma-space list)
+// into a trimmed, non-empty scope slice. Returns nil for an empty header.
+func parseScopesHeader(header string) []string {
+	var scopes []string
+	for _, s := range strings.Split(header, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			scopes = append(scopes, s)
+		}
+	}
+	return scopes
+}
+
+// scopesSatisfy reports whether the granted scopes cover every required scope.
+// Delegates to the shared contract scope-hierarchy source (honoring GitHub's
+// admin:org ⊇ read:org/write:org implications) so this auto-login probe and
+// gh-teacher's init preflight can never disagree on what a token satisfies.
+func scopesSatisfy(granted, required []string) bool {
+	return contract.ScopesSatisfy(granted, required)
+}
+
+// tokenHasScopes probes the client's token via a cheap authenticated request
+// (GET /, the API root) and reports whether its granted OAuth scopes — read
+// from the X-OAuth-Scopes response header — satisfy required. A transport
+// error is returned so callers can treat the probe as inconclusive.
+func tokenHasScopes(client *api.RESTClient, required []string) (bool, error) {
+	resp, err := client.Request(http.MethodGet, "", nil)
+	if err != nil {
+		return false, fmt.Errorf("probe token scopes: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	granted := parseScopesHeader(resp.Header.Get("X-OAuth-Scopes"))
+	return scopesSatisfy(granted, required), nil
 }
 
 // autoLogin shells out to `gh auth login` with the CLI's scopes against the
@@ -69,8 +161,10 @@ func autoLogin(out, errOut writer, host string, opts Options) error {
 
 // RunLogin execs `gh auth login --hostname <host>` with the required scopes
 // plus any extra scopes, wiring stdio through. Shared by autoLogin and the
-// explicit `login` command.
+// explicit `login` command. Warns first that it hands control to `gh`, which
+// rewrites the stored auth for this host in `gh`'s config (issue #534).
 func RunLogin(out, errOut writer, host string, requiredScopes, extraScopes []string) error {
+	_, _ = fmt.Fprintf(errOut, "Note: this runs `gh auth login`, which will update %s's stored authentication in your gh config (e.g. ~/.config/gh/hosts.yml) — replacing the token gh has for %s.\n", host, host)
 	args := []string{"auth", "login", "--hostname", host}
 	for _, s := range requiredScopes {
 		args = append(args, "-s", s)

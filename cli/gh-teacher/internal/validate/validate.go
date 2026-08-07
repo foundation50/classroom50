@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/foundation50/classroom50-cli-shared/contract"
 )
 
 // ShortNamePattern: classroom short-names and assignment slugs both flow into
@@ -77,29 +79,18 @@ func ScopeListContains(scopes, want string) bool {
 	return false
 }
 
-// scopeImpliedBy maps an OAuth scope to broader scopes that include it. GitHub
-// normalizes granted scopes, dropping any implied by a broader one, so a token
-// with `admin:org` reports only that and a whole-token match for `read:org`
-// would wrongly report it missing. Only the org hierarchy is listed (the only
-// implication in gh-teacher's scopes); extend if a new required scope has
-// implied parents.
-var scopeImpliedBy = map[string][]string{
-	"read:org":  {"admin:org", "write:org"},
-	"write:org": {"admin:org"},
-}
+// scopeImpliedBy lives in the shared contract package (the single source of the
+// OAuth scope hierarchy across both CLIs); ScopeListSatisfies delegates to it.
 
 // ScopeListSatisfies reports whether the X-OAuth-Scopes list satisfies want,
 // treating a broader granted scope as covering the narrower one it implies. Use
 // this (not ScopeListContains) when checking whether a token can perform an
-// operation.
+// operation. Resolves through contract.ScopeSatisfiedBy so the auto-login probe
+// (shared ghauth) and this preflight check share one scope hierarchy.
 func ScopeListSatisfies(scopes, want string) bool {
-	if ScopeListContains(scopes, want) {
-		return true
+	granted := make(map[string]bool)
+	for _, s := range strings.Split(scopes, ",") {
+		granted[strings.TrimSpace(s)] = true
 	}
-	for _, broader := range scopeImpliedBy[want] {
-		if ScopeListContains(scopes, broader) {
-			return true
-		}
-	}
-	return false
+	return contract.ScopeSatisfiedBy(granted, want)
 }
