@@ -1,9 +1,12 @@
 package ghauth
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -37,6 +40,93 @@ func TestScopesSatisfy(t *testing.T) {
 				t.Errorf("scopesSatisfy(%v, %v) = %v, want %v", tc.granted, tc.required, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestHostsConfigPath verifies the warning points at gh's real hosts file
+// resolved per-platform (via go-gh's config.ConfigDir), not a hardcoded
+// ~/.config/gh path: setting GH_CONFIG_DIR must move it, proving it isn't
+// macOS/Linux-only and honors gh's own precedence.
+func TestHostsConfigPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("GH_CONFIG_DIR", dir)
+
+	got := hostsConfigPath()
+	want := filepath.Join(dir, "hosts.yml")
+	if got != want {
+		t.Errorf("hostsConfigPath() = %q, want %q (should honor GH_CONFIG_DIR)", got, want)
+	}
+}
+
+// TestRenderWarningBox pins the config-rewrite warning renderer (issue #534):
+// the plain path stays ANSI-free and keeps the literal "Warning:" prefix so
+// log scrapers/tests match; the color path draws an aligned yellow box whose
+// borders line up regardless of the widest line.
+func TestRenderWarningBox(t *testing.T) {
+	lines := []string{
+		"Warning: this runs `gh auth login`, which rewrites gh's stored",
+		"authentication for github.com in your gh config",
+		"(e.g. ~/.config/gh/hosts.yml), replacing the token gh currently has.",
+	}
+
+	t.Run("plain path is ANSI-free and keeps Warning prefix", func(t *testing.T) {
+		var buf bytes.Buffer
+		renderWarningBox(&buf, false, lines)
+		got := buf.String()
+		if strings.Contains(got, "\x1b[") {
+			t.Errorf("plain path must not emit ANSI escapes:\n%q", got)
+		}
+		if strings.ContainsAny(got, boxTopLeft+boxVertical+boxBottomRight) {
+			t.Errorf("plain path must not draw box-drawing runes:\n%q", got)
+		}
+		if !strings.Contains(got, "Warning:") {
+			t.Errorf("plain path must keep the literal Warning: prefix:\n%q", got)
+		}
+		for _, ln := range lines {
+			if !strings.Contains(got, ln) {
+				t.Errorf("plain path dropped a line %q:\n%q", ln, got)
+			}
+		}
+	})
+
+	t.Run("color path draws an aligned yellow box", func(t *testing.T) {
+		var buf bytes.Buffer
+		renderWarningBox(&buf, true, lines)
+		out := buf.String()
+		if !strings.Contains(out, warnAnsiYellow) {
+			t.Errorf("color path must emit the yellow SGR code:\n%q", out)
+		}
+		if !strings.Contains(out, boxTopLeft) || !strings.Contains(out, boxBottomRight) {
+			t.Errorf("color path must draw the box corners:\n%q", out)
+		}
+		// Every rendered row must have the same visible width, so the right
+		// border lines up under the top border.
+		rows := strings.Split(strings.TrimRight(out, "\n"), "\n")
+		for i, row := range rows {
+			if w := displayWidth(row); w != displayWidth(rows[0]) {
+				t.Errorf("row %d visible width %d != top border width %d; box misaligned:\n%q",
+					i, w, displayWidth(rows[0]), out)
+			}
+		}
+	})
+}
+
+// TestDisplayWidth pins the ANSI-aware width used to align the box border: it
+// counts visible runes and skips SGR escapes.
+func TestDisplayWidth(t *testing.T) {
+	cases := []struct {
+		in   string
+		want int
+	}{
+		{"", 0},
+		{"abc", 3},
+		{"\x1b[33mabc\x1b[0m", 3},
+		{"\x1b[1mWarning:\x1b[0m x", 10},
+	}
+	for _, tc := range cases {
+		if got := displayWidth(tc.in); got != tc.want {
+			t.Errorf("displayWidth(%q) = %d, want %d", tc.in, got, tc.want)
+		}
 	}
 }
 

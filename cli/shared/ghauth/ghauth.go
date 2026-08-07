@@ -15,10 +15,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/cli/go-gh/v2/pkg/auth"
+	"github.com/cli/go-gh/v2/pkg/config"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
 )
@@ -153,10 +155,11 @@ func autoLogin(out, errOut writer, host string, opts Options) error {
 
 // RunLogin execs `gh auth login --hostname <host>` with the required scopes
 // plus any extra scopes, wiring stdio through. Shared by autoLogin and the
-// explicit `login` command. Warns first that it hands control to `gh`, which
-// rewrites the stored auth for this host in `gh`'s config (issue #534).
+// explicit `login` command. Warns first, prominently, that it hands control to
+// `gh`, which rewrites the stored auth for this host in `gh`'s config (issue
+// #534).
 func RunLogin(out, errOut writer, host string, requiredScopes, extraScopes []string) error {
-	_, _ = fmt.Fprintf(errOut, "Note: this runs `gh auth login`, which will update %s's stored authentication in your gh config (e.g. ~/.config/gh/hosts.yml) — replacing the token gh has for %s.\n", host, host)
+	printConfigRewriteWarning(errOut, host)
 	args := []string{"auth", "login", "--hostname", host}
 	for _, s := range requiredScopes {
 		args = append(args, "-s", s)
@@ -174,6 +177,116 @@ func RunLogin(out, errOut writer, host string, requiredScopes, extraScopes []str
 		return fmt.Errorf("gh auth login: %w", err)
 	}
 	return nil
+}
+
+// Minimal SGR codes + rounded box-drawing runes for the config-rewrite warning.
+// Hand-rolled (not the shared ghui renderer) because ghui imports ghauth for
+// the TTY guard, so ghauth can't import ghui back without an import cycle.
+const (
+	warnAnsiReset  = "\x1b[0m"
+	warnAnsiBold   = "\x1b[1m"
+	warnAnsiYellow = "\x1b[33m"
+
+	boxTopLeft     = "╭"
+	boxTopRight    = "╮"
+	boxBottomLeft  = "╰"
+	boxBottomRight = "╯"
+	boxHorizontal  = "─"
+	boxVertical    = "│"
+)
+
+// printConfigRewriteWarning warns, prominently, that `gh auth login` is about
+// to rewrite gh's stored auth for host (issue #534). On a color TTY it renders
+// a yellow box; on a non-TTY / NO_COLOR it prints plain lines. Either way the
+// literal "Warning:" prefix is present so log scrapers and tests keep matching.
+func printConfigRewriteWarning(errOut writer, host string) {
+	lines := []string{
+		"Warning: this runs `gh auth login`, which rewrites gh's stored",
+		fmt.Sprintf("authentication for %s in your gh config", host),
+		fmt.Sprintf("(%s), replacing the token gh currently has.", hostsConfigPath()),
+	}
+	renderWarningBox(errOut, stderrWantsColor(errOut), lines)
+}
+
+// hostsConfigPath returns the platform-correct path to gh's hosts file — the
+// file `gh auth login` rewrites — resolved the same way gh does (GH_CONFIG_DIR,
+// then XDG_CONFIG_HOME, then Windows AppData, else ~/.config/gh). Never
+// hardcode ~/.config/gh/hosts.yml: it's wrong on Windows and whenever
+// GH_CONFIG_DIR / XDG_CONFIG_HOME is set.
+func hostsConfigPath() string {
+	return filepath.Join(config.ConfigDir(), "hosts.yml")
+}
+
+// renderWarningBox draws lines inside a yellow rounded box when color is true,
+// or prints them as plain left-aligned lines otherwise. Box width fits the
+// widest line; line widths ignore ANSI escapes so the border stays aligned.
+// color is a parameter (not read inline) so tests can exercise both paths.
+func renderWarningBox(errOut writer, color bool, lines []string) {
+	if !color {
+		for _, ln := range lines {
+			_, _ = fmt.Fprintf(errOut, "%s\n", ln)
+		}
+		return
+	}
+
+	width := 0
+	for _, ln := range lines {
+		if w := displayWidth(ln); w > width {
+			width = w
+		}
+	}
+	const pad = 1 // one space of horizontal padding inside the border
+	inner := width + pad*2
+
+	yellow := func(s string) string { return warnAnsiYellow + s + warnAnsiReset }
+
+	top := yellow(boxTopLeft + strings.Repeat(boxHorizontal, inner) + boxTopRight)
+	bottom := yellow(boxBottomLeft + strings.Repeat(boxHorizontal, inner) + boxBottomRight)
+	bar := yellow(boxVertical)
+
+	_, _ = fmt.Fprintf(errOut, "%s\n", top)
+	for _, ln := range lines {
+		// Bold the leading "Warning:" so it stands out; right-pad to the box
+		// interior using the ANSI-free display width.
+		display := ln
+		if rest, ok := strings.CutPrefix(ln, "Warning:"); ok {
+			display = warnAnsiBold + "Warning:" + warnAnsiReset + rest
+		}
+		gap := width - displayWidth(ln)
+		_, _ = fmt.Fprintf(errOut, "%s %s%s %s\n",
+			bar, display, strings.Repeat(" ", gap), bar)
+	}
+	_, _ = fmt.Fprintf(errOut, "%s\n", bottom)
+}
+
+// stderrWantsColor reports whether to emit color/box drawing to w: w must be
+// the real stderr and a TTY, with neither NO_COLOR nor CLASSROOM50_NO_COLOR
+// set. Mirrors ghui.UseColor (duplicated to avoid an import cycle — ghui
+// imports ghauth); keep the two in lockstep.
+func stderrWantsColor(w writer) bool {
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("CLASSROOM50_NO_COLOR") != "" {
+		return false
+	}
+	return w == writer(os.Stderr) && IsCharDevice(os.Stderr)
+}
+
+// displayWidth counts the printed width of s as its rune count, skipping ANSI
+// SGR escapes so a colored string still measures by its visible glyphs.
+func displayWidth(s string) int {
+	n, inEscape := 0, false
+	for _, r := range s {
+		switch {
+		case inEscape:
+			if r == 'm' {
+				inEscape = false
+			}
+		case r == '\x1b':
+			inEscape = true
+		default:
+			n++
+		}
+	}
+	return n
 }
 
 // DefaultHost is exported for the `login` command, which needs the host to
