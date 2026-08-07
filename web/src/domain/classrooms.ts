@@ -17,6 +17,7 @@ import {
   editClassroom,
   ensureClassroomTeam,
   ensureStaffTeams,
+  grantStaffTeamsConfigRepoAccess,
   addUserToTeam,
   removeUserFromTeam,
   isDeletableClassroomTeamRef,
@@ -116,6 +117,23 @@ export async function createClassroomFiles(
         // Non-fatal; the classroom still scaffolds.
       }
     }
+  }
+
+  // Grant staff-team config-repo access AFTER the creator drop above (the order
+  // is load-bearing — see grantStaffTeamsConfigRepoAccess). Best-effort: a grant
+  // hiccup leaves staff without config-repo write until the next reconcile
+  // re-affirms it, but must not fail the scaffold.
+  try {
+    await grantStaffTeamsConfigRepoAccess(client, input.org, teams)
+  } catch (err) {
+    log.warn(
+      "create classroom: granting staff-team config-repo access failed",
+      {
+        org: input.org,
+        classroom: input.classroom,
+        err,
+      },
+    )
   }
 
   // If scaffolding fails after the teams exist, any team we CREATED would be

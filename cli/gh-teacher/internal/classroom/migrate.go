@@ -251,6 +251,12 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 	// teacher — mixed roles aren't allowed, same as `classroom add`.
 	dropCreatorFromNonTeacherTeams(client, errOut, plan.TargetOrg, login, team.Slug, staffTeams)
 
+	// Grant staff-team config-repo access AFTER the drop (order is load-bearing —
+	// see EnsureStaffTeams), same as `classroom add`. Best-effort.
+	if err := configrepo.GrantStaffTeamsConfigRepoAccess(client, plan.TargetOrg, staffTeams); err != nil {
+		_, _ = fmt.Fprintf(errOut, "Warning: couldn't grant staff teams config-repo access (%v); staff may lack write until re-affirmed.\n", err)
+	}
+
 	build := func(parentSHA string) (map[string]string, error) {
 		exists, err := configrepo.ContentsExists(client, plan.TargetOrg, configrepo.ConfigRepoName, plan.ShortName, parentSHA)
 		if err != nil {

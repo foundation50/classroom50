@@ -155,8 +155,8 @@ export async function ensureClassroomRoleTeam(
   role: StaffRole,
 ): Promise<ClassroomTeamRef & { created: boolean }> {
   assertCanonicalTeamShortName(classroom)
-  // Staff enable notifications (student team stays disabled); see
-  // TeamNotificationSetting.
+  // Staff enable notifications so @mentions reach TAs/teachers (#335); the
+  // student team stays disabled (see TeamNotificationSetting).
   return ensureSecretTeamByName(
     client,
     org,
@@ -205,12 +205,18 @@ export async function grantTeamConfigRepoAccess(
   })
 }
 
-// Ensure every staff team exists and holds its role's config-repo access
-// (teacher/hta write, ta read-only), returning their refs for classroom.json.
+// Ensure every staff team exists, returning their refs for classroom.json.
 // Idempotent — used at create AND as a preflight, so a classroom missing a
-// staff team self-heals on next touch, and a TA team that still holds write is
-// downgraded to read on re-affirm. `created` lists the roles this call newly
-// created (for create-failure rollback).
+// staff team self-heals on next touch. `created` lists the roles this call
+// newly created (for create-failure rollback).
+//
+// This does NOT grant config-repo access — callers must invoke
+// grantStaffTeamsConfigRepoAccess separately, AFTER dropping the auto-added
+// creator from the non-teacher teams. GitHub auto-adds the team creator as a
+// maintainer, and removing a member from a team that HOLDS repo access emails
+// them a "removed from team" alert; doing the grant only once the owner is gone
+// keeps that drop silent (the notification_setting toggle can't — it governs
+// only @mentions).
 export async function ensureStaffTeams(
   client: GitHubClient,
   org: string,
@@ -222,9 +228,25 @@ export async function ensureStaffTeams(
     const team = await ensureClassroomRoleTeam(client, org, classroom, role)
     teams[role] = { id: team.id, slug: team.slug }
     if (team.created) created.push(role)
-    await grantTeamConfigRepoAccess(client, org, team.slug, role)
   }
   return { teams, created }
+}
+
+// Grant each staff team its role's config-repo access (teacher/hta write, ta
+// read-only). Permission-aware — a TA team that still holds write is downgraded
+// to read on re-affirm. Split from ensureStaffTeams so callers run it AFTER the
+// creator drop (see ensureStaffTeams). Safe at create AND as a reconcile
+// preflight.
+export async function grantStaffTeamsConfigRepoAccess(
+  client: GitHubClient,
+  org: string,
+  teams: StaffTeamRefs,
+): Promise<void> {
+  for (const role of STAFF_ROLES) {
+    const slug = teams[role]?.slug
+    if (!slug) continue
+    await grantTeamConfigRepoAccess(client, org, slug, role)
+  }
 }
 
 // Thrown by deleteClassroomTeam when the live team's id no longer matches the

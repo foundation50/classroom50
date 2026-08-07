@@ -20,6 +20,7 @@ import {
   createBlob,
   ensureClassroomTeam,
   ensureStaffTeams,
+  grantStaffTeamsConfigRepoAccess,
   removeUserFromTeam,
   updateRef,
 } from "@/github-core/mutations"
@@ -107,6 +108,18 @@ export async function migrateClassroom(
         // Non-fatal.
       }
     }
+  }
+
+  // Grant staff-team config-repo access AFTER the drop (order is load-bearing —
+  // see ensureStaffTeams), same as `classroom add`.
+  try {
+    await grantStaffTeamsConfigRepoAccess(client, targetOrg, teams)
+  } catch (err) {
+    log.warn("migrate: granting staff-team config-repo access failed", {
+      targetOrg,
+      shortName,
+      err,
+    })
   }
 
   // --- Phase B: copy templates (best-effort per item) ---

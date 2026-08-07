@@ -5,6 +5,7 @@ import { isClassroomArchived, type StaffRole } from "@/types/classroom"
 import {
   ensureClassroomTeam,
   ensureStaffTeams,
+  grantStaffTeamsConfigRepoAccess,
   reconcileStudentTeamDescription,
   removeUserFromTeam,
   type TeamDescriptionReconcileResult,
@@ -79,6 +80,23 @@ export async function reconcileClassroom(
     staffTeams.hta?.slug,
     staffTeams.ta?.slug,
   ])
+
+  // Grant staff-team config-repo access AFTER the drop (order is load-bearing —
+  // see ensureStaffTeams); also re-affirms the TA read-only downgrade.
+  // Best-effort: a failure leaves access unset until the next pass, never aborts
+  // the heal.
+  try {
+    await grantStaffTeamsConfigRepoAccess(client, org, staffTeams)
+  } catch (err) {
+    log.warn(
+      "classroom reconcile: granting staff-team config-repo access failed",
+      {
+        org,
+        classroom,
+        err,
+      },
+    )
+  }
 
   // A 404 from the student-team read is permanent (a wrong derived slug never
   // converges) UNLESS we just created that team this pass: then it's a
