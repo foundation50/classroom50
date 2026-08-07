@@ -85,6 +85,11 @@ export type GitHubRepo = {
     private: boolean
   }
   default_branch: string
+  // Repo size in KB (GET /repos). 0 means the repo has no commits — a
+  // commitless template can't be generated from (GitHub's POST /generate 422s
+  // "is empty"), so the template pre-flight rejects it. GitHub reports a phantom
+  // default_branch for such a repo, so size is the reliable emptiness signal.
+  size?: number
   visibility?: "public" | "private" | "internal"
   archived?: boolean
   // Repository feature flags (GET /repos returns them). Used by the assignment

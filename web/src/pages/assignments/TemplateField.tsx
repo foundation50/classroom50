@@ -499,6 +499,16 @@ function renderTemplateVerdict({
         </Note>
       )
 
+    case "empty-template":
+      return (
+        <Note tone="error" icon={AlertTriangle}>
+          {t("assignments.template.emptyTemplate", {
+            owner: verification.owner,
+            repo: verification.repo,
+          })}
+        </Note>
+      )
+
     case "restricted": {
       return (
         <Note

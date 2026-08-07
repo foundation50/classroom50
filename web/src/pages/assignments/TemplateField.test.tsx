@@ -322,3 +322,19 @@ describe("TemplateField — outage hint on inconclusive verdicts", () => {
     expect(screen.queryByText(STATUS_LINK)).toBeNull()
   })
 })
+
+describe("TemplateField — empty-template verdict", () => {
+  it("renders the empty-template error copy for a commitless template", async () => {
+    verifyTemplateAccess.mockResolvedValue({
+      kind: "empty-template",
+      owner: ORG,
+      repo: "tmpl",
+    })
+    renderField()
+    expect(
+      await screen.findByText("assignments.template.emptyTemplate", {
+        exact: false,
+      }),
+    ).toBeTruthy()
+  })
+})
