@@ -185,6 +185,19 @@ var scopeImpliedBy = map[string][]string{
 	"write:org": {"admin:org"},
 }
 
+// ParseScopeList splits an X-OAuth-Scopes header value (a comma-separated OAuth
+// scope list) into trimmed, non-empty scopes. Single source of the scope-list
+// parse shared by both CLIs' scope checks. Returns nil for an empty list.
+func ParseScopeList(list string) []string {
+	var scopes []string
+	for _, s := range strings.Split(list, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			scopes = append(scopes, s)
+		}
+	}
+	return scopes
+}
+
 // ScopeSatisfiedBy reports whether a token whose granted OAuth scopes are keyed
 // true in have satisfies the single scope want, honoring the scope hierarchy (a
 // broader granted scope covers the narrower one it implies).

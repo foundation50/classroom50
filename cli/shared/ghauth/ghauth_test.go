@@ -40,34 +40,6 @@ func TestScopesSatisfy(t *testing.T) {
 	}
 }
 
-// TestParseScopesHeader pins the X-OAuth-Scopes parse: GitHub returns a
-// comma-space-separated list, possibly empty, possibly with stray spaces.
-func TestParseScopesHeader(t *testing.T) {
-	cases := []struct {
-		name   string
-		header string
-		want   []string
-	}{
-		{"empty", "", nil},
-		{"single", "repo", []string{"repo"}},
-		{"comma-space separated", "admin:org, read:org, repo, workflow", []string{"admin:org", "read:org", "repo", "workflow"}},
-		{"stray spaces and empties", " repo ,, workflow ", []string{"repo", "workflow"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := parseScopesHeader(tc.header)
-			if len(got) != len(tc.want) {
-				t.Fatalf("parseScopesHeader(%q) = %v, want %v", tc.header, got, tc.want)
-			}
-			for i := range got {
-				if got[i] != tc.want[i] {
-					t.Fatalf("parseScopesHeader(%q) = %v, want %v", tc.header, got, tc.want)
-				}
-			}
-		})
-	}
-}
-
 // TestIsGhManagedToken pins which TokenForHost sources count as gh-managed —
 // the cases where re-running `gh auth login` can add scopes safely. go-gh
 // returns "gh" for a keyring/secure-storage token and "oauth_token" for the

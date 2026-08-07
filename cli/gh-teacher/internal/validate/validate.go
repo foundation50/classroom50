@@ -79,9 +79,6 @@ func ScopeListContains(scopes, want string) bool {
 	return false
 }
 
-// scopeImpliedBy lives in the shared contract package (the single source of the
-// OAuth scope hierarchy across both CLIs); ScopeListSatisfies delegates to it.
-
 // ScopeListSatisfies reports whether the X-OAuth-Scopes list satisfies want,
 // treating a broader granted scope as covering the narrower one it implies. Use
 // this (not ScopeListContains) when checking whether a token can perform an
@@ -89,8 +86,8 @@ func ScopeListContains(scopes, want string) bool {
 // (shared ghauth) and this preflight check share one scope hierarchy.
 func ScopeListSatisfies(scopes, want string) bool {
 	granted := make(map[string]bool)
-	for _, s := range strings.Split(scopes, ",") {
-		granted[strings.TrimSpace(s)] = true
+	for _, s := range contract.ParseScopeList(scopes) {
+		granted[s] = true
 	}
 	return contract.ScopeSatisfiedBy(granted, want)
 }

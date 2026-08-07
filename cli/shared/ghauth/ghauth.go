@@ -113,18 +113,6 @@ func isGhManagedToken(source string) bool {
 	return s == "oauth_token" || s == "gh"
 }
 
-// parseScopesHeader splits GitHub's X-OAuth-Scopes header (a comma-space list)
-// into a trimmed, non-empty scope slice. Returns nil for an empty header.
-func parseScopesHeader(header string) []string {
-	var scopes []string
-	for _, s := range strings.Split(header, ",") {
-		if s = strings.TrimSpace(s); s != "" {
-			scopes = append(scopes, s)
-		}
-	}
-	return scopes
-}
-
 // scopesSatisfy reports whether the granted scopes cover every required scope.
 // Delegates to the shared contract scope-hierarchy source (honoring GitHub's
 // admin:org ⊇ read:org/write:org implications) so this auto-login probe and
@@ -136,15 +124,19 @@ func scopesSatisfy(granted, required []string) bool {
 // tokenHasScopes probes the client's token via a cheap authenticated request
 // (GET /, the API root) and reports whether its granted OAuth scopes — read
 // from the X-OAuth-Scopes response header — satisfy required. A transport
-// error is returned so callers can treat the probe as inconclusive.
+// error is returned so callers can treat the probe as inconclusive. An empty
+// required set is vacuously satisfied and skips the request.
 func tokenHasScopes(client *api.RESTClient, required []string) (bool, error) {
+	if len(required) == 0 {
+		return true, nil
+	}
 	resp, err := client.Request(http.MethodGet, "", nil)
 	if err != nil {
 		return false, fmt.Errorf("probe token scopes: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
-	granted := parseScopesHeader(resp.Header.Get("X-OAuth-Scopes"))
+	granted := contract.ParseScopeList(resp.Header.Get("X-OAuth-Scopes"))
 	return scopesSatisfy(granted, required), nil
 }
 

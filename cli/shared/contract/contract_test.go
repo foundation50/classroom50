@@ -320,3 +320,31 @@ func TestScopesSatisfy(t *testing.T) {
 		})
 	}
 }
+
+// TestParseScopeList pins the shared X-OAuth-Scopes parse: GitHub returns a
+// comma-space-separated list, possibly empty, possibly with stray spaces.
+func TestParseScopeList(t *testing.T) {
+	cases := []struct {
+		name string
+		list string
+		want []string
+	}{
+		{"empty", "", nil},
+		{"single", "repo", []string{"repo"}},
+		{"comma-space separated", "admin:org, read:org, repo, workflow", []string{"admin:org", "read:org", "repo", "workflow"}},
+		{"stray spaces and empties", " repo ,, workflow ", []string{"repo", "workflow"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseScopeList(tc.list)
+			if len(got) != len(tc.want) {
+				t.Fatalf("ParseScopeList(%q) = %v, want %v", tc.list, got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("ParseScopeList(%q) = %v, want %v", tc.list, got, tc.want)
+				}
+			}
+		})
+	}
+}
