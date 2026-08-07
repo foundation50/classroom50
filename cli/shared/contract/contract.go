@@ -171,6 +171,64 @@ func RequiredOAuthScopes() []string {
 	return append([]string(nil), requiredOAuthScopes...)
 }
 
+// scopeImpliedBy maps an OAuth scope to the broader scopes that include it.
+// GitHub normalizes granted scopes, dropping any implied by a broader one, so a
+// token with `admin:org` reports only that; a whole-token match for `read:org`
+// would then wrongly report it missing. Single source of the OAuth scope
+// hierarchy for both CLIs — the shared auto-login scope probe (ghauth) and
+// gh-teacher's init preflight / validate both resolve through it, so a
+// required-scope change can't make two paths disagree. Kept in contract (a pure
+// package, no go-gh client dependency) so the pure validators can share it.
+// Extend when a new required scope has implied parents.
+var scopeImpliedBy = map[string][]string{
+	"read:org":  {"admin:org", "write:org"},
+	"write:org": {"admin:org"},
+}
+
+// ParseScopeList splits an X-OAuth-Scopes header value (a comma-separated OAuth
+// scope list) into trimmed, non-empty scopes. Single source of the scope-list
+// parse shared by both CLIs' scope checks. Returns nil for an empty list.
+func ParseScopeList(list string) []string {
+	var scopes []string
+	for _, s := range strings.Split(list, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			scopes = append(scopes, s)
+		}
+	}
+	return scopes
+}
+
+// ScopeSatisfiedBy reports whether a token whose granted OAuth scopes are keyed
+// true in have satisfies the single scope want, honoring the scope hierarchy (a
+// broader granted scope covers the narrower one it implies).
+func ScopeSatisfiedBy(have map[string]bool, want string) bool {
+	if have[want] {
+		return true
+	}
+	for _, broader := range scopeImpliedBy[want] {
+		if have[broader] {
+			return true
+		}
+	}
+	return false
+}
+
+// ScopesSatisfy reports whether granted covers every scope in required,
+// honoring the OAuth scope hierarchy (e.g. admin:org implies read:org and
+// write:org). Elements are trimmed; empty required is vacuously satisfied.
+func ScopesSatisfy(granted, required []string) bool {
+	have := make(map[string]bool, len(granted))
+	for _, g := range granted {
+		have[strings.TrimSpace(g)] = true
+	}
+	for _, r := range required {
+		if !ScopeSatisfiedBy(have, strings.TrimSpace(r)) {
+			return false
+		}
+	}
+	return true
+}
+
 // PrefixCommit prepends CommitPrefix, producing the canonical "[Classroom 50]
 // <message>" form. Any trailing "(gh ... )" provenance hint inside message is
 // preserved verbatim.
