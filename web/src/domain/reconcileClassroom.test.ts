@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 const getClassroomJson = vi.fn()
 const ensureClassroomTeam = vi.fn()
 const ensureStaffTeams = vi.fn()
+const grantStaffTeamsConfigRepoAccess = vi.fn()
 const reconcileDescription = vi.fn()
 const removeUserFromTeam = vi.fn()
 
@@ -12,6 +13,8 @@ vi.mock("@/github-core/configRepoReads", () => ({
 vi.mock("@/github-core/mutations", () => ({
   ensureClassroomTeam: (...a: unknown[]) => ensureClassroomTeam(...a),
   ensureStaffTeams: (...a: unknown[]) => ensureStaffTeams(...a),
+  grantStaffTeamsConfigRepoAccess: (...a: unknown[]) =>
+    grantStaffTeamsConfigRepoAccess(...a),
   reconcileStudentTeamDescription: (...a: unknown[]) =>
     reconcileDescription(...a),
   removeUserFromTeam: (...a: unknown[]) => removeUserFromTeam(...a),
@@ -44,6 +47,7 @@ beforeEach(() => {
   getClassroomJson.mockReset()
   ensureClassroomTeam.mockReset()
   ensureStaffTeams.mockReset()
+  grantStaffTeamsConfigRepoAccess.mockReset()
   reconcileDescription.mockReset()
   removeUserFromTeam.mockReset()
   // Healthy defaults: active classroom, everything already converged.
@@ -63,6 +67,7 @@ beforeEach(() => {
   })
   reconcileDescription.mockResolvedValue({ changed: false })
   removeUserFromTeam.mockResolvedValue(undefined)
+  grantStaffTeamsConfigRepoAccess.mockResolvedValue(undefined)
 })
 
 describe("reconcileClassroom", () => {

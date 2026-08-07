@@ -249,12 +249,13 @@ func TestStaffTeamRepoPermissions(t *testing.T) {
 	}
 }
 
-// TestEnsureStaffTeams verifies both staff teams are created and each is
-// granted push (write) on the config repo, and that the returned refs
-// carry the created ids/slugs.
+// TestEnsureStaffTeams verifies all three staff teams are created as `secret`
+// with notifications_enabled (#335), the returned refs carry the created
+// ids/slugs, and NO config-repo grant is issued — the grant is now a separate
+// step (GrantStaffTeamsConfigRepoAccess) callers run AFTER the creator drop so
+// the drop stays silent.
 func TestEnsureStaffTeams(t *testing.T) {
 	var createdNames []string
-	grantPerms := map[string]string{} // slug -> permission
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -274,19 +275,9 @@ func TestEnsureStaffTeams(t *testing.T) {
 			createdNames = append(createdNames, body.Name)
 			// slug == name (canonical short-name).
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": int64(len(createdNames)), "slug": body.Name})
-		case strings.HasPrefix(r.URL.Path, "/orgs/o/teams/") && strings.Contains(r.URL.Path, "/repos/") && r.Method == http.MethodGet:
-			// No access yet.
-			w.WriteHeader(http.StatusNotFound)
-		case strings.HasPrefix(r.URL.Path, "/orgs/o/teams/") && strings.Contains(r.URL.Path, "/repos/") && r.Method == http.MethodPut:
-			var body struct {
-				Permission string `json:"permission"`
-			}
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			// slug is the segment between /teams/ and /repos/.
-			slug := strings.TrimPrefix(r.URL.Path, "/orgs/o/teams/")
-			slug = strings.SplitN(slug, "/repos/", 2)[0]
-			grantPerms[slug] = body.Permission
-			w.WriteHeader(http.StatusNoContent)
+		case strings.Contains(r.URL.Path, "/repos/"):
+			t.Errorf("EnsureStaffTeams must not grant config-repo access (that moved to GrantStaffTeamsConfigRepoAccess): %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
 		default:
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -311,6 +302,44 @@ func TestEnsureStaffTeams(t *testing.T) {
 	if len(createdNames) != 3 {
 		t.Fatalf("created %d teams, want 3: %v", len(createdNames), createdNames)
 	}
+}
+
+// TestGrantStaffTeamsConfigRepoAccess pins that each recorded staff team is
+// granted its role's config-repo permission (teacher/hta push, ta pull) — the
+// grant split out of EnsureStaffTeams so callers run it AFTER the silent
+// creator drop. A nil ref/empty slug is skipped.
+func TestGrantStaffTeamsConfigRepoAccess(t *testing.T) {
+	grantPerms := map[string]string{} // slug -> permission
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/repos/") && r.Method == http.MethodGet:
+			// No access yet, so each role issues its PUT.
+			w.WriteHeader(http.StatusNotFound)
+		case strings.Contains(r.URL.Path, "/repos/") && r.Method == http.MethodPut:
+			var body struct {
+				Permission string `json:"permission"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			slug := strings.TrimPrefix(r.URL.Path, "/orgs/o/teams/")
+			slug = strings.SplitN(slug, "/repos/", 2)[0]
+			grantPerms[slug] = body.Permission
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	refs := &StaffTeamsRef{
+		Teacher: &TeamRef{ID: 1, Slug: "classroom50-cs-principles-teacher"},
+		HeadTA:  &TeamRef{ID: 2, Slug: "classroom50-cs-principles-hta"},
+		TA:      &TeamRef{ID: 3, Slug: "classroom50-cs-principles-ta"},
+	}
+	if err := GrantStaffTeamsConfigRepoAccess(client, "o", refs); err != nil {
+		t.Fatalf("GrantStaffTeamsConfigRepoAccess: %v", err)
+	}
 	// Teacher and head-TA get config-repo write; a plain TA gets read-only.
 	for _, slug := range []string{"classroom50-cs-principles-teacher", "classroom50-cs-principles-hta"} {
 		if grantPerms[slug] != "push" {
@@ -319,6 +348,49 @@ func TestEnsureStaffTeams(t *testing.T) {
 	}
 	if grantPerms["classroom50-cs-principles-ta"] != "pull" {
 		t.Errorf("ta team granted %q on config repo, want pull", grantPerms["classroom50-cs-principles-ta"])
+	}
+}
+
+// TestGrantStaffTeamsConfigRepoAccess_SkipsAbsentAndNil pins the guards: a nil
+// refs pointer is a no-op, and a role with no recorded ref is skipped.
+func TestGrantStaffTeamsConfigRepoAccess_SkipsAbsentAndNil(t *testing.T) {
+	var touchedSlugs []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/repos/") {
+			slug := strings.TrimPrefix(r.URL.Path, "/orgs/o/teams/")
+			slug = strings.SplitN(slug, "/repos/", 2)[0]
+			touchedSlugs = append(touchedSlugs, slug)
+		}
+		// GET probe returns 404 (no access) so a recorded team would PUT.
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	if err := GrantStaffTeamsConfigRepoAccess(client, "o", nil); err != nil {
+		t.Fatalf("nil refs: %v", err)
+	}
+	if len(touchedSlugs) != 0 {
+		t.Errorf("nil refs touched teams: %v", touchedSlugs)
+	}
+
+	// Only teacher recorded; hta/ta absent must be skipped.
+	if err := GrantStaffTeamsConfigRepoAccess(client, "o", &StaffTeamsRef{
+		Teacher: &TeamRef{ID: 1, Slug: "classroom50-cs101-teacher"},
+	}); err != nil {
+		t.Fatalf("partial refs: %v", err)
+	}
+	for _, s := range touchedSlugs {
+		if s != "classroom50-cs101-teacher" {
+			t.Errorf("partial refs touched unexpected team %q, want only classroom50-cs101-teacher", s)
+		}
+	}
+	if len(touchedSlugs) == 0 {
+		t.Error("partial refs: expected the teacher team to be granted")
 	}
 }
 

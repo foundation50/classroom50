@@ -33,6 +33,7 @@ export {
   grantTeamConfigRepoWrite,
   grantTeamConfigRepoAccess,
   ensureStaffTeams,
+  grantStaffTeamsConfigRepoAccess,
   deleteClassroomTeam,
   addRepositoryToTeam,
   removeRepositoryFromTeam,

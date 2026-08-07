@@ -217,6 +217,11 @@ func EnsureClassroomTeam(client githubapi.Client, org, shortName, description st
 // EnsureClassroomStaffTeam creates (or adopts) the per-classroom STAFF team for
 // `role` — a `secret` team `classroom50-<short>-<role>`. Mirrors the web's
 // ensureClassroomRoleTeam. Idempotent; safe as a preflight before any staff op.
+//
+// Staff teams create `notificationsEnabled` so @mentions reach TAs/teachers
+// (#335). This is independent of the create-time removal-email fix, which is an
+// ordering concern handled by GrantStaffTeamsConfigRepoAccess, not a
+// notification one.
 func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, role StaffRole) (TeamRef, error) {
 	if !CanonicalTeamSlugShortName(shortName) {
 		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking staff membership and config-repo grants)", shortName)
@@ -227,20 +232,22 @@ func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, ro
 }
 
 // EnsureStaffTeams creates (or adopts) all staff teams (teacher, hta, ta) and
-// grants each its config-repo permission — `push` for teacher/hta so staff can
-// author assignments, `pull` for ta (read-only). The grant is permission-aware,
-// so re-affirming an existing TA team that holds `push` downgrades it to `pull`.
-// Returns the refs to record under classroom.json `teams`. Mirrors the web's
+// returns the refs to record under classroom.json `teams`. Mirrors the web's
 // ensureStaffTeams.
+//
+// This does NOT grant config-repo access — callers must invoke
+// GrantStaffTeamsConfigRepoAccess separately, AFTER dropping the auto-added
+// creator from the non-teacher teams. GitHub auto-adds the team creator as a
+// maintainer, and removing a member from a team that HOLDS repo access emails
+// them a "removed from team" alert; granting only once the owner is gone keeps
+// that drop silent (the notification_setting toggle can't — it governs only
+// @mentions).
 func EnsureStaffTeams(client githubapi.Client, org, shortName string) (*StaffTeamsRef, error) {
 	refs := &StaffTeamsRef{}
 	for _, role := range StaffRoles {
 		team, err := EnsureClassroomStaffTeam(client, org, shortName, role)
 		if err != nil {
 			return nil, fmt.Errorf("ensure %s staff team: %w", role, err)
-		}
-		if _, err := GrantTeamConfigRepoAccess(client, org, team.Slug, role); err != nil {
-			return nil, fmt.Errorf("grant %s staff team config-repo access: %w", role, err)
 		}
 		switch role {
 		case RoleTeacher:
@@ -252,6 +259,29 @@ func EnsureStaffTeams(client githubapi.Client, org, shortName string) (*StaffTea
 		}
 	}
 	return refs, nil
+}
+
+// GrantStaffTeamsConfigRepoAccess grants each recorded staff team its role's
+// config-repo permission — `push` for teacher/hta so staff can author
+// assignments, `pull` for ta (read-only). Split from EnsureStaffTeams so
+// callers can sequence it AFTER the creator drop (see EnsureStaffTeams for why
+// the order matters). Permission-aware, so re-affirming an existing TA team
+// that holds `push` downgrades it to `pull`. A nil refs pointer or empty slug
+// is skipped. Mirrors the web's grantStaffTeamsConfigRepoAccess.
+func GrantStaffTeamsConfigRepoAccess(client githubapi.Client, org string, refs *StaffTeamsRef) error {
+	if refs == nil {
+		return nil
+	}
+	for _, role := range StaffRoles {
+		ref := refs.RefForRole(role)
+		if ref == nil || ref.Slug == "" {
+			continue
+		}
+		if _, err := GrantTeamConfigRepoAccess(client, org, ref.Slug, role); err != nil {
+			return fmt.Errorf("grant %s staff team config-repo access: %w", role, err)
+		}
+	}
+	return nil
 }
 
 // ReconcileClassroomTeamDescription re-derives the classroom50/team/v1 bootstrap

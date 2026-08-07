@@ -7,8 +7,11 @@ import type { GitHubRequestOptions } from "./client"
 
 // Pins the team-level notification policy (#335): student teams create with
 // notifications_disabled (assignment-repo churn would spam the class), staff
-// teams with notifications_enabled (so @mentions reach TAs/teachers). tsc keeps
-// the arg well-typed but cannot catch a wrong literal — these do.
+// teams with notifications_enabled (so @mentions reach TAs/teachers). The
+// create-time owner-drop is kept silent by ORDERING (drop before granting the
+// team config-repo access — see grantStaffTeamsConfigRepoAccess), not by muting
+// notifications, which govern only @mentions. tsc keeps the arg well-typed but
+// cannot catch a wrong literal — these do.
 
 type Call = { path: string; options?: GitHubRequestOptions }
 

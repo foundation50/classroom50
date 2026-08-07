@@ -233,6 +233,13 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 	// mirroring the web.
 	dropCreatorFromNonTeacherTeams(client, errOut, org, login, team.Slug, staffTeams)
 
+	// Grant staff-team config-repo access AFTER the creator drop above (the order
+	// is load-bearing — see GrantStaffTeamsConfigRepoAccess). Best-effort,
+	// mirroring the web: a failure warns but doesn't fail creation.
+	if err := configrepo.GrantStaffTeamsConfigRepoAccess(client, org, staffTeams); err != nil {
+		_, _ = fmt.Fprintf(errOut, "Warning: couldn't grant staff teams config-repo access (%v); staff may lack write until re-affirmed.\n", err)
+	}
+
 	files, err := classroomScaffold(org, shortName, name, term, secret, nil, nil, &team, staffTeams)
 	if err != nil {
 		return err
@@ -284,13 +291,16 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 	return nil
 }
 
-// seedStaffTeams creates (or adopts) the staff teams (teacher, hta, ta), grants
-// each its config-repo access (teacher/hta write, ta read-only), and adds the
-// acting teacher as teacher-team maintainer — shared by `classroom add` and
-// `classroom migrate`. Returns the resolved acting login (empty when it couldn't
-// be read) so the caller can drop that same user from the non-teacher teams. The
-// maintainer add is best-effort: a CurrentUser/membership failure warns but
-// doesn't fail creation (the teacher can self-add via the web).
+// seedStaffTeams creates (or adopts) the staff teams (teacher, hta, ta) and
+// adds the acting teacher as teacher-team maintainer — shared by `classroom
+// add` and `classroom migrate`. It deliberately does NOT grant config-repo
+// access; the caller does that via GrantStaffTeamsConfigRepoAccess AFTER
+// dropping the auto-added creator from the non-teacher teams, so the drop
+// doesn't email the owner (see EnsureStaffTeams). Returns the resolved acting
+// login (empty when it couldn't be read) so the caller can drop that same user
+// from the non-teacher teams. The maintainer add is best-effort: a
+// CurrentUser/membership failure warns but doesn't fail creation (the teacher
+// can self-add via the web).
 func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName string) (*configrepo.StaffTeamsRef, string, error) {
 	staffTeams, err := configrepo.EnsureStaffTeams(client, org, shortName)
 	if err != nil {

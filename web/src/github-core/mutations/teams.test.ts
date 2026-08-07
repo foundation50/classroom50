@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest"
-import { grantTeamConfigRepoAccess } from "./teams"
+import {
+  grantTeamConfigRepoAccess,
+  grantStaffTeamsConfigRepoAccess,
+} from "./teams"
 import type { GitHubClient } from "@/github-core/client"
 
 // grantTeamConfigRepoAccess routes each staff role to its config-repo
@@ -48,5 +51,44 @@ describe("grantTeamConfigRepoAccess", () => {
       "student" as never,
     )
     expect(request).not.toHaveBeenCalled()
+  })
+})
+
+// grantStaffTeamsConfigRepoAccess grants each recorded staff team its role's
+// config-repo permission (teacher/hta push, ta pull). Split from
+// ensureStaffTeams so callers sequence it AFTER the creator drop (granting a
+// team repo access before removing a member emails that member). Skips absent
+// slugs. The web grantTeamConfigRepoAccess PUTs unconditionally.
+describe("grantStaffTeamsConfigRepoAccess", () => {
+  it("PUTs each role's permission for every recorded staff team", async () => {
+    const request = vi.fn().mockResolvedValue({})
+    const client = { request } as unknown as GitHubClient
+    await grantStaffTeamsConfigRepoAccess(client, "acme", {
+      teacher: { id: 1, slug: "classroom50-cs101-teacher" },
+      hta: { id: 2, slug: "classroom50-cs101-hta" },
+      ta: { id: 3, slug: "classroom50-cs101-ta" },
+    })
+    // teacher -> push, hta -> push, ta -> pull; one PUT each.
+    expect(request).toHaveBeenCalledTimes(3)
+    const bodies = request.mock.calls.map(
+      ([, o]) => (o as { body?: unknown }).body,
+    )
+    expect(bodies).toEqual([
+      { permission: "push" },
+      { permission: "push" },
+      { permission: "pull" },
+    ])
+  })
+
+  it("skips a role whose team ref is absent", async () => {
+    const request = vi.fn().mockResolvedValue({})
+    const client = { request } as unknown as GitHubClient
+    await grantStaffTeamsConfigRepoAccess(client, "acme", {
+      teacher: { id: 1, slug: "classroom50-cs101-teacher" },
+    })
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request.mock.calls[0][0] as string).toContain(
+      "classroom50-cs101-teacher",
+    )
   })
 })
