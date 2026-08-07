@@ -1026,7 +1026,11 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 		DefaultBranch string `json:"default_branch"`
 		Private       bool   `json:"private"`
 		Fork          bool   `json:"fork"`
-		Parent        struct {
+		// Repo size in KB. 0 means no commits — an empty template can't be
+		// generated from (POST /generate 422s "is empty"), and GitHub reports a
+		// phantom default_branch for it, so size is the reliable emptiness signal.
+		Size   int `json:"size"`
+		Parent struct {
 			FullName string `json:"full_name"`
 		} `json:"parent"`
 	}
@@ -1037,7 +1041,7 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 		}
 		return assignment.TemplateRef{}, false, "", fmt.Errorf("GET %s: %w", path, err)
 	}
-	ref, err = resolveTemplateBranch(t, resp.IsTemplate, resp.DefaultBranch)
+	ref, err = resolveTemplateBranch(t, resp.IsTemplate, resp.DefaultBranch, resp.Size)
 	if err != nil {
 		return assignment.TemplateRef{}, false, "", err
 	}
@@ -1061,19 +1065,26 @@ func templateInOrg(templateOwner, org string) bool {
 }
 
 // resolveTemplateBranch picks the final assignment.TemplateRef from
-// --template + repo fields: not-a-template, explicit @branch,
-// default_branch fallback, or empty-default_branch guard.
-func resolveTemplateBranch(t templateArg, isTemplate bool, defaultBranch string) (assignment.TemplateRef, error) {
+// --template + repo fields: not-a-template, empty (commitless), explicit
+// @branch, default_branch fallback, or empty-default_branch guard.
+func resolveTemplateBranch(t templateArg, isTemplate bool, defaultBranch string, size int) (assignment.TemplateRef, error) {
 	if !isTemplate {
 		return assignment.TemplateRef{}, fmt.Errorf("`%s/%s` is not a template repository — toggle Settings → \"Template repository\" on the repo, then re-run", t.Owner, t.Repo)
+	}
+	// Caught before the empty-branch guard below (which a commitless repo's
+	// phantom default_branch would slip past). Fail closed on an absent size —
+	// Go's zero value — the deliberate opposite of the web verify path's
+	// fail-open === 0, since `add` is the last gate before write.
+	if size == 0 {
+		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no commits — add at least one commit (e.g. a README) so students can generate from it, then re-run", t.Owner, t.Repo)
 	}
 	branch := t.Branch
 	if branch == "" {
 		branch = defaultBranch
 	}
 	if branch == "" {
-		// Defensive: a fresh repo can return empty default_branch, and an
-		// empty on-disk Branch would trip `student accept`.
+		// Not expected once size > 0, but a blank on-disk Branch would trip
+		// `student accept`, so guard it anyway.
 		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no default branch — pass --template %s/%s@<branch> explicitly", t.Owner, t.Repo, t.Owner, t.Repo)
 	}
 	return assignment.TemplateRef{Owner: t.Owner, Repo: t.Repo, Branch: branch}, nil

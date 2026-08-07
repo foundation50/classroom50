@@ -202,6 +202,10 @@ export type TemplateAccessVerification =
   | { kind: "invalid"; message: string }
   | { kind: "not-visible"; owner: string; repo: string }
   | { kind: "not-template"; owner: string; repo: string }
+  // Template with no commits (size 0): GitHub's generate 422s "is empty" at
+  // accept. A commitless repo reports a phantom default_branch, so `no-branch`
+  // never catches it — size is the reliable signal. resolveTemplate rejects it.
+  | { kind: "empty-template"; owner: string; repo: string }
   // No usable branch: no @branch given and the repo has no default branch
   // (e.g., a commitless template). resolveTemplate rejects this too.
   | { kind: "no-branch"; owner: string; repo: string }
@@ -353,6 +357,11 @@ export async function verifyTemplateAccess(
   if (!repo.is_template) {
     return { kind: "not-template", owner: parsed.owner, repo: parsed.repo }
   }
+  // Caught before no-branch: a commitless repo reports a phantom default_branch
+  // (see the empty-template verdict). Fail open on an absent size.
+  if (repo.size === 0) {
+    return { kind: "empty-template", owner: parsed.owner, repo: parsed.repo }
+  }
 
   const inOrg = parsed.owner.toLowerCase() === org.toLowerCase()
   if (repo.private && !inOrg) {
@@ -434,6 +443,14 @@ export async function resolveTemplate(
   if (!repo.is_template) {
     throw new Error(
       `"${parsed.owner}/${parsed.repo}" is not a template repository — toggle Settings → "Template repository" on the repo, then retry.`,
+    )
+  }
+
+  // Fail closed: never write an assignment pointing at a commitless template
+  // (see the empty-template verdict for why size, not default_branch).
+  if (repo.size === 0) {
+    throw new Error(
+      `Template "${parsed.owner}/${parsed.repo}" has no commits — add at least one commit (e.g. a README) so students can generate from it, then retry.`,
     )
   }
 

@@ -76,7 +76,7 @@ func newTestCmdServer(t *testing.T, assignmentsBody string, autograderExists boo
 	})
 	// Template repo probe used by the runAssignmentAdd tests.
 	mux.HandleFunc("/repos/cs50/hello-template", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "default_branch": "main"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "size": 1, "default_branch": "main"})
 	})
 	mux.HandleFunc("/repos/o/classroom50/git/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPatch {
@@ -615,7 +615,7 @@ func archivedClassroomAddServer(t *testing.T, fix *testCmdFixture) *httptest.Ser
 	// The template probe runs (and must pass) before the build callback
 	// where ensureClassroomActive fires, so serve a valid template.
 	mux.HandleFunc("/repos/cs50/hello-template", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "default_branch": "main"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "size": 1, "default_branch": "main"})
 	})
 	mux.HandleFunc("/repos/o/classroom50/contents/cs-principles/classroom.json", func(w http.ResponseWriter, r *http.Request) {
 		body := `{"schema":"classroom50/classroom/v1","name":"CS Principles","short_name":"cs-principles","term":"","org":"o","active":false}`
@@ -660,7 +660,7 @@ func TestRunAssignmentAdd_WarnsOnNonMainTemplateBranch(t *testing.T) {
 		})
 	})
 	mux.HandleFunc("/repos/cs50/hello-template", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "default_branch": "master"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "size": 1, "default_branch": "master"})
 	})
 	mux.HandleFunc("/repos/o/classroom50/git/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPatch {
@@ -1133,7 +1133,7 @@ func newPrivateTemplateServer(t *testing.T, templateOwner string, templatePrivat
 	// Template probe — the test controls owner + visibility.
 	mux.HandleFunc("/repos/"+templateOwner+"/hello-template", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"is_template": true, "default_branch": "main", "private": templatePrivate,
+			"is_template": true, "size": 1, "default_branch": "main", "private": templatePrivate,
 		})
 	})
 	// commitTree write endpoints.
@@ -1277,7 +1277,7 @@ func TestRunAssignmentAdd_InOrgPrivateNoTeamErrors(t *testing.T) {
 		})
 	})
 	fresh.HandleFunc("/repos/o/hello-template", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "default_branch": "main", "private": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "size": 1, "default_branch": "main", "private": true})
 	})
 	fresh.HandleFunc("/repos/o/classroom50/git/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPatch {

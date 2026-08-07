@@ -1811,6 +1811,38 @@ describe("verifyTemplateAccess", () => {
     expect(result.kind).toBe("not-template")
   })
 
+  it("returns empty-template when the template has no commits (size 0)", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: false,
+      is_template: true,
+      // GitHub reports a phantom default_branch for a commitless repo, so the
+      // signal is size, not the branch.
+      default_branch: "main",
+      size: 0,
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("empty-template")
+  })
+
+  it("prefers not-template over empty-template when both apply (ordering)", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: false,
+      is_template: false,
+      default_branch: "main",
+      size: 0,
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("not-template")
+  })
+
   it("returns not-visible when the repo read 404s (getRepo -> null)", async () => {
     const client = clientReturning(() => {
       throw new GitHubAPIError({
@@ -2022,6 +2054,40 @@ describe("resolveTemplate (create/edit blocking path)", () => {
     const request = vi.fn(async () => result)
     return { request } as unknown as GitHubClient
   }
+
+  it("throws for an empty template (no commits, size 0)", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: false,
+      is_template: true,
+      default_branch: "main",
+      size: 0,
+    })
+
+    await expect(
+      resolveTemplate(client, ORG, ref(ORG, "tmpl")),
+    ).rejects.toThrow(/has no commits/)
+  })
+
+  it("resolves a template with commits (size > 0)", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: false,
+      is_template: true,
+      default_branch: "main",
+      size: 12,
+    })
+
+    const result = await resolveTemplate(client, ORG, ref(ORG, "tmpl"))
+
+    expect(result.template).toEqual({
+      owner: ORG,
+      repo: "tmpl",
+      branch: "main",
+    })
+  })
 
   it("allows a cross-org private fork (generate copies the fork's own objects)", async () => {
     // Verified against GitHub: generate does NOT need parent access, so a

@@ -1361,6 +1361,7 @@
       "okVerify": "Reachable in {{owner}} (branch <branch>{{branch}}</branch>). If {{owner}} restricts third-party apps, students can't copy it until an owner approves Classroom 50.",
       "notVisible": "{{owner}}/{{repo}} isn't visible to you. Make it public or copy it into {{org}}.",
       "notTemplate": "{{owner}}/{{repo}} isn't a template repo. Enable it in the repo's Settings.",
+      "emptyTemplate": "{{owner}}/{{repo}} is a template but has no commits. Add at least one commit (e.g. a README), then retry.",
       "restricted": "{{owner}} blocked access to {{repo}} (HTTP 403) — likely a third-party app restriction. Try, in order:",
       "restrictedItemApprove": "Approve Classroom 50 for {{owner}} (Org settings → Third-party access).",
       "restrictedItemFork": "If {{repo}} is a fork, approve Classroom 50 on the fork's upstream org too — a private fork's access follows the upstream org's policy.",
