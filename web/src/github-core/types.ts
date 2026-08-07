@@ -88,7 +88,9 @@ export type GitHubRepo = {
   // Repo size in KB (GET /repos). 0 means the repo has no commits — a
   // commitless template can't be generated from (GitHub's POST /generate 422s
   // "is empty"), so the template pre-flight rejects it. GitHub reports a phantom
-  // default_branch for such a repo, so size is the reliable emptiness signal.
+  // default_branch for such a repo, so size is the reliable emptiness signal —
+  // except for a fork, which GitHub reports as size 0 while it shares objects
+  // with its parent, so the emptiness guard exempts forks.
   size?: number
   visibility?: "public" | "private" | "internal"
   archived?: boolean
