@@ -108,9 +108,7 @@ describe("SubmissionsActionsMenu — Update autograding triggers item", () => {
   it("shows the item only when onBulkTrigger is provided (owner + default autograder)", () => {
     const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)
     expect(screen.queryByText("submissions.bulkTrigger.menuLabel")).toBeNull()
-    rerender(
-      <SubmissionsActionsMenu {...baseProps} onBulkTrigger={() => {}} />,
-    )
+    rerender(<SubmissionsActionsMenu {...baseProps} onBulkTrigger={() => {}} />)
     expect(
       screen.queryByText("submissions.bulkTrigger.menuLabel"),
     ).not.toBeNull()
