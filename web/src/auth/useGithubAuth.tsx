@@ -336,13 +336,12 @@ function useGithubAuthState() {
         onSuccess: ({ scopes }) => {
           const result = classifyPatResult(scopes)
 
-          // A fine-grained PAT (null header) carries no verifiable scopes; its
-          // per-resource permissions can't be checked here and typically fail
-          // mid-operation, so block it at entry rather than sign in on a token
-          // we can't vet.
-          if (result.kind === "fine-grained") {
-            log.warn("PAT rejected: fine-grained (unverifiable scopes)")
-            onReject(t("auth.errorPatFineGrained"))
+          // A fine-grained PAT (null header) exposes no scopes to verify here;
+          // accept it and let the runtime backstop (GitHubProvider 401 teardown)
+          // govern its per-resource permissions. It carries an empty granted
+          // scope so useMissingScopes stays fail-open (no spurious banner).
+          if (result.kind === "fine-grained-ok") {
+            completeSignIn({ access_token: token, scope: "" })
             return
           }
 

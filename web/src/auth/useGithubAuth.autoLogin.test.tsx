@@ -278,11 +278,11 @@ describe("submitPat (post-refactor behavior)", () => {
     expect(result.current.patError).toBeNull()
   })
 
-  it("surfaces a fine-grained rejection via patError without signing in", async () => {
+  it("signs in a fine-grained token (null header) without rejecting", async () => {
     setEnv({ DEV: false })
     fetchGithubUserWithScopes.mockResolvedValue({
       user: { login: "octocat" },
-      scopes: null, // fine-grained: unverifiable
+      scopes: null, // fine-grained: accepted without header verification
     })
 
     const { result } = renderHook(() => useGithubAuth(), {
@@ -290,10 +290,8 @@ describe("submitPat (post-refactor behavior)", () => {
     })
 
     result.current.submitPat("github_pat_xxx")
-    await waitFor(() => expect(result.current.patError).not.toBeNull())
-    // Untranslated t() returns the key, locking the reject branch's message id.
-    expect(result.current.patError).toBe("auth.errorPatFineGrained")
-    expect(result.current.token).toBeNull()
+    await waitFor(() => expect(result.current.token).toBe("github_pat_xxx"))
+    expect(result.current.patError).toBeNull()
   })
 
   it("surfaces a 401 rejection via patError", async () => {

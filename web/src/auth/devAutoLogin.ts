@@ -7,18 +7,22 @@ import { LOG_SCOPE_AUTH } from "@/lib/logScopes"
 const log = logger.scope(LOG_SCOPE_AUTH)
 
 // Decision for a validated PAT's X-OAuth-Scopes header, split out so every
-// branch is unit-testable. A null header means the scopes are unverifiable —
-// a fine-grained PAT — which we block at entry rather than sign in on a token
-// we can't vet. An empty string is a classic token with no boxes ticked, which
-// falls through to the missing-scopes check (missingScopes("") reports every
-// required scope). "ok" carries the scope string forward to completeSignIn.
+// branch is unit-testable. A null header means the token exposes no scopes — a
+// fine-grained PAT — which we accept without header verification (its
+// per-resource permissions can't be introspected here; the runtime backstop in
+// GitHubProvider governs it, and we help the teacher create a correctly-scoped
+// one via the pre-fill link). An empty string is a classic token with no boxes
+// ticked, which falls through to the missing-scopes check (missingScopes("")
+// reports every required scope). "ok" carries the classic scope string forward
+// to completeSignIn; "fine-grained-ok" carries an empty scope (never a
+// synthesized one, so useMissingScopes stays fail-open).
 export type PatResult =
-  | { kind: "fine-grained" }
+  | { kind: "fine-grained-ok" }
   | { kind: "missing"; missing: string[] }
   | { kind: "ok"; scopes: string }
 
 export function classifyPatResult(scopes: string | null): PatResult {
-  if (scopes === null) return { kind: "fine-grained" }
+  if (scopes === null) return { kind: "fine-grained-ok" }
 
   const missing = missingScopes(scopes)
   if (missing.length > 0) return { kind: "missing", missing }
@@ -73,17 +77,20 @@ export function runDevAutoLoginOnce(
     try {
       const { scopes } = await fetchGithubUserWithScopes(envPat)
       const result = classifyPatResult(scopes)
-      if (result.kind !== "ok") {
-        // A definitive rejection (fine-grained / missing scopes): keep it
-        // cached — the same token won't pass on a retry this page load.
+      if (result.kind === "missing") {
+        // A definitive rejection (missing scopes): keep it cached — the same
+        // token won't pass on a retry this page load.
         log.warn("VITE_GITHUB_PAT auto-login rejected", { kind: result.kind })
         return null
       }
+      // A classic token carries its granted scopes forward; a fine-grained
+      // token has none to verify (empty scope, fail-open in useMissingScopes).
+      const scope = result.kind === "ok" ? result.scopes : ""
       // Persist immediately so a remount restores the session even if the mount
       // that started this validation was already torn down.
-      persistGithubToken(envPat, result.scopes)
+      persistGithubToken(envPat, scope)
       log.info("dev auto-login validated; token persisted")
-      return { token: envPat, scope: result.scopes }
+      return { token: envPat, scope }
     } catch (err) {
       // A transient failure (network blip / timeout / 5xx) is not the token's
       // fault. Clear the cached promise so the next mount re-attempts rather
