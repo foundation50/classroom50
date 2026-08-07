@@ -45,18 +45,18 @@ export const FINE_GRAINED_SIGNIN_PERMISSIONS = {
 // Human-readable permission lines for the prompt UI, derived from the same recipe
 // so the on-screen list and the pre-filled URL share one source.
 export const FINE_GRAINED_SIGNIN_PERMISSION_LABELS = [
-  "Repository — Administration: Read and write",
-  "Repository — Contents: Read and write",
-  "Repository — Workflows: Read and write",
-  "Repository — Pages: Read and write",
-  "Repository — Secrets: Read and write",
-  "Repository — Variables: Read and write",
-  "Repository — Actions: Read and write",
-  "Repository — Pull requests: Read and write",
-  "Repository — Issues: Read and write",
-  "Organization — Administration: Read and write",
-  "Organization — Members: Read and write",
-  "Organization — Plan: Read-only",
+  "Repository, Administration: Read and write",
+  "Repository, Contents: Read and write",
+  "Repository, Workflows: Read and write",
+  "Repository, Pages: Read and write",
+  "Repository, Secrets: Read and write",
+  "Repository, Variables: Read and write",
+  "Repository, Actions: Read and write",
+  "Repository, Pull requests: Read and write",
+  "Repository, Issues: Read and write",
+  "Organization, Administration: Read and write",
+  "Organization, Members: Read and write",
+  "Organization, Plan: Read-only",
 ] as const
 
 // Pre-filled fine-grained-PAT creation URL for teacher sign-in. `org` becomes
