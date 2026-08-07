@@ -103,7 +103,7 @@ export function GitHubPatPrompt({
             <p className="text-xs leading-relaxed text-base-content/70">
               {t("auth.patFineGrainedIntro")}
             </p>
-            <label className="form-control w-full">
+            <label className="flex w-full flex-col gap-1.5">
               <span className="label-text text-xs">
                 {t("auth.patFineGrainedOrgLabel")}
               </span>
@@ -163,8 +163,8 @@ export function GitHubPatPrompt({
         )}
       </div>
 
-      <label className="form-control w-full">
-        <span className="label-text mb-1 text-xs leading-relaxed text-base-content/70">
+      <label className="flex w-full flex-col gap-1.5">
+        <span className="label-text text-xs leading-relaxed text-base-content/70">
           {t("auth.patPasteInstruction")}
         </span>
         <Input
