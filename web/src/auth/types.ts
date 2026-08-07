@@ -29,3 +29,8 @@ export type DeviceAuthState = {
 
 export type GithubAuthScreen =
   "config" | "exchanging" | "device-prompt" | "pat-prompt" | "authed"
+
+// Which personal-access-token variant the PAT sign-in prompt guides the user
+// through. Classic spans every org the teacher owns (the multi-org default);
+// fine-grained is scoped to one org.
+export type PatTokenType = "classic" | "fine-grained"

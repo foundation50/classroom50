@@ -7,6 +7,7 @@ import {
   FINE_GRAINED_SIGNIN_PERMISSION_LABELS,
   buildFineGrainedSigninUrl,
 } from "./fineGrainedSigninUrl"
+import type { PatTokenType } from "./types"
 import { Alert, Button, Input } from "@/components/ui"
 
 // The classic-PAT checkboxes to tick, derived from REQUIRED_SCOPES (the same
@@ -41,14 +42,16 @@ const CREATE_TOKEN_URL = `https://github.com/settings/tokens/new?${new URLSearch
   },
 ).toString()}`
 
-type TokenType = "classic" | "fine-grained"
-
+// The token variant is chosen upstream (two entries under "other sign-in
+// methods"), so the prompt renders one variant's guidance — no in-prompt toggle.
 export function GitHubPatPrompt({
+  tokenType,
   onSubmit,
   onCancel,
   isValidating,
   error,
 }: {
+  tokenType: PatTokenType
   onSubmit: (token: string) => void
   onCancel: () => void
   isValidating: boolean
@@ -56,12 +59,10 @@ export function GitHubPatPrompt({
 }) {
   const { t } = useTranslation()
   const [token, setToken] = useState("")
-  // Classic is the default: it spans every org the teacher owns, so it's the
-  // right choice for the multi-org norm. Fine-grained is the single-org option.
-  const [tokenType, setTokenType] = useState<TokenType>("classic")
   const [org, setOrg] = useState("")
   const trimmed = token.trim()
   const trimmedOrg = org.trim()
+  const isFineGrained = tokenType === "fine-grained"
 
   return (
     <form
@@ -80,55 +81,13 @@ export function GitHubPatPrompt({
       ) : null}
 
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold">{t("auth.patTitle")}</h2>
-        <p className="text-xs leading-relaxed text-base-content/70">
-          {t("auth.patInstructions")}
-        </p>
+        <h2 className="text-sm font-semibold">
+          {isFineGrained
+            ? t("auth.patTitleFineGrained")
+            : t("auth.patTitleClassic")}
+        </h2>
 
-        <div className="join w-full" role="tablist">
-          <Button
-            type="button"
-            variant={tokenType === "classic" ? "primary" : "outline"}
-            className="join-item flex-1"
-            role="tab"
-            aria-selected={tokenType === "classic"}
-            onClick={() => setTokenType("classic")}
-          >
-            {t("auth.patTypeClassicRecommended")}
-          </Button>
-          <Button
-            type="button"
-            variant={tokenType === "fine-grained" ? "primary" : "outline"}
-            className="join-item flex-1"
-            role="tab"
-            aria-selected={tokenType === "fine-grained"}
-            onClick={() => setTokenType("fine-grained")}
-          >
-            {t("auth.patTypeFineGrained")}
-          </Button>
-        </div>
-
-        {tokenType === "classic" ? (
-          <div className="space-y-2">
-            <p className="text-xs leading-relaxed text-base-content/70">
-              {t("auth.patClassicIntro")}
-            </p>
-            <ul className="grid gap-1 rounded-lg border border-base-300 bg-base-200 px-4 py-3 font-mono text-xs">
-              {REQUIRED_PAT_SCOPES.map((scope) => (
-                <li key={scope}>{scope}</li>
-              ))}
-            </ul>
-            <a
-              className="link link-info link-hover inline-flex items-center gap-1 text-xs"
-              href={CREATE_TOKEN_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink aria-hidden="true" className="size-3" />
-              {t("auth.patCreateTokenLink")}
-            </a>
-          </div>
-        ) : (
+        {isFineGrained ? (
           <div className="space-y-2">
             <p className="text-xs leading-relaxed text-base-content/70">
               {t("auth.patFineGrainedIntro")}
@@ -172,6 +131,26 @@ export function GitHubPatPrompt({
               </p>
             )}
           </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs leading-relaxed text-base-content/70">
+              {t("auth.patClassicIntro")}
+            </p>
+            <ul className="grid gap-1 rounded-lg border border-base-300 bg-base-200 px-4 py-3 font-mono text-xs">
+              {REQUIRED_PAT_SCOPES.map((scope) => (
+                <li key={scope}>{scope}</li>
+              ))}
+            </ul>
+            <a
+              className="link link-info link-hover inline-flex items-center gap-1 text-xs"
+              href={CREATE_TOKEN_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink aria-hidden="true" className="size-3" />
+              {t("auth.patCreateTokenLink")}
+            </a>
+          </div>
         )}
       </div>
 
@@ -182,7 +161,7 @@ export function GitHubPatPrompt({
           type="password"
           autoComplete="off"
           spellCheck={false}
-          placeholder="ghp_… or github_pat_…"
+          placeholder={isFineGrained ? "github_pat_…" : "ghp_…"}
           value={token}
           onChange={(event) => setToken(event.target.value)}
           disabled={isValidating}
