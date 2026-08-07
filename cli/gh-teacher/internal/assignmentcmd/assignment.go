@@ -1028,7 +1028,9 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 		Fork          bool   `json:"fork"`
 		// Repo size in KB. 0 means no commits — an empty template can't be
 		// generated from (POST /generate 422s "is empty"), and GitHub reports a
-		// phantom default_branch for it, so size is the reliable emptiness signal.
+		// phantom default_branch for it, so size is the reliable emptiness signal
+		// for a non-fork. Forks report size 0 while sharing parent objects, so the
+		// emptiness guard exempts them.
 		Size   int `json:"size"`
 		Parent struct {
 			FullName string `json:"full_name"`
@@ -1041,7 +1043,7 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 		}
 		return assignment.TemplateRef{}, false, "", fmt.Errorf("GET %s: %w", path, err)
 	}
-	ref, err = resolveTemplateBranch(t, resp.IsTemplate, resp.DefaultBranch, resp.Size)
+	ref, err = resolveTemplateBranch(t, resp.IsTemplate, resp.Fork, resp.DefaultBranch, resp.Size)
 	if err != nil {
 		return assignment.TemplateRef{}, false, "", err
 	}
@@ -1067,15 +1069,17 @@ func templateInOrg(templateOwner, org string) bool {
 // resolveTemplateBranch picks the final assignment.TemplateRef from
 // --template + repo fields: not-a-template, empty (commitless), explicit
 // @branch, default_branch fallback, or empty-default_branch guard.
-func resolveTemplateBranch(t templateArg, isTemplate bool, defaultBranch string, size int) (assignment.TemplateRef, error) {
+func resolveTemplateBranch(t templateArg, isTemplate, isFork bool, defaultBranch string, size int) (assignment.TemplateRef, error) {
 	if !isTemplate {
 		return assignment.TemplateRef{}, fmt.Errorf("`%s/%s` is not a template repository — toggle Settings → \"Template repository\" on the repo, then re-run", t.Owner, t.Repo)
 	}
 	// Caught before the empty-branch guard below (which a commitless repo's
 	// phantom default_branch would slip past). Fail closed on an absent size —
 	// Go's zero value — the deliberate opposite of the web verify path's
-	// fail-open === 0, since `add` is the last gate before write.
-	if size == 0 {
+	// fail-open === 0, since `add` is the last gate before write. Forks are
+	// exempt: GitHub reports size 0 for a fork sharing objects with its parent
+	// even when it has commits, and a fork can only exist from a non-empty parent.
+	if size == 0 && !isFork {
 		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no commits — add at least one commit (e.g. a README) so students can generate from it, then re-run", t.Owner, t.Repo)
 	}
 	branch := t.Branch
