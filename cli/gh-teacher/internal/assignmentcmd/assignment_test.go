@@ -176,6 +176,7 @@ func TestResolveTemplateBranch(t *testing.T) {
 		arg         templateArg
 		isTemplate  bool
 		defaultBr   string
+		size        int
 		wantRef     assignment.TemplateRef
 		wantErrPart string // empty → expect success
 	}{
@@ -184,13 +185,23 @@ func TestResolveTemplateBranch(t *testing.T) {
 			arg:         templateArg{Owner: "cs50", Repo: "hello-template"},
 			isTemplate:  false,
 			defaultBr:   "main",
+			size:        0,
 			wantErrPart: "not a template repository",
+		},
+		{
+			name:        "empty template (no commits) rejected before branch resolution",
+			arg:         templateArg{Owner: "cs50", Repo: "hello-template"},
+			isTemplate:  true,
+			defaultBr:   "main", // GitHub reports a phantom default_branch for a commitless repo
+			size:        0,
+			wantErrPart: "has no commits",
 		},
 		{
 			name:       "explicit @branch retained even when default_branch differs",
 			arg:        templateArg{Owner: "cs50", Repo: "hello-template", Branch: "feature/foo"},
 			isTemplate: true,
 			defaultBr:  "main",
+			size:       1,
 			wantRef:    assignment.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "feature/foo"},
 		},
 		{
@@ -198,6 +209,7 @@ func TestResolveTemplateBranch(t *testing.T) {
 			arg:        templateArg{Owner: "cs50", Repo: "hello-template"},
 			isTemplate: true,
 			defaultBr:  "master",
+			size:       1,
 			wantRef:    assignment.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "master"},
 		},
 		{
@@ -205,6 +217,7 @@ func TestResolveTemplateBranch(t *testing.T) {
 			arg:        templateArg{Owner: "cs50", Repo: "hello-template"},
 			isTemplate: true,
 			defaultBr:  "main",
+			size:       1,
 			wantRef:    assignment.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "main"},
 		},
 		{
@@ -212,12 +225,13 @@ func TestResolveTemplateBranch(t *testing.T) {
 			arg:         templateArg{Owner: "cs50", Repo: "hello-template"},
 			isTemplate:  true,
 			defaultBr:   "",
+			size:        1,
 			wantErrPart: "has no default branch",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := resolveTemplateBranch(tc.arg, tc.isTemplate, tc.defaultBr)
+			got, err := resolveTemplateBranch(tc.arg, tc.isTemplate, tc.defaultBr, tc.size)
 			if tc.wantErrPart != "" {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil (returned %#v)", tc.wantErrPart, got)
@@ -472,6 +486,7 @@ func TestValidateTemplateRepo_CrossOrgFork(t *testing.T) {
 	t.Run("cross-org fork reports the parent org", func(t *testing.T) {
 		client := newClient(t, map[string]any{
 			"is_template":    true,
+			"size":           1,
 			"default_branch": "main",
 			"private":        true,
 			"fork":           true,
@@ -489,6 +504,7 @@ func TestValidateTemplateRepo_CrossOrgFork(t *testing.T) {
 	t.Run("same-org fork reports no parent", func(t *testing.T) {
 		client := newClient(t, map[string]any{
 			"is_template":    true,
+			"size":           1,
 			"default_branch": "main",
 			"private":        true,
 			"fork":           true,
@@ -506,6 +522,7 @@ func TestValidateTemplateRepo_CrossOrgFork(t *testing.T) {
 	t.Run("non-fork reports no parent", func(t *testing.T) {
 		client := newClient(t, map[string]any{
 			"is_template":    true,
+			"size":           1,
 			"default_branch": "main",
 			"private":        true,
 			"fork":           false,

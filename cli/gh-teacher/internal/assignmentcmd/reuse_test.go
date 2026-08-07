@@ -100,7 +100,7 @@ func newReuseServer(t *testing.T, cfg reuseServerConfig) (*httptest.Server, *reu
 			_, _ = io.WriteString(w, `{"message":"Not Found"}`)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "default_branch": "main", "private": cfg.templatePrivate})
+		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "size": 1, "default_branch": "main", "private": cfg.templatePrivate})
 	})
 
 	// Classroom-team grant: GET team membership probe + PUT grant.

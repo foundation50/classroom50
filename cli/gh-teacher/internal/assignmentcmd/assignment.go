@@ -1026,7 +1026,11 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 		DefaultBranch string `json:"default_branch"`
 		Private       bool   `json:"private"`
 		Fork          bool   `json:"fork"`
-		Parent        struct {
+		// Repo size in KB. 0 means no commits — an empty template can't be
+		// generated from (POST /generate 422s "is empty"), and GitHub reports a
+		// phantom default_branch for it, so size is the reliable emptiness signal.
+		Size   int `json:"size"`
+		Parent struct {
 			FullName string `json:"full_name"`
 		} `json:"parent"`
 	}
@@ -1037,7 +1041,7 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 		}
 		return assignment.TemplateRef{}, false, "", fmt.Errorf("GET %s: %w", path, err)
 	}
-	ref, err = resolveTemplateBranch(t, resp.IsTemplate, resp.DefaultBranch)
+	ref, err = resolveTemplateBranch(t, resp.IsTemplate, resp.DefaultBranch, resp.Size)
 	if err != nil {
 		return assignment.TemplateRef{}, false, "", err
 	}
@@ -1061,11 +1065,16 @@ func templateInOrg(templateOwner, org string) bool {
 }
 
 // resolveTemplateBranch picks the final assignment.TemplateRef from
-// --template + repo fields: not-a-template, explicit @branch,
-// default_branch fallback, or empty-default_branch guard.
-func resolveTemplateBranch(t templateArg, isTemplate bool, defaultBranch string) (assignment.TemplateRef, error) {
+// --template + repo fields: not-a-template, empty (commitless), explicit
+// @branch, default_branch fallback, or empty-default_branch guard.
+func resolveTemplateBranch(t templateArg, isTemplate bool, defaultBranch string, size int) (assignment.TemplateRef, error) {
 	if !isTemplate {
 		return assignment.TemplateRef{}, fmt.Errorf("`%s/%s` is not a template repository — toggle Settings → \"Template repository\" on the repo, then re-run", t.Owner, t.Repo)
+	}
+	// A commitless template (size 0) reports a phantom default_branch, so the
+	// empty-branch guard below never catches it; generate would 422 at accept.
+	if size == 0 {
+		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no commits — add at least one commit (e.g. a README) so students can generate from it, then re-run", t.Owner, t.Repo)
 	}
 	branch := t.Branch
 	if branch == "" {

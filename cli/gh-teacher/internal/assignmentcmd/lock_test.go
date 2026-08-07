@@ -70,6 +70,7 @@ func newLockServer(t *testing.T, cfg lockServerConfig) (*httptest.Server, *lockF
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"is_template":    true,
+			"size":           1,
 			"default_branch": "main",
 			"private":        cfg.templatePrivate,
 		})
