@@ -359,6 +359,8 @@ export async function verifyTemplateAccess(
   }
   // A template with no commits (size 0) reports a phantom default_branch, so
   // the no-branch verdict below never catches it; generate would 422 at accept.
+  // GET /repos always returns size, so an absent value never reaches here; the
+  // strict === 0 only trips on an explicit 0 (fail open if GitHub ever omits it).
   if (repo.size === 0) {
     return { kind: "empty-template", owner: parsed.owner, repo: parsed.repo }
   }

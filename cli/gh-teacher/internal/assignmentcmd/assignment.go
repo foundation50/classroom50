@@ -1073,6 +1073,9 @@ func resolveTemplateBranch(t templateArg, isTemplate bool, defaultBranch string,
 	}
 	// A commitless template (size 0) reports a phantom default_branch, so the
 	// empty-branch guard below never catches it; generate would 422 at accept.
+	// GitHub always returns size on GET /repos; if it ever omitted it, Go's zero
+	// value makes this fail closed (reject) — the deliberate opposite of the web
+	// verify path's fail-open === 0, since add is the last gate before write.
 	if size == 0 {
 		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no commits — add at least one commit (e.g. a README) so students can generate from it, then re-run", t.Owner, t.Repo)
 	}
@@ -1081,8 +1084,10 @@ func resolveTemplateBranch(t templateArg, isTemplate bool, defaultBranch string,
 		branch = defaultBranch
 	}
 	if branch == "" {
-		// Defensive: a fresh repo can return empty default_branch, and an
-		// empty on-disk Branch would trip `student accept`.
+		// Defensive fallback: a non-empty repo (size > 0) that still reports no
+		// default_branch is not expected — a commitless repo is already caught by
+		// the size guard above (it reports a phantom default_branch, not "") — but
+		// an empty on-disk Branch would trip `student accept`, so guard it anyway.
 		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no default branch — pass --template %s/%s@<branch> explicitly", t.Owner, t.Repo, t.Owner, t.Repo)
 	}
 	return assignment.TemplateRef{Owner: t.Owner, Repo: t.Repo, Branch: branch}, nil
