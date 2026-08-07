@@ -110,9 +110,8 @@ export async function migrateClassroom(
     }
   }
 
-  // Grant staff teams their config-repo access AFTER the drop (granting before
-  // the owner removal emails them a "removed from team" alert — see
-  // ensureStaffTeams). Same order as `classroom add`.
+  // Grant staff-team config-repo access AFTER the drop (order is load-bearing —
+  // see ensureStaffTeams), same as `classroom add`.
   try {
     await grantStaffTeamsConfigRepoAccess(client, targetOrg, teams)
   } catch (err) {

@@ -156,9 +156,7 @@ export async function ensureClassroomRoleTeam(
 ): Promise<ClassroomTeamRef & { created: boolean }> {
   assertCanonicalTeamShortName(classroom)
   // Staff enable notifications so @mentions reach TAs/teachers (#335); the
-  // student team stays disabled (see TeamNotificationSetting). This is
-  // independent of the create-time removal-email fix, which is an ordering
-  // concern handled by grantStaffTeamsConfigRepoAccess, not a notification one.
+  // student team stays disabled (see TeamNotificationSetting).
   return ensureSecretTeamByName(
     client,
     org,
@@ -235,10 +233,10 @@ export async function ensureStaffTeams(
 }
 
 // Grant each staff team its role's config-repo access (teacher/hta write, ta
-// read-only). Split from ensureStaffTeams so callers can sequence it AFTER the
-// creator drop (see ensureStaffTeams for why the order matters). Idempotent and
-// permission-aware — a TA team that still holds write is downgraded to read on
-// re-affirm — so this is safe at create AND as a reconcile preflight.
+// read-only). Permission-aware — a TA team that still holds write is downgraded
+// to read on re-affirm. Split from ensureStaffTeams so callers run it AFTER the
+// creator drop (see ensureStaffTeams). Safe at create AND as a reconcile
+// preflight.
 export async function grantStaffTeamsConfigRepoAccess(
   client: GitHubClient,
   org: string,

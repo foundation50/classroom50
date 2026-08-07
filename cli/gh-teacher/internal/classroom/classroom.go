@@ -293,14 +293,12 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 
 // seedStaffTeams creates (or adopts) the staff teams (teacher, hta, ta) and
 // adds the acting teacher as teacher-team maintainer — shared by `classroom
-// add` and `classroom migrate`. It deliberately does NOT grant config-repo
-// access; the caller does that via GrantStaffTeamsConfigRepoAccess AFTER
-// dropping the auto-added creator from the non-teacher teams, so the drop
-// doesn't email the owner (see EnsureStaffTeams). Returns the resolved acting
-// login (empty when it couldn't be read) so the caller can drop that same user
-// from the non-teacher teams. The maintainer add is best-effort: a
-// CurrentUser/membership failure warns but doesn't fail creation (the teacher
-// can self-add via the web).
+// add` and `classroom migrate`. It does NOT grant config-repo access; the
+// caller does that via GrantStaffTeamsConfigRepoAccess after the creator drop
+// (see EnsureStaffTeams). Returns the resolved acting login (empty when it
+// couldn't be read) so the caller can drop that same user from the non-teacher
+// teams. The maintainer add is best-effort: a CurrentUser/membership failure
+// warns but doesn't fail creation (the teacher can self-add via the web).
 func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName string) (*configrepo.StaffTeamsRef, string, error) {
 	staffTeams, err := configrepo.EnsureStaffTeams(client, org, shortName)
 	if err != nil {

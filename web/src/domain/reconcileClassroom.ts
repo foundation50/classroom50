@@ -81,10 +81,9 @@ export async function reconcileClassroom(
     staffTeams.ta?.slug,
   ])
 
-  // Grant staff teams their config-repo access AFTER the drop (see
-  // ensureStaffTeams / createClassroomFiles: granting before removal is what
-  // emails the owner). Also re-affirms the TA read-only downgrade. Best-effort:
-  // a failure leaves config-repo access unset until the next pass, never aborts
+  // Grant staff-team config-repo access AFTER the drop (order is load-bearing —
+  // see ensureStaffTeams); also re-affirms the TA read-only downgrade.
+  // Best-effort: a failure leaves access unset until the next pass, never aborts
   // the heal.
   try {
     await grantStaffTeamsConfigRepoAccess(client, org, staffTeams)

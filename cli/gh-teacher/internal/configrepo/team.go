@@ -217,11 +217,8 @@ func EnsureClassroomTeam(client githubapi.Client, org, shortName, description st
 // EnsureClassroomStaffTeam creates (or adopts) the per-classroom STAFF team for
 // `role` — a `secret` team `classroom50-<short>-<role>`. Mirrors the web's
 // ensureClassroomRoleTeam. Idempotent; safe as a preflight before any staff op.
-//
 // Staff teams create `notificationsEnabled` so @mentions reach TAs/teachers
-// (#335). This is independent of the create-time removal-email fix, which is an
-// ordering concern handled by GrantStaffTeamsConfigRepoAccess, not a
-// notification one.
+// (#335).
 func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, role StaffRole) (TeamRef, error) {
 	if !CanonicalTeamSlugShortName(shortName) {
 		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking staff membership and config-repo grants)", shortName)
@@ -262,12 +259,11 @@ func EnsureStaffTeams(client githubapi.Client, org, shortName string) (*StaffTea
 }
 
 // GrantStaffTeamsConfigRepoAccess grants each recorded staff team its role's
-// config-repo permission — `push` for teacher/hta so staff can author
-// assignments, `pull` for ta (read-only). Split from EnsureStaffTeams so
-// callers can sequence it AFTER the creator drop (see EnsureStaffTeams for why
-// the order matters). Permission-aware, so re-affirming an existing TA team
-// that holds `push` downgrades it to `pull`. A nil refs pointer or empty slug
-// is skipped. Mirrors the web's grantStaffTeamsConfigRepoAccess.
+// config-repo permission — `push` for teacher/hta (author assignments), `pull`
+// for ta (read-only). Permission-aware, so re-affirming a TA team that holds
+// `push` downgrades it to `pull`. Split from EnsureStaffTeams so callers run it
+// AFTER the creator drop (see EnsureStaffTeams). Nil refs or empty slug skipped.
+// Mirrors the web's grantStaffTeamsConfigRepoAccess.
 func GrantStaffTeamsConfigRepoAccess(client githubapi.Client, org string, refs *StaffTeamsRef) error {
 	if refs == nil {
 		return nil
