@@ -90,6 +90,7 @@ export function GitHubAuthCard() {
             />
           ) : auth.screen === "pat-prompt" ? (
             <GitHubPatPrompt
+              tokenType={auth.patTokenType}
               onSubmit={auth.submitPat}
               onCancel={auth.cancelPatFlow}
               isValidating={auth.isValidatingPat}
@@ -167,9 +168,18 @@ export function GitHubAuthCard() {
                       variant="outline"
                       className="w-full"
                       type="button"
-                      onClick={() => auth.startPatFlow()}
+                      onClick={() => auth.startPatFlow("classic")}
                     >
-                      {t("auth.usePersonalAccessToken")}
+                      {t("auth.usePersonalAccessTokenClassic")}
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      type="button"
+                      onClick={() => auth.startPatFlow("fine-grained")}
+                    >
+                      {t("auth.usePersonalAccessTokenFineGrained")}
                     </Button>
                   </div>
                 </details>

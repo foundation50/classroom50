@@ -53,7 +53,7 @@ import {
   persistGithubToken,
   saveOAuthSession,
 } from "./storage"
-import type { DeviceAuthState, GithubAuthScreen } from "./types"
+import type { DeviceAuthState, GithubAuthScreen, PatTokenType } from "./types"
 import type { AuthStatus } from "@/types/router"
 
 // Translator shape used for the auth error strings. Matches the subset of
@@ -247,6 +247,9 @@ function useGithubAuthState() {
   // Scoped to the PAT prompt so a token-entry failure surfaces on that screen
   // without disturbing the config screen's `error`.
   const [patError, setPatError] = useState<string | null>(null)
+  // Which PAT variant the user chose from "other sign-in methods"; drives the
+  // prompt's guidance + pre-fill (classic vs fine-grained).
+  const [patTokenType, setPatTokenType] = useState<PatTokenType>("classic")
   const [device, setDevice] = useState<DeviceAuthState | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [hasLoadedStoredAuth, setHasLoadedStoredAuth] = useState(false)
@@ -336,13 +339,12 @@ function useGithubAuthState() {
         onSuccess: ({ scopes }) => {
           const result = classifyPatResult(scopes)
 
-          // A fine-grained PAT (null header) carries no verifiable scopes; its
-          // per-resource permissions can't be checked here and typically fail
-          // mid-operation, so block it at entry rather than sign in on a token
-          // we can't vet.
-          if (result.kind === "fine-grained") {
-            log.warn("PAT rejected: fine-grained (unverifiable scopes)")
-            onReject(t("auth.errorPatFineGrained"))
+          // A fine-grained PAT (null header) exposes no scopes to verify here;
+          // accept it and let the runtime backstop (GitHubProvider 401 teardown)
+          // govern its per-resource permissions. It carries an empty granted
+          // scope so useMissingScopes stays fail-open (no spurious banner).
+          if (result.kind === "fine-grained-ok") {
+            completeSignIn({ access_token: token, scope: "" })
             return
           }
 
@@ -767,8 +769,9 @@ function useGithubAuthState() {
     )
   }, [])
 
-  const startPatFlow = useCallback(() => {
+  const startPatFlow = useCallback((tokenType: PatTokenType = "classic") => {
     setPatError(null)
+    setPatTokenType(tokenType)
     setScreen("pat-prompt")
   }, [])
 
@@ -949,6 +952,7 @@ function useGithubAuthState() {
     cancelPatFlow,
     submitPat,
     patError,
+    patTokenType,
     isValidatingPat: validatePatMutation.isPending,
     signOut,
     expireSession,
