@@ -43,6 +43,58 @@ func TestScopesSatisfy(t *testing.T) {
 	}
 }
 
+// TestConfirmProceed pins the re-login confirmation: only an explicit yes
+// proceeds; empty (bare Enter), no, and EOF all default to No so the safe
+// choice — leaving the existing auth untouched — is the effortless one.
+func TestConfirmProceed(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"y proceeds", "y\n", true},
+		{"yes proceeds", "yes\n", true},
+		{"uppercase Y proceeds", "Y\n", true},
+		{"padded yes proceeds", "  yes  \n", true},
+		{"bare enter declines", "\n", false},
+		{"n declines", "n\n", false},
+		{"no declines", "no\n", false},
+		{"garbage declines", "maybe\n", false},
+		{"EOF declines", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var errOut bytes.Buffer
+			got := confirmProceed(&errOut, strings.NewReader(tc.in))
+			if got != tc.want {
+				t.Errorf("confirmProceed(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+			if !strings.Contains(errOut.String(), "Proceed") {
+				t.Errorf("confirmProceed must print a prompt; got %q", errOut.String())
+			}
+		})
+	}
+}
+
+// TestPrintLoginDeclinedHelp pins the post-decline guidance: it must name the
+// two no-clobber alternatives the reporter asked for (issue #534) — refreshing
+// the existing login and supplying your own token via GH_TOKEN — with the
+// required scopes filled in.
+func TestPrintLoginDeclinedHelp(t *testing.T) {
+	var buf bytes.Buffer
+	printLoginDeclinedHelp(&buf, "github.com", []string{"admin:org", "workflow"})
+	got := buf.String()
+	for _, want := range []string{
+		"gh auth refresh -h github.com -s admin:org,workflow",
+		"GH_TOKEN",
+		"unchanged",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("decline help missing %q:\n%s", want, got)
+		}
+	}
+}
+
 // TestGhScopeArgs pins the `gh auth login`/`refresh` argument builder shared by
 // the login and refresh paths: each required scope and each non-empty trimmed
 // extra scope becomes a `-s <scope>` pair appended to the base command.

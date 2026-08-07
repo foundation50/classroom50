@@ -10,6 +10,8 @@
 package ghauth
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -163,17 +165,62 @@ func autoLogin(out, errOut writer, host string, opts Options) error {
 
 // RunLogin execs `gh auth login --hostname <host>` with the required scopes
 // plus any extra scopes, wiring stdio through. Shared by autoLogin and the
-// explicit `login` command. Prints the prominent config-rewrite box ONLY when
-// the host already has a stored token — that's the case where `gh auth login`
-// mints a fresh token and overwrites the user's existing auth in `gh`'s config
-// (issue #534). A first-time login (no token yet) has nothing to clobber, so it
-// skips the box. To widen an existing login's scopes without replacing its
-// token, prefer RunRefresh.
+// explicit `login` command.
+//
+// When the host already has a stored token, `gh auth login` mints a fresh token
+// and overwrites the user's existing auth in `gh`'s config (issue #534), so
+// RunLogin first prints the config-rewrite box and — on an interactive
+// terminal — asks the user to confirm. Declining aborts with manual
+// alternatives and returns ErrLoginDeclined. A first-time login (no token yet)
+// has nothing to clobber, so it skips both the box and the prompt. To widen an
+// existing login's scopes without replacing its token, prefer RunRefresh.
 func RunLogin(out, errOut writer, host string, requiredScopes, extraScopes []string) error {
 	if token, _ := auth.TokenForHost(host); token != "" {
 		printConfigRewriteWarning(errOut, host)
+		// Only gate on a real interactive terminal; a non-TTY (CI, piped)
+		// can't answer, so proceed as before rather than blocking.
+		if IsInteractiveTTY() && !confirmProceed(errOut, os.Stdin) {
+			printLoginDeclinedHelp(errOut, host, requiredScopes)
+			return ErrLoginDeclined
+		}
 	}
 	return runGh(out, errOut, ghScopeArgs([]string{"auth", "login", "--hostname", host}, requiredScopes, extraScopes)...)
+}
+
+// ErrLoginDeclined is returned by RunLogin when the user answers No to the
+// config-rewrite confirmation. Callers can treat it as a clean, user-chosen
+// abort (the guidance was already printed) rather than an unexpected failure.
+var ErrLoginDeclined = errors.New("login declined: existing gh authentication left unchanged")
+
+// confirmProceed prompts on errOut and reads a line from in, returning true
+// only on an explicit yes. Defaults to No (empty/anything-else), so the safe
+// choice — leaving the existing auth untouched — is the one a bare Enter makes.
+func confirmProceed(errOut writer, in io.Reader) bool {
+	_, _ = fmt.Fprint(errOut, "Proceed and let `gh auth login` replace it? [y/N] ")
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && line == "" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// printLoginDeclinedHelp explains, after a declined re-login, the non-clobbering
+// ways to get the scopes the CLI needs without a full `gh auth login`: widen the
+// existing credential with `gh auth refresh`, or supply your own token via
+// GH_TOKEN. Keeps the reporter's "let me set it up manually" path first-class
+// (issue #534).
+func printLoginDeclinedHelp(errOut writer, host string, requiredScopes []string) {
+	scopeCSV := strings.Join(requiredScopes, ",")
+	_, _ = fmt.Fprintf(errOut,
+		"Aborted — your existing %s authentication is unchanged. To get the scopes without replacing your token, either:\n"+
+			"  • widen your current login in place:  gh auth refresh -h %s -s %s\n"+
+			"  • or use your own token:               export GH_TOKEN=<a PAT with %s>\n",
+		host, host, scopeCSV, strings.Join(requiredScopes, ", "))
 }
 
 // RunRefresh execs `gh auth refresh --hostname <host> -s <scopes>` to ADD
