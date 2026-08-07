@@ -17,6 +17,15 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.26.1](https://github.com/foundation50/classroom50/compare/web-v1.26.0...web-v1.26.1) (2026-08-07)
+
+
+### Bug Fixes
+
+* reject an empty (commitless) template before accept ([#528](https://github.com/foundation50/classroom50/issues/528)) ([5ca964f](https://github.com/foundation50/classroom50/commit/5ca964f4d50656d2bfa0c9f77ac995f2f79e9003))
+* silence staff-team removal email by granting config-repo access after owner drop ([#529](https://github.com/foundation50/classroom50/issues/529)) ([34c4014](https://github.com/foundation50/classroom50/commit/34c401403eb3178040551763fd2fef575685233f))
+* **web:** stop a GitHub outage from showing as "You're offline" ([#524](https://github.com/foundation50/classroom50/issues/524)) ([7df06e3](https://github.com/foundation50/classroom50/commit/7df06e3af800bd3a5c6fee122599f83abc306b10))
+
 ## [1.26.0](https://github.com/foundation50/classroom50/compare/web-v1.25.1...web-v1.26.0) (2026-08-06)
 
 
