@@ -624,29 +624,15 @@ jobs:
           emit("release-assets", release_assets_json)
           emit("no-autograder", "true" if no_autograder else "false")
 
-      # === Autograde-skipped commit status ===
-      # Parallel to the acceptance-skip status: post an explicit
-      # classroom50/autograde success so a status-polling client can tell
-      # "skipped — no autograder configured" from "hasn't run yet".
-      # Best-effort; never fails the job.
-      - name: Autograde-skipped commit status
-        if: steps.read.outputs.no-autograder == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          gh api "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-            -f state="success" \
-            -f context="classroom50/autograde" \
-            -f description="no autograder configured — autograding skipped" \
-            -f target_url="$RUN_URL" >/dev/null 2>&1 || true
-
   grade:
     needs: setup
-    # Skip the acceptance commit and the no-autograder case (set-latest needs
-    # grade, so it skips too).
-    if: needs.setup.outputs.is-acceptance != 'true' && needs.setup.outputs.no-autograder != 'true'
+    # Skip only the acceptance commit. The no-autograder case still runs so the
+    # submission is RECORDED: runner.py synthesizes a vacuous-pass (0/0 success)
+    # result and the Release step publishes it, keeping the submission visible on
+    # the teacher dashboard (which reads submit/* releases). Language-toolchain
+    # setup is separately gated off no-autograder below, so this cheap path spends
+    # no minutes installing toolchains it won't use.
+    if: needs.setup.outputs.is-acceptance != 'true'
     runs-on:   ${{ fromJSON(needs.setup.outputs.runs-on) }}
     container: ${{ fromJSON(needs.setup.outputs.container) }}
     timeout-minutes: 15
@@ -698,27 +684,32 @@ jobs:
       # packages (see issue #369). Keyed on the runner itself — not the
       # `runs-on` label — so it also covers self-hosted runners registered
       # with --no-default-labels or selected by a runner group.
+      #
+      # Also gated off no-autograder: when nothing is configured to grade, the
+      # job still runs to RECORD the submission (runner.py's vacuous-pass), but
+      # it needs only system python3 — so skip every toolchain install and spend
+      # no minutes provisioning a toolchain the recording path won't use.
       - name: Set up Python
-        if: needs.setup.outputs.python != '' && runner.environment != 'self-hosted'
+        if: needs.setup.outputs.python != '' && needs.setup.outputs.no-autograder != 'true' && runner.environment != 'self-hosted'
         uses: actions/setup-python@v7
         with:
           python-version: ${{ needs.setup.outputs.python }}
 
       - name: Set up Node
-        if: needs.setup.outputs.node != '' && runner.environment != 'self-hosted'
+        if: needs.setup.outputs.node != '' && needs.setup.outputs.no-autograder != 'true' && runner.environment != 'self-hosted'
         uses: actions/setup-node@v7
         with:
           node-version: ${{ needs.setup.outputs.node }}
 
       - name: Set up Java
-        if: needs.setup.outputs.java != '' && runner.environment != 'self-hosted'
+        if: needs.setup.outputs.java != '' && needs.setup.outputs.no-autograder != 'true' && runner.environment != 'self-hosted'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: ${{ needs.setup.outputs.java }}
 
       - name: Set up Go
-        if: needs.setup.outputs.go != '' && runner.environment != 'self-hosted'
+        if: needs.setup.outputs.go != '' && needs.setup.outputs.no-autograder != 'true' && runner.environment != 'self-hosted'
         uses: actions/setup-go@v7
         with:
           go-version: ${{ needs.setup.outputs.go }}
@@ -727,13 +718,13 @@ jobs:
       # standard. Pinned to @master with an explicit `toolchain:` input
       # (its @rev-derived default can't read a version from a SHA pin).
       - name: Set up Rust
-        if: needs.setup.outputs.rust != '' && runner.environment != 'self-hosted'
+        if: needs.setup.outputs.rust != '' && needs.setup.outputs.no-autograder != 'true' && runner.environment != 'self-hosted'
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ needs.setup.outputs.rust }}
 
       - name: Install apt packages
-        if: needs.setup.outputs.apt != '' && runner.os == 'Linux' && runner.environment != 'self-hosted'
+        if: needs.setup.outputs.apt != '' && needs.setup.outputs.no-autograder != 'true' && runner.os == 'Linux' && runner.environment != 'self-hosted'
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -921,9 +912,10 @@ jobs:
   # reclaiming latest.
   set-latest:
     needs: [setup, grade]
-    # Explicit no-autograder guard, defensive against a future change to
-    # grade's result semantics.
-    if: needs.setup.outputs.no-autograder != 'true' && needs.grade.result == 'success' && (needs.grade.outputs.status == 'success' || needs.grade.outputs.status == 'failure')
+    # Advance latest for any recorded submission — including the no-autograder
+    # vacuous pass (status 'success'), so its release becomes the latest the
+    # dashboard surfaces. Gated only on a clean grade result with a real status.
+    if: needs.grade.result == 'success' && (needs.grade.outputs.status == 'success' || needs.grade.outputs.status == 'failure')
     runs-on: ubuntu-latest
     concurrency:
       group: classroom50-set-latest-${{ github.repository }}
