@@ -163,13 +163,16 @@ func autoLogin(out, errOut writer, host string, opts Options) error {
 
 // RunLogin execs `gh auth login --hostname <host>` with the required scopes
 // plus any extra scopes, wiring stdio through. Shared by autoLogin and the
-// explicit `login` command. Warns first, prominently, that it hands control to
-// `gh`, which mints a fresh token and rewrites the stored auth for this host in
-// `gh`'s config (issue #534). Use this only for a FRESH sign-in (no token yet)
-// or an explicit user `login`; to widen an existing login's scopes without
-// replacing its token, prefer RunRefresh.
+// explicit `login` command. Prints the prominent config-rewrite box ONLY when
+// the host already has a stored token — that's the case where `gh auth login`
+// mints a fresh token and overwrites the user's existing auth in `gh`'s config
+// (issue #534). A first-time login (no token yet) has nothing to clobber, so it
+// skips the box. To widen an existing login's scopes without replacing its
+// token, prefer RunRefresh.
 func RunLogin(out, errOut writer, host string, requiredScopes, extraScopes []string) error {
-	printConfigRewriteWarning(errOut, host)
+	if token, _ := auth.TokenForHost(host); token != "" {
+		printConfigRewriteWarning(errOut, host)
+	}
 	return runGh(out, errOut, ghScopeArgs([]string{"auth", "login", "--hostname", host}, requiredScopes, extraScopes)...)
 }
 
