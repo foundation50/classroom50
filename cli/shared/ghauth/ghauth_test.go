@@ -12,34 +12,17 @@ import (
 	"github.com/cli/go-gh/v2/pkg/api"
 )
 
-// TestScopesSatisfy pins the granted-vs-required decision that lets an
-// already-sufficient token skip a re-login (issue #534): a superset satisfies,
-// admin:org covers read:org (GitHub's implication), and a genuine gap does not.
+// TestScopesSatisfy is a smoke check that ghauth's wrapper delegates to the
+// shared scope-hierarchy source: the two cases that matter for the reuse
+// decision — a satisfied set (incl. GitHub's admin:org ⊇ read:org implication)
+// and a genuine gap. The exhaustive hierarchy matrix is owned by
+// contract.TestScopesSatisfy; this only pins that the seam is wired through.
 func TestScopesSatisfy(t *testing.T) {
-	cases := []struct {
-		name     string
-		granted  []string
-		required []string
-		want     bool
-	}{
-		{"exact match", []string{"repo", "workflow"}, []string{"repo", "workflow"}, true},
-		{"granted superset", []string{"repo", "workflow", "gist"}, []string{"repo"}, true},
-		{"admin:org implies read:org", []string{"admin:org", "repo", "workflow"}, []string{"admin:org", "read:org", "repo", "workflow"}, true},
-		{"admin:org implies write:org", []string{"admin:org"}, []string{"write:org"}, true},
-		{"write:org implies read:org but not admin:org", []string{"write:org"}, []string{"read:org"}, true},
-		{"unified set satisfied by unified grant", []string{"admin:org", "repo", "workflow"}, []string{"admin:org", "read:org", "repo", "workflow"}, true},
-		{"missing workflow", []string{"admin:org", "read:org", "repo"}, []string{"admin:org", "read:org", "repo", "workflow"}, false},
-		{"read:org alone does not imply admin:org", []string{"read:org", "repo", "workflow"}, []string{"admin:org", "read:org", "repo", "workflow"}, false},
-		{"empty granted, non-empty required", nil, []string{"repo"}, false},
-		{"empty required is always satisfied", []string{"repo"}, nil, true},
-		{"whitespace in granted list tolerated", []string{" repo ", "workflow"}, []string{"repo", "workflow"}, true},
+	if !scopesSatisfy([]string{"admin:org", "repo", "workflow"}, []string{"admin:org", "read:org", "repo", "workflow"}) {
+		t.Error("want satisfied: admin:org should imply read:org for the unified set")
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := scopesSatisfy(tc.granted, tc.required); got != tc.want {
-				t.Errorf("scopesSatisfy(%v, %v) = %v, want %v", tc.granted, tc.required, got, tc.want)
-			}
-		})
+	if scopesSatisfy([]string{"admin:org", "read:org", "repo"}, []string{"admin:org", "read:org", "repo", "workflow"}) {
+		t.Error("want unsatisfied: workflow is missing")
 	}
 }
 

@@ -257,7 +257,13 @@ func runGh(out, errOut writer, args ...string) error {
 	sub.Stdout = out
 	sub.Stderr = errOut
 	if err := sub.Run(); err != nil {
-		return fmt.Errorf("gh %s: %w", strings.Join(args[:2], " "), err)
+		// Name the subcommand (e.g. "gh auth login") in the error; guard the
+		// slice so a short arg list degrades to "gh" instead of panicking.
+		label := "gh"
+		if len(args) >= 2 {
+			label = "gh " + strings.Join(args[:2], " ")
+		}
+		return fmt.Errorf("%s: %w", label, err)
 	}
 	return nil
 }
@@ -345,7 +351,10 @@ func renderWarningBox(errOut writer, color bool, lines []string) {
 // stderrWantsColor reports whether to emit color/box drawing to w: w must be
 // the real stderr and a TTY, with neither NO_COLOR nor CLASSROOM50_NO_COLOR
 // set. Mirrors ghui.UseColor (duplicated to avoid an import cycle — ghui
-// imports ghauth); keep the two in lockstep.
+// imports ghauth); keep the two in lockstep. A future cleanup could instead
+// move these color/TTY/width primitives DOWN into ghauth (the layer ghui and
+// both ui packages already import) and have them re-use it, collapsing the
+// copies — a cross-package change left out of this fix's scope.
 func stderrWantsColor(w writer) bool {
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("CLASSROOM50_NO_COLOR") != "" {
 		return false

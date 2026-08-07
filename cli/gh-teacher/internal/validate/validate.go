@@ -71,8 +71,8 @@ func OrgClassroom(args []string) (org, classroom string, err error) {
 // ScopeListContains reports whether the comma-separated OAuth scope
 // list (an X-OAuth-Scopes header value) includes want.
 func ScopeListContains(scopes, want string) bool {
-	for _, s := range strings.Split(scopes, ",") {
-		if strings.TrimSpace(s) == want {
+	for _, s := range contract.ParseScopeList(scopes) {
+		if s == want {
 			return true
 		}
 	}
