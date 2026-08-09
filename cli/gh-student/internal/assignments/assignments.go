@@ -91,7 +91,7 @@ type Entry struct {
 	// existed).
 	SubmissionTags []string `json:"submission_tags,omitempty"`
 
-	// NoAutograder marks a TEMPLATED assignment as teacher-managed CI: accept
+	// NoAutograder marks a TEMPLATED assignment as teacher-supplied CI: accept
 	// commits the .classroom50.yaml marker and the template's content but NO
 	// autograde shim (neither the default shim nor a Pages-fetched workflow),
 	// so the teacher's own .github/ CI runs instead. UNLIKE EmptyRepo it keeps

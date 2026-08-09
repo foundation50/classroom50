@@ -806,7 +806,7 @@ def test_is_no_autograder_is_strict_boolean_true():
 
 def test_load_roster_no_autograder_raises_sentinel(monkeypatch, tmp_path):
     # A templated no_autograder assignment raises the same skip sentinel BEFORE
-    # the team listing — teacher-managed CI commits no shim, so there is nothing
+    # the team listing — teacher-supplied CI commits no shim, so there is nothing
     # to re-run and the first-grade fallback would push useless submit/* tags.
     cdir = tmp_path / "cs50"
     cdir.mkdir()

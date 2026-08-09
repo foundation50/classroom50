@@ -338,7 +338,7 @@ export type CreateAssignmentInput = {
   // allowed_files/release_assets/pass_threshold; immutable after creation
   // (edit rejects a change). Mirrors the CLI's --empty-repo.
   empty_repo?: boolean
-  // Teacher-managed CI on a templated assignment: accept commits no autograde
+  // Teacher-supplied CI on a templated assignment: accept commits no autograde
   // shim. Mutually exclusive with empty_repo, a non-default autograder, and the
   // grading-adjacent fields; permits a template and the Feedback PR. Immutable
   // after creation. Mirrors the CLI's no_autograder field.

@@ -199,7 +199,7 @@ describe("buildReusedEntry", () => {
 
   it("preserves no_autograder verbatim on reuse (tolerate-and-preserve)", () => {
     // no_autograder rides through the whole-source spread — a templated
-    // teacher-managed-CI assignment stays that way when copied to a new
+    // teacher-supplied-CI assignment stays that way when copied to a new
     // classroom. Unlike empty_repo it keeps its template.
     const source: Assignment = {
       slug: "ci-lab",

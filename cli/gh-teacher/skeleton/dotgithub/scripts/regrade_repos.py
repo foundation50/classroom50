@@ -201,7 +201,7 @@ def main() -> int:
     except EmptyRepoAssignment:
         # Successful no-op, not a failure: the teacher (or a stale button)
         # targeted an assignment that never autogrades (empty_repo, or a
-        # templated no_autograder with teacher-managed CI).
+        # templated no_autograder with teacher-supplied CI).
         print(
             f"regrade {classroom_filter}/{assignment_filter}: assignment does "
             f"not autograde (empty_repo or no_autograder) — nothing to regrade."
@@ -684,7 +684,7 @@ class RegradeInputError(Exception):
 
 class EmptyRepoAssignment(Exception):
     """The target assignment never autogrades — empty_repo: true (bare repos)
-    or no_autograder: true (templated, teacher-managed CI). Student repos carry
+    or no_autograder: true (templated, teacher-supplied CI). Student repos carry
     no autograde workflow, so there is nothing to re-run and no HEAD worth
     tagging (the first-grade fallback would push submit/* tags that fire
     nothing). main() treats this as a successful no-op, not an error."""
@@ -710,7 +710,7 @@ def is_no_autograder(entry: dict[str, Any]) -> bool:
 
 def skips_grading(entry: dict[str, Any]) -> bool:
     """True when the assignment never autogrades — either a bare empty_repo or a
-    templated no_autograder (teacher-managed CI). The "does not autograde"
+    templated no_autograder (teacher-supplied CI). The "does not autograde"
     predicate family shared with collect_scores.py."""
     return is_empty_repo(entry) or is_no_autograder(entry)
 
@@ -769,7 +769,7 @@ def load_roster(
             f"{classroom_dir.name}/assignments.json"
         )
     # Assignments that never autograde (empty_repo, or a templated
-    # no_autograder with teacher-managed CI) commit no autograde workflow, so
+    # no_autograder with teacher-supplied CI) commit no autograde workflow, so
     # skip before the team listing — otherwise the first-grade fallback would
     # push useless submit/* tags into every student repo.
     if skips_grading(entries[assignment_slug]):

@@ -146,7 +146,7 @@ export type Assignment = {
   // with template/tests/feedback_pr/allowed_files/pass_threshold and IMMUTABLE
   // after creation. Omitted when false (CLI omitempty); absent reads as false.
   empty_repo?: boolean
-  // Teacher-managed CI on a TEMPLATED assignment: accept commits the
+  // Teacher-supplied CI on a TEMPLATED assignment: accept commits the
   // .classroom50.yaml marker and the template's content but NO autograde shim
   // (neither the default shim nor a Pages-fetched workflow), so the teacher's
   // own .github/ CI runs instead. UNLIKE empty_repo it permits a template and

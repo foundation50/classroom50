@@ -83,59 +83,60 @@ export type CreateAssignmentResult = CreateClassroomResult & {
 // Ownership of every Assignment entry-level key on the edit path. Typed as a
 // total Record<keyof Assignment, ...>, so adding a field to Assignment fails to
 // compile here until classified — closing the silent-desync trap where a new
-// managed field omitted from the set lets an edit that clears it get
-// re-populated from the stale existing entry. "managed": buildAssignmentEntry
-// rebuilds it from input, so a clearing edit must win. "unmanaged": the form
-// never touches it; preserve verbatim on read-modify-write (mirrors the CLI's
-// AssignmentEntry.Extra).
+// Classroom-50-owned field omitted from the set lets an edit that clears it get
+// re-populated from the stale existing entry. "classroom50-owned":
+// buildAssignmentEntry rebuilds it from form input, so a clearing edit must
+// win. "preserved": the form never touches it; carry it verbatim on
+// read-modify-write (mirrors the CLI's AssignmentEntry.Extra). ("Owned" here is
+// always from Classroom 50's perspective — never the teacher's.)
 const ASSIGNMENT_KEY_OWNERSHIP: Record<
   keyof Assignment,
-  "managed" | "unmanaged"
+  "classroom50-owned" | "preserved"
 > = {
-  slug: "managed",
-  name: "managed",
-  description: "managed",
-  template: "managed",
-  due: "managed",
-  due_meta: "managed",
-  available_from: "managed",
-  available_from_meta: "managed",
-  mode: "managed",
-  autograder: "managed",
-  max_group_size: "managed",
-  feedback_pr: "managed",
-  // Managed (rebuilt from input) but IMMUTABLE: editAssignment rejects an edit
-  // whose empty_repo differs from the stored entry, so the rebuild can only
-  // ever re-write the same value. The edit form shows it read-only.
-  empty_repo: "managed",
-  no_autograder: "managed",
-  // Fully managed AND a closed object: the CLI decodes runtime strictly
-  // (RuntimeRef has no Extra, DisallowUnknownFields; schema additionalProperties
-  // false), so the rebuilt runtime must win and any unknown sub-key drops rather
-  // than round-tripping into a file the CLI would reject.
-  runtime: "managed",
-  allowed_files: "managed",
-  release_assets: "managed",
-  pass_threshold: "managed",
-  student_permission: "managed",
-  submission_mode: "managed",
-  submission_tags: "managed",
-  repo_features: "managed",
-  tests: "managed",
-  // Written only by the CLI's `migrate`; the form never manages it, so it must
+  slug: "classroom50-owned",
+  name: "classroom50-owned",
+  description: "classroom50-owned",
+  template: "classroom50-owned",
+  due: "classroom50-owned",
+  due_meta: "classroom50-owned",
+  available_from: "classroom50-owned",
+  available_from_meta: "classroom50-owned",
+  mode: "classroom50-owned",
+  autograder: "classroom50-owned",
+  max_group_size: "classroom50-owned",
+  feedback_pr: "classroom50-owned",
+  // Rebuilt from input but IMMUTABLE: editAssignment rejects an edit whose
+  // empty_repo differs from the stored entry, so the rebuild can only ever
+  // re-write the same value. The edit form shows it read-only.
+  empty_repo: "classroom50-owned",
+  no_autograder: "classroom50-owned",
+  // Rebuilt AND a closed object: the CLI decodes runtime strictly (RuntimeRef
+  // has no Extra, DisallowUnknownFields; schema additionalProperties false), so
+  // the rebuilt runtime must win and any unknown sub-key drops rather than
+  // round-tripping into a file the CLI would reject.
+  runtime: "classroom50-owned",
+  allowed_files: "classroom50-owned",
+  release_assets: "classroom50-owned",
+  pass_threshold: "classroom50-owned",
+  student_permission: "classroom50-owned",
+  submission_mode: "classroom50-owned",
+  submission_tags: "classroom50-owned",
+  repo_features: "classroom50-owned",
+  tests: "classroom50-owned",
+  // Written only by the CLI's `migrate`; the form never rebuilds it, so it must
   // ride through a GUI edit untouched.
-  migrated_from: "unmanaged",
-  // Managed by the separate lock/unlock action (useSetAssignmentLock), never
-  // the create/edit form, so an edit must preserve it verbatim — otherwise
-  // saving an edit would silently unlock a locked assignment.
-  locked: "unmanaged",
+  migrated_from: "preserved",
+  // Owned by the separate lock/unlock action (useSetAssignmentLock), never the
+  // create/edit form, so an edit must preserve it verbatim — otherwise saving
+  // an edit would silently unlock a locked assignment.
+  locked: "preserved",
 }
 
-// Keys the edit form fully owns, derived from the ownership map above so it can
-// never drift from the Assignment type.
+// Keys the edit form fully owns (Classroom-50-owned), derived from the
+// ownership map above so it can never drift from the Assignment type.
 const EDIT_MANAGED_ASSIGNMENT_KEYS = new Set<string>(
   Object.entries(ASSIGNMENT_KEY_OWNERSHIP)
-    .filter(([, ownership]) => ownership === "managed")
+    .filter(([, ownership]) => ownership === "classroom50-owned")
     .map(([key]) => key),
 )
 
@@ -211,7 +212,9 @@ export async function editAssignment(
   // is baked into each student repo at accept time and never retrofitted, so
   // flipping it strands every already-accepted repo. Mirrors the CLI's
   // ValidateNoAutograderUnchanged.
-  if (Boolean(input.no_autograder) !== Boolean(targetAssignment.no_autograder)) {
+  if (
+    Boolean(input.no_autograder) !== Boolean(targetAssignment.no_autograder)
+  ) {
     throw new Error(
       `no_autograder cannot be changed after creation (assignment "${slug}"): repositories students already accepted are not retrofitted. Create a new assignment under a different slug instead — reusing this slug (even after removing it) would leave already-accepted repos on the old setting.`,
     )
@@ -404,32 +407,32 @@ async function buildAssignmentEntry(
     }
     if (tests.length > 0) {
       throw new Error(
-        "no_autograder: teacher-managed CI can't have autograding tests or a setup command — no shim runs them.",
+        "no_autograder: teacher-supplied CI can't have autograding tests or a setup command — no shim runs them.",
       )
     }
     if (input.allowed_files?.trim()) {
       throw new Error(
-        "no_autograder: teacher-managed CI can't restrict allowed files — no shim enforces them.",
+        "no_autograder: teacher-supplied CI can't restrict allowed files — no shim enforces them.",
       )
     }
     if (input.release_assets.trim()) {
       throw new Error(
-        "no_autograder: teacher-managed CI can't attach submission release files — no shim autogrades.",
+        "no_autograder: teacher-supplied CI can't attach submission release files — no shim autogrades.",
       )
     }
     if (input.pass_threshold !== undefined) {
       throw new Error(
-        "no_autograder: teacher-managed CI can't have a passing threshold — no shim autogrades.",
+        "no_autograder: teacher-supplied CI can't have a passing threshold — no shim autogrades.",
       )
     }
     if (input.submission_mode && input.submission_mode !== "every-push") {
       throw new Error(
-        "no_autograder: teacher-managed CI can't set a submission mode — no shim exists to trigger.",
+        "no_autograder: teacher-supplied CI can't set a submission mode — no shim exists to trigger.",
       )
     }
     if (input.submission_tags && input.submission_tags.length > 0) {
       throw new Error(
-        "no_autograder: teacher-managed CI can't set milestone tags — no shim exists to trigger.",
+        "no_autograder: teacher-supplied CI can't set milestone tags — no shim exists to trigger.",
       )
     }
   }
@@ -484,7 +487,7 @@ async function buildAssignmentEntry(
   if (input.empty_repo) {
     entry.empty_repo = true
   }
-  // Written only when true (CLI omitempty). Teacher-managed CI, no shim.
+  // Written only when true (CLI omitempty). Teacher-supplied CI, no shim.
   if (input.no_autograder) {
     entry.no_autograder = true
   }

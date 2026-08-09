@@ -381,7 +381,7 @@ def is_no_autograder(entry: dict[str, Any]) -> bool:
 
 def skips_grading(entry: dict[str, Any]) -> bool:
     """True when the assignment never autogrades — either a bare empty_repo or a
-    templated no_autograder (teacher-managed CI). The "does not autograde"
+    templated no_autograder (teacher-supplied CI). The "does not autograde"
     predicate family; collection/regrade poll neither."""
     return is_empty_repo(entry) or is_no_autograder(entry)
 
