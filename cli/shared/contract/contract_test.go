@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestContractLiterals is a change-detector pinning each cross-binary constant
@@ -29,6 +30,17 @@ func TestContractLiterals(t *testing.T) {
 		{"DefaultAutograderName", DefaultAutograderName, "default"},
 		{"ModeIndividual", ModeIndividual, "individual"},
 		{"ModeGroup", ModeGroup, "group"},
+		// SubmissionMode values are mirrored, with NO compile-time link, in the
+		// assignments-v1 schema enum (parity-pinned by
+		// TestSubmissionModeEnumParity in gh-teacher), the web SUBMISSION_MODES,
+		// and the runner's inline validator. Update every copy in lockstep.
+		{"SubmissionModeEveryPush", SubmissionModeEveryPush, "every-push"},
+		{"SubmissionModeTag", SubmissionModeTag, "tag"},
+		// SubmitTagPrefix is mirrored, with NO compile-time link, in runner.py /
+		// collect_scores.py / regrade_repos.py (SUBMIT_TAG_PREFIX), the
+		// autograde-runner.yaml tag step, and the web SUBMISSION_TAG_PREFIX
+		// (releaseRunReads.ts). Update every copy in lockstep on change.
+		{"SubmitTagPrefix", SubmitTagPrefix, "submit/"},
 		{"ResultFilename", ResultFilename, "result.json"},
 		{"ReleaseBodyFilename", ReleaseBodyFilename, "release-body.md"},
 		// RosterFilename is mirrored, with NO compile-time link, in the web GUI
@@ -207,6 +219,39 @@ func TestRequiredOAuthScopes(t *testing.T) {
 	RequiredOAuthScopes()[0] = "tampered"
 	if RequiredOAuthScopes()[0] != "admin:org" {
 		t.Error("RequiredOAuthScopes() must return a defensive copy")
+	}
+}
+
+// TestBuildSubmitTag pins the submit/<UTC-timestamp>-<short-sha> format
+// byte-identical with the runner's tag-minting step (autograde-runner.yaml)
+// and regrade_repos.py's build_submit_tag — no compile-time link.
+func TestBuildSubmitTag(t *testing.T) {
+	at := time.Date(2026, 8, 3, 14, 30, 5, 0, time.UTC)
+	got := BuildSubmitTag(at, "abcdef0123456789")
+	want := "submit/2026-08-03T14-30-05Z-abcdef0"
+	if got != want {
+		t.Errorf("BuildSubmitTag = %q, want %q", got, want)
+	}
+	// Non-UTC input must normalize to UTC (the runner uses `date -u`).
+	est := time.FixedZone("EST", -5*60*60)
+	if got := BuildSubmitTag(at.In(est), "abcdef0123456789"); got != want {
+		t.Errorf("BuildSubmitTag(non-UTC) = %q, want %q", got, want)
+	}
+	// A short SHA is used as-is rather than sliced out of range.
+	if got := BuildSubmitTag(at, "abc"); got != "submit/2026-08-03T14-30-05Z-abc" {
+		t.Errorf("BuildSubmitTag(short sha) = %q", got)
+	}
+}
+
+// TestShimUpdateCommitMessage pins the retrofit commit message: the [skip ci]
+// body line is load-bearing (a tag→every-push retrofit commit carries the
+// restored push trigger and must not grade itself), and the web GUI mirrors
+// the whole string with NO compile-time link.
+func TestShimUpdateCommitMessage(t *testing.T) {
+	got := ShimUpdateCommitMessage(SubmissionModeTag)
+	want := "[Classroom 50] Update autograder trigger to tag (submission-mode)\n\n[skip ci]"
+	if got != want {
+		t.Errorf("ShimUpdateCommitMessage = %q, want %q", got, want)
 	}
 }
 

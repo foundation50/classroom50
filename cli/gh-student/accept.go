@@ -57,18 +57,57 @@ const (
 	defaultConfigRepoBranch     = "main"
 )
 
+// shimBranchTriggerLine is the exact `on.push.branches` line of the embedded
+// shim (before placeholder substitution). Tag submission mode removes it, so
+// the shim triggers only on submit/* tag pushes. Pinned by the accept shim
+// tests so an embed edit can't silently break the line surgery.
+const shimBranchTriggerLine = "    branches: [\"" + shimBranchPlaceholder + "\"]\n"
+
+// shimTagsTriggerLine is the exact `on.push.tags` line of the embedded shim.
+// Assignments with submission_tags replace it with the union of the
+// teacher's milestone patterns and submit/* (contract.ShimTagsList); the
+// default keeps it verbatim. Pinned by the accept shim tests like
+// shimBranchTriggerLine, and single-occurrence-guarded for the same reason.
+const shimTagsTriggerLine = "    tags: [\"submit/*\"]\n"
+
 // renderEmbeddedShim returns the embedded shim with the org, submission-branch,
 // and config-branch placeholders substituted. The shim never changes after
 // accept — runtime customization, runner edits, and teacher overrides all flow
 // through the runner workflow + assignments.json on the teacher's side.
-func renderEmbeddedShim(org, branch, configBranch string) string {
+//
+// submissionMode contract.SubmissionModeTag drops the branch-push trigger line
+// so only submission-tag pushes grade (`gh student submit` creates the tag; a
+// hand-pushed submit/* tag works too). Every other value — including "" and an
+// explicit "every-push" — takes the identical code path as before the field
+// existed, keeping the default shim byte-identical.
+//
+// submissionTags (teacher-named milestone patterns, e.g. phase1) widen the
+// tags trigger to their union with the always-on submit/* namespace; empty
+// keeps the tags line verbatim (again byte-identical). Orthogonal to
+// submissionMode: an every-push assignment can also name milestone tags.
+func renderEmbeddedShim(org, branch, configBranch, submissionMode string, submissionTags []string) string {
 	if branch == "" {
 		branch = defaultConfigRepoBranch
 	}
 	if configBranch == "" {
 		configBranch = defaultConfigRepoBranch
 	}
-	out := strings.ReplaceAll(embeddedShimContent, shimOrgPlaceholder, org)
+	shim := embeddedShimContent
+	if submissionMode == contract.SubmissionModeTag {
+		// Exact-line surgery, not a template branch: the embed stays one
+		// lintable file and every-push output can't drift. If the embed's
+		// trigger line ever changes shape, the tests pin this constant and
+		// the fallback below keeps accept emitting a valid (every-push) shim
+		// rather than garbage.
+		shim = strings.Replace(shim, shimBranchTriggerLine, "", 1)
+	}
+	if len(submissionTags) > 0 {
+		// Same exact-line surgery for the tags trigger: milestone patterns
+		// union submit/*, so the canonical namespace always fires.
+		shim = strings.Replace(shim, shimTagsTriggerLine,
+			"    tags: ["+contract.ShimTagsList(submissionTags)+"]\n", 1)
+	}
+	out := strings.ReplaceAll(shim, shimOrgPlaceholder, org)
 	out = strings.ReplaceAll(out, shimBranchPlaceholder, branch)
 	out = strings.ReplaceAll(out, shimConfigBranchPlaceholder, configBranch)
 	return out
@@ -458,7 +497,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 			}
 			configBranch = commitBranch
 		}
-		shim = renderEmbeddedShim(org, commitBranch, configBranch)
+		shim = renderEmbeddedShim(org, commitBranch, configBranch, entry.SubmissionMode, entry.SubmissionTags)
 	}
 
 	repoName := reponame.Name(classroom, assignment, username)

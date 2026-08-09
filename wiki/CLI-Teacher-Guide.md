@@ -358,6 +358,8 @@ shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--max-group-size <N>` | Max collaborators on a group repo (2–100). Advisory, not hard-enforced. |
 | `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.14. See [Autograders](Autograders). |
 | `--autograder <name>` | Reserved for swapping the whole reusable workflow (rare). Use `--runtime` for language toolchains. |
+| `--submission-mode every-push\|tag` | When the autograder fires. `every-push` (default) grades every push; `tag` grades only on explicit submits (`gh student submit`, or a hand-pushed `submit/*` tag) — regular pushes cost no Actions minutes, the cost lever for large classes. |
+| `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading — e.g. `--submission-tag phase1 --submission-tag phase2`. Students grade a milestone with plain git: `git tag phase1 && git push origin phase1`. Works with either mode; the graded record still appears as a `submit/*` release. |
 
 > [!NOTE]
 > **Custom grading isn't registered here.** Drop an `autograder.py` at
@@ -365,6 +367,21 @@ shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 > default with `gh teacher autograder set-default`. See [Autograders](Autograders).
 
 Re-running with the same slug replaces the entry in place; new slugs append.
+
+**Change when grading runs (and fix existing repos):**
+
+```sh
+gh teacher assignment submission-mode <org> <classroom> <slug> --tag          # grade on submit only
+gh teacher assignment submission-mode <org> <classroom> <slug> --every-push   # back to grading every push
+```
+
+The trigger lives in each student repo's workflow file (set at accept time),
+so this command both flips the assignment field and rewrites the workflow
+across existing student repos — idempotently, with a `[skip ci]` commit that
+doesn't trigger grading. Hand-edited workflows are reported and left
+untouched. Tell students to `git pull` afterward. See
+[`assignment submission-mode`](gh-teacher#assignment-submission-mode) for
+`--user`, `--dry-run`, and the custom-autograder rules.
 
 **Remove an assignment:**
 

@@ -17,6 +17,7 @@ package contract
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 const (
@@ -43,6 +44,22 @@ const (
 	// repo per student; group = a shared repo teammates join.
 	ModeIndividual = "individual"
 	ModeGroup      = "group"
+
+	// SubmissionModeEveryPush and SubmissionModeTag are the assignment
+	// submission_mode values: every-push = the shim grades every push to the
+	// default branch plus submit/* tags (the wire default — writers omit it);
+	// tag = the shim grades ONLY submit/* tag pushes, which the submit clients
+	// create. Mirrored in the assignments-v1 schema enum and the web
+	// SUBMISSION_MODES; pinned by contract_test.go and the schema-parity tests.
+	SubmissionModeEveryPush = "every-push"
+	SubmissionModeTag       = "tag"
+
+	// SubmitTagPrefix is the tag namespace that marks a grading submission:
+	// only submit/* tag Releases count as submissions everywhere (runner,
+	// collect_scores.py SUBMIT_TAG_PREFIX, regrade_repos.py, the web
+	// SUBMISSION_TAG_PREFIX). Hand-mirrored with NO compile-time link — keep
+	// byte-identical; contract_test.go pins the Go half.
+	SubmitTagPrefix = "submit/"
 
 	// Repo collaborator permission levels, GitHub's low-to-high ladder. Used
 	// for an assignment's optional student_permission (the access the enrolled
@@ -279,6 +296,45 @@ func FeedbackLabelForMode(mode string) (name, color string) {
 		return "Group Assignment", "5319E7"
 	}
 	return "Individual Assignment", "0E8A16"
+}
+
+// SubmissionModes is every valid assignments.json submission_mode value.
+// Single-sources the allow-list; the schema enum in assignments-v1.schema.json
+// and the web SUBMISSION_MODES mirror it (parity-tested on both sides).
+var SubmissionModes = []string{SubmissionModeEveryPush, SubmissionModeTag}
+
+// IsValidSubmissionMode reports whether m is one of the SubmissionModes.
+func IsValidSubmissionMode(m string) bool {
+	for _, allowed := range SubmissionModes {
+		if m == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// BuildSubmitTag is the canonical submission tag for a commit:
+// submit/<UTC-timestamp>-<short-sha>. Byte-format-identical with the runner's
+// tag-minting step in autograde-runner.yaml and regrade_repos.py's
+// build_submit_tag — the short-SHA suffix prevents collisions when two
+// submissions land in the same UTC second.
+func BuildSubmitTag(now time.Time, sha string) string {
+	short := sha
+	if len(short) > 7 {
+		short = short[:7]
+	}
+	return SubmitTagPrefix + now.UTC().Format("2006-01-02T15-04-05Z") + "-" + short
+}
+
+// ShimUpdateCommitMessage is the commit message for a submission-mode shim
+// retrofit in a student repo. The `[skip ci]` body line is load-bearing: a
+// tag→every-push retrofit commit carries the restored push trigger, and
+// without it the shim would grade the retrofit commit itself (pushes with a
+// user OAuth token DO fire workflows). The runner's shim-update detection is
+// the backstop. Hand-mirrored with NO compile-time link in the web GUI
+// (web/src/domain/assignments/submissionTrigger.ts) — keep byte-identical.
+func ShimUpdateCommitMessage(mode string) string {
+	return PrefixCommit("Update autograder trigger to "+mode+" (submission-mode)") + "\n\n[skip ci]"
 }
 
 // RepoPermissions is GitHub's collaborator permission ladder, low to high.

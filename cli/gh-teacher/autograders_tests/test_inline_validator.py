@@ -180,7 +180,9 @@ _MISSING = object()
 
 def _manifest(*, slug: str = "hello", runtime: dict | None = None,
               tests: list | None = None,
-              release_assets: object = _MISSING) -> dict:
+              release_assets: object = _MISSING,
+              submission_mode: object = _MISSING,
+              submission_tags: object = _MISSING) -> dict:
     """Minimum assignments.json with one entry, optional runtime/tests."""
     entry = {
         "slug": slug,
@@ -195,6 +197,10 @@ def _manifest(*, slug: str = "hello", runtime: dict | None = None,
         entry["tests"] = tests
     if release_assets is not _MISSING:
         entry["release_assets"] = release_assets
+    if submission_mode is not _MISSING:
+        entry["submission_mode"] = submission_mode
+    if submission_tags is not _MISSING:
+        entry["submission_tags"] = submission_tags
     return {
         "schema": "classroom50/assignments/v1",
         "assignments": [entry],
@@ -852,3 +858,283 @@ class TestNoAutograderDetection:
         assert rc != 0
         assert "empty-repository assignment" in stderr
         assert "no-autograder" not in outputs
+
+
+# ---------------------------------------------------------------------------
+# Submission mode — stale-shim defense
+# ---------------------------------------------------------------------------
+
+
+class TestSubmissionMode:
+    # The read step emits submission-mode (absent → every-push) and
+    # branch-push-suppressed (tag mode + branch-triggered run). Suppression
+    # only fires for a stale/hand-edited every-push shim on a tag-mode
+    # assignment — a correctly retrofitted shim never branch-triggers.
+
+    _BRANCH_REF = {"REF": "refs/heads/main"}
+    _TAG_REF = {"REF": "refs/tags/submit/2026-06-01T14-32-05Z-a1b2c3d"}
+
+    def test_absent_mode_defaults_to_every_push(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc == 0
+        assert outputs["submission-mode"] == "every-push"
+        assert outputs["branch-push-suppressed"] == "false"
+
+    def test_explicit_every_push_not_suppressed(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_mode="every-push"),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc == 0
+        assert outputs["submission-mode"] == "every-push"
+        assert outputs["branch-push-suppressed"] == "false"
+
+    def test_tag_mode_branch_run_suppressed(self, inline_script, tmp_path):
+        # The stale-shim case: mode flipped to tag but this repo's shim
+        # still branch-triggers. Suppress so the push costs nothing.
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_mode="tag"),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc == 0
+        assert outputs["submission-mode"] == "tag"
+        assert outputs["branch-push-suppressed"] == "true"
+
+    def test_tag_mode_tag_run_grades(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_mode="tag"),
+            extra_env=self._TAG_REF,
+        )
+        assert rc == 0
+        assert outputs["submission-mode"] == "tag"
+        assert outputs["branch-push-suppressed"] == "false"
+
+    def test_invalid_mode_hard_fails(self, inline_script, tmp_path):
+        # Mirrors the other per-entry fields: junk in a hand-edited
+        # manifest is a setup-time error, not a silent default.
+        rc, _stdout, stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_mode="on-demand"),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc != 0
+        assert "submission_mode" in stderr
+        assert "branch-push-suppressed" not in outputs
+
+    def test_every_push_tag_run_not_suppressed(self, inline_script, tmp_path):
+        # A manual submit/* tag on an every-push assignment always grades
+        # (today's behavior, unchanged).
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(),
+            extra_env=self._TAG_REF,
+        )
+        assert rc == 0
+        assert outputs["branch-push-suppressed"] == "false"
+
+
+# ---------------------------------------------------------------------------
+# Submission tags — milestone-tag classification
+# ---------------------------------------------------------------------------
+
+
+class TestSubmissionTags:
+    # The read step classifies TAG runs: canonical submit/* (grades, reuse),
+    # a configured milestone pattern (grades; trigger-tag emitted so the tag
+    # step mints the canonical record tag), or neither (foreign-tag
+    # suppression — stale/hand-edited shim; on.push.tags normally
+    # pre-filters). Branch runs are untouched by the patterns.
+
+    _BRANCH_REF = {"REF": "refs/heads/main", "REF_NAME": "main"}
+    _SUBMIT_REF = {
+        "REF": "refs/tags/submit/2026-06-01T14-32-05Z-a1b2c3d",
+        "REF_NAME": "submit/2026-06-01T14-32-05Z-a1b2c3d",
+    }
+    _MILESTONE_REF = {"REF": "refs/tags/phase1", "REF_NAME": "phase1"}
+    _FOREIGN_REF = {"REF": "refs/tags/v9.9", "REF_NAME": "v9.9"}
+
+    def test_milestone_tag_grades_with_trigger(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_tags=["phase1", "phase2"]),
+            extra_env=self._MILESTONE_REF,
+        )
+        assert rc == 0
+        assert outputs["trigger-tag"] == "phase1"
+        assert outputs["foreign-tag-suppressed"] == "false"
+        assert outputs["branch-push-suppressed"] == "false"
+
+    def test_glob_pattern_matches(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_tags=["v*"]),
+            extra_env=self._FOREIGN_REF,
+        )
+        assert rc == 0
+        assert outputs["trigger-tag"] == "v9.9"
+        assert outputs["foreign-tag-suppressed"] == "false"
+
+    def test_canonical_submit_tag_unaffected(self, inline_script, tmp_path):
+        # A submit/* push never reads as a milestone trigger.
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_tags=["phase1"]),
+            extra_env=self._SUBMIT_REF,
+        )
+        assert rc == 0
+        assert outputs["trigger-tag"] == ""
+        assert outputs["foreign-tag-suppressed"] == "false"
+
+    def test_foreign_tag_suppressed(self, inline_script, tmp_path):
+        # A tag matching neither submit/* nor any pattern: suppressed
+        # gracefully (stale/hand-edited shim), never a hard error.
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_tags=["phase1"]),
+            extra_env=self._FOREIGN_REF,
+        )
+        assert rc == 0
+        assert outputs["foreign-tag-suppressed"] == "true"
+        assert outputs["trigger-tag"] == ""
+
+    def test_foreign_tag_without_patterns_suppressed(self, inline_script, tmp_path):
+        # No patterns configured: only submit/* counts (replaces the old
+        # hard-error in the tag step with graceful suppression).
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(),
+            extra_env=self._FOREIGN_REF,
+        )
+        assert rc == 0
+        assert outputs["foreign-tag-suppressed"] == "true"
+
+    def test_branch_run_ignores_patterns(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_tags=["phase1"]),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc == 0
+        assert outputs["trigger-tag"] == ""
+        assert outputs["foreign-tag-suppressed"] == "false"
+        assert outputs["branch-push-suppressed"] == "false"
+
+    def test_invalid_pattern_hard_fails(self, inline_script, tmp_path):
+        # Junk in a hand-edited manifest is a setup-time error, mirroring
+        # submission_mode and the other per-entry fields.
+        rc, _stdout, stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_tags=['ta"g']),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc != 0
+        assert "submission_tags" in stderr
+
+    def test_non_list_hard_fails(self, inline_script, tmp_path):
+        rc, _stdout, stderr, _outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_tags="phase1"),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc != 0
+        assert "submission_tags" in stderr
+
+    @pytest.mark.parametrize("pattern", ["v*+", "a++", "x?+", "m**+", "+lead", "?lead"])
+    def test_stacked_quantifier_hard_fails(self, inline_script, tmp_path, pattern):
+        # Stacked/leading quantifiers compile as POSSESSIVE quantifiers in
+        # Python (this very validator's dialect) but are compile errors in
+        # Go/JS — the one construct where the four matcher copies would
+        # diverge, so the read step rejects them like the write-side
+        # validators do (contract.stackedQuantifierRE).
+        rc, _stdout, stderr, _outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_tags=[pattern]),
+            extra_env=self._BRANCH_REF,
+        )
+        assert rc != 0
+        assert "submission_tags" in stderr
+
+    def test_tag_mode_milestone_tag_grades(self, inline_script, tmp_path):
+        # Orthogonality: tag mode + milestone patterns — a milestone push
+        # grades (it IS a tag run), only branch pushes are suppressed.
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(submission_mode="tag", submission_tags=["phase1"]),
+            extra_env=self._MILESTONE_REF,
+        )
+        assert rc == 0
+        assert outputs["trigger-tag"] == "phase1"
+        assert outputs["branch-push-suppressed"] == "false"
+        assert outputs["foreign-tag-suppressed"] == "false"
+
+
+class TestInlineMatcherFixtureParity:
+    # The read step's matches_submission_tag is a by-value copy of the shared
+    # matcher (Go contract.MatchesSubmissionTag / web matchesSubmissionTag /
+    # regrade_repos.py) with NO import link. Run the whole golden fixture
+    # through the copy extracted from the live workflow YAML so drift in the
+    # inline implementation fails here, exactly like the other three sides.
+
+    def test_inline_matcher_matches_golden_fixture(self, inline_script):
+        # Execute just the matcher's dependencies from the inline script in an
+        # isolated namespace: the two functions are self-contained (re only).
+        import re as _re
+        namespace: dict = {"re": _re}
+        src = inline_script
+        # The matcher depends on the _TAG_PATTERN charset gate and the
+        # _STACKED_QUANTIFIER guard defined earlier in the read step —
+        # extract those lines first so the sliced functions run against the
+        # live regexes.
+        charset_match = _re.search(r"_TAG_PATTERN = re\.compile\([^\n]+\)", src)
+        assert charset_match, "inline validator lost its _TAG_PATTERN charset gate"
+        exec(charset_match.group(0), namespace)  # noqa: S102 — test-only, our own YAML
+        quant_match = _re.search(r"_STACKED_QUANTIFIER = re\.compile\([^\n]+\)", src)
+        assert quant_match, "inline validator lost its _STACKED_QUANTIFIER guard"
+        exec(quant_match.group(0), namespace)  # noqa: S102 — test-only, our own YAML
+        # Slice from the compile helper through the end of the matcher.
+        start = src.index("def _compile_tag_pattern")
+        end = src.index("\n# ", start) if "\n# " in src[start:] else None
+        block_lines = []
+        for line in src[start:].splitlines():
+            if block_lines and line and not line.startswith((" ", "\t", "def ", "#")):
+                break
+            block_lines.append(line)
+            if line.strip() == "return False" and "def matches_submission_tag" in "\n".join(block_lines):
+                break
+        exec("\n".join(block_lines), namespace)  # noqa: S102 — test-only, our own YAML
+        matches = namespace["matches_submission_tag"]
+
+        fixture = json.loads(
+            (_REPO_ROOT / "cli" / "shared" / "testdata" / "submission_tag_match_cases.json")
+            .read_text()
+        )
+        for case in fixture["cases"]:
+            got = matches(case["patterns"], case["tag"])
+            assert got is case["matches"], (
+                f"inline matcher drift: patterns={case['patterns']} tag={case['tag']!r} "
+                f"got {got}, fixture expects {case['matches']} — keep the workflow's "
+                f"by-value copy in lockstep with contract.MatchesSubmissionTag"
+            )

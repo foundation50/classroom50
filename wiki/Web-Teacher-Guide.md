@@ -141,6 +141,17 @@ On the classroom page, click **+ Assignment**. Fill in:
   project** (students share a repository and submit together).
 - **Feedback pull request** — automatically opens a pull request per student so
   you can review changes and leave inline feedback.
+- **Autograding trigger** — when the autograder runs. **Every push** (the
+  default) grades each push to the default branch. **On submit only** grades
+  only when a student submits (`gh student submit`) or pushes a `submit/*`
+  tag — regular pushes cost no Actions minutes, which matters at scale.
+- **Milestone submission tags** (optional) — tag names (e.g. `phase1`,
+  `phase2`, `complete`) that also trigger grading. A student pushes the tag
+  with plain git (`git tag phase1 && git push origin phase1`) and that commit
+  grades; the result appears as a normal `submit/*` release titled "via
+  phase1". Prefer exact names — a broad glob like `v*` grades every matching
+  tag. Changing them later requires the same trigger update as the mode (see
+  below).
 - **Empty repository** — creates each student's repository completely empty: no
   starter files, no autograding, no feedback pull request. Use it when students
   build everything from scratch, including their own GitHub Actions.
@@ -299,3 +310,25 @@ CSV for a spreadsheet or external tool.
   Same form as creating one, pre-filled.
 - **Edit a classroom** — open the classroom, then **Settings**. Same form as
   creating one, pre-filled.
+
+### Changing the autograding trigger later
+
+The trigger is baked into each student repository's autograding workflow when
+the student accepts, so changing it in **Assignment settings** only affects
+repositories created from then on. To update repositories students already
+accepted:
+
+1. Change the trigger in **Assignment settings** and save.
+2. On the submissions page, open the actions menu and click **Update
+   autograding triggers**. It rewrites each repository's workflow to match
+   (the commit is marked so it doesn't trigger grading), reports repositories
+   whose workflow was hand-edited (those are left untouched), and skips
+   students who haven't accepted. A single repository can also be updated from
+   its row's manage dialog.
+3. Tell students to run `git pull` — clones made before the update will
+   conflict on their next push.
+
+The bulk action is available for assignments using the default autograder
+(a custom autograder's workflow is yours to edit) and needs your GitHub
+authorization to include the `workflow` scope — sign out and back in if the
+action reports a permissions problem.

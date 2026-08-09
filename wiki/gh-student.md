@@ -90,6 +90,11 @@ Functionally equivalent to `git commit -am "Submit" && git push`, with one extra
 step: it refreshes the teacher's `.gitignore` and `.github/` from the template
 (skipped for a template-less assignment).
 
+On a **submit-only assignment** (`submission_mode: tag` — your teacher will
+say so) plain pushes aren't graded; `submit` additionally pushes the
+`submit/<UTC-timestamp>-<short-sha>` tag itself, which is what triggers
+grading. Hand-pushing any `submit/*` tag works the same.
+
 <details>
 <summary>What submit does, step by step</summary>
 
@@ -99,11 +104,14 @@ step: it refreshes the teacher's `.gitignore` and `.github/` from the template
 3. Fetches the teacher's `.gitignore` and `.github/` from the template.
 4. Commits (with your GitHub login + noreply email) and pushes to the default
    branch as a fast-forward — no force-push; prior commits stay reachable.
-5. Prints the Actions and Releases URLs.
+5. On a submit-only assignment, pushes the `submit/…` tag at the new commit
+   (reusing an existing tag if the commit already has one, so a retry never
+   grades twice).
+6. Prints the Actions and Releases URLs.
 
-Tagging is the runner's job. The **acceptance commit** is skipped (nothing to
-grade); your first real submit always grades. `GIT_AUTHOR_*` / `GIT_COMMITTER_*`
-override the default identity.
+On an every-push assignment tagging is the runner's job. The **acceptance
+commit** is skipped (nothing to grade); your first real submit always grades.
+`GIT_AUTHOR_*` / `GIT_COMMITTER_*` override the default identity.
 
 </details>
 

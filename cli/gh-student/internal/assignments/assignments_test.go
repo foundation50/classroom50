@@ -330,6 +330,55 @@ func TestEntryDecodesFeedbackPR(t *testing.T) {
 	}
 }
 
+func TestEntryDecodesSubmissionMode(t *testing.T) {
+	// submission_mode decodes when present and defaults to every-push
+	// semantics when absent — accept (shim rendering) and submit (tag push)
+	// both branch on IsTagSubmissionMode, so the wire contract matters.
+	var file assignmentsFile
+	if err := json.Unmarshal([]byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {"slug": "tagged", "name": "Tagged", "mode": "individual", "autograder": "default", "submission_mode": "tag"},
+    {"slug": "explicit", "name": "Explicit", "mode": "individual", "autograder": "default", "submission_mode": "every-push"},
+    {"slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default"}
+  ]
+}`), &file); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !file.Assignments[0].IsTagSubmissionMode() {
+		t.Error("tagged.IsTagSubmissionMode() = false, want true")
+	}
+	if file.Assignments[1].IsTagSubmissionMode() {
+		t.Error("explicit(every-push).IsTagSubmissionMode() = true, want false")
+	}
+	if file.Assignments[2].IsTagSubmissionMode() {
+		t.Error("hello(absent).IsTagSubmissionMode() = true, want false")
+	}
+}
+
+func TestEntryDecodesSubmissionTags(t *testing.T) {
+	// submission_tags decodes when present and reads empty when absent —
+	// accept renders the shim's tags trigger from it, so the wire contract
+	// matters.
+	var file assignmentsFile
+	if err := json.Unmarshal([]byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {"slug": "proj", "name": "Project", "mode": "individual", "autograder": "default", "submission_tags": ["phase1", "v*"]},
+    {"slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default"}
+  ]
+}`), &file); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	got := file.Assignments[0].SubmissionTags
+	if len(got) != 2 || got[0] != "phase1" || got[1] != "v*" {
+		t.Errorf("proj.SubmissionTags = %v, want [phase1 v*]", got)
+	}
+	if len(file.Assignments[1].SubmissionTags) != 0 {
+		t.Errorf("hello(absent).SubmissionTags = %v, want empty", file.Assignments[1].SubmissionTags)
+	}
+}
+
 func TestEntryDecodesLocked(t *testing.T) {
 	// locked decodes when present and defaults to false when absent — the
 	// accept flow refuses a locked assignment, so the wire contract matters.

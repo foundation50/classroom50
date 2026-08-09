@@ -20,6 +20,8 @@ import { OpenAllFeedbackPrsModal } from "@/pages/submissions/OpenAllFeedbackPrsM
 import { DownloadAllSubmissionsModal } from "@/pages/submissions/DownloadAllSubmissionsModal"
 import { BulkRepoAccessModal } from "@/components/modals/BulkRepoAccessModal"
 import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal"
+import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
+import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
 import { DataFreshness } from "@/pages/submissions/DataFreshness"
 import { ConfirmModal } from "@/components/modals"
 import {
@@ -260,6 +262,7 @@ const SubmissionsPageContent = () => {
   const [downloadAllOpen, setDownloadAllOpen] = useState(false)
   const [bulkAccessOpen, setBulkAccessOpen] = useState(false)
   const [bulkFeaturesOpen, setBulkFeaturesOpen] = useState(false)
+  const [bulkTriggerOpen, setBulkTriggerOpen] = useState(false)
 
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
   // Gate on a resolved roster so a transient load/permission failure falls back
@@ -1051,6 +1054,24 @@ const SubmissionsPageContent = () => {
                 ? () => setBulkFeaturesOpen(true)
                 : undefined
             }
+            // Bulk retrofit autograding triggers: same gate as bulk features
+            // plus default-autograder only — teacher-authored (custom) shims
+            // are never rewritten. Reconciles existing repos with the
+            // assignment's submission_mode (baked into shims at accept time).
+            // Requires a RESOLVED assignmentInfo: isDefaultAutograder(undefined)
+            // is true, so gating on the optional chain alone would enable the
+            // action while the assignments query loads (or after it fails) and
+            // retrofit shims to the fallback every-push mode.
+            onBulkTrigger={
+              isOwner &&
+              !isGroupAssignment &&
+              !isEmptyRepoAssignment &&
+              assignmentInfo != null &&
+              isDefaultAutograder(assignmentInfo.autograder) &&
+              acceptedSet.size > 0
+                ? () => setBulkTriggerOpen(true)
+                : undefined
+            }
             locked={isLockedAssignment}
             lockPending={setLock.isPending}
             // Lock/unlock is an authoring-tier action (teacher|hta), same gate
@@ -1077,6 +1098,20 @@ const SubmissionsPageContent = () => {
         filtered={hasActiveFilter}
         onClearFilters={clearFilters}
         emptyRepo={isEmptyRepoAssignment}
+        // Per-row trigger retrofit: owner + default-autograder only (teacher-
+        // authored shims are never rewritten). Mirrors the bulk-action gate,
+        // including the resolved-assignmentInfo requirement: while the
+        // assignments query loads, isDefaultAutograder(undefined) is true and
+        // the ?? fallback would arm the action with "every-push" — clicking it
+        // would rewrite a tag-mode repo's shim to the wrong trigger.
+        submissionMode={
+          isOwner &&
+          assignmentInfo != null &&
+          isDefaultAutograder(assignmentInfo.autograder)
+            ? (assignmentInfo.submission_mode ?? "every-push")
+            : undefined
+        }
+        submissionTags={assignmentInfo?.submission_tags}
         initialLoading={initialLoading}
         nonSubmittersLoading={
           !nonSubmittersReady &&
@@ -1217,6 +1252,17 @@ const SubmissionsPageContent = () => {
         org={org}
         classroom={classroom}
         assignment={assignment}
+        owners={acceptedOwners}
+        students={students}
+      />
+      <BulkSubmissionTriggerModal
+        open={bulkTriggerOpen}
+        onClose={() => setBulkTriggerOpen(false)}
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+        submissionMode={assignmentInfo?.submission_mode ?? "every-push"}
+        submissionTags={assignmentInfo?.submission_tags}
         owners={acceptedOwners}
         students={students}
       />

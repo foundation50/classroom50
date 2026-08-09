@@ -140,10 +140,11 @@ func TestCopySubmittableFiles_ControlFilesKeptEvenUnderStarIgnore(t *testing.T) 
 	}
 }
 
-func TestFetchAllowedFiles_FetchFailureReturnsNil(t *testing.T) {
+func TestFetchSubmitEntry_FetchFailureReturnsNil(t *testing.T) {
 	// Best-effort guarantee: a manifest fetch failure must never block
-	// submission — fetchAllowedFiles returns nil (submit all) since the
-	// runner enforces the allowlist authoritatively.
+	// submission — fetchSubmitEntry returns (nil, err); the caller submits
+	// all files (the runner enforces allowed_files authoritatively) and
+	// warns about the unknown submission mode post-push.
 	orig := fetchEntryFn
 	t.Cleanup(func() { fetchEntryFn = orig })
 	fetchEntryFn = func(ctx context.Context, org, classroom, secret, assignment string) (assignments.Entry, error) {
@@ -152,24 +153,37 @@ func TestFetchAllowedFiles_FetchFailureReturnsNil(t *testing.T) {
 
 	u := ui.NewForced(os.Stderr, false)
 	cfg := &classroomcfg.Config{Classroom: "cs-principles", Assignment: "hello"}
-	got := fetchAllowedFiles(context.Background(), "o", cfg, u, false)
-	if got != nil {
-		t.Errorf("fetchAllowedFiles on fetch failure = %#v, want nil (submit all)", got)
+	entry, err := fetchSubmitEntry(context.Background(), "o", cfg, u, false)
+	if entry != nil {
+		t.Errorf("fetchSubmitEntry on fetch failure = %#v, want nil (submit all)", entry)
+	}
+	if err == nil {
+		t.Error("fetchSubmitEntry on fetch failure must surface the error for the post-push warning")
 	}
 }
 
-func TestFetchAllowedFiles_SuccessReturnsPatterns(t *testing.T) {
+func TestFetchSubmitEntry_SuccessReturnsEntry(t *testing.T) {
 	orig := fetchEntryFn
 	t.Cleanup(func() { fetchEntryFn = orig })
 	fetchEntryFn = func(ctx context.Context, org, classroom, secret, assignment string) (assignments.Entry, error) {
-		return assignments.Entry{AllowedFiles: []string{"*", "!hello.py"}}, nil
+		return assignments.Entry{
+			AllowedFiles:   []string{"*", "!hello.py"},
+			SubmissionMode: "tag",
+		}, nil
 	}
 
 	u := ui.NewForced(os.Stderr, false)
 	cfg := &classroomcfg.Config{Classroom: "cs-principles", Assignment: "hello"}
-	got := fetchAllowedFiles(context.Background(), "o", cfg, u, false)
+	entry, err := fetchSubmitEntry(context.Background(), "o", cfg, u, false)
+	if err != nil || entry == nil {
+		t.Fatalf("fetchSubmitEntry = (%#v, %v), want entry", entry, err)
+	}
+	got := entry.AllowedFiles
 	if len(got) != 2 || got[0] != "*" || got[1] != "!hello.py" {
-		t.Errorf("fetchAllowedFiles = %#v, want [* !hello.py]", got)
+		t.Errorf("AllowedFiles = %#v, want [* !hello.py]", got)
+	}
+	if !entry.IsTagSubmissionMode() {
+		t.Error("IsTagSubmissionMode() = false, want true")
 	}
 }
 

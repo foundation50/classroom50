@@ -155,12 +155,22 @@ write an `autograder.py`. See [Autograders](Autograders).
 
 ### Can I turn autograding off, or reduce Actions usage?
 
-Yes. Create an assignment with **no autograding tests**, and no grading runs
-(Classroom 50 still uses a lightweight workflow to tag submissions and support
-written feedback, which uses far fewer Actions minutes). You can also **pause
-autograding org-wide** from the organization's Actions settings in the web app,
-and setup applies a **$0 Actions spending cap** by default so a runaway workflow
-can't run up a bill.
+Yes, several levers:
+
+- **Grade on submit only** — set the assignment's autograding trigger to
+  **On submit only** (`--submission-mode tag` in the CLI). Students' regular
+  pushes then run nothing at all; grading happens only when they submit
+  (`gh student submit` or a hand-pushed `submit/*` tag). This is the biggest
+  saver for large classes, where every work-in-progress push would otherwise
+  grade. You can also name **milestone tags** (`--submission-tag phase1`) so
+  students grade specific checkpoints with plain git. See
+  [Autograders → Which commits grade](Autograders#which-commits-grade).
+- Create an assignment with **no autograding tests**, and no grading runs
+  (Classroom 50 still uses a lightweight workflow to tag submissions and
+  support written feedback, which uses far fewer Actions minutes).
+- **Pause autograding org-wide** from the organization's Actions settings in
+  the web app; setup also applies a **$0 Actions spending cap** by default so
+  a runaway workflow can't run up a bill.
 
 ### Can I use my own (self-hosted) runners?
 

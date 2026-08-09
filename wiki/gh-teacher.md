@@ -33,6 +33,7 @@ output, or `--verbose` / `-v` for per-step detail.
 | `assignment reuse <org> <slug> --from <src> --to <dst>` | Copy an assignment into another classroom. |
 | `assignment remove <org> <classroom> <slug>` | Remove an assignment entry. |
 | `assignment list <org> <classroom>` | List assignment slugs. Flags: `--json`, `-q`. |
+| `assignment submission-mode <org> <classroom> <slug> --tag\|--every-push` | Change when the autograder fires and retrofit existing repos' shims. |
 | `assignment test add/list/remove` | Manage an assignment's declarative tests. |
 | `autograder set-default <org> <classroom>` | Install/replace the classroom default `autograder.py`. |
 | `autograder show/list/remove <org> <classroom>` | Inspect or delete autograders. |
@@ -408,8 +409,10 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--tests <path>` | JSON array of declarative tests. Mutually exclusive with a per-assignment `autograder.py`. |
 | `--autograder <name>` | Swap the reusable workflow (rare). Default `default`. |
 | `--feedback-pr` | One review PR per student repo. **On by default**; `--feedback-pr=false` disables. |
-| `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; immutable; mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold. |
+| `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; immutable; mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode/submission-tag. |
 | `--pass-threshold <0–100>` | Advisory passing bar shown by gradebook clients. Off when omitted (distinct from `0`). |
+| `--submission-mode every-push\|tag` | When the autograder fires: `every-push` (default) grades every push; `tag` grades only `submit/*` tag pushes (the submit clients push the tag — plain `git push` costs no Actions minutes). Change it later with `assignment submission-mode`. |
+| `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading: `git tag phase1 && git push origin phase1` grades that commit. Simple globs (`v*`) work; exact names are safer. The record still lives at the canonical `submit/*` tag. Mutually exclusive with `--empty-repo`. |
 
 **Where grading logic lives** (increasing effort): declarative `--tests` → a
 per-assignment `<classroom>/autograders/<slug>/autograder.py` → a classroom
@@ -466,6 +469,47 @@ gh teacher assignment list <org> <classroom> [--json] [-q]
 
 One slug per line (pipeable into `xargs`). `--json` emits the full entries array.
 Read-only.
+
+### `assignment submission-mode`
+
+```sh
+gh teacher assignment submission-mode <org> <classroom> <slug> (--every-push | --tag) [flags]
+gh teacher assignment submission-mode cs50-fall-2026 cs-principles hello --tag
+gh teacher assignment submission-mode cs50-fall-2026 cs-principles hello --tag --user alice
+gh teacher assignment submission-mode cs50-fall-2026 cs-principles hello --every-push --dry-run
+```
+
+Sets when the autograder fires — `--every-push` (every default-branch push
+grades; the default behavior) or `--tag` (**only** `submit/*` tag pushes
+grade; `gh student submit`, or a hand-pushed `submit/*`
+tag; plain `git push` costs no Actions minutes) — and, by default,
+**retrofits the autograde shim in every existing student repo** to match.
+The trigger lives in each repo's workflow file, so a mode change doesn't
+reach already-accepted repos without the retrofit.
+
+| Flag | Purpose |
+| --- | --- |
+| `--update-shims` | Retrofit each existing repo's shim (default on). `--update-shims=false` flips only the assignments.json field. |
+| `--user <login>` | Retrofit a single student's repo (e.g., one that failed on a previous run). |
+| `--dry-run` | Report the field flip and per-repo changes without writing anything. |
+| `-q, --quiet` | Suppress per-repo and summary lines. |
+
+Details that matter:
+
+- **Idempotent** — an already-set field and already-current shims commit
+  nothing; re-running only fills gaps.
+- The retrofit commit carries `[skip ci]`, so it **never triggers grading**.
+- Repos whose shim was hand-edited are **reported and left untouched** —
+  the rewrite only touches a recognizable default-shim trigger block.
+- **Custom autograders**: the command refuses to rewrite a teacher-authored
+  shim. Edit its `on:` block yourself, then re-run with
+  `--update-shims=false` (the field still controls whether the submit
+  clients push the tag).
+- `empty_repo` assignments are rejected (no shim exists).
+- Needs the `workflow` OAuth scope to commit workflow files
+  (`gh auth refresh -s workflow` if you see a scope error).
+- **Tell students to `git pull` afterward** — clones made before the change
+  conflict on their next push.
 
 ### `assignment test`
 

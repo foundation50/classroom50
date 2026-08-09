@@ -217,6 +217,24 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		// a dropped output would make every gate below read empty and
 		// re-grade the acceptance commit.
 		"is-acceptance",
+		// is-shim-update gates the skip for a teacher-side submission-mode
+		// shim retrofit commit — the backstop behind the [skip ci] in the
+		// retrofit commit message.
+		"is-shim-update",
+		// branch-push-suppressed gates the tag-mode stale-shim defense: a
+		// branch-triggered run on a tag-mode assignment must not tag or
+		// grade. A dropped output would read empty and grade every push,
+		// defeating the cost lever the mode exists for. (The step-level
+		// submission-mode emit stays for run-log debugging, but it is NOT a
+		// job output — branch-push-suppressed is the only gate.)
+		"branch-push-suppressed",
+		// foreign-tag-suppressed gates the milestone-tags twin: a pushed tag
+		// matching neither submit/* nor any configured submission_tags
+		// pattern must not tag or grade.
+		"foreign-tag-suppressed",
+		// trigger-tag carries the milestone tag that triggered the run so
+		// the Release title can note it ("via phase1").
+		"trigger-tag",
 		// no-autograder no longer skips the grade job (the submission is
 		// still recorded via runner.py's vacuous pass); the output is retained
 		// so the toolchain-setup steps can skip provisioning a toolchain the
@@ -238,15 +256,23 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// every acceptance commit and republish the spurious 0/0 release —
 	// exactly what this guard exists to prevent.
 	//
-	// grade is gated at the job level ONLY on the acceptance commit. The
-	// no-autograder case still runs the grade job so the submission is
-	// recorded: runner.py synthesizes a vacuous-pass (0/0 success) result and
-	// the Release step publishes it, keeping the submission visible on the
-	// teacher dashboard (which reads submit/* releases). Toolchain setup is
-	// separately gated off no-autograder so the recording path spends no
-	// minutes provisioning unused toolchains.
-	if got, _ := nested(doc, "jobs", "grade", "if"); got != "needs.setup.outputs.is-acceptance != 'true'" {
-		t.Errorf("grade.if = %v, want the acceptance-commit skip gate", got)
+	// grade is gated at the job level (set-latest needs grade, so it skips
+	// transitively). The gate carries three skips: the acceptance commit, a
+	// teacher-side shim-retrofit commit (is-shim-update, the [skip ci]
+	// backstop), and a suppressed run (branch-push-suppressed /
+	// foreign-tag-suppressed, the stale-shim defenses). The no-autograder
+	// case still runs the grade job so the submission is recorded: runner.py
+	// synthesizes a vacuous-pass (0/0 success) result and the Release step
+	// publishes it, keeping the submission visible on the teacher dashboard
+	// (which reads submit/* releases). Toolchain setup is separately gated
+	// off no-autograder so the recording path spends no minutes provisioning
+	// unused toolchains.
+	wantGradeIf := "needs.setup.outputs.is-acceptance != 'true' && " +
+		"needs.setup.outputs.is-shim-update != 'true' && " +
+		"needs.setup.outputs.branch-push-suppressed != 'true' && " +
+		"needs.setup.outputs.foreign-tag-suppressed != 'true'"
+	if got, _ := nested(doc, "jobs", "grade", "if"); got != wantGradeIf {
+		t.Errorf("grade.if = %v, want the acceptance + shim-update + suppressed-push + foreign-tag skip gate", got)
 	}
 	// The setup checkout must use full history: _baseline_scan walks back
 	// to the commit that added .classroom50.yaml, and a shallow clone
@@ -256,9 +282,66 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		t.Errorf("autograde-runner.yaml setup checkout missing fetch-depth: 0 (acceptance scan needs full history)")
 	}
 	// The tag and read steps are step-gated off the same detection so the
-	// acceptance commit produces no submit/* tag and no metadata read.
-	if !strings.Contains(body, "if: steps.acceptance.outputs.is-acceptance != 'true'") {
-		t.Errorf("autograde-runner.yaml tag/read steps not gated on the acceptance detection")
+	// acceptance commit produces no submit/* tag and no metadata read. Both
+	// use folded (>-) multi-line ifs now, so assert on the parsed step
+	// conditions rather than a raw substring. The tag step additionally
+	// gates on branch-push-suppressed: it runs AFTER the read step so a
+	// tag-mode branch push (stale every-push shim) never mints a tag for a
+	// run that won't grade.
+	setupSteps, _ := nested(doc, "jobs", "setup", "steps")
+	stepIf := func(id string) string {
+		steps, _ := setupSteps.([]any)
+		for _, s := range steps {
+			m, _ := s.(map[string]any)
+			if m["id"] == id {
+				cond, _ := m["if"].(string)
+				return cond
+			}
+		}
+		return ""
+	}
+	for _, id := range []string{"read", "tag"} {
+		cond := stepIf(id)
+		for _, gate := range []string{
+			"steps.acceptance.outputs.is-acceptance != 'true'",
+			"steps.acceptance.outputs.is-shim-update != 'true'",
+		} {
+			if !strings.Contains(cond, gate) {
+				t.Errorf("autograde-runner.yaml %s step if = %q, missing gate %q", id, cond, gate)
+			}
+		}
+	}
+	if cond := stepIf("tag"); !strings.Contains(cond, "steps.read.outputs.branch-push-suppressed != 'true'") {
+		t.Errorf("autograde-runner.yaml tag step if = %q, missing the branch-push-suppressed gate (a suppressed tag-mode push must not mint a tag)", cond)
+	}
+	if cond := stepIf("tag"); !strings.Contains(cond, "steps.read.outputs.foreign-tag-suppressed != 'true'") {
+		t.Errorf("autograde-runner.yaml tag step if = %q, missing the foreign-tag-suppressed gate (a non-submission tag must not mint a canonical tag)", cond)
+	}
+	// The read step's suppression decision classifies branch vs tag runs from
+	// $REF, so the env mapping is load-bearing: dropped, REF reads empty,
+	// every run classifies as branch-triggered, and tag-mode submit/* TAG
+	// pushes get suppressed — grading stops for tag mode entirely. The Python
+	// tests inject REF themselves, so only this pin catches the mapping.
+	stepEnv := func(id string) map[string]any {
+		steps, _ := setupSteps.([]any)
+		for _, s := range steps {
+			m, _ := s.(map[string]any)
+			if m["id"] == id {
+				env, _ := m["env"].(map[string]any)
+				return env
+			}
+		}
+		return nil
+	}
+	if got := stepEnv("read")["REF"]; got != "${{ github.ref }}" {
+		t.Errorf("read step env.REF = %v, want ${{ github.ref }} (suppression classifies branch vs tag runs from it)", got)
+	}
+	// submission-tag was rewired from the read step to the tag step (which
+	// now runs after read); pin the expression VALUE, not just key presence —
+	// a typo'd expression would silently feed an empty TAG to the release
+	// and set-latest jobs.
+	if got := outputsMap["submission-tag"]; got != "${{ steps.tag.outputs.tag }}" {
+		t.Errorf("setup.outputs.submission-tag = %v, want ${{ steps.tag.outputs.tag }}", got)
 	}
 	// Branch trigger only — a tag push is always a submission, so the
 	// detection step must not run on tag pushes (its absence leaves
@@ -276,7 +359,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		t.Errorf("autograde-runner.yaml acceptance step doesn't invoke runner.py --detect-acceptance")
 	}
 
-	// === set-latest job: serialized + commit-time-based ===
+	// === set-latest job: serialized + submission-event ordering ===
 	if got, _ := nested(doc, "jobs", "set-latest", "concurrency", "group"); got != "classroom50-set-latest-${{ github.repository }}" {
 		t.Errorf("set-latest concurrency group = %v, want per-repo serialization", got)
 	}
@@ -383,6 +466,15 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	if !strings.Contains(body, `context="classroom50/autograde"`) {
 		t.Errorf("autograde-runner.yaml doesn't post the classroom50/autograde commit status")
 	}
+	// Suppressed runs (foreign tag, tag-mode branch push) report under a
+	// DISTINCT context: the student's work exists but was NOT graded, and a
+	// green classroom50/autograde would read as "graded successfully" to any
+	// human or client checking that context. Exactly the two suppression
+	// statuses use it; the nothing-to-grade skips (acceptance, shim-update,
+	// no-autograder) stay on the main context.
+	if got := strings.Count(body, `context="classroom50/autograde-skipped"`); got != 2 {
+		t.Errorf("classroom50/autograde-skipped context count = %d, want 2 (foreign-tag + suppressed-push statuses)", got)
+	}
 	if !strings.Contains(body, "if: success() && steps.autograde.outputs.status != 'error'") {
 		t.Errorf("release step not gated on success() && status != 'error'")
 	}
@@ -416,6 +508,12 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 			`EXTRA_ASSETS+=("$ASSET")`,
 			`gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes`,
 			`gh release create "$TAG" result.json ${EXTRA_ASSETS[@]+"${EXTRA_ASSETS[@]}"}`,
+			// Immutable-release tolerance (regrade failed live 2026-08-07): a
+			// rejected delete re-checks existence; if the release survived,
+			// warn and keep it instead of failing the grade job.
+			`if ! DELETE_ERR="$(gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes 2>&1)"; then`,
+			`the release at $TAG is immutable (org ruleset) and cannot be refreshed`,
+			`gradebook collection keeps reading the OLD release's result.json`,
 		} {
 			if !strings.Contains(releaseRun, want) {
 				t.Errorf("Release shell is missing %q", want)
@@ -532,20 +630,144 @@ printf '%s\n' "$*" >> "$GH_LOG"
 				t.Errorf("Release shell output missing invalid-basename warning:\n%s", output)
 			}
 		})
+
+		// Immutable-release tolerance (regrade failed live 2026-08-07): when the
+		// delete is rejected AND the release still exists (immutable ruleset),
+		// the step warns, skips the create, and exits 0 — grading already
+		// posted its commit status, so record-keeping GitHub forbids must not
+		// fail the job.
+		t.Run("ReleaseShellToleratesImmutableRuleset", func(t *testing.T) {
+			tmp := t.TempDir()
+			binDir := filepath.Join(tmp, "bin")
+			if err := os.MkdirAll(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			ghLog := filepath.Join(tmp, "gh.log")
+			// view succeeds (release exists, before AND after), delete is
+			// rejected the way an immutable-releases ruleset rejects it.
+			fakeGH := []byte(`#!/bin/sh
+printf '%s\n' "$*" >> "$GH_LOG"
+case "$1 $2" in
+  "release delete")
+    echo "HTTP 422: Release is immutable (ruleset)" >&2
+    exit 1
+    ;;
+esac
+exit 0
+`)
+			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"result.json", "release-body.md"} {
+				if err := os.WriteFile(filepath.Join(tmp, name), []byte("fixture"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			cmd := exec.Command("bash", "-c", releaseRun)
+			cmd.Dir = tmp
+			cmd.Env = append(os.Environ(),
+				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GH_LOG="+ghLog,
+				"GH_TOKEN=test-token",
+				"GITHUB_REPOSITORY=example/classroom-assignment-student",
+				"STAGED_RELEASE_BASENAMES=",
+				"TAG=submit/test",
+			)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("Release shell must exit 0 when the delete is immutable-blocked: %v\n%s", err, output)
+			}
+			if !strings.Contains(string(output), "::warning::the release at $TAG is immutable") &&
+				!strings.Contains(string(output), "::warning::the release at submit/test is immutable") {
+				t.Errorf("Release shell output missing the immutable-release warning:\n%s", output)
+			}
+			log, err := os.ReadFile(ghLog)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(log), "release create") {
+				t.Errorf("immutable-blocked path must skip `gh release create` (the old release stays):\n%s", log)
+			}
+		})
+
+		// Race fallback: the delete fails but the release is GONE on re-check,
+		// so the step proceeds to create instead of warning-and-skipping.
+		t.Run("ReleaseShellCreatesWhenFailedDeleteLeftNoRelease", func(t *testing.T) {
+			tmp := t.TempDir()
+			binDir := filepath.Join(tmp, "bin")
+			if err := os.MkdirAll(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			ghLog := filepath.Join(tmp, "gh.log")
+			viewCount := filepath.Join(tmp, "view.count")
+			// First view: exists. Delete: fails. Second view: gone (race).
+			fakeGH := []byte(`#!/bin/sh
+printf '%s\n' "$*" >> "$GH_LOG"
+case "$1 $2" in
+  "release view")
+    if [ -f "$VIEW_COUNT" ]; then
+      exit 1
+    fi
+    : > "$VIEW_COUNT"
+    exit 0
+    ;;
+  "release delete")
+    echo "HTTP 500: something transient" >&2
+    exit 1
+    ;;
+esac
+exit 0
+`)
+			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"result.json", "release-body.md"} {
+				if err := os.WriteFile(filepath.Join(tmp, name), []byte("fixture"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			cmd := exec.Command("bash", "-c", releaseRun)
+			cmd.Dir = tmp
+			cmd.Env = append(os.Environ(),
+				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GH_LOG="+ghLog,
+				"VIEW_COUNT="+viewCount,
+				"GH_TOKEN=test-token",
+				"GITHUB_REPOSITORY=example/classroom-assignment-student",
+				"STAGED_RELEASE_BASENAMES=",
+				"TAG=submit/test",
+			)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("Release shell must create when the failed delete left no release: %v\n%s", err, output)
+			}
+			log, err := os.ReadFile(ghLog)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(log), "release create submit/test result.json") {
+				t.Errorf("race path must fall through to `gh release create`:\n%s", log)
+			}
+		})
 	}
 
-	// set-latest uses commit-time-based comparison (not lexical tag
-	// compare) so two pushes in the same UTC second still order
-	// correctly, and a non-submit/* "latest" can't permanently block
-	// future submissions from claiming latest.
-	if !strings.Contains(body, `if [[ -z "$CURRENT" || "$CURRENT" != submit/* ]]`) {
-		t.Errorf("set-latest job missing non-submit/* fallback (cascade-block protection)")
+	// set-latest: every published submission claims the badge (latest =
+	// most recent SUBMISSION EVENT, matching the collector and the web
+	// views), best-effort — a rejected edit (e.g. an org ruleset enforcing
+	// immutable releases 422s edits) warns and never fails the pipeline.
+	// The old commit-time comparator must stay gone: it read its own
+	// just-published release back as CURRENT, self-compared, and never
+	// acted (dead code confirmed live on 2026-08-05).
+	if !strings.Contains(body, `if ! gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=true; then`) {
+		t.Errorf("set-latest job missing the best-effort latest claim")
 	}
-	if !strings.Contains(body, `commit.committer.date`) {
-		t.Errorf("set-latest job not using commit-time-based comparison")
+	if !strings.Contains(body, "could not mark $TAG as the latest release") {
+		t.Errorf("set-latest job missing the rejected-edit warning (immutable-release rulesets)")
 	}
-	if !strings.Contains(body, `gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=true`) {
-		t.Errorf("set-latest job missing forward-only latest pointer flip")
+	if strings.Contains(body, `commit.committer.date`) {
+		t.Errorf("set-latest job still carries the dead commit-time comparator (self-compares its own release; see 2026-08-05 finding)")
 	}
 }
 

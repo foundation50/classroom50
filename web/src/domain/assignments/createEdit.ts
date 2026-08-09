@@ -6,6 +6,7 @@ import {
   PASS_THRESHOLD_MAX,
   PASS_THRESHOLD_MIN,
   REPO_PERMISSIONS,
+  SUBMISSION_MODES,
   assertAssignmentMode,
   defaultStudentPermission,
 } from "@/types/classroom"
@@ -42,6 +43,7 @@ import {
 } from "@/util/runtime"
 import { parseAllowedFiles, validateAllowedFiles } from "@/util/allowedFiles"
 import { parseReleaseAssets, validateReleaseAssets } from "@/util/releaseAssets"
+import { validateSubmissionTags } from "@/util/submissionTags"
 import {
   addRepositoryToTeam,
   removeRepositoryFromTeam,
@@ -115,6 +117,8 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   release_assets: "managed",
   pass_threshold: "managed",
   student_permission: "managed",
+  submission_mode: "managed",
+  submission_tags: "managed",
   repo_features: "managed",
   tests: "managed",
   // Written only by the CLI's `migrate`; the form never manages it, so it must
@@ -626,6 +630,40 @@ async function buildAssignmentEntry(
     if (effective !== defaultStudentPermission(mode)) {
       entry.student_permission = effective
     }
+  }
+
+  // submission_mode: omit the wire default (every-push) so an untouched
+  // assignment stays byte-identical, mirroring the CLI's omitempty collapse.
+  // Validate against the enum so a bad value can't produce a file the CLI
+  // refuses to parse; reject alongside empty_repo (no shim exists to trigger).
+  if (input.submission_mode && input.submission_mode !== "every-push") {
+    if (!SUBMISSION_MODES.includes(input.submission_mode)) {
+      throw new Error(
+        `submission_mode: must be one of ${SUBMISSION_MODES.join(", ")} (got "${input.submission_mode}").`,
+      )
+    }
+    if (input.empty_repo) {
+      throw new Error(
+        "submission_mode: mutually exclusive with empty_repo — a bare repo has no autograde shim to trigger.",
+      )
+    }
+    entry.submission_mode = input.submission_mode
+  }
+
+  // submission_tags: omit when empty (no milestone tags — today's behavior),
+  // mirroring the CLI's omitempty. Validate so a bad pattern can't produce a
+  // file the CLI refuses to parse; reject alongside empty_repo (no shim).
+  if (input.submission_tags && input.submission_tags.length > 0) {
+    const tagsError = validateSubmissionTags(input.submission_tags)
+    if (tagsError) {
+      throw new Error(`submission_tags: ${tagsError}`)
+    }
+    if (input.empty_repo) {
+      throw new Error(
+        "submission_tags: mutually exclusive with empty_repo — a bare repo has no autograde shim to trigger.",
+      )
+    }
+    entry.submission_tags = [...input.submission_tags]
   }
 
   // repo_features: write only the keys the teacher set (undefined = inherit),

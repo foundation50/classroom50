@@ -122,10 +122,22 @@ workflow runs automatically: it tags the commit `submit/<UTC-timestamp>-<short-s
 grades it, and publishes a GitHub Release with your score a minute or two later.
 
 > [!NOTE]
-> You can also `git push` directly — the result is the same. `gh student submit`
-> exists mainly to pull any teacher-side updates to `.gitignore` and `.github/`
-> from the template before pushing. (For a template-less assignment there's
-> nothing to refresh, so it just commits and pushes.)
+> On most assignments you can also `git push` directly — the result is the
+> same. `gh student submit` exists mainly to pull any teacher-side updates to
+> `.gitignore` and `.github/` from the template before pushing. (For a
+> template-less assignment there's nothing to refresh, so it just commits and
+> pushes.)
+>
+> Some assignments grade **only on submit** (your teacher will say so, and a
+> plain push shows a passing check that says the push was not graded). There,
+> `gh student submit` pushes the `submit/…` tag that triggers grading — or tag
+> a commit yourself: `git tag submit/final && git push origin submit/final`.
+> Any tag under `submit/` grades.
+>
+> Some assignments also name **milestone tags** (e.g. `phase1`, `phase2`,
+> `complete` — your teacher will tell you). Push one to grade that commit:
+> `git tag phase1 && git push origin phase1`. The graded result appears as a
+> normal `submit/…` release.
 
 When submit finishes, it prints two URLs:
 
@@ -134,10 +146,15 @@ When submit finishes, it prints two URLs:
 
 **Good to know:**
 
-- **Every push grades.** Each commit on the default branch triggers a graded run
-  with its own tag and Release — except the first commit from accepting, which
-  has nothing to grade and is skipped. The latest Release is always your most
-  recent submission.
+- **Every push grades (by default).** Each commit on the default branch
+  triggers a graded run with its own tag and Release — except the first commit
+  from accepting, which has nothing to grade and is skipped. The latest
+  Release is always your most recent submission. On a **submit-only**
+  assignment, only `gh student submit` (or a hand-pushed `submit/*` tag)
+  grades; regular pushes save your work without grading it.
+- **Pull after teacher-side workflow updates.** If your teacher changes the
+  assignment's grading trigger, a small commit lands in your repo. Run
+  `git pull` before your next push, or git will report a conflict.
 - **History is preserved.** Submissions stack as commits; prior commits stay
   reachable for review.
 - **No git config required.** Commits are authored with your GitHub login and

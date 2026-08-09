@@ -13,6 +13,13 @@ export const log = logger.scope(LOG_SCOPE_QUERIES)
 // while still beating a strictly-sequential loop.
 export const REPO_READ_CONCURRENCY = 8
 
+// Max simultaneous per-repo CONTENT WRITES (tree/commit/ref chains). GitHub's
+// secondary-rate-limit guidance is to avoid concurrent content writes — the
+// CLI's retrofit loop is serial for the same reason — so bulk write fan-outs
+// (e.g. the submission-trigger retrofit) stay effectively sequential while
+// still reusing the mapWithConcurrency progress plumbing.
+export const REPO_WRITE_CONCURRENCY = 1
+
 // A small FIFO counting semaphore. Independent per-repo fan-outs (the live
 // submissions hook and the group-member hook) can run on the same page load;
 // each capping *itself* at REPO_READ_CONCURRENCY still lets their union burst to

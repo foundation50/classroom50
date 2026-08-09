@@ -51,6 +51,123 @@ func TestStudentPermissionEnumParity(t *testing.T) {
 	}
 }
 
+// TestSubmissionModeEnumParity pins the submission_mode allow-list across its
+// hand-mirrored sources: the JSON schema enum (declared source of truth) and
+// the Go contract.SubmissionModes (what ValidateSubmissionMode enforces). The
+// web mirror (SUBMISSION_MODES) is pinned against the same schema enum by a
+// vitest, and the runner's inline validator carries a by-value copy.
+func TestSubmissionModeEnumParity(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "schemas", "assignments-v1.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	var schema struct {
+		Defs struct {
+			Assignment struct {
+				Properties struct {
+					SubmissionMode struct {
+						Enum []string `json:"enum"`
+					} `json:"submission_mode"`
+				} `json:"properties"`
+			} `json:"assignment"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	schemaEnum := schema.Defs.Assignment.Properties.SubmissionMode.Enum
+	if len(schemaEnum) == 0 {
+		t.Fatalf("schema submission_mode.enum not found; did the $defs shape change?")
+	}
+	if !reflect.DeepEqual(schemaEnum, contract.SubmissionModes) {
+		t.Errorf("submission_mode drift: schema enum %v != contract.SubmissionModes %v — update every mirror in lockstep (schema, Go contract, web SUBMISSION_MODES, runner inline validator)",
+			schemaEnum, contract.SubmissionModes)
+	}
+}
+
+// TestValidateSubmissionMode pins the read/write validator: absent (empty) and
+// both enum values pass; anything else is a hard error. An explicit
+// "every-push" is legal on read even though this CLI normalizes it to absent
+// on write (other writers may emit it).
+func TestValidateSubmissionMode(t *testing.T) {
+	for _, ok := range []string{"", "every-push", "tag"} {
+		if err := ValidateSubmissionMode(ok); err != nil {
+			t.Errorf("ValidateSubmissionMode(%q) = %v, want nil", ok, err)
+		}
+	}
+	for _, bad := range []string{"Tag", "every_push", "push", "submit"} {
+		if err := ValidateSubmissionMode(bad); err == nil {
+			t.Errorf("ValidateSubmissionMode(%q) = nil, want error", bad)
+		}
+	}
+}
+
+// TestSubmissionMode_RoundTrip pins two wire behaviors: submission_mode is a
+// KNOWN key (decodes onto the struct, not Extra), and an explicit
+// "every-push" written by another client survives a read-modify-write
+// verbatim (EncodeAssignments never normalizes it away — only this CLI's own
+// write paths collapse their own input).
+func TestSubmissionMode_RoundTrip(t *testing.T) {
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    { "slug": "tagged", "name": "Tagged", "mode": "individual", "autograder": "default", "submission_mode": "tag" },
+    { "slug": "pushy", "name": "Pushy", "mode": "individual", "autograder": "default", "submission_mode": "every-push" }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	if got := file.Assignments[0].SubmissionMode; got != contract.SubmissionModeTag {
+		t.Errorf("SubmissionMode = %q, want %q", got, contract.SubmissionModeTag)
+	}
+	if len(file.Assignments[0].Extra) != 0 {
+		t.Errorf("submission_mode leaked into Extra: %v", file.Assignments[0].Extra)
+	}
+	out, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	if !strings.Contains(string(out), `"submission_mode": "tag"`) {
+		t.Errorf("encoded output lost submission_mode=tag:\n%s", out)
+	}
+	if !strings.Contains(string(out), `"submission_mode": "every-push"`) {
+		t.Errorf("encoded output normalized away explicit every-push (must round-trip verbatim):\n%s", out)
+	}
+}
+
+// TestParseAssignments_InvalidSubmissionMode pins the read-side hard error.
+func TestParseAssignments_InvalidSubmissionMode(t *testing.T) {
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    { "slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default", "submission_mode": "on-demand" }
+  ]
+}`)
+	if _, err := ParseAssignments(in); err == nil {
+		t.Fatal("ParseAssignments accepted invalid submission_mode")
+	} else if !strings.Contains(err.Error(), "submission_mode") {
+		t.Errorf("error %v does not mention submission_mode", err)
+	}
+}
+
+// TestValidateAssignmentEntry_SubmissionModeEmptyRepo pins the write-side
+// mutual exclusion: a bare repo has no shim to trigger.
+func TestValidateAssignmentEntry_SubmissionModeEmptyRepo(t *testing.T) {
+	entry := AssignmentEntry{
+		Slug: "bare", Name: "Bare", Mode: "individual", Autograder: "default",
+		EmptyRepo: true, SubmissionMode: contract.SubmissionModeTag,
+	}
+	if err := ValidateAssignmentEntry(entry); err == nil {
+		t.Fatal("ValidateAssignmentEntry accepted empty_repo + submission_mode")
+	}
+}
+
 func TestParseAssignments_Canonical(t *testing.T) {
 	in := []byte(`{
   "schema": "classroom50/assignments/v1",

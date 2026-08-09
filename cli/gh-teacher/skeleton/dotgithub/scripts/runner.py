@@ -147,6 +147,13 @@ ACCEPT_COMMIT_PATHS = frozenset(
     }
 )
 
+# Paths a teacher-side submission-mode shim retrofit touches: exactly the shim,
+# nothing else. Such a commit carries `[skip ci]` so the workflow normally
+# never fires; is_shim_update_commit is the backstop for environments that
+# strip it. Mirrors contract.ShimUpdateCommitMessage's write path — keep in
+# lockstep with classroomcfg.AutogradeWorkflowPath.
+SHIM_UPDATE_COMMIT_PATHS = frozenset({".github/workflows/autograde.yaml"})
+
 # `_baseline_scan` source discriminator. SOURCE_OPENABLE yields a usable
 # Feedback PR base (accept commit or root fallback); the others skip.
 SOURCE_ACCEPT = "accept"
@@ -461,6 +468,11 @@ def validate_result(
             f"want {expected_type!r}"
         )
 
+    # submit/* here is the RECORD namespace, deliberately not the configurable
+    # submission_tags patterns: a milestone-tag run (e.g. phase1) mints/reuses
+    # the canonical submit/<ts>-<sha> tag in the workflow's tag step BEFORE
+    # grading, so SUBMISSION_TAG — and thus result.json's `submission` — is
+    # always canonical. Custom tags trigger; submit/* records.
     submission = data.get("submission")
     if not isinstance(submission, str) or not submission.startswith("submit/"):
         return f"{RESULT_FILENAME} 'submission' must be a 'submit/*' string"
@@ -648,6 +660,36 @@ def _accept_commit_is_setup_only(workspace: pathlib.Path, head_sha: str) -> bool
     empty path list, so a commit we can't fully inspect is treated as a
     submission rather than silently skipped.
     """
+    return _commit_touches_only(workspace, head_sha, ACCEPT_COMMIT_PATHS)
+
+
+def is_shim_update_commit(workspace: pathlib.Path, head_sha: str) -> bool:
+    """Whether head_sha is a teacher-side submission-mode shim retrofit: a tip
+    commit that touches ONLY .github/workflows/autograde.yaml.
+
+    Such commits carry `[skip ci]` and normally never fire the workflow; this
+    is the defense-in-depth backstop for a client that forgot the marker or an
+    environment that strips it. Deliberately NOT gated on the accept scan: a
+    shim-only commit has nothing to grade regardless of who authored it, and a
+    student hand-editing their shim gets a skip either way (the edit alone is
+    never gradeable work). Fails open (False -> grade) on any uncertainty.
+    The acceptance check takes precedence at the call site — the accept commit
+    also touches the shim but additionally lands the marker, so the path sets
+    never overlap in practice.
+    """
+    if not head_sha:
+        return False
+    return _commit_touches_only(workspace, head_sha, SHIM_UPDATE_COMMIT_PATHS)
+
+
+def _commit_touches_only(
+    workspace: pathlib.Path, head_sha: str, allowed: frozenset[str]
+) -> bool:
+    """True only when every path the commit touches is in `allowed`. Fails
+    open (False -> grade) on any git error or an empty path list, so a commit
+    we can't fully inspect is treated as a submission rather than silently
+    skipped.
+    """
 
     def git(*args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -668,7 +710,7 @@ def _accept_commit_is_setup_only(workspace: pathlib.Path, head_sha: str) -> bool
         paths = [p for p in changed.stdout.split("\0") if p]
         if not paths:
             return False
-        return all(p in ACCEPT_COMMIT_PATHS for p in paths)
+        return all(p in allowed for p in paths)
     except (OSError, subprocess.SubprocessError):
         return False
 
@@ -2198,21 +2240,29 @@ def finalize_result(finalize: Finalizer, *, is_group: bool) -> int:
 
 
 def detect_acceptance_mode() -> int:
-    """`runner.py --detect-acceptance`: write is-acceptance=true|false to
-    $GITHUB_OUTPUT for the setup job's skip gate. Always exits 0; fails open
-    (False) on any uncertainty.
+    """`runner.py --detect-acceptance`: write is-acceptance=true|false and
+    is-shim-update=true|false to $GITHUB_OUTPUT for the setup job's skip
+    gates. Always exits 0; fails open (both False) on any uncertainty.
+    Acceptance takes precedence: the accept commit also touches the shim, so
+    is-shim-update is only computed for a non-acceptance tip.
     """
     workspace = pathlib.Path.cwd()
     head_sha = os.environ.get("GITHUB_SHA", "").strip()
     is_acceptance = is_acceptance_commit(workspace, head_sha)
+    is_shim_update = not is_acceptance and is_shim_update_commit(workspace, head_sha)
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
         with open(github_output, "a") as fh:
             fh.write(f"is-acceptance={'true' if is_acceptance else 'false'}\n")
+            fh.write(f"is-shim-update={'true' if is_shim_update else 'false'}\n")
     if is_acceptance:
         print(
             "::notice::acceptance commit detected — nothing to grade yet; "
             "submit work (gh student submit) to be graded"
+        )
+    elif is_shim_update:
+        print(
+            "::notice::autograder-trigger update detected — nothing to grade"
         )
     else:
         print("runner: not an acceptance commit; grading proceeds")

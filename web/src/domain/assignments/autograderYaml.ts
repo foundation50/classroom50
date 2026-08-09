@@ -1,7 +1,9 @@
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { classroomPagesSegment } from "@/util/secret"
+import { safeShimTagPatterns } from "@/util/submissionTags"
 import { fetchTextWithFriendlyErrors } from "../queries/assignments"
 import { localizedError } from "@/types/localizedMessage"
+import type { SubmissionMode } from "@/types/classroom"
 
 export function createClassroom50Yaml(params: {
   classroom: string
@@ -84,17 +86,45 @@ function pagesAutograderUrl(params: {
   return `https://${org}.github.io/${CONFIG_REPO}/${segment}/autograders/${name}.yaml`
 }
 
+// The shim's on.push.tags flow sequence: the teacher's milestone patterns (if
+// any) UNION the always-on canonical submit/* namespace. No patterns ->
+// `"submit/*"` alone, byte-identical to the pre-submission_tags shim.
+// Byte-format mirror of Go contract.ShimTagsList — keep identical. FAIL
+// CLOSED: this renders a workflow file into a student repo from the
+// PUBLISHED (hand-editable) manifest, so unsafe patterns drop the whole
+// milestone set rather than trusting write-time validation
+// (safeShimTagPatterns has the full rationale).
+function shimTagsList(submissionTags?: string[]): string {
+  return [...safeShimTagPatterns(submissionTags), "submit/*"]
+    .map((p) => `"${p}"`)
+    .join(", ")
+}
+
 export function defaultAutograderWorkflow(
   org: string,
   branch: string,
   configBranch: string,
+  submissionMode?: SubmissionMode,
+  submissionTags?: string[],
 ) {
+  // Tag mode drops ONLY the branches: line, so the shim fires exclusively on
+  // submission-tag pushes (the submit flows create the tag; a hand-pushed
+  // submit/* tag works too). Every other value — undefined, an explicit
+  // "every-push", anything unvalidated — renders the identical bytes as
+  // before submission_mode existed. Milestone submission_tags widen the tags
+  // line to their union with submit/* and are orthogonal to the mode.
+  // Mirrors the CLI's renderEmbeddedShim.
+  const tagsLine = `    tags: [${shimTagsList(submissionTags)}]`
+  const pushTriggers =
+    submissionMode === "tag"
+      ? tagsLine
+      : `    branches: ["${branch}"]
+${tagsLine}`
   return `name: Autograde
 
 on:
   push:
-    branches: ["${branch}"]
-    tags: ["submit/*"]
+${pushTriggers}
 
 jobs:
   grade:
@@ -125,13 +155,31 @@ export async function resolveAutograderWorkflow(params: {
   // built-in default shim; teacher-authored autograders are branch-agnostic.
   branch?: string
   configBranch?: string
+  // The assignment's submission_mode; "tag" drops the branch-push trigger.
+  // Only applies to the default shim — teacher-authored autograders own their
+  // triggers and are never rewritten.
+  submissionMode?: SubmissionMode
+  // The assignment's milestone submission_tags; rendered into the tags
+  // trigger as their union with submit/*. Default-shim only, like the mode.
+  submissionTags?: string[]
 }): Promise<string> {
-  const { org, classroom, autograder, secret, branch, configBranch } = params
+  const {
+    org,
+    classroom,
+    autograder,
+    secret,
+    branch,
+    configBranch,
+    submissionMode,
+    submissionTags,
+  } = params
   if (isDefaultAutograder(autograder)) {
     return defaultAutograderWorkflow(
       org,
       branch || DEFAULT_BRANCH,
       configBranch || DEFAULT_BRANCH,
+      submissionMode,
+      submissionTags,
     )
   }
   // Narrowed: isDefaultAutograder returns true for undefined/"default", so a
