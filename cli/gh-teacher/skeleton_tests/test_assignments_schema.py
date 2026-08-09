@@ -453,6 +453,58 @@ class TestEmptyRepo:
         )
 
 
+class TestNoAutograder:
+    # no_autograder is a narrower sibling of empty_repo: it commits no shim but
+    # PERMITS a template and the Feedback PR (a templated repo has a baseline
+    # commit). It excludes the grading-adjacent fields, empty_repo, and a
+    # non-default autograder. Mirrors Go's validateNoAutograderExclusions.
+    def _entry(self, **overrides):
+        # Keeps the default template (the asymmetry vs empty_repo). Overrides
+        # win over the no_autograder=True default so a test can set it invalid.
+        return _entry(**{"no_autograder": True, **overrides})
+
+    def test_no_autograder_accepted_with_template(self):
+        assert _errors(_manifest(self._entry())) == []
+
+    def test_no_autograder_permits_feedback_pr(self):
+        # Unlike empty_repo, a templated no-autograder repo can open a Feedback
+        # PR (it has a baseline commit to diff against).
+        assert _errors(_manifest(self._entry(feedback_pr=True))) == []
+
+    def test_no_autograder_false_accepted(self):
+        assert _errors(_manifest(_entry(no_autograder=False))) == []
+
+    def test_no_autograder_must_be_boolean(self):
+        assert _errors(_manifest(self._entry(no_autograder="yes"))) != []
+
+    def test_no_autograder_rejects_empty_repo(self):
+        # A bare repo already commits no shim; the two states must not both be
+        # set.
+        entry = self._entry(empty_repo=True)
+        del entry["template"]  # empty_repo also forbids a template
+        assert _errors(_manifest(entry)) != []
+
+    def test_no_autograder_rejects_non_default_autograder(self):
+        # A non-default autograder means "fetch this Pages workflow" — the
+        # opposite of adding no workflow.
+        assert _errors(_manifest(self._entry(autograder="io-suite"))) != []
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("tests", [{"name": "t", "type": "run", "run": "true", "points": 1}]),
+            ("allowed_files", ["*"]),
+            ("release_assets", ["report.pdf"]),
+            ("pass_threshold", 70),
+            ("submission_mode", "tag"),
+            ("submission_tags", ["phase1"]),
+        ],
+    )
+    def test_no_autograder_rejects_grading_fields(self, field, value):
+        # No shim exists to grade, trigger, or attach assets to.
+        assert _errors(_manifest(self._entry(**{field: value}))) != []
+
+
 def _release_assets_errors(value):
     return _errors(_manifest(_entry(release_assets=value)))
 
