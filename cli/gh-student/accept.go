@@ -416,6 +416,12 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	if entry.EmptyRepo && entry.Template != nil {
 		return fmt.Errorf("assignment %q sets both empty_repo and a template — the entry is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
+	// no_autograder is a templated, shim-less state; empty_repo is a bare
+	// shim-less state. Both being set is an invalid hand-edited entry — fail
+	// closed rather than pick one. (Mirrors the empty_repo+template guard.)
+	if entry.NoAutograder && entry.EmptyRepo {
+		return fmt.Errorf("assignment %q sets both no_autograder and empty_repo — the entry is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
+	}
 
 	// 2) Resolve the autograder shim. A non-default (Pages-fetched) autograder
 	//    is teacher-authored and resolved up front so a fetch failure doesn't
@@ -428,7 +434,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	autograderName := entry.ResolveAutograder()
 	useDefaultShim := autograderName == contract.DefaultAutograderName
 	var shim string
-	if !useDefaultShim && !entry.EmptyRepo {
+	if !useDefaultShim && !entry.EmptyRepo && !entry.NoAutograder {
 		workflow, err := assignments.FetchAutograderWorkflow(cmd.Context(), org, classroom, secret, autograderName)
 		if err != nil {
 			return err
@@ -489,7 +495,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	// a hardcoded `main` — a wrong `@main` ref would 404 the runner and silently
 	// skip grading on a master-default org. An empty_repo assignment commits no
 	// shim at all, so skip the render (and its config-branch read).
-	if useDefaultShim && !entry.EmptyRepo {
+	if useDefaultShim && !entry.EmptyRepo && !entry.NoAutograder {
 		configBranch, cbErr := resolveConfigRepoBranch(client, org)
 		if cbErr != nil {
 			if verbose {

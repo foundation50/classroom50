@@ -108,3 +108,96 @@ func TestCommitFiles_EmptyIsNoop(t *testing.T) {
 		t.Fatalf("CommitFiles(nil): %v", err)
 	}
 }
+
+// TestDropFiles_NoAutograderOmitsShim pins the no_autograder / empty-shim
+// behavior: an empty workflowContent must commit ONLY the .classroom50.yaml
+// marker, never an empty .github/workflows/autograde.yaml. A non-empty shim
+// still commits both.
+func TestDropFiles_NoAutograderOmitsShim(t *testing.T) {
+	run := func(t *testing.T, workflowContent string) []string {
+		var (
+			mu    sync.Mutex
+			paths []string
+		)
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/r/git/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPatch {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"object": map[string]string{"sha": "parent-sha"},
+			})
+		})
+		mux.HandleFunc("/repos/o/r/git/commits/parent-sha", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"tree": map[string]string{"sha": "parent-tree"},
+			})
+		})
+		mux.HandleFunc("/repos/o/r/git/commits", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "new-commit-sha"})
+		})
+		mux.HandleFunc("/repos/o/r/git/blobs", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "blob-sha"})
+		})
+		mux.HandleFunc("/repos/o/r/git/trees", func(w http.ResponseWriter, r *http.Request) {
+			var body struct {
+				Tree []struct {
+					Path string `json:"path"`
+				} `json:"tree"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			mu.Lock()
+			for _, e := range body.Tree {
+				paths = append(paths, e.Path)
+			}
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "tree-sha"})
+		})
+		// The contents API probe WaitForStableBranch uses to confirm the branch.
+		mux.HandleFunc("/repos/o/r/branches/main", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name":   "main",
+				"commit": map[string]string{"sha": "parent-sha"},
+			})
+		})
+
+		server := httptest.NewServer(mux)
+		defer server.Close()
+		client := githubtest.NewTestClient(t, server)
+
+		cfg := Config{Classroom: "cs", Assignment: "hw"}
+		if _, err := DropFiles(client, "o", "r", "main", cfg, workflowContent); err != nil {
+			t.Fatalf("DropFiles: %v", err)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		return paths
+	}
+
+	has := func(paths []string, want string) bool {
+		for _, p := range paths {
+			if p == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("empty shim commits only the marker", func(t *testing.T) {
+		paths := run(t, "")
+		if !has(paths, MetadataPath) {
+			t.Errorf("marker %q not committed; paths=%v", MetadataPath, paths)
+		}
+		if has(paths, AutogradeWorkflowPath) {
+			t.Errorf("no_autograder accept must not commit %q; paths=%v", AutogradeWorkflowPath, paths)
+		}
+	})
+
+	t.Run("non-empty shim commits both", func(t *testing.T) {
+		paths := run(t, "name: Autograde\n")
+		if !has(paths, MetadataPath) || !has(paths, AutogradeWorkflowPath) {
+			t.Errorf("expected both marker and shim; paths=%v", paths)
+		}
+	})
+}
