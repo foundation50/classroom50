@@ -2522,6 +2522,69 @@ def test_runner_empty_repo_guard_uses_strict_predicate():
     assert "autograding is disabled for it" in runner
 
 
+def test_valid_assignment_slugs_excludes_no_autograder():
+    # A templated no_autograder assignment (teacher-managed CI) never produces
+    # submit/* releases, so it is not collectable — same skip as empty_repo.
+    assignments = {
+        "assignments": [
+            {"slug": "hello"},
+            {"slug": "ci-lab", "no_autograder": True},
+            {"slug": "world", "no_autograder": False},
+        ]
+    }
+    assert cs.valid_assignment_slugs(assignments) == ["hello", "world"]
+
+
+def test_is_no_autograder_is_strict_boolean_true():
+    # Same strict-boolean wire contract as is_empty_repo, so all tools agree.
+    assert cs.is_no_autograder({"no_autograder": True}) is True
+    assert cs.is_no_autograder({"no_autograder": False}) is False
+    assert cs.is_no_autograder({}) is False
+    for non_bool in ("true", "yes", 1, [1], {"x": 1}):
+        assert cs.is_no_autograder({"no_autograder": non_bool}) is False, non_bool
+    # skips_grading unifies the two "does not autograde" states.
+    assert cs.skips_grading({"empty_repo": True}) is True
+    assert cs.skips_grading({"no_autograder": True}) is True
+    assert cs.skips_grading({"slug": "x"}) is False
+
+
+def test_runner_no_autograder_guard_uses_strict_predicate():
+    # The runner's student-repo-facing guard must skip a no_autograder
+    # assignment with the same strict predicate as the importable readers.
+    runner = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "skeleton"
+        / "dotgithub"
+        / "workflows"
+        / "autograde-runner.yaml"
+    ).read_text()
+    assert 'entry.get("no_autograder") is True' in runner, (
+        "runner no_autograder guard must use the strict `is True` predicate "
+        "(matching is_no_autograder / Go bool / TS === true)"
+    )
+
+
+def test_collect_classroom_skips_no_autograder_assignment(monkeypatch, capsys):
+    # A no_autograder assignment is skipped with a log line, like empty_repo.
+    def fail_releases(*args, **kwargs):
+        raise AssertionError("no_autograder repos must not be polled for releases")
+
+    monkeypatch.setattr(cs, "all_submit_releases", fail_releases)
+    stub_team_members(monkeypatch, ["alice"])
+
+    results, _ = cs.collect_classroom(
+        api_url="https://api.github.com",
+        org="cs50",
+        classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "ci-lab", "no_autograder": True}]},
+        service_token="token",
+    )
+
+    assert results == []
+    assert "no_autograder" in capsys.readouterr().out
+
+
 def test_collect_classroom_skips_empty_repo_assignment(monkeypatch, capsys):
     # An empty_repo assignment is skipped with a log line: its bare repos are
     # never polled for releases, so no dead gradebook rows are produced.

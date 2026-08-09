@@ -266,6 +266,15 @@ jobs:
           if entry.get("empty_repo") is True:
               fail(f"assignment {assignment!r} is an empty-repository assignment — autograding is disabled for it")
 
+          # no_autograder assignments (templated, teacher-managed CI) commit no
+          # shim, so the runner should never be invoked for one. Enforced here
+          # for the same student-writable reason as empty_repo: a hand-added
+          # workflow must not re-enter the grading pipeline collection skips.
+          # Strict boolean, byte-identical to is_no_autograder in
+          # collect_scores.py / regrade_repos.py.
+          if entry.get("no_autograder") is True:
+              fail(f"assignment {assignment!r} is a no-autograder assignment (teacher-managed CI) — built-in autograding is disabled for it")
+
           # === Re-validate the declarative tests block ===
           # Mirrors cli/gh-teacher/tests.go (write-time validator) so a
           # hand-edited assignments.json fails here with a clear

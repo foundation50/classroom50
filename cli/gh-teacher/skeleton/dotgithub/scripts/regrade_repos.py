@@ -200,10 +200,11 @@ def main() -> int:
         roster, entry = load_roster(classroom_dir, assignment_filter, api_url, org, service_token)
     except EmptyRepoAssignment:
         # Successful no-op, not a failure: the teacher (or a stale button)
-        # targeted an assignment whose repos are deliberately bare.
+        # targeted an assignment that never autogrades (empty_repo, or a
+        # templated no_autograder with teacher-managed CI).
         print(
-            f"regrade {classroom_filter}/{assignment_filter}: assignment has "
-            f"empty_repo enabled — autograding is disabled, nothing to regrade."
+            f"regrade {classroom_filter}/{assignment_filter}: assignment does "
+            f"not autograde (empty_repo or no_autograder) — nothing to regrade."
         )
         return 0
     except RegradeInputError as exc:
@@ -682,10 +683,11 @@ class RegradeInputError(Exception):
 
 
 class EmptyRepoAssignment(Exception):
-    """The target assignment has empty_repo: true — student repos carry no
-    autograde workflow, so there is nothing to re-run and no HEAD worth tagging
-    (the first-grade fallback would push submit/* tags that fire nothing).
-    main() treats this as a successful no-op, not an error."""
+    """The target assignment never autogrades — empty_repo: true (bare repos)
+    or no_autograder: true (templated, teacher-managed CI). Student repos carry
+    no autograde workflow, so there is nothing to re-run and no HEAD worth
+    tagging (the first-grade fallback would push submit/* tags that fire
+    nothing). main() treats this as a successful no-op, not an error."""
 
 
 def is_empty_repo(entry: dict[str, Any]) -> bool:
@@ -695,6 +697,22 @@ def is_empty_repo(entry: dict[str, Any]) -> bool:
     byte-identical to collect_scores.py / the autograde-runner so every tool
     agrees on the predicate."""
     return entry.get("empty_repo") is True
+
+
+def is_no_autograder(entry: dict[str, Any]) -> bool:
+    """True only when no_autograder is the boolean `true` (strict, like
+    is_empty_repo). A templated no_autograder assignment commits no shim, so it
+    never autogrades and produces no submit/* releases — regrade has nothing to
+    re-run and no HEAD worth tagging. Keep byte-identical to collect_scores.py /
+    the autograde-runner so every tool agrees."""
+    return entry.get("no_autograder") is True
+
+
+def skips_grading(entry: dict[str, Any]) -> bool:
+    """True when the assignment never autogrades — either a bare empty_repo or a
+    templated no_autograder (teacher-managed CI). The "does not autograde"
+    predicate family shared with collect_scores.py."""
+    return is_empty_repo(entry) or is_no_autograder(entry)
 
 
 def is_tag_submission_mode(entry: dict[str, Any]) -> bool:
@@ -750,10 +768,11 @@ def load_roster(
             f"assignment {assignment_slug!r} is not registered in "
             f"{classroom_dir.name}/assignments.json"
         )
-    # empty_repo assignments never autograde (accept commits no workflow), so
+    # Assignments that never autograde (empty_repo, or a templated
+    # no_autograder with teacher-managed CI) commit no autograde workflow, so
     # skip before the team listing — otherwise the first-grade fallback would
     # push useless submit/* tags into every student repo.
-    if is_empty_repo(entries[assignment_slug]):
+    if skips_grading(entries[assignment_slug]):
         raise EmptyRepoAssignment(assignment_slug)
 
     # Resolve the classroom team slug: classroom.json's authoritative team.slug

@@ -790,6 +790,50 @@ def test_is_empty_repo_is_strict_boolean_true():
         assert rr.is_empty_repo({"empty_repo": non_bool}) is False, non_bool
 
 
+def test_is_no_autograder_is_strict_boolean_true():
+    # Byte-identical in meaning to collect_scores.is_no_autograder and the
+    # runner guard: only the literal True skips regrade.
+    assert rr.is_no_autograder({"no_autograder": True}) is True
+    assert rr.is_no_autograder({"no_autograder": False}) is False
+    assert rr.is_no_autograder({}) is False
+    for non_bool in ("true", "yes", 1, [1], {"x": 1}):
+        assert rr.is_no_autograder({"no_autograder": non_bool}) is False, non_bool
+    # skips_grading unifies the two "does not autograde" states.
+    assert rr.skips_grading({"empty_repo": True}) is True
+    assert rr.skips_grading({"no_autograder": True}) is True
+    assert rr.skips_grading({"slug": "x"}) is False
+
+
+def test_load_roster_no_autograder_raises_sentinel(monkeypatch, tmp_path):
+    # A templated no_autograder assignment raises the same skip sentinel BEFORE
+    # the team listing — teacher-managed CI commits no shim, so there is nothing
+    # to re-run and the first-grade fallback would push useless submit/* tags.
+    cdir = tmp_path / "cs50"
+    cdir.mkdir()
+    (cdir / "assignments.json").write_text(
+        json.dumps(
+            {
+                "schema": rr.ASSIGNMENTS_SCHEMA_V1,
+                "assignments": [
+                    {
+                        "slug": "ci-lab",
+                        "name": "CI Lab",
+                        "mode": "individual",
+                        "autograder": "default",
+                        "template": {"owner": "o", "repo": "t", "branch": "main"},
+                        "no_autograder": True,
+                    }
+                ],
+            }
+        )
+    )
+    monkeypatch.setattr(
+        rr, "list_team_member_logins", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+    with pytest.raises(rr.EmptyRepoAssignment):
+        rr.load_roster(cdir, "ci-lab", "https://api", "cs50org", "tok")
+
+
 def test_load_roster_empty_repo_raises_sentinel(monkeypatch, tmp_path):
     # An empty_repo assignment raises EmptyRepoAssignment BEFORE the team
     # listing — bare repos carry no autograde workflow, so there is nothing to
