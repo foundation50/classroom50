@@ -146,6 +146,16 @@ export type Assignment = {
   // with template/tests/feedback_pr/allowed_files/pass_threshold and IMMUTABLE
   // after creation. Omitted when false (CLI omitempty); absent reads as false.
   empty_repo?: boolean
+  // Teacher-managed CI on a TEMPLATED assignment: accept commits the
+  // .classroom50.yaml marker and the template's content but NO autograde shim
+  // (neither the default shim nor a Pages-fetched workflow), so the teacher's
+  // own .github/ CI runs instead. UNLIKE empty_repo it permits a template and
+  // the Feedback PR (a templated repo has a baseline commit); it excludes the
+  // grading-adjacent fields and is mutually exclusive with empty_repo and a
+  // non-default autograder. IMMUTABLE after creation. Omitted when false (CLI
+  // omitempty); absent reads as false. In lockstep with the CLI's
+  // assignments-v1 schema (`no_autograder`).
+  no_autograder?: boolean
   // Lock the assignment against student access. Every student surface (accept
   // page, assignments list, submission view, and `gh student accept`) refuses
   // a locked assignment for EVERY student, including one who already accepted.

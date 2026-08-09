@@ -108,6 +108,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   // whose empty_repo differs from the stored entry, so the rebuild can only
   // ever re-write the same value. The edit form shows it read-only.
   empty_repo: "managed",
+  no_autograder: "managed",
   // Fully managed AND a closed object: the CLI decodes runtime strictly
   // (RuntimeRef has no Extra, DisallowUnknownFields; schema additionalProperties
   // false), so the rebuilt runtime must win and any unknown sub-key drops rather
@@ -380,6 +381,49 @@ async function buildAssignmentEntry(
     }
   }
 
+  // no_autograder is a narrower sibling of empty_repo: no shim, so the
+  // grading-adjacent fields are rejected — but a template and the Feedback PR
+  // are PERMITTED (a templated repo has a baseline commit). Mutually exclusive
+  // with empty_repo. Mirrors the CLI's validateNoAutograderExclusions; the form
+  // gates these inputs, this is the authoritative backstop.
+  if (input.no_autograder) {
+    if (input.empty_repo) {
+      throw new Error(
+        "no_autograder: mutually exclusive with empty_repo — a bare repo already commits no shim.",
+      )
+    }
+    if (tests.length > 0) {
+      throw new Error(
+        "no_autograder: teacher-managed CI can't have autograding tests or a setup command — no shim runs them.",
+      )
+    }
+    if (input.allowed_files?.trim()) {
+      throw new Error(
+        "no_autograder: teacher-managed CI can't restrict allowed files — no shim enforces them.",
+      )
+    }
+    if (input.release_assets.trim()) {
+      throw new Error(
+        "no_autograder: teacher-managed CI can't attach submission release files — no shim autogrades.",
+      )
+    }
+    if (input.pass_threshold !== undefined) {
+      throw new Error(
+        "no_autograder: teacher-managed CI can't have a passing threshold — no shim autogrades.",
+      )
+    }
+    if (input.submission_mode && input.submission_mode !== "every-push") {
+      throw new Error(
+        "no_autograder: teacher-managed CI can't set a submission mode — no shim exists to trigger.",
+      )
+    }
+    if (input.submission_tags && input.submission_tags.length > 0) {
+      throw new Error(
+        "no_autograder: teacher-managed CI can't set milestone tags — no shim exists to trigger.",
+      )
+    }
+  }
+
   if (tests.length > 0) {
     await ensureDeclarativeTestsWritable(
       client,
@@ -429,6 +473,10 @@ async function buildAssignmentEntry(
   // Written only when true, matching the CLI's omitempty.
   if (input.empty_repo) {
     entry.empty_repo = true
+  }
+  // Written only when true (CLI omitempty). Teacher-managed CI, no shim.
+  if (input.no_autograder) {
+    entry.no_autograder = true
   }
   // Omit the template block entirely for a template-less assignment, matching
   // the CLI's nil TemplateRef.
