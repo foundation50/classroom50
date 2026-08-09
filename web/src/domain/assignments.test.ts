@@ -878,6 +878,31 @@ describe("editAssignment (preserved-entry integration)", () => {
     ).rejects.toThrow(/empty_repo cannot be changed after creation/)
   })
 
+  it("rejects flipping no_autograder on after creation (immutable)", async () => {
+    // existingEntry has no no_autograder (false); the edit tries to enable it.
+    // The shim (or its absence) is baked at accept time and never retrofitted.
+    const { client } = makeClient()
+    await expect(
+      editAssignment(client, editInput({ no_autograder: true })),
+    ).rejects.toThrow(/no_autograder cannot be changed after creation/)
+  })
+
+  it("rejects flipping no_autograder off after creation (immutable)", async () => {
+    const ciEntry: Assignment = {
+      slug: SLUG,
+      name: "CI Lab",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "o", repo: "t", branch: "main" },
+      feedback_pr: true,
+      no_autograder: true,
+    }
+    const { client } = makeBareClient(ciEntry)
+    await expect(
+      editAssignment(client, editInput({ no_autograder: false })),
+    ).rejects.toThrow(/no_autograder cannot be changed after creation/)
+  })
+
   it("rejects flipping empty_repo off after creation (immutable)", async () => {
     const bareEntry: Assignment = {
       slug: SLUG,

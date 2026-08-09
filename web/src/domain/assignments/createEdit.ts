@@ -207,6 +207,16 @@ export async function editAssignment(
     )
   }
 
+  // no_autograder is immutable for the same reason: the shim (or its absence)
+  // is baked into each student repo at accept time and never retrofitted, so
+  // flipping it strands every already-accepted repo. Mirrors the CLI's
+  // ValidateNoAutograderUnchanged.
+  if (Boolean(input.no_autograder) !== Boolean(targetAssignment.no_autograder)) {
+    throw new Error(
+      `no_autograder cannot be changed after creation (assignment "${slug}"): repositories students already accepted are not retrofitted. Create a new assignment under a different slug instead — reusing this slug (even after removing it) would leave already-accepted repos on the old setting.`,
+    )
+  }
+
   // Normalize the edit like create so it never leaves stray non-schema keys
   // the CLI rejects. Pass the stored template so an unchanged ref is reused
   // without a live lookup (non-template edits save even if the template moved).
