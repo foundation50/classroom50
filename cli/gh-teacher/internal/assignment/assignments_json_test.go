@@ -1725,6 +1725,62 @@ func TestParseAssignments_EmptyRepoRoundTrip(t *testing.T) {
 	}
 }
 
+// TestParseAssignments_NoAutograderRoundTrip: no_autograder=true parses,
+// survives re-encode/re-parse, and an entry without the field defaults to
+// false (back-compat: a pre-feature manifest behaves identically). Same
+// omitempty wire shape as empty_repo. A no_autograder assignment keeps its
+// template (the asymmetry vs empty_repo).
+func TestParseAssignments_NoAutograderRoundTrip(t *testing.T) {
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "ci-lab",
+      "name": "CI Lab",
+      "template": { "owner": "cs50", "repo": "ci-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default",
+      "no_autograder": true
+    },
+    {
+      "slug": "world",
+      "name": "World",
+      "template": { "owner": "cs50", "repo": "world-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default"
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	if !file.Assignments[0].NoAutograder {
+		t.Errorf("ci-lab.NoAutograder = false, want true")
+	}
+	if file.Assignments[1].NoAutograder {
+		t.Errorf("world.NoAutograder = true, want false (field absent — back-compat)")
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"no_autograder": true`) {
+		t.Errorf("encoded missing no_autograder:\n%s", encoded)
+	}
+	if strings.Contains(string(encoded), `"no_autograder": false`) {
+		t.Errorf("no_autograder:false should omit, not serialize:\n%s", encoded)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if !again.Assignments[0].NoAutograder || again.Assignments[1].NoAutograder {
+		t.Errorf("no_autograder not stable across round-trip: %#v", again.Assignments)
+	}
+}
+
 // TestValidateAssignmentEntry_EmptyRepoHappyPath: a bare empty_repo entry
 // (no template, no grading fields) passes both validators.
 func TestValidateAssignmentEntry_EmptyRepoHappyPath(t *testing.T) {
