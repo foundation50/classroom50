@@ -1,6 +1,6 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { Assignment } from "@/types/classroom"
-import { getRepo } from "@/github-core/repoReads"
+import { getRepo, hasAnyCommits } from "@/github-core/repoReads"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { GitHubAPIError } from "@/github-core/errors"
 import { isDefiniteOutageError } from "@/lib/githubHealth/githubHealthStore"
@@ -202,11 +202,13 @@ export type TemplateAccessVerification =
   | { kind: "invalid"; message: string }
   | { kind: "not-visible"; owner: string; repo: string }
   | { kind: "not-template"; owner: string; repo: string }
-  // Template with no commits (size 0): GitHub's generate 422s "is empty" at
-  // accept. A commitless repo reports a phantom default_branch, so `no-branch`
-  // never catches it — size is the reliable signal for a NON-fork. Forks report
-  // size 0 while sharing objects with the parent, so they're exempt (a fork can
-  // only exist from a non-empty parent). resolveTemplate rejects it.
+  // Template with no commits: GitHub's generate 422s "is empty" at accept.
+  // Detected by an authoritative branches probe (GET /branches?per_page=1 →
+  // empty array) when GET /repos reports size 0 — size alone is unreliable
+  // because it's computed asynchronously and lags a fresh repo's real commits
+  // (issue #544). Forks report size 0 while sharing objects with the parent, so
+  // they're never probed and never treated as empty (regression #528).
+  // resolveTemplate rejects a confirmed-empty template.
   | { kind: "empty-template"; owner: string; repo: string }
   // No usable branch: no @branch given and the repo has no default branch
   // (e.g., a commitless template). resolveTemplate rejects this too.
@@ -359,13 +361,20 @@ export async function verifyTemplateAccess(
   if (!repo.is_template) {
     return { kind: "not-template", owner: parsed.owner, repo: parsed.repo }
   }
-  // Caught before no-branch: a commitless repo reports a phantom default_branch
-  // (see the empty-template verdict). Fail open on an absent size. Skip forks:
+  // Caught before no-branch: a commitless repo reports a phantom default_branch.
+  // size is an async, lagging value (a freshly-pushed repo with commits reads
+  // size 0 for minutes — issue #544), so a non-fork size 0 is only a *suspicion*
+  // of emptiness; confirm it with an authoritative branches probe. Skip forks:
   // GitHub reports size 0 for a fork that shares objects with its parent even
-  // when the fork has commits, so size is not a valid emptiness signal there —
-  // and a fork can only exist from a parent that already had commits.
+  // when the fork has commits (regression #528), and a fork can only exist from
+  // a parent that already had commits. Fail OPEN: a null (inconclusive) probe
+  // never returns empty-template — this advisory path must never be harder than
+  // the real accept-time gate.
   if (repo.size === 0 && !repo.fork) {
-    return { kind: "empty-template", owner: parsed.owner, repo: parsed.repo }
+    const commits = await hasAnyCommits(client, parsed.owner, parsed.repo)
+    if (commits === false) {
+      return { kind: "empty-template", owner: parsed.owner, repo: parsed.repo }
+    }
   }
 
   const inOrg = parsed.owner.toLowerCase() === org.toLowerCase()
@@ -451,14 +460,22 @@ export async function resolveTemplate(
     )
   }
 
-  // Fail closed: never write an assignment pointing at a commitless template
-  // (see the empty-template verdict for why size, not default_branch). Skip
-  // forks — GitHub reports size 0 for a fork sharing objects with its parent
-  // even when it has commits, and a fork can only exist from a non-empty parent.
+  // Never write an assignment pointing at a commitless template. size is an
+  // async, lagging value (a freshly-pushed repo with commits reads size 0 for
+  // minutes — issue #544), so a non-fork size 0 is only a suspicion; confirm it
+  // with an authoritative branches probe and throw only when it's definitely
+  // commitless. Skip forks — GitHub reports size 0 for a fork sharing objects
+  // with its parent even when it has commits (regression #528), and a fork can
+  // only exist from a non-empty parent. An inconclusive probe does NOT throw:
+  // this pre-flight is advisory (accept is the real gate), so a transient blip
+  // must not manufacture a false "has no commits".
   if (repo.size === 0 && !repo.fork) {
-    throw new Error(
-      `Template "${parsed.owner}/${parsed.repo}" has no commits — add at least one commit (e.g. a README) so students can generate from it, then retry.`,
-    )
+    const commits = await hasAnyCommits(client, parsed.owner, parsed.repo)
+    if (commits === false) {
+      throw new Error(
+        `Template "${parsed.owner}/${parsed.repo}" has no commits — add at least one commit (e.g. a README) so students can generate from it, then retry.`,
+      )
+    }
   }
 
   const branch = parsed.branch || repo.default_branch
