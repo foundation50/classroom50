@@ -1044,12 +1044,14 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 		}
 		return assignment.TemplateRef{}, false, "", fmt.Errorf("GET %s: %w", path, err)
 	}
-	// hasCommits resolves the ambiguous non-fork size-0 case with an
-	// authoritative branches probe; forks and size > 0 short-circuit with no
-	// extra request.
-	hasCommits, err := templateHasCommits(client, t, resp.Fork, resp.Size)
-	if err != nil {
-		return assignment.TemplateRef{}, false, "", err
+	// Resolve emptiness only for an actual template (mirrors the web path, which
+	// returns not-template before probing): a non-template short-circuits in
+	// resolveTemplateBranch below, so a non-template size-0 repo issues no probe.
+	// For a template, hasCommits resolves the ambiguous non-fork size-0 case with
+	// an authoritative branches probe; forks and size > 0 issue no extra request.
+	hasCommits := true
+	if resp.IsTemplate {
+		hasCommits = templateHasCommits(client, t, resp.Fork, resp.Size)
 	}
 	ref, err = resolveTemplateBranch(t, resp.IsTemplate, hasCommits, resp.DefaultBranch)
 	if err != nil {
@@ -1109,26 +1111,29 @@ func resolveTemplateBranch(t templateArg, isTemplate, hasCommits bool, defaultBr
 // #528; fast path). Only the ambiguous non-fork size-0 case issues an
 // authoritative branches probe (GET /branches?per_page=1): a non-empty array
 // means the repo has commits, an empty array means it is genuinely commitless
-// (issue #544 — size lags a fresh repo's real commits). A probe that cannot
-// confirm emptiness (transient error) fails toward "has commits" rather than
-// manufacturing a false "has no commits"; `add`'s real emptiness gate is
-// GitHub's generate at accept, and the fresh-repo 409 is already tolerated
-// there.
-func templateHasCommits(client githubapi.Client, t templateArg, isFork bool, size int) (bool, error) {
+// (verified: a truly-empty repo returns 200 [] — issue #544, where size lags a
+// fresh repo's real commits). Only a 404 (repo gone) is a definite empty; any
+// other error — including a 409 "Git Repository is empty." (the fresh-repo
+// warmup window this codebase treats as transient, see gh-student's
+// isFreshRepoRetryable) — fails toward has-commits rather than manufacturing a
+// false "has no commits". `add`'s real emptiness gate is GitHub's generate at
+// accept, and the fresh-repo 409 is already tolerated there.
+func templateHasCommits(client githubapi.Client, t templateArg, isFork bool, size int) bool {
 	if isFork || size > 0 {
-		return true, nil
+		return true
 	}
 	path := fmt.Sprintf("repos/%s/%s/branches?per_page=1", url.PathEscape(t.Owner), url.PathEscape(t.Repo))
 	var branches []struct {
 		Name string `json:"name"`
 	}
 	if err := client.Get(path, &branches); err != nil {
-		// 404 (gone) or 409 ("Git Repository is empty.") is a definite empty; any
-		// other error is inconclusive, so fail toward has-commits (don't block).
-		if cliutil.IsHTTPStatus(err, http.StatusNotFound) || cliutil.IsHTTPStatus(err, http.StatusConflict) {
-			return false, nil
+		// 404 (gone) is a definite empty; any other error (incl. a transient
+		// fresh-repo 409, rate-limit 403, or 5xx) is inconclusive, so fail toward
+		// has-commits and let generate-at-accept be the real gate.
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return false
 		}
-		return true, nil
+		return true
 	}
-	return len(branches) > 0, nil
+	return len(branches) > 0
 }

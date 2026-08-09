@@ -203,11 +203,8 @@ export type TemplateAccessVerification =
   | { kind: "not-visible"; owner: string; repo: string }
   | { kind: "not-template"; owner: string; repo: string }
   // Template with no commits: GitHub's generate 422s "is empty" at accept.
-  // Detected by an authoritative branches probe (GET /branches?per_page=1 →
-  // empty array) when GET /repos reports size 0 — size alone is unreliable
-  // because it's computed asynchronously and lags a fresh repo's real commits
-  // (issue #544). Forks report size 0 while sharing objects with the parent, so
-  // they're never probed and never treated as empty (regression #528).
+  // Detected via hasAnyCommits when GET /repos reports size 0 (see its comment
+  // for why size alone is unreliable — #544; forks exempt — #528).
   // resolveTemplate rejects a confirmed-empty template.
   | { kind: "empty-template"; owner: string; repo: string }
   // No usable branch: no @branch given and the repo has no default branch
@@ -361,15 +358,11 @@ export async function verifyTemplateAccess(
   if (!repo.is_template) {
     return { kind: "not-template", owner: parsed.owner, repo: parsed.repo }
   }
-  // Caught before no-branch: a commitless repo reports a phantom default_branch.
-  // size is an async, lagging value (a freshly-pushed repo with commits reads
-  // size 0 for minutes — issue #544), so a non-fork size 0 is only a *suspicion*
-  // of emptiness; confirm it with an authoritative branches probe. Skip forks:
-  // GitHub reports size 0 for a fork that shares objects with its parent even
-  // when the fork has commits (regression #528), and a fork can only exist from
-  // a parent that already had commits. Fail OPEN: a null (inconclusive) probe
-  // never returns empty-template — this advisory path must never be harder than
-  // the real accept-time gate.
+  // Caught before no-branch (a commitless repo reports a phantom default_branch).
+  // A non-fork size 0 is only a suspicion; confirm via hasAnyCommits (#544).
+  // Forks are never probed and never treated as empty (#528). Fail OPEN: a null
+  // (inconclusive) probe never returns empty-template — this advisory path must
+  // never be harder than the real accept-time gate.
   if (repo.size === 0 && !repo.fork) {
     const commits = await hasAnyCommits(client, parsed.owner, parsed.repo)
     if (commits === false) {
@@ -460,15 +453,11 @@ export async function resolveTemplate(
     )
   }
 
-  // Never write an assignment pointing at a commitless template. size is an
-  // async, lagging value (a freshly-pushed repo with commits reads size 0 for
-  // minutes — issue #544), so a non-fork size 0 is only a suspicion; confirm it
-  // with an authoritative branches probe and throw only when it's definitely
-  // commitless. Skip forks — GitHub reports size 0 for a fork sharing objects
-  // with its parent even when it has commits (regression #528), and a fork can
-  // only exist from a non-empty parent. An inconclusive probe does NOT throw:
-  // this pre-flight is advisory (accept is the real gate), so a transient blip
-  // must not manufacture a false "has no commits".
+  // Never write an assignment pointing at a commitless template. A non-fork
+  // size 0 is only a suspicion; confirm via hasAnyCommits (#544). Forks are
+  // never probed (#528). An inconclusive probe does NOT throw: this pre-flight
+  // is advisory (accept is the real gate), so a transient blip must not
+  // manufacture a false "has no commits".
   if (repo.size === 0 && !repo.fork) {
     const commits = await hasAnyCommits(client, parsed.owner, parsed.repo)
     if (commits === false) {

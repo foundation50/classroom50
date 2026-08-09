@@ -85,14 +85,10 @@ export type GitHubRepo = {
     private: boolean
   }
   default_branch: string
-  // Repo size in KB (GET /repos). Populated by an async background job, so a
-  // freshly-created/pushed repo with real commits reads 0 for minutes (issue
-  // #544) — size is NOT a reliable emptiness signal on its own. A commitless
-  // template can't be generated from (GitHub's POST /generate 422s "is empty"),
-  // so the pre-flight treats a non-fork size 0 as a *suspicion* and confirms it
-  // with an authoritative branches probe (see hasAnyCommits). Forks report
-  // size 0 while sharing objects with their parent, so they're never probed
-  // and never treated as empty (regression #528).
+  // Repo size in KB (GET /repos). Populated by an async background job, so it
+  // lags a fresh repo's real commits (issue #544) — a non-fork size 0 is only a
+  // suspicion of emptiness, confirmed via hasAnyCommits (see its comment); forks
+  // (size 0 while sharing parent objects, #528) are never probed.
   size?: number
   visibility?: "public" | "private" | "internal"
   archived?: boolean

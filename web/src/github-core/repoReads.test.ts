@@ -51,11 +51,11 @@ describe("hasAnyCommits", () => {
     expect(paths).toEqual(["/repos/o/r/branches?per_page=1"])
   })
 
-  it("treats a 409 'Git Repository is empty.' as definitely empty", async () => {
+  it("treats a 409 'Git Repository is empty.' as inconclusive (fresh-repo warmup)", async () => {
     const { client } = clientReturning(async () => {
       throw apiError(409, "Git Repository is empty.")
     })
-    expect(await hasAnyCommits(client, "o", "r")).toBe(false)
+    expect(await hasAnyCommits(client, "o", "r")).toBeNull()
   })
 
   it("treats a 404 (repo gone) as definitely empty", async () => {
@@ -63,6 +63,11 @@ describe("hasAnyCommits", () => {
       throw apiError(404, "Not Found")
     })
     expect(await hasAnyCommits(client, "o", "r")).toBe(false)
+  })
+
+  it("returns null (inconclusive) on a malformed non-array 200 body", async () => {
+    const { client } = clientReturning(async () => ({ message: "nope" }))
+    expect(await hasAnyCommits(client, "o", "r")).toBeNull()
   })
 
   it("returns null (inconclusive) on a transient server error", async () => {

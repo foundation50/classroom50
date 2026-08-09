@@ -1887,6 +1887,7 @@ describe("verifyTemplateAccess", () => {
     const result = await verifyTemplateAccess(client, ORG, "tmpl")
 
     expect(result.kind).not.toBe("empty-template")
+    expect(result.kind).toBe("ok")
   })
 
   it("does not probe branches when size > 0 (fast path)", async () => {
