@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.27.2](https://github.com/foundation50/classroom50/compare/web-v1.27.1...web-v1.27.2) (2026-08-09)
+
+
+### Bug Fixes
+
+* **web:** bump nanoid to 3.3.18 to fix zero-size infinite loop (GHSA-2v37-7h3g-55p8) ([#549](https://github.com/foundation50/classroom50/issues/549)) ([a5c2850](https://github.com/foundation50/classroom50/commit/a5c28506b3a126ba8a97364b67e072bb6ffd616a))
+
 ## [1.27.1](https://github.com/foundation50/classroom50/compare/web-v1.27.0...web-v1.27.1) (2026-08-09)
 
 
