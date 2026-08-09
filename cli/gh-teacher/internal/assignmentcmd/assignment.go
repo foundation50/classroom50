@@ -753,6 +753,9 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			if err := assignment.ValidateEmptyRepoUnchanged(file.Assignments[prevIdx], entry); err != nil {
 				return nil, err
 			}
+			if err := assignment.ValidateNoAutograderUnchanged(file.Assignments[prevIdx], entry); err != nil {
+				return nil, err
+			}
 		}
 		// Upsert replaces the whole entry, so re-running add without --tests
 		// drops tests authored via `assignment test add`. Count them for the

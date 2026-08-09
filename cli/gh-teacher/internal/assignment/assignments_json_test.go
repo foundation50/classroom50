@@ -1825,3 +1825,67 @@ func TestValidateEmptyRepoUnchanged(t *testing.T) {
 		t.Errorf("flip false->true: got %v, want the immutability error", err)
 	}
 }
+
+// TestValidateNoAutograderExclusions: no_autograder commits no shim but PERMITS
+// a template and the Feedback PR (the asymmetry vs empty_repo); it excludes the
+// grading-adjacent fields, empty_repo, and a non-default autograder.
+func TestValidateNoAutograderExclusions(t *testing.T) {
+	base := AssignmentEntry{
+		Slug: "hw", Name: "HW", Mode: "individual", Autograder: "default",
+		NoAutograder: true,
+		Template:     &TemplateRef{Owner: "o", Repo: "t", Branch: "main"},
+	}
+	// Permitted: template + feedback_pr alongside no_autograder.
+	ok := base
+	ok.FeedbackPR = true
+	if err := validateNoAutograderExclusions(ok); err != nil {
+		t.Errorf("template + feedback_pr should be permitted: %v", err)
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(*AssignmentEntry)
+		want   string
+	}{
+		{"empty_repo", func(e *AssignmentEntry) { e.EmptyRepo = true }, "mutually exclusive with empty_repo"},
+		{"non-default autograder", func(e *AssignmentEntry) { e.Autograder = "io-suite" }, "non-default autograder"},
+		{"tests", func(e *AssignmentEntry) {
+			e.Tests = []TestSpec{{Name: "t", Type: "run", Run: "true", Points: 1}}
+		}, "mutually exclusive with tests"},
+		{"allowed_files", func(e *AssignmentEntry) { e.AllowedFiles = []string{"*"} }, "allowed_files"},
+		{"release_assets", func(e *AssignmentEntry) { e.ReleaseAssets = []string{"r.pdf"} }, "release_assets"},
+		{"pass_threshold", func(e *AssignmentEntry) { n := 70; e.PassThreshold = &n }, "pass_threshold"},
+		{"submission_mode", func(e *AssignmentEntry) { e.SubmissionMode = "tag" }, "submission_mode"},
+		{"submission_tags", func(e *AssignmentEntry) { e.SubmissionTags = []string{"phase1"} }, "submission_tags"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := base
+			tc.mutate(&e)
+			err := validateNoAutograderExclusions(e)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("got %v, want an error containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestValidateNoAutograderUnchanged: no_autograder is immutable on upsert, like
+// empty_repo — the shim (or its absence) is baked at accept time.
+func TestValidateNoAutograderUnchanged(t *testing.T) {
+	on := AssignmentEntry{Slug: "hw", NoAutograder: true}
+	off := AssignmentEntry{Slug: "hw", NoAutograder: false}
+
+	if err := ValidateNoAutograderUnchanged(on, on); err != nil {
+		t.Errorf("same value (true): %v", err)
+	}
+	if err := ValidateNoAutograderUnchanged(off, off); err != nil {
+		t.Errorf("same value (false): %v", err)
+	}
+	if err := ValidateNoAutograderUnchanged(on, off); err == nil || !strings.Contains(err.Error(), "no_autograder cannot be changed") {
+		t.Errorf("flip true->false: got %v, want the immutability error", err)
+	}
+	if err := ValidateNoAutograderUnchanged(off, on); err == nil || !strings.Contains(err.Error(), "no_autograder cannot be changed") {
+		t.Errorf("flip false->true: got %v, want the immutability error", err)
+	}
+}
