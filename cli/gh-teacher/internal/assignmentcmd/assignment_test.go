@@ -169,16 +169,17 @@ func TestNormalizeDueDate_UnresolvableTZ(t *testing.T) {
 func TestResolveTemplateBranch(t *testing.T) {
 	// Each row covers one branch of the post-HTTP decision tree so a
 	// change to validateTemplateRepo's response handling can't
-	// silently drop a guard: not-a-template, empty-template (with the
-	// fork exemption), explicit-@branch retention, default_branch
-	// fallback, empty-default_branch error.
+	// silently drop a guard: not-a-template, empty-template,
+	// explicit-@branch retention, default_branch fallback,
+	// empty-default_branch error. Emptiness is now an input (hasCommits);
+	// the fork exemption (#528) and the size-0 branches probe (#544) are
+	// resolved by templateHasCommits and covered by TestTemplateHasCommits.
 	cases := []struct {
 		name        string
 		arg         templateArg
 		isTemplate  bool
-		isFork      bool
+		hasCommits  bool
 		defaultBr   string
-		size        int
 		wantRef     assignment.TemplateRef
 		wantErrPart string // empty → expect success
 	}{
@@ -186,65 +187,64 @@ func TestResolveTemplateBranch(t *testing.T) {
 			name:        "not a template",
 			arg:         templateArg{Owner: "cs50", Repo: "hello-template"},
 			isTemplate:  false,
+			hasCommits:  true,
 			defaultBr:   "main",
-			size:        0,
 			wantErrPart: "not a template repository",
 		},
 		{
 			name:        "empty template (no commits) rejected before branch resolution",
 			arg:         templateArg{Owner: "cs50", Repo: "hello-template"},
 			isTemplate:  true,
+			hasCommits:  false,
 			defaultBr:   "main", // GitHub reports a phantom default_branch for a commitless repo
-			size:        0,
 			wantErrPart: "has no commits",
 		},
 		{
-			// A fork reports size 0 while sharing objects with its parent even when
-			// it has commits, so the emptiness guard must exempt it (regression #528).
-			name:       "fork with reported size 0 is not treated as empty",
+			// The fork exemption (#528) is resolved by templateHasCommits before
+			// this pure function; here it arrives as hasCommits: true.
+			name:       "template with commits resolves to default_branch",
 			arg:        templateArg{Owner: "cs50", Repo: "cross-org-fork-template"},
 			isTemplate: true,
-			isFork:     true,
+			hasCommits: true,
 			defaultBr:  "main",
-			size:       0,
 			wantRef:    assignment.TemplateRef{Owner: "cs50", Repo: "cross-org-fork-template", Branch: "main"},
 		},
 		{
 			name:       "explicit @branch retained even when default_branch differs",
 			arg:        templateArg{Owner: "cs50", Repo: "hello-template", Branch: "feature/foo"},
 			isTemplate: true,
+			hasCommits: true,
 			defaultBr:  "main",
-			size:       1,
 			wantRef:    assignment.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "feature/foo"},
 		},
 		{
 			name:       "no @branch falls back to default_branch (master)",
 			arg:        templateArg{Owner: "cs50", Repo: "hello-template"},
 			isTemplate: true,
+			hasCommits: true,
 			defaultBr:  "master",
-			size:       1,
 			wantRef:    assignment.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "master"},
 		},
 		{
 			name:       "no @branch falls back to default_branch (main)",
 			arg:        templateArg{Owner: "cs50", Repo: "hello-template"},
 			isTemplate: true,
+			hasCommits: true,
 			defaultBr:  "main",
-			size:       1,
 			wantRef:    assignment.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "main"},
 		},
 		{
 			name:        "no @branch and empty default_branch → defensive error",
 			arg:         templateArg{Owner: "cs50", Repo: "hello-template"},
 			isTemplate:  true,
+			hasCommits:  true,
 			defaultBr:   "",
-			size:        1,
 			wantErrPart: "has no default branch",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := resolveTemplateBranch(tc.arg, tc.isTemplate, tc.isFork, tc.defaultBr, tc.size)
+			got, err := resolveTemplateBranch(tc.arg, tc.isTemplate, tc.hasCommits, tc.defaultBr)
 			if tc.wantErrPart != "" {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil (returned %#v)", tc.wantErrPart, got)
@@ -546,6 +546,122 @@ func TestValidateTemplateRepo_CrossOrgFork(t *testing.T) {
 		}
 		if parent != "" {
 			t.Errorf("crossOrgForkParent = %q, want empty for a non-fork", parent)
+		}
+	})
+}
+
+func TestTemplateHasCommits(t *testing.T) {
+	// newClient serves an optional /branches endpoint and records whether it was
+	// hit, so the fork / size>0 fast paths can assert "no probe issued".
+	newClient := func(t *testing.T, branches []map[string]any, branchErr int) (githubapi.Client, *bool) {
+		t.Helper()
+		probed := false
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/tmpl/branches", func(w http.ResponseWriter, _ *http.Request) {
+			probed = true
+			if branchErr != 0 {
+				w.WriteHeader(branchErr)
+				_, _ = w.Write([]byte(`{"message":"boom"}`))
+				return
+			}
+			_ = json.NewEncoder(w).Encode(branches)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		return githubtest.NewTestClient(t, server), &probed
+	}
+	arg := templateArg{Owner: "o", Repo: "tmpl"}
+
+	t.Run("fork short-circuits to has-commits without probing (regression #528)", func(t *testing.T) {
+		client, probed := newClient(t, nil, 0)
+		got, err := templateHasCommits(client, arg, true /*fork*/, 0)
+		if err != nil || !got {
+			t.Fatalf("got (%v, %v), want (true, nil)", got, err)
+		}
+		if *probed {
+			t.Error("branches endpoint was probed for a fork; want no probe")
+		}
+	})
+
+	t.Run("size > 0 short-circuits to has-commits without probing (fast path)", func(t *testing.T) {
+		client, probed := newClient(t, nil, 0)
+		got, err := templateHasCommits(client, arg, false, 12)
+		if err != nil || !got {
+			t.Fatalf("got (%v, %v), want (true, nil)", got, err)
+		}
+		if *probed {
+			t.Error("branches endpoint was probed when size > 0; want no probe")
+		}
+	})
+
+	t.Run("size 0 with a branch resolves to has-commits (regression #544)", func(t *testing.T) {
+		client, probed := newClient(t, []map[string]any{{"name": "main"}}, 0)
+		got, err := templateHasCommits(client, arg, false, 0)
+		if err != nil || !got {
+			t.Fatalf("got (%v, %v), want (true, nil)", got, err)
+		}
+		if !*probed {
+			t.Error("branches endpoint was not probed for a non-fork size-0 repo")
+		}
+	})
+
+	t.Run("size 0 with no branches resolves to empty", func(t *testing.T) {
+		client, _ := newClient(t, []map[string]any{}, 0)
+		got, err := templateHasCommits(client, arg, false, 0)
+		if err != nil || got {
+			t.Fatalf("got (%v, %v), want (false, nil)", got, err)
+		}
+	})
+
+	t.Run("size 0 with an inconclusive probe fails toward has-commits", func(t *testing.T) {
+		client, _ := newClient(t, nil, http.StatusInternalServerError)
+		got, err := templateHasCommits(client, arg, false, 0)
+		if err != nil || !got {
+			t.Fatalf("got (%v, %v), want (true, nil) on a transient probe error", got, err)
+		}
+	})
+}
+
+func TestValidateTemplateRepo_Emptiness(t *testing.T) {
+	// End-to-end through validateTemplateRepo: a fresh non-fork template with
+	// size 0 but a real branch must resolve (not error "has no commits").
+	newClient := func(t *testing.T, repo map[string]any, branches []map[string]any) githubapi.Client {
+		t.Helper()
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/tmpl/branches", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(branches)
+		})
+		mux.HandleFunc("/repos/o/tmpl", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(repo)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		return githubtest.NewTestClient(t, server)
+	}
+
+	t.Run("fresh size-0 template with a branch resolves (regression #544)", func(t *testing.T) {
+		client := newClient(t,
+			map[string]any{"is_template": true, "size": 0, "default_branch": "main", "private": true},
+			[]map[string]any{{"name": "main"}},
+		)
+		ref, _, _, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		if err != nil {
+			t.Fatalf("validateTemplateRepo: %v", err)
+		}
+		want := assignment.TemplateRef{Owner: "o", Repo: "tmpl", Branch: "main"}
+		if ref != want {
+			t.Errorf("ref = %#v, want %#v", ref, want)
+		}
+	})
+
+	t.Run("size-0 template with no branches errors has-no-commits", func(t *testing.T) {
+		client := newClient(t,
+			map[string]any{"is_template": true, "size": 0, "default_branch": "main", "private": true},
+			[]map[string]any{},
+		)
+		_, _, _, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		if err == nil || !strings.Contains(err.Error(), "has no commits") {
+			t.Fatalf("err = %v, want it to contain %q", err, "has no commits")
 		}
 	})
 }
