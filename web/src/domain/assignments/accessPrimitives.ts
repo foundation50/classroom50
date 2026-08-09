@@ -293,6 +293,24 @@ export function classifyPrivateFork(
   }
 }
 
+// Confirmed-commitless: a non-fork whose size-0 emptiness *suspicion* (size is
+// an async, lagging value — issue #544) is corroborated by the authoritative
+// branches probe. Forks (size 0 while sharing parent objects — regression #528)
+// and an inconclusive/null probe are never treated as empty, so both the
+// advisory verify path and the blocking resolve path fail open on uncertainty.
+// The size-0 gate is checked before no-branch because a commitless repo reports
+// a phantom default_branch. Mirrors the CLI's templateHasCommits factoring:
+// this owns the probe decision; each caller owns the terminal action.
+async function isConfirmedEmptyTemplate(
+  client: GitHubClient,
+  repo: GitHubRepo,
+  owner: string,
+  name: string,
+): Promise<boolean> {
+  if (repo.size !== 0 || repo.fork) return false
+  return (await hasAnyCommits(client, owner, name)) === false
+}
+
 export async function verifyTemplateAccess(
   client: GitHubClient,
   org: string,
@@ -359,15 +377,10 @@ export async function verifyTemplateAccess(
     return { kind: "not-template", owner: parsed.owner, repo: parsed.repo }
   }
   // Caught before no-branch (a commitless repo reports a phantom default_branch).
-  // A non-fork size 0 is only a suspicion; confirm via hasAnyCommits (#544).
-  // Forks are never probed and never treated as empty (#528). Fail OPEN: a null
-  // (inconclusive) probe never returns empty-template — this advisory path must
-  // never be harder than the real accept-time gate.
-  if (repo.size === 0 && !repo.fork) {
-    const commits = await hasAnyCommits(client, parsed.owner, parsed.repo)
-    if (commits === false) {
-      return { kind: "empty-template", owner: parsed.owner, repo: parsed.repo }
-    }
+  // Fail open: isConfirmedEmptyTemplate only returns true on a corroborated
+  // empty — this advisory path must never be stricter than accept.
+  if (await isConfirmedEmptyTemplate(client, repo, parsed.owner, parsed.repo)) {
+    return { kind: "empty-template", owner: parsed.owner, repo: parsed.repo }
   }
 
   const inOrg = parsed.owner.toLowerCase() === org.toLowerCase()
@@ -453,18 +466,13 @@ export async function resolveTemplate(
     )
   }
 
-  // Never write an assignment pointing at a commitless template. A non-fork
-  // size 0 is only a suspicion; confirm via hasAnyCommits (#544). Forks are
-  // never probed (#528). An inconclusive probe does NOT throw: this pre-flight
-  // is advisory (accept is the real gate), so a transient blip must not
-  // manufacture a false "has no commits".
-  if (repo.size === 0 && !repo.fork) {
-    const commits = await hasAnyCommits(client, parsed.owner, parsed.repo)
-    if (commits === false) {
-      throw new Error(
-        `Template "${parsed.owner}/${parsed.repo}" has no commits — add at least one commit (e.g. a README) so students can generate from it, then retry.`,
-      )
-    }
+  // Never write an assignment pointing at a commitless template. Same
+  // corroborated-empty decision as the verify path (see isConfirmedEmptyTemplate);
+  // an inconclusive probe does NOT throw — accept is the real gate.
+  if (await isConfirmedEmptyTemplate(client, repo, parsed.owner, parsed.repo)) {
+    throw new Error(
+      `Template "${parsed.owner}/${parsed.repo}" has no commits — add at least one commit (e.g. a README) so students can generate from it, then retry.`,
+    )
   }
 
   const branch = parsed.branch || repo.default_branch
