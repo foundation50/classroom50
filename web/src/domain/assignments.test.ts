@@ -1752,8 +1752,16 @@ describe("verifyTemplateAccess", () => {
 
   // A GitHubClient whose only method that matters here is `request`, which
   // returns the given repo object or throws the given error for the repo read.
-  function clientReturning(result: unknown | (() => never)): GitHubClient {
-    const request = vi.fn(async () => {
+  // When `branches` is supplied, a `/branches` request returns that array
+  // (the size-0 emptiness tiebreaker) while every other path returns the repo.
+  function clientReturning(
+    result: unknown | (() => never),
+    branches?: unknown[],
+  ): GitHubClient {
+    const request = vi.fn(async (path: string) => {
+      if (branches !== undefined && path.includes("/branches")) {
+        return branches
+      }
       if (typeof result === "function") {
         ;(result as () => never)()
       }
@@ -1811,41 +1819,129 @@ describe("verifyTemplateAccess", () => {
     expect(result.kind).toBe("not-template")
   })
 
-  it("returns empty-template when the template has no commits (size 0)", async () => {
-    const client = clientReturning({
-      name: "tmpl",
-      full_name: `${ORG}/tmpl`,
-      private: false,
-      is_template: true,
-      // GitHub reports a phantom default_branch for a commitless repo, so the
-      // signal is size, not the branch.
-      default_branch: "main",
-      size: 0,
-    })
+  it("returns empty-template when size 0 and the branches probe confirms no commits", async () => {
+    const client = clientReturning(
+      {
+        name: "tmpl",
+        full_name: `${ORG}/tmpl`,
+        private: false,
+        is_template: true,
+        // GitHub reports a phantom default_branch for a commitless repo; the
+        // authoritative signal is the empty branches array, not size alone.
+        default_branch: "main",
+        size: 0,
+      },
+      [], // no branches -> genuinely commitless
+    )
 
     const result = await verifyTemplateAccess(client, ORG, "tmpl")
 
     expect(result.kind).toBe("empty-template")
   })
 
-  it("does not flag a fork as empty-template despite size 0 (regression #528)", async () => {
-    // GitHub reports size 0 for a fork sharing objects with its parent even when
-    // the fork has commits, so a fork must never be treated as commitless.
-    const client = clientReturning({
-      name: "cross-org-fork-template",
-      full_name: `${ORG}/cross-org-fork-template`,
-      private: false,
-      is_template: true,
-      fork: true,
-      default_branch: "main",
-      size: 0,
+  it("does NOT flag a fresh repo with commits as empty despite size 0 (regression #544)", async () => {
+    // A freshly-pushed repo reports size 0 for minutes even with real commits.
+    // The branches probe (non-empty) proves it has commits, so it must resolve.
+    const client = clientReturning(
+      {
+        name: "tmpl",
+        full_name: `${ORG}/tmpl`,
+        private: true,
+        is_template: true,
+        default_branch: "main",
+        size: 0,
+      },
+      [{ name: "main" }], // has a branch -> has commits
+    )
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).not.toBe("empty-template")
+    expect(result.kind).toBe("ok")
+  })
+
+  it("fails open (not empty-template) when the size-0 branches probe is inconclusive", async () => {
+    // A transient error on the probe must not manufacture a false empty verdict
+    // on this advisory path.
+    const request = vi.fn(async (path: string) => {
+      if (path.includes("/branches")) {
+        throw new GitHubAPIError({
+          status: 500,
+          url: path,
+          message: "Server Error",
+          body: {},
+          rateLimit: emptyRateLimit,
+        })
+      }
+      return {
+        name: "tmpl",
+        full_name: `${ORG}/tmpl`,
+        private: true,
+        is_template: true,
+        default_branch: "main",
+        size: 0,
+      }
     })
+    const client = { request } as unknown as GitHubClient
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).not.toBe("empty-template")
+    expect(result.kind).toBe("ok")
+  })
+
+  it("does not probe branches when size > 0 (fast path)", async () => {
+    const requestedPaths: string[] = []
+    const request = vi.fn(async (path: string) => {
+      requestedPaths.push(path)
+      return {
+        name: "tmpl",
+        full_name: `${ORG}/tmpl`,
+        private: false,
+        is_template: true,
+        default_branch: "main",
+        size: 12,
+      }
+    })
+    const client = { request } as unknown as GitHubClient
+
+    await verifyTemplateAccess(client, ORG, "tmpl")
+
+    const requestedBranches = requestedPaths.some((p) =>
+      p.includes("/branches"),
+    )
+    expect(requestedBranches).toBe(false)
+  })
+
+  it("does not flag a fork as empty-template despite size 0, and never probes branches (regression #528)", async () => {
+    // GitHub reports size 0 for a fork sharing objects with its parent even when
+    // the fork has commits, so a fork must never be treated as commitless and
+    // must never trigger the branches probe.
+    const requestedPaths: string[] = []
+    const request = vi.fn(async (path: string) => {
+      requestedPaths.push(path)
+      return {
+        name: "cross-org-fork-template",
+        full_name: `${ORG}/cross-org-fork-template`,
+        private: false,
+        is_template: true,
+        fork: true,
+        default_branch: "main",
+        size: 0,
+      }
+    })
+    const client = { request } as unknown as GitHubClient
 
     const result = await verifyTemplateAccess(
       client,
       ORG,
       "cross-org-fork-template",
     )
+
+    const requestedBranches = requestedPaths.some((p) =>
+      p.includes("/branches"),
+    )
+    expect(requestedBranches).toBe(false)
 
     expect(result.kind).not.toBe("empty-template")
   })
@@ -2072,24 +2168,98 @@ describe("resolveTemplate (create/edit blocking path)", () => {
   const ORG = "cs50"
   const ref = (owner: string, repo: string) => ({ owner, repo })
 
-  function clientReturning(result: unknown): GitHubClient {
-    const request = vi.fn(async () => result)
+  function clientReturning(
+    result: unknown,
+    branches?: unknown[],
+  ): GitHubClient {
+    const request = vi.fn(async (path: string) => {
+      if (branches !== undefined && path.includes("/branches")) {
+        return branches
+      }
+      return result
+    })
     return { request } as unknown as GitHubClient
   }
 
-  it("throws for an empty template (no commits, size 0)", async () => {
-    const client = clientReturning({
-      name: "tmpl",
-      full_name: `${ORG}/tmpl`,
-      private: false,
-      is_template: true,
-      default_branch: "main",
-      size: 0,
-    })
+  it("throws for an empty template (size 0 and branches probe confirms no commits)", async () => {
+    const client = clientReturning(
+      {
+        name: "tmpl",
+        full_name: `${ORG}/tmpl`,
+        private: false,
+        is_template: true,
+        default_branch: "main",
+        size: 0,
+      },
+      [], // no branches -> genuinely commitless
+    )
 
     await expect(
       resolveTemplate(client, ORG, ref(ORG, "tmpl")),
     ).rejects.toThrow(/has no commits/)
+  })
+
+  it("resolves a fresh template with commits despite size 0 (regression #544)", async () => {
+    // A freshly-pushed repo reports size 0 for minutes even with real commits;
+    // the branches probe (non-empty) proves it has commits, so it must resolve
+    // rather than throw "has no commits".
+    const client = clientReturning(
+      {
+        name: "tmpl",
+        full_name: `${ORG}/tmpl`,
+        private: true,
+        is_template: true,
+        default_branch: "main",
+        size: 0,
+      },
+      [{ name: "main" }],
+    )
+
+    const result = await resolveTemplate(client, ORG, ref(ORG, "tmpl"))
+
+    expect(result.template).toEqual({
+      owner: ORG,
+      repo: "tmpl",
+      branch: "main",
+    })
+  })
+
+  it("does not throw when the size-0 branches probe is inconclusive", async () => {
+    const request = vi.fn(async (path: string) => {
+      if (path.includes("/branches")) {
+        throw new GitHubAPIError({
+          status: 500,
+          url: path,
+          message: "Server Error",
+          body: {},
+          rateLimit: {
+            limit: null,
+            remaining: null,
+            used: null,
+            reset: null,
+            resource: null,
+            retryAfter: null,
+          },
+        })
+      }
+      return {
+        name: "tmpl",
+        full_name: `${ORG}/tmpl`,
+        private: true,
+        is_template: true,
+        default_branch: "main",
+        size: 0,
+      }
+    })
+    const client = { request } as unknown as GitHubClient
+
+    const result = await resolveTemplate(client, ORG, ref(ORG, "tmpl"))
+
+    expect(result.template).toEqual({
+      owner: ORG,
+      repo: "tmpl",
+      branch: "main",
+    })
   })
 
   it("does not reject a fork with reported size 0 as commitless (regression #528)", async () => {

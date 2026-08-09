@@ -1026,11 +1026,12 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 		DefaultBranch string `json:"default_branch"`
 		Private       bool   `json:"private"`
 		Fork          bool   `json:"fork"`
-		// Repo size in KB. 0 means no commits — an empty template can't be
-		// generated from (POST /generate 422s "is empty"), and GitHub reports a
-		// phantom default_branch for it, so size is the reliable emptiness signal
-		// for a non-fork. Forks report size 0 while sharing parent objects, so the
-		// emptiness guard exempts them.
+		// Repo size in KB. size is populated by an async background job, so a
+		// freshly-created/pushed repo with real commits reads 0 for minutes
+		// (issue #544) — size alone is NOT a reliable emptiness signal. A non-fork
+		// size 0 is only a suspicion, confirmed by an authoritative branches probe
+		// below. Forks report size 0 while sharing parent objects (regression
+		// #528), so they're never probed and never treated as empty.
 		Size   int `json:"size"`
 		Parent struct {
 			FullName string `json:"full_name"`
@@ -1043,7 +1044,16 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 		}
 		return assignment.TemplateRef{}, false, "", fmt.Errorf("GET %s: %w", path, err)
 	}
-	ref, err = resolveTemplateBranch(t, resp.IsTemplate, resp.Fork, resp.DefaultBranch, resp.Size)
+	// Resolve emptiness only for an actual template (mirrors the web path, which
+	// returns not-template before probing): a non-template short-circuits in
+	// resolveTemplateBranch below, so a non-template size-0 repo issues no probe.
+	// For a template, hasCommits resolves the ambiguous non-fork size-0 case with
+	// an authoritative branches probe; forks and size > 0 issue no extra request.
+	hasCommits := true
+	if resp.IsTemplate {
+		hasCommits = templateHasCommits(client, t, resp.Fork, resp.Size)
+	}
+	ref, err = resolveTemplateBranch(t, resp.IsTemplate, hasCommits, resp.DefaultBranch)
 	if err != nil {
 		return assignment.TemplateRef{}, false, "", err
 	}
@@ -1068,18 +1078,20 @@ func templateInOrg(templateOwner, org string) bool {
 
 // resolveTemplateBranch picks the final assignment.TemplateRef from
 // --template + repo fields: not-a-template, empty (commitless), explicit
-// @branch, default_branch fallback, or empty-default_branch guard.
-func resolveTemplateBranch(t templateArg, isTemplate, isFork bool, defaultBranch string, size int) (assignment.TemplateRef, error) {
+// @branch, default_branch fallback, or empty-default_branch guard. Emptiness is
+// passed in as a resolved `hasCommits` (the HTTP-aware caller owns the branches
+// probe) so this stays a pure, unit-testable function.
+func resolveTemplateBranch(t templateArg, isTemplate, hasCommits bool, defaultBranch string) (assignment.TemplateRef, error) {
 	if !isTemplate {
 		return assignment.TemplateRef{}, fmt.Errorf("`%s/%s` is not a template repository — toggle Settings → \"Template repository\" on the repo, then re-run", t.Owner, t.Repo)
 	}
 	// Caught before the empty-branch guard below (which a commitless repo's
-	// phantom default_branch would slip past). Fail closed on an absent size —
-	// Go's zero value — the deliberate opposite of the web verify path's
-	// fail-open === 0, since `add` is the last gate before write. Forks are
-	// exempt: GitHub reports size 0 for a fork sharing objects with its parent
-	// even when it has commits, and a fork can only exist from a non-empty parent.
-	if size == 0 && !isFork {
+	// phantom default_branch would slip past). `hasCommits` is resolved by the
+	// caller: size > 0, or a fork (regression #528 — GitHub reports size 0 for a
+	// fork sharing objects with its parent), or an authoritative branches probe
+	// when size is 0 (size is async and lags a fresh repo's real commits —
+	// issue #544).
+	if !hasCommits {
 		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no commits — add at least one commit (e.g. a README) so students can generate from it, then re-run", t.Owner, t.Repo)
 	}
 	branch := t.Branch
@@ -1092,4 +1104,36 @@ func resolveTemplateBranch(t templateArg, isTemplate, isFork bool, defaultBranch
 		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no default branch — pass --template %s/%s@<branch> explicitly", t.Owner, t.Repo, t.Owner, t.Repo)
 	}
 	return assignment.TemplateRef{Owner: t.Owner, Repo: t.Repo, Branch: branch}, nil
+}
+
+// templateHasCommits resolves whether a template has any commits. Forks and a
+// reported size > 0 short-circuit to true with no extra request (regression
+// #528; fast path). Only the ambiguous non-fork size-0 case issues an
+// authoritative branches probe (GET /branches?per_page=1): a non-empty array
+// means the repo has commits, an empty array means it is genuinely commitless
+// (verified: a truly-empty repo returns 200 [] — issue #544, where size lags a
+// fresh repo's real commits). Only a 404 (repo gone) is a definite empty; any
+// other error — including a 409 "Git Repository is empty." (the fresh-repo
+// warmup window this codebase treats as transient, see gh-student's
+// isFreshRepoRetryable) — fails toward has-commits rather than manufacturing a
+// false "has no commits". `add`'s real emptiness gate is GitHub's generate at
+// accept, and the fresh-repo 409 is already tolerated there.
+func templateHasCommits(client githubapi.Client, t templateArg, isFork bool, size int) bool {
+	if isFork || size > 0 {
+		return true
+	}
+	path := fmt.Sprintf("repos/%s/%s/branches?per_page=1", url.PathEscape(t.Owner), url.PathEscape(t.Repo))
+	var branches []struct {
+		Name string `json:"name"`
+	}
+	if err := client.Get(path, &branches); err != nil {
+		// 404 (gone) is a definite empty; any other error (incl. a transient
+		// fresh-repo 409, rate-limit 403, or 5xx) is inconclusive, so fail toward
+		// has-commits and let generate-at-accept be the real gate.
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return false
+		}
+		return true
+	}
+	return len(branches) > 0
 }
