@@ -333,3 +333,63 @@ func TestFeedbackPRBody(t *testing.T) {
 // feedbackPRBodyGoldenPath locates the rendered-body golden, also consumed by
 // the Python (skeleton_tests) and TypeScript (web) mirror tests.
 const feedbackPRBodyGoldenPath = "testdata/feedback_pr_body.golden"
+
+// TestScopesSatisfy pins the single OAuth scope-hierarchy source both CLIs
+// share (the shared auto-login probe and gh-teacher's init preflight): a
+// superset satisfies, and GitHub's org implications (admin:org ⊇ write:org ⊇
+// read:org) are honored so a normalized grant isn't wrongly reported missing.
+func TestScopesSatisfy(t *testing.T) {
+	cases := []struct {
+		name     string
+		granted  []string
+		required []string
+		want     bool
+	}{
+		{"exact match", []string{"repo", "workflow"}, []string{"repo", "workflow"}, true},
+		{"superset satisfies", []string{"repo", "workflow", "gist"}, []string{"repo"}, true},
+		{"unified grant satisfies unified required", []string{"admin:org", "repo", "workflow"}, RequiredOAuthScopes(), true},
+		{"admin:org implies read:org", []string{"admin:org"}, []string{"read:org"}, true},
+		{"admin:org implies write:org", []string{"admin:org"}, []string{"write:org"}, true},
+		{"write:org implies read:org", []string{"write:org"}, []string{"read:org"}, true},
+		{"write:org does not imply admin:org", []string{"write:org"}, []string{"admin:org"}, false},
+		{"read:org does not imply admin:org", []string{"read:org"}, []string{"admin:org"}, false},
+		{"missing workflow", []string{"admin:org", "repo"}, []string{"admin:org", "repo", "workflow"}, false},
+		{"empty required is satisfied", []string{"repo"}, nil, true},
+		{"whitespace tolerated", []string{" repo ", "workflow"}, []string{"repo", "workflow"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ScopesSatisfy(tc.granted, tc.required); got != tc.want {
+				t.Errorf("ScopesSatisfy(%v, %v) = %v, want %v", tc.granted, tc.required, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestParseScopeList pins the shared X-OAuth-Scopes parse: GitHub returns a
+// comma-space-separated list, possibly empty, possibly with stray spaces.
+func TestParseScopeList(t *testing.T) {
+	cases := []struct {
+		name string
+		list string
+		want []string
+	}{
+		{"empty", "", nil},
+		{"single", "repo", []string{"repo"}},
+		{"comma-space separated", "admin:org, read:org, repo, workflow", []string{"admin:org", "read:org", "repo", "workflow"}},
+		{"stray spaces and empties", " repo ,, workflow ", []string{"repo", "workflow"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseScopeList(tc.list)
+			if len(got) != len(tc.want) {
+				t.Fatalf("ParseScopeList(%q) = %v, want %v", tc.list, got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("ParseScopeList(%q) = %v, want %v", tc.list, got, tc.want)
+				}
+			}
+		})
+	}
+}

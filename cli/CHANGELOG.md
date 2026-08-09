@@ -17,6 +17,26 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.27.1](https://github.com/foundation50/classroom50/compare/cli-v1.27.0...cli-v1.27.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* **web:** use branches probe, not repo size, to detect empty templates ([#545](https://github.com/foundation50/classroom50/issues/545)) ([4ed82f5](https://github.com/foundation50/classroom50/commit/4ed82f54d606736433bca081fbc18c7a53b0c425))
+
+## [1.27.0](https://github.com/foundation50/classroom50/compare/cli-v1.26.1...cli-v1.27.0) (2026-08-07)
+
+
+### Features
+
+* **cli:** reuse/refresh gh auth instead of clobbering it on login ([#537](https://github.com/foundation50/classroom50/issues/537)) ([6fe861a](https://github.com/foundation50/classroom50/commit/6fe861a7b43bd413853d4287361518f1e8769917))
+
+
+### Bug Fixes
+
+* **cli:** record a submission when no autograder is configured ([#535](https://github.com/foundation50/classroom50/issues/535)) ([f3dd96c](https://github.com/foundation50/classroom50/commit/f3dd96c8c949cb7d763743ad942ffa22718e68fc))
+* exempt forks from the empty-template size-0 guard ([#536](https://github.com/foundation50/classroom50/issues/536)) ([6be63f1](https://github.com/foundation50/classroom50/commit/6be63f1838124645da20f3a4ffa6e62a769b6080))
+
 ## [1.26.1](https://github.com/foundation50/classroom50/compare/cli-v1.26.0...cli-v1.26.1) (2026-08-07)
 
 

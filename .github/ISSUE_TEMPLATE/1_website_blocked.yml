@@ -1,0 +1,82 @@
+name: Website blocked or unreachable
+description: Report that classroom50.org won't load — DNS errors, "site can't be reached", or the site seems blocked on your network.
+labels: ["Web"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Some networks — especially school, home, or ISP-level filters — mistakenly flag
+        new sites like classroom50.org, so the page won't load even though the site is up.
+        A few things fix this most of the time:
+
+        - **Try a different network.** A phone hotspot or mobile data often works when
+          home or school Wi-Fi doesn't. That alone confirms it's a network block.
+        - **Switch your DNS** to a public resolver like Cloudflare (`1.1.1.1`) or Google
+          (`8.8.8.8` / `8.8.4.4`), then restart your browser.
+        - **Ask your ISP or school IT** to unblock `classroom50.org`. If they suggest a
+          firewall or content-filter change on your end, that's usually safe to allow for
+          this domain.
+
+        If none of that works, tell us what you're seeing below — it helps us spot which
+        providers are blocking the site so we can get it de-listed.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happens when you try to load the site?
+      description: The error message shown is the most useful part — paste the exact text or code (e.g. `DNS_PROBE_FINISHED_NXDOMAIN`, "This site can't be reached").
+      placeholder: |
+        "This site can't be reached — classroom50.org's DNS address could not be found."
+        Error code: DNS_PROBE_FINISHED_NXDOMAIN
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: A screenshot of the error page helps us see exactly what you're hitting.
+      placeholder: Drag and drop images here, or paste them straight from your clipboard.
+
+  - type: dropdown
+    id: network-type
+    attributes:
+      label: What kind of network are you on?
+      options:
+        - Home Wi-Fi / broadband
+        - School or campus network
+        - Work / office network
+        - Phone hotspot
+        - Mobile data
+        - Public Wi-Fi (café, library, etc.)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: isp
+    attributes:
+      label: Internet service provider (ISP)
+      description: Who provides this internet connection? This is the biggest clue for us.
+      placeholder: e.g. Comcast, BT, school district network
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Location
+      description: Country, and optionally your city or region — blocks are often regional.
+      placeholder: e.g. United States, or Ontario, Canada
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I removed any private data from the screenshots and text above.
+          required: true
