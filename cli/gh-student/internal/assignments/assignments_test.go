@@ -331,6 +331,28 @@ func TestEntryDecodesNoAutograder(t *testing.T) {
 	}
 }
 
+func TestEntryDecodesInitShim(t *testing.T) {
+	// init_shim decodes when present and defaults to false when absent. The
+	// accept flow routes it to the initialized (non-bare) create path and
+	// commits the shim (CommitsShim true), so the wire contract matters.
+	var file assignmentsFile
+	if err := json.Unmarshal([]byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {"slug": "scratch", "name": "Scratch", "mode": "individual", "autograder": "default", "init_shim": true},
+    {"slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default"}
+  ]
+}`), &file); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !file.Assignments[0].InitShim {
+		t.Error("scratch.InitShim = false, want true")
+	}
+	if file.Assignments[1].InitShim {
+		t.Error("hello.InitShim = true, want false (field absent — back-compat)")
+	}
+}
+
 func TestEntryCommitsShim(t *testing.T) {
 	// CommitsShim is the accept-time gate: both no-shim states (empty_repo,
 	// no_autograder) suppress the shim; everything else commits it. This pins
@@ -344,6 +366,9 @@ func TestEntryCommitsShim(t *testing.T) {
 		{"plain templated (default autograder)", Entry{}, true},
 		{"empty_repo", Entry{EmptyRepo: true}, false},
 		{"no_autograder", Entry{NoAutograder: true}, false},
+		// init_shim commits the DEFAULT shim onto an initialized repo — it sets
+		// neither no-shim flag, so CommitsShim is true (the whole point).
+		{"init_shim", Entry{InitShim: true}, true},
 		// A hand-edited manifest could carry both; either alone already
 		// suppresses the shim, so the conjunction stays false.
 		{"both flags", Entry{EmptyRepo: true, NoAutograder: true}, false},
