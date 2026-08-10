@@ -409,7 +409,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--tests <path>` | JSON array of declarative tests. Mutually exclusive with a per-assignment `autograder.py`. |
 | `--autograder <name>` | Swap the reusable workflow (rare). Default `default`. |
 | `--feedback-pr` | One review PR per student repo. **On by default**; `--feedback-pr=false` disables. |
-| `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; immutable; mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode/submission-tag/no-autograder. |
+| `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; immutable; mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode/submission-tag/no-autograder/init-shim. |
 | `--pass-threshold <0–100>` | Advisory passing bar shown by gradebook clients. Off when omitted (distinct from `0`). |
 | `--submission-mode every-push\|tag` | When the autograder fires: `every-push` (default) grades every push; `tag` grades only `submit/*` tag pushes (the submit clients push the tag — plain `git push` costs no Actions minutes). Change it later with `assignment submission-mode`. |
 | `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading: `git tag phase1 && git push origin phase1` grades that commit. Simple globs (`v*`) work; exact names are safer. The record still lives at the canonical `submit/*` tag. Mutually exclusive with `--empty-repo`. |
@@ -433,6 +433,23 @@ regrade skip it (no `submit/*` releases are produced). It is currently set by
 writing `no_autograder: true` into `assignments.json` (via the gradebook's
 edit path); there is no `assignment add` flag and no dedicated form control for
 it yet.
+
+**Built-in autograder on an otherwise-empty repo (`init_shim`).** A
+**template-less** assignment can carry `init_shim: true` in `assignments.json`
+to get an initialized-but-README-less repo carrying **only** the control files:
+accept creates the repo with an initial commit and lands the `.classroom50.yaml`
+marker + the universal default autograde shim — but no README and no other
+starter content. Unlike `--empty-repo` (a bare repo with no commit that **never**
+autogrades), an `init_shim` repo **does** autograde: it commits the default
+shim, produces `submit/*` releases, and is collected/regraded like any built-in
+assignment (the grading pipeline does **not** skip it). It **requires** the
+default autograder and **no** template (a template provides its own starter
+content); it is mutually exclusive with `empty_repo`, `template`,
+`no_autograder`, and a non-default `--autograder`, and it **permits** the
+grading-adjacent fields (it autogrades). It is immutable after creation. Like
+`no_autograder`, it is currently set by writing `init_shim: true` into
+`assignments.json` (via the gradebook's edit path); there is no `assignment add`
+flag.
 
 <details>
 <summary>Errors</summary>

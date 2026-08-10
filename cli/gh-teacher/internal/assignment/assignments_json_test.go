@@ -1781,6 +1781,56 @@ func TestParseAssignments_NoAutograderRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseAssignments_InitShimRoundTrip(t *testing.T) {
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "scratch",
+      "name": "Scratch",
+      "mode": "individual",
+      "autograder": "default",
+      "init_shim": true
+    },
+    {
+      "slug": "world",
+      "name": "World",
+      "template": { "owner": "cs50", "repo": "world-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default"
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	if !file.Assignments[0].InitShim {
+		t.Errorf("scratch.InitShim = false, want true")
+	}
+	if file.Assignments[1].InitShim {
+		t.Errorf("world.InitShim = true, want false (field absent — back-compat)")
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"init_shim": true`) {
+		t.Errorf("encoded missing init_shim:\n%s", encoded)
+	}
+	if strings.Contains(string(encoded), `"init_shim": false`) {
+		t.Errorf("init_shim:false should omit, not serialize:\n%s", encoded)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if !again.Assignments[0].InitShim || again.Assignments[1].InitShim {
+		t.Errorf("init_shim not stable across round-trip: %#v", again.Assignments)
+	}
+}
+
 // TestValidateAssignmentEntry_EmptyRepoHappyPath: a bare empty_repo entry
 // (no template, no grading fields) passes both validators.
 func TestValidateAssignmentEntry_EmptyRepoHappyPath(t *testing.T) {
@@ -1943,6 +1993,74 @@ func TestValidateNoAutograderUnchanged(t *testing.T) {
 		t.Errorf("flip true->false: got %v, want the immutability error", err)
 	}
 	if err := ValidateNoAutograderUnchanged(off, on); err == nil || !strings.Contains(err.Error(), "no_autograder cannot be changed") {
+		t.Errorf("flip false->true: got %v, want the immutability error", err)
+	}
+}
+
+func TestValidateInitShimExclusions(t *testing.T) {
+	// init_shim is the built-in-autograder-on-an-empty-repo state: template-less,
+	// default autograder, no empty_repo/no_autograder. Unlike no_autograder it
+	// PERMITS the grading-adjacent fields (it autogrades).
+	base := AssignmentEntry{
+		Slug: "hw", Name: "HW", Mode: "individual", Autograder: "default",
+		InitShim: true,
+	}
+	// Permitted: grading fields + feedback_pr alongside init_shim.
+	ok := base
+	ok.FeedbackPR = true
+	ok.Tests = []TestSpec{{Name: "t", Type: "run", Run: "true", Points: 1}}
+	ok.SubmissionMode = "tag"
+	ok.SubmissionTags = []string{"phase1"}
+	n := 70
+	ok.PassThreshold = &n
+	ok.AllowedFiles = []string{"*"}
+	ok.ReleaseAssets = []string{"r.pdf"}
+	if err := validateInitShimExclusions(ok); err != nil {
+		t.Errorf("grading fields + feedback_pr should be permitted for init_shim: %v", err)
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(*AssignmentEntry)
+		want   string
+	}{
+		{"template", func(e *AssignmentEntry) {
+			e.Template = &TemplateRef{Owner: "o", Repo: "t", Branch: "main"}
+		}, "mutually exclusive with template"},
+		{"empty_repo", func(e *AssignmentEntry) { e.EmptyRepo = true }, "mutually exclusive with empty_repo"},
+		{"no_autograder", func(e *AssignmentEntry) {
+			e.NoAutograder = true
+		}, "mutually exclusive with no_autograder"},
+		{"non-default autograder", func(e *AssignmentEntry) { e.Autograder = "io-suite" }, "non-default autograder"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := base
+			tc.mutate(&e)
+			err := validateInitShimExclusions(e)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("got %v, want an error containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestValidateInitShimUnchanged: init_shim is immutable on upsert, like
+// empty_repo/no_autograder — the shim is committed at accept time.
+func TestValidateInitShimUnchanged(t *testing.T) {
+	on := AssignmentEntry{Slug: "hw", InitShim: true}
+	off := AssignmentEntry{Slug: "hw", InitShim: false}
+
+	if err := ValidateInitShimUnchanged(on, on); err != nil {
+		t.Errorf("same value (true): %v", err)
+	}
+	if err := ValidateInitShimUnchanged(off, off); err != nil {
+		t.Errorf("same value (false): %v", err)
+	}
+	if err := ValidateInitShimUnchanged(on, off); err == nil || !strings.Contains(err.Error(), "init_shim cannot be changed") {
+		t.Errorf("flip true->false: got %v, want the immutability error", err)
+	}
+	if err := ValidateInitShimUnchanged(off, on); err == nil || !strings.Contains(err.Error(), "init_shim cannot be changed") {
 		t.Errorf("flip false->true: got %v, want the immutability error", err)
 	}
 }
