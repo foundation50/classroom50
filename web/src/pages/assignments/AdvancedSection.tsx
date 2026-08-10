@@ -140,11 +140,17 @@ export const AdvancedSection = ({
       </form.Subscribe>
 
       {/* Grading-only settings: a bare repo never autogrades, so the setup
-          command, allowed-files allowlist, and passing threshold are hidden
-          while empty_repo is on (submit clears them). */}
-      <form.Subscribe selector={(state) => state.values.empty_repo}>
-        {(emptyRepo) =>
-          emptyRepo ? null : (
+          command, allowed-files allowlist, and passing threshold belong to the
+          built-in autograder only, so they are hidden unless the autograding
+          tri-state is "built-in" (submit clears them otherwise). */}
+      <form.Subscribe
+        selector={(state) =>
+          !state.values.empty_repo &&
+          state.values.autograding_state === "built-in"
+        }
+      >
+        {(showsBuiltIn) =>
+          !showsBuiltIn ? null : (
             <>
               <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-[minmax(0,1fr)_12rem]">
                 <form.Field name="setup_command">

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Button, Card } from "@/components/ui"
 import { DetailsSection } from "./DetailsSection"
 import { AdvancedSection } from "./AdvancedSection"
+import { AutogradingSection } from "./AutogradingSection"
 import AutogradingTestsPane from "./AutogradingTestsPane"
 import {
   useAssignmentForm,
@@ -99,15 +100,27 @@ const CreateAssignmentForm = ({
 
         <Card bordered={false} className="w-full mb-6">
           <Card.Body>
+            <AutogradingSection form={form} />
+          </Card.Body>
+        </Card>
+
+        <Card bordered={false} className="w-full mb-6">
+          <Card.Body>
             <AdvancedSection form={form} org={org} />
           </Card.Body>
         </Card>
 
-        {/* Declarative tests can never run in a bare repo (no autograde
-            workflow), so the whole pane is hidden while empty_repo is on. */}
-        <form.Subscribe selector={(state) => state.values.empty_repo}>
-          {(emptyRepo) =>
-            emptyRepo ? null : <AutogradingTestsPane form={form} />
+        {/* Declarative tests belong to the built-in autograder only: hidden for
+            a bare repo (no shim) and for teacher-supplied CI (no built-in
+            grading). empty_repo always wins over a stale tri-state value. */}
+        <form.Subscribe
+          selector={(state) =>
+            !state.values.empty_repo &&
+            state.values.autograding_state === "built-in"
+          }
+        >
+          {(showsBuiltIn) =>
+            showsBuiltIn ? <AutogradingTestsPane form={form} /> : null
           }
         </form.Subscribe>
       </fieldset>
