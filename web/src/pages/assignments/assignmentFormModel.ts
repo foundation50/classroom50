@@ -42,6 +42,7 @@ import {
   deriveAutogradingState,
   type AutogradingState,
 } from "@/domain/assignments/autogradingState"
+import { deriveFormShape } from "./formShape"
 import type {
   Assignment,
   RepoPermission,
@@ -416,21 +417,16 @@ export function validateAssignmentForm(
 export function toSubmitValues(
   value: CreateAssignmentFormValues,
 ): CreateAssignmentFormValues {
-  const isContainer = value.runtime_env === "container"
-  // An empty repo never autogrades, so every grading-adjacent field is cleared
-  // on submit — the sections are hidden while the toggle is on, and a stale
-  // value from before toggling must not reach the wire (the mutation layer
-  // rejects the combination).
-  const isEmptyRepo = value.empty_repo
-  // "none" (teacher-supplied CI) also commits no shim, so it clears the same
-  // built-in-only grading fields as empty_repo — but it PERMITS template and
-  // feedback_pr (a templated repo has a baseline commit), so those clear only
-  // for empty_repo. Both no-shim states collapse the autograding-state to a
-  // value the wire mapping reads; empty_repo forces "empty" regardless.
-  const autogradingState: AutogradingState = isEmptyRepo
-    ? "empty"
-    : value.autograding_state
-  const noBuiltIn = isEmptyRepo || autogradingState === "none"
+  // One derived shape drives every clear below, so the render gates (which read
+  // the same deriveFormShape) and the submit clears can't drift. empty_repo
+  // forces autogradingState "empty" inside deriveFormShape; a bare repo and
+  // teacher-supplied CI ("none") both commit no shim, so both clear the built-
+  // in-only grading fields — but only empty_repo also clears template and
+  // feedback_pr (a templated repo has a baseline commit).
+  const shape = deriveFormShape(value)
+  const isContainer = shape.showContainerFields
+  const isEmptyRepo = shape.repositorySource === "empty"
+  const noBuiltIn = !shape.showBuiltInConfig
   return {
     name: value.name.trim(),
     slug: slugify(value.slug),
@@ -442,7 +438,7 @@ export function toSubmitValues(
     max_group_size: value.max_group_size,
     feedback_pr: isEmptyRepo ? false : value.feedback_pr,
     empty_repo: isEmptyRepo,
-    autograding_state: autogradingState,
+    autograding_state: shape.autogradingState,
     runtime_env: value.runtime_env,
     runs_on: value.runs_on.trim(),
     container_image: isContainer ? value.container_image.trim() : "",
