@@ -100,7 +100,7 @@ const CreateAssignmentForm = ({
 
         <Card bordered={false} className="w-full mb-6">
           <Card.Body>
-            <AutogradingSection form={form} />
+            <AutogradingSection form={form} edit={edit} />
           </Card.Body>
         </Card>
 

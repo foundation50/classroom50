@@ -139,10 +139,11 @@ export const AdvancedSection = ({
         }}
       </form.Subscribe>
 
-      {/* Grading-only settings: a bare repo never autogrades, so the setup
-          command, allowed-files allowlist, and passing threshold belong to the
-          built-in autograder only, so they are hidden unless the autograding
-          tri-state is "built-in" (submit clears them otherwise). */}
+      {/* Grading-only settings: the setup command, allowed-files allowlist, and
+          passing threshold belong to the built-in autograder only, so they are
+          hidden unless the autograding tri-state is "built-in" — a bare repo or
+          teacher-supplied CI ("none") commits no shim to run them. Submit clears
+          them for both no-shim states (empty_repo and "none"). */}
       <form.Subscribe
         selector={(state) =>
           !state.values.empty_repo &&

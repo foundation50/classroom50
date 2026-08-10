@@ -15,9 +15,20 @@ import type { AutogradingState } from "@/domain/assignments/autogradingState"
 //                 (gated by the caller on autograding_state === "built-in").
 // Wired to the form's UI-only autograding_state; the submit mapping in
 // toSubmitValues translates it to the wire fields (no_autograder + clears).
+//
+// Immutable after creation: the "none" ↔ "built-in" choice maps to no_autograder,
+// which the domain layer rejects changing on edit (already-accepted repos aren't
+// retrofitted). So on edit the radios render locked, mirroring the empty_repo
+// field — the form must not offer a change the save path will reject.
 const SELECTABLE: readonly AutogradingState[] = ["built-in", "none"]
 
-export function AutogradingSection({ form }: { form: AssignmentForm }) {
+export function AutogradingSection({
+  form,
+  edit,
+}: {
+  form: AssignmentForm
+  edit: boolean
+}) {
   const { t } = useTranslation()
 
   return (
@@ -39,39 +50,55 @@ export function AutogradingSection({ form }: { form: AssignmentForm }) {
                     </span>
                   </Alert>
                 ) : (
-                  <fieldset className="flex flex-col gap-2">
-                    <legend className="sr-only">
-                      {t("assignments.form.autograding.label")}
-                    </legend>
-                    {SELECTABLE.map((option) => (
-                      <label
-                        key={option}
-                        htmlFor={`${field.name}-${option}`}
-                        className="label cursor-pointer items-start justify-start gap-3 p-0"
-                      >
-                        <input
-                          id={`${field.name}-${option}`}
-                          type="radio"
-                          className="radio mt-1"
-                          name={field.name}
-                          value={option}
-                          checked={field.state.value === option}
-                          onBlur={field.handleBlur}
-                          onChange={() => field.handleChange(option)}
-                        />
-                        <span className="font-bold">
-                          {t(
-                            `assignments.form.autograding.choices.${option}.label`,
-                          )}
-                          <span className="mt-0.5 block font-normal text-sm text-base-content/70">
+                  <>
+                    <fieldset
+                      className={
+                        edit
+                          ? "flex flex-col gap-2 pointer-events-none opacity-50"
+                          : "flex flex-col gap-2"
+                      }
+                      disabled={edit}
+                      aria-disabled={edit}
+                    >
+                      <legend className="sr-only">
+                        {t("assignments.form.autograding.label")}
+                      </legend>
+                      {SELECTABLE.map((option) => (
+                        <label
+                          key={option}
+                          htmlFor={`${field.name}-${option}`}
+                          className="label cursor-pointer items-start justify-start gap-3 p-0"
+                        >
+                          <input
+                            id={`${field.name}-${option}`}
+                            type="radio"
+                            className="radio mt-1"
+                            name={field.name}
+                            value={option}
+                            checked={field.state.value === option}
+                            disabled={edit}
+                            onBlur={field.handleBlur}
+                            onChange={() => field.handleChange(option)}
+                          />
+                          <span className="font-bold">
                             {t(
-                              `assignments.form.autograding.choices.${option}.help`,
+                              `assignments.form.autograding.choices.${option}.label`,
                             )}
+                            <span className="mt-0.5 block font-normal text-sm text-base-content/70">
+                              {t(
+                                `assignments.form.autograding.choices.${option}.help`,
+                              )}
+                            </span>
                           </span>
-                        </span>
-                      </label>
-                    ))}
-                  </fieldset>
+                        </label>
+                      ))}
+                    </fieldset>
+                    {edit ? (
+                      <p className="mt-1.5 text-sm text-base-content/70">
+                        {t("assignments.form.autograding.lockedHelp")}
+                      </p>
+                    ) : null}
+                  </>
                 )}
               </div>
             )}
