@@ -126,6 +126,10 @@
           "type": "boolean",
           "description": "Opt the assignment into truly bare student repos: accept creates the repo with no initial commit (auto_init false) and commits NO control files — no README, no .classroom50.yaml accept marker, no .github/workflows/autograde.yaml shim. Autograding and the Feedback PR are disabled for the assignment; regrade and score collection skip it. Mutually exclusive with template, tests, feedback_pr, allowed_files, release_assets, and pass_threshold (see the conditional at the assignment level). IMMUTABLE after creation: flipping it later would require retrofitting control files into (or stripping them from) every already-accepted student repo, so writers must reject an edit that changes it. On the wire it is collapsed like feedback_pr: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
         },
+        "no_autograder": {
+          "type": "boolean",
+          "description": "Opt a TEMPLATED assignment into teacher-supplied CI: accept commits the .classroom50.yaml marker and the template's generated content but NO autograde shim — neither the universal default shim nor a Pages-fetched teacher-authored workflow. The teacher supplies their own .github/ CI inside the template. Autograding is disabled for the assignment; regrade and score collection skip it, exactly as they skip empty_repo (it produces no submit/* releases). REQUIRES a template (the template carries the workflows — use empty_repo for a bare repo with no CI). UNLIKE empty_repo it PERMITS the Feedback PR (a templated repo has starter content and a baseline commit to diff against). Mutually exclusive with empty_repo (a bare repo already commits no shim), with a non-default autograder (which fetches a teacher-authored workflow from Pages — the opposite of adding nothing), and with the grading-adjacent fields tests/allowed_files/release_assets/pass_threshold/submission_mode/submission_tags (no shim exists to trigger). See the conditional at the assignment level. IMMUTABLE after creation like empty_repo: student repos are provisioned (shim or no shim) at accept time and never retrofitted, so writers must reject an edit that changes it. On the wire it is collapsed like empty_repo/feedback_pr: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
+        },
         "locked": {
           "type": "boolean",
           "description": "Lock the assignment against student access. The web accept page, the student assignments list, the student submission view, and `gh student accept` all refuse a locked assignment for EVERY student, including one who already accepted. UNLIKE available_from (which is listing-advisory only), this is intended as access control — but because assignments.json is published publicly to GitHub Pages, the client gates are still best-effort UX; a determined student can read the raw file. The ENFORCEABLE boundary applies only to a PRIVATE, in-org template: locking also removes the classroom STUDENT team's read on that template repo (teacher/head-TA/TA teams are left untouched), so no new student can generate a repo from it while locked; unlocking re-grants that read. Public-template and template-less assignments can only be UX-gated, never hard-blocked. Existing student repos are not deleted. On the wire it is collapsed like feedback_pr/empty_repo: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
@@ -220,6 +224,22 @@
               { "not": { "required": ["submission_mode"] } },
               { "not": { "required": ["submission_tags"] } },
               { "properties": { "feedback_pr": { "const": false } } }
+            ]
+          }
+        },
+        {
+          "if": { "properties": { "no_autograder": { "const": true } }, "required": ["no_autograder"] },
+          "then": {
+            "allOf": [
+              { "required": ["template"] },
+              { "not": { "required": ["tests"] } },
+              { "not": { "required": ["allowed_files"] } },
+              { "not": { "required": ["release_assets"] } },
+              { "not": { "required": ["pass_threshold"] } },
+              { "not": { "required": ["submission_mode"] } },
+              { "not": { "required": ["submission_tags"] } },
+              { "not": { "properties": { "empty_repo": { "const": true } }, "required": ["empty_repo"] } },
+              { "properties": { "autograder": { "const": "default" } } }
             ]
           }
         }

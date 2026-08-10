@@ -197,6 +197,26 @@ describe("buildReusedEntry", () => {
     ).toThrow(/empty_repo.*release/i)
   })
 
+  it("preserves no_autograder verbatim on reuse (tolerate-and-preserve)", () => {
+    // no_autograder rides through the whole-source spread — a templated
+    // teacher-supplied-CI assignment stays that way when copied to a new
+    // classroom. Unlike empty_repo it keeps its template.
+    const source: Assignment = {
+      slug: "ci-lab",
+      name: "CI Lab",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "o", repo: "t", branch: "main" },
+      feedback_pr: true,
+      no_autograder: true,
+    }
+
+    const copy = buildReusedEntry(source, { slug: "ci-copy", name: "CI Copy" })
+    expect(copy.no_autograder).toBe(true)
+    expect(copy.template).toEqual({ owner: "o", repo: "t", branch: "main" })
+    expect(copy.feedback_pr).toBe(true)
+  })
+
   it("preserves an empty tests/allowed_files array (present, not dropped)", () => {
     // Empty array is truthy, so the omitempty cleanup must NOT delete it —
     // absent vs [] can mean different things to the CLI, so reuse copies the
@@ -856,6 +876,31 @@ describe("editAssignment (preserved-entry integration)", () => {
     await expect(
       editAssignment(client, editInput({ empty_repo: true })),
     ).rejects.toThrow(/empty_repo cannot be changed after creation/)
+  })
+
+  it("rejects flipping no_autograder on after creation (immutable)", async () => {
+    // existingEntry has no no_autograder (false); the edit tries to enable it.
+    // The shim (or its absence) is baked at accept time and never retrofitted.
+    const { client } = makeClient()
+    await expect(
+      editAssignment(client, editInput({ no_autograder: true })),
+    ).rejects.toThrow(/no_autograder cannot be changed after creation/)
+  })
+
+  it("rejects flipping no_autograder off after creation (immutable)", async () => {
+    const ciEntry: Assignment = {
+      slug: SLUG,
+      name: "CI Lab",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "o", repo: "t", branch: "main" },
+      feedback_pr: true,
+      no_autograder: true,
+    }
+    const { client } = makeBareClient(ciEntry)
+    await expect(
+      editAssignment(client, editInput({ no_autograder: false })),
+    ).rejects.toThrow(/no_autograder cannot be changed after creation/)
   })
 
   it("rejects flipping empty_repo off after creation (immutable)", async () => {

@@ -2189,6 +2189,7 @@
     },
     "errors": {
       "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template, which isn't valid. Ask your teacher to re-run assignment setup.",
+      "noAutograderWithEmptyRepo": "Assignment \"{{assignmentSlug}}\" sets both no built-in autograder and an empty repository, which isn't valid. Ask your teacher to re-run assignment setup.",
       "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup."
     },
     "progress": {
@@ -2213,6 +2214,7 @@
     "downloadCsv": "Download scores (CSV)",
     "viewSourceRepo": "View template",
     "emptyRepoNote": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted.",
+    "noAutograderNote": "This assignment has no built-in autograding — the teacher supplies their own CI in the template. Built-in scores and regrading are disabled; the table below shows who has accepted. The feedback pull request still works when enabled.",
     "lockedNotice": "This assignment is locked. Students can't accept or open it, and if it uses a private template the student team's access to that template has been removed. Existing repositories and their submissions are unaffected. Unlock it from the Actions menu (or the assignments list) to reopen it.",
     "lock": {
       "lockLabel": "Lock assignment",

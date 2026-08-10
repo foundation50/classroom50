@@ -29,6 +29,9 @@ export type DataFreshnessProps = {
   errorCount?: number
   // empty_repo assignments never autograde; show that instead of freshness.
   emptyRepo?: boolean
+  // no_autograder assignments also never autograde, but keep the Feedback PR —
+  // pick the accurate note (only meaningful when emptyRepo is true).
+  noAutograder?: boolean
 }
 
 export function DataFreshness({
@@ -38,6 +41,7 @@ export function DataFreshness({
   onRefresh,
   errorCount = 0,
   emptyRepo = false,
+  noAutograder = false,
 }: DataFreshnessProps) {
   const { t } = useTranslation()
 
@@ -45,7 +49,13 @@ export function DataFreshness({
     return (
       <div className="flex items-start gap-2 text-sm text-base-content/70">
         <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        <p>{t("submissions.emptyRepoNote")}</p>
+        <p>
+          {t(
+            noAutograder
+              ? "submissions.noAutograderNote"
+              : "submissions.emptyRepoNote",
+          )}
+        </p>
       </div>
     )
   }

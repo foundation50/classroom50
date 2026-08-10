@@ -370,24 +370,42 @@ def is_empty_repo(entry: dict[str, Any]) -> bool:
     return entry.get("empty_repo") is True
 
 
+def is_no_autograder(entry: dict[str, Any]) -> bool:
+    """True only when no_autograder is the boolean `true` (strict, like
+    is_empty_repo). A templated no_autograder assignment commits no shim, so it
+    never autogrades and produces no submit/* releases — collection and regrade
+    skip it exactly as they skip empty_repo. Keep byte-identical across
+    collect/regrade and the autograde-runner read step so every tool agrees."""
+    return entry.get("no_autograder") is True
+
+
+def skips_grading(entry: dict[str, Any]) -> bool:
+    """True when the assignment never autogrades — either a bare empty_repo or a
+    templated no_autograder (teacher-supplied CI). The "does not autograde"
+    predicate family; collection/regrade poll neither."""
+    return is_empty_repo(entry) or is_no_autograder(entry)
+
+
 def valid_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
     """Slugs worth collecting: non-empty strings, in manifest order, excluding
-    empty_repo assignments (their bare repos never autograde, so polling them
-    would only produce dead gradebook rows). main()'s zero-submission guard
-    counts these; the collect loop applies the same predicate inline (it also
-    needs each entry's `due`), so both agree on what counts as collectable."""
+    assignments that never autograde (empty_repo or no_autograder — their repos
+    produce no submit/* releases, so polling them would only produce dead
+    gradebook rows). main()'s zero-submission guard counts these; the collect
+    loop applies the same predicate inline (it also needs each entry's `due`),
+    so both agree on what counts as collectable."""
     slugs: list[str] = []
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
-        if isinstance(slug, str) and slug and not is_empty_repo(entry):
+        if isinstance(slug, str) and slug and not skips_grading(entry):
             slugs.append(slug)
     return slugs
 
 
 def all_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
-    """Every valid slug including empty_repo assignments. Staff access grants
-    use this instead of valid_assignment_slugs: a bare repo never autogrades,
-    but TAs still need read on it to review the student-built work."""
+    """Every valid slug including assignments that never autograde (empty_repo
+    or no_autograder). Staff access grants use this instead of
+    valid_assignment_slugs: these repos never autograde, but TAs still need read
+    on them to review the student-built work."""
     slugs: list[str] = []
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
@@ -526,11 +544,12 @@ def collect_classroom(
         slug = entry.get("slug")
         if not isinstance(slug, str) or not slug:
             continue
-        # empty_repo assignments never autograde — same predicate as
-        # valid_assignment_slugs, kept in lockstep.
-        if is_empty_repo(entry):
+        # Assignments that never autograde (empty_repo or no_autograder) —
+        # same predicate as valid_assignment_slugs, kept in lockstep.
+        if skips_grading(entry):
+            reason = "empty_repo" if is_empty_repo(entry) else "no_autograder"
             print(
-                f"{classroom_short}/{slug}: empty_repo assignment — autograding "
+                f"{classroom_short}/{slug}: {reason} assignment — autograding "
                 f"is disabled; skipping collection"
             )
             continue

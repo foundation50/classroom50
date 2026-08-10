@@ -116,8 +116,14 @@ func DropFiles(client githubapi.Client, owner, repo, branch string, cfg Config, 
 	}
 
 	files := map[string]string{
-		MetadataPath:          string(metadataBytes),
-		AutogradeWorkflowPath: workflowContent,
+		MetadataPath: string(metadataBytes),
+	}
+	// A no_autograder (or empty_repo) accept passes an empty shim: commit only
+	// the marker, never an empty .github/workflows/autograde.yaml. Landing an
+	// empty workflow file would still make the runner shape ambiguous and churn
+	// the teacher's own CI path.
+	if workflowContent != "" {
+		files[AutogradeWorkflowPath] = workflowContent
 	}
 	return CommitFiles(client, owner, repo, branch,
 		contract.PrefixCommit("Initialize .classroom50.yaml and autograde workflow (gh student accept)"),

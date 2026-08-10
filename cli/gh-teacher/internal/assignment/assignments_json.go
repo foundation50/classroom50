@@ -156,6 +156,7 @@ type AssignmentEntry struct {
 	Tests             []TestSpec       `json:"tests,omitempty"`
 	FeedbackPR        bool             `json:"feedback_pr,omitempty"`
 	EmptyRepo         bool             `json:"empty_repo,omitempty"`
+	NoAutograder      bool             `json:"no_autograder,omitempty"`
 	Locked            bool             `json:"locked,omitempty"`
 	AllowedFiles      []string         `json:"allowed_files,omitempty"`
 	ReleaseAssets     []string         `json:"release_assets,omitempty"`
@@ -181,6 +182,7 @@ var knownEntryKeys = map[string]struct{}{
 	"locked": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
 	"student_permission": {}, "submission_mode": {}, "submission_tags": {},
+	"no_autograder": {},
 	"repo_features": {},
 }
 
@@ -870,6 +872,11 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 			return err
 		}
 	}
+	if entry.NoAutograder {
+		if err := validateNoAutograderExclusions(entry); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -905,6 +912,48 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 	return nil
 }
 
+// validateNoAutograderExclusions rejects the combinations no_autograder rules
+// out. A narrower sibling of empty_repo: it commits no shim (so the
+// grading-adjacent fields are meaningless), and it must not coexist with
+// empty_repo (already shim-less) or a non-default autograder (which fetches a
+// teacher-authored Pages workflow — the opposite of adding nothing). It
+// REQUIRES a template (it is the teacher-supplied-CI state: the template
+// carries the workflows), and UNLIKE empty_repo it permits feedback_pr (a
+// templated repo has a baseline commit). Unlike empty_repo, no_autograder has
+// no `assignment add` flag yet (it is GUI/manifest-set), so error wording names
+// the JSON fields, not a --no-autograder flag; the parse path wraps with the
+// entry context.
+func validateNoAutograderExclusions(entry AssignmentEntry) error {
+	if entry.Template == nil {
+		return errors.New("no_autograder requires a template: it marks a TEMPLATED assignment as teacher-supplied CI (the template carries its own workflows); a template-less repo has no CI to run — use empty_repo for a bare repo instead")
+	}
+	if entry.EmptyRepo {
+		return errors.New("no_autograder is mutually exclusive with empty_repo: a bare repo already commits no shim")
+	}
+	if entry.Autograder != "" && entry.Autograder != contract.DefaultAutograderName {
+		return fmt.Errorf("no_autograder is mutually exclusive with a non-default autograder (%q): a custom autograder fetches a teacher-authored workflow, the opposite of adding no workflow", entry.Autograder)
+	}
+	if len(entry.Tests) > 0 {
+		return errors.New("no_autograder is mutually exclusive with tests: no shim exists to run them")
+	}
+	if len(entry.AllowedFiles) > 0 {
+		return errors.New("no_autograder is mutually exclusive with allowed_files: no shim exists to enforce them")
+	}
+	if len(entry.ReleaseAssets) > 0 {
+		return errors.New("no_autograder is mutually exclusive with release_assets: no shim autogrades, so no submission release exists to attach assets to")
+	}
+	if entry.PassThreshold != nil {
+		return errors.New("no_autograder is mutually exclusive with pass_threshold: no shim autogrades")
+	}
+	if entry.SubmissionMode != "" {
+		return errors.New("no_autograder is mutually exclusive with submission_mode: no shim exists to trigger")
+	}
+	if len(entry.SubmissionTags) > 0 {
+		return errors.New("no_autograder is mutually exclusive with submission_tags: no shim exists to trigger")
+	}
+	return nil
+}
+
 // ValidateEmptyRepoUnchanged enforces empty_repo's immutability on upsert:
 // student repos are provisioned (or not) at accept time, so flipping the flag
 // after creation would strand every already-accepted repo on the old
@@ -912,6 +961,18 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 func ValidateEmptyRepoUnchanged(existing, updated AssignmentEntry) error {
 	if existing.EmptyRepo != updated.EmptyRepo {
 		return fmt.Errorf("empty_repo cannot be changed after creation (assignment %q): student repos already accepted under the old setting are not retrofitted — remove the assignment and add it under a new slug instead", existing.Slug)
+	}
+	return nil
+}
+
+// ValidateNoAutograderUnchanged enforces no_autograder's immutability on
+// upsert, mirroring ValidateEmptyRepoUnchanged: the shim (or its absence) is
+// baked into each student repo at accept time and never retrofitted, so
+// flipping the flag would strand every already-accepted repo. Callers run it
+// alongside ValidateEmptyRepoUnchanged before UpsertAssignment.
+func ValidateNoAutograderUnchanged(existing, updated AssignmentEntry) error {
+	if existing.NoAutograder != updated.NoAutograder {
+		return fmt.Errorf("no_autograder cannot be changed after creation (assignment %q): student repos already accepted under the old setting are not retrofitted — remove the assignment and add it under a new slug instead", existing.Slug)
 	}
 	return nil
 }
@@ -1009,6 +1070,11 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 	}
 	if entry.EmptyRepo {
 		if err := validateEmptyRepoExclusions(entry); err != nil {
+			return fmt.Errorf("entry %q: %w", entry.Slug, err)
+		}
+	}
+	if entry.NoAutograder {
+		if err := validateNoAutograderExclusions(entry); err != nil {
 			return fmt.Errorf("entry %q: %w", entry.Slug, err)
 		}
 	}
