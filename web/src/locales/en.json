@@ -1135,23 +1135,30 @@
         "label": "Per-student extensions (coming soon)",
         "help": "Grant individual students or groups a later due date. Not yet available."
       },
-      "creationMethod": {
-        "label": "Creation method",
-        "generate": {
-          "label": "Generate from template",
-          "help": "Create each repository from the template's default branch. This is the standard method."
+      "repoSource": {
+        "label": "Start with a template",
+        "lockedHelp": "The repository source can't be changed after creation: repositories students already accepted are not re-provisioned.",
+        "none": {
+          "label": "No template",
+          "help": "Create a fresh repository for each student."
         },
-        "mirror": {
-          "label": "Mirror all branches and history (coming soon)",
-          "help": "A fork-like copy that mirrors every branch and the full commit history from the template. Not yet available."
+        "template": {
+          "label": "Template repository",
+          "help": "Generate each student's repository from a template you provide."
         }
+      },
+      "addReadme": {
+        "label": "Add a README",
+        "helpOn": "Initialize each repository with a README.md, creating an initial commit so branches, pull requests, and the Feedback PR work.",
+        "helpOff": "Create an empty repository with no initial commit. Autograding and the Feedback PR are unavailable until the student's first commit."
+      },
+      "includeAllBranches": {
+        "label": "Include all branches (coming soon)",
+        "help": "Copy every branch and its history from the template, not just the default branch. Not yet available."
       },
       "feedbackPr": "Feedback pull request",
       "feedbackPrHelp": "Open a pull request per repo for inline review of each submission.",
       "feedbackPrEmptyRepoHelp": "Unavailable for empty repositories — there is no starter commit to diff against.",
-      "emptyRepo": "Empty repository",
-      "emptyRepoHelp": "Create each student's repository completely empty: no starter files, no autograding, no feedback pull request. For assignments where students build everything from scratch, including their own GitHub Actions. This choice is permanent for the assignment.",
-      "emptyRepoLocked": "It can't be changed after creation.",
       "studentPermission": {
         "label": "Student repo access",
         "learnMore": "Learn more",

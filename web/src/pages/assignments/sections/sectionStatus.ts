@@ -21,11 +21,12 @@ const SECTION_FIELDS: Record<
   SectionId,
   ReadonlyArray<keyof CreateAssignmentFormValues>
 > = {
-  details: ["name", "slug", "description", "mode"],
+  details: ["name", "slug", "description", "mode", "max_group_size"],
   repository: [
+    "repo_source",
+    "add_readme",
     "empty_repo",
     "template_repo",
-    "max_group_size",
     "student_permission",
     "feedback_pr",
   ],

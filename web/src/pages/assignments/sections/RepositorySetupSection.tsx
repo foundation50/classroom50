@@ -1,15 +1,10 @@
 import { useTranslation } from "react-i18next"
 import { ExternalLink } from "lucide-react"
-import { FormField, Input, Select } from "@/components/ui"
-import {
-  GROUP_SIZE_MAX,
-  GROUP_SIZE_MIN,
-  REPO_PERMISSIONS,
-  defaultStudentPermission,
-} from "@/types/classroom"
+import { FormField, Select } from "@/components/ui"
+import { REPO_PERMISSIONS, defaultStudentPermission } from "@/types/classroom"
 import { TemplateField } from "../TemplateField"
-import { FieldLabel, ToggleRow } from "../AdvancedRuntimeFields"
-import type { AssignmentForm } from "../assignmentFormModel"
+import { ToggleRow } from "../AdvancedRuntimeFields"
+import type { AssignmentForm, RepoSource } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
 import type { SectionStatus } from "./sectionStatus"
 import { SectionCard } from "./SectionCard"
@@ -20,10 +15,17 @@ import { SectionCard } from "./SectionCard"
 const REPO_ROLES_DOCS_URL =
   "https://docs.github.com/en/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/repository-roles-for-an-organization#repository-roles-for-organizations"
 
-// Repository Setup (IA overhaul U5/U6): the repository source (empty vs
-// template), the template ref and creation method, group provisioning (max
-// group size + student repo access), and the Feedback PR. The source choice
-// drives the downstream gates via deriveFormShape.
+// Repository Setup (IA overhaul U5/U6 + repo-source remodel): mirrors GitHub's
+// own repo-creation flow.
+//   - "Start with a template" (default: No). No template -> an "Add a README"
+//     toggle picks between an initialized repo (auto_init, README on) and a
+//     bare repo (README off). A template hides the README toggle (the template
+//     provides the initial commit) and shows an "Include all branches" toggle
+//     (deferred/coming-soon).
+//   - Student repo access, and the Feedback PR (decoupled from autograding —
+//     available for any non-empty repo).
+// The source choice folds into empty_repo + template on submit via
+// deriveFormShape; the choice is immutable after creation (locked on edit).
 export function RepositorySetupSection({
   form,
   edit,
@@ -48,45 +50,68 @@ export function RepositorySetupSection({
     >
       <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2 sm:items-start">
         <div className="flex flex-col gap-4">
-          {/* Repository source: empty repo vs template. Immutable after
-              creation (locked on edit), since already-accepted repos can't be
+          {/* Repository source: template vs no template (default No). Immutable
+              after creation (locked on edit): already-accepted repos can't be
               retrofitted from one source to the other. */}
-          <form.Field name="empty_repo">
+          <form.Field name="repo_source">
             {(field) => (
-              <div
+              <fieldset
                 className={edit ? "pointer-events-none opacity-50" : ""}
+                disabled={edit}
                 aria-disabled={edit}
               >
-                <ToggleRow
-                  id={field.name}
-                  checked={field.state.value}
-                  onChange={(checked) => field.handleChange(checked)}
-                  onBlur={field.handleBlur}
-                  label={t("assignments.form.emptyRepo")}
-                  help={
-                    edit
-                      ? `${t("assignments.form.emptyRepoHelp")} ${t("assignments.form.emptyRepoLocked")}`
-                      : t("assignments.form.emptyRepoHelp")
-                  }
-                />
-              </div>
+                <legend className="label font-bold mb-2">
+                  {t("assignments.form.repoSource.label")}
+                </legend>
+                <div className="flex flex-col gap-2">
+                  {(["none", "template"] as const).map((option) => (
+                    <label
+                      key={option}
+                      htmlFor={`${field.name}-${option}`}
+                      className="label cursor-pointer items-start justify-start gap-3 p-0"
+                    >
+                      <input
+                        id={`${field.name}-${option}`}
+                        type="radio"
+                        className="radio mt-1"
+                        name={field.name}
+                        value={option}
+                        checked={field.state.value === option}
+                        disabled={edit}
+                        onBlur={field.handleBlur}
+                        onChange={() =>
+                          field.handleChange(option as RepoSource)
+                        }
+                      />
+                      <span className="font-bold">
+                        {t(`assignments.form.repoSource.${option}.label`)}
+                        <span className="mt-0.5 block font-normal text-sm text-base-content/70">
+                          {t(`assignments.form.repoSource.${option}.help`)}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {edit ? (
+                  <p className="mt-1.5 text-sm text-base-content/70">
+                    {t("assignments.form.repoSource.lockedHelp")}
+                  </p>
+                ) : null}
+              </fieldset>
             )}
           </form.Field>
 
-          {/* Template picker + creation method: only when the source isn't a
-              bare empty repo (which starts with no content). */}
-          <form.Subscribe
-            selector={(state) =>
-              deriveFormShape(state.values).showTemplateFields
-            }
-          >
-            {(showTemplateFields) =>
-              showTemplateFields ? (
+          {/* No-template branch: "Add a README" picks initialized vs bare.
+              Template branch: the template picker + a deferred "Include all
+              branches" toggle. deriveFormShape decides which shows. */}
+          <form.Subscribe selector={(state) => deriveFormShape(state.values)}>
+            {(shape) =>
+              shape.showTemplateFields ? (
                 <>
                   <form.Field name="template_repo">
-                    {(field) => (
+                    {(templateField) => (
                       <TemplateField
-                        field={field}
+                        field={templateField}
                         org={org}
                         classroom={classroom}
                         slug={slug}
@@ -94,111 +119,38 @@ export function RepositorySetupSection({
                     )}
                   </form.Field>
 
-                  {/* Creation method (R6/U9): generate-from-default-branch is
-                      today's only path; the fork-like mirror is reserved as a
-                      disabled "coming soon" option that writes nothing. */}
-                  <fieldset>
-                    <legend className="label font-bold mb-2">
-                      {t("assignments.form.creationMethod.label")}
-                    </legend>
-                    <div className="flex flex-col gap-2">
-                      <label
-                        htmlFor="creation-method-generate"
-                        className="label cursor-pointer items-start justify-start gap-3 p-0"
-                      >
-                        <input
-                          id="creation-method-generate"
-                          type="radio"
-                          className="radio mt-1"
-                          name="creation_method"
-                          value="generate"
-                          checked
-                          readOnly
-                        />
-                        <span className="font-bold">
-                          {t("assignments.form.creationMethod.generate.label")}
-                          <span className="mt-0.5 block font-normal text-sm text-base-content/70">
-                            {t("assignments.form.creationMethod.generate.help")}
-                          </span>
-                        </span>
-                      </label>
-                      <label
-                        htmlFor="creation-method-mirror"
-                        className="label items-start justify-start gap-3 p-0 pointer-events-none opacity-50"
-                        aria-disabled="true"
-                      >
-                        <input
-                          id="creation-method-mirror"
-                          type="radio"
-                          className="radio mt-1"
-                          name="creation_method"
-                          value="mirror"
-                          disabled
-                        />
-                        <span className="font-bold">
-                          {t("assignments.form.creationMethod.mirror.label")}
-                          <span className="mt-0.5 block font-normal text-sm text-base-content/70">
-                            {t("assignments.form.creationMethod.mirror.help")}
-                          </span>
-                        </span>
-                      </label>
-                    </div>
-                  </fieldset>
+                  {/* Deferred (R6/U9): include-all-branches mirror. Reserved as
+                      an inert, disabled toggle (off) — the accept path doesn't
+                      send include_all_branches yet, and there's no wire field
+                      to carry it, so it writes nothing. */}
+                  <div
+                    className="pointer-events-none opacity-50"
+                    aria-disabled="true"
+                  >
+                    <ToggleRow
+                      id="include-all-branches-deferred"
+                      checked={false}
+                      onChange={() => {}}
+                      label={t("assignments.form.includeAllBranches.label")}
+                      help={t("assignments.form.includeAllBranches.help")}
+                    />
+                  </div>
                 </>
-              ) : null
-            }
-          </form.Subscribe>
-
-          {/* Assignment type drives group provisioning: max group size shows
-              only for a group, and student repo access takes the mode default. */}
-          <form.Subscribe
-            selector={(state) => deriveFormShape(state.values).showGroupSize}
-          >
-            {(showGroupSize) =>
-              showGroupSize ? (
-                <form.Field name="max_group_size">
-                  {(field) => (
-                    <div className="border-s-2 border-base-300 ps-4">
-                      <FieldLabel
-                        htmlFor={field.name}
-                        label={t("assignments.form.maxGroupSize")}
-                      />
-                      <Input
-                        id={field.name}
-                        name={field.name}
-                        type="number"
-                        className="validator w-full sm:max-w-[8rem]"
-                        placeholder="#"
-                        min={GROUP_SIZE_MIN}
-                        max={GROUP_SIZE_MAX}
-                        step="1"
-                        title={t("assignments.form.maxGroupSizeTitle", {
-                          min: GROUP_SIZE_MIN,
-                          max: GROUP_SIZE_MAX,
-                        })}
-                        value={
-                          Number.isFinite(field.state.value)
-                            ? field.state.value
-                            : ""
-                        }
-                        onBlur={() => {
-                          // Snap to a valid whole number on blur so the CLI
-                          // never sees a non-integer or out-of-range size.
-                          const raw = field.state.value
-                          const next = Number.isFinite(raw)
-                            ? Math.min(
-                                Math.max(Math.floor(raw), GROUP_SIZE_MIN),
-                                GROUP_SIZE_MAX,
-                              )
-                            : GROUP_SIZE_MIN
-                          if (next !== raw) field.handleChange(next)
-                          field.handleBlur()
-                        }}
-                        onChange={(e) =>
-                          field.handleChange(e.target.valueAsNumber)
-                        }
-                      />
-                    </div>
+              ) : shape.showAddReadme ? (
+                <form.Field name="add_readme">
+                  {(readmeField) => (
+                    <ToggleRow
+                      id={readmeField.name}
+                      checked={readmeField.state.value}
+                      onChange={(checked) => readmeField.handleChange(checked)}
+                      onBlur={readmeField.handleBlur}
+                      label={t("assignments.form.addReadme.label")}
+                      help={
+                        readmeField.state.value
+                          ? t("assignments.form.addReadme.helpOn")
+                          : t("assignments.form.addReadme.helpOff")
+                      }
+                    />
                   )}
                 </form.Field>
               ) : null
@@ -275,9 +227,9 @@ export function RepositorySetupSection({
 
         <div className="flex flex-col gap-4">
           {/* Feedback PR (U6): decoupled from autograding — available for any
-              non-empty repo, since it only needs a baseline commit. An empty
-              repo has none, so it renders locked-off (not hidden) to keep the
-              trade-off visible. */}
+              non-empty repo, since it only needs a baseline commit. A bare repo
+              (no README, no template) has none, so it renders locked-off (not
+              hidden) to keep the trade-off visible. */}
           <form.Subscribe
             selector={(state) =>
               deriveFormShape(state.values).feedbackPrEnabled

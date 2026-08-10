@@ -43,6 +43,8 @@ const base: CreateAssignmentFormValues = {
   max_group_size: 2,
   feedback_pr: true,
   empty_repo: false,
+  repo_source: "none",
+  add_readme: true,
   autograding_state: "built-in",
   runtime_env: "hosted",
   runs_on: "",
@@ -440,6 +442,7 @@ describe("toSubmitValues — runtime field clearing", () => {
     // template and the Feedback PR (a templated repo has a baseline commit).
     const out = toSubmitValues({
       ...base,
+      repo_source: "template",
       autograding_state: "none",
       template_repo: "acme/starter",
       feedback_pr: true,
@@ -470,6 +473,37 @@ describe("toSubmitValues — runtime field clearing", () => {
       autograding_state: "built-in",
     })
     expect(out.autograding_state).toBe("empty")
+  })
+
+  it("no template + README maps to a non-empty repo (empty_repo false), template cleared", () => {
+    const out = toSubmitValues({
+      ...base,
+      repo_source: "none",
+      add_readme: true,
+      template_repo: "acme/starter",
+    })
+    expect(out.empty_repo).toBe(false)
+    expect(out.template_repo).toBe("")
+  })
+
+  it("no template + no README maps to a bare repo (empty_repo true)", () => {
+    const out = toSubmitValues({
+      ...base,
+      repo_source: "none",
+      add_readme: false,
+    })
+    expect(out.empty_repo).toBe(true)
+  })
+
+  it("template source keeps the template and is never empty", () => {
+    const out = toSubmitValues({
+      ...base,
+      repo_source: "template",
+      add_readme: false,
+      template_repo: "acme/starter",
+    })
+    expect(out.empty_repo).toBe(false)
+    expect(out.template_repo).toBe("acme/starter")
   })
 })
 

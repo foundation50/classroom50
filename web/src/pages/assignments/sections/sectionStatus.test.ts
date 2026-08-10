@@ -15,6 +15,8 @@ const defaults: CreateAssignmentFormValues = {
   max_group_size: 2,
   feedback_pr: true,
   empty_repo: false,
+  repo_source: "none",
+  add_readme: true,
   autograding_state: "built-in",
   runtime_env: "hosted",
   runs_on: "",

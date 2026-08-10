@@ -586,20 +586,29 @@ describe("assignment form five-section IA", () => {
     ).toBeGreaterThan(0)
   })
 
-  it("reserves the fork-mirror creation method as a disabled affordance", () => {
-    // Templated (non-empty) create form: the creation-method selector shows,
-    // with the mirror option disabled and generate selected.
-    const { container } = renderForm({
-      defaultValues: { template_repo: "acme/starter" },
+  it("shows Add-a-README for the no-template source and reserves include-all-branches for a template", () => {
+    // No template (the default): the Add-a-README toggle shows, no
+    // include-all-branches affordance.
+    const noTemplate = renderForm({ defaultValues: { repo_source: "none" } })
+    expect(noTemplate.container.querySelector("#add_readme")).not.toBeNull()
+    expect(
+      noTemplate.container.querySelector("#include-all-branches-deferred"),
+    ).toBeNull()
+    cleanup()
+
+    // Template source: the README toggle is hidden and the deferred
+    // include-all-branches toggle renders disabled.
+    const templated = renderForm({
+      defaultValues: { repo_source: "template", template_repo: "acme/starter" },
     })
-    const mirror = container.querySelector<HTMLInputElement>(
-      "#creation-method-mirror",
+    expect(templated.container.querySelector("#add_readme")).toBeNull()
+    // The include-all-branches affordance is present but inert (wrapped in an
+    // aria-disabled container, mirroring the Extensions affordance).
+    const mirror = templated.container.querySelector<HTMLInputElement>(
+      "#include-all-branches-deferred",
     )
-    const generate = container.querySelector<HTMLInputElement>(
-      "#creation-method-generate",
-    )
-    expect(mirror?.disabled).toBe(true)
-    expect(generate?.checked).toBe(true)
+    expect(mirror).not.toBeNull()
+    expect(mirror?.closest("[aria-disabled='true']")).not.toBeNull()
   })
 
   it("reserves the schedule Extensions affordance as disabled", () => {

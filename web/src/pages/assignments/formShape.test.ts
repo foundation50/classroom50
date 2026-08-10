@@ -14,6 +14,8 @@ const base: CreateAssignmentFormValues = {
   max_group_size: 2,
   feedback_pr: true,
   empty_repo: false,
+  repo_source: "none",
+  add_readme: true,
   autograding_state: "built-in",
   runtime_env: "hosted",
   runs_on: "",
@@ -41,43 +43,70 @@ const base: CreateAssignmentFormValues = {
   tests: [],
 }
 
-describe("deriveFormShape", () => {
-  it("empty_repo forces the empty source and empty autograding, disabling grading + feedback + template", () => {
-    // empty_repo wins even over a stale "built-in" pick on the radios.
+describe("deriveFormShape — repository source", () => {
+  it("no template + README ('readme'): non-empty, template hidden, README shown, feedback available", () => {
+    const shape = deriveFormShape({
+      ...base,
+      repo_source: "none",
+      add_readme: true,
+    })
+    expect(shape.repositorySource).toBe("readme")
+    expect(shape.emptyRepo).toBe(false)
+    expect(shape.showTemplateFields).toBe(false)
+    expect(shape.showAddReadme).toBe(true)
+    expect(shape.feedbackPrEnabled).toBe(true)
+  })
+
+  it("no template + no README ('empty'): bare repo, forces empty autograding, disables feedback", () => {
+    const shape = deriveFormShape({
+      ...base,
+      repo_source: "none",
+      add_readme: false,
+      autograding_state: "built-in",
+    })
+    expect(shape.repositorySource).toBe("empty")
+    expect(shape.emptyRepo).toBe(true)
+    expect(shape.autogradingState).toBe("empty")
+    expect(shape.showTemplateFields).toBe(false)
+    expect(shape.showAddReadme).toBe(true)
+    expect(shape.feedbackPrEnabled).toBe(false)
+    expect(shape.showBuiltInConfig).toBe(false)
+  })
+
+  it("a raw empty_repo: true overrides to 'empty' (stored bare-repo assignment)", () => {
     const shape = deriveFormShape({
       ...base,
       empty_repo: true,
       autograding_state: "built-in",
     })
     expect(shape.repositorySource).toBe("empty")
+    expect(shape.emptyRepo).toBe(true)
     expect(shape.autogradingState).toBe("empty")
-    expect(shape.showTemplateFields).toBe(false)
-    expect(shape.feedbackPrEnabled).toBe(false)
-    expect(shape.showBuiltInConfig).toBe(false)
   })
 
-  it("a templated default-autograder assignment is built-in with template + feedback available", () => {
+  it("template source: template fields shown, README toggle hidden, built-in available", () => {
     const shape = deriveFormShape({
       ...base,
-      empty_repo: false,
+      repo_source: "template",
+      add_readme: false,
       autograding_state: "built-in",
     })
-    expect(shape.repositorySource).toBe("template-or-blank")
-    expect(shape.autogradingState).toBe("built-in")
+    expect(shape.repositorySource).toBe("template")
+    expect(shape.emptyRepo).toBe(false)
     expect(shape.showTemplateFields).toBe(true)
+    expect(shape.showAddReadme).toBe(false)
     expect(shape.feedbackPrEnabled).toBe(true)
     expect(shape.showBuiltInConfig).toBe(true)
   })
 
-  it("a teacher-supplied-CI assignment is 'none': no built-in config, but template + feedback stay available", () => {
+  it("template source with teacher-supplied CI ('none'): no built-in config, template + feedback stay", () => {
     const shape = deriveFormShape({
       ...base,
-      empty_repo: false,
+      repo_source: "template",
       autograding_state: "none",
     })
     expect(shape.autogradingState).toBe("none")
     expect(shape.showBuiltInConfig).toBe(false)
-    // The asymmetry vs empty_repo: "none" keeps the template + Feedback PR.
     expect(shape.showTemplateFields).toBe(true)
     expect(shape.feedbackPrEnabled).toBe(true)
   })
