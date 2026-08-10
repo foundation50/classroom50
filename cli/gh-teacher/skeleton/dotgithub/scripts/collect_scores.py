@@ -402,9 +402,10 @@ def valid_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
 
 
 def all_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
-    """Every valid slug including empty_repo assignments. Staff access grants
-    use this instead of valid_assignment_slugs: a bare repo never autogrades,
-    but TAs still need read on it to review the student-built work."""
+    """Every valid slug including assignments that never autograde (empty_repo
+    or no_autograder). Staff access grants use this instead of
+    valid_assignment_slugs: these repos never autograde, but TAs still need read
+    on them to review the student-built work."""
     slugs: list[str] = []
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")

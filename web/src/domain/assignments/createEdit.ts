@@ -396,10 +396,17 @@ async function buildAssignmentEntry(
 
   // no_autograder is a narrower sibling of empty_repo: no shim, so the
   // grading-adjacent fields are rejected — but a template and the Feedback PR
-  // are PERMITTED (a templated repo has a baseline commit). Mutually exclusive
-  // with empty_repo. Mirrors the CLI's validateNoAutograderExclusions; the form
-  // gates these inputs, this is the authoritative backstop.
+  // are PERMITTED (a templated repo has a baseline commit). It REQUIRES a
+  // template (it is the teacher-supplied-CI state: the template carries the
+  // workflows). Mutually exclusive with empty_repo. Mirrors the CLI's
+  // validateNoAutograderExclusions; the form gates these inputs, this is the
+  // authoritative backstop.
   if (input.no_autograder) {
+    if (!input.template_repo.trim()) {
+      throw new Error(
+        "no_autograder: teacher-supplied CI requires a template — the template carries its own workflows. Use an empty repository for a bare repo instead.",
+      )
+    }
     if (input.empty_repo) {
       throw new Error(
         "no_autograder: mutually exclusive with empty_repo — a bare repo already commits no shim.",

@@ -167,6 +167,13 @@ export function createTreeRepo(
 type GitHubTree = {
   sha: string
 }
+
+type GitHubTreeEntry = {
+  path: string
+  mode: "100644"
+  type: "blob"
+  content: string
+}
 export function createTreeForAssignment(params: {
   client: GitHubClient
   owner: string
@@ -178,24 +185,32 @@ export function createTreeForAssignment(params: {
   const { client, owner, repo, baseTreeSha, metadataYaml, autogradeYaml } =
     params
 
+  const tree: GitHubTreeEntry[] = [
+    {
+      path: ".classroom50.yaml",
+      mode: "100644",
+      type: "blob",
+      content: metadataYaml,
+    },
+  ]
+  // A no-shim accept (empty_repo or no_autograder) passes an empty shim: commit
+  // only the marker, never an empty .github/workflows/autograde.yaml. Landing
+  // an empty workflow file would make the runner shape ambiguous and churn the
+  // teacher's own CI path. Mirrors the CLI's classroomcfg.DropFiles.
+  if (autogradeYaml !== "") {
+    tree.push({
+      path: ".github/workflows/autograde.yaml",
+      mode: "100644",
+      type: "blob",
+      content: autogradeYaml,
+    })
+  }
+
   return client.request<GitHubTree>(`/repos/${owner}/${repo}/git/trees`, {
     method: "POST",
     body: {
       base_tree: baseTreeSha,
-      tree: [
-        {
-          path: ".classroom50.yaml",
-          mode: "100644",
-          type: "blob",
-          content: metadataYaml,
-        },
-        {
-          path: ".github/workflows/autograde.yaml",
-          mode: "100644",
-          type: "blob",
-          content: autogradeYaml,
-        },
-      ],
+      tree,
     },
   })
 }

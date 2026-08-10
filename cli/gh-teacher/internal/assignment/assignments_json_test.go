@@ -1903,6 +1903,7 @@ func TestValidateNoAutograderExclusions(t *testing.T) {
 		mutate func(*AssignmentEntry)
 		want   string
 	}{
+		{"no template", func(e *AssignmentEntry) { e.Template = nil }, "requires a template"},
 		{"empty_repo", func(e *AssignmentEntry) { e.EmptyRepo = true }, "mutually exclusive with empty_repo"},
 		{"non-default autograder", func(e *AssignmentEntry) { e.Autograder = "io-suite" }, "non-default autograder"},
 		{"tests", func(e *AssignmentEntry) {

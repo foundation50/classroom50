@@ -2562,6 +2562,10 @@ def test_runner_no_autograder_guard_uses_strict_predicate():
         "runner no_autograder guard must use the strict `is True` predicate "
         "(matching is_no_autograder / Go bool / TS === true)"
     )
+    # Assert the guard's fail() body too, not just the predicate line: a guard
+    # that keeps the predicate but has a broken/no-op body would still pass a
+    # predicate-only check green (mirrors the empty_repo guard's twin).
+    assert "built-in autograding is disabled for it" in runner
 
 
 def test_collect_classroom_skips_no_autograder_assignment(monkeypatch, capsys):

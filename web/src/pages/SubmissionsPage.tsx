@@ -22,6 +22,10 @@ import { BulkRepoAccessModal } from "@/components/modals/BulkRepoAccessModal"
 import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
+import {
+  assignmentSkipsGrading,
+  isNoAutograderAssignment,
+} from "@/domain/assignments/autogradingState"
 import { DataFreshness } from "@/pages/submissions/DataFreshness"
 import { ConfirmModal } from "@/components/modals"
 import {
@@ -155,11 +159,24 @@ const SubmissionsPageContent = () => {
     (a) => a.slug === assignment,
   )
   const isGroupAssignment = assignmentInfo?.mode === "group"
-  // empty_repo assignments never autograde: repos were created bare, with no
-  // autograde workflow. Grading UI (Regrade all, per-row regrade, scores,
-  // Feedback PR) is hidden and a notice explains why. Collect stays enabled —
-  // it's org-wide and collect_scores.py skips this assignment itself.
+  // Assignments that never autograde (empty_repo bare repos, or no_autograder
+  // teacher-supplied CI) produce no submit/* releases. Grading UI (Regrade all,
+  // per-row regrade, scores, live polling, the trigger retrofit) is hidden and
+  // a notice explains why. Collect stays enabled — it's org-wide and
+  // collect_scores.py skips these assignments itself. Mirrors the Python
+  // skips_grading() predicate family.
+  const skipsGrading = assignmentInfo
+    ? assignmentSkipsGrading(assignmentInfo)
+    : false
+  // The narrower bare-repo case: no repos worth managing at all. Only the
+  // repo-management bulk actions (access/features) key off this — a
+  // no_autograder repo is templated and DOES have repos to manage.
   const isEmptyRepoAssignment = assignmentInfo?.empty_repo === true
+  // Distinguishes the two skips-grading states for the freshness note wording
+  // (no_autograder keeps the Feedback PR; empty_repo does not).
+  const isNoAutograder = assignmentInfo
+    ? isNoAutograderAssignment(assignmentInfo)
+    : false
   // Locked assignments are closed to students (accept + submission surfaces
   // refuse them); the gradebook stays fully functional for staff, so this is a
   // heads-up banner, not a gate.
@@ -291,7 +308,7 @@ const SubmissionsPageContent = () => {
   // an effect) so the reset lands in the same commit as the change — no extra
   // render, and no setState-in-effect. React bails out of the re-render once the
   // signature matches.
-  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}|${isOwner && !isEmptyRepoAssignment}`
+  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}|${isOwner && !skipsGrading}`
   const [lastViewSignature, setLastViewSignature] = useState(viewSignature)
   if (viewSignature !== lastViewSignature) {
     setLastViewSignature(viewSignature)
@@ -317,9 +334,10 @@ const SubmissionsPageContent = () => {
     : null
 
   // Whether the live presence overlay applies here: owner-only (personal token
-  // can read the repos) and not an empty_repo assignment (never autograded). A
-  // non-owner renders purely from the collected snapshot.
-  const liveCapable = isOwner && !isEmptyRepoAssignment
+  // can read the repos) and an assignment that autogrades (empty_repo and
+  // no_autograder never produce submit/* releases). A non-owner renders purely
+  // from the collected snapshot.
+  const liveCapable = isOwner && !skipsGrading
 
   // When live, the toolbar hides Sort + Status (they can't be reconciled with a
   // page-scoped live fan-out), so the effective order/status are pinned to the
@@ -749,8 +767,7 @@ const SubmissionsPageContent = () => {
     ? formatRelativeToNow(new Date(effectiveLastCollectedAt))
     : null
   const snapshotStale =
-    !isEmptyRepoAssignment &&
-    snapshotIsStale(latestPush, effectiveLastCollectedAt)
+    !skipsGrading && snapshotIsStale(latestPush, effectiveLastCollectedAt)
 
   // Refresh scores + last-run timestamp + org repo list once a manual collection
   // finishes, so the freshness line re-derives (the collect just consumed the
@@ -987,7 +1004,8 @@ const SubmissionsPageContent = () => {
             stale={snapshotStale}
             collecting={collecting}
             errorCount={liveErrorCount}
-            emptyRepo={isEmptyRepoAssignment}
+            emptyRepo={skipsGrading}
+            noAutograder={isNoAutograder}
             onRefresh={
               collecting || emptyRoster.show
                 ? undefined
@@ -1012,15 +1030,16 @@ const SubmissionsPageContent = () => {
             regradeAllActive={regradeAllActive}
             canRegradeAll={canRegradeAll}
             emptyRoster={emptyRoster.show}
-            emptyRepo={isEmptyRepoAssignment}
+            emptyRepo={skipsGrading}
             // Metrics summarizes the graded snapshot; hide it when live (the
             // overlay adds ungraded pending rows the stats don't model).
             onMetrics={liveCapable ? undefined : () => setMetricsOpen(true)}
             onCollect={() => collectScores.collect()}
             onRegradeAll={() => setRegradeConfirmOpen(true)}
             // Bulk-open Feedback PRs: owner-only (needs admin on every repo,
-            // like the live reads), never for empty_repo (no PRs), and only
-            // when there are repos to target.
+            // like the live reads), never for empty_repo (no PRs). A
+            // no_autograder repo is templated and PERMITS the Feedback PR, so
+            // it is gated on empty_repo only, not on skipsGrading.
             onOpenAllPrs={
               isOwner && !isEmptyRepoAssignment && allAssignmentRepos.length > 0
                 ? () => setOpenAllPrsOpen(true)
@@ -1056,7 +1075,8 @@ const SubmissionsPageContent = () => {
             }
             // Bulk retrofit autograding triggers: same gate as bulk features
             // plus default-autograder only — teacher-authored (custom) shims
-            // are never rewritten. Reconciles existing repos with the
+            // are never rewritten, and a no_autograder assignment has no shim
+            // to retrofit (skipsGrading). Reconciles existing repos with the
             // assignment's submission_mode (baked into shims at accept time).
             // Requires a RESOLVED assignmentInfo: isDefaultAutograder(undefined)
             // is true, so gating on the optional chain alone would enable the
@@ -1065,7 +1085,7 @@ const SubmissionsPageContent = () => {
             onBulkTrigger={
               isOwner &&
               !isGroupAssignment &&
-              !isEmptyRepoAssignment &&
+              !skipsGrading &&
               assignmentInfo != null &&
               isDefaultAutograder(assignmentInfo.autograder) &&
               acceptedSet.size > 0
@@ -1097,7 +1117,7 @@ const SubmissionsPageContent = () => {
         thresholdFraction={thresholdFraction}
         filtered={hasActiveFilter}
         onClearFilters={clearFilters}
-        emptyRepo={isEmptyRepoAssignment}
+        emptyRepo={skipsGrading}
         // Per-row trigger retrofit: owner + default-autograder only (teacher-
         // authored shims are never rewritten). Mirrors the bulk-action gate,
         // including the resolved-assignmentInfo requirement: while the
@@ -1106,6 +1126,7 @@ const SubmissionsPageContent = () => {
         // would rewrite a tag-mode repo's shim to the wrong trigger.
         submissionMode={
           isOwner &&
+          !skipsGrading &&
           assignmentInfo != null &&
           isDefaultAutograder(assignmentInfo.autograder)
             ? (assignmentInfo.submission_mode ?? "every-push")

@@ -746,6 +746,18 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// One lookup of the entry this upsert replaces, shared by the
 		// wholesale-replace footgun checks and the Extra carry-forward.
 		prevIdx, hasPrev := assignment.FindAssignment(file.Assignments, slug)
+		// no_autograder is owned by the gradebook GUI, not `assignment add`
+		// (there is no --no-autograder flag), so `entry`/`attemptEntry` rebuilt
+		// from flags never carry it. Carry it forward from the prior entry
+		// BEFORE the immutability check below — otherwise a same-slug re-add
+		// (e.g. editing the due date) would compare the flag-default false
+		// against a stored true and wrongly trip ValidateNoAutograderUnchanged,
+		// making a GUI-created no_autograder assignment impossible to update.
+		// Mirrors the Locked carry-forward (also GUI/other-command-owned).
+		if hasPrev {
+			entry.NoAutograder = file.Assignments[prevIdx].NoAutograder
+			attemptEntry.NoAutograder = entry.NoAutograder
+		}
 		// empty_repo is immutable: student repos were provisioned (or left
 		// bare) at accept time and are never retrofitted. Checked at parentSHA
 		// inside the build so a concurrent add/remove is observed on retry.

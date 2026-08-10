@@ -418,17 +418,20 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 per-assignment `<classroom>/autograders/<slug>/autograder.py` → a classroom
 default via `gh teacher autograder set-default`. See [Autograders](Autograders).
 
-**No built-in autograder (teacher-supplied CI).** An assignment can carry
-`no_autograder: true` in `assignments.json` to opt out of the built-in
+**No built-in autograder (teacher-supplied CI).** A **templated** assignment can
+carry `no_autograder: true` in `assignments.json` to opt out of the built-in
 autograder entirely: accept commits the `.classroom50.yaml` marker and the
 template's content but **no** `.github/workflows/autograde.yaml` shim, so the
-teacher's own CI inside the template runs instead. Unlike `--empty-repo` it
-keeps the template and the Feedback PR (a templated repo has a baseline commit);
-it is mutually exclusive with `empty_repo`, a non-default `--autograder`, and
-the grading-adjacent fields (tests/allowed-files/release-assets/pass-threshold/
-submission-mode/submission-tag), and it is immutable after creation. Score
-collection and regrade skip it (no `submit/*` releases are produced). It is set
-through the gradebook's assignment form; there is no `assignment add` flag for
+teacher's own CI inside the template runs instead. It **requires** a template
+(the template carries the workflows — use `--empty-repo` for a bare repo with no
+CI). Unlike `--empty-repo` it keeps the template and the Feedback PR (a
+templated repo has a baseline commit); it is mutually exclusive with
+`empty_repo`, a non-default `--autograder`, and the grading-adjacent fields
+(tests/allowed-files/release-assets/pass-threshold/submission-mode/
+submission-tag), and it is immutable after creation. Score collection and
+regrade skip it (no `submit/*` releases are produced). It is currently set by
+writing `no_autograder: true` into `assignments.json` (via the gradebook's
+edit path); there is no `assignment add` flag and no dedicated form control for
 it yet.
 
 <details>

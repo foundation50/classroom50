@@ -595,9 +595,24 @@ export async function acceptAssignment(params: {
   // whole setup step are skipped. Mirrors the CLI's acceptIntoBareRepo.
   const isEmptyRepo = assignment.empty_repo === true
 
+  // no_autograder assignment (teacher-supplied CI): a TEMPLATED repo that
+  // commits the marker + template content but NO autograde shim of either kind
+  // (neither the default shim nor a Pages-fetched workflow), so the teacher's
+  // own .github/ CI runs. Unlike empty_repo it keeps the template and permits
+  // the Feedback PR. Mirrors the CLI student accept gate (entry.CommitsShim()).
+  const isNoAutograder = assignment.no_autograder === true
+
+  // Whether accept commits an autograde shim at all. Both no-shim states
+  // suppress it; the inverse of the CLI's entry.CommitsShim(). empty_repo also
+  // skips the whole setup/commit path (it commits nothing); no_autograder still
+  // commits the marker + template content, only the shim is omitted.
+  const skipsShim = isEmptyRepo || isNoAutograder
+
   // feedback_pr opts into the accept-time Feedback PR (issue #228). Never
   // set together with empty_repo (the teacher CLI enforces the exclusivity;
-  // the bare path below skips the step regardless).
+  // the bare path below skips the step regardless). no_autograder PERMITS the
+  // Feedback PR (a templated repo has a baseline commit), so it is not gated
+  // out here — only empty_repo is.
   const wantsFeedbackPr = assignment.feedback_pr === true && !isEmptyRepo
 
   // empty_repo and template are mutually exclusive at write time, but the
@@ -607,6 +622,17 @@ export async function acceptAssignment(params: {
   if (isEmptyRepo && assignment.template) {
     throw new AcceptStepError({
       key: "accept.errors.emptyRepoWithTemplate",
+      params: { assignmentSlug },
+    })
+  }
+
+  // no_autograder and empty_repo are mutually exclusive at write time, but the
+  // published manifest is not re-validated. Both being set is an invalid
+  // hand-edited entry — fail closed rather than pick one. Mirrors the CLI
+  // student accept guard (accept.go: NoAutograder && EmptyRepo).
+  if (isNoAutograder && isEmptyRepo) {
+    throw new AcceptStepError({
+      key: "accept.errors.noAutograderWithEmptyRepo",
       params: { assignmentSlug },
     })
   }
@@ -626,10 +652,10 @@ export async function acceptAssignment(params: {
     }
   }
 
-  // A bare (empty_repo) repo carries no autograde workflow — mark the step
-  // complete (as skipped) so the checklist doesn't look stuck, and never fetch
-  // the shim.
-  let autogradeYaml = isEmptyRepo
+  // A no-shim accept (empty_repo bare repo, or no_autograder teacher-supplied
+  // CI) carries no autograde workflow — mark the step complete (as skipped) so
+  // the checklist doesn't look stuck, and never fetch the shim.
+  let autogradeYaml = skipsShim
     ? ""
     : await withAcceptStep(
         {
@@ -655,7 +681,7 @@ export async function acceptAssignment(params: {
             submissionTags: assignment.submission_tags,
           }),
       )
-  if (isEmptyRepo) {
+  if (skipsShim) {
     onStepUpdate?.({
       id: "autograder",
       status: "complete",
@@ -804,7 +830,7 @@ export async function acceptAssignment(params: {
   // branch resolved here may still be the transient `main`. rerenderShim lets
   // the commit step rebuild the shim once the true branch materializes.
   let rerenderShim: ((branch: string) => string) | undefined
-  if (isDefaultAutograder(assignment.autograder)) {
+  if (!skipsShim && isDefaultAutograder(assignment.autograder)) {
     const resolvedBranch =
       created.kind === "fallback-empty"
         ? created.branch
@@ -838,6 +864,10 @@ export async function acceptAssignment(params: {
     // "genuinely accepted" when BOTH the metadata and workflow landed (one
     // commit, so a missing workflow means the prior accept failed mid-flow). If
     // either is missing, re-run the idempotent provisioning.
+    //
+    // A no_autograder accept commits NO workflow by design, so the workflow
+    // probe would always report "missing" and wrongly re-provision a healthy
+    // repo forever — for it, the marker alone proves a completed accept.
     const [hasMetadata, hasWorkflow] = await Promise.all([
       repoContentsPathExists(
         client,
@@ -852,7 +882,7 @@ export async function acceptAssignment(params: {
         ".github/workflows/autograde.yaml",
       ),
     ])
-    const provisioned = hasMetadata && hasWorkflow
+    const provisioned = hasMetadata && (isNoAutograder || hasWorkflow)
 
     if (provisioned) {
       onStepUpdate?.({

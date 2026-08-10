@@ -309,6 +309,54 @@ func TestEntryDecodesEmptyRepo(t *testing.T) {
 	}
 }
 
+func TestEntryDecodesNoAutograder(t *testing.T) {
+	// no_autograder decodes when present and defaults to false when absent
+	// (back-compat: a pre-feature manifest behaves as today). The accept flow
+	// branches on it via CommitsShim, so the wire contract matters.
+	var file assignmentsFile
+	if err := json.Unmarshal([]byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {"slug": "ci", "name": "CI", "mode": "individual", "autograder": "default", "template": {"owner": "o", "repo": "t", "branch": "main"}, "no_autograder": true},
+    {"slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default"}
+  ]
+}`), &file); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !file.Assignments[0].NoAutograder {
+		t.Error("ci.NoAutograder = false, want true")
+	}
+	if file.Assignments[1].NoAutograder {
+		t.Error("hello.NoAutograder = true, want false (field absent — back-compat)")
+	}
+}
+
+func TestEntryCommitsShim(t *testing.T) {
+	// CommitsShim is the accept-time gate: both no-shim states (empty_repo,
+	// no_autograder) suppress the shim; everything else commits it. This pins
+	// the two accept.go shim branches (the default-shim render and the
+	// Pages-fetch) so dropping either condition from the gate fails here.
+	cases := []struct {
+		name  string
+		entry Entry
+		want  bool
+	}{
+		{"plain templated (default autograder)", Entry{}, true},
+		{"empty_repo", Entry{EmptyRepo: true}, false},
+		{"no_autograder", Entry{NoAutograder: true}, false},
+		// A hand-edited manifest could carry both; either alone already
+		// suppresses the shim, so the conjunction stays false.
+		{"both flags", Entry{EmptyRepo: true, NoAutograder: true}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.entry.CommitsShim(); got != tc.want {
+				t.Errorf("CommitsShim() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestEntryDecodesFeedbackPR(t *testing.T) {
 	// feedback_pr decodes when present and defaults to false when absent —
 	// the accept flow gates the accept-time Feedback PR on it (issue #228).

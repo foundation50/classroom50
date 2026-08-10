@@ -916,13 +916,19 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 // out. A narrower sibling of empty_repo: it commits no shim (so the
 // grading-adjacent fields are meaningless), and it must not coexist with
 // empty_repo (already shim-less) or a non-default autograder (which fetches a
-// teacher-authored Pages workflow — the opposite of adding nothing). UNLIKE
-// empty_repo it permits template and feedback_pr (a templated repo has a
-// baseline commit). Error wording references CLI flags (write-path convention);
-// the parse path wraps with the entry context.
+// teacher-authored Pages workflow — the opposite of adding nothing). It
+// REQUIRES a template (it is the teacher-supplied-CI state: the template
+// carries the workflows), and UNLIKE empty_repo it permits feedback_pr (a
+// templated repo has a baseline commit). Unlike empty_repo, no_autograder has
+// no `assignment add` flag yet (it is GUI/manifest-set), so error wording names
+// the JSON fields, not a --no-autograder flag; the parse path wraps with the
+// entry context.
 func validateNoAutograderExclusions(entry AssignmentEntry) error {
+	if entry.Template == nil {
+		return errors.New("no_autograder requires a template: it marks a TEMPLATED assignment as teacher-supplied CI (the template carries its own workflows); a template-less repo has no CI to run — use empty_repo for a bare repo instead")
+	}
 	if entry.EmptyRepo {
-		return errors.New("no_autograder is mutually exclusive with empty_repo (--no-autograder vs --empty-repo): a bare repo already commits no shim")
+		return errors.New("no_autograder is mutually exclusive with empty_repo: a bare repo already commits no shim")
 	}
 	if entry.Autograder != "" && entry.Autograder != contract.DefaultAutograderName {
 		return fmt.Errorf("no_autograder is mutually exclusive with a non-default autograder (%q): a custom autograder fetches a teacher-authored workflow, the opposite of adding no workflow", entry.Autograder)
@@ -940,10 +946,10 @@ func validateNoAutograderExclusions(entry AssignmentEntry) error {
 		return errors.New("no_autograder is mutually exclusive with pass_threshold: no shim autogrades")
 	}
 	if entry.SubmissionMode != "" {
-		return errors.New("no_autograder is mutually exclusive with submission_mode (--no-autograder vs --submission-mode): no shim exists to trigger")
+		return errors.New("no_autograder is mutually exclusive with submission_mode: no shim exists to trigger")
 	}
 	if len(entry.SubmissionTags) > 0 {
-		return errors.New("no_autograder is mutually exclusive with submission_tags (--no-autograder vs --submission-tag): no shim exists to trigger")
+		return errors.New("no_autograder is mutually exclusive with submission_tags: no shim exists to trigger")
 	}
 	return nil
 }

@@ -107,6 +107,16 @@ func (e Entry) IsTagSubmissionMode() bool {
 	return e.SubmissionMode == contract.SubmissionModeTag
 }
 
+// CommitsShim reports whether accept commits an autograde shim for this entry.
+// Both no-shim states suppress it: EmptyRepo (a bare repo commits nothing) and
+// NoAutograder (teacher-supplied CI). Centralized so the two accept-time shim
+// branches can't drift on the predicate — the Go analogue of the Python
+// skips_grading() family (the inverse: skips_grading is "does not autograde",
+// this is "does the shim get committed").
+func (e Entry) CommitsShim() bool {
+	return !e.EmptyRepo && !e.NoAutograder
+}
+
 // RepoFeatures is the tri-state Issues/Wiki/Projects/Pull-requests override; a nil pointer
 // field inherits, an explicit true/false forces on/off. Mirrors the teacher
 // CLI's assignment.RepoFeatures.

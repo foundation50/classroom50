@@ -456,7 +456,8 @@ class TestEmptyRepo:
 class TestNoAutograder:
     # no_autograder is a narrower sibling of empty_repo: it commits no shim but
     # PERMITS a template and the Feedback PR (a templated repo has a baseline
-    # commit). It excludes the grading-adjacent fields, empty_repo, and a
+    # commit). It REQUIRES a template (teacher-supplied CI lives in the
+    # template), and excludes the grading-adjacent fields, empty_repo, and a
     # non-default autograder. Mirrors Go's validateNoAutograderExclusions.
     def _entry(self, **overrides):
         # Keeps the default template (the asymmetry vs empty_repo). Overrides
@@ -476,6 +477,15 @@ class TestNoAutograder:
 
     def test_no_autograder_must_be_boolean(self):
         assert _errors(_manifest(self._entry(no_autograder="yes"))) != []
+
+    def test_no_autograder_requires_template(self):
+        # no_autograder is the TEMPLATED teacher-supplied-CI state: the template
+        # carries the workflows. A template-less entry is rejected (use
+        # empty_repo for a bare repo). The asymmetry's other half of
+        # test_no_autograder_permits_feedback_pr.
+        entry = self._entry()
+        del entry["template"]
+        assert _errors(_manifest(entry)) != []
 
     def test_no_autograder_rejects_empty_repo(self):
         # A bare repo already commits no shim; the two states must not both be

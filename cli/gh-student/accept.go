@@ -422,6 +422,14 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	if entry.NoAutograder && entry.EmptyRepo {
 		return fmt.Errorf("assignment %q sets both no_autograder and empty_repo — the entry is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
+	// no_autograder is the TEMPLATED teacher-supplied-CI state: the template
+	// carries its own workflows. A template-less no_autograder entry (only
+	// reachable via a hand-edited manifest, since the write validators require a
+	// template) would produce a bare marker-only repo with no CI at all — use
+	// empty_repo for that. Fail closed rather than silently contradict the docs.
+	if entry.NoAutograder && !hasTemplate {
+		return fmt.Errorf("assignment %q sets no_autograder without a template — teacher-supplied CI needs a template that carries the workflows; the entry is invalid, ask your teacher to re-run `gh teacher assignment add`", assignment)
+	}
 
 	// 2) Resolve the autograder shim. A non-default (Pages-fetched) autograder
 	//    is teacher-authored and resolved up front so a fetch failure doesn't
@@ -434,7 +442,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	autograderName := entry.ResolveAutograder()
 	useDefaultShim := autograderName == contract.DefaultAutograderName
 	var shim string
-	if !useDefaultShim && !entry.EmptyRepo && !entry.NoAutograder {
+	if !useDefaultShim && entry.CommitsShim() {
 		workflow, err := assignments.FetchAutograderWorkflow(cmd.Context(), org, classroom, secret, autograderName)
 		if err != nil {
 			return err
@@ -493,9 +501,10 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	// `uses:` ref targets the config repo's actual default branch. On a read
 	// failure, fall back to the assignment repo's own branch (commitBranch), not
 	// a hardcoded `main` — a wrong `@main` ref would 404 the runner and silently
-	// skip grading on a master-default org. An empty_repo assignment commits no
-	// shim at all, so skip the render (and its config-branch read).
-	if useDefaultShim && !entry.EmptyRepo && !entry.NoAutograder {
+	// skip grading on a master-default org. A no-shim assignment (empty_repo or
+	// no_autograder) commits no shim at all, so skip the render (and its
+	// config-branch read).
+	if useDefaultShim && entry.CommitsShim() {
 		configBranch, cbErr := resolveConfigRepoBranch(client, org)
 		if cbErr != nil {
 			if verbose {
