@@ -515,6 +515,62 @@ class TestNoAutograder:
         assert _errors(_manifest(self._entry(**{field: value}))) != []
 
 
+class TestInitShim:
+    # init_shim is the built-in-autograder-on-an-otherwise-empty-repo state: a
+    # template-less repo initialized with only the marker + default shim that
+    # DOES autograde. It REQUIRES no template and the default autograder, is
+    # mutually exclusive with empty_repo/template/no_autograder/non-default
+    # autograder, and PERMITS the grading-adjacent fields (it autogrades).
+    # Mirrors Go's validateInitShimExclusions.
+    def _entry(self, **overrides):
+        # Template-less base (init_shim forbids a template).
+        base = _entry(**{"init_shim": True, **overrides})
+        base.pop("template", None)
+        return base
+
+    def test_init_shim_accepted_template_less(self):
+        assert _errors(_manifest(self._entry())) == []
+
+    def test_init_shim_permits_grading_fields(self):
+        # Unlike empty_repo/no_autograder, init_shim autogrades, so tests +
+        # feedback_pr + submission_mode are allowed.
+        assert (
+            _errors(
+                _manifest(
+                    self._entry(
+                        feedback_pr=True,
+                        tests=[
+                            {"name": "t", "type": "run", "run": "true", "points": 1}
+                        ],
+                        submission_mode="tag",
+                        pass_threshold=70,
+                    )
+                )
+            )
+            == []
+        )
+
+    def test_init_shim_false_accepted(self):
+        assert _errors(_manifest(_entry(init_shim=False))) == []
+
+    def test_init_shim_must_be_boolean(self):
+        assert _errors(_manifest(self._entry(init_shim="yes"))) != []
+
+    def test_init_shim_rejects_template(self):
+        entry = self._entry()
+        entry["template"] = {"owner": "o", "repo": "t", "branch": "main"}
+        assert _errors(_manifest(entry)) != []
+
+    def test_init_shim_rejects_empty_repo(self):
+        assert _errors(_manifest(self._entry(empty_repo=True))) != []
+
+    def test_init_shim_rejects_no_autograder(self):
+        assert _errors(_manifest(self._entry(no_autograder=True))) != []
+
+    def test_init_shim_rejects_non_default_autograder(self):
+        assert _errors(_manifest(self._entry(autograder="io-suite"))) != []
+
+
 def _release_assets_errors(value):
     return _errors(_manifest(_entry(release_assets=value)))
 

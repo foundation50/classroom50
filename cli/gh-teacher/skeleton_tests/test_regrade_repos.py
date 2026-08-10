@@ -804,6 +804,17 @@ def test_is_no_autograder_is_strict_boolean_true():
     assert rr.skips_grading({"slug": "x"}) is False
 
 
+def test_is_init_shim_is_strict_boolean_and_still_grades():
+    # init_shim commits the default shim and autogrades, so regrade must NOT
+    # skip it — deliberately excluded from skips_grading.
+    assert rr.is_init_shim({"init_shim": True}) is True
+    assert rr.is_init_shim({"init_shim": False}) is False
+    assert rr.is_init_shim({}) is False
+    for non_bool in ("true", "yes", 1, [1], {"x": 1}):
+        assert rr.is_init_shim({"init_shim": non_bool}) is False, non_bool
+    assert rr.skips_grading({"init_shim": True}) is False
+
+
 def test_load_roster_no_autograder_raises_sentinel(monkeypatch, tmp_path):
     # A templated no_autograder assignment raises the same skip sentinel BEFORE
     # the team listing — teacher-supplied CI commits no shim, so there is nothing
