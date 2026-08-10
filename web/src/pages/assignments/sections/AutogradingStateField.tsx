@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Alert, FormField } from "@/components/ui"
-import type { AssignmentForm } from "./assignmentFormModel"
+import type { AssignmentForm } from "../assignmentFormModel"
 import type { AutogradingState } from "@/domain/assignments/autogradingState"
 
 // The autograding tri-state selector (assignment-form IA overhaul U3/U7).
@@ -22,7 +22,7 @@ import type { AutogradingState } from "@/domain/assignments/autogradingState"
 // field — the form must not offer a change the save path will reject.
 const SELECTABLE: readonly AutogradingState[] = ["built-in", "none"]
 
-export function AutogradingSection({
+export function AutogradingStateField({
   form,
   edit,
 }: {
@@ -38,7 +38,7 @@ export function AutogradingSection({
         return (
           <FormField
             htmlFor={field.name}
-            label={t("assignments.form.autograding.label")}
+            label={t("assignments.form.autograding.modeLabel")}
           >
             {({ describedById }) => (
               <div aria-describedby={describedById}>
@@ -61,7 +61,7 @@ export function AutogradingSection({
                       aria-disabled={edit}
                     >
                       <legend className="sr-only">
-                        {t("assignments.form.autograding.label")}
+                        {t("assignments.form.autograding.modeLabel")}
                       </legend>
                       {SELECTABLE.map((option) => (
                         <label
@@ -108,5 +108,3 @@ export function AutogradingSection({
     </form.Field>
   )
 }
-
-export default AutogradingSection

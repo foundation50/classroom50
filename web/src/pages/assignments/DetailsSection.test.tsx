@@ -33,7 +33,7 @@ vi.mock("@/context/github/GitHubProvider", () => ({
   useOptionalGitHubClient: () => useOptionalGitHubClient(),
 }))
 
-import { RepoFeatureControls } from "./DetailsSection"
+import { RepoFeatureControls } from "./sections/RepositoryFeaturesSection"
 import { useAssignmentForm } from "./assignmentFormModel"
 
 const t = ((key: string) => key) as unknown as TFunction

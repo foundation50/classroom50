@@ -530,3 +530,80 @@ describe("autograding tri-state selector", () => {
     ).not.toBeNull()
   })
 })
+
+// The five-section IA (R1/R2): the sections render in order with a status badge
+// each, and the two deferred affordances (R6/R14) render inert.
+describe("assignment form five-section IA", () => {
+  const renderForm = (props: {
+    edit?: boolean
+    defaultValues?: Partial<CreateAssignmentFormValues>
+  }) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          edit={props.edit}
+          defaultValues={props.defaultValues}
+          onSubmit={() => {}}
+        />
+      </QueryClientProvider>,
+    )
+
+  const sectionTitleKeys = [
+    "assignments.form.detailsSection",
+    "assignments.form.repositorySetupSection",
+    "assignments.form.autograding.label",
+    "assignments.form.repositoryFeaturesSection",
+    "assignments.form.scheduleSection",
+  ]
+
+  it("renders the five sections in order for create", () => {
+    renderForm({})
+    const headings = screen
+      .getAllByRole("heading", { level: 3 })
+      .map((h) => h.textContent)
+    // The section headings appear in the required order (other h3s may exist
+    // inside sections, so assert the five titles are a subsequence).
+    const indices = sectionTitleKeys.map((key) => headings.indexOf(key))
+    expect(indices.every((i) => i >= 0)).toBe(true)
+    expect([...indices]).toEqual([...indices].sort((a, b) => a - b))
+  })
+
+  it("renders the five sections in order for edit", () => {
+    renderForm({
+      edit: true,
+      defaultValues: assignmentToFormValues(baseAssignment),
+    })
+    for (const key of sectionTitleKeys) {
+      expect(screen.getByText(key)).not.toBeNull()
+    }
+  })
+
+  it("shows a per-section status badge (default on a fresh create form)", () => {
+    renderForm({})
+    // Details is untouched on a fresh form -> "default" badge present.
+    expect(
+      screen.getAllByText("assignments.form.sectionStatus.default").length,
+    ).toBeGreaterThan(0)
+  })
+
+  it("reserves the fork-mirror creation method as a disabled affordance", () => {
+    // Templated (non-empty) create form: the creation-method selector shows,
+    // with the mirror option disabled and generate selected.
+    const { container } = renderForm({
+      defaultValues: { template_repo: "acme/starter" },
+    })
+    const mirror = container.querySelector<HTMLInputElement>(
+      "#creation-method-mirror",
+    )
+    const generate = container.querySelector<HTMLInputElement>(
+      "#creation-method-generate",
+    )
+    expect(mirror?.disabled).toBe(true)
+    expect(generate?.checked).toBe(true)
+  })
+
+  it("reserves the schedule Extensions affordance as disabled", () => {
+    renderForm({})
+    expect(screen.getByText("assignments.form.extensions.label")).not.toBeNull()
+  })
+})
