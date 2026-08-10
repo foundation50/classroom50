@@ -57,7 +57,24 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.feedbackPrEnabled).toBe(true)
   })
 
-  it("no template + no README ('empty'): bare repo, forces empty autograding, disables feedback", () => {
+  it("no template + no README + none: bare repo (empty_repo), disables feedback", () => {
+    const shape = deriveFormShape({
+      ...base,
+      repo_source: "none",
+      add_readme: false,
+      autograding_state: "none",
+    })
+    expect(shape.repositorySource).toBe("empty")
+    expect(shape.emptyRepo).toBe(true)
+    expect(shape.initShim).toBe(false)
+    expect(shape.autogradingState).toBe("empty")
+    expect(shape.showTemplateFields).toBe(false)
+    expect(shape.showAddReadme).toBe(true)
+    expect(shape.feedbackPrEnabled).toBe(false)
+    expect(shape.showBuiltInConfig).toBe(false)
+  })
+
+  it("no template + no README + built-in: init_shim (not bare), built-in config + feedback available", () => {
     const shape = deriveFormShape({
       ...base,
       repo_source: "none",
@@ -65,12 +82,23 @@ describe("deriveFormShape — repository source", () => {
       autograding_state: "built-in",
     })
     expect(shape.repositorySource).toBe("empty")
+    // Built-in on an empty source is init_shim, NOT a bare repo.
+    expect(shape.initShim).toBe(true)
+    expect(shape.emptyRepo).toBe(false)
+    expect(shape.autogradingState).toBe("built-in")
+    expect(shape.showBuiltInConfig).toBe(true)
+    expect(shape.feedbackPrEnabled).toBe(true)
+  })
+
+  it("a raw empty_repo: true stays bare even with built-in picked (hard override, no init_shim)", () => {
+    const shape = deriveFormShape({
+      ...base,
+      empty_repo: true,
+      autograding_state: "built-in",
+    })
     expect(shape.emptyRepo).toBe(true)
+    expect(shape.initShim).toBe(false)
     expect(shape.autogradingState).toBe("empty")
-    expect(shape.showTemplateFields).toBe(false)
-    expect(shape.showAddReadme).toBe(true)
-    expect(shape.feedbackPrEnabled).toBe(false)
-    expect(shape.showBuiltInConfig).toBe(false)
   })
 
   it("a raw empty_repo: true overrides to 'empty' (stored bare-repo assignment)", () => {

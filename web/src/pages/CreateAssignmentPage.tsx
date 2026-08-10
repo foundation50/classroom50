@@ -11,6 +11,7 @@ import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
 import CreateAssignmentForm, {
   formValuesToRepoFeatures,
 } from "@/pages/assignments/CreateAssignmentForm"
+import { deriveFormShape } from "@/pages/assignments/formShape"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useCreateAssignment } from "@/hooks/mutations/useCreateAssignment"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -130,6 +131,7 @@ const CreateAssignmentPage = () => {
                 feedback_pr: values.feedback_pr,
                 empty_repo: values.empty_repo,
                 no_autograder: values.autograding_state === "none",
+                init_shim: deriveFormShape(values).initShim,
                 runs_on: values.runs_on,
                 container_image: values.container_image,
                 container_user: values.container_user,

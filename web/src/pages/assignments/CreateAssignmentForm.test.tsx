@@ -492,28 +492,26 @@ describe("autograding selector", () => {
     none: container.querySelector<HTMLInputElement>("#autograding_state-none"),
   })
 
-  it("create default (empty repo): built-in disabled, none selected, init hint shown", () => {
-    // The fresh create form defaults to an uninitialized repo (README off), so
-    // built-in autograding can't attach yet.
+  it("create default (empty repo): none selected, built-in still selectable (init_shim)", () => {
+    // The fresh create form defaults to an uninitialized repo (README off) with
+    // "No built-in autograder" selected — but built-in is now SELECTABLE
+    // (picking it commits a shim onto the repo, the init_shim state).
     const { container } = renderForm()
     const { builtIn, none } = radios(container)
     expect(none?.checked).toBe(true)
-    expect(builtIn?.disabled).toBe(true)
+    expect(builtIn?.disabled).toBe(false)
     expect(
-      screen.getByText("assignments.form.autograding.builtInNeedsInit"),
-    ).not.toBeNull()
+      screen.queryByText("assignments.form.autograding.builtInNeedsInit"),
+    ).toBeNull()
   })
 
-  it("initialized repo (README on): both choices enabled, no init hint", () => {
+  it("initialized repo (README on): both choices enabled", () => {
     const { container } = renderForm({
       defaultValues: { repo_source: "none", add_readme: true },
     })
     const { builtIn, none } = radios(container)
     expect(builtIn?.disabled).toBe(false)
     expect(none?.disabled).toBe(false)
-    expect(
-      screen.queryByText("assignments.form.autograding.builtInNeedsInit"),
-    ).toBeNull()
   })
 
   it("none is the first option", () => {
@@ -557,8 +555,11 @@ describe("autograding selector", () => {
     expect(none?.disabled).toBe(true)
   })
 
-  it("empty_repo: shows both radios with built-in disabled and none selected", () => {
+  it("stored empty_repo on edit: radios locked, none selected", () => {
+    // A stored bare repo opens on "none" (derived), and the radios are locked
+    // on edit like every immutable field.
     const { container } = renderForm({
+      edit: true,
       defaultValues: assignmentToFormValues({
         ...baseAssignment,
         empty_repo: true,
@@ -568,7 +569,7 @@ describe("autograding selector", () => {
     expect(none?.checked).toBe(true)
     expect(builtIn?.disabled).toBe(true)
     expect(
-      screen.getByText("assignments.form.autograding.builtInNeedsInit"),
+      screen.getByText("assignments.form.autograding.lockedHelp"),
     ).not.toBeNull()
   })
 })

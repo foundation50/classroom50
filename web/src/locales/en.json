@@ -1176,7 +1176,6 @@
       "autograding": {
         "label": "Autograding",
         "modeLabel": "Autograding mode",
-        "builtInNeedsInit": "Built-in autograding needs an initialized repository. Turn on \"Add a README\" or choose a template in Repository Setup to enable it.",
         "lockedHelp": "The autograding mode can't be changed after creation: repositories students already accepted are not retrofitted with (or stripped of) the autograding workflow.",
         "choices": {
           "built-in": {

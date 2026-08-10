@@ -486,13 +486,26 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.template_repo).toBe("")
   })
 
-  it("no template + no README maps to a bare repo (empty_repo true)", () => {
+  it("no template + no README + none maps to a bare repo (empty_repo true)", () => {
     const out = toSubmitValues({
       ...base,
       repo_source: "none",
       add_readme: false,
+      autograding_state: "none",
     })
     expect(out.empty_repo).toBe(true)
+  })
+
+  it("no template + no README + built-in is NOT bare (init_shim case; empty_repo false)", () => {
+    const out = toSubmitValues({
+      ...base,
+      repo_source: "none",
+      add_readme: false,
+      autograding_state: "built-in",
+    })
+    // Built-in on an empty source commits a shim (init_shim), so it is not bare.
+    expect(out.empty_repo).toBe(false)
+    expect(out.autograding_state).toBe("built-in")
   })
 
   it("template source keeps the template and is never empty", () => {
