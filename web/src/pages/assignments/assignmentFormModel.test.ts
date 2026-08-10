@@ -43,6 +43,7 @@ const base: CreateAssignmentFormValues = {
   max_group_size: 2,
   feedback_pr: true,
   empty_repo: false,
+  autograding_state: "built-in",
   runtime_env: "hosted",
   runs_on: "",
   container_image: "",
@@ -431,6 +432,78 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.student_permission).toBe("admin")
     expect(out.submission_mode).toBe("tag")
     expect(out.submission_tags).toBe("phase1\nphase2")
+  })
+
+  it("clears built-in-only fields for the 'none' autograding state but keeps template + feedback_pr", () => {
+    // "none" (teacher-supplied CI) commits no shim, so the grading-adjacent
+    // fields clear like empty_repo — but unlike empty_repo it PERMITS a
+    // template and the Feedback PR (a templated repo has a baseline commit).
+    const out = toSubmitValues({
+      ...base,
+      autograding_state: "none",
+      template_repo: "acme/starter",
+      feedback_pr: true,
+      setup_command: "make",
+      allowed_files: "*\n!hello.py",
+      release_assets: "report.pdf",
+      pass_threshold_enabled: true,
+      submission_mode: "tag",
+      submission_tags: "phase1",
+    })
+    // Permitted (the asymmetry vs empty_repo):
+    expect(out.template_repo).toBe("acme/starter")
+    expect(out.feedback_pr).toBe(true)
+    // Cleared (no shim to run/trigger):
+    expect(out.setup_command).toBe("")
+    expect(out.allowed_files).toBe("")
+    expect(out.release_assets).toBe("")
+    expect(out.pass_threshold_enabled).toBe(false)
+    expect(out.submission_mode).toBe("every-push")
+    expect(out.submission_tags).toBe("")
+    expect(out.autograding_state).toBe("none")
+  })
+
+  it("empty_repo forces the autograding state to 'empty' regardless of the picked value", () => {
+    const out = toSubmitValues({
+      ...base,
+      empty_repo: true,
+      autograding_state: "built-in",
+    })
+    expect(out.autograding_state).toBe("empty")
+  })
+})
+
+describe("assignmentToFormValues — autograding tri-state", () => {
+  it("derives 'built-in' for a default-autograder assignment", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+    })
+    expect(values.autograding_state).toBe("built-in")
+  })
+
+  it("derives 'none' for a no_autograder assignment", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      no_autograder: true,
+    })
+    expect(values.autograding_state).toBe("none")
+  })
+
+  it("derives 'empty' for an empty_repo assignment", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      empty_repo: true,
+    })
+    expect(values.autograding_state).toBe("empty")
   })
 })
 

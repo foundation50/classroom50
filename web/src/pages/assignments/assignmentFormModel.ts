@@ -38,6 +38,10 @@ import {
   validateLanguageVersion,
 } from "@/util/runtime"
 import { utcIsoToDatetimeLocalValue } from "./formFieldHelpers"
+import {
+  deriveAutogradingState,
+  type AutogradingState,
+} from "@/domain/assignments/autogradingState"
 import type {
   Assignment,
   RepoPermission,
@@ -80,6 +84,14 @@ export type CreateAssignmentFormValues = {
   // are hidden and their values cleared on submit, mirroring runtime_env's
   // conditional-clear idiom.
   empty_repo: boolean
+  // UI-only autograding tri-state (never sent verbatim; mapped to wire fields
+  // on submit): "empty" (bare repo — driven by empty_repo), "none" (templated,
+  // teacher-supplied CI — maps to no_autograder: true, no shim), "built-in"
+  // (the default-shim path with triggers/advanced/tests). Read from the stored
+  // entry via deriveAutogradingState; on submit "none" writes no_autograder and
+  // clears the built-in-only fields, "built-in" clears no_autograder. Mirrors
+  // the runtime_env UI-only-discriminator idiom.
+  autograding_state: AutogradingState
   // UI-only: which runtime environment the teacher is configuring. Selects
   // which fields render and get written; never sent to the wire. "hosted" uses
   // a GitHub Actions runner (runs-on + apt); "container" grades inside a Docker
@@ -410,6 +422,15 @@ export function toSubmitValues(
   // value from before toggling must not reach the wire (the mutation layer
   // rejects the combination).
   const isEmptyRepo = value.empty_repo
+  // "none" (teacher-supplied CI) also commits no shim, so it clears the same
+  // built-in-only grading fields as empty_repo — but it PERMITS template and
+  // feedback_pr (a templated repo has a baseline commit), so those clear only
+  // for empty_repo. Both no-shim states collapse the autograding-state to a
+  // value the wire mapping reads; empty_repo forces "empty" regardless.
+  const autogradingState: AutogradingState = isEmptyRepo
+    ? "empty"
+    : value.autograding_state
+  const noBuiltIn = isEmptyRepo || autogradingState === "none"
   return {
     name: value.name.trim(),
     slug: slugify(value.slug),
@@ -421,6 +442,7 @@ export function toSubmitValues(
     max_group_size: value.max_group_size,
     feedback_pr: isEmptyRepo ? false : value.feedback_pr,
     empty_repo: isEmptyRepo,
+    autograding_state: autogradingState,
     runtime_env: value.runtime_env,
     runs_on: value.runs_on.trim(),
     container_image: isContainer ? value.container_image.trim() : "",
@@ -431,17 +453,17 @@ export function toSubmitValues(
     runtime_go: value.runtime_go.trim(),
     runtime_rust: value.runtime_rust.trim(),
     runtime_apt: isContainer ? "" : value.runtime_apt.trim(),
-    setup_command: isEmptyRepo ? "" : value.setup_command.trim(),
-    setup_timeout: isEmptyRepo ? 0 : value.setup_timeout,
-    allowed_files: isEmptyRepo ? "" : value.allowed_files,
-    release_assets: isEmptyRepo ? "" : value.release_assets,
-    pass_threshold_enabled: isEmptyRepo ? false : value.pass_threshold_enabled,
+    setup_command: noBuiltIn ? "" : value.setup_command.trim(),
+    setup_timeout: noBuiltIn ? 0 : value.setup_timeout,
+    allowed_files: noBuiltIn ? "" : value.allowed_files,
+    release_assets: noBuiltIn ? "" : value.release_assets,
+    pass_threshold_enabled: noBuiltIn ? false : value.pass_threshold_enabled,
     pass_threshold: Number(value.pass_threshold),
     student_permission: value.student_permission,
-    // A bare repo has no shim to trigger; clear a stale pick on submit
-    // (mirrors the other grading-adjacent clears above).
-    submission_mode: isEmptyRepo ? "every-push" : value.submission_mode,
-    submission_tags: isEmptyRepo ? "" : value.submission_tags,
+    // No shim (bare repo OR teacher-supplied CI) means no trigger to configure;
+    // clear a stale pick on submit (mirrors the other grading-adjacent clears).
+    submission_mode: noBuiltIn ? "every-push" : value.submission_mode,
+    submission_tags: noBuiltIn ? "" : value.submission_tags,
     // Uniform tri-state controls; "inherit" is the default and resolves to the
     // template's feature (templated) or GitHub's own create default (template-
     // less) at accept time, so no template-dependent default-flip is needed here.
@@ -473,6 +495,7 @@ export const useAssignmentForm = (
       max_group_size: defaultValues?.max_group_size || 2,
       feedback_pr: defaultValues?.feedback_pr ?? true,
       empty_repo: defaultValues?.empty_repo ?? false,
+      autograding_state: defaultValues?.autograding_state ?? "built-in",
       runtime_env: defaultValues?.runtime_env || "hosted",
       runs_on: defaultValues?.runs_on || "",
       container_image: defaultValues?.container_image || "",
@@ -555,6 +578,10 @@ export const assignmentToFormValues = (
     max_group_size: assignment.max_group_size ?? 2,
     feedback_pr: assignment.feedback_pr ?? true,
     empty_repo: assignment.empty_repo ?? false,
+    // Derive the tri-state from the stored wire fields (empty_repo /
+    // no_autograder / default), so an edit opens on the right autograding
+    // option and a round-trip preserves it. Uses the #554 domain helper.
+    autograding_state: deriveAutogradingState(assignment),
     // A stored container block means the assignment was configured in container
     // mode; otherwise it's the hosted runner (the default).
     runtime_env: assignment.runtime?.container ? "container" : "hosted",
