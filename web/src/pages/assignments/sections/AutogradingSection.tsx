@@ -35,7 +35,17 @@ export function AutogradingSection({
       title={t("assignments.form.autograding.label")}
       status={status}
     >
-      <AutogradingStateField form={form} edit={edit} />
+      <form.Subscribe
+        selector={(state) => deriveFormShape(state.values).emptyRepo}
+      >
+        {(emptyRepo) => (
+          <AutogradingStateField
+            form={form}
+            edit={edit}
+            emptyRepo={emptyRepo}
+          />
+        )}
+      </form.Subscribe>
 
       {/* Built-in sub-controls: Custom triggers, Advanced, and Declarative
           tests. Hidden for a bare repo (no shim) and for teacher-supplied CI

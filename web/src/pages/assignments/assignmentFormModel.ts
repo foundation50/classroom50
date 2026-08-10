@@ -512,12 +512,12 @@ export const useAssignmentForm = (
       max_group_size: defaultValues?.max_group_size || 2,
       feedback_pr: defaultValues?.feedback_pr ?? true,
       empty_repo: defaultValues?.empty_repo ?? false,
-      // Default to no template with a README (empty_repo false), mirroring
-      // GitHub's own "create a repository" defaults. Seeded from the stored
-      // wire fields on edit via assignmentToFormValues.
+      // Default to an uninitialized (empty) repository with no template and no
+      // README, mirroring GitHub's "create a repository" defaults. Seeded from
+      // the stored wire fields on edit via assignmentToFormValues.
       repo_source: defaultValues?.repo_source ?? "none",
-      add_readme: defaultValues?.add_readme ?? true,
-      autograding_state: defaultValues?.autograding_state ?? "built-in",
+      add_readme: defaultValues?.add_readme ?? false,
+      autograding_state: defaultValues?.autograding_state ?? "none",
       runtime_env: defaultValues?.runtime_env || "hosted",
       runs_on: defaultValues?.runs_on || "",
       container_image: defaultValues?.container_image || "",

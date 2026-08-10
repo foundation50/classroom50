@@ -1176,7 +1176,7 @@
       "autograding": {
         "label": "Autograding",
         "modeLabel": "Autograding mode",
-        "emptyExplain": "Autograding is unavailable for empty repositories. Change the repository source in Repository Setup to use a template if you want autograding.",
+        "builtInNeedsInit": "Built-in autograding needs an initialized repository. Turn on \"Add a README\" or choose a template in Repository Setup to enable it.",
         "lockedHelp": "The autograding mode can't be changed after creation: repositories students already accepted are not retrofitted with (or stripped of) the autograding workflow.",
         "choices": {
           "built-in": {
@@ -1184,8 +1184,8 @@
             "help": "Classroom 50 adds its autograding workflow to each repo. Configure triggers, runtime, and tests below."
           },
           "none": {
-            "label": "No built-in autograder (teacher-supplied CI)",
-            "help": "Classroom 50 adds no autograding workflow. Your template supplies its own GitHub Actions CI. Scores are not collected."
+            "label": "No built-in autograder",
+            "help": "Classroom 50 adds no autograding workflow. A templated repo can supply its own GitHub Actions CI; an empty repo has none. Scores are not collected."
           }
         }
       },

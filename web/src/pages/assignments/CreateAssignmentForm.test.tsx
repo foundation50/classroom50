@@ -235,11 +235,18 @@ describe("assignment slug field", () => {
 })
 
 describe("submission release files visibility", () => {
+  // release_assets is a built-in autograder field, so these render an
+  // initialized repo with built-in autograding selected (the default create
+  // form is now an empty repo with no built-in config).
   const renderForm = (defaultValues?: Partial<CreateAssignmentFormValues>) =>
     render(
       <QueryClientProvider client={new QueryClient()}>
         <CreateAssignmentForm
-          defaultValues={defaultValues}
+          defaultValues={{
+            add_readme: true,
+            autograding_state: "built-in",
+            ...defaultValues,
+          }}
           onSubmit={() => {}}
         />
       </QueryClientProvider>,
@@ -317,6 +324,8 @@ describe("assignment setup timeout", () => {
           defaultValues={{
             name: "Homework",
             slug: "hw1",
+            add_readme: true,
+            autograding_state: "built-in",
           }}
           onSubmit={onSubmit}
         />
@@ -416,11 +425,17 @@ describe("edit form re-disables Save after a successful save", () => {
 // runner targets self-hosted: the grade job skips managed setup there
 // (runner.environment != 'self-hosted'), so those options wouldn't apply.
 describe("self-hosted disables built-in runtime options", () => {
+  // The runtime fields are built-in autograder controls, so render an
+  // initialized repo with built-in autograding selected.
   const renderForm = (defaultValues?: Partial<CreateAssignmentFormValues>) =>
     render(
       <QueryClientProvider client={new QueryClient()}>
         <CreateAssignmentForm
-          defaultValues={defaultValues}
+          defaultValues={{
+            add_readme: true,
+            autograding_state: "built-in",
+            ...defaultValues,
+          }}
           onSubmit={() => {}}
         />
       </QueryClientProvider>,
@@ -450,10 +465,10 @@ describe("self-hosted disables built-in runtime options", () => {
   })
 })
 
-// The autograding tri-state selector: interactive on create, but the built-in
-// vs teacher-supplied choice maps to no_autograder — immutable after creation —
-// so it must render locked on edit (mirroring empty_repo). See AutogradingSection.
-describe("autograding tri-state selector", () => {
+// The autograding selector: "No built-in autograder" first + default; built-in
+// requires an initialized repo (README or template) and is disabled while the
+// repo is uninitialized; the none<->built-in choice is immutable on edit.
+describe("autograding selector", () => {
   const renderForm = (
     props: {
       edit?: boolean
@@ -477,14 +492,41 @@ describe("autograding tri-state selector", () => {
     none: container.querySelector<HTMLInputElement>("#autograding_state-none"),
   })
 
-  it("create: renders both choices enabled with no locked note", () => {
+  it("create default (empty repo): built-in disabled, none selected, init hint shown", () => {
+    // The fresh create form defaults to an uninitialized repo (README off), so
+    // built-in autograding can't attach yet.
     const { container } = renderForm()
+    const { builtIn, none } = radios(container)
+    expect(none?.checked).toBe(true)
+    expect(builtIn?.disabled).toBe(true)
+    expect(
+      screen.getByText("assignments.form.autograding.builtInNeedsInit"),
+    ).not.toBeNull()
+  })
+
+  it("initialized repo (README on): both choices enabled, no init hint", () => {
+    const { container } = renderForm({
+      defaultValues: { repo_source: "none", add_readme: true },
+    })
     const { builtIn, none } = radios(container)
     expect(builtIn?.disabled).toBe(false)
     expect(none?.disabled).toBe(false)
     expect(
-      screen.queryByText("assignments.form.autograding.lockedHelp"),
+      screen.queryByText("assignments.form.autograding.builtInNeedsInit"),
     ).toBeNull()
+  })
+
+  it("none is the first option", () => {
+    const { container } = renderForm({
+      defaultValues: { repo_source: "none", add_readme: true },
+    })
+    const inputs = Array.from(
+      container.querySelectorAll<HTMLInputElement>(
+        "input[name='autograding_state']",
+      ),
+    )
+    expect(inputs[0]?.value).toBe("none")
+    expect(inputs[1]?.value).toBe("built-in")
   })
 
   it("edit: locks both choices and shows the immutability note", () => {
@@ -515,7 +557,7 @@ describe("autograding tri-state selector", () => {
     expect(none?.disabled).toBe(true)
   })
 
-  it("empty_repo: shows the read-only explanation and no radios", () => {
+  it("empty_repo: shows both radios with built-in disabled and none selected", () => {
     const { container } = renderForm({
       defaultValues: assignmentToFormValues({
         ...baseAssignment,
@@ -523,10 +565,10 @@ describe("autograding tri-state selector", () => {
       }),
     })
     const { builtIn, none } = radios(container)
-    expect(builtIn).toBeNull()
-    expect(none).toBeNull()
+    expect(none?.checked).toBe(true)
+    expect(builtIn?.disabled).toBe(true)
     expect(
-      screen.getByText("assignments.form.autograding.emptyExplain"),
+      screen.getByText("assignments.form.autograding.builtInNeedsInit"),
     ).not.toBeNull()
   })
 })
