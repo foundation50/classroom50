@@ -43,6 +43,7 @@ const base: CreateAssignmentFormValues = {
   max_group_size: 2,
   feedback_pr: true,
   empty_repo: false,
+  autograding_state: "built-in",
   runtime_env: "hosted",
   runs_on: "",
   container_image: "",
@@ -288,6 +289,50 @@ describe("validateAssignmentForm — runtime env", () => {
   })
 })
 
+describe("validateAssignmentForm — submission mode + milestone tags", () => {
+  it("accepts the two valid submission modes", () => {
+    expect(
+      validateAssignmentForm({ ...base, submission_mode: "tag" }, t)
+        .submission_mode,
+    ).toBeUndefined()
+    expect(
+      validateAssignmentForm({ ...base, submission_mode: "every-push" }, t)
+        .submission_mode,
+    ).toBeUndefined()
+  })
+
+  it("flags a hand-tampered submission mode", () => {
+    expect(
+      validateAssignmentForm(
+        { ...base, submission_mode: "on-demand" as never },
+        t,
+      ).submission_mode,
+    ).toBe("assignments.form.validation.submissionModeInvalid")
+  })
+
+  it("accepts valid milestone tag patterns", () => {
+    expect(
+      validateAssignmentForm(
+        { ...base, submission_tags: "phase1\nphase2\nv*" },
+        t,
+      ).submission_tags,
+    ).toBeUndefined()
+  })
+
+  it.each([
+    ["exclude pattern", "!v*"],
+    ["charset violation (quote)", 'ta"g'],
+    ["whitespace", "has space"],
+    ["stacked quantifier", "v*+"],
+    ["duplicate", "phase1\nphase1"],
+  ])("flags an invalid milestone tag: %s", (_label, raw) => {
+    expect(
+      validateAssignmentForm({ ...base, submission_tags: raw }, t)
+        .submission_tags,
+    ).toBeDefined()
+  })
+})
+
 // The validator delegates to two shared helpers and folds their results into
 // the same error map — these prove the parse-then-merge wiring, which the
 // per-field cases above don't touch.
@@ -350,6 +395,9 @@ describe("toSubmitValues — runtime field clearing", () => {
       setup_timeout: 600,
       allowed_files: "*\n!hello.py",
       pass_threshold_enabled: true,
+      submission_mode: "tag",
+      submission_tags: "phase1\nphase2",
+      release_assets: "report.pdf",
       tests: [{ name: "t", run: "pytest", points: 1 } as never],
     })
     expect(out.empty_repo).toBe(true)
@@ -360,6 +408,102 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.allowed_files).toBe("")
     expect(out.pass_threshold_enabled).toBe(false)
     expect(out.tests).toEqual([])
+    // The two newest grading-trigger fields must also clear for a bare repo
+    // (no shim to trigger) — pins the empty-repo clear set the autograding
+    // restructure reproduces.
+    expect(out.submission_mode).toBe("every-push")
+    expect(out.submission_tags).toBe("")
+    expect(out.release_assets).toBe("")
+  })
+
+  it("passes group provisioning and submission fields through for a non-empty repo", () => {
+    // The complement of the empty-repo clear: a normal assignment keeps its
+    // group size, submission mode, and milestone tags. Pins the fields the
+    // restructure must NOT clear when the repo is non-empty.
+    const out = toSubmitValues({
+      ...base,
+      mode: "group",
+      max_group_size: 4,
+      student_permission: "admin",
+      submission_mode: "tag",
+      submission_tags: "phase1\nphase2",
+    })
+    expect(out.max_group_size).toBe(4)
+    expect(out.student_permission).toBe("admin")
+    expect(out.submission_mode).toBe("tag")
+    expect(out.submission_tags).toBe("phase1\nphase2")
+  })
+
+  it("clears built-in-only fields for the 'none' autograding state but keeps template + feedback_pr", () => {
+    // "none" (teacher-supplied CI) commits no shim, so the grading-adjacent
+    // fields clear like empty_repo — but unlike empty_repo it PERMITS a
+    // template and the Feedback PR (a templated repo has a baseline commit).
+    const out = toSubmitValues({
+      ...base,
+      autograding_state: "none",
+      template_repo: "acme/starter",
+      feedback_pr: true,
+      setup_command: "make",
+      allowed_files: "*\n!hello.py",
+      release_assets: "report.pdf",
+      pass_threshold_enabled: true,
+      submission_mode: "tag",
+      submission_tags: "phase1",
+    })
+    // Permitted (the asymmetry vs empty_repo):
+    expect(out.template_repo).toBe("acme/starter")
+    expect(out.feedback_pr).toBe(true)
+    // Cleared (no shim to run/trigger):
+    expect(out.setup_command).toBe("")
+    expect(out.allowed_files).toBe("")
+    expect(out.release_assets).toBe("")
+    expect(out.pass_threshold_enabled).toBe(false)
+    expect(out.submission_mode).toBe("every-push")
+    expect(out.submission_tags).toBe("")
+    expect(out.autograding_state).toBe("none")
+  })
+
+  it("empty_repo forces the autograding state to 'empty' regardless of the picked value", () => {
+    const out = toSubmitValues({
+      ...base,
+      empty_repo: true,
+      autograding_state: "built-in",
+    })
+    expect(out.autograding_state).toBe("empty")
+  })
+})
+
+describe("assignmentToFormValues — autograding tri-state", () => {
+  it("derives 'built-in' for a default-autograder assignment", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+    })
+    expect(values.autograding_state).toBe("built-in")
+  })
+
+  it("derives 'none' for a no_autograder assignment", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      no_autograder: true,
+    })
+    expect(values.autograding_state).toBe("none")
+  })
+
+  it("derives 'empty' for an empty_repo assignment", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      empty_repo: true,
+    })
+    expect(values.autograding_state).toBe("empty")
   })
 })
 

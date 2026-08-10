@@ -1143,10 +1143,24 @@
           "admin": "Admin"
         }
       },
+      "autograding": {
+        "label": "Autograding",
+        "emptyExplain": "Autograding is unavailable for empty repositories. Change the repository source in Repository Setup to use a template if you want autograding.",
+        "lockedHelp": "The autograding mode can't be changed after creation: repositories students already accepted are not retrofitted with (or stripped of) the autograding workflow.",
+        "choices": {
+          "built-in": {
+            "label": "Built-in autograder",
+            "help": "Classroom 50 adds its autograding workflow to each repo. Configure triggers, runtime, and tests below."
+          },
+          "none": {
+            "label": "No built-in autograder (teacher-supplied CI)",
+            "help": "Classroom 50 adds no autograding workflow. Your template supplies its own GitHub Actions CI. Scores are not collected."
+          }
+        }
+      },
       "submissionMode": {
         "label": "Autograding trigger",
         "help": "When the autograder runs. \"Every push\" grades each push to the default branch. \"On submit only\" grades only when a student submits (with gh student submit) or pushes a submit/* tag — regular pushes cost no Actions minutes, which matters for large classes.",
-        "emptyRepoHelp": "Unavailable for empty repositories — they carry no autograding workflow.",
         "editWarning": "Changing the trigger only affects repositories created from now on. Repositories students already accepted keep the old trigger until you update them — use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
         "choices": {
           "everyPush": "Every push (default)",

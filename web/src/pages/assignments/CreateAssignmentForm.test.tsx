@@ -449,3 +449,84 @@ describe("self-hosted disables built-in runtime options", () => {
     ).not.toBeNull()
   })
 })
+
+// The autograding tri-state selector: interactive on create, but the built-in
+// vs teacher-supplied choice maps to no_autograder — immutable after creation —
+// so it must render locked on edit (mirroring empty_repo). See AutogradingSection.
+describe("autograding tri-state selector", () => {
+  const renderForm = (
+    props: {
+      edit?: boolean
+      defaultValues?: Partial<CreateAssignmentFormValues>
+    } = {},
+  ) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          edit={props.edit}
+          defaultValues={props.defaultValues}
+          onSubmit={() => {}}
+        />
+      </QueryClientProvider>,
+    )
+
+  const radios = (container: HTMLElement) => ({
+    builtIn: container.querySelector<HTMLInputElement>(
+      "#autograding_state-built-in",
+    ),
+    none: container.querySelector<HTMLInputElement>("#autograding_state-none"),
+  })
+
+  it("create: renders both choices enabled with no locked note", () => {
+    const { container } = renderForm()
+    const { builtIn, none } = radios(container)
+    expect(builtIn?.disabled).toBe(false)
+    expect(none?.disabled).toBe(false)
+    expect(
+      screen.queryByText("assignments.form.autograding.lockedHelp"),
+    ).toBeNull()
+  })
+
+  it("edit: locks both choices and shows the immutability note", () => {
+    const { container } = renderForm({
+      edit: true,
+      defaultValues: assignmentToFormValues(baseAssignment),
+    })
+    const { builtIn, none } = radios(container)
+    expect(builtIn?.disabled).toBe(true)
+    expect(none?.disabled).toBe(true)
+    expect(
+      screen.getByText("assignments.form.autograding.lockedHelp"),
+    ).not.toBeNull()
+  })
+
+  it("edit: a stored no_autograder assignment opens on the 'none' choice, locked", () => {
+    const { container } = renderForm({
+      edit: true,
+      defaultValues: assignmentToFormValues({
+        ...baseAssignment,
+        template: { owner: "acme", repo: "starter", branch: "main" },
+        no_autograder: true,
+      }),
+    })
+    const { builtIn, none } = radios(container)
+    expect(none?.checked).toBe(true)
+    expect(builtIn?.checked).toBe(false)
+    expect(none?.disabled).toBe(true)
+  })
+
+  it("empty_repo: shows the read-only explanation and no radios", () => {
+    const { container } = renderForm({
+      defaultValues: assignmentToFormValues({
+        ...baseAssignment,
+        empty_repo: true,
+      }),
+    })
+    const { builtIn, none } = radios(container)
+    expect(builtIn).toBeNull()
+    expect(none).toBeNull()
+    expect(
+      screen.getByText("assignments.form.autograding.emptyExplain"),
+    ).not.toBeNull()
+  })
+})

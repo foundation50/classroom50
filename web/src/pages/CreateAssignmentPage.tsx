@@ -129,6 +129,7 @@ const CreateAssignmentPage = () => {
                 max_group_size: values.max_group_size,
                 feedback_pr: values.feedback_pr,
                 empty_repo: values.empty_repo,
+                no_autograder: values.autograding_state === "none",
                 runs_on: values.runs_on,
                 container_image: values.container_image,
                 container_user: values.container_user,
