@@ -903,6 +903,30 @@ describe("editAssignment (preserved-entry integration)", () => {
     ).rejects.toThrow(/no_autograder cannot be changed after creation/)
   })
 
+  it("rejects flipping init_shim on after creation (immutable)", async () => {
+    // existingEntry has no init_shim (false); the edit tries to enable it. The
+    // shim is committed at accept time and never retrofitted.
+    const { client } = makeClient()
+    await expect(
+      editAssignment(client, editInput({ init_shim: true })),
+    ).rejects.toThrow(/init_shim cannot be changed after creation/)
+  })
+
+  it("rejects flipping init_shim off after creation (immutable)", async () => {
+    const shimEntry: Assignment = {
+      slug: SLUG,
+      name: "Scratch",
+      mode: "individual",
+      autograder: "default",
+      feedback_pr: true,
+      init_shim: true,
+    }
+    const { client } = makeBareClient(shimEntry)
+    await expect(
+      editAssignment(client, editInput({ init_shim: false })),
+    ).rejects.toThrow(/init_shim cannot be changed after creation/)
+  })
+
   it("rejects flipping empty_repo off after creation (immutable)", async () => {
     const bareEntry: Assignment = {
       slug: SLUG,

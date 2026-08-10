@@ -58,4 +58,14 @@ describe("deriveAutogradingState (tri-state for the assignment-form IA)", () => 
   it("everything else is 'built-in'", () => {
     expect(deriveAutogradingState(base)).toBe("built-in")
   })
+
+  it("init_shim reads as 'built-in' (it commits the default shim and autogrades)", () => {
+    // init_shim sets neither empty_repo nor no_autograder, so the derived
+    // tri-state is built-in — the form opens on the built-in option.
+    expect(deriveAutogradingState({ ...base, init_shim: true })).toBe(
+      "built-in",
+    )
+    // And it does NOT skip grading (unlike empty_repo / no_autograder).
+    expect(assignmentSkipsGrading({ ...base, init_shim: true })).toBe(false)
+  })
 })

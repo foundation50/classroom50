@@ -2235,6 +2235,7 @@
     "errors": {
       "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template, which isn't valid. Ask your teacher to re-run assignment setup.",
       "noAutograderWithEmptyRepo": "Assignment \"{{assignmentSlug}}\" sets both no built-in autograder and an empty repository, which isn't valid. Ask your teacher to re-run assignment setup.",
+      "initShimInvalidCombo": "Assignment \"{{assignmentSlug}}\" combines the built-in-autograder-on-an-empty-repo setting with a template, an empty repository, or no built-in autograder, which isn't valid. Ask your teacher to re-run assignment setup.",
       "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup."
     },
     "progress": {
