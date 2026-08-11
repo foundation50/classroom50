@@ -19,17 +19,15 @@ const REPO_ROLES_DOCS_URL =
   "https://docs.github.com/en/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/repository-roles-for-an-organization#repository-roles-for-organizations"
 
 // Repository Setup (IA overhaul U5/U6 + repo-source remodel; features
-// consolidated in): mirrors GitHub's own repo-creation flow.
-//   - "Start with a template" (default: No). No template -> an "Add a README"
-//     toggle picks between an initialized repo (auto_init, README on) and a
-//     bare repo (README off). A template hides the README toggle (the template
-//     provides the initial commit) and shows an "Include all branches" toggle
-//     (copy every branch at generate, default off).
-//   - Student repo access, and the Feedback PR (decoupled from autograding —
-//     available for any non-empty repo).
-//   - Repository features (Wiki / Issues / Projects / Pull requests) as a
-//     labeled sub-block, folded in from the former standalone section so all
-//     repo-shape config lives in one card.
+// consolidated in): mirrors GitHub's own repo-creation flow. Two columns:
+//   - Left — repo-shape config: the "Start with a template" source (default No;
+//     no template -> an "Add a README" toggle picks initialized vs. bare;
+//     a template shows the picker + an "Include all branches" toggle), then the
+//     Feedback PR toggle (decoupled from autograding — available for any
+//     non-empty repo), then Student repo access.
+//   - Right — Repository features (Wiki / Issues / Projects / Pull requests),
+//     the tri-state controls folded in from the former standalone section so
+//     all repo config lives in one card.
 // The source choice folds into empty_repo + template on submit via
 // deriveFormShape; the choice is immutable after creation (locked on edit).
 export function RepositorySetupSection({
@@ -109,58 +107,96 @@ export function RepositorySetupSection({
 
           {/* No-template branch: "Add a README" picks initialized vs bare.
               Template branch: the template picker + an "Include all
-              branches" toggle. deriveFormShape decides which shows. */}
+              branches" toggle. deriveFormShape decides which shows. The
+              Feedback PR toggle follows here so all repo-shape toggles sit
+              together in the left column. */}
           <form.Subscribe selector={(state) => deriveFormShape(state.values)}>
-            {(shape) =>
-              shape.showTemplateFields ? (
-                <>
-                  <form.Field name="template_repo">
-                    {(templateField) => (
-                      <TemplateField
-                        field={templateField}
-                        org={org}
-                        classroom={classroom}
-                        slug={slug}
-                      />
-                    )}
-                  </form.Field>
+            {(shape) => (
+              <>
+                {shape.showTemplateFields ? (
+                  <>
+                    <form.Field name="template_repo">
+                      {(templateField) => (
+                        <TemplateField
+                          field={templateField}
+                          org={org}
+                          classroom={classroom}
+                          slug={slug}
+                        />
+                      )}
+                    </form.Field>
 
-                  {/* Copy all template branches at generate (include_all_branches).
-                      Only shown for a template source; default off. */}
-                  <form.Field name="include_all_branches">
-                    {(branchesField) => (
+                    {/* Copy all template branches at generate (include_all_branches).
+                        Only shown for a template source; default off. */}
+                    <form.Field name="include_all_branches">
+                      {(branchesField) => (
+                        <ToggleRow
+                          id={branchesField.name}
+                          checked={branchesField.state.value}
+                          onChange={(checked) =>
+                            branchesField.handleChange(checked)
+                          }
+                          onBlur={branchesField.handleBlur}
+                          label={t("assignments.form.includeAllBranches.label")}
+                          help={t("assignments.form.includeAllBranches.help")}
+                        />
+                      )}
+                    </form.Field>
+                  </>
+                ) : shape.showAddReadme ? (
+                  <form.Field name="add_readme">
+                    {(readmeField) => (
                       <ToggleRow
-                        id={branchesField.name}
-                        checked={branchesField.state.value}
+                        id={readmeField.name}
+                        checked={readmeField.state.value}
                         onChange={(checked) =>
-                          branchesField.handleChange(checked)
+                          readmeField.handleChange(checked)
                         }
-                        onBlur={branchesField.handleBlur}
-                        label={t("assignments.form.includeAllBranches.label")}
-                        help={t("assignments.form.includeAllBranches.help")}
+                        onBlur={readmeField.handleBlur}
+                        label={t("assignments.form.addReadme.label")}
+                        help={
+                          readmeField.state.value
+                            ? t("assignments.form.addReadme.helpOn")
+                            : t("assignments.form.addReadme.helpOff")
+                        }
                       />
                     )}
                   </form.Field>
-                </>
-              ) : shape.showAddReadme ? (
-                <form.Field name="add_readme">
-                  {(readmeField) => (
-                    <ToggleRow
-                      id={readmeField.name}
-                      checked={readmeField.state.value}
-                      onChange={(checked) => readmeField.handleChange(checked)}
-                      onBlur={readmeField.handleBlur}
-                      label={t("assignments.form.addReadme.label")}
-                      help={
-                        readmeField.state.value
-                          ? t("assignments.form.addReadme.helpOn")
-                          : t("assignments.form.addReadme.helpOff")
+                ) : null}
+
+                {/* Feedback PR (U6): decoupled from autograding — available for
+                    any non-empty repo, since it only needs a baseline commit. A
+                    bare repo (no README, no template) has none, so it renders
+                    locked-off (not hidden) to keep the trade-off visible. */}
+                <form.Field name="feedback_pr">
+                  {(field) => (
+                    <div
+                      className={
+                        shape.feedbackPrEnabled
+                          ? ""
+                          : "pointer-events-none opacity-50"
                       }
-                    />
+                      aria-disabled={!shape.feedbackPrEnabled}
+                    >
+                      <ToggleRow
+                        id={field.name}
+                        checked={
+                          shape.feedbackPrEnabled ? field.state.value : false
+                        }
+                        onChange={(checked) => field.handleChange(checked)}
+                        onBlur={field.handleBlur}
+                        label={t("assignments.form.feedbackPr")}
+                        help={
+                          shape.feedbackPrEnabled
+                            ? t("assignments.form.feedbackPrHelp")
+                            : t("assignments.form.feedbackPrEmptyRepoHelp")
+                        }
+                      />
+                    </div>
                   )}
                 </form.Field>
-              ) : null
-            }
+              </>
+            )}
           </form.Subscribe>
 
           <form.Field name="student_permission">
@@ -232,65 +268,27 @@ export function RepositorySetupSection({
         </div>
 
         <div className="flex flex-col gap-4">
-          {/* Feedback PR (U6): decoupled from autograding — available for any
-              non-empty repo, since it only needs a baseline commit. A bare repo
-              (no README, no template) has none, so it renders locked-off (not
-              hidden) to keep the trade-off visible. */}
+          {/* Repository features (Wiki / Issues / Projects / Pull requests):
+              the right column. RepoFeatureControls renders its own heading,
+              refresh, help, and override warning; stacked here so each select
+              gets the full column width. Wrap it in the subscription that feeds
+              it the template ref + bare-repo flag. */}
           <form.Subscribe
-            selector={(state) =>
-              deriveFormShape(state.values).feedbackPrEnabled
-            }
+            selector={(state) => ({
+              templateRepo: state.values.template_repo.trim(),
+              emptyRepo: state.values.empty_repo,
+            })}
           >
-            {(feedbackPrEnabled) => (
-              <form.Field name="feedback_pr">
-                {(field) => (
-                  <div
-                    className={
-                      feedbackPrEnabled ? "" : "pointer-events-none opacity-50"
-                    }
-                    aria-disabled={!feedbackPrEnabled}
-                  >
-                    <ToggleRow
-                      id={field.name}
-                      checked={feedbackPrEnabled ? field.state.value : false}
-                      onChange={(checked) => field.handleChange(checked)}
-                      onBlur={field.handleBlur}
-                      label={t("assignments.form.feedbackPr")}
-                      help={
-                        feedbackPrEnabled
-                          ? t("assignments.form.feedbackPrHelp")
-                          : t("assignments.form.feedbackPrEmptyRepoHelp")
-                      }
-                    />
-                  </div>
-                )}
-              </form.Field>
+            {({ templateRepo, emptyRepo }) => (
+              <RepoFeatureControls
+                form={form}
+                templateRepo={templateRepo}
+                emptyRepo={emptyRepo}
+              />
             )}
           </form.Subscribe>
         </div>
       </div>
-
-      {/* Repository features (Wiki / Issues / Projects / Pull requests):
-          consolidated into this card as a full-width sub-block below the
-          two-column grid. RepoFeatureControls renders its own heading, help,
-          and override warning; wrap it in the same subscription that feeds it
-          the template ref + bare-repo flag. */}
-      <form.Subscribe
-        selector={(state) => ({
-          templateRepo: state.values.template_repo.trim(),
-          emptyRepo: state.values.empty_repo,
-        })}
-      >
-        {({ templateRepo, emptyRepo }) => (
-          <div className="mt-6">
-            <RepoFeatureControls
-              form={form}
-              templateRepo={templateRepo}
-              emptyRepo={emptyRepo}
-            />
-          </div>
-        )}
-      </form.Subscribe>
     </SectionCard>
   )
 }
@@ -421,10 +419,7 @@ export const RepoFeatureControls = ({
         {t("assignments.form.repoFeatures.help")}
       </p>
       <div
-        className={cx(
-          "grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2",
-          isRefreshing && "opacity-60",
-        )}
+        className={cx("grid grid-cols-1 gap-y-4", isRefreshing && "opacity-60")}
         aria-busy={isRefreshing}
       >
         {REPO_FEATURE_KEYS.map(({ field: fieldName, key }) => (
