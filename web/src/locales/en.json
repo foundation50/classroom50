@@ -1103,7 +1103,6 @@
       "repositorySetupSection": "Repository Setup",
       "submissionSection": "Submission and Grading",
       "submissionSectionHelp": "Define what counts as a submission for this assignment — when the autograder runs and which tags a student can push to submit.",
-      "repositoryFeaturesSection": "Repository Features",
       "scheduleSection": "Schedule",
       "sectionStatus": {
         "error": "Needs attention",

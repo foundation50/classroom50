@@ -72,6 +72,18 @@ describe("deriveSectionStatus", () => {
     )
   })
 
+  it("attributes the folded repo-feature choices to the repository section", () => {
+    const wikiOff = { ...defaults, repo_feature_wiki: "off" as const }
+    expect(deriveSectionStatus("repository", wikiOff, defaults, {})).toBe(
+      "configured",
+    )
+    // All features left at "inherit" (and no other repo field changed) reads
+    // default — the four repo_feature_* fields fold into this one badge.
+    expect(deriveSectionStatus("repository", defaults, defaults, {})).toBe(
+      "default",
+    )
+  })
+
   it("reports 'error' when a validation error names one of the section's fields", () => {
     expect(
       deriveSectionStatus("details", defaults, defaults, {

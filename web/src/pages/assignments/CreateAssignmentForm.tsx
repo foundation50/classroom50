@@ -5,7 +5,6 @@ import { DetailsSection } from "./sections/DetailsSection"
 import { RepositorySetupSection } from "./sections/RepositorySetupSection"
 import { AutogradingSection } from "./sections/AutogradingSection"
 import { SubmissionGradingSection } from "./sections/SubmissionGradingSection"
-import { RepositoryFeaturesSection } from "./sections/RepositoryFeaturesSection"
 import { ScheduleSection } from "./sections/ScheduleSection"
 import { deriveSectionStatus } from "./sections/sectionStatus"
 import {
@@ -165,15 +164,6 @@ const CreateAssignmentForm = ({
                     errors,
                   )}
                   org={org}
-                />
-                <RepositoryFeaturesSection
-                  form={form}
-                  status={deriveSectionStatus(
-                    "features",
-                    values,
-                    defaults,
-                    errors,
-                  )}
                 />
                 <ScheduleSection
                   form={form}
