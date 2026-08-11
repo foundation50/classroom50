@@ -1189,6 +1189,21 @@
           }
         }
       },
+      "grading": {
+        "label": "Grading",
+        "help": "How this assignment is graded. \"Autograded\" runs the autograder you configure below. \"Manual\" lets you enter each student's score by hand on the submissions page. \"Not graded\" records no score. Can't be changed after the assignment is created.",
+        "editWarning": "The grading mode can't be changed after creation: scores already recorded under the old mode would be misread. Create a new assignment under a different slug instead.",
+        "autoNote": "This assignment is autograded. Configure the autograder in the Autograding section above. Whether you use the built-in autograder or supply your own workflow, it must publish a result.json asset on the submission release — that file is what the app reads to show scores.",
+        "choices": {
+          "off": "Not graded",
+          "auto": "Autograded",
+          "manual": "Manual (enter scores by hand)"
+        },
+        "maxPoints": {
+          "label": "Max points",
+          "help": "Total points available for this manual assignment. Used to show each student's score out of the maximum."
+        }
+      },
       "submissionMode": {
         "label": "Autograding trigger",
         "help": "When the autograder runs. \"Every push\" grades each push to the default branch. \"On submit only\" grades only when a student submits (with gh student submit) or pushes a submit/* tag — regular pushes cost no Actions minutes, which matters for large classes.",
@@ -1301,6 +1316,8 @@
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
         "studentPermissionInvalid": "Student repo access must be one of pull, triage, push, maintain, or admin.",
         "submissionModeInvalid": "Autograding trigger must be \"every-push\" or \"tag\".",
+        "gradingModeInvalid": "Grading must be \"off\", \"auto\", or \"manual\".",
+        "gradingMaxPointsInvalid": "Max points must be a whole number of at least {{min}}.",
         "releaseAssetsTooMany": "Choose at most {{max}} submission release files (currently {{count}}).",
         "releaseAssetsTooLarge": "Submission release file paths may total at most {{max}} UTF-8 bytes (8 KiB); currently {{bytes}}.",
         "releaseAssetsInvalidPath": "{{path}} is not an exact workspace-relative file path.",
@@ -2442,6 +2459,8 @@
       "loading": "Loading submissions…",
       "pendingGrade": "Pending",
       "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Sync submissions now\" or wait for the nightly collection.",
+      "overridden": "Manual",
+      "overriddenTitle": "This score was set by hand and won't be changed by autograding until the override is cleared.",
       "notSubmitted": "Not submitted",
       "acceptedAwaiting": "Accepted · awaiting submission",
       "notAccepted": "Not accepted",
@@ -2451,6 +2470,17 @@
       "review": "Review",
       "reviewAria": "Open feedback pull request",
       "fullHistory": "Open the <repoLink>repository</repoLink> for the full commit history."
+    },
+    "manualGrade": {
+      "notGraded": "Not graded",
+      "add": "Add grade",
+      "edit": "Edit grade",
+      "addLabel": "Add grade for {{name}}",
+      "editLabel": "Edit grade for {{name}}",
+      "inputLabel": "Score for {{name}}",
+      "required": "Enter a score to save.",
+      "range": "Score must be a whole number from 0 to {{max}}.",
+      "saveError": "Couldn't save the grade. Check your connection and try again."
     },
     "reviewModal": {
       "errorTitle": "Couldn't check for a feedback PR",

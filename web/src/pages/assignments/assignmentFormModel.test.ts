@@ -67,6 +67,8 @@ const base: CreateAssignmentFormValues = {
   student_permission: "",
   submission_mode: "every-push",
   submission_tags: "",
+  grading_choice: "auto",
+  grading_max_points: 100,
   repo_feature_issues: "inherit",
   repo_feature_wiki: "inherit",
   repo_feature_projects: "inherit",
@@ -334,6 +336,130 @@ describe("validateAssignmentForm — submission mode + milestone tags", () => {
       validateAssignmentForm({ ...base, submission_tags: raw }, t)
         .submission_tags,
     ).toBeDefined()
+  })
+})
+
+describe("validateAssignmentForm — grading", () => {
+  it("accepts off/auto without a max, and manual with a max >= 1", () => {
+    for (const choice of ["off", "auto"] as const) {
+      expect(
+        validateAssignmentForm({ ...base, grading_choice: choice }, t)
+          .grading_max_points,
+      ).toBeUndefined()
+    }
+    expect(
+      validateAssignmentForm(
+        { ...base, grading_choice: "manual", grading_max_points: 1 },
+        t,
+      ).grading_max_points,
+    ).toBeUndefined()
+    expect(
+      validateAssignmentForm(
+        { ...base, grading_choice: "manual", grading_max_points: 100 },
+        t,
+      ).grading_max_points,
+    ).toBeUndefined()
+  })
+
+  it("flags a hand-tampered grading choice", () => {
+    expect(
+      validateAssignmentForm({ ...base, grading_choice: "partial" as never }, t)
+        .grading_choice,
+    ).toBe("assignments.form.validation.gradingModeInvalid")
+  })
+
+  it.each([
+    ["zero", 0],
+    ["negative", -5],
+    ["non-integer", 2.5],
+  ])("flags a manual max of %s", (_label, max) => {
+    expect(
+      validateAssignmentForm(
+        { ...base, grading_choice: "manual", grading_max_points: max },
+        t,
+      ).grading_max_points,
+    ).toBe("assignments.form.validation.gradingMaxPointsInvalid")
+  })
+
+  it("ignores the max when the choice is not manual", () => {
+    // A stale/invalid max is not validated unless manual is selected.
+    expect(
+      validateAssignmentForm(
+        { ...base, grading_choice: "auto", grading_max_points: 0 },
+        t,
+      ).grading_max_points,
+    ).toBeUndefined()
+  })
+})
+
+describe("toSubmitValues — grading", () => {
+  it("passes the choice through and keeps the manual max", () => {
+    const out = toSubmitValues({
+      ...base,
+      grading_choice: "manual",
+      grading_max_points: 50,
+    })
+    expect(out.grading_choice).toBe("manual")
+    expect(out.grading_max_points).toBe(50)
+  })
+
+  it("resets the max when the choice is not manual", () => {
+    const out = toSubmitValues({
+      ...base,
+      grading_choice: "auto",
+      grading_max_points: 37,
+    })
+    expect(out.grading_choice).toBe("auto")
+    expect(out.grading_max_points).toBe(100)
+  })
+
+  it("does not clear grading for a teacher-CI (no built-in) assignment", () => {
+    // grading is orthogonal to the autograding tri-state: a no-built-in repo
+    // can still be graded manually, unlike submission_mode which is cleared.
+    const out = toSubmitValues({
+      ...base,
+      autograding_state: "none",
+      grading_choice: "manual",
+      grading_max_points: 20,
+    })
+    expect(out.grading_choice).toBe("manual")
+    expect(out.grading_max_points).toBe(20)
+    expect(out.submission_mode).toBe("every-push")
+  })
+})
+
+describe("assignmentToFormValues — grading", () => {
+  it("defaults to auto when grading is absent", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+    })
+    expect(values.grading_choice).toBe("auto")
+  })
+
+  it("reads a stored manual grading with its max", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      grading: { mode: "manual", max_points: 25 },
+    })
+    expect(values.grading_choice).toBe("manual")
+    expect(values.grading_max_points).toBe(25)
+  })
+
+  it("reads a stored off grading", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      grading: { mode: "off" },
+    })
+    expect(values.grading_choice).toBe("off")
   })
 })
 

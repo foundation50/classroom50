@@ -468,6 +468,54 @@ func TestWriteScoresCSV(t *testing.T) {
 	}
 }
 
+func TestWriteScoresCSV_ManualOverride(t *testing.T) {
+	// A web-authored manual/override grade is an ordinary entry with
+	// override:true whose submissions[0] is a synthesized submit/manual-* record
+	// in the existing shape. The CSV renders it exactly like any other row (the
+	// score/max/datetime are real; the sentinel tag flows through verbatim), so
+	// no download-side branch is needed — this pins that.
+	scores := scoresschema.File{
+		Schema: scoresschema.SchemaV1,
+		Assignments: map[string]scoresschema.AssignmentBucket{
+			"hello": {
+				Type: "individual",
+				Entries: []map[string]any{
+					{
+						"owner":    "alice",
+						"override": true,
+						"submissions": []any{
+							map[string]any{
+								"score":      float64(42),
+								"max-score":  float64(50),
+								"datetime":   "2026-06-02T09:00:00Z",
+								"submission": "submit/manual-2026-06-02T09-00-00Z",
+								"review":     "submit/manual-2026-06-02T09-00-00Z",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "scores.csv")
+	if err := writeScoresCSV(path, scores, "hello", []string{"alice"}, nil); err != nil {
+		t.Fatalf("writeScoresCSV: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	want := strings.Join([]string{
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override",
+		"alice,,,,,42,50,2026-06-02T09:00:00Z,submit/manual-2026-06-02T09-00-00Z,,submit/manual-2026-06-02T09-00-00Z,,true",
+		"",
+	}, "\n")
+	if string(got) != want {
+		t.Fatalf("scores.csv mismatch:\n got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestWriteScoresCSV_GroupFanOut(t *testing.T) {
 	// A group submission is one multi-username row. writeScoresCSV must
 	// credit every member with the group's submissions, including a

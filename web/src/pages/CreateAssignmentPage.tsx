@@ -152,6 +152,13 @@ const CreateAssignmentPage = () => {
                 student_permission: values.student_permission || undefined,
                 submission_mode: values.submission_mode,
                 submission_tags: parseSubmissionTags(values.submission_tags),
+                grading:
+                  values.grading_choice === "manual"
+                    ? {
+                        mode: "manual",
+                        max_points: values.grading_max_points,
+                      }
+                    : { mode: values.grading_choice },
                 repo_features: formValuesToRepoFeatures(values),
                 classroom,
                 tests: values.tests,

@@ -169,6 +169,22 @@
           "maximum": 100,
           "description": "Opt-in, advisory passing bar: the integer percentage of max score (0–100) at/above which a gradebook client (e.g., the GUI) shows a submission as passing, plus passing/failing rollups, badges, and filters. ABSENT means the feature is OFF — no passing concept — which is distinct from a 0% threshold; clients must not treat absent as a default. CLI-unenforced like max_group_size: the autograder and score collection never read it; it changes no student's actual score. Written only when a teacher enables it."
         },
+        "grading": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {
+              "enum": ["off", "auto", "manual"],
+              "description": "How the teacher intends this assignment to be graded, as a first-class choice the GUI surfaces. `auto` = autograded (the default meaning; ABSENT reads as `auto` so existing files are unchanged). `manual` = the teacher records scores by hand on the submissions page. `off` = not graded. ORTHOGONAL to the autograding tri-state (empty_repo/no_autograder/init_shim) and to collection: this field records intent only and is NOT read by collect_scores.py/regrade_repos.py (which key off the tri-state), so the two never need to agree and must not be coupled by a conditional here. A manual (or overridden) score is stored in scores.json as an ordinary entry with `override: true` — there is no separate manual scores shape."
+            },
+            "max_points": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Total points available for a MANUAL assignment. Required when mode is `manual`; forbidden otherwise. Minimum 1 (not 0) because a gradebook client divides score by max to show passing/failing and to tally stats — a 0 max is the 'ungraded' sentinel, so it must not be a legal configured max."
+            }
+          }
+        },
         "migrated_from": {
           "type": "object",
           "additionalProperties": false,
@@ -271,6 +287,14 @@
               { "not": { "properties": { "init_shim": { "const": true } }, "required": ["init_shim"] } }
             ]
           }
+        },
+        {
+          "if": {
+            "properties": { "grading": { "properties": { "mode": { "const": "manual" } }, "required": ["mode"] } },
+            "required": ["grading"]
+          },
+          "then": { "properties": { "grading": { "required": ["max_points"] } } },
+          "else": { "properties": { "grading": { "not": { "required": ["max_points"] } } } }
         }
       ]
     },

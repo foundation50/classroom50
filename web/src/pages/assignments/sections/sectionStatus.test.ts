@@ -38,6 +38,8 @@ const defaults: CreateAssignmentFormValues = {
   student_permission: "",
   submission_mode: "every-push",
   submission_tags: "",
+  grading_choice: "auto",
+  grading_max_points: 100,
   repo_feature_issues: "inherit",
   repo_feature_wiki: "inherit",
   repo_feature_projects: "inherit",
@@ -126,6 +128,23 @@ describe("deriveSectionStatus", () => {
     expect(deriveSectionStatus("submission", withTags, defaults, {})).toBe(
       "configured",
     )
+  })
+
+  it("attributes the grading choice + max points to the submission section", () => {
+    const manual = { ...defaults, grading_choice: "manual" as const }
+    expect(deriveSectionStatus("submission", manual, defaults, {})).toBe(
+      "configured",
+    )
+    const maxChanged = { ...defaults, grading_max_points: 42 }
+    expect(deriveSectionStatus("submission", maxChanged, defaults, {})).toBe(
+      "configured",
+    )
+    // A grading validation error routes to the submission section.
+    expect(
+      deriveSectionStatus("submission", defaults, defaults, {
+        grading_max_points: "bad",
+      }),
+    ).toBe("error")
   })
 
   it("routes a submission_tags validation error to the submission section", () => {

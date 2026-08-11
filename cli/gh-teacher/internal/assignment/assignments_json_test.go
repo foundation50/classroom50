@@ -89,6 +89,105 @@ func TestSubmissionModeEnumParity(t *testing.T) {
 	}
 }
 
+// TestGradingModeEnumParity pins the grading.mode allow-list across its
+// hand-mirrored sources: the JSON schema enum (declared source of truth) and
+// the Go contract.GradingModes (what ValidateGrading enforces). The web mirror
+// (GRADING_MODES) is pinned against the same schema enum by a vitest.
+func TestGradingModeEnumParity(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "schemas", "assignments-v1.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	var schema struct {
+		Defs struct {
+			Assignment struct {
+				Properties struct {
+					Grading struct {
+						Properties struct {
+							Mode struct {
+								Enum []string `json:"enum"`
+							} `json:"mode"`
+						} `json:"properties"`
+					} `json:"grading"`
+				} `json:"properties"`
+			} `json:"assignment"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	schemaEnum := schema.Defs.Assignment.Properties.Grading.Properties.Mode.Enum
+	if len(schemaEnum) == 0 {
+		t.Fatalf("schema grading.mode.enum not found; did the $defs shape change?")
+	}
+	if !reflect.DeepEqual(schemaEnum, contract.GradingModes) {
+		t.Errorf("grading.mode drift: schema enum %v != contract.GradingModes %v — update every mirror in lockstep (schema, Go contract, web GRADING_MODES)",
+			schemaEnum, contract.GradingModes)
+	}
+}
+
+// TestValidateGrading pins the grading validator against the same shapes the
+// schema conditionals enforce: absent is valid (auto); off/auto forbid
+// max_points; manual requires max_points >= 1.
+func TestValidateGrading(t *testing.T) {
+	ptr := func(n int) *int { return &n }
+	cases := []struct {
+		name    string
+		grading *Grading
+		wantErr bool
+	}{
+		{"absent", nil, false},
+		{"off", &Grading{Mode: "off"}, false},
+		{"auto", &Grading{Mode: "auto"}, false},
+		{"manual with max", &Grading{Mode: "manual", MaxPoints: ptr(100)}, false},
+		{"manual min max", &Grading{Mode: "manual", MaxPoints: ptr(1)}, false},
+		{"manual missing max", &Grading{Mode: "manual"}, true},
+		{"manual zero max", &Grading{Mode: "manual", MaxPoints: ptr(0)}, true},
+		{"manual negative max", &Grading{Mode: "manual", MaxPoints: ptr(-5)}, true},
+		{"auto with max", &Grading{Mode: "auto", MaxPoints: ptr(10)}, true},
+		{"off with max", &Grading{Mode: "off", MaxPoints: ptr(10)}, true},
+		{"bad mode", &Grading{Mode: "none"}, true},
+		{"empty mode", &Grading{Mode: ""}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateGrading(tc.grading)
+			if tc.wantErr && err == nil {
+				t.Errorf("ValidateGrading(%+v) = nil, want error", tc.grading)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("ValidateGrading(%+v) = %v, want nil", tc.grading, err)
+			}
+		})
+	}
+}
+
+// TestGradingRoundTrips confirms a grading block survives parse->encode
+// (manual grading coexists with any autograding state; here alongside a
+// template, i.e. an auto assignment the teacher chose to grade manually).
+func TestGradingRoundTrips(t *testing.T) {
+	src := `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hw1","name":"HW1","template":{"owner":"o","repo":"t","branch":"main"},"mode":"individual","autograder":"default","grading":{"mode":"manual","max_points":50}}]}`
+	file, err := ParseAssignments([]byte(src))
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	g := file.Assignments[0].Grading
+	if g == nil || g.Mode != "manual" || g.MaxPoints == nil || *g.MaxPoints != 50 {
+		t.Fatalf("grading not parsed: %+v", g)
+	}
+	out, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	if !strings.Contains(string(out), `"grading"`) || !strings.Contains(string(out), `"max_points": 50`) {
+		t.Errorf("grading dropped on re-encode: %s", out)
+	}
+}
+
 // TestValidateSubmissionMode pins the read/write validator: absent (empty) and
 // both enum values pass; anything else is a hard error. An explicit
 // "every-push" is legal on read even though this CLI normalizes it to absent

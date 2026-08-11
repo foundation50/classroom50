@@ -54,6 +54,18 @@ const (
 	SubmissionModeEveryPush = "every-push"
 	SubmissionModeTag       = "tag"
 
+	// GradingModeOff, GradingModeAuto, and GradingModeManual are the assignment
+	// grading.mode values — the teacher's grading intent as a first-class GUI
+	// choice. auto = autograded (ABSENT reads as auto, so existing files are
+	// unchanged); manual = the teacher records scores by hand (requires
+	// max_points); off = not graded. Orthogonal to the autograding tri-state and
+	// to collection (nothing in the grading pipeline reads grading). Mirrored in
+	// the assignments-v1 schema enum and the web GRADING_MODES; pinned by the
+	// schema-parity tests.
+	GradingModeOff    = "off"
+	GradingModeAuto   = "auto"
+	GradingModeManual = "manual"
+
 	// SubmitTagPrefix is the tag namespace that marks a grading submission:
 	// only submit/* tag Releases count as submissions everywhere (runner,
 	// collect_scores.py SUBMIT_TAG_PREFIX, regrade_repos.py, the web
@@ -306,6 +318,21 @@ var SubmissionModes = []string{SubmissionModeEveryPush, SubmissionModeTag}
 // IsValidSubmissionMode reports whether m is one of the SubmissionModes.
 func IsValidSubmissionMode(m string) bool {
 	for _, allowed := range SubmissionModes {
+		if m == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// GradingModes is every valid assignments.json grading.mode value.
+// Single-sources the allow-list; the schema enum in assignments-v1.schema.json
+// and the web GRADING_MODES mirror it (parity-tested on both sides).
+var GradingModes = []string{GradingModeOff, GradingModeAuto, GradingModeManual}
+
+// IsValidGradingMode reports whether m is one of the GradingModes.
+func IsValidGradingMode(m string) bool {
+	for _, allowed := range GradingModes {
 		if m == allowed {
 			return true
 		}

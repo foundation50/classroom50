@@ -835,6 +835,20 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			attemptEntry.ReleaseAssets = append([]string(nil), previous.ReleaseAssets...)
 			attemptEntry.Extra = previous.Extra
 			attemptEntry.Locked = previous.Locked
+			// grading is a GUI/manifest-owned field with no `assignment add`
+			// flag; since it was promoted to a known key it no longer rides
+			// through Extra, so a same-slug re-add would silently drop a
+			// GUI-authored grading block (its mode is immutable, and the manual
+			// max_points feeds the gradebook). Deep-copy the *Grading + *int so
+			// the carried value doesn't alias the previous entry.
+			if attemptEntry.Grading == nil && previous.Grading != nil {
+				carried := *previous.Grading
+				if previous.Grading.MaxPoints != nil {
+					maxPoints := *previous.Grading.MaxPoints
+					carried.MaxPoints = &maxPoints
+				}
+				attemptEntry.Grading = &carried
+			}
 			// submission_mode is carried forward when --submission-mode was
 			// omitted: deployed shims were rendered under the prior mode, so a
 			// silent reset to every-push would strand a tag-mode assignment

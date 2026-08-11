@@ -1160,6 +1160,21 @@ const SubmissionsPageContent = () => {
             : undefined
         }
         submissionTags={assignmentInfo?.submission_tags}
+        // Manual grading: staff may enter/edit scores inline. Gated on a
+        // resolved manual-mode assignment with a valid max_points. Group
+        // manual entry keys on the founder (row owner).
+        manualGrade={
+          assignmentInfo?.grading?.mode === "manual" &&
+          typeof assignmentInfo.grading.max_points === "number"
+            ? {
+                org,
+                classroom,
+                assignment,
+                assignmentType: isGroupAssignment ? "group" : "individual",
+                maxPoints: assignmentInfo.grading.max_points,
+              }
+            : undefined
+        }
         // Per-row Pause/Resume autograding: same gate as the bulk pause/resume
         // (owner + individual + resolved default-autograder). Kept separate from
         // submissionMode so the row action doesn't inherit the trigger action's
