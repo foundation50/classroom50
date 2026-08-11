@@ -244,21 +244,24 @@ export type Assignment = {
   // a value below admin is clamped up to admin (a founder must manage members).
   // In lockstep with the CLI's assignments-v1 schema (`student_permission`).
   student_permission?: RepoPermission
-  // When the autograder fires. Absent or "every-push" (the wire default —
-  // writers omit it): the shim grades every default-branch push plus submit/*
-  // tags. "tag": the shim grades ONLY submit/* tag pushes, which both submit
-  // clients create after the branch push — a plain `git push` does not grade.
-  // Baked into the shim at accept time; changing it later requires
-  // retrofitting existing repos' shims (gradebook bulk action or
+  // What counts as a submission for this assignment — the single source of
+  // truth the Submissions subsection owns, consumed by BOTH the submissions
+  // page (detection/counting) and the autograder (when it fires). Absent or
+  // "every-push" (the wire default — writers omit it): every default-branch
+  // push (minus the baseline commit) counts as a submission, and the shim
+  // grades each one plus submit/* tags. "tag": only submit/* tag pushes count,
+  // which both submit clients create after the branch push — a plain `git push`
+  // does not count or grade. Baked into the shim at accept time; changing it
+  // later requires retrofitting existing repos' shims (gradebook bulk action or
   // `gh teacher assignment submission-mode`). Mutually exclusive with
   // empty_repo (no shim exists). In lockstep with the CLI's assignments-v1
   // schema enum (`submission_mode`).
   submission_mode?: SubmissionMode
   // Teacher-named milestone tag patterns (e.g. ["phase1", "v*"]) that ALSO
-  // trigger grading, alongside the always-on canonical submit/* namespace.
-  // TRIGGERS, not records: the runner still mints/reuses the canonical
-  // submit/* tag at the triggering commit and publishes the Release there.
-  // Baked into the shim at accept time (union with submit/*); changing
+  // count and trigger grading, alongside the always-on canonical submit/*
+  // namespace. TRIGGERS, not records: the runner still mints/reuses the
+  // canonical submit/* tag at the triggering commit and publishes the Release
+  // there. Baked into the shim at accept time (union with submit/*); changing
   // patterns later requires the same shim retrofit as submission_mode.
   // Empty/absent = no milestone tags. Mutually exclusive with empty_repo.
   // In lockstep with the CLI's assignments-v1 schema (`submission_tags`);
