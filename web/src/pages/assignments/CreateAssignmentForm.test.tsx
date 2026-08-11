@@ -591,12 +591,12 @@ describe("assignment form section IA", () => {
       </QueryClientProvider>,
     )
 
-  // The default create form leaves the autograder off, so the Submission and
-  // Grading section (gated on a built-in shim) is absent; these are the
-  // always-present sections, in order.
+  // The Submission and Grading section now always renders (grading applies to
+  // any assignment), between Repository Setup and Autograding.
   const baseSectionTitleKeys = [
     "assignments.form.detailsSection",
     "assignments.form.repositorySetupSection",
+    "assignments.form.submissionSection",
     "assignments.form.autograding.label",
     "assignments.form.repositoryFeaturesSection",
     "assignments.form.scheduleSection",
@@ -608,51 +608,44 @@ describe("assignment form section IA", () => {
       .getAllByRole("heading", { level: 3 })
       .map((h) => h.textContent)
     // The section headings appear in the required order (other h3s may exist
-    // inside sections, so assert the titles are a subsequence). The Submission
-    // and Grading section is absent here (no built-in autograder by default).
+    // inside sections, so assert the titles are a subsequence).
     const indices = baseSectionTitleKeys.map((key) => headings.indexOf(key))
     expect(indices.every((i) => i >= 0)).toBe(true)
     expect([...indices]).toEqual([...indices].sort((a, b) => a - b))
-    expect(headings).not.toContain("assignments.form.submissionSection")
   })
 
   it("renders the sections in order for edit", () => {
-    // baseAssignment uses the default (built-in) autograder, so the Submission
-    // and Grading section renders between Repository Setup and Autograding.
     renderForm({
       edit: true,
       defaultValues: assignmentToFormValues(baseAssignment),
     })
-    const editSectionTitleKeys = [
-      "assignments.form.detailsSection",
-      "assignments.form.repositorySetupSection",
-      "assignments.form.submissionSection",
-      "assignments.form.autograding.label",
-      "assignments.form.repositoryFeaturesSection",
-      "assignments.form.scheduleSection",
-    ]
     const headings = screen
       .getAllByRole("heading", { level: 3 })
       .map((h) => h.textContent)
-    const indices = editSectionTitleKeys.map((key) => headings.indexOf(key))
+    const indices = baseSectionTitleKeys.map((key) => headings.indexOf(key))
     expect(indices.every((i) => i >= 0)).toBe(true)
     expect([...indices]).toEqual([...indices].sort((a, b) => a - b))
   })
 
-  it("shows the Submission and Grading section when built-in is on", () => {
-    // The built-in autograder means a shim exists to trigger, so the
-    // submission-trigger section renders.
-    renderForm({ defaultValues: { autograding_state: "built-in" } })
+  it("shows the grading choice regardless of the autograder state", () => {
+    // Grading applies to any assignment, so the section + grading control
+    // render even with no built-in autograder.
+    renderForm({ defaultValues: { autograding_state: "none" } })
     expect(
       screen.getByText("assignments.form.submissionSection"),
     ).not.toBeNull()
+    expect(screen.getByText("assignments.form.grading.label")).not.toBeNull()
+    // The submission trigger needs a shim, so it stays hidden here.
+    expect(
+      screen.queryByText("assignments.form.submissionMode.label"),
+    ).toBeNull()
   })
 
-  it("hides the Submission and Grading section when there is no built-in autograder", () => {
-    // "No built-in autograder" means no shim exists to trigger, so the whole
-    // submission-trigger section drops out (matching showBuiltInConfig).
-    renderForm({ defaultValues: { autograding_state: "none" } })
-    expect(screen.queryByText("assignments.form.submissionSection")).toBeNull()
+  it("shows the submission trigger controls only when built-in is on", () => {
+    renderForm({ defaultValues: { autograding_state: "built-in" } })
+    expect(
+      screen.getByText("assignments.form.submissionMode.label"),
+    ).not.toBeNull()
   })
 
   it("shows a per-section status badge (default on a fresh create form)", () => {

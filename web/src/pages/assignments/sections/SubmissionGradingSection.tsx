@@ -1,22 +1,25 @@
 import { useTranslation } from "react-i18next"
-import { Alert, FormField, Select, Textarea } from "@/components/ui"
+import { Alert, FormField, Input, Select, Textarea } from "@/components/ui"
 import {
   parseSubmissionTags,
   validateSubmissionTags,
 } from "@/util/submissionTags"
+import { GRADING_MAX_POINTS_MIN } from "@/types/classroom"
 import type { AssignmentForm } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
 import type { SectionStatus } from "./sectionStatus"
 import { SectionCard } from "./SectionCard"
 
-// Submission and Grading: what counts as a submission for the assignment — the
-// submission trigger (every push vs. on submit only) and optional milestone
-// tags. Split out of Autograding so "what counts as a submission" has its own
-// home. Both controls only matter when a built-in shim exists (they are
-// mutually exclusive with empty_repo / no_autograder on the wire), so the whole
-// section hides for a bare repo or teacher-supplied CI, mirroring
-// showBuiltInConfig. On a hidden section the fields keep their (default) values,
-// so the wire stays correct.
+// Submission and Grading: how the assignment is graded (off / auto / manual,
+// with a manual max-points) and — when a built-in shim exists — what triggers
+// the autograder (every push vs. on submit only, plus milestone tags).
+//
+// The grading controls apply to ANY assignment (a bare or teacher-CI repo can
+// still be graded by hand), so the section always renders. The submission
+// trigger + milestone tags only matter with a built-in shim (they are mutually
+// exclusive with empty_repo / no_autograder on the wire), so those sub-controls
+// stay gated on showBuiltInConfig. Hidden fields keep their (default) values, so
+// the wire stays correct.
 export function SubmissionGradingSection({
   form,
   edit,
@@ -29,24 +32,149 @@ export function SubmissionGradingSection({
   const { t } = useTranslation()
 
   return (
-    <form.Subscribe
-      selector={(state) => deriveFormShape(state.values).showBuiltInConfig}
+    <SectionCard
+      title={t("assignments.form.submissionSection")}
+      status={status}
+      description={t("assignments.form.submissionSectionHelp")}
     >
-      {(showBuiltInConfig) =>
-        showBuiltInConfig ? (
-          <SectionCard
-            title={t("assignments.form.submissionSection")}
-            status={status}
-            description={t("assignments.form.submissionSectionHelp")}
-          >
-            <div className="flex flex-col gap-4">
-              <SubmissionModeField form={form} edit={edit} />
-              <SubmissionTagsField form={form} edit={edit} />
-            </div>
-          </SectionCard>
-        ) : null
-      }
-    </form.Subscribe>
+      <div className="flex flex-col gap-4">
+        <GradingChoiceField form={form} edit={edit} />
+        {/* Submission trigger + milestone tags need a built-in shim; hidden for
+            a bare repo or teacher-supplied CI. */}
+        <form.Subscribe
+          selector={(state) => deriveFormShape(state.values).showBuiltInConfig}
+        >
+          {(showBuiltInConfig) =>
+            showBuiltInConfig ? (
+              <>
+                <div className="divider my-0" />
+                <SubmissionModeField form={form} edit={edit} />
+                <SubmissionTagsField form={form} edit={edit} />
+              </>
+            ) : null
+          }
+        </form.Subscribe>
+      </div>
+    </SectionCard>
+  )
+}
+
+// Grading choice (off / auto / manual). manual reveals a max-points input; auto
+// shows a pointer to the Autograding section + the result.json requirement.
+// The mode is immutable after creation, so on edit a change warns.
+function GradingChoiceField({
+  form,
+  edit,
+}: {
+  form: AssignmentForm
+  edit: boolean
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col gap-3">
+      <form.Field name="grading_choice">
+        {(field) => (
+          <div>
+            <FormField
+              htmlFor={field.name}
+              label={t("assignments.form.grading.label")}
+              help={t("assignments.form.grading.help")}
+            >
+              {({ id, describedById }) => (
+                <Select
+                  id={id}
+                  name={field.name}
+                  className="w-full sm:max-w-xs"
+                  aria-describedby={describedById}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) =>
+                    field.handleChange(e.target.value as typeof field.state.value)
+                  }
+                >
+                  <option value="off">
+                    {t("assignments.form.grading.choices.off")}
+                  </option>
+                  <option value="auto">
+                    {t("assignments.form.grading.choices.auto")}
+                  </option>
+                  <option value="manual">
+                    {t("assignments.form.grading.choices.manual")}
+                  </option>
+                </Select>
+              )}
+            </FormField>
+            {edit ? (
+              <form.Subscribe selector={(state) => state.values.grading_choice}>
+                {(choice) =>
+                  choice !==
+                  (form.options.defaultValues?.grading_choice ?? "auto") ? (
+                    <Alert tone="warning" role="status" className="mt-2 text-sm">
+                      <span>{t("assignments.form.grading.editWarning")}</span>
+                    </Alert>
+                  ) : null
+                }
+              </form.Subscribe>
+            ) : null}
+          </div>
+        )}
+      </form.Field>
+
+      {/* manual -> max points; auto -> result.json pointer. Keyed off the live
+          choice so switching modes reveals the right affordance. */}
+      <form.Subscribe selector={(state) => state.values.grading_choice}>
+        {(choice) =>
+          choice === "manual" ? (
+            <ManualMaxPointsField form={form} />
+          ) : choice === "auto" ? (
+            <Alert tone="info" role="note" className="text-sm">
+              <span>{t("assignments.form.grading.autoNote")}</span>
+            </Alert>
+          ) : null
+        }
+      </form.Subscribe>
+    </div>
+  )
+}
+
+function ManualMaxPointsField({ form }: { form: AssignmentForm }) {
+  const { t } = useTranslation()
+  return (
+    <form.Field name="grading_max_points">
+      {(field) => {
+        const error = field.state.meta.errors[0] as string | undefined
+        return (
+          <div>
+            <FormField
+              htmlFor={field.name}
+              label={t("assignments.form.grading.maxPoints.label")}
+              help={t("assignments.form.grading.maxPoints.help")}
+            >
+              {({ id, describedById }) => (
+                <Input
+                  id={id}
+                  name={field.name}
+                  type="number"
+                  inputMode="numeric"
+                  min={GRADING_MAX_POINTS_MIN}
+                  step={1}
+                  className="w-28"
+                  aria-describedby={describedById}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(Number(e.target.value))}
+                />
+              )}
+            </FormField>
+            {error ? (
+              <p role="alert" className="mt-1.5 text-sm text-error">
+                {error}
+              </p>
+            ) : null}
+          </div>
+        )
+      }}
+    </form.Field>
   )
 }
 

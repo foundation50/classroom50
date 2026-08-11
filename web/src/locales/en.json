@@ -1189,6 +1189,21 @@
           }
         }
       },
+      "grading": {
+        "label": "Grading",
+        "help": "How this assignment is graded. \"Autograded\" runs the autograder you configure below. \"Manual\" lets you enter each student's score by hand on the submissions page. \"Not graded\" records no score. Can't be changed after the assignment is created.",
+        "editWarning": "The grading mode can't be changed after creation: scores already recorded under the old mode would be misread. Create a new assignment under a different slug instead.",
+        "autoNote": "This assignment is autograded. Configure the autograder in the Autograding section above. Whether you use the built-in autograder or supply your own workflow, it must publish a result.json asset on the submission release — that file is what the app reads to show scores.",
+        "choices": {
+          "off": "Not graded",
+          "auto": "Autograded",
+          "manual": "Manual (enter scores by hand)"
+        },
+        "maxPoints": {
+          "label": "Max points",
+          "help": "Total points available for this manual assignment. Used to show each student's score out of the maximum."
+        }
+      },
       "submissionMode": {
         "label": "Autograding trigger",
         "help": "When the autograder runs. \"Every push\" grades each push to the default branch. \"On submit only\" grades only when a student submits (with gh student submit) or pushes a submit/* tag — regular pushes cost no Actions minutes, which matters for large classes.",
