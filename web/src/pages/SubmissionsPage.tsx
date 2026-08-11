@@ -19,6 +19,7 @@ import { MetricsModal } from "@/pages/submissions/MetricsModal"
 import { OpenAllFeedbackPrsModal } from "@/pages/submissions/OpenAllFeedbackPrsModal"
 import { DownloadAllSubmissionsModal } from "@/pages/submissions/DownloadAllSubmissionsModal"
 import { BulkRepoAccessModal } from "@/components/modals/BulkRepoAccessModal"
+import { CloseSubmissionModal } from "@/components/modals/CloseSubmissionModal"
 import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal"
 import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
@@ -184,6 +185,7 @@ const SubmissionsPageContent = () => {
   // refuse them); the gradebook stays fully functional for staff, so this is a
   // heads-up banner, not a gate.
   const isLockedAssignment = assignmentInfo?.locked === true
+  const isClosedAssignment = assignmentInfo?.closed === true
   // Org repo list drives repo-existence signals (individual acceptance below,
   // group-repo enumeration, the staff-acceptance gate, and the pushed_at
   // staleness heuristic). `refetch` is wired to Sync + collect-completion so
@@ -285,6 +287,7 @@ const SubmissionsPageContent = () => {
   const [bulkTriggerOpen, setBulkTriggerOpen] = useState(false)
   const [bulkPauseOpen, setBulkPauseOpen] = useState(false)
   const [bulkResumeOpen, setBulkResumeOpen] = useState(false)
+  const [closeSubmissionOpen, setCloseSubmissionOpen] = useState(false)
 
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
   // Gate on a resolved roster so a transient load/permission failure falls back
@@ -918,6 +921,11 @@ const SubmissionsPageContent = () => {
                 {t("submissions.lateBadge", { count: lateCount })}
               </Badge>
             )}
+            {isClosedAssignment && (
+              <Badge tone="warning" size="md">
+                {t("submissions.closeSubmission.statusBadge.closed")}
+              </Badge>
+            )}
             {assignmentInfo?.template && (
               <GitHubLink
                 href={githubTemplateRepoUrl(
@@ -936,6 +944,12 @@ const SubmissionsPageContent = () => {
       {isLockedAssignment && (
         <Alert tone="warning" role="status">
           {t("submissions.lockedNotice")}
+        </Alert>
+      )}
+
+      {isClosedAssignment && !isLockedAssignment && (
+        <Alert tone="warning" role="status">
+          {t("submissions.closedNotice")}
         </Alert>
       )}
 
@@ -1160,6 +1174,19 @@ const SubmissionsPageContent = () => {
             // as Regrade all; a plain TA doesn't see it (GitHub 403s them too).
             onLockToggle={
               canRegradeAll ? () => setLockConfirmOpen(true) : undefined
+            }
+            closed={isClosedAssignment}
+            // Close/reopen submission: authoring tier + individual, non-empty
+            // repo shape (a group repo's membership is founder-managed). Unlike
+            // bulk access it does NOT require acceptedSet.size > 0 — closing
+            // still blocks future accepts when no one has accepted yet.
+            onCloseToggle={
+              canRegradeAll &&
+              isOwner &&
+              !isGroupAssignment &&
+              !isEmptyRepoAssignment
+                ? () => setCloseSubmissionOpen(true)
+                : undefined
             }
           />
         }
@@ -1396,6 +1423,16 @@ const SubmissionsPageContent = () => {
         classroom={classroom}
         assignment={assignment}
         action="resume"
+        owners={acceptedOwners}
+        students={students}
+      />
+      <CloseSubmissionModal
+        open={closeSubmissionOpen}
+        onClose={() => setCloseSubmissionOpen(false)}
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+        mode={isClosedAssignment ? "reopen" : "close"}
         owners={acceptedOwners}
         students={students}
       />

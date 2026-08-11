@@ -140,3 +140,57 @@ describe("SubmissionsActionsMenu — Lock/Unlock item", () => {
     expect(screen.queryByText("submissions.lock.lockLabel")).toBeNull()
   })
 })
+
+describe("SubmissionsActionsMenu — Close/Reopen submission item", () => {
+  it("shows the item only when onCloseToggle is provided (authoring tier)", () => {
+    const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)
+    expect(
+      screen.queryByText("submissions.closeSubmission.menuLabel"),
+    ).toBeNull()
+    rerender(
+      <SubmissionsActionsMenu {...baseProps} onCloseToggle={() => {}} />,
+    )
+    expect(
+      screen.queryByText("submissions.closeSubmission.menuLabel"),
+    ).not.toBeNull()
+  })
+
+  it("shows Reopen when the assignment is already closed", () => {
+    render(
+      <SubmissionsActionsMenu
+        {...baseProps}
+        closed
+        onCloseToggle={() => {}}
+      />,
+    )
+    expect(
+      screen.queryByText("submissions.closeSubmission.reopenLabel"),
+    ).not.toBeNull()
+    expect(
+      screen.queryByText("submissions.closeSubmission.menuLabel"),
+    ).toBeNull()
+  })
+
+  it("fires the handler on click", () => {
+    const onCloseToggle = vi.fn()
+    render(
+      <SubmissionsActionsMenu {...baseProps} onCloseToggle={onCloseToggle} />,
+    )
+    screen.getByText("submissions.closeSubmission.menuLabel").click()
+    expect(onCloseToggle).toHaveBeenCalledTimes(1)
+  })
+
+  it("is independent of Lock — both items can appear together", () => {
+    render(
+      <SubmissionsActionsMenu
+        {...baseProps}
+        onLockToggle={() => {}}
+        onCloseToggle={() => {}}
+      />,
+    )
+    expect(screen.queryByText("submissions.lock.lockLabel")).not.toBeNull()
+    expect(
+      screen.queryByText("submissions.closeSubmission.menuLabel"),
+    ).not.toBeNull()
+  })
+})

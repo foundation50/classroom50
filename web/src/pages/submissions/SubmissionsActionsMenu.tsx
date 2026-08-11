@@ -1,5 +1,7 @@
 import {
   BarChart3,
+  CalendarCheck,
+  CalendarX,
   ChevronDown,
   DownloadCloud,
   ExternalLink,
@@ -50,6 +52,8 @@ export function SubmissionsActionsMenu({
   locked = false,
   lockPending = false,
   onLockToggle,
+  closed = false,
+  onCloseToggle,
 }: {
   collecting: boolean
   regrading: boolean
@@ -106,6 +110,12 @@ export function SubmissionsActionsMenu({
   // can't author assignments (teacher|hta) — the page owns the mutation, this
   // is just the affordance.
   onLockToggle?: () => void
+  // Current closed state, for the Close/Reopen item's label and icon.
+  closed?: boolean
+  // Opens the Close/Reopen submission modal. Same gate as onBulkAccess (owner,
+  // individual, non-empty repo shape) plus authoring tier; omitted otherwise.
+  // The page owns the modal and the closed-flag mutation.
+  onCloseToggle?: () => void
 }) {
   const { t } = useTranslation()
   const busy = collecting || regrading
@@ -384,6 +394,42 @@ export function SubmissionsActionsMenu({
                 </button>
               </li>
             )}
+            <div
+              className="my-1 border-t border-base-content/10"
+              role="separator"
+            />
+          </>
+        )}
+        {/* Close / Reopen submission — ends or reopens the submission window
+            (blocks new accepts + sets repos read-only on close). Same
+            authoring tier + per-repo bulk-access gate; independent of Lock. */}
+        {onCloseToggle && (
+          <>
+            <li>
+              <button
+                type="button"
+                disabled={disabledActions}
+                title={
+                  closed
+                    ? t("submissions.closeSubmission.reopenMenuTitle")
+                    : t("submissions.closeSubmission.menuTitle")
+                }
+                onClick={() => {
+                  closeMenu()
+                  if (disabledActions) return
+                  onCloseToggle()
+                }}
+              >
+                {closed ? (
+                  <CalendarCheck aria-hidden="true" className="size-4" />
+                ) : (
+                  <CalendarX aria-hidden="true" className="size-4" />
+                )}
+                {closed
+                  ? t("submissions.closeSubmission.reopenLabel")
+                  : t("submissions.closeSubmission.menuLabel")}
+              </button>
+            </li>
             <div
               className="my-1 border-t border-base-content/10"
               role="separator"
