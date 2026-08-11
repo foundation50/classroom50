@@ -123,8 +123,8 @@ type Entry struct {
 }
 
 // IsTagSubmissionMode reports whether the entry grades only on submit/* tag
-// pushes. Centralized so accept (shim rendering) and submit (tag push) can't
-// drift on the absent-means-every-push default.
+// pushes. Centralized so submit's tag-push branch (and tests) share the
+// absent-means-every-push default.
 func (e Entry) IsTagSubmissionMode() bool {
 	return e.SubmissionMode == contract.SubmissionModeTag
 }
@@ -132,9 +132,7 @@ func (e Entry) IsTagSubmissionMode() bool {
 // CommitsShim reports whether accept commits an autograde shim for this entry.
 // Both no-shim states suppress it: EmptyRepo (a bare repo commits nothing) and
 // NoAutograder (teacher-supplied CI). Centralized so the two accept-time shim
-// branches can't drift on the predicate — the Go analogue of the Python
-// skips_grading() family (the inverse: skips_grading is "does not autograde",
-// this is "does the shim get committed").
+// branches can't drift on the predicate.
 func (e Entry) CommitsShim() bool {
 	return !e.EmptyRepo && !e.NoAutograder
 }

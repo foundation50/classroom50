@@ -356,11 +356,9 @@ func pushSubmitTag(gitDir, sha string) (string, error) {
 	if err == nil && existing != "" {
 		return existing, nil
 	}
-	// A failed reuse probe falls through to pushing a fresh tag. The fresh
-	// tag's timestamped name never collides with an existing one, so the
-	// worst case is a second submit/* tag at the same SHA (one extra graded
-	// run of identical work) — preferred over failing the submission when
-	// the probe hiccups but the push would succeed.
+	// Probe failure falls through to a fresh tag: worst case is a duplicate
+	// submit/* tag at the same SHA (one extra identical graded run), preferred
+	// over failing a submission whose push would succeed.
 	tag := contract.BuildSubmitTag(timeNow(), sha)
 	if _, err := gitOutputWithGitDir(gitDir, "push", "origin", sha+":refs/tags/"+tag); err != nil {
 		return "", err

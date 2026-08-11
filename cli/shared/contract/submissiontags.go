@@ -134,8 +134,6 @@ func compileTagPattern(pattern string) (*regexp.Regexp, error) {
 				b.WriteString("[^/]*") // * stops at /
 			}
 		case '?':
-			// Zero-or-one of the preceding element: regexp `?` after the
-			// previous literal/class already emitted.
 			b.WriteString("?")
 		case '+':
 			b.WriteString("+")

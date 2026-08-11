@@ -32,19 +32,15 @@ export type FormShape = {
   // The repository source, folded from the UI's repo_source + add_readme.
   // Everything template- and grading-related keys off it.
   repositorySource: RepositorySource
-  // The wire empty_repo boolean this shape resolves to: a no-template no-README
-  // repo where the teacher did NOT pick built-in autograding (a truly bare
-  // repo). If they picked built-in on that same source, it's init_shim instead
-  // (see below) and this is false.
+  // The wire empty_repo boolean this shape resolves to (a truly bare repo).
+  // See the header three-way: "empty" source without built-in autograding.
   emptyRepo: boolean
   // The wire init_shim boolean: a no-template no-README repo that is Autograded
   // — initialized with the marker + default shim, and it autogrades.
   initShim: boolean
-  // The wire no_autograder boolean: a TEMPLATED assignment the teacher marked
-  // as teacher-supplied CI (grading is Autograded but the built-in shim is
-  // off). Only a template source can be no_autograder — a README/empty repo
-  // with the built-in autograder off is simply "no autograder", NOT the
-  // teacher-supplied-CI wire state (which requires a template).
+  // The wire no_autograder boolean: a TEMPLATED teacher-supplied-CI assignment
+  // (grading Autograded, built-in shim off). Only a template can be
+  // no_autograder — see deriveFormShape.
   noAutograder: boolean
   // The autograding tri-state as it applies to THIS form's values. A bare
   // (empty_repo) repo forces "empty"; otherwise it's derived from the grading

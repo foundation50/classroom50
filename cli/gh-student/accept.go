@@ -77,9 +77,8 @@ const shimTagsTriggerLine = "    tags: [\"submit/*\"]\n"
 //
 // submissionMode contract.SubmissionModeTag drops the branch-push trigger line
 // so only submission-tag pushes grade (`gh student submit` creates the tag; a
-// hand-pushed submit/* tag works too). Every other value — including "" and an
-// explicit "every-push" — takes the identical code path as before the field
-// existed, keeping the default shim byte-identical.
+// hand-pushed submit/* tag works too). Any other value (incl. "" and
+// "every-push") keeps the default every-push shim byte-identical.
 //
 // submissionTags (teacher-named milestone patterns, e.g. phase1) widen the
 // tags trigger to their union with the always-on submit/* namespace; empty

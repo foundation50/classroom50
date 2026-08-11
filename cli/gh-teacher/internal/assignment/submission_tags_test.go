@@ -34,7 +34,7 @@ func TestValidateSubmissionTags(t *testing.T) {
 		{[]string{""}, "only letters"},
 		// Stacked/leading quantifiers: possessive in Python, compile error
 		// in Go/JS — the one construct where the four matcher copies would
-		// diverge, so the writer refuses it (see contract.stackedQuantifierRE).
+		// diverge, so the writer refuses it (see IsSafeSubmissionTagPattern).
 		{[]string{"v*+"}, "follow another glob quantifier"},
 		{[]string{"a++"}, "follow another glob quantifier"},
 		{[]string{"x?+"}, "follow another glob quantifier"},
@@ -58,7 +58,7 @@ func TestValidateSubmissionTags(t *testing.T) {
 
 // TestSubmissionTagsSchemaParity pins the hand-mirrored constants against the
 // schema (declared source of truth): maxItems vs SubmissionTagsCap and
-// items.pattern vs submissionTagPatternRE. The web mirror
+// items.pattern vs contract.SubmissionTagCharsetRE. The web mirror
 // (SUBMISSION_TAGS_CAP / SUBMISSION_TAG_PATTERN_RE) is pinned by its own
 // vitest against the same schema.
 func TestSubmissionTagsSchemaParity(t *testing.T) {

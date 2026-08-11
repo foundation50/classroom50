@@ -188,10 +188,7 @@ export function mergeDetectedSubmissions(
   const merged = rows.map((row) => {
     const d = detectedByOwner.get(row.owner.trim().toLowerCase())
     if (!d || d.count <= row.submissionCount) return row
-    // A teacher-overridden (manual) grade is frozen by hand and never
-    // auto-collected, so the "newest push isn't graded yet — re-collect" hint
-    // (staleCount) doesn't apply: bump the visible count but leave the row
-    // unflagged. Autograded rows still get the stale hint.
+    // staleCount off for overrides — see mergeLiveRows.
     return { ...row, submissionCount: d.count, staleCount: !row.overridden }
   })
 
