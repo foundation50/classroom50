@@ -37,6 +37,8 @@ const base: CreateAssignmentFormValues = {
   student_permission: "",
   submission_mode: "every-push",
   submission_tags: "",
+  grading_choice: "auto",
+  grading_max_points: 100,
   repo_feature_issues: "inherit",
   repo_feature_wiki: "inherit",
   repo_feature_projects: "inherit",
@@ -58,7 +60,7 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.feedbackPrEnabled).toBe(true)
   })
 
-  it("no template + no README + none: bare repo (empty_repo), disables feedback", () => {
+  it("no template + no README + built-in off: bare repo (empty_repo), disables feedback", () => {
     const shape = deriveFormShape({
       ...base,
       repo_source: "none",
@@ -68,6 +70,7 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.repositorySource).toBe("empty")
     expect(shape.emptyRepo).toBe(true)
     expect(shape.initShim).toBe(false)
+    expect(shape.noAutograder).toBe(false)
     expect(shape.autogradingState).toBe("empty")
     expect(shape.showTemplateFields).toBe(false)
     expect(shape.showAddReadme).toBe(true)
@@ -75,7 +78,7 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.showBuiltInConfig).toBe(false)
   })
 
-  it("no template + no README + built-in: init_shim (not bare), built-in config + feedback available", () => {
+  it("no template + no README + built-in on: init_shim (not bare), built-in config + feedback available", () => {
     const shape = deriveFormShape({
       ...base,
       repo_source: "none",
@@ -86,12 +89,13 @@ describe("deriveFormShape — repository source", () => {
     // Built-in on an empty source is init_shim, NOT a bare repo.
     expect(shape.initShim).toBe(true)
     expect(shape.emptyRepo).toBe(false)
+    expect(shape.noAutograder).toBe(false)
     expect(shape.autogradingState).toBe("built-in")
     expect(shape.showBuiltInConfig).toBe(true)
     expect(shape.feedbackPrEnabled).toBe(true)
   })
 
-  it("a raw empty_repo: true stays bare even with built-in picked (hard override, no init_shim)", () => {
+  it("a raw empty_repo: true stays bare even with built-in on (hard override, no init_shim)", () => {
     const shape = deriveFormShape({
       ...base,
       empty_repo: true,
@@ -113,7 +117,7 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.autogradingState).toBe("empty")
   })
 
-  it("template source: template fields shown, README toggle hidden, built-in available", () => {
+  it("template source, built-in on: template fields shown, README toggle hidden, built-in available", () => {
     const shape = deriveFormShape({
       ...base,
       repo_source: "template",
@@ -122,22 +126,53 @@ describe("deriveFormShape — repository source", () => {
     })
     expect(shape.repositorySource).toBe("template")
     expect(shape.emptyRepo).toBe(false)
+    expect(shape.noAutograder).toBe(false)
     expect(shape.showTemplateFields).toBe(true)
     expect(shape.showAddReadme).toBe(false)
     expect(shape.feedbackPrEnabled).toBe(true)
     expect(shape.showBuiltInConfig).toBe(true)
   })
 
-  it("template source with teacher-supplied CI ('none'): no built-in config, template + feedback stay", () => {
+  it("template source, built-in off: teacher-supplied CI (no_autograder), template + feedback stay", () => {
     const shape = deriveFormShape({
       ...base,
       repo_source: "template",
       autograding_state: "none",
     })
     expect(shape.autogradingState).toBe("none")
+    // A template source with built-in off is the teacher-supplied-CI wire state.
+    expect(shape.noAutograder).toBe(true)
     expect(shape.showBuiltInConfig).toBe(false)
     expect(shape.showTemplateFields).toBe(true)
     expect(shape.feedbackPrEnabled).toBe(true)
+  })
+
+  it("README source, built-in off: plain repo, NOT no_autograder (no template)", () => {
+    const shape = deriveFormShape({
+      ...base,
+      repo_source: "none",
+      add_readme: true,
+      autograding_state: "none",
+    })
+    expect(shape.repositorySource).toBe("readme")
+    expect(shape.emptyRepo).toBe(false)
+    // no_autograder requires a template, so a README repo never sets it.
+    expect(shape.noAutograder).toBe(false)
+    expect(shape.autogradingState).toBe("none")
+  })
+
+  it("autograding config is offered only when grading is Autograded", () => {
+    expect(
+      deriveFormShape({ ...base, grading_choice: "auto" })
+        .showAutogradingConfig,
+    ).toBe(true)
+    expect(
+      deriveFormShape({ ...base, grading_choice: "manual" })
+        .showAutogradingConfig,
+    ).toBe(false)
+    expect(
+      deriveFormShape({ ...base, grading_choice: "off" }).showAutogradingConfig,
+    ).toBe(false)
   })
 
   it("showGroupSize is true only for a group assignment", () => {

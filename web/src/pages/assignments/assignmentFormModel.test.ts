@@ -67,6 +67,8 @@ const base: CreateAssignmentFormValues = {
   student_permission: "",
   submission_mode: "every-push",
   submission_tags: "",
+  grading_choice: "auto",
+  grading_max_points: 100,
   repo_feature_issues: "inherit",
   repo_feature_wiki: "inherit",
   repo_feature_projects: "inherit",
@@ -317,7 +319,11 @@ describe("validateAssignmentForm — submission mode + milestone tags", () => {
   it("accepts valid milestone tag patterns", () => {
     expect(
       validateAssignmentForm(
-        { ...base, submission_tags: "phase1\nphase2\nv*" },
+        {
+          ...base,
+          submission_mode: "tag",
+          submission_tags: "phase1\nphase2\nv*",
+        },
         t,
       ).submission_tags,
     ).toBeUndefined()
@@ -331,9 +337,151 @@ describe("validateAssignmentForm — submission mode + milestone tags", () => {
     ["duplicate", "phase1\nphase1"],
   ])("flags an invalid milestone tag: %s", (_label, raw) => {
     expect(
-      validateAssignmentForm({ ...base, submission_tags: raw }, t)
-        .submission_tags,
+      validateAssignmentForm(
+        { ...base, submission_mode: "tag", submission_tags: raw },
+        t,
+      ).submission_tags,
     ).toBeDefined()
+  })
+
+  it("skips tag validation in every-push mode (field hidden, value ignored)", () => {
+    // The tags field is only shown for "A tagged commit"; a stale invalid value
+    // in every-push mode must not raise an error the teacher can't see to fix
+    // (toSubmitValues clears it there anyway).
+    expect(
+      validateAssignmentForm(
+        {
+          ...base,
+          submission_mode: "every-push",
+          submission_tags: "has space",
+        },
+        t,
+      ).submission_tags,
+    ).toBeUndefined()
+  })
+})
+
+describe("validateAssignmentForm — grading", () => {
+  it("accepts off/auto without a max, and manual with a max >= 1", () => {
+    for (const choice of ["off", "auto"] as const) {
+      expect(
+        validateAssignmentForm({ ...base, grading_choice: choice }, t)
+          .grading_max_points,
+      ).toBeUndefined()
+    }
+    expect(
+      validateAssignmentForm(
+        { ...base, grading_choice: "manual", grading_max_points: 1 },
+        t,
+      ).grading_max_points,
+    ).toBeUndefined()
+    expect(
+      validateAssignmentForm(
+        { ...base, grading_choice: "manual", grading_max_points: 100 },
+        t,
+      ).grading_max_points,
+    ).toBeUndefined()
+  })
+
+  it("flags a hand-tampered grading choice", () => {
+    expect(
+      validateAssignmentForm({ ...base, grading_choice: "partial" as never }, t)
+        .grading_choice,
+    ).toBe("assignments.form.validation.gradingModeInvalid")
+  })
+
+  it.each([
+    ["zero", 0],
+    ["negative", -5],
+    ["non-integer", 2.5],
+  ])("flags a manual max of %s", (_label, max) => {
+    expect(
+      validateAssignmentForm(
+        { ...base, grading_choice: "manual", grading_max_points: max },
+        t,
+      ).grading_max_points,
+    ).toBe("assignments.form.validation.gradingMaxPointsInvalid")
+  })
+
+  it("ignores the max when the choice is not manual", () => {
+    // A stale/invalid max is not validated unless manual is selected.
+    expect(
+      validateAssignmentForm(
+        { ...base, grading_choice: "auto", grading_max_points: 0 },
+        t,
+      ).grading_max_points,
+    ).toBeUndefined()
+  })
+})
+
+describe("toSubmitValues — grading", () => {
+  it("passes the choice through and keeps the manual max", () => {
+    const out = toSubmitValues({
+      ...base,
+      grading_choice: "manual",
+      grading_max_points: 50,
+    })
+    expect(out.grading_choice).toBe("manual")
+    expect(out.grading_max_points).toBe(50)
+  })
+
+  it("resets the max when the choice is not manual", () => {
+    const out = toSubmitValues({
+      ...base,
+      grading_choice: "auto",
+      grading_max_points: 37,
+    })
+    expect(out.grading_choice).toBe("auto")
+    expect(out.grading_max_points).toBe(100)
+  })
+
+  it("does not clear grading for a teacher-CI (no built-in) assignment", () => {
+    // grading is orthogonal to the autograding tri-state: a no-built-in repo
+    // can still be graded manually, unlike submission_mode which is cleared.
+    const out = toSubmitValues({
+      ...base,
+      autograding_state: "none",
+      grading_choice: "manual",
+      grading_max_points: 20,
+    })
+    expect(out.grading_choice).toBe("manual")
+    expect(out.grading_max_points).toBe(20)
+    expect(out.submission_mode).toBe("every-push")
+  })
+})
+
+describe("assignmentToFormValues — grading", () => {
+  it("defaults to auto when grading is absent", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+    })
+    expect(values.grading_choice).toBe("auto")
+  })
+
+  it("reads a stored manual grading with its max", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      grading: { mode: "manual", max_points: 25 },
+    })
+    expect(values.grading_choice).toBe("manual")
+    expect(values.grading_max_points).toBe(25)
+  })
+
+  it("reads a stored off grading", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      grading: { mode: "off" },
+    })
+    expect(values.grading_choice).toBe("off")
   })
 })
 
@@ -412,11 +560,11 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.allowed_files).toBe("")
     expect(out.pass_threshold_enabled).toBe(false)
     expect(out.tests).toEqual([])
-    // The two newest grading-trigger fields must also clear for a bare repo
-    // (no shim to trigger) — pins the empty-repo clear set the autograding
-    // restructure reproduces.
-    expect(out.submission_mode).toBe("every-push")
-    expect(out.submission_tags).toBe("")
+    // The submission definition is preserved even for a bare repo: it is the
+    // app's detection rule (what the submissions page counts), not a shim
+    // trigger, so empty_repo no longer clears it.
+    expect(out.submission_mode).toBe("tag")
+    expect(out.submission_tags).toBe("phase1\nphase2")
     expect(out.release_assets).toBe("")
   })
 
@@ -438,14 +586,17 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.submission_tags).toBe("phase1\nphase2")
   })
 
-  it("clears built-in-only fields for the 'none' autograding state but keeps template + feedback_pr", () => {
-    // "none" (teacher-supplied CI) commits no shim, so the grading-adjacent
-    // fields clear like empty_repo — but unlike empty_repo it PERMITS a
-    // template and the Feedback PR (a templated repo has a baseline commit).
+  it("clears built-in-only fields when the built-in autograder is off but keeps template + feedback_pr", () => {
+    // A templated assignment with the built-in autograder OFF commits no shim
+    // (teacher-supplied CI), so the grading-adjacent fields clear like
+    // empty_repo — but unlike empty_repo it PERMITS a template and the Feedback
+    // PR (a templated repo has a baseline commit).
     const out = toSubmitValues({
       ...base,
       repo_source: "template",
       autograding_state: "none",
+      grading_choice: "manual",
+      grading_max_points: 50,
       template_repo: "acme/starter",
       feedback_pr: true,
       setup_command: "make",
@@ -463,9 +614,49 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.allowed_files).toBe("")
     expect(out.release_assets).toBe("")
     expect(out.pass_threshold_enabled).toBe(false)
+    // Preserved: the submission definition is the app's detection rule, valid
+    // for any repo shape (not cleared with the built-in-only autograder config).
+    expect(out.submission_mode).toBe("tag")
+    expect(out.submission_tags).toBe("phase1")
+    expect(out.autograding_state).toBe("none")
+  })
+
+  it("clears submission_tags in every-push mode (the field is hidden there)", () => {
+    // The tags field is shown only for "A tagged commit"; a stale value from a
+    // prior "tag" selection must not persist once the teacher switches back to
+    // every-push, so the wire matches what's visible.
+    const out = toSubmitValues({
+      ...base,
+      submission_mode: "every-push",
+      submission_tags: "phase1\nphase2",
+    })
     expect(out.submission_mode).toBe("every-push")
     expect(out.submission_tags).toBe("")
-    expect(out.autograding_state).toBe("none")
+  })
+
+  it("preserves built-in autograder config under Manual grading (built-in on)", () => {
+    // The built-in-only field clearing keys off the built-in autograder toggle
+    // (autograding_state), NOT the grading choice — so a built-in assignment
+    // graded Manually must KEEP its advanced config on submit even though the
+    // (immutable) Manual choice hides the panes in the UI. Guards the invariant
+    // deriveFormShape's showBuiltInConfig doc calls out.
+    const out = toSubmitValues({
+      ...base,
+      repo_source: "template",
+      template_repo: "acme/starter",
+      autograding_state: "built-in",
+      grading_choice: "manual",
+      grading_max_points: 50,
+      setup_command: "make",
+      allowed_files: "*\n!hello.py",
+      release_assets: "report.pdf",
+      pass_threshold_enabled: true,
+    })
+    expect(out.autograding_state).toBe("built-in")
+    expect(out.setup_command).toBe("make")
+    expect(out.allowed_files).toBe("*\n!hello.py")
+    expect(out.release_assets).toBe("report.pdf")
+    expect(out.pass_threshold_enabled).toBe(true)
   })
 
   it("empty_repo forces the autograding state to 'empty' regardless of the picked value", () => {
@@ -488,24 +679,27 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.template_repo).toBe("")
   })
 
-  it("no template + no README + none maps to a bare repo (empty_repo true)", () => {
+  it("no template + no README + built-in off maps to a bare repo (empty_repo true)", () => {
     const out = toSubmitValues({
       ...base,
       repo_source: "none",
       add_readme: false,
       autograding_state: "none",
+      grading_choice: "manual",
+      grading_max_points: 50,
     })
     expect(out.empty_repo).toBe(true)
   })
 
-  it("no template + no README + built-in is NOT bare (init_shim case; empty_repo false)", () => {
+  it("no template + no README + built-in on is NOT bare (init_shim case; empty_repo false)", () => {
     const out = toSubmitValues({
       ...base,
       repo_source: "none",
       add_readme: false,
       autograding_state: "built-in",
+      grading_choice: "auto",
     })
-    // Built-in on an empty source commits a shim (init_shim), so it is not bare.
+    // Built-in on an empty source commits a shim (init_shim), so it's not bare.
     expect(out.empty_repo).toBe(false)
     expect(out.autograding_state).toBe("built-in")
   })
@@ -555,6 +749,31 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(values.autograding_state).toBe("built-in")
     const shape = deriveFormShape({ ...base, ...values })
     expect(shape.initShim).toBe(true)
+    expect(shape.emptyRepo).toBe(false)
+  })
+
+  it("round-trips a stored templated no_autograder assignment without dropping the flag", () => {
+    // A stored no_autograder (teacher-supplied CI on a template) must read back
+    // as a template source with the built-in autograder off, so deriveFormShape
+    // re-derives no_autograder:true — otherwise a re-save would drop the
+    // immutable flag and editAssignment's guard would reject the edit. Guards
+    // that noAutograder keys off the (template) source + built-in toggle, not
+    // the grading choice (this assignment is graded manually).
+    const values = assignmentToFormValues({
+      slug: "ci",
+      name: "Teacher CI",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "acme", repo: "starter", branch: "main" },
+      no_autograder: true,
+      grading: { mode: "manual", max_points: 50 },
+    })
+    expect(values.repo_source).toBe("template")
+    expect(values.autograding_state).toBe("none")
+    expect(values.grading_choice).toBe("manual")
+    const shape = deriveFormShape({ ...base, ...values })
+    expect(shape.noAutograder).toBe(true)
+    expect(shape.initShim).toBe(false)
     expect(shape.emptyRepo).toBe(false)
   })
 })

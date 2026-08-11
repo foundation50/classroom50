@@ -7,6 +7,8 @@ import {
   PASS_THRESHOLD_MIN,
   REPO_PERMISSIONS,
   SUBMISSION_MODES,
+  GRADING_MODES,
+  GRADING_MAX_POINTS_MIN,
   assertAssignmentMode,
   defaultStudentPermission,
 } from "@/types/classroom"
@@ -123,6 +125,11 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   student_permission: "classroom50-owned",
   submission_mode: "classroom50-owned",
   submission_tags: "classroom50-owned",
+  // Rebuilt from input but IMMUTABLE: editAssignment rejects an edit whose
+  // grading.mode differs from the stored entry (a manual<->auto flip would
+  // change how already-graded repos are read), so the rebuild only ever
+  // re-writes the same mode. The edit form shows the choice read-only.
+  grading: "classroom50-owned",
   repo_features: "classroom50-owned",
   tests: "classroom50-owned",
   // Written only by the CLI's `migrate`; the form never rebuilds it, so it must
@@ -227,6 +234,20 @@ export async function editAssignment(
   if (Boolean(input.init_shim) !== Boolean(targetAssignment.init_shim)) {
     throw new Error(
       `init_shim cannot be changed after creation (assignment "${slug}"): repositories students already accepted are not retrofitted. Create a new assignment under a different slug instead — reusing this slug (even after removing it) would leave already-accepted repos on the old setting.`,
+    )
+  }
+
+  // grading.mode is immutable: flipping manual<->auto (or off) changes how
+  // already-graded repos are read and scored (an override-backed manual grade
+  // vs a collected autograded one), so a mid-course flip would misrepresent
+  // existing scores. Absent reads as "auto", so compare the resolved modes.
+  // max_points is NOT immutable — it's only a display max, safe to adjust.
+  if (
+    (input.grading?.mode ?? "auto") !==
+    (targetAssignment.grading?.mode ?? "auto")
+  ) {
+    throw new Error(
+      `grading mode cannot be changed after creation (assignment "${slug}"): scores already recorded under the old grading mode would be misread. Create a new assignment under a different slug instead.`,
     )
   }
 
@@ -440,16 +461,6 @@ async function buildAssignmentEntry(
     if (input.pass_threshold !== undefined) {
       throw new Error(
         "no_autograder: teacher-supplied CI can't have a passing threshold — no shim autogrades.",
-      )
-    }
-    if (input.submission_mode && input.submission_mode !== "every-push") {
-      throw new Error(
-        "no_autograder: teacher-supplied CI can't set a submission mode — no shim exists to trigger.",
-      )
-    }
-    if (input.submission_tags && input.submission_tags.length > 0) {
-      throw new Error(
-        "no_autograder: teacher-supplied CI can't set milestone tags — no shim exists to trigger.",
       )
     }
   }
@@ -769,16 +780,13 @@ async function buildAssignmentEntry(
   // submission_mode: omit the wire default (every-push) so an untouched
   // assignment stays byte-identical, mirroring the CLI's omitempty collapse.
   // Validate against the enum so a bad value can't produce a file the CLI
-  // refuses to parse; reject alongside empty_repo (no shim exists to trigger).
+  // refuses to parse. Permitted for every repo shape (including empty_repo /
+  // no_autograder): with no shim it carries no trigger, but it still defines
+  // what the submissions page counts as a submission.
   if (input.submission_mode && input.submission_mode !== "every-push") {
     if (!SUBMISSION_MODES.includes(input.submission_mode)) {
       throw new Error(
         `submission_mode: must be one of ${SUBMISSION_MODES.join(", ")} (got "${input.submission_mode}").`,
-      )
-    }
-    if (input.empty_repo) {
-      throw new Error(
-        "submission_mode: mutually exclusive with empty_repo — a bare repo has no autograde shim to trigger.",
       )
     }
     entry.submission_mode = input.submission_mode
@@ -786,18 +794,47 @@ async function buildAssignmentEntry(
 
   // submission_tags: omit when empty (no milestone tags — today's behavior),
   // mirroring the CLI's omitempty. Validate so a bad pattern can't produce a
-  // file the CLI refuses to parse; reject alongside empty_repo (no shim).
+  // file the CLI refuses to parse. Permitted for every repo shape: with a shim
+  // they widen the trigger; without one they are the submissions-page detection
+  // definition.
   if (input.submission_tags && input.submission_tags.length > 0) {
     const tagsError = validateSubmissionTags(input.submission_tags)
     if (tagsError) {
       throw new Error(`submission_tags: ${tagsError}`)
     }
-    if (input.empty_repo) {
+    entry.submission_tags = [...input.submission_tags]
+  }
+
+  // grading: omit when it resolves to plain auto with no max (today's behavior),
+  // mirroring the CLI's omitempty. Validate mode against the enum and require a
+  // whole-number max >= 1 for manual (a 0 max is the ungraded sentinel); reject
+  // max_points for off/auto. Orthogonal to the autograding tri-state, so no
+  // empty_repo/no_autograder cross-check here.
+  if (input.grading && input.grading.mode !== "auto") {
+    if (!GRADING_MODES.includes(input.grading.mode)) {
       throw new Error(
-        "submission_tags: mutually exclusive with empty_repo — a bare repo has no autograde shim to trigger.",
+        `grading.mode: must be one of ${GRADING_MODES.join(", ")} (got "${input.grading.mode}").`,
       )
     }
-    entry.submission_tags = [...input.submission_tags]
+    if (input.grading.mode === "manual") {
+      const max = input.grading.max_points
+      if (
+        typeof max !== "number" ||
+        !Number.isInteger(max) ||
+        max < GRADING_MAX_POINTS_MIN
+      ) {
+        throw new Error(
+          `grading.max_points: must be a whole number >= ${GRADING_MAX_POINTS_MIN} for manual grading (got ${String(max)}).`,
+        )
+      }
+      entry.grading = { mode: "manual", max_points: max }
+    } else {
+      // "off" — no max_points.
+      entry.grading = { mode: input.grading.mode }
+    }
+  } else if (input.grading?.max_points !== undefined) {
+    // Defensive: an auto/absent grading must not carry max_points.
+    throw new Error("grading.max_points: only valid for manual grading.")
   }
 
   // repo_features: write only the keys the teacher set (undefined = inherit),

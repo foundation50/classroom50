@@ -24,7 +24,6 @@ import {
   TablePagination,
   rtlFlip,
 } from "@/components/ui"
-import { scoreTone } from "@/pages/submissions/dashboard"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
 import type { SubmissionSort } from "@/pages/submissions/dashboard"
 import {
@@ -50,6 +49,9 @@ import {
   RepoRowActions,
 } from "@/pages/submissions/SubmissionsRowActions"
 import { ManageSubmissionModal } from "@/pages/submissions/ManageSubmissionModal"
+import { ScoreBadge as SharedScoreBadge } from "@/pages/submissions/ScoreBadge"
+import { ManualGradeCell } from "@/pages/submissions/ManualGradeCell"
+import type { ManualGradeContext } from "@/pages/submissions/ManualGradeCell"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
@@ -63,30 +65,10 @@ const formatDateTime = (datetime: string) =>
     timeStyle: "short",
   })
 
-// Score chip via the shared scoreTone recipe (one mapping for table + history):
-// success/error tone for graded rows, neutral ghost for ungraded.
-const ScoreBadge = ({
-  score,
-  max,
-  thresholdFraction,
-  size,
-}: {
-  score: number
-  max: number
-  thresholdFraction: number | null
-  size?: "xs" | "sm" | "md"
-}) => {
-  const t = scoreTone(score, max, thresholdFraction)
-  return (
-    <Badge
-      size={size}
-      ghost={"ghost" in t && t.ghost}
-      tone={"tone" in t ? t.tone : "neutral"}
-    >
-      {score}/{max}
-    </Badge>
-  )
-}
+// Score chip: the shared ScoreBadge (one recipe, one source — see
+// ./ScoreBadge). Imported rather than re-implemented so the manual-grade cell
+// and this table can't drift.
+const ScoreBadge = SharedScoreBadge
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
@@ -230,6 +212,7 @@ const SubmissionsTable = ({
   emptyRepo = false,
   submissionMode,
   submissionTags,
+  manualGrade,
   canPauseAutograding = false,
   initialLoading = false,
   nonSubmittersLoading = false,
@@ -274,6 +257,10 @@ const SubmissionsTable = ({
   submissionMode?: SubmissionMode
   // The assignment's milestone submission_tags for the same action.
   submissionTags?: string[]
+  // When set, the assignment is graded MANUALLY and the viewer may enter/edit
+  // scores inline. Carries the write context (org/classroom/assignment/type/
+  // max points). Omitted for autograded assignments or a viewer who can't write.
+  manualGrade?: ManualGradeContext
   // Whether the per-row Pause/Resume-autograding action applies. Gated by the
   // page (owner + individual + resolved default-autograder), matching the bulk
   // pause/resume gate so the row and menu entry points stay in lockstep — the
@@ -460,16 +447,44 @@ const SubmissionsTable = ({
               >
                 —
               </span>
+            ) : manualGrade && !(isGroup && rest.pending) ? (
+              // A pending GROUP row comes from the live/detection overlay before
+              // collection, so its `usernames` is just the founder ([owner]) —
+              // the real members aren't known yet. Grading it here would write
+              // member_usernames:[founder] and mis-credit the group (the other
+              // members would read as non-submitters and never see the grade),
+              // so fall through to the pending badge until collection resolves
+              // the member list. Individual pending rows and any collected group
+              // row are safe to grade inline.
+              <ManualGradeCell
+                owner={rest.owner}
+                score={score}
+                max={rest["max-score"]}
+                hasGrade={!rest.pending}
+                thresholdFraction={passBar}
+                ctx={{ ...manualGrade, memberUsernames: usernames }}
+              />
             ) : rest.pending ? (
               <Badge ghost title={t("submissions.table.pendingGradeTitle")}>
                 {t("submissions.table.pendingGrade")}
               </Badge>
             ) : (
-              <ScoreBadge
-                score={score}
-                max={rest["max-score"]}
-                thresholdFraction={passBar}
-              />
+              <div className="flex items-center gap-1.5">
+                <ScoreBadge
+                  score={score}
+                  max={rest["max-score"]}
+                  thresholdFraction={passBar}
+                />
+                {rest.overridden ? (
+                  <Badge
+                    ghost
+                    size="sm"
+                    title={t("submissions.table.overriddenTitle")}
+                  >
+                    {t("submissions.table.overridden")}
+                  </Badge>
+                ) : null}
+              </div>
             )}
           </td>
           <td>
@@ -737,6 +752,7 @@ const SubmissionsTable = ({
                     acceptedUsernames={acceptedUsernames}
                     onProfile={setProfileUsername}
                     actions={actions}
+                    manualGrade={manualGrade}
                   />
                 )
               }

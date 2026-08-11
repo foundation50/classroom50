@@ -1101,6 +1101,8 @@
     "form": {
       "detailsSection": "Details",
       "repositorySetupSection": "Repository Setup",
+      "submissionSection": "Submission and Grading",
+      "submissionSectionHelp": "Define what counts as a submission for this assignment — when the autograder runs and which tags a student can push to submit.",
       "repositoryFeaturesSection": "Repository Features",
       "scheduleSection": "Schedule",
       "sectionStatus": {
@@ -1130,7 +1132,6 @@
       "typeGroup": "Group project",
       "maxGroupSize": "Max group size",
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
-      "customTriggersHeading": "Custom triggers",
       "extensions": {
         "label": "Per-student extensions (coming soon)",
         "help": "Grant individual students or groups a later due date. Not yet available."
@@ -1175,32 +1176,52 @@
       },
       "autograding": {
         "label": "Autograding",
-        "modeLabel": "Autograding mode",
-        "lockedHelp": "The autograding mode can't be changed after creation: repositories students already accepted are not retrofitted with (or stripped of) the autograding workflow.",
+        "notAutogradedNote": "Autograding options apply only when this assignment is set to \"Autograded\" in the Submission and Grading section above. Change the grading choice to Autograded to configure the autograder.",
+        "modeLabel": "Built-in autograder",
+        "lockedHelp": "Whether the built-in autograder is used can't be changed after creation: repositories students already accepted are not re-provisioned.",
         "choices": {
-          "built-in": {
-            "label": "Built-in autograder",
-            "help": "Classroom 50 adds its autograding workflow to each repo. Configure triggers, runtime, and tests below."
-          },
           "none": {
-            "label": "No built-in autograder",
-            "help": "Classroom 50 adds no autograding workflow. A templated repo can supply its own GitHub Actions CI; an empty repo has none. Scores are not collected."
+            "label": "Do not use the built-in autograder",
+            "help": "No autograder shim is committed. With a template, supply your own workflow in the template (it must publish a result.json asset on the submission release). Without a template, the repository simply has no autograder."
+          },
+          "built-in": {
+            "label": "Use the built-in autograder",
+            "help": "Commit the built-in autograder shim, then configure the runtime and declarative tests below."
           }
         }
       },
-      "submissionMode": {
-        "label": "Autograding trigger",
-        "help": "When the autograder runs. \"Every push\" grades each push to the default branch. \"On submit only\" grades only when a student submits (with gh student submit) or pushes a submit/* tag — regular pushes cost no Actions minutes, which matters for large classes.",
-        "editWarning": "Changing the trigger only affects repositories created from now on. Repositories students already accepted keep the old trigger until you update them — use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
+      "grading": {
+        "label": "Grading",
+        "help": "How this assignment is graded. \"Autograded\" runs the autograder you configure below. \"Manual\" lets you enter each student's score by hand on the submissions page. \"Not graded\" records no score. Can't be changed after the assignment is created.",
+        "editWarning": "The grading mode can't be changed after creation: scores already recorded under the old mode would be misread. Create a new assignment under a different slug instead.",
+        "autoNote": "This assignment is autograded. Configure the autograder in the Autograding section below. Whether you use the built-in autograder or supply your own workflow, it must publish a result.json asset on the submission release — that file is what the app reads to show scores.",
         "choices": {
-          "everyPush": "Every push (default)",
-          "tag": "On submit only"
+          "off": "Not graded",
+          "auto": "Autograded",
+          "manual": "Manual (enter scores by hand)"
+        },
+        "maxPoints": {
+          "label": "Max points",
+          "help": "Total points available for this manual assignment. Used to show each student's score out of the maximum."
+        }
+      },
+      "submissions": {
+        "heading": "Submissions",
+        "help": "How the submissions page detects and counts each student's work. The autograder uses the same definition."
+      },
+      "submissionMode": {
+        "label": "Submission type",
+        "help": "\"Every push to the default branch\" counts each push (other than the starting commit). \"A tagged commit\" counts only tagged commits — a student submits with gh student submit or by pushing a tag, so ordinary pushes cost no Actions minutes.",
+        "editWarning": "Changing this only affects repositories created from now on. Repositories students already accepted keep the old setting until you update them — use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
+        "choices": {
+          "everyPush": "Every push to the default branch",
+          "tag": "A tagged commit"
         }
       },
       "submissionTags": {
-        "label": "Milestone submission tags",
-        "help": "Optional tag names (one per line) that also trigger grading — e.g. phase1, phase2, complete. A student pushing a matching tag (git tag phase1 && git push origin phase1) gets that commit graded; the graded record still appears as a submit/* release. Simple globs like v* work too. Leave empty for none.",
-        "wildcardCaution": "A broad pattern like v* grades every matching tag a student pushes, including unrelated release tags. Prefer exact milestone names like phase1.",
+        "label": "Submission tags",
+        "help": "Optional tag names (one per line) whose commits also count — e.g. phase1, phase2. Patterns like v* match a family of tags. Leave empty for none.",
+        "wildcardCaution": "A broad pattern like v* matches every tag a student pushes, including unrelated release tags. Prefer exact names like phase1.",
         "commaHint": "Put one tag per line, not a comma-separated list — a comma becomes part of the tag name and will be rejected."
       },
       "repoFeatures": {
@@ -1300,6 +1321,8 @@
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
         "studentPermissionInvalid": "Student repo access must be one of pull, triage, push, maintain, or admin.",
         "submissionModeInvalid": "Autograding trigger must be \"every-push\" or \"tag\".",
+        "gradingModeInvalid": "Grading must be \"off\", \"auto\", or \"manual\".",
+        "gradingMaxPointsInvalid": "Max points must be a whole number of at least {{min}}.",
         "releaseAssetsTooMany": "Choose at most {{max}} submission release files (currently {{count}}).",
         "releaseAssetsTooLarge": "Submission release file paths may total at most {{max}} UTF-8 bytes (8 KiB); currently {{bytes}}.",
         "releaseAssetsInvalidPath": "{{path}} is not an exact workspace-relative file path.",
@@ -2441,6 +2464,8 @@
       "loading": "Loading submissions…",
       "pendingGrade": "Pending",
       "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Sync submissions now\" or wait for the nightly collection.",
+      "overridden": "Manual",
+      "overriddenTitle": "This score was set by hand and won't be changed by autograding until the override is cleared.",
       "notSubmitted": "Not submitted",
       "acceptedAwaiting": "Accepted · awaiting submission",
       "notAccepted": "Not accepted",
@@ -2450,6 +2475,17 @@
       "review": "Review",
       "reviewAria": "Open feedback pull request",
       "fullHistory": "Open the <repoLink>repository</repoLink> for the full commit history."
+    },
+    "manualGrade": {
+      "notGraded": "Not graded",
+      "add": "Add grade",
+      "edit": "Edit grade",
+      "addLabel": "Add grade for {{name}}",
+      "editLabel": "Edit grade for {{name}}",
+      "inputLabel": "Score for {{name}}",
+      "required": "Enter a score to save.",
+      "range": "Score must be a whole number from 0 to {{max}}.",
+      "saveError": "Couldn't save the grade. Check your connection and try again."
     },
     "reviewModal": {
       "errorTitle": "Couldn't check for a feedback PR",

@@ -3,19 +3,21 @@ import { FormField } from "@/components/ui"
 import type { AssignmentForm } from "../assignmentFormModel"
 import type { AutogradingState } from "@/domain/assignments/autogradingState"
 
-// The autograding selector (assignment-form IA overhaul U3/U7). Two radios in
-// this order:
-//   - none      : no built-in autograder. Templated -> teacher-supplied CI
-//                 (no_autograder on the wire). Uninitialized (empty) repo ->
-//                 there's simply no autograder (empty_repo on the wire). This
-//                 is the FIRST option and the default.
-//   - built-in  : the default-shim path; reveals triggers / advanced / tests
-//                 (gated by the caller on autograding_state === "built-in").
+// The built-in-autograder selector inside the Autograding section. Only shown
+// once grading is "Autograded" (the section swaps to a note otherwise), it
+// offers two radios in this order — "none" first and DEFAULT:
+//   - none      : do NOT use the built-in autograder. Templated -> teacher-
+//                 supplied CI (no_autograder on the wire); template-less ->
+//                 there's simply no autograder (empty_repo / a plain repo).
+//   - built-in  : the default-shim path; reveals the advanced settings and
+//                 declarative tests (the caller gates those on
+//                 deriveFormShape().showBuiltInConfig).
 //
 // Built-in is selectable on ANY repository source, including a no-template
 // no-README repo: on that source, picking built-in commits the shim onto an
 // initialized repo (the init_shim wire state) rather than leaving it bare. The
-// wire mapping (deriveFormShape + toSubmitValues) folds it to init_shim.
+// wire mapping (deriveFormShape + toSubmitValues) folds it to init_shim /
+// no_autograder accordingly.
 //
 // Immutable after creation: the none<->built-in choice maps to no_autograder /
 // init_shim, which the domain layer rejects changing on edit (already-accepted

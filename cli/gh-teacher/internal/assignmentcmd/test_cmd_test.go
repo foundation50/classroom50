@@ -798,6 +798,39 @@ func TestRunAssignmentAdd_PreservesReleaseAssets(t *testing.T) {
 	}
 }
 
+// TestRunAssignmentAdd_PreservesGrading guards the grading carry-forward: a
+// same-slug re-add WITHOUT a grading flag (the CLI has none) must keep a prior
+// GUI-authored grading block. grading was promoted to a known key, so it no
+// longer rides through Extra; without the carry-forward the upsert would drop a
+// manual-grading assignment back to auto and lose its max_points.
+func TestRunAssignmentAdd_PreservesGrading(t *testing.T) {
+	seeded := `{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [{
+    "slug": "hello",
+    "name": "Hello",
+    "template": {"owner":"cs50","repo":"hello-template","branch":"main"},
+    "mode": "individual",
+    "autograder": "default",
+    "grading": {"mode": "manual", "max_points": 50}
+  }]
+}`
+	server, fix := newTestCmdServer(t, seeded, false)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout, stderr bytes.Buffer
+	if err := runAssignmentAdd(client, &stdout, &stderr, helloAddParams()); err != nil {
+		t.Fatalf("runAssignmentAdd: %v", err)
+	}
+	got := decodeCommitted(t, fix).Assignments[0].Grading
+	if got == nil {
+		t.Fatalf("grading block dropped on re-add")
+	}
+	if got.Mode != "manual" || got.MaxPoints == nil || *got.MaxPoints != 50 {
+		t.Fatalf("grading = %+v (max_points %v), want mode manual / max_points 50", got, got.MaxPoints)
+	}
+}
+
 func TestRunAssignmentAdd_RetryDoesNotResurrectPreservedFieldsAfterConcurrentDelete(t *testing.T) {
 	seeded := `{
   "schema": "classroom50/assignments/v1",

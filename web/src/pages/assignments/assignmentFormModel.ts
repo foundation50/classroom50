@@ -48,6 +48,7 @@ import type {
   RepoPermission,
   RepoFeatures,
   SubmissionMode,
+  GradingMode,
 } from "@/types/classroom"
 import {
   GROUP_SIZE_MAX,
@@ -57,7 +58,12 @@ import {
   PASS_THRESHOLD_MIN,
   REPO_PERMISSIONS,
   SUBMISSION_MODES,
+  GRADING_MODES,
+  GRADING_MAX_POINTS_MIN,
 } from "@/types/classroom"
+
+// Default manual max-points shown when a teacher first picks manual grading.
+const DEFAULT_GRADING_MAX_POINTS = 100
 
 // Which runtime environment the Advanced Settings form is configuring. A UI-
 // only discriminator (not a wire field): "hosted" = a GitHub Actions runner
@@ -107,12 +113,15 @@ export type CreateAssignmentFormValues = {
   // template. Default off.
   include_all_branches: boolean
   // UI-only autograding tri-state (never sent verbatim; mapped to wire fields
-  // on submit): "empty" (bare repo — driven by empty_repo), "none" (templated,
-  // teacher-supplied CI — maps to no_autograder: true, no shim), "built-in"
-  // (the default-shim path with triggers/advanced/tests). Read from the stored
-  // entry via deriveAutogradingState; on submit "none" writes no_autograder and
-  // clears the built-in-only fields, "built-in" clears no_autograder. Mirrors
-  // the runtime_env UI-only-discriminator idiom.
+  // on submit): "empty" (bare repo — driven by empty_repo), "none" (no built-in
+  // autograder — teacher-supplied CI on a template maps to no_autograder: true,
+  // a template-less repo just carries no shim), "built-in" (the default-shim
+  // path with advanced/tests). It is the built-in-autograder toggle inside the
+  // Autograding section, offered only when grading_choice is "auto" and default
+  // "none". Read from the stored entry via deriveAutogradingState; on submit the
+  // wire no_autograder/init_shim are derived from deriveFormShape (which also
+  // requires grading_choice === "auto"). Mirrors the runtime_env
+  // UI-only-discriminator idiom.
   autograding_state: AutogradingState
   // UI-only: which runtime environment the teacher is configuring. Selects
   // which fields render and get written; never sent to the wire. "hosted" uses
@@ -154,6 +163,16 @@ export type CreateAssignmentFormValues = {
   // Raw textarea text (one milestone tag pattern per line); parsed to
   // string[] on save, joined back on read. Empty = no milestone tags.
   submission_tags: string
+  // The teacher's grading intent: "off" (not graded), "auto" (autograded — the
+  // default), or "manual" (teacher enters scores on the submissions page).
+  // Maps to the wire grading.mode; ABSENT on the wire reads as "auto". Shown
+  // regardless of the autograding tri-state (a bare/teacher-CI repo can still
+  // be graded manually).
+  grading_choice: GradingMode
+  // Total points for a manual assignment; only meaningful when
+  // grading_choice === "manual" (cleared on submit otherwise). Maps to the wire
+  // grading.max_points (>= 1).
+  grading_max_points: number
   // Per-feature repo override, tri-state (one control shape regardless of
   // template): "inherit" writes no key (absent = inherit the template when
   // templated, else GitHub's own create default), "on"/"off" force the feature.
@@ -417,12 +436,31 @@ export function validateAssignmentForm(
   }
 
   // Mirror the CLI's ValidateSubmissionTags so a bad pattern can't reach the
-  // file (the util returns its own user-readable message).
-  const submissionTagsError = validateSubmissionTags(
-    parseSubmissionTags(value.submission_tags),
-  )
-  if (submissionTagsError) {
-    errors.submission_tags = submissionTagsError
+  // file (the util returns its own user-readable message). Only validated in
+  // "tag" mode: the tags field is hidden and cleared on submit for every-push,
+  // so a stale value there must not raise an error the teacher can't see to fix.
+  if (value.submission_mode === "tag") {
+    const submissionTagsError = validateSubmissionTags(
+      parseSubmissionTags(value.submission_tags),
+    )
+    if (submissionTagsError) {
+      errors.submission_tags = submissionTagsError
+    }
+  }
+
+  // Guard the grading picker against a hand-tampered value.
+  if (!GRADING_MODES.includes(value.grading_choice)) {
+    errors.grading_choice = t("assignments.form.validation.gradingModeInvalid")
+  } else if (value.grading_choice === "manual") {
+    // Manual grading needs a whole-number max >= 1 (a 0 max is the ungraded
+    // sentinel the submissions UI divides by). Mirrors the CLI ValidateGrading.
+    const max = Number(value.grading_max_points)
+    if (!Number.isInteger(max) || max < GRADING_MAX_POINTS_MIN) {
+      errors.grading_max_points = t(
+        "assignments.form.validation.gradingMaxPointsInvalid",
+        { min: GRADING_MAX_POINTS_MIN },
+      )
+    }
   }
 
   return errors
@@ -485,10 +523,24 @@ export function toSubmitValues(
     pass_threshold_enabled: noBuiltIn ? false : value.pass_threshold_enabled,
     pass_threshold: Number(value.pass_threshold),
     student_permission: value.student_permission,
-    // No shim (bare repo OR teacher-supplied CI) means no trigger to configure;
-    // clear a stale pick on submit (mirrors the other grading-adjacent clears).
-    submission_mode: noBuiltIn ? "every-push" : value.submission_mode,
-    submission_tags: noBuiltIn ? "" : value.submission_tags,
+    // The submission MODE is how the app identifies submissions and is valid
+    // for every repo shape (with a shim it also drives the trigger; without one
+    // it's the detection definition), so it is NOT cleared by noBuiltIn.
+    submission_mode: value.submission_mode,
+    // Tags only refine the "tagged commit" mode, and the form hides the field
+    // in every-push mode — so clear any stale value there to keep the wire
+    // consistent with what the teacher sees (no hidden tags persisting).
+    submission_tags:
+      value.submission_mode === "tag" ? value.submission_tags : "",
+    // Grading intent is orthogonal to the autograding tri-state (a bare or
+    // teacher-CI repo can still be graded manually), so it is NOT cleared by
+    // noBuiltIn. Only the manual max-points is normalized: kept when manual,
+    // reset otherwise so a stale value can't reach the wire.
+    grading_choice: value.grading_choice,
+    grading_max_points:
+      value.grading_choice === "manual"
+        ? Number(value.grading_max_points)
+        : DEFAULT_GRADING_MAX_POINTS,
     // Uniform tri-state controls; "inherit" is the default and resolves to the
     // template's feature (templated) or GitHub's own create default (template-
     // less) at accept time, so no template-dependent default-flip is needed here.
@@ -547,6 +599,12 @@ export const useAssignmentForm = (
       student_permission: defaultValues?.student_permission ?? "",
       submission_mode: defaultValues?.submission_mode ?? "every-push",
       submission_tags: defaultValues?.submission_tags || "",
+      // Create default is "off" (not graded); the option order is off ->
+      // manual -> auto. On edit, assignmentToFormValues supplies the stored
+      // choice (absent grading reads as "auto" for pre-existing assignments).
+      grading_choice: defaultValues?.grading_choice ?? "off",
+      grading_max_points:
+        defaultValues?.grading_max_points ?? DEFAULT_GRADING_MAX_POINTS,
       repo_feature_issues: defaultValues?.repo_feature_issues ?? "inherit",
       repo_feature_wiki: defaultValues?.repo_feature_wiki ?? "inherit",
       repo_feature_projects: defaultValues?.repo_feature_projects ?? "inherit",
@@ -653,6 +711,11 @@ export const assignmentToFormValues = (
     submission_mode: assignment.submission_mode ?? "every-push",
     // Milestone tag patterns, joined one-per-line for the textarea.
     submission_tags: submissionTagsToText(assignment.submission_tags),
+    // Grading intent; absent reads as "auto" (today's behavior). A stored
+    // manual max seeds the input, else the default (only used once manual).
+    grading_choice: assignment.grading?.mode ?? "auto",
+    grading_max_points:
+      assignment.grading?.max_points ?? DEFAULT_GRADING_MAX_POINTS,
     // Read mapping: absent object/key -> "inherit", true -> "on", false ->
     // "off", per key, so a stored "off" round-trips instead of reverting.
     repo_feature_issues: repoFeatureChoice(assignment.repo_features?.issues),

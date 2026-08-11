@@ -244,6 +244,7 @@ describe("submission release files visibility", () => {
         <CreateAssignmentForm
           defaultValues={{
             add_readme: true,
+            grading_choice: "auto",
             autograding_state: "built-in",
             ...defaultValues,
           }}
@@ -325,6 +326,7 @@ describe("assignment setup timeout", () => {
             name: "Homework",
             slug: "hw1",
             add_readme: true,
+            grading_choice: "auto",
             autograding_state: "built-in",
           }}
           onSubmit={onSubmit}
@@ -433,6 +435,7 @@ describe("self-hosted disables built-in runtime options", () => {
         <CreateAssignmentForm
           defaultValues={{
             add_readme: true,
+            grading_choice: "auto",
             autograding_state: "built-in",
             ...defaultValues,
           }}
@@ -468,7 +471,7 @@ describe("self-hosted disables built-in runtime options", () => {
 // The autograding selector: "No built-in autograder" first + default; built-in
 // requires an initialized repo (README or template) and is disabled while the
 // repo is uninitialized; the none<->built-in choice is immutable on edit.
-describe("autograding selector", () => {
+describe("grading drives the autograding config", () => {
   const renderForm = (
     props: {
       edit?: boolean
@@ -485,98 +488,102 @@ describe("autograding selector", () => {
       </QueryClientProvider>,
     )
 
-  const radios = (container: HTMLElement) => ({
-    builtIn: container.querySelector<HTMLInputElement>(
-      "#autograding_state-built-in",
-    ),
-    none: container.querySelector<HTMLInputElement>("#autograding_state-none"),
-  })
-
-  it("create default (empty repo): none selected, built-in still selectable (init_shim)", () => {
-    // The fresh create form defaults to an uninitialized repo (README off) with
-    // "No built-in autograder" selected — but built-in is now SELECTABLE
-    // (picking it commits a shim onto the repo, the init_shim state).
+  it("create default is 'off' (not graded): no autograding config, shows the note", () => {
     const { container } = renderForm()
-    const { builtIn, none } = radios(container)
-    expect(none?.checked).toBe(true)
-    expect(builtIn?.disabled).toBe(false)
+    // The grading select defaults to "off".
+    const grading =
+      container.querySelector<HTMLSelectElement>("#grading_choice")
+    expect(grading?.value).toBe("off")
+    // Autograding config (Advanced release_assets, tests) is hidden; the
+    // not-autograded note is shown instead.
+    expect(container.querySelector("#release_assets")).toBeNull()
     expect(
-      screen.queryByText("assignments.form.autograding.builtInNeedsInit"),
-    ).toBeNull()
-  })
-
-  it("initialized repo (README on): both choices enabled", () => {
-    const { container } = renderForm({
-      defaultValues: { repo_source: "none", add_readme: true },
-    })
-    const { builtIn, none } = radios(container)
-    expect(builtIn?.disabled).toBe(false)
-    expect(none?.disabled).toBe(false)
-  })
-
-  it("none is the first option", () => {
-    const { container } = renderForm({
-      defaultValues: { repo_source: "none", add_readme: true },
-    })
-    const inputs = Array.from(
-      container.querySelectorAll<HTMLInputElement>(
-        "input[name='autograding_state']",
-      ),
-    )
-    expect(inputs[0]?.value).toBe("none")
-    expect(inputs[1]?.value).toBe("built-in")
-  })
-
-  it("edit: locks both choices and shows the immutability note", () => {
-    const { container } = renderForm({
-      edit: true,
-      defaultValues: assignmentToFormValues(baseAssignment),
-    })
-    const { builtIn, none } = radios(container)
-    expect(builtIn?.disabled).toBe(true)
-    expect(none?.disabled).toBe(true)
-    expect(
-      screen.getByText("assignments.form.autograding.lockedHelp"),
+      screen.getByText("assignments.form.autograding.notAutogradedNote"),
     ).not.toBeNull()
   })
 
-  it("edit: a stored no_autograder assignment opens on the 'none' choice, locked", () => {
+  it("Manual grading also hides the autograding config", () => {
     const { container } = renderForm({
-      edit: true,
-      defaultValues: assignmentToFormValues({
-        ...baseAssignment,
-        template: { owner: "acme", repo: "starter", branch: "main" },
-        no_autograder: true,
-      }),
+      defaultValues: { grading_choice: "manual", grading_max_points: 50 },
     })
-    const { builtIn, none } = radios(container)
-    expect(none?.checked).toBe(true)
-    expect(builtIn?.checked).toBe(false)
-    expect(none?.disabled).toBe(true)
+    expect(container.querySelector("#release_assets")).toBeNull()
+    expect(
+      screen.getByText("assignments.form.autograding.notAutogradedNote"),
+    ).not.toBeNull()
   })
 
-  it("stored empty_repo on edit: radios locked, none selected", () => {
-    // A stored bare repo opens on "none" (derived), and the radios are locked
-    // on edit like every immutable field.
+  it("Autograded shows the built-in toggle; config stays hidden until built-in is selected", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm({
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "auto",
+      },
+    })
+    // Autograded offers the built-in-autograder toggle instead of the note.
+    expect(
+      screen.queryByText("assignments.form.autograding.notAutogradedNote"),
+    ).toBeNull()
+    expect(
+      screen.getByRole("radio", {
+        name: /assignments\.form\.autograding\.choices\.none\.label/,
+      }),
+    ).not.toBeNull()
+    // Built-in is off by default, so the config (release_assets) is hidden.
+    expect(container.querySelector("#release_assets")).toBeNull()
+
+    // Selecting "Use the built-in autograder" reveals the config.
+    await user.click(
+      screen.getByRole("radio", {
+        name: /assignments\.form\.autograding\.choices\.built-in\.label/,
+      }),
+    )
+    expect(container.querySelector("#release_assets")).not.toBeNull()
+  })
+
+  it("Autograded + built-in preselected reveals the autograding config", () => {
+    const { container } = renderForm({
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "auto",
+        autograding_state: "built-in",
+      },
+    })
+    expect(container.querySelector("#release_assets")).not.toBeNull()
+    expect(
+      screen.queryByText("assignments.form.autograding.notAutogradedNote"),
+    ).toBeNull()
+  })
+
+  it("locks the built-in autograder radios on edit (the choice is immutable)", () => {
+    // On edit the built-in choice maps to no_autograder/init_shim, which the
+    // domain layer refuses to change after creation, so the radios render
+    // disabled with the locked-help note.
     const { container } = renderForm({
       edit: true,
-      defaultValues: assignmentToFormValues({
-        ...baseAssignment,
-        empty_repo: true,
-      }),
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "auto",
+        autograding_state: "built-in",
+      },
     })
-    const { builtIn, none } = radios(container)
-    expect(none?.checked).toBe(true)
-    expect(builtIn?.disabled).toBe(true)
+    const radios = container.querySelectorAll<HTMLInputElement>(
+      'input[name="autograding_state"]',
+    )
+    expect(radios.length).toBe(2)
+    radios.forEach((radio) => expect(radio.disabled).toBe(true))
     expect(
       screen.getByText("assignments.form.autograding.lockedHelp"),
     ).not.toBeNull()
   })
 })
 
-// The five-section IA (R1/R2): the sections render in order with a status badge
+// The section IA (R1/R2): the sections render in order with a status badge
 // each, and the two deferred affordances (R6/R14) render inert.
-describe("assignment form five-section IA", () => {
+describe("assignment form section IA", () => {
   const renderForm = (props: {
     edit?: boolean
     defaultValues?: Partial<CreateAssignmentFormValues>
@@ -591,34 +598,110 @@ describe("assignment form five-section IA", () => {
       </QueryClientProvider>,
     )
 
-  const sectionTitleKeys = [
+  // The Submission and Grading section now always renders (grading applies to
+  // any assignment), between Repository Setup and Autograding.
+  const baseSectionTitleKeys = [
     "assignments.form.detailsSection",
     "assignments.form.repositorySetupSection",
+    "assignments.form.submissionSection",
     "assignments.form.autograding.label",
     "assignments.form.repositoryFeaturesSection",
     "assignments.form.scheduleSection",
   ]
 
-  it("renders the five sections in order for create", () => {
+  it("renders the sections in order for create", () => {
     renderForm({})
     const headings = screen
       .getAllByRole("heading", { level: 3 })
       .map((h) => h.textContent)
     // The section headings appear in the required order (other h3s may exist
-    // inside sections, so assert the five titles are a subsequence).
-    const indices = sectionTitleKeys.map((key) => headings.indexOf(key))
+    // inside sections, so assert the titles are a subsequence).
+    const indices = baseSectionTitleKeys.map((key) => headings.indexOf(key))
     expect(indices.every((i) => i >= 0)).toBe(true)
     expect([...indices]).toEqual([...indices].sort((a, b) => a - b))
   })
 
-  it("renders the five sections in order for edit", () => {
+  it("renders the sections in order for edit", () => {
     renderForm({
       edit: true,
       defaultValues: assignmentToFormValues(baseAssignment),
     })
-    for (const key of sectionTitleKeys) {
-      expect(screen.getByText(key)).not.toBeNull()
-    }
+    const headings = screen
+      .getAllByRole("heading", { level: 3 })
+      .map((h) => h.textContent)
+    const indices = baseSectionTitleKeys.map((key) => headings.indexOf(key))
+    expect(indices.every((i) => i >= 0)).toBe(true)
+    expect([...indices]).toEqual([...indices].sort((a, b) => a - b))
+  })
+
+  it("shows the submission mode regardless of the grading mode; tags follow the mode", () => {
+    // Grading applies to any assignment, and the submission MODE is how the app
+    // identifies submissions — independent of grading and repo shape — so it
+    // renders even when not autograded. The tags field is shown only for the
+    // "tagged commit" mode (set it here to reveal it).
+    renderForm({
+      defaultValues: {
+        grading_choice: "manual",
+        grading_max_points: 50,
+        submission_mode: "tag",
+      },
+    })
+    expect(
+      screen.getByText("assignments.form.submissionSection"),
+    ).not.toBeNull()
+    expect(screen.getByText("assignments.form.grading.label")).not.toBeNull()
+    expect(
+      screen.getByText("assignments.form.submissionMode.label"),
+    ).not.toBeNull()
+    // Tag mode reveals the milestone-tags field, even without a built-in
+    // autograder (it's the app's detection definition, not shim-only).
+    expect(
+      screen.getByText("assignments.form.submissionTags.label"),
+    ).not.toBeNull()
+  })
+
+  it("shows the submission mode for a bare (empty) repo; tags follow the mode", () => {
+    // A bare repo has no shim, but the mode still drives how the submissions
+    // page counts pushes/tags, so it renders. Tags show only in "tag" mode.
+    renderForm({
+      defaultValues: {
+        repo_source: "none",
+        add_readme: false,
+        grading_choice: "off",
+        submission_mode: "tag",
+      },
+    })
+    expect(
+      screen.getByText("assignments.form.submissionMode.label"),
+    ).not.toBeNull()
+    expect(
+      screen.getByText("assignments.form.submissionTags.label"),
+    ).not.toBeNull()
+  })
+
+  it("hides submission tags in every-push mode and shows them in tag mode", () => {
+    const { rerender } = renderForm({
+      defaultValues: { submission_mode: "every-push" },
+    })
+    // every-push: mode control visible, tags field hidden.
+    expect(
+      screen.getByText("assignments.form.submissionMode.label"),
+    ).not.toBeNull()
+    expect(
+      screen.queryByText("assignments.form.submissionTags.label"),
+    ).toBeNull()
+    // Switching to "A tagged commit" reveals the tags field.
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          defaultValues={{ submission_mode: "tag" }}
+          onSubmit={() => {}}
+        />
+      </QueryClientProvider>,
+    )
+    expect(
+      screen.getByText("assignments.form.submissionTags.label"),
+    ).not.toBeNull()
   })
 
   it("shows a per-section status badge (default on a fresh create form)", () => {

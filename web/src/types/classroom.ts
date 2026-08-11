@@ -100,6 +100,27 @@ export function defaultStudentPermission(mode: AssignmentMode): RepoPermission {
 export const SUBMISSION_MODES = ["every-push", "tag"] as const
 export type SubmissionMode = (typeof SUBMISSION_MODES)[number]
 
+// The teacher's grading intent. Absent reads as "auto" (today's behavior). In
+// lockstep with the CLI's assignments-v1 schema enum and contract.GradingModes
+// (parity-tested by a vitest). Orthogonal to the autograding tri-state and to
+// collection — nothing in the grading pipeline reads it.
+export const GRADING_MODES = ["off", "auto", "manual"] as const
+export type GradingMode = (typeof GRADING_MODES)[number]
+
+// Smallest legal manual max_points. Not 0: a gradebook client divides score by
+// max and treats a 0 max as the "ungraded" sentinel, so a configured manual max
+// must be >= 1. In lockstep with the CLI schema (grading.max_points minimum) and
+// contract.GradingMaxPointsMin.
+export const GRADING_MAX_POINTS_MIN = 1
+
+// A first-class grading choice: off (not graded), auto (autograded), or manual
+// (teacher-entered, requires max_points). In lockstep with the CLI's
+// assignments-v1 `grading` object and the Go Grading struct.
+export type Grading = {
+  mode: GradingMode
+  max_points?: number
+}
+
 // Per-assignment repo feature overrides (tri-state per key: absent = inherit,
 // true = force on, false = force off). The `repo_features` block on Assignment,
 // and the value the create/edit form round-trips. In lockstep with the CLI's
@@ -223,26 +244,37 @@ export type Assignment = {
   // a value below admin is clamped up to admin (a founder must manage members).
   // In lockstep with the CLI's assignments-v1 schema (`student_permission`).
   student_permission?: RepoPermission
-  // When the autograder fires. Absent or "every-push" (the wire default —
-  // writers omit it): the shim grades every default-branch push plus submit/*
-  // tags. "tag": the shim grades ONLY submit/* tag pushes, which both submit
-  // clients create after the branch push — a plain `git push` does not grade.
-  // Baked into the shim at accept time; changing it later requires
-  // retrofitting existing repos' shims (gradebook bulk action or
-  // `gh teacher assignment submission-mode`). Mutually exclusive with
-  // empty_repo (no shim exists). In lockstep with the CLI's assignments-v1
-  // schema enum (`submission_mode`).
+  // What counts as a submission for this assignment — the single source of
+  // truth the Submissions subsection owns, consumed by BOTH the submissions
+  // page (detection/counting) and the autograder (when it fires). Absent or
+  // "every-push" (the wire default — writers omit it): every default-branch
+  // push (minus the baseline commit) counts as a submission, and the shim
+  // grades each one plus submit/* tags. "tag": only submit/* tag pushes count,
+  // which both submit clients create after the branch push — a plain `git push`
+  // does not count or grade. Baked into the shim at accept time; changing it
+  // later requires retrofitting existing repos' shims (gradebook bulk action or
+  // `gh teacher assignment submission-mode`). Permitted on every repo shape,
+  // including empty_repo / no_autograder: with no shim it carries no trigger
+  // but still defines what the submissions page counts as a submission. In
+  // lockstep with the CLI's assignments-v1 schema enum (`submission_mode`).
   submission_mode?: SubmissionMode
   // Teacher-named milestone tag patterns (e.g. ["phase1", "v*"]) that ALSO
-  // trigger grading, alongside the always-on canonical submit/* namespace.
-  // TRIGGERS, not records: the runner still mints/reuses the canonical
-  // submit/* tag at the triggering commit and publishes the Release there.
-  // Baked into the shim at accept time (union with submit/*); changing
+  // count and trigger grading, alongside the always-on canonical submit/*
+  // namespace. TRIGGERS, not records: the runner still mints/reuses the
+  // canonical submit/* tag at the triggering commit and publishes the Release
+  // there. Baked into the shim at accept time (union with submit/*); changing
   // patterns later requires the same shim retrofit as submission_mode.
-  // Empty/absent = no milestone tags. Mutually exclusive with empty_repo.
-  // In lockstep with the CLI's assignments-v1 schema (`submission_tags`);
-  // validation in @/util/submissionTags.
+  // Empty/absent = no milestone tags. Permitted on every repo shape (empty_repo
+  // / no_autograder included): with no shim they are purely the submissions-
+  // page detection definition. In lockstep with the CLI's assignments-v1 schema
+  // (`submission_tags`); validation in @/util/submissionTags.
   submission_tags?: string[]
+  // The teacher's grading intent (off / auto / manual), a first-class GUI
+  // choice. Absent reads as "auto" (today's behavior). Manual carries
+  // max_points (>= 1). Orthogonal to the autograding tri-state and to
+  // collection. In lockstep with the CLI's assignments-v1 schema (`grading`
+  // object) and the Go Grading struct.
+  grading?: Grading
   // Per-assignment repo feature overrides applied to each student repo at
   // accept time, on fresh create only. Each key is tri-state: absent = inherit
   // (a templated assignment carries the template's setting through GitHub's

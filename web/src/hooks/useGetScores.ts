@@ -70,6 +70,11 @@ export type SubmissionRow = {
   late?: boolean
   // Last (re-)graded instant of the latest submission (mirrors submissions[0]).
   gradedAt?: string
+  // The entry carries a teacher override (`override: true` in scores.json): the
+  // latest score was set/frozen by hand rather than (only) autograded. The
+  // table marks it so a hand-entered grade is distinguishable from an
+  // autograded one. Mirrors the collector's per-entry override flag.
+  overridden?: boolean
   // A row with a submission the collector recorded as present but not graded
   // (no score yet) — rendered as "submitted, not yet collected" rather than a
   // 0/0 score. Excluded from graded stats/average and the CSV score column.
@@ -131,7 +136,18 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
           (a, b) =>
             new Date(b.datetime).getTime() - new Date(a.datetime).getTime(),
         )
-      const latest = sorted[0]
+      // For a teacher-overridden entry, the displayed grade must be the manual
+      // override record, not whichever submission sorts newest by datetime — a
+      // real autograded submission's datetime is the student-controllable
+      // committer date and could be future-dated above the override. Prefer the
+      // synthesized manual record (submission tag `submit/manual-*`) when the
+      // entry is overridden; the writer also clamps its datetime to sort first,
+      // so this is defense-in-depth for entries written before that clamp.
+      const overrideRecord =
+        entry.override === true
+          ? sorted.find((s) => s.submission.startsWith("submit/manual-"))
+          : undefined
+      const latest = overrideRecord ?? sorted[0]
 
       const usernames =
         entry.member_usernames && entry.member_usernames.length > 0
@@ -150,6 +166,7 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
         submissionCount: entry.submissions.length,
         late: latest.late,
         gradedAt: latest.graded_at,
+        overridden: entry.override === true,
         submissions: sorted.map((s) => ({
           datetime: s.datetime,
           commit: s.commit,

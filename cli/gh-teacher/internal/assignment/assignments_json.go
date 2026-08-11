@@ -139,7 +139,9 @@ type AssignmentsJSON struct {
 // contract.SubmissionModeTag makes the shim trigger ONLY on submit/* tag
 // pushes, which the submit clients create. Baked into the shim at accept time;
 // changing it later requires retrofitting existing repos' shims (`gh teacher
-// assignment submission-mode`). Mutually exclusive with EmptyRepo (no shim).
+// assignment submission-mode`). Permitted on every repo shape, including
+// EmptyRepo / NoAutograder: with no shim it carries no trigger, but it still
+// defines what the submissions page counts as a submission.
 type AssignmentEntry struct {
 	Slug               string           `json:"slug"`
 	Name               string           `json:"name"`
@@ -163,6 +165,7 @@ type AssignmentEntry struct {
 	AllowedFiles       []string         `json:"allowed_files,omitempty"`
 	ReleaseAssets      []string         `json:"release_assets,omitempty"`
 	PassThreshold      *int             `json:"pass_threshold,omitempty"`
+	Grading            *Grading         `json:"grading,omitempty"`
 	StudentPermission  string           `json:"student_permission,omitempty"`
 	SubmissionMode     string           `json:"submission_mode,omitempty"`
 	SubmissionTags     []string         `json:"submission_tags,omitempty"`
@@ -188,6 +191,7 @@ var knownEntryKeys = map[string]struct{}{
 	"init_shim":            {},
 	"include_all_branches": {},
 	"repo_features":        {},
+	"grading":              {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then strictly
@@ -321,6 +325,49 @@ func ValidatePassThreshold(n *int) error {
 	}
 	if *n < PassThresholdMin || *n > PassThresholdMax {
 		return fmt.Errorf("pass_threshold %d out of range (%d..%d)", *n, PassThresholdMin, PassThresholdMax)
+	}
+	return nil
+}
+
+// Grading records the teacher's grading intent as a first-class choice the GUI
+// surfaces: `auto` (autograded — the default; an absent block reads as auto),
+// `manual` (the teacher records scores by hand on the submissions page), or
+// `off` (not graded). ORTHOGONAL to the autograding tri-state
+// (empty_repo/no_autograder/init_shim) and to collection: nothing in the
+// grading pipeline reads it, so the two axes never need to agree and are not
+// coupled by any exclusion. MaxPoints is a pointer so absent stays distinct
+// from a would-be 0; it is required (and >= 1) for manual, forbidden otherwise.
+type Grading struct {
+	Mode      string `json:"mode"`
+	MaxPoints *int   `json:"max_points,omitempty"`
+}
+
+// GradingMaxPointsMin is the smallest legal manual max_points. Not 0: a
+// gradebook client divides score by max to show passing/failing and to tally
+// stats, and treats a 0 max as the "ungraded" sentinel — so a configured
+// manual max must be at least 1.
+const GradingMaxPointsMin = 1
+
+// ValidateGrading checks an optional grading block, mirroring the schema's
+// grading conditionals. A nil pointer (absent) is valid and means auto. When
+// present: mode must be a valid GradingMode; manual requires max_points >= 1;
+// off/auto must omit max_points.
+func ValidateGrading(g *Grading) error {
+	if g == nil {
+		return nil
+	}
+	if !contract.IsValidGradingMode(g.Mode) {
+		return fmt.Errorf("invalid grading.mode %q: must be one of %v", g.Mode, contract.GradingModes)
+	}
+	if g.Mode == contract.GradingModeManual {
+		if g.MaxPoints == nil {
+			return errors.New("grading.mode manual requires grading.max_points")
+		}
+		if *g.MaxPoints < GradingMaxPointsMin {
+			return fmt.Errorf("grading.max_points %d out of range (must be >= %d)", *g.MaxPoints, GradingMaxPointsMin)
+		}
+	} else if g.MaxPoints != nil {
+		return fmt.Errorf("grading.max_points is only valid for manual grading (mode is %q)", g.Mode)
 	}
 	return nil
 }
@@ -862,6 +909,9 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {
 		return err
 	}
+	if err := ValidateGrading(entry.Grading); err != nil {
+		return err
+	}
 	if err := ValidateStudentPermission(entry.StudentPermission); err != nil {
 		return err
 	}
@@ -917,26 +967,21 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 	if entry.PassThreshold != nil {
 		return errors.New("empty_repo is mutually exclusive with pass_threshold (--empty-repo vs --pass-threshold): a bare repo never autogrades")
 	}
-	if entry.SubmissionMode != "" {
-		return errors.New("empty_repo is mutually exclusive with submission_mode (--empty-repo vs --submission-mode): a bare repo has no autograde shim to trigger")
-	}
-	if len(entry.SubmissionTags) > 0 {
-		return errors.New("empty_repo is mutually exclusive with submission_tags (--empty-repo vs --submission-tag): a bare repo has no autograde shim to trigger")
-	}
 	return nil
 }
 
 // validateNoAutograderExclusions rejects the combinations no_autograder rules
-// out. A narrower sibling of empty_repo: it commits no shim (so the
-// grading-adjacent fields are meaningless), and it must not coexist with
-// empty_repo (already shim-less) or a non-default autograder (which fetches a
-// teacher-authored Pages workflow — the opposite of adding nothing). It
-// REQUIRES a template (it is the teacher-supplied-CI state: the template
-// carries the workflows), and UNLIKE empty_repo it permits feedback_pr (a
-// templated repo has a baseline commit). Unlike empty_repo, no_autograder has
-// no `assignment add` flag yet (it is GUI/manifest-set), so error wording names
-// the JSON fields, not a --no-autograder flag; the parse path wraps with the
-// entry context.
+// out. A narrower sibling of empty_repo: it commits no shim, and it must not
+// coexist with empty_repo (already shim-less) or a non-default autograder
+// (which fetches a teacher-authored Pages workflow — the opposite of adding
+// nothing). It REQUIRES a template (it is the teacher-supplied-CI state: the
+// template carries the workflows), and UNLIKE empty_repo it permits feedback_pr
+// (a templated repo has a baseline commit). submission_mode/submission_tags are
+// PERMITTED — with no shim they carry no trigger, but they still define what the
+// submissions page counts as a submission (branch pushes / milestone tags).
+// Unlike empty_repo, no_autograder has no `assignment add` flag yet (it is
+// GUI/manifest-set), so error wording names the JSON fields, not a
+// --no-autograder flag; the parse path wraps with the entry context.
 func validateNoAutograderExclusions(entry AssignmentEntry) error {
 	if entry.Template == nil {
 		return errors.New("no_autograder requires a template: it marks a TEMPLATED assignment as teacher-supplied CI (the template carries its own workflows); a template-less repo has no CI to run — use empty_repo for a bare repo instead")
@@ -958,12 +1003,6 @@ func validateNoAutograderExclusions(entry AssignmentEntry) error {
 	}
 	if entry.PassThreshold != nil {
 		return errors.New("no_autograder is mutually exclusive with pass_threshold: no shim autogrades")
-	}
-	if entry.SubmissionMode != "" {
-		return errors.New("no_autograder is mutually exclusive with submission_mode: no shim exists to trigger")
-	}
-	if len(entry.SubmissionTags) > 0 {
-		return errors.New("no_autograder is mutually exclusive with submission_tags: no shim exists to trigger")
 	}
 	return nil
 }
@@ -1130,6 +1169,9 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {
+		return fmt.Errorf("entry %q: %w", entry.Slug, err)
+	}
+	if err := ValidateGrading(entry.Grading); err != nil {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidateStudentPermission(entry.StudentPermission); err != nil {

@@ -1,17 +1,25 @@
 import type { CreateAssignmentFormValues } from "../assignmentFormModel"
 
-// Per-section status for the five-section IA (R2): a teacher scans the section
-// headers to see progress without reading each section's contents.
+// Per-section status (R2): a teacher scans the section headers to see progress
+// without reading each section's contents.
 //   - "error"      : a field the section owns has a validation error.
 //   - "configured" : no error, and the section holds a non-default value.
 //   - "default"    : no error and every owned field is still at its default.
 export type SectionStatus = "error" | "configured" | "default"
 
-// The five sections, in render order. Each owns a disjoint slice of the form
-// fields; the status derivation keys off these lists so a field belongs to
-// exactly one section's badge.
+// The sections, in render order. Each owns a disjoint slice of the form fields;
+// the status derivation keys off these lists so a field belongs to exactly one
+// section's badge. "submission" (the Submission and Grading section, whose
+// Submissions subsection is the single source of truth for what counts as a
+// submission) owns the submission definition + milestone tags and the grading
+// choice, right after Repository Setup.
 export type SectionId =
-  "details" | "repository" | "autograding" | "features" | "schedule"
+  | "details"
+  | "repository"
+  | "submission"
+  | "autograding"
+  | "features"
+  | "schedule"
 
 // The fields each section owns, for both the error scan (which validation keys
 // map to this section) and the configured scan (which values to compare against
@@ -33,8 +41,6 @@ const SECTION_FIELDS: Record<
   ],
   autograding: [
     "autograding_state",
-    "submission_mode",
-    "submission_tags",
     "runtime_env",
     "runs_on",
     "container_image",
@@ -52,6 +58,12 @@ const SECTION_FIELDS: Record<
     "pass_threshold_enabled",
     "pass_threshold",
     "tests",
+  ],
+  submission: [
+    "submission_mode",
+    "submission_tags",
+    "grading_choice",
+    "grading_max_points",
   ],
   features: [
     "repo_feature_issues",

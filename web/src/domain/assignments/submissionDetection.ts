@@ -1,0 +1,92 @@
+import type { GitHubCommit, GitHubTag } from "@/github-core/types"
+import { matchesSubmissionTag } from "@/util/submissionTags"
+
+// Pure derivation for the submission-detection subsystem (KTD6/KTD7): turn raw
+// repo state (default-branch commits, git tags) plus the submission definition
+// into detected submissions. No React, no fetch — the fan-out hook (U8) and the
+// merge layer (U10) consume these. Grades never come from here; detection only
+// reveals which submissions exist and how they group.
+
+// One detected submission (or grouped set, for a glob). `count` is the number of
+// underlying commits/tags it represents (1 for a single commit or exact tag; N
+// for a glob group). `label` names it for the UI (a tag name, a glob pattern, or
+// a commit sha); `sha` points at the underlying commit when known.
+export type DetectedSubmission = {
+  kind: "commit" | "tag" | "tag-group"
+  label: string
+  count: number
+  sha?: string
+}
+
+// A glob pattern uses any Actions tag-filter metacharacter; an exact pattern is
+// a literal tag name. Only globs GROUP their matches into one submission set.
+function isGlobPattern(pattern: string): boolean {
+  return /[*?+[\]]/.test(pattern)
+}
+
+// Branch mode: every default-branch commit except the baseline counts as a
+// submission (R6, KTD7). `baselineSha` is the oldest commit touching the
+// .classroom50.yaml marker; a null baseline (no marker, e.g. a bare repo) counts
+// every commit. Commits arrive newest-first (GitHub's default order), preserved.
+export function detectBranchSubmissions(
+  commits: GitHubCommit[],
+  baselineSha: string | null,
+): DetectedSubmission[] {
+  return commits
+    .filter((c) => c.sha !== baselineSha)
+    .map((c) => ({
+      kind: "commit" as const,
+      label: c.sha.slice(0, 7),
+      count: 1,
+      sha: c.sha,
+    }))
+}
+
+// Tag mode: for each configured pattern, an EXACT pattern yields one submission
+// per matching tag; a GLOB pattern groups all its matching tags into a single
+// submission set (R7). A tag matched by more than one pattern is attributed to
+// the first pattern that claims it, so it is never double-counted.
+export function detectTagSubmissions(
+  tags: GitHubTag[],
+  submissionTags: string[],
+): DetectedSubmission[] {
+  const detected: DetectedSubmission[] = []
+  const claimed = new Set<string>()
+
+  for (const pattern of submissionTags) {
+    const matches = tags.filter(
+      (t) => !claimed.has(t.name) && matchesSubmissionTag([pattern], t.name),
+    )
+    if (matches.length === 0) continue
+    for (const t of matches) claimed.add(t.name)
+
+    if (isGlobPattern(pattern)) {
+      detected.push({
+        kind: "tag-group",
+        label: pattern,
+        count: matches.length,
+        sha: matches[0].commit.sha,
+      })
+    } else {
+      for (const t of matches) {
+        detected.push({
+          kind: "tag",
+          label: t.name,
+          count: 1,
+          sha: t.commit.sha,
+        })
+      }
+    }
+  }
+
+  return detected
+}
+
+// The total number of submissions a detected set represents — the sum of each
+// entry's count (a glob group counts its matches). This is the value the merge
+// layer compares against the snapshot count (max wins, KTD6).
+export function detectedSubmissionCount(
+  detected: DetectedSubmission[],
+): number {
+  return detected.reduce((sum, d) => sum + d.count, 0)
+}

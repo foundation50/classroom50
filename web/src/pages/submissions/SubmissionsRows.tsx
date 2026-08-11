@@ -6,6 +6,8 @@ import { studentRepoUrl } from "@/util/studentRepo"
 import Avatar from "@/components/avatar"
 import { Badge, Button } from "@/components/ui"
 import { nonSubmitterStatus } from "@/pages/submissions/dashboard"
+import { ManualGradeCell } from "@/pages/submissions/ManualGradeCell"
+import type { ManualGradeContext } from "@/pages/submissions/ManualGradeCell"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import type { Student } from "@/types/classroom"
 
@@ -233,6 +235,7 @@ export const NonSubmitterRow = ({
   acceptedUsernames,
   onProfile,
   actions,
+  manualGrade,
 }: {
   student: Student
   students: Student[]
@@ -240,6 +243,10 @@ export const NonSubmitterRow = ({
   acceptedUsernames?: Set<string>
   onProfile: (username: string) => void
   actions?: React.ReactNode
+  // When set (individual manual-grade assignment, writable viewer), the score
+  // cell offers inline grade entry for this not-yet-graded student instead of
+  // an em-dash.
+  manualGrade?: ManualGradeContext
 }) => {
   return (
     <tr>
@@ -265,7 +272,20 @@ export const NonSubmitterRow = ({
           acceptedUsernames={acceptedUsernames}
         />
       </td>
-      <td>—</td>
+      <td>
+        {manualGrade && !isGroup && student.username ? (
+          <ManualGradeCell
+            owner={student.username}
+            score={0}
+            max={manualGrade.maxPoints}
+            hasGrade={false}
+            thresholdFraction={null}
+            ctx={manualGrade}
+          />
+        ) : (
+          "—"
+        )}
+      </td>
       <td>—</td>
       <td>
         {actions ? (

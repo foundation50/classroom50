@@ -927,6 +927,93 @@ describe("editAssignment (preserved-entry integration)", () => {
     ).rejects.toThrow(/init_shim cannot be changed after creation/)
   })
 
+  it("rejects changing grading.mode after creation (auto -> manual, immutable)", async () => {
+    // existingEntry has no grading (resolves to auto); the edit sets manual.
+    // Scores already recorded under the old mode would be misread.
+    const { client } = makeClient()
+    await expect(
+      editAssignment(
+        client,
+        editInput({ grading: { mode: "manual", max_points: 50 } }),
+      ),
+    ).rejects.toThrow(/grading mode cannot be changed after creation/)
+  })
+
+  it("rejects changing grading.mode after creation (manual -> auto, immutable)", async () => {
+    const manualEntry: Assignment = {
+      slug: SLUG,
+      name: "Homework 1",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "cs50", repo: "hello-template", branch: "main" },
+      feedback_pr: true,
+      grading: { mode: "manual", max_points: 50 },
+    }
+    const { client } = makeBareClient(manualEntry)
+    await expect(
+      editAssignment(client, editInput({ grading: { mode: "auto" } })),
+    ).rejects.toThrow(/grading mode cannot be changed after creation/)
+  })
+
+  it("writes grading:{mode,max_points} on a same-mode manual edit", async () => {
+    // A manual assignment edited without changing the mode: the immutability
+    // guard passes and buildAssignmentEntry emits the grading block. max_points
+    // is mutable, so a bumped value lands.
+    const manualEntry: Assignment = {
+      slug: SLUG,
+      name: "Homework 1",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "cs50", repo: "hello-template", branch: "main" },
+      feedback_pr: true,
+      grading: { mode: "manual", max_points: 50 },
+    }
+    const { client, committedContent } = makeBareClient(manualEntry)
+    await editAssignment(
+      client,
+      editInput({ grading: { mode: "manual", max_points: 80 } }),
+    )
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.grading).toEqual({ mode: "manual", max_points: 80 })
+  })
+
+  it("rejects a manual grading edit with an out-of-range max_points", async () => {
+    // Same-mode manual edit (immutability guard passes) with max_points 0 must
+    // hit buildAssignmentEntry's grading validation throw (min 1).
+    const manualEntry: Assignment = {
+      slug: SLUG,
+      name: "Homework 1",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "cs50", repo: "hello-template", branch: "main" },
+      feedback_pr: true,
+      grading: { mode: "manual", max_points: 50 },
+    }
+    const { client } = makeBareClient(manualEntry)
+    await expect(
+      editAssignment(
+        client,
+        editInput({ grading: { mode: "manual", max_points: 0 } }),
+      ),
+    ).rejects.toThrow(/grading\.max_points/)
+  })
+
+  it("rejects a grading edit carrying max_points on a non-manual mode", async () => {
+    // An auto assignment edited with grading:{mode:auto, max_points} must hit
+    // the defensive "max_points only valid for manual" throw. Mode stays auto,
+    // so the immutability guard passes first.
+    const { client } = makeClient()
+    await expect(
+      editAssignment(
+        client,
+        editInput({ grading: { mode: "auto", max_points: 10 } }),
+      ),
+    ).rejects.toThrow(/grading\.max_points/)
+  })
+
   it("rejects flipping empty_repo off after creation (immutable)", async () => {
     const bareEntry: Assignment = {
       slug: SLUG,
@@ -986,7 +1073,6 @@ describe("editAssignment (preserved-entry integration)", () => {
       [{ allowed_files: "*.py" }, /restrict allowed files/],
       [{ release_assets: "report.pdf" }, /release/],
       [{ pass_threshold: 70 }, /passing threshold/],
-      [{ submission_mode: "tag" }, /no autograde shim/],
     ]
     for (const [overrides, want] of cases) {
       const { client } = makeBareClient(bareEntry)
@@ -994,6 +1080,34 @@ describe("editAssignment (preserved-entry integration)", () => {
         editAssignment(client, editInput({ empty_repo: true, ...overrides })),
       ).rejects.toThrow(want)
     }
+  })
+
+  it("permits the submission definition alongside empty_repo (detection, not a trigger)", async () => {
+    // The submission definition is how the app identifies submissions on the
+    // submissions page; it is valid for a bare repo (no shim triggers on it).
+    const bareEntry: Assignment = {
+      slug: SLUG,
+      name: "Actions Lab",
+      mode: "individual",
+      autograder: "default",
+      feedback_pr: false,
+      empty_repo: true,
+    }
+    const { client, committedContent } = makeBareClient(bareEntry)
+    await editAssignment(
+      client,
+      editInput({
+        empty_repo: true,
+        submission_mode: "tag",
+        submission_tags: ["phase1", "v*"],
+      }),
+    )
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.submission_mode).toBe("tag")
+    expect(edited.submission_tags).toEqual(["phase1", "v*"])
   })
 
   // The write path's submission_mode branches (buildAssignmentEntry is not

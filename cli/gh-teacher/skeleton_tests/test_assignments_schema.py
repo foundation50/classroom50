@@ -437,19 +437,20 @@ class TestEmptyRepo:
     def test_empty_repo_rejects_pass_threshold(self):
         assert _errors(_manifest(self._bare_entry(pass_threshold=70))) != []
 
-    def test_empty_repo_rejects_submission_mode(self):
-        # A bare repo carries no autograde shim, so there is no trigger for
-        # submission_mode to configure. Mirrors Go's
-        # validateEmptyRepoExclusions.
-        assert _errors(_manifest(self._bare_entry(submission_mode="tag"))) != []
+    def test_empty_repo_allows_submission_mode(self):
+        # The submission definition is the app's detection rule, not a shim
+        # trigger, so a bare repo may set it (no shim triggers on it; the
+        # submissions page still counts pushes/tags accordingly). Mirrors Go's
+        # relaxed validateEmptyRepoExclusions.
+        assert _errors(_manifest(self._bare_entry(submission_mode="tag"))) == []
         assert (
-            _errors(_manifest(self._bare_entry(submission_mode="every-push"))) != []
+            _errors(_manifest(self._bare_entry(submission_mode="every-push"))) == []
         )
 
-    def test_empty_repo_rejects_submission_tags(self):
-        # Same shim-less reasoning as submission_mode.
+    def test_empty_repo_allows_submission_tags(self):
+        # Same detection-definition reasoning as submission_mode.
         assert (
-            _errors(_manifest(self._bare_entry(submission_tags=["phase1"]))) != []
+            _errors(_manifest(self._bare_entry(submission_tags=["phase1"]))) == []
         )
 
 
@@ -506,13 +507,20 @@ class TestNoAutograder:
             ("allowed_files", ["*"]),
             ("release_assets", ["report.pdf"]),
             ("pass_threshold", 70),
-            ("submission_mode", "tag"),
-            ("submission_tags", ["phase1"]),
         ],
     )
     def test_no_autograder_rejects_grading_fields(self, field, value):
         # No shim exists to grade, trigger, or attach assets to.
         assert _errors(_manifest(self._entry(**{field: value}))) != []
+
+    def test_no_autograder_allows_submission_definition(self):
+        # The submission definition is the app's detection rule, not a shim
+        # trigger, so a no_autograder assignment may set it. Mirrors Go's
+        # relaxed validateNoAutograderExclusions.
+        assert _errors(_manifest(self._entry(submission_mode="tag"))) == []
+        assert (
+            _errors(_manifest(self._entry(submission_tags=["phase1", "v*"]))) == []
+        )
 
 
 class TestInitShim:
@@ -619,6 +627,73 @@ class TestIncludeAllBranches:
         entry = self._entry(init_shim=True)
         del entry["template"]  # init_shim also forbids a template
         assert _errors(_manifest(entry)) != []
+
+
+class TestGrading:
+    # `grading` records the teacher's grading intent (off / auto / manual) as a
+    # first-class GUI choice. ABSENT reads as auto (today's behavior). manual
+    # requires max_points (>= 1, since a 0 max is the ungraded sentinel a
+    # gradebook divides by); off/auto forbid max_points. The field is orthogonal
+    # to the autograding tri-state and to collection, so it is intentionally NOT
+    # coupled to empty_repo/no_autograder by any conditional.
+    def test_grading_absent_accepted(self):
+        # Covered by test_minimal_manifest, pinned here for intent.
+        assert _errors(_manifest(_entry())) == []
+
+    def test_grading_off_accepted(self):
+        assert _errors(_manifest(_entry(grading={"mode": "off"}))) == []
+
+    def test_grading_auto_accepted(self):
+        assert _errors(_manifest(_entry(grading={"mode": "auto"}))) == []
+
+    def test_grading_manual_with_max_points_accepted(self):
+        assert (
+            _errors(_manifest(_entry(grading={"mode": "manual", "max_points": 100})))
+            == []
+        )
+
+    def test_grading_manual_min_max_points_accepted(self):
+        assert (
+            _errors(_manifest(_entry(grading={"mode": "manual", "max_points": 1})))
+            == []
+        )
+
+    def test_grading_manual_requires_max_points(self):
+        assert _errors(_manifest(_entry(grading={"mode": "manual"}))) != []
+
+    def test_grading_manual_rejects_zero_max_points(self):
+        # 0 is the ungraded sentinel the submissions UI divides by; a configured
+        # manual max must be >= 1.
+        assert (
+            _errors(_manifest(_entry(grading={"mode": "manual", "max_points": 0})))
+            != []
+        )
+
+    @pytest.mark.parametrize("mode", ["off", "auto"])
+    def test_grading_non_manual_forbids_max_points(self, mode):
+        assert (
+            _errors(_manifest(_entry(grading={"mode": mode, "max_points": 50}))) != []
+        )
+
+    def test_grading_requires_mode(self):
+        assert _errors(_manifest(_entry(grading={}))) != []
+
+    @pytest.mark.parametrize("mode", ["Manual", "none", "", None, True])
+    def test_grading_bad_mode_rejected(self, mode):
+        assert _errors(_manifest(_entry(grading={"mode": mode}))) != []
+
+    def test_grading_unknown_key_rejected(self):
+        # The grading object is additionalProperties:false.
+        assert (
+            _errors(_manifest(_entry(grading={"mode": "auto", "weight": 2}))) != []
+        )
+
+    def test_grading_manual_coexists_with_no_autograder(self):
+        # grading is orthogonal to the autograding tri-state: a teacher-supplied
+        # CI (no_autograder) assignment graded manually is a legal combination —
+        # no conditional couples the two.
+        entry = _entry(no_autograder=True, grading={"mode": "manual", "max_points": 10})
+        assert _errors(_manifest(entry)) == []
 
 
 def _release_assets_errors(value):

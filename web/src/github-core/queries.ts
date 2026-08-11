@@ -50,6 +50,12 @@ export {
   getOpenPullRequests,
   listPullRequestsByBaseHead,
 } from "./queries/repoRefReads"
+export {
+  listDefaultBranchCommits,
+  listRepoTags,
+  defaultBranchCommitsQuery,
+  repoTagsQuery,
+} from "./queries/repoDetectionReads"
 export type { GitHubPullRequest } from "./types"
 export {
   rawFileQuery,

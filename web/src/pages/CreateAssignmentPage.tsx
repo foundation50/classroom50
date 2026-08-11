@@ -130,7 +130,7 @@ const CreateAssignmentPage = () => {
                 max_group_size: values.max_group_size,
                 feedback_pr: values.feedback_pr,
                 empty_repo: values.empty_repo,
-                no_autograder: values.autograding_state === "none",
+                no_autograder: deriveFormShape(values).noAutograder,
                 init_shim: deriveFormShape(values).initShim,
                 include_all_branches: values.include_all_branches,
                 runs_on: values.runs_on,
@@ -152,6 +152,13 @@ const CreateAssignmentPage = () => {
                 student_permission: values.student_permission || undefined,
                 submission_mode: values.submission_mode,
                 submission_tags: parseSubmissionTags(values.submission_tags),
+                grading:
+                  values.grading_choice === "manual"
+                    ? {
+                        mode: "manual",
+                        max_points: values.grading_max_points,
+                      }
+                    : { mode: values.grading_choice },
                 repo_features: formValuesToRepoFeatures(values),
                 classroom,
                 tests: values.tests,
