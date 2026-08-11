@@ -2459,6 +2459,8 @@
       "loading": "Loading submissions…",
       "pendingGrade": "Pending",
       "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Sync submissions now\" or wait for the nightly collection.",
+      "overridden": "Manual",
+      "overriddenTitle": "This score was set by hand and won't be changed by autograding until the override is cleared.",
       "notSubmitted": "Not submitted",
       "acceptedAwaiting": "Accepted · awaiting submission",
       "notAccepted": "Not accepted",
@@ -2468,6 +2470,17 @@
       "review": "Review",
       "reviewAria": "Open feedback pull request",
       "fullHistory": "Open the <repoLink>repository</repoLink> for the full commit history."
+    },
+    "manualGrade": {
+      "notGraded": "Not graded",
+      "add": "Add grade",
+      "edit": "Edit grade",
+      "addLabel": "Add grade for {{name}}",
+      "editLabel": "Edit grade for {{name}}",
+      "inputLabel": "Score for {{name}}",
+      "required": "Enter a score to save.",
+      "range": "Score must be a whole number from 0 to {{max}}.",
+      "saveError": "Couldn't save the grade. Check your connection and try again."
     },
     "reviewModal": {
       "errorTitle": "Couldn't check for a feedback PR",

@@ -114,8 +114,10 @@ function synthesizeOverrideRecord(
 // A submission record is a real autograder result (not our synthesized manual
 // one) when its submission tag isn't the manual sentinel.
 function isSynthesizedManual(record: SubmissionRecord): boolean {
-  return typeof record.submission === "string" &&
+  return (
+    typeof record.submission === "string" &&
     record.submission.startsWith("submit/manual-")
+  )
 }
 
 // Read scores.json at a ref, returning a normalized file (a scaffold when the
@@ -189,8 +191,9 @@ export async function editScoreOverride(
         if (realSubmissions.length > 0) {
           // Keep the real autograder history; drop the override so the next
           // collect refreshes it.
-          const { override: _override, ...rest } = entry
-          bucket.entries[idx] = { ...rest, submissions: realSubmissions }
+          const rest: ScoreEntry = { ...entry, submissions: realSubmissions }
+          delete rest.override
+          bucket.entries[idx] = rest
         } else {
           // No real submissions — the entry existed only for the override.
           bucket.entries.splice(idx, 1)
