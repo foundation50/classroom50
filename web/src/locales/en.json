@@ -1101,6 +1101,8 @@
     "form": {
       "detailsSection": "Details",
       "repositorySetupSection": "Repository Setup",
+      "submissionSection": "Submission and Grading",
+      "submissionSectionHelp": "Define what counts as a submission for this assignment — when the autograder runs and which tags a student can push to submit.",
       "repositoryFeaturesSection": "Repository Features",
       "scheduleSection": "Schedule",
       "sectionStatus": {
@@ -1130,7 +1132,6 @@
       "typeGroup": "Group project",
       "maxGroupSize": "Max group size",
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
-      "customTriggersHeading": "Custom triggers",
       "extensions": {
         "label": "Per-student extensions (coming soon)",
         "help": "Grant individual students or groups a later due date. Not yet available."

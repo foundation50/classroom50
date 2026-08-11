@@ -112,4 +112,29 @@ describe("deriveSectionStatus", () => {
       "configured",
     )
   })
+
+  it("attributes the submission trigger + tags to the submission section", () => {
+    const tagMode = { ...defaults, submission_mode: "tag" as const }
+    expect(deriveSectionStatus("submission", tagMode, defaults, {})).toBe(
+      "configured",
+    )
+    // Those fields no longer flip Autograding — they moved to their own section.
+    expect(deriveSectionStatus("autograding", tagMode, defaults, {})).toBe(
+      "default",
+    )
+    const withTags = { ...defaults, submission_tags: "phase1" }
+    expect(deriveSectionStatus("submission", withTags, defaults, {})).toBe(
+      "configured",
+    )
+  })
+
+  it("routes a submission_tags validation error to the submission section", () => {
+    const errors = { submission_tags: "bad" }
+    expect(deriveSectionStatus("submission", defaults, defaults, errors)).toBe(
+      "error",
+    )
+    expect(deriveSectionStatus("autograding", defaults, defaults, errors)).toBe(
+      "default",
+    )
+  })
 })

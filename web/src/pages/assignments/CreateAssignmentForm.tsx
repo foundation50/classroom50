@@ -4,6 +4,7 @@ import { Button } from "@/components/ui"
 import { DetailsSection } from "./sections/DetailsSection"
 import { RepositorySetupSection } from "./sections/RepositorySetupSection"
 import { AutogradingSection } from "./sections/AutogradingSection"
+import { SubmissionGradingSection } from "./sections/SubmissionGradingSection"
 import { RepositoryFeaturesSection } from "./sections/RepositoryFeaturesSection"
 import { ScheduleSection } from "./sections/ScheduleSection"
 import { deriveSectionStatus } from "./sections/sectionStatus"
@@ -143,6 +144,16 @@ const CreateAssignmentForm = ({
                   org={org}
                   classroom={classroom}
                   slug={slug}
+                />
+                <SubmissionGradingSection
+                  form={form}
+                  edit={edit}
+                  status={deriveSectionStatus(
+                    "submission",
+                    values,
+                    defaults,
+                    errors,
+                  )}
                 />
                 <AutogradingSection
                   form={form}
