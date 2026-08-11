@@ -482,7 +482,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	createSp.Start()
 	if hasTemplate {
 		var genBranch string
-		htmlURL, fullName, genBranch, alreadyExisted, err = createTemplatedPrivateAssignmentRepoInOrg(client, u, verbose, username, classroom, assignment, org, *entry.Template, entry.RepoFeatures)
+		htmlURL, fullName, genBranch, alreadyExisted, err = createTemplatedPrivateAssignmentRepoInOrg(client, u, verbose, username, classroom, assignment, org, *entry.Template, entry.RepoFeatures, entry.IncludeAllBranches)
 		// The generated repo's own default branch — not the template's branch —
 		// is where control files land and what the shim must trigger on.
 		commitBranch = genBranch
@@ -1170,12 +1170,13 @@ func patchRepoFeatures(client githubapi.Client, u *ui.UI, verbose bool, org, rep
 // cross-org visibility message (template not readable by the student).
 // 422-already-exists → alreadyExisted=true and the PATCH is skipped so
 // re-runs don't disturb an existing repo.
-func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbose bool, username, classroom, assignment, org string, tmpl assignments.TemplateRef, features *assignments.RepoFeatures) (htmlURL, fullName, defaultBranch string, alreadyExisted bool, err error) {
+func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbose bool, username, classroom, assignment, org string, tmpl assignments.TemplateRef, features *assignments.RepoFeatures, includeAllBranches bool) (htmlURL, fullName, defaultBranch string, alreadyExisted bool, err error) {
 	newRepoName := reponame.Name(classroom, assignment, username)
 	createBody, err := json.Marshal(map[string]any{
-		"owner":   org,
-		"name":    newRepoName,
-		"private": true,
+		"owner":                org,
+		"name":                 newRepoName,
+		"private":              true,
+		"include_all_branches": includeAllBranches,
 	})
 	if err != nil {
 		return "", "", "", false, fmt.Errorf("error encoding json for template: %w", err)

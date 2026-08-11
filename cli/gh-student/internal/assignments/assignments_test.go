@@ -353,6 +353,27 @@ func TestEntryDecodesInitShim(t *testing.T) {
 	}
 }
 
+func TestEntryDecodesIncludeAllBranches(t *testing.T) {
+	// include_all_branches decodes when present and defaults to false when
+	// absent. accept passes it into the templated /generate body.
+	var file assignmentsFile
+	if err := json.Unmarshal([]byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {"slug": "mirror", "name": "Mirror", "mode": "individual", "autograder": "default", "template": {"owner": "o", "repo": "t", "branch": "main"}, "include_all_branches": true},
+    {"slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default", "template": {"owner": "o", "repo": "t", "branch": "main"}}
+  ]
+}`), &file); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !file.Assignments[0].IncludeAllBranches {
+		t.Error("mirror.IncludeAllBranches = false, want true")
+	}
+	if file.Assignments[1].IncludeAllBranches {
+		t.Error("hello.IncludeAllBranches = true, want false (field absent — back-compat)")
+	}
+}
+
 func TestEntryCommitsShim(t *testing.T) {
 	// CommitsShim is the accept-time gate: both no-shim states (empty_repo,
 	// no_autograder) suppress the shim; everything else commits it. This pins
