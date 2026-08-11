@@ -5,10 +5,9 @@ import type { AssignmentForm } from "../assignmentFormModel"
 import type { SectionStatus } from "./sectionStatus"
 import { SectionCard } from "./SectionCard"
 
-// Schedule (IA overhaul U8): the opt-in release-date and due-date pickers, plus
-// the deferred per-student/group Extensions affordance (U9, inert). The toggle
-// state lives in the orchestrator so the pickers stay controlled across the
-// section split.
+// Schedule (IA overhaul U8): the opt-in release-date and due-date pickers. The
+// toggle state lives in the orchestrator so the pickers stay controlled across
+// the section split.
 export function ScheduleSection({
   form,
   status,
@@ -113,19 +112,6 @@ export function ScheduleSection({
             </div>
           )}
         </form.Field>
-
-        {/* Deferred (R14/U9): per-student/group due-date extensions. Reserved
-            as an inert, disabled affordance — there is no due-override data
-            model yet, so it writes nothing to assignments.json. */}
-        <div className="pointer-events-none opacity-50" aria-disabled="true">
-          <ToggleRow
-            id="extensions-deferred"
-            checked={false}
-            onChange={() => {}}
-            label={t("assignments.form.extensions.label")}
-            help={t("assignments.form.extensions.help")}
-          />
-        </div>
       </div>
     </SectionCard>
   )

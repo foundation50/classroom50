@@ -733,9 +733,4 @@ describe("assignment form section IA", () => {
     expect(branches).not.toBeNull()
     expect(branches?.disabled).toBe(false)
   })
-
-  it("reserves the schedule Extensions affordance as disabled", () => {
-    renderForm({})
-    expect(screen.getByText("assignments.form.extensions.label")).not.toBeNull()
-  })
 })
