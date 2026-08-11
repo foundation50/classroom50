@@ -157,7 +157,6 @@ const CreateAssignmentForm = ({
                 />
                 <AutogradingSection
                   form={form}
-                  edit={edit}
                   status={deriveSectionStatus(
                     "autograding",
                     values,

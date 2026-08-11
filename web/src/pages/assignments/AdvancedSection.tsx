@@ -18,6 +18,7 @@ import {
   AptField,
 } from "./AdvancedRuntimeFields"
 import { normalizeOnBlur } from "./formFieldHelpers"
+import { deriveFormShape } from "./formShape"
 import { PASS_THRESHOLD_MAX, PASS_THRESHOLD_MIN } from "@/types/classroom"
 import type { AssignmentForm } from "./assignmentFormModel"
 
@@ -145,10 +146,7 @@ export const AdvancedSection = ({
           teacher-supplied CI ("none") commits no shim to run them. Submit clears
           them for both no-shim states (empty_repo and "none"). */}
       <form.Subscribe
-        selector={(state) =>
-          !state.values.empty_repo &&
-          state.values.autograding_state === "built-in"
-        }
+        selector={(state) => deriveFormShape(state.values).showBuiltInConfig}
       >
         {(showsBuiltIn) =>
           !showsBuiltIn ? null : (

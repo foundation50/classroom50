@@ -97,11 +97,11 @@ function GradingChoiceField({
                   <option value="off">
                     {t("assignments.form.grading.choices.off")}
                   </option>
-                  <option value="auto">
-                    {t("assignments.form.grading.choices.auto")}
-                  </option>
                   <option value="manual">
                     {t("assignments.form.grading.choices.manual")}
+                  </option>
+                  <option value="auto">
+                    {t("assignments.form.grading.choices.auto")}
                   </option>
                 </Select>
               )}

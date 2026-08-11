@@ -244,7 +244,7 @@ describe("submission release files visibility", () => {
         <CreateAssignmentForm
           defaultValues={{
             add_readme: true,
-            autograding_state: "built-in",
+            grading_choice: "auto",
             ...defaultValues,
           }}
           onSubmit={() => {}}
@@ -325,7 +325,7 @@ describe("assignment setup timeout", () => {
             name: "Homework",
             slug: "hw1",
             add_readme: true,
-            autograding_state: "built-in",
+            grading_choice: "auto",
           }}
           onSubmit={onSubmit}
         />
@@ -433,7 +433,7 @@ describe("self-hosted disables built-in runtime options", () => {
         <CreateAssignmentForm
           defaultValues={{
             add_readme: true,
-            autograding_state: "built-in",
+            grading_choice: "auto",
             ...defaultValues,
           }}
           onSubmit={() => {}}
@@ -468,7 +468,7 @@ describe("self-hosted disables built-in runtime options", () => {
 // The autograding selector: "No built-in autograder" first + default; built-in
 // requires an initialized repo (README or template) and is disabled while the
 // repo is uninitialized; the none<->built-in choice is immutable on edit.
-describe("autograding selector", () => {
+describe("grading drives the autograding config", () => {
   const renderForm = (
     props: {
       edit?: boolean
@@ -485,92 +485,42 @@ describe("autograding selector", () => {
       </QueryClientProvider>,
     )
 
-  const radios = (container: HTMLElement) => ({
-    builtIn: container.querySelector<HTMLInputElement>(
-      "#autograding_state-built-in",
-    ),
-    none: container.querySelector<HTMLInputElement>("#autograding_state-none"),
-  })
-
-  it("create default (empty repo): none selected, built-in still selectable (init_shim)", () => {
-    // The fresh create form defaults to an uninitialized repo (README off) with
-    // "No built-in autograder" selected — but built-in is now SELECTABLE
-    // (picking it commits a shim onto the repo, the init_shim state).
+  it("create default is 'off' (not graded): no autograding config, shows the note", () => {
     const { container } = renderForm()
-    const { builtIn, none } = radios(container)
-    expect(none?.checked).toBe(true)
-    expect(builtIn?.disabled).toBe(false)
+    // The grading select defaults to "off".
+    const grading =
+      container.querySelector<HTMLSelectElement>("#grading_choice")
+    expect(grading?.value).toBe("off")
+    // Autograding config (Advanced release_assets, tests) is hidden; the
+    // not-autograded note is shown instead.
+    expect(container.querySelector("#release_assets")).toBeNull()
     expect(
-      screen.queryByText("assignments.form.autograding.builtInNeedsInit"),
+      screen.getByText("assignments.form.autograding.notAutogradedNote"),
+    ).not.toBeNull()
+  })
+
+  it("Manual grading also hides the autograding config", () => {
+    const { container } = renderForm({
+      defaultValues: { grading_choice: "manual", grading_max_points: 50 },
+    })
+    expect(container.querySelector("#release_assets")).toBeNull()
+    expect(
+      screen.getByText("assignments.form.autograding.notAutogradedNote"),
+    ).not.toBeNull()
+  })
+
+  it("Autograded reveals the autograding config", () => {
+    const { container } = renderForm({
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "auto",
+      },
+    })
+    expect(container.querySelector("#release_assets")).not.toBeNull()
+    expect(
+      screen.queryByText("assignments.form.autograding.notAutogradedNote"),
     ).toBeNull()
-  })
-
-  it("initialized repo (README on): both choices enabled", () => {
-    const { container } = renderForm({
-      defaultValues: { repo_source: "none", add_readme: true },
-    })
-    const { builtIn, none } = radios(container)
-    expect(builtIn?.disabled).toBe(false)
-    expect(none?.disabled).toBe(false)
-  })
-
-  it("none is the first option", () => {
-    const { container } = renderForm({
-      defaultValues: { repo_source: "none", add_readme: true },
-    })
-    const inputs = Array.from(
-      container.querySelectorAll<HTMLInputElement>(
-        "input[name='autograding_state']",
-      ),
-    )
-    expect(inputs[0]?.value).toBe("none")
-    expect(inputs[1]?.value).toBe("built-in")
-  })
-
-  it("edit: locks both choices and shows the immutability note", () => {
-    const { container } = renderForm({
-      edit: true,
-      defaultValues: assignmentToFormValues(baseAssignment),
-    })
-    const { builtIn, none } = radios(container)
-    expect(builtIn?.disabled).toBe(true)
-    expect(none?.disabled).toBe(true)
-    expect(
-      screen.getByText("assignments.form.autograding.lockedHelp"),
-    ).not.toBeNull()
-  })
-
-  it("edit: a stored no_autograder assignment opens on the 'none' choice, locked", () => {
-    const { container } = renderForm({
-      edit: true,
-      defaultValues: assignmentToFormValues({
-        ...baseAssignment,
-        template: { owner: "acme", repo: "starter", branch: "main" },
-        no_autograder: true,
-      }),
-    })
-    const { builtIn, none } = radios(container)
-    expect(none?.checked).toBe(true)
-    expect(builtIn?.checked).toBe(false)
-    expect(none?.disabled).toBe(true)
-  })
-
-  it("stored empty_repo on edit: radios locked, none selected", () => {
-    // A stored bare repo opens on "none" (derived), and the radios are locked
-    // on edit like every immutable field.
-    const { container } = renderForm({
-      edit: true,
-      defaultValues: assignmentToFormValues({
-        ...baseAssignment,
-        empty_repo: true,
-      }),
-    })
-    const { builtIn, none } = radios(container)
-    expect(none?.checked).toBe(true)
-    expect(builtIn?.disabled).toBe(true)
-    expect(
-      screen.getByText("assignments.form.autograding.lockedHelp"),
-    ).not.toBeNull()
   })
 })
 
@@ -627,22 +577,24 @@ describe("assignment form section IA", () => {
     expect([...indices]).toEqual([...indices].sort((a, b) => a - b))
   })
 
-  it("shows the grading choice regardless of the autograder state", () => {
+  it("shows the grading choice regardless of the grading mode", () => {
     // Grading applies to any assignment, so the section + grading control
-    // render even with no built-in autograder.
-    renderForm({ defaultValues: { autograding_state: "none" } })
+    // render even when not autograded.
+    renderForm({
+      defaultValues: { grading_choice: "manual", grading_max_points: 50 },
+    })
     expect(
       screen.getByText("assignments.form.submissionSection"),
     ).not.toBeNull()
     expect(screen.getByText("assignments.form.grading.label")).not.toBeNull()
-    // The submission trigger needs a shim, so it stays hidden here.
+    // The submission trigger needs a shim (grading = auto), so it stays hidden.
     expect(
       screen.queryByText("assignments.form.submissionMode.label"),
     ).toBeNull()
   })
 
-  it("shows the submission trigger controls only when built-in is on", () => {
-    renderForm({ defaultValues: { autograding_state: "built-in" } })
+  it("shows the submission trigger controls only when grading is Autograded", () => {
+    renderForm({ defaultValues: { grading_choice: "auto" } })
     expect(
       screen.getByText("assignments.form.submissionMode.label"),
     ).not.toBeNull()

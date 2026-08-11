@@ -587,7 +587,10 @@ export const useAssignmentForm = (
       student_permission: defaultValues?.student_permission ?? "",
       submission_mode: defaultValues?.submission_mode ?? "every-push",
       submission_tags: defaultValues?.submission_tags || "",
-      grading_choice: defaultValues?.grading_choice ?? "auto",
+      // Create default is "off" (not graded); the option order is off ->
+      // manual -> auto. On edit, assignmentToFormValues supplies the stored
+      // choice (absent grading reads as "auto" for pre-existing assignments).
+      grading_choice: defaultValues?.grading_choice ?? "off",
       grading_max_points:
         defaultValues?.grading_max_points ?? DEFAULT_GRADING_MAX_POINTS,
       repo_feature_issues: defaultValues?.repo_feature_issues ?? "inherit",

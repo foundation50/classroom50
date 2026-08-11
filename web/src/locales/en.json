@@ -1176,24 +1176,13 @@
       },
       "autograding": {
         "label": "Autograding",
-        "modeLabel": "Autograding mode",
-        "lockedHelp": "The autograding mode can't be changed after creation: repositories students already accepted are not retrofitted with (or stripped of) the autograding workflow.",
-        "choices": {
-          "built-in": {
-            "label": "Built-in autograder",
-            "help": "Classroom 50 adds its autograding workflow to each repo. Configure triggers, runtime, and tests below."
-          },
-          "none": {
-            "label": "No built-in autograder",
-            "help": "Classroom 50 adds no autograding workflow. A templated repo can supply its own GitHub Actions CI; an empty repo has none. Scores are not collected."
-          }
-        }
+        "notAutogradedNote": "Autograding options apply only when this assignment is set to \"Autograded\" in the Submission and Grading section above. Change the grading choice to Autograded to configure the autograder."
       },
       "grading": {
         "label": "Grading",
         "help": "How this assignment is graded. \"Autograded\" runs the autograder you configure below. \"Manual\" lets you enter each student's score by hand on the submissions page. \"Not graded\" records no score. Can't be changed after the assignment is created.",
         "editWarning": "The grading mode can't be changed after creation: scores already recorded under the old mode would be misread. Create a new assignment under a different slug instead.",
-        "autoNote": "This assignment is autograded. Configure the autograder in the Autograding section above. Whether you use the built-in autograder or supply your own workflow, it must publish a result.json asset on the submission release — that file is what the app reads to show scores.",
+        "autoNote": "This assignment is autograded. Configure the autograder in the Autograding section below. Whether you use the built-in autograder or supply your own workflow, it must publish a result.json asset on the submission release — that file is what the app reads to show scores.",
         "choices": {
           "off": "Not graded",
           "auto": "Autograded",

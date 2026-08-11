@@ -564,14 +564,16 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.submission_tags).toBe("phase1\nphase2")
   })
 
-  it("clears built-in-only fields for the 'none' autograding state but keeps template + feedback_pr", () => {
-    // "none" (teacher-supplied CI) commits no shim, so the grading-adjacent
-    // fields clear like empty_repo — but unlike empty_repo it PERMITS a
-    // template and the Feedback PR (a templated repo has a baseline commit).
+  it("clears built-in-only fields when not autograded but keeps template + feedback_pr", () => {
+    // A not-autograded ("manual"/"off") templated assignment commits no shim, so
+    // the grading-adjacent fields clear like empty_repo — but unlike empty_repo
+    // it PERMITS a template and the Feedback PR (a templated repo has a baseline
+    // commit).
     const out = toSubmitValues({
       ...base,
       repo_source: "template",
-      autograding_state: "none",
+      grading_choice: "manual",
+      grading_max_points: 50,
       template_repo: "acme/starter",
       feedback_pr: true,
       setup_command: "make",
@@ -614,24 +616,25 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.template_repo).toBe("")
   })
 
-  it("no template + no README + none maps to a bare repo (empty_repo true)", () => {
+  it("no template + no README + not autograded maps to a bare repo (empty_repo true)", () => {
     const out = toSubmitValues({
       ...base,
       repo_source: "none",
       add_readme: false,
-      autograding_state: "none",
+      grading_choice: "manual",
+      grading_max_points: 50,
     })
     expect(out.empty_repo).toBe(true)
   })
 
-  it("no template + no README + built-in is NOT bare (init_shim case; empty_repo false)", () => {
+  it("no template + no README + autograded is NOT bare (init_shim case; empty_repo false)", () => {
     const out = toSubmitValues({
       ...base,
       repo_source: "none",
       add_readme: false,
-      autograding_state: "built-in",
+      grading_choice: "auto",
     })
-    // Built-in on an empty source commits a shim (init_shim), so it is not bare.
+    // Autograded on an empty source commits a shim (init_shim), so it's not bare.
     expect(out.empty_repo).toBe(false)
     expect(out.autograding_state).toBe("built-in")
   })

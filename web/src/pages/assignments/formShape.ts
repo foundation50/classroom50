@@ -18,11 +18,11 @@ import type { CreateAssignmentFormValues } from "./assignmentFormModel"
 //   - "readme"   : no template, initialized with a README — an auto_init repo
 //                  with a baseline commit (empty_repo: false on the wire).
 //   - "empty"    : no template, no README. This is a bare repo (empty_repo: true)
-//                  UNLESS the teacher picks built-in autograding, in which case
+//                  UNLESS the grading choice is "Autograded", in which case
 //                  the repo is initialized with the marker + default shim
 //                  (init_shim: true) and DOES autograde — see initShim below.
-// So "empty" source + built-in autograding is the init_shim state, not a bare
-// repo; "empty" source + no built-in is the truly bare empty_repo.
+// So "empty" source + Autograded is the init_shim state, not a bare repo;
+// "empty" source + not-autograded is the truly bare empty_repo.
 export type RepositorySource = "template" | "readme" | "empty"
 export type AssignmentType = "individual" | "group"
 
@@ -35,13 +35,13 @@ export type FormShape = {
   // repo). If they picked built-in on that same source, it's init_shim instead
   // (see below) and this is false.
   emptyRepo: boolean
-  // The wire init_shim boolean: a no-template no-README repo WITH built-in
-  // autograding — initialized with the marker + default shim, and it autogrades.
+  // The wire init_shim boolean: a no-template no-README repo that is Autograded
+  // — initialized with the marker + default shim, and it autogrades.
   initShim: boolean
   // The autograding tri-state as it applies to THIS form's values. A bare
-  // (empty_repo) repo forces "empty"; otherwise it's the teacher's pick — and
-  // note built-in is now allowed even on a no-template no-README repo (that is
-  // exactly the init_shim case).
+  // (empty_repo) repo forces "empty"; otherwise it's derived from the grading
+  // choice — "Autograded" -> "built-in" (including the init_shim case),
+  // everything else -> "none".
   autogradingState: AutogradingState
   assignmentType: AssignmentType
   // Max group size only applies to a group assignment.
@@ -80,21 +80,29 @@ export function deriveFormShape(value: CreateAssignmentFormValues): FormShape {
         ? "empty"
         : "readme"
 
+  // The grading choice is the master switch for the built-in autograder: only
+  // "auto" runs it. "manual" (teacher enters scores) and "off" (not graded)
+  // both mean no built-in autograder, so the Autograding section's config is
+  // disabled for them. (The standalone autograding_state radio was folded into
+  // this choice.)
+  const wantsBuiltIn = value.grading_choice === "auto"
+
   // On a no-template no-README source, built-in autograding means "initialize
   // with a shim" (init_shim), NOT a bare repo. A stored empty_repo:true is a
   // hard bare override (no shim), so it never becomes init_shim.
   const noTemplateNoReadme = repositorySource === "empty"
-  const initShim =
-    noTemplateNoReadme &&
-    !value.empty_repo &&
-    value.autograding_state === "built-in"
+  const initShim = noTemplateNoReadme && !value.empty_repo && wantsBuiltIn
   // Truly bare only when it's the empty source AND not the init_shim case.
   const emptyRepo = noTemplateNoReadme && !initShim
 
-  // A bare repo can't autograde (forced "empty"); otherwise the teacher's pick.
+  // A bare repo can't autograde (forced "empty"); otherwise the grading choice
+  // decides: "auto" -> built-in, everything else -> none (teacher-supplied CI
+  // on a template, or simply no autograder).
   const autogradingState: AutogradingState = emptyRepo
     ? "empty"
-    : value.autograding_state
+    : wantsBuiltIn
+      ? "built-in"
+      : "none"
 
   return {
     repositorySource,

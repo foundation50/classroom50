@@ -60,12 +60,12 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.feedbackPrEnabled).toBe(true)
   })
 
-  it("no template + no README + none: bare repo (empty_repo), disables feedback", () => {
+  it("no template + no README + not-autograded: bare repo (empty_repo), disables feedback", () => {
     const shape = deriveFormShape({
       ...base,
       repo_source: "none",
       add_readme: false,
-      autograding_state: "none",
+      grading_choice: "manual",
     })
     expect(shape.repositorySource).toBe("empty")
     expect(shape.emptyRepo).toBe(true)
@@ -77,15 +77,15 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.showBuiltInConfig).toBe(false)
   })
 
-  it("no template + no README + built-in: init_shim (not bare), built-in config + feedback available", () => {
+  it("no template + no README + autograded: init_shim (not bare), built-in config + feedback available", () => {
     const shape = deriveFormShape({
       ...base,
       repo_source: "none",
       add_readme: false,
-      autograding_state: "built-in",
+      grading_choice: "auto",
     })
     expect(shape.repositorySource).toBe("empty")
-    // Built-in on an empty source is init_shim, NOT a bare repo.
+    // Autograded on an empty source is init_shim, NOT a bare repo.
     expect(shape.initShim).toBe(true)
     expect(shape.emptyRepo).toBe(false)
     expect(shape.autogradingState).toBe("built-in")
@@ -93,11 +93,11 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.feedbackPrEnabled).toBe(true)
   })
 
-  it("a raw empty_repo: true stays bare even with built-in picked (hard override, no init_shim)", () => {
+  it("a raw empty_repo: true stays bare even when autograded (hard override, no init_shim)", () => {
     const shape = deriveFormShape({
       ...base,
       empty_repo: true,
-      autograding_state: "built-in",
+      grading_choice: "auto",
     })
     expect(shape.emptyRepo).toBe(true)
     expect(shape.initShim).toBe(false)
@@ -108,7 +108,7 @@ describe("deriveFormShape — repository source", () => {
     const shape = deriveFormShape({
       ...base,
       empty_repo: true,
-      autograding_state: "built-in",
+      grading_choice: "auto",
     })
     expect(shape.repositorySource).toBe("empty")
     expect(shape.emptyRepo).toBe(true)
@@ -120,7 +120,7 @@ describe("deriveFormShape — repository source", () => {
       ...base,
       repo_source: "template",
       add_readme: false,
-      autograding_state: "built-in",
+      grading_choice: "auto",
     })
     expect(shape.repositorySource).toBe("template")
     expect(shape.emptyRepo).toBe(false)
@@ -130,11 +130,11 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.showBuiltInConfig).toBe(true)
   })
 
-  it("template source with teacher-supplied CI ('none'): no built-in config, template + feedback stay", () => {
+  it("template source, not autograded: no built-in config, template + feedback stay", () => {
     const shape = deriveFormShape({
       ...base,
       repo_source: "template",
-      autograding_state: "none",
+      grading_choice: "manual",
     })
     expect(shape.autogradingState).toBe("none")
     expect(shape.showBuiltInConfig).toBe(false)

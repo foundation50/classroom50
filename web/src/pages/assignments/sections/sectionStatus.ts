@@ -39,7 +39,6 @@ const SECTION_FIELDS: Record<
     "feedback_pr",
   ],
   autograding: [
-    "autograding_state",
     "runtime_env",
     "runs_on",
     "container_image",
