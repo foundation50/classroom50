@@ -162,9 +162,7 @@ describe("CloseSubmissionModal", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText(
-          "submissions.closeSubmission.resultHeadlineThrottled",
-        ),
+        screen.getByText("submissions.closeSubmission.resultHeadlineThrottled"),
       ).toBeTruthy(),
     )
     expect(

@@ -2594,7 +2594,6 @@
       "reopenLabel": "Reopen submission",
       "menuTitle": "Close the submission window: block new accepts and set every student's repository to read-only",
       "reopenMenuTitle": "Reopen the submission window: allow new accepts and restore write access",
-      "titleEmptyRoster": "No students have accepted yet",
       "title": "Close submission",
       "reopenTitle": "Reopen submission",
       "subtitle_one": "Blocks new accepts and sets {{count}} student's repository to read-only.",
@@ -2611,8 +2610,6 @@
       "flagError": "The submission window could not be updated, so no repositories were changed. Try again.",
       "working": "Updating repositories",
       "progress": "Updated {{processed}} of {{total}}",
-      "flagClosed": "Submission closed to new accepts.",
-      "flagReopened": "Submission reopened to new accepts.",
       "resultHeadline": "Set {{count}} of {{total}} repositories to read-only.",
       "resultHeadlineThrottled": "Set {{count}} of {{total}} repositories to read-only before GitHub rate-limited the request — re-run to finish the rest.",
       "reopenResultHeadline": "Restored write access for {{count}} of {{total}} repositories.",
@@ -2623,7 +2620,6 @@
       "deferredSection_other": "{{count}} repositories were not updated",
       "deferredDetail": "Skipped — re-run to update.",
       "statusBadge": {
-        "open": "Open",
         "closed": "Closed"
       }
     },

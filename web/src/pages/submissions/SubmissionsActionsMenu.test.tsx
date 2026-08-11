@@ -147,9 +147,7 @@ describe("SubmissionsActionsMenu — Close/Reopen submission item", () => {
     expect(
       screen.queryByText("submissions.closeSubmission.menuLabel"),
     ).toBeNull()
-    rerender(
-      <SubmissionsActionsMenu {...baseProps} onCloseToggle={() => {}} />,
-    )
+    rerender(<SubmissionsActionsMenu {...baseProps} onCloseToggle={() => {}} />)
     expect(
       screen.queryByText("submissions.closeSubmission.menuLabel"),
     ).not.toBeNull()
@@ -157,11 +155,7 @@ describe("SubmissionsActionsMenu — Close/Reopen submission item", () => {
 
   it("shows Reopen when the assignment is already closed", () => {
     render(
-      <SubmissionsActionsMenu
-        {...baseProps}
-        closed
-        onCloseToggle={() => {}}
-      />,
+      <SubmissionsActionsMenu {...baseProps} closed onCloseToggle={() => {}} />,
     )
     expect(
       screen.queryByText("submissions.closeSubmission.reopenLabel"),
