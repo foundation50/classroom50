@@ -127,6 +127,13 @@ type AssignmentsJSON struct {
 // the STUDENT team's read on it (staff teams untouched), and unlocking
 // re-grants it. Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
 //
+// Closed narrowly ends the submission WINDOW: unlike Locked it only refuses a
+// NEW accept (web + `gh student accept`); it does NOT hide the assignment or
+// touch any template team's read. The teacher 'Close submission' action pairs
+// it with a per-repo collaborator downgrade to read; that downgrade is applied
+// out of band and not represented here. Closed and Locked are independent axes.
+// Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
+//
 // RepoFeatures overrides Issues/Wiki/Projects/Pull requests on each student repo at accept
 // time (fresh create only). Each key is tri-state (nil pointer = inherit;
 // explicit true/false = force on/off), so absent inherits the template's
@@ -162,6 +169,7 @@ type AssignmentEntry struct {
 	InitShim           bool             `json:"init_shim,omitempty"`
 	IncludeAllBranches bool             `json:"include_all_branches,omitempty"`
 	Locked             bool             `json:"locked,omitempty"`
+	Closed             bool             `json:"closed,omitempty"`
 	AllowedFiles       []string         `json:"allowed_files,omitempty"`
 	ReleaseAssets      []string         `json:"release_assets,omitempty"`
 	PassThreshold      *int             `json:"pass_threshold,omitempty"`
@@ -184,7 +192,7 @@ var knownEntryKeys = map[string]struct{}{
 	"slug": {}, "name": {}, "description": {}, "template": {}, "due": {},
 	"due_meta": {}, "mode": {}, "autograder": {}, "max_group_size": {},
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
-	"locked": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
+	"locked": {}, "closed": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
 	"student_permission": {}, "submission_mode": {}, "submission_tags": {},
 	"no_autograder":        {},

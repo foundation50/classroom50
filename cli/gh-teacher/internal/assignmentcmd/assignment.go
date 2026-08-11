@@ -835,6 +835,11 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			attemptEntry.ReleaseAssets = append([]string(nil), previous.ReleaseAssets...)
 			attemptEntry.Extra = previous.Extra
 			attemptEntry.Locked = previous.Locked
+			// Closed is likewise preserved: it's owned out of band by the web
+			// "Close submission" action, not `add`, and `closed` is a known key
+			// (decodes onto the struct, not Extra). Without this carry-forward a
+			// same-slug re-add would silently re-open a closed submission window.
+			attemptEntry.Closed = previous.Closed
 			// grading is a GUI/manifest-owned field with no `assignment add`
 			// flag; since it was promoted to a known key it no longer rides
 			// through Extra, so a same-slug re-add would silently drop a

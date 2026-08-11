@@ -205,6 +205,17 @@ export type Assignment = {
   // head-TA/TA untouched); unlocking re-grants it. Existing student repos are
   // not deleted. Omitted when false (CLI omitempty); absent reads as false.
   locked?: boolean
+  // End the assignment's submission window. UNLIKE `locked`, `closed` is narrow:
+  // its only effect is that the accept flow (web + `gh student accept`) refuses a
+  // NEW accept while true. It does NOT hide the assignment (an already-accepted
+  // student keeps read + visibility — see isListableToStudent, which checks only
+  // `locked`), and it does NOT touch template team read. The teacher "Close
+  // submission" action pairs this flag with a per-repo collaborator downgrade to
+  // read; that downgrade is applied out of band and not represented here. `closed`
+  // and `locked` are independent axes and may both be set. Omitted when false;
+  // absent reads as false. In lockstep with the CLI's assignments-v1 schema
+  // (`closed`).
+  closed?: boolean
   // Mirrors classroom50/assignments/v1's `runtime` block and the CLI's
   // RuntimeRef. `runs-on`/`container` select the runner; python/node/java/go/rust
   // pick the setup-X toolchain version the autograder provisions; apt installs

@@ -69,6 +69,12 @@ type Entry struct {
 	// it when false).
 	Locked bool `json:"locked,omitempty"`
 
+	// Closed ends the submission window: unlike Locked it only refuses a NEW
+	// accept (see the gate in accept.go) and does not hide the assignment or
+	// touch template team read. Independent of Locked. Advisory (assignments.json
+	// is public). Absent reads as false (teacher CLI omits it when false).
+	Closed bool `json:"closed,omitempty"`
+
 	// RepoFeatures overrides Issues/Wiki/Projects/Pull requests on the student repo at accept
 	// time (fresh create only). Each key is tri-state: a nil pointer inherits
 	// (the template's setting carries through on a templated assignment; GitHub's
