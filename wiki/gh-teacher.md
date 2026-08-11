@@ -451,6 +451,19 @@ grading-adjacent fields (it autogrades). It is immutable after creation. Like
 `assignments.json` (via the gradebook's edit path); there is no `assignment add`
 flag.
 
+**Include all branches (`include_all_branches`).** A **templated** assignment can
+carry `include_all_branches: true` in `assignments.json` to copy **all** of the
+template's branches (not just the default) when each student repo is generated:
+accept passes `include_all_branches` to GitHub's `POST /repos/{template}/generate`.
+It **requires** a template (it only affects the generate call) and is mutually
+exclusive with `empty_repo` and `init_shim` (both template-less, never
+generated); it is **compatible** with everything else, including `no_autograder`
+and the grading-adjacent fields (branches don't affect grading). Unlike the
+immutable no-shim states it is **accept-time only and mutable**: changing it
+affects only repos generated from now on (already-accepted repos are never
+re-generated). Like `no_autograder`/`init_shim` it is currently set via the
+gradebook edit path; there is no `assignment add` flag.
+
 <details>
 <summary>Errors</summary>
 

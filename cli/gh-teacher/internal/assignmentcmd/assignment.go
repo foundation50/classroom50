@@ -765,6 +765,14 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			entry.InitShim = file.Assignments[prevIdx].InitShim
 			attemptEntry.InitShim = entry.InitShim
 		}
+		// include_all_branches is likewise GUI/manifest-owned (no flag), so carry
+		// it forward so a same-slug CLI re-add doesn't silently reset it. Unlike
+		// the above it is MUTABLE (no immutability check) — a teacher may change
+		// it; it only affects repos generated from now on.
+		if hasPrev {
+			entry.IncludeAllBranches = file.Assignments[prevIdx].IncludeAllBranches
+			attemptEntry.IncludeAllBranches = entry.IncludeAllBranches
+		}
 		// empty_repo is immutable: student repos were provisioned (or left
 		// bare) at accept time and are never retrofitted. Checked at parentSHA
 		// inside the build so a concurrent add/remove is observed on retry.

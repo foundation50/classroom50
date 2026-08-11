@@ -1831,6 +1831,57 @@ func TestParseAssignments_InitShimRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseAssignments_IncludeAllBranchesRoundTrip(t *testing.T) {
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "mirror",
+      "name": "Mirror",
+      "template": { "owner": "cs50", "repo": "multi-branch", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default",
+      "include_all_branches": true
+    },
+    {
+      "slug": "world",
+      "name": "World",
+      "template": { "owner": "cs50", "repo": "world-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default"
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	if !file.Assignments[0].IncludeAllBranches {
+		t.Errorf("mirror.IncludeAllBranches = false, want true")
+	}
+	if file.Assignments[1].IncludeAllBranches {
+		t.Errorf("world.IncludeAllBranches = true, want false (field absent — back-compat)")
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"include_all_branches": true`) {
+		t.Errorf("encoded missing include_all_branches:\n%s", encoded)
+	}
+	if strings.Contains(string(encoded), `"include_all_branches": false`) {
+		t.Errorf("include_all_branches:false should omit, not serialize:\n%s", encoded)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if !again.Assignments[0].IncludeAllBranches || again.Assignments[1].IncludeAllBranches {
+		t.Errorf("include_all_branches not stable across round-trip: %#v", again.Assignments)
+	}
+}
+
 // TestValidateAssignmentEntry_EmptyRepoHappyPath: a bare empty_repo entry
 // (no template, no grading fields) passes both validators.
 func TestValidateAssignmentEntry_EmptyRepoHappyPath(t *testing.T) {
@@ -2062,5 +2113,52 @@ func TestValidateInitShimUnchanged(t *testing.T) {
 	}
 	if err := ValidateInitShimUnchanged(off, on); err == nil || !strings.Contains(err.Error(), "init_shim cannot be changed") {
 		t.Errorf("flip false->true: got %v, want the immutability error", err)
+	}
+}
+
+func TestValidateIncludeAllBranchesExclusions(t *testing.T) {
+	// include_all_branches only affects the templated generate call, so it
+	// REQUIRES a template and is mutually exclusive with the template-less
+	// states empty_repo/init_shim; it is compatible with everything else.
+	base := AssignmentEntry{
+		Slug: "hw", Name: "HW", Mode: "individual", Autograder: "default",
+		IncludeAllBranches: true,
+		Template:           &TemplateRef{Owner: "o", Repo: "t", Branch: "main"},
+	}
+	// Permitted: no_autograder + grading fields alongside include_all_branches.
+	ok := base
+	ok.NoAutograder = true
+	if err := validateIncludeAllBranchesExclusions(ok); err != nil {
+		t.Errorf("no_autograder should be permitted with include_all_branches: %v", err)
+	}
+	ok2 := base
+	ok2.Tests = []TestSpec{{Name: "t", Type: "run", Run: "true", Points: 1}}
+	ok2.SubmissionMode = "tag"
+	if err := validateIncludeAllBranchesExclusions(ok2); err != nil {
+		t.Errorf("grading fields should be permitted with include_all_branches: %v", err)
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(*AssignmentEntry)
+		want   string
+	}{
+		{"no template", func(e *AssignmentEntry) { e.Template = nil }, "requires a template"},
+		{"empty_repo", func(e *AssignmentEntry) {
+			e.EmptyRepo = true
+		}, "mutually exclusive with empty_repo"},
+		{"init_shim", func(e *AssignmentEntry) {
+			e.InitShim = true
+		}, "mutually exclusive with init_shim"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := base
+			tc.mutate(&e)
+			err := validateIncludeAllBranchesExclusions(e)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("got %v, want an error containing %q", err, tc.want)
+			}
+		})
 	}
 }
