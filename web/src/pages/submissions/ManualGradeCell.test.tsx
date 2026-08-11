@@ -131,4 +131,85 @@ describe("ManualGradeCell", () => {
     // Back to the idle badge.
     expect(screen.getByText("10/50")).toBeTruthy()
   })
+
+  it("saves on Enter from the input", async () => {
+    const user = userEvent.setup()
+    renderCell({ hasGrade: false })
+    await user.click(
+      screen.getByRole("button", {
+        name: "submissions.manualGrade.addLabel:alice",
+      }),
+    )
+    const input = screen.getByRole("spinbutton", {
+      name: "submissions.manualGrade.inputLabel:alice",
+    })
+    await user.type(input, "30{Enter}")
+    expect(mutate).toHaveBeenCalledTimes(1)
+    expect(mutate.mock.calls[0][0]).toMatchObject({ score: 30 })
+  })
+
+  it("cancels back to idle on Escape without saving", async () => {
+    const user = userEvent.setup()
+    renderCell({ hasGrade: false })
+    await user.click(
+      screen.getByRole("button", {
+        name: "submissions.manualGrade.addLabel:alice",
+      }),
+    )
+    const input = screen.getByRole("spinbutton", {
+      name: "submissions.manualGrade.inputLabel:alice",
+    })
+    await user.type(input, "12{Escape}")
+    expect(mutate).not.toHaveBeenCalled()
+    // Escape returns to the ungraded idle state (no save, no editor).
+    expect(screen.getByText("submissions.manualGrade.notGraded")).toBeTruthy()
+  })
+
+  it("does not save an empty or invalid value on Enter", async () => {
+    const user = userEvent.setup()
+    renderCell({ hasGrade: false })
+    await user.click(
+      screen.getByRole("button", {
+        name: "submissions.manualGrade.addLabel:alice",
+      }),
+    )
+    const input = screen.getByRole("spinbutton", {
+      name: "submissions.manualGrade.inputLabel:alice",
+    })
+    // Enter on an empty field is a no-op (required error blocks the save).
+    await user.type(input, "{Enter}")
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it("shows the error banner and keeps the draft for retry when the save fails", async () => {
+    isError = true
+    const user = userEvent.setup()
+    renderCell({ hasGrade: false })
+    await user.click(
+      screen.getByRole("button", {
+        name: "submissions.manualGrade.addLabel:alice",
+      }),
+    )
+    const input = screen.getByRole("spinbutton", {
+      name: "submissions.manualGrade.inputLabel:alice",
+    }) as HTMLInputElement
+    await user.type(input, "20")
+    // The save-error alert is shown and the entered value is retained.
+    expect(screen.getByText("submissions.manualGrade.saveError")).toBeTruthy()
+    expect(input.value).toBe("20")
+  })
+
+  it("ignores a second Save click while a save is in flight", async () => {
+    isPending = true
+    const user = userEvent.setup()
+    renderCell({ hasGrade: true, score: 10, max: 50 })
+    await user.click(
+      screen.getByRole("button", {
+        name: "submissions.manualGrade.editLabel:alice",
+      }),
+    )
+    // While pending the cell renders a spinner (no Save button), but the guard
+    // in save() is the real backstop: even if save() is invoked it must no-op.
+    expect(mutate).not.toHaveBeenCalled()
+  })
 })

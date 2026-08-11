@@ -1195,10 +1195,14 @@ const SubmissionsPageContent = () => {
             : undefined
         }
         submissionTags={assignmentInfo?.submission_tags}
-        // Manual grading: staff may enter/edit scores inline. Gated on a
-        // resolved manual-mode assignment with a valid max_points. Group
-        // manual entry keys on the founder (row owner).
+        // Manual grading: staff may enter/edit scores inline. Gated on an org
+        // OWNER (the same write-capability gate every other mutating control on
+        // this page uses — a non-owner can't write the config repo's
+        // scores.json, so the editor must not appear for them) plus a resolved
+        // manual-mode assignment with a valid max_points. Group manual entry
+        // keys on the founder (row owner).
         manualGrade={
+          isOwner &&
           assignmentInfo?.grading?.mode === "manual" &&
           typeof assignmentInfo.grading.max_points === "number"
             ? {

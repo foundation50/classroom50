@@ -113,6 +113,36 @@ describe("useDetectedSubmissions — branch mode", () => {
     // not an error.
     expect(result.current.errorCount).toBe(0)
   })
+
+  it("counts a transient baseline-read failure as an error (no +1 inflation)", async () => {
+    // A 5xx on the baseline (.classroom50.yaml) read must NOT collapse to a
+    // null baseline — that would keep the accept commit and over-count by one.
+    // It propagates and lands the repo in errorCount instead.
+    request.mockImplementation((url: string) => {
+      if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
+        return Promise.resolve({ default_branch: "main" })
+      }
+      if (url.includes("path=.classroom50.yaml")) {
+        return Promise.reject(apiError(500))
+      }
+      if (url.includes("/commits?sha=")) {
+        return Promise.resolve([{ sha: "c1" }, { sha: "baseline" }])
+      }
+      return Promise.resolve([])
+    })
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "every-push",
+          repoOwners: ["a"],
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.detected).toEqual([])
+    expect(result.current.errorCount).toBe(1)
+  })
 })
 
 describe("useDetectedSubmissions — tag mode", () => {
@@ -143,6 +173,41 @@ describe("useDetectedSubmissions — tag mode", () => {
       kind: "tag-group",
       label: "v*",
     })
+  })
+
+  it("counts submit/* tags even with no milestone patterns configured", async () => {
+    // The common tag-mode case: no teacher milestones, students push submit/*
+    // tags via `gh student submit`. Detection must union the always-on submit/*
+    // namespace (mirroring the shim trigger) or it would see nothing.
+    request.mockImplementation((url: string) =>
+      url.includes("/tags")
+        ? Promise.resolve([
+            {
+              name: "submit/2026-01-01T00-00-00Z-abc1234",
+              commit: { sha: "a" },
+            },
+            {
+              name: "submit/2026-01-02T00-00-00Z-def5678",
+              commit: { sha: "b" },
+            },
+            { name: "random", commit: { sha: "c" } },
+          ])
+        : Promise.resolve([]),
+    )
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "tag",
+          submissionTags: [],
+          repoOwners: ["a"],
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.detected).toHaveLength(1)
+    // The two submit/* tags group under the submit/* glob; "random" is ignored.
+    expect(result.current.detected[0].count).toBe(2)
   })
 })
 

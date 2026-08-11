@@ -74,6 +74,12 @@ export function ManualGradeCell({
 
   const save = () => {
     if (validationError) return
+    // Guard against a double-submit: mutation.isPending only flips to true on
+    // the next render, so two fast synchronous Save clicks (or an Enter racing
+    // the button) would both fire mutate and write two config-repo commits for
+    // the same owner. The conflict retry makes that non-corrupting, just
+    // wasteful — skip the second call outright.
+    if (mutation.isPending) return
     mutation.mutate(
       {
         org: ctx.org,

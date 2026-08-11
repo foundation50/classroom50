@@ -253,9 +253,10 @@ export type Assignment = {
   // which both submit clients create after the branch push — a plain `git push`
   // does not count or grade. Baked into the shim at accept time; changing it
   // later requires retrofitting existing repos' shims (gradebook bulk action or
-  // `gh teacher assignment submission-mode`). Mutually exclusive with
-  // empty_repo (no shim exists). In lockstep with the CLI's assignments-v1
-  // schema enum (`submission_mode`).
+  // `gh teacher assignment submission-mode`). Permitted on every repo shape,
+  // including empty_repo / no_autograder: with no shim it carries no trigger
+  // but still defines what the submissions page counts as a submission. In
+  // lockstep with the CLI's assignments-v1 schema enum (`submission_mode`).
   submission_mode?: SubmissionMode
   // Teacher-named milestone tag patterns (e.g. ["phase1", "v*"]) that ALSO
   // count and trigger grading, alongside the always-on canonical submit/*
@@ -263,9 +264,10 @@ export type Assignment = {
   // canonical submit/* tag at the triggering commit and publishes the Release
   // there. Baked into the shim at accept time (union with submit/*); changing
   // patterns later requires the same shim retrofit as submission_mode.
-  // Empty/absent = no milestone tags. Mutually exclusive with empty_repo.
-  // In lockstep with the CLI's assignments-v1 schema (`submission_tags`);
-  // validation in @/util/submissionTags.
+  // Empty/absent = no milestone tags. Permitted on every repo shape (empty_repo
+  // / no_autograder included): with no shim they are purely the submissions-
+  // page detection definition. In lockstep with the CLI's assignments-v1 schema
+  // (`submission_tags`); validation in @/util/submissionTags.
   submission_tags?: string[]
   // The teacher's grading intent (off / auto / manual), a first-class GUI
   // choice. Absent reads as "auto" (today's behavior). Manual carries

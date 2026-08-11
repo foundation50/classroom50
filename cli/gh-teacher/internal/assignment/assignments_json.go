@@ -139,7 +139,9 @@ type AssignmentsJSON struct {
 // contract.SubmissionModeTag makes the shim trigger ONLY on submit/* tag
 // pushes, which the submit clients create. Baked into the shim at accept time;
 // changing it later requires retrofitting existing repos' shims (`gh teacher
-// assignment submission-mode`). Mutually exclusive with EmptyRepo (no shim).
+// assignment submission-mode`). Permitted on every repo shape, including
+// EmptyRepo / NoAutograder: with no shim it carries no trigger, but it still
+// defines what the submissions page counts as a submission.
 type AssignmentEntry struct {
 	Slug               string           `json:"slug"`
 	Name               string           `json:"name"`

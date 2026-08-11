@@ -5,12 +5,14 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import {
   REPO_READ_CONCURRENCY,
   githubKeys,
+  getOldestCommitShaForPath,
   listDefaultBranchCommits,
   listRepoTags,
   retryOnRateLimit,
   withGithubReadSlot,
 } from "@/github-core/queries"
 import { getRepo } from "@/github-core/repoReads"
+import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
 import type { SubmissionMode } from "@/types/classroom"
 import {
   detectBranchSubmissions,
@@ -18,7 +20,6 @@ import {
   detectedSubmissionCount,
   type DetectedSubmission,
 } from "@/domain/assignments/submissionDetection"
-import { resolveFeedbackBaselineSha } from "@/domain/assignments/feedbackPr"
 import { studentRepoName } from "@/util/studentRepo"
 import { mapWithConcurrency } from "@/util/concurrency"
 
@@ -120,17 +121,34 @@ export function useDetectedSubmissions({
               retryOnRateLimit(async () => {
                 if (resolvedMode === "tag") {
                   const tags = await listRepoTags(client, org!, repo)
-                  return detectTagSubmissions(tags, submissionTags ?? [])
+                  // Detection must mirror the shim's trigger, which always
+                  // unions the canonical submit/* namespace with the milestone
+                  // patterns (see shimTagsList). Without submit/* a tag-mode
+                  // assignment with no milestone patterns — the common case,
+                  // where students push submit/* tags via `gh student submit` —
+                  // would detect nothing. submit/* is a glob, so it groups.
+                  return detectTagSubmissions(tags, [
+                    ...(submissionTags ?? []),
+                    `${SUBMISSION_TAG_PREFIX}*`,
+                  ])
                 }
                 // Branch mode: resolve the default branch, its baseline, and the
                 // commit log, then exclude the baseline commit.
                 const info = await getRepo(client, org!, repo)
                 const branch = info?.default_branch
                 if (!branch) return [] // not accepted / commitless
-                const baseline = await resolveFeedbackBaselineSha(
+                // Resolve the baseline (oldest .classroom50.yaml commit)
+                // directly so a genuinely-absent marker reads as null (a bare
+                // repo — count every commit) while a transient read failure
+                // PROPAGATES: resolveFeedbackBaselineSha swallows every error to
+                // null, which would keep the accept/baseline commit and inflate
+                // the count by one. Letting it throw routes the repo to the
+                // per-repo errorCount/rate-limit retry instead.
+                const baseline = await getOldestCommitShaForPath(
                   client,
                   org!,
                   repo,
+                  ".classroom50.yaml",
                 )
                 const commits = await listDefaultBranchCommits(
                   client,

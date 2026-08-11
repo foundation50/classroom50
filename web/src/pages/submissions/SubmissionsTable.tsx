@@ -447,7 +447,15 @@ const SubmissionsTable = ({
               >
                 —
               </span>
-            ) : manualGrade ? (
+            ) : manualGrade && !(isGroup && rest.pending) ? (
+              // A pending GROUP row comes from the live/detection overlay before
+              // collection, so its `usernames` is just the founder ([owner]) —
+              // the real members aren't known yet. Grading it here would write
+              // member_usernames:[founder] and mis-credit the group (the other
+              // members would read as non-submitters and never see the grade),
+              // so fall through to the pending badge until collection resolves
+              // the member list. Individual pending rows and any collected group
+              // row are safe to grade inline.
               <ManualGradeCell
                 owner={rest.owner}
                 score={score}

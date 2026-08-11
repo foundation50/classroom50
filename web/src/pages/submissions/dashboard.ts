@@ -127,7 +127,10 @@ export function mergeLiveRows(
     return {
       ...row,
       submissionCount: live.submissionCount,
-      staleCount: true,
+      // A teacher-overridden (manual) grade is frozen by hand and never
+      // auto-collected, so the "re-collect" stale hint doesn't apply — bump the
+      // count but don't flag it. Autograded rows still surface the stale hint.
+      staleCount: !row.overridden,
       liveLatestAt: live.datetime,
     }
   })
@@ -185,7 +188,11 @@ export function mergeDetectedSubmissions(
   const merged = rows.map((row) => {
     const d = detectedByOwner.get(row.owner.trim().toLowerCase())
     if (!d || d.count <= row.submissionCount) return row
-    return { ...row, submissionCount: d.count, staleCount: true }
+    // A teacher-overridden (manual) grade is frozen by hand and never
+    // auto-collected, so the "newest push isn't graded yet — re-collect" hint
+    // (staleCount) doesn't apply: bump the visible count but leave the row
+    // unflagged. Autograded rows still get the stale hint.
+    return { ...row, submissionCount: d.count, staleCount: !row.overridden }
   })
 
   const knownOwners = new Set(rows.map((row) => row.owner.trim().toLowerCase()))

@@ -1255,6 +1255,19 @@ describe("mergeDetectedSubmissions", () => {
     const merged = mergeDetectedSubmissions([], [detected("bob", 0)])
     expect(merged).toEqual([])
   })
+
+  it("bumps the count but omits the stale hint on an overridden (manual) row", () => {
+    // A hand-set/override grade is frozen and never auto-collected, so the
+    // "newest push not yet graded — re-collect" hint doesn't apply. The count
+    // still rises to reflect the detected pushes.
+    const rows = [
+      row({ owner: "alice", score: 9, submissionCount: 1, overridden: true }),
+    ]
+    const merged = mergeDetectedSubmissions(rows, [detected("alice", 4)])
+    expect(merged[0].submissionCount).toBe(4)
+    expect(merged[0].staleCount).toBe(false)
+    expect(merged[0].score).toBe(9)
+  })
 })
 
 describe("displayPageOwners", () => {
