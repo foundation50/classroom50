@@ -119,22 +119,22 @@ export function RepositorySetupSection({
                     )}
                   </form.Field>
 
-                  {/* Deferred (R6/U9): include-all-branches mirror. Reserved as
-                      an inert, disabled toggle (off) — the accept path doesn't
-                      send include_all_branches yet, and there's no wire field
-                      to carry it, so it writes nothing. */}
-                  <div
-                    className="pointer-events-none opacity-50"
-                    aria-disabled="true"
-                  >
-                    <ToggleRow
-                      id="include-all-branches-deferred"
-                      checked={false}
-                      onChange={() => {}}
-                      label={t("assignments.form.includeAllBranches.label")}
-                      help={t("assignments.form.includeAllBranches.help")}
-                    />
-                  </div>
+                  {/* Copy all template branches at generate (include_all_branches).
+                      Only shown for a template source; default off. */}
+                  <form.Field name="include_all_branches">
+                    {(branchesField) => (
+                      <ToggleRow
+                        id={branchesField.name}
+                        checked={branchesField.state.value}
+                        onChange={(checked) =>
+                          branchesField.handleChange(checked)
+                        }
+                        onBlur={branchesField.handleBlur}
+                        label={t("assignments.form.includeAllBranches.label")}
+                        help={t("assignments.form.includeAllBranches.help")}
+                      />
+                    )}
+                  </form.Field>
                 </>
               ) : shape.showAddReadme ? (
                 <form.Field name="add_readme">

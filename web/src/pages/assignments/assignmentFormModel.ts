@@ -101,6 +101,11 @@ export type CreateAssignmentFormValues = {
   // README off maps to empty_repo: true (a bare repo, no commit). Hidden when a
   // template is chosen (the template provides the initial commit).
   add_readme: boolean
+  // UI-only, only meaningful for a template source: copy ALL of the template's
+  // branches (not just the default) when each student repo is generated. Maps
+  // to the wire include_all_branches; cleared on submit when the source isn't a
+  // template. Default off.
+  include_all_branches: boolean
   // UI-only autograding tri-state (never sent verbatim; mapped to wire fields
   // on submit): "empty" (bare repo — driven by empty_repo), "none" (templated,
   // teacher-supplied CI — maps to no_autograder: true, no shim), "built-in"
@@ -459,6 +464,9 @@ export function toSubmitValues(
     empty_repo: isEmptyRepo,
     repo_source: value.repo_source,
     add_readme: value.add_readme,
+    // Only meaningful for a template source; clear it otherwise so a stale
+    // toggle can't reach the wire (buildAssignmentEntry also rejects the combo).
+    include_all_branches: isTemplate ? value.include_all_branches : false,
     autograding_state: shape.autogradingState,
     runtime_env: value.runtime_env,
     runs_on: value.runs_on.trim(),
@@ -517,6 +525,7 @@ export const useAssignmentForm = (
       // the stored wire fields on edit via assignmentToFormValues.
       repo_source: defaultValues?.repo_source ?? "none",
       add_readme: defaultValues?.add_readme ?? false,
+      include_all_branches: defaultValues?.include_all_branches ?? false,
       autograding_state: defaultValues?.autograding_state ?? "none",
       runtime_env: defaultValues?.runtime_env || "hosted",
       runs_on: defaultValues?.runs_on || "",
@@ -609,6 +618,7 @@ export const assignmentToFormValues = (
     repo_source: assignment.template ? "template" : "none",
     add_readme:
       !(assignment.empty_repo ?? false) && !(assignment.init_shim ?? false),
+    include_all_branches: assignment.include_all_branches ?? false,
     // Derive the tri-state from the stored wire fields (empty_repo /
     // no_autograder / default), so an edit opens on the right autograding
     // option and a round-trip preserves it. Uses the #554 domain helper.

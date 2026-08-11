@@ -629,29 +629,27 @@ describe("assignment form five-section IA", () => {
     ).toBeGreaterThan(0)
   })
 
-  it("shows Add-a-README for the no-template source and reserves include-all-branches for a template", () => {
+  it("shows Add-a-README for the no-template source and an enabled include-all-branches toggle for a template", () => {
     // No template (the default): the Add-a-README toggle shows, no
-    // include-all-branches affordance.
+    // include-all-branches toggle.
     const noTemplate = renderForm({ defaultValues: { repo_source: "none" } })
     expect(noTemplate.container.querySelector("#add_readme")).not.toBeNull()
     expect(
-      noTemplate.container.querySelector("#include-all-branches-deferred"),
+      noTemplate.container.querySelector("#include_all_branches"),
     ).toBeNull()
     cleanup()
 
-    // Template source: the README toggle is hidden and the deferred
-    // include-all-branches toggle renders disabled.
+    // Template source: the README toggle is hidden and the include-all-branches
+    // toggle renders enabled (no longer a disabled "coming soon" affordance).
     const templated = renderForm({
       defaultValues: { repo_source: "template", template_repo: "acme/starter" },
     })
     expect(templated.container.querySelector("#add_readme")).toBeNull()
-    // The include-all-branches affordance is present but inert (wrapped in an
-    // aria-disabled container, mirroring the Extensions affordance).
-    const mirror = templated.container.querySelector<HTMLInputElement>(
-      "#include-all-branches-deferred",
+    const branches = templated.container.querySelector<HTMLInputElement>(
+      "#include_all_branches",
     )
-    expect(mirror).not.toBeNull()
-    expect(mirror?.closest("[aria-disabled='true']")).not.toBeNull()
+    expect(branches).not.toBeNull()
+    expect(branches?.disabled).toBe(false)
   })
 
   it("reserves the schedule Extensions affordance as disabled", () => {

@@ -1153,8 +1153,8 @@
         "helpOff": "Create an empty repository with no initial commit. Autograding and the Feedback PR are unavailable until the student's first commit."
       },
       "includeAllBranches": {
-        "label": "Include all branches (coming soon)",
-        "help": "Copy every branch and its history from the template, not just the default branch. Not yet available."
+        "label": "Include all branches",
+        "help": "Copy every branch and its history from the template, not just the default branch."
       },
       "feedbackPr": "Feedback pull request",
       "feedbackPrHelp": "Open a pull request per repo for inline review of each submission.",

@@ -25,6 +25,7 @@ const SECTION_FIELDS: Record<
   repository: [
     "repo_source",
     "add_readme",
+    "include_all_branches",
     "empty_repo",
     "template_repo",
     "student_permission",
