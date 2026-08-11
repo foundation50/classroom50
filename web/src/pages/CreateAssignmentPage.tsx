@@ -130,7 +130,7 @@ const CreateAssignmentPage = () => {
                 max_group_size: values.max_group_size,
                 feedback_pr: values.feedback_pr,
                 empty_repo: values.empty_repo,
-                no_autograder: values.autograding_state === "none",
+                no_autograder: deriveFormShape(values).noAutograder,
                 init_shim: deriveFormShape(values).initShim,
                 include_all_branches: values.include_all_branches,
                 runs_on: values.runs_on,

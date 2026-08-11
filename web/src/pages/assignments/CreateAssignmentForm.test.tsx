@@ -245,6 +245,7 @@ describe("submission release files visibility", () => {
           defaultValues={{
             add_readme: true,
             grading_choice: "auto",
+            autograding_state: "built-in",
             ...defaultValues,
           }}
           onSubmit={() => {}}
@@ -326,6 +327,7 @@ describe("assignment setup timeout", () => {
             slug: "hw1",
             add_readme: true,
             grading_choice: "auto",
+            autograding_state: "built-in",
           }}
           onSubmit={onSubmit}
         />
@@ -434,6 +436,7 @@ describe("self-hosted disables built-in runtime options", () => {
           defaultValues={{
             add_readme: true,
             grading_choice: "auto",
+            autograding_state: "built-in",
             ...defaultValues,
           }}
           onSubmit={() => {}}
@@ -509,12 +512,43 @@ describe("grading drives the autograding config", () => {
     ).not.toBeNull()
   })
 
-  it("Autograded reveals the autograding config", () => {
+  it("Autograded shows the built-in toggle; config stays hidden until built-in is selected", async () => {
+    const user = userEvent.setup()
     const { container } = renderForm({
       defaultValues: {
         repo_source: "none",
         add_readme: true,
         grading_choice: "auto",
+      },
+    })
+    // Autograded offers the built-in-autograder toggle instead of the note.
+    expect(
+      screen.queryByText("assignments.form.autograding.notAutogradedNote"),
+    ).toBeNull()
+    expect(
+      screen.getByRole("radio", {
+        name: /assignments\.form\.autograding\.choices\.none\.label/,
+      }),
+    ).not.toBeNull()
+    // Built-in is off by default, so the config (release_assets) is hidden.
+    expect(container.querySelector("#release_assets")).toBeNull()
+
+    // Selecting "Use the built-in autograder" reveals the config.
+    await user.click(
+      screen.getByRole("radio", {
+        name: /assignments\.form\.autograding\.choices\.built-in\.label/,
+      }),
+    )
+    expect(container.querySelector("#release_assets")).not.toBeNull()
+  })
+
+  it("Autograded + built-in preselected reveals the autograding config", () => {
+    const { container } = renderForm({
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "auto",
+        autograding_state: "built-in",
       },
     })
     expect(container.querySelector("#release_assets")).not.toBeNull()

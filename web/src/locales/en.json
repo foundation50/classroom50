@@ -1176,7 +1176,19 @@
       },
       "autograding": {
         "label": "Autograding",
-        "notAutogradedNote": "Autograding options apply only when this assignment is set to \"Autograded\" in the Submission and Grading section above. Change the grading choice to Autograded to configure the autograder."
+        "notAutogradedNote": "Autograding options apply only when this assignment is set to \"Autograded\" in the Submission and Grading section above. Change the grading choice to Autograded to configure the autograder.",
+        "modeLabel": "Built-in autograder",
+        "lockedHelp": "Whether the built-in autograder is used can't be changed after creation: repositories students already accepted are not re-provisioned.",
+        "choices": {
+          "none": {
+            "label": "Do not use the built-in autograder",
+            "help": "No autograder shim is committed. With a template, supply your own workflow in the template (it must publish a result.json asset on the submission release). Without a template, the repository simply has no autograder."
+          },
+          "built-in": {
+            "label": "Use the built-in autograder",
+            "help": "Commit the built-in autograder shim, then configure the runtime and declarative tests below."
+          }
+        }
       },
       "grading": {
         "label": "Grading",
