@@ -2210,6 +2210,11 @@
       "title": "This assignment is locked",
       "body": "Your teacher has locked <assignment>{{assignment}}</assignment>, so it can't be accepted right now. Check back later or ask your teacher to unlock it."
     },
+    "closed": {
+      "badge": "Closed",
+      "title": "Submissions are closed",
+      "body": "Your teacher has closed <assignment>{{assignment}}</assignment> to new submissions, so it can't be accepted right now. Ask your teacher to reopen it if you think this is a mistake."
+    },
     "notEnrolled": {
       "badge": "Unavailable",
       "title": "This assignment isn't available to you",

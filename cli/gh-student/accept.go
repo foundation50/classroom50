@@ -394,6 +394,13 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	if entry.Locked {
 		return fmt.Errorf("assignment %q is locked by your teacher and can't be accepted right now — ask them to unlock it", assignment)
 	}
+	// Closed ends the submission window: unlike locked it only blocks a NEW
+	// accept and doesn't hide the assignment. Existing repos are unaffected, so
+	// this refuses a first accept (a re-run on an already-accepted repo would
+	// hit the same message, which is acceptable — the window is closed).
+	if entry.Closed {
+		return fmt.Errorf("assignment %q is closed to new submissions — ask your teacher to reopen it", assignment)
+	}
 	// The first accepter accepts a group assignment normally: the repo is
 	// created under their name and they add teammates via
 	// `gh student invite <org>/<repo> <teammate>`. Only an unknown mode errors.
