@@ -518,3 +518,24 @@ func TestEntryDecodesLocked(t *testing.T) {
 		t.Error("hello.Locked = true, want false (field absent)")
 	}
 }
+
+func TestEntryDecodesClosed(t *testing.T) {
+	// closed decodes when present and defaults to false when absent — the accept
+	// flow refuses a closed assignment (new submissions), independent of locked.
+	var file assignmentsFile
+	if err := json.Unmarshal([]byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {"slug": "done", "name": "Done", "mode": "individual", "autograder": "default", "closed": true},
+    {"slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default"}
+  ]
+}`), &file); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !file.Assignments[0].Closed {
+		t.Error("done.Closed = false, want true")
+	}
+	if file.Assignments[1].Closed {
+		t.Error("hello.Closed = true, want false (field absent)")
+	}
+}

@@ -20,6 +20,11 @@ let studentClassroomsData: Array<{ classroom: string; secret?: string }> = []
 // Enrollment-gate inputs, reset per test. Default: active member, enrolled.
 let orgRole = "member"
 let enrollmentVerdict: "enrolled" | "not-enrolled" | "unresolved" = "enrolled"
+// Whether the fetched assignment is closed to new submissions, reset per test.
+let assignmentClosed = false
+// The repo useGetRepo returns (null = the student hasn't accepted yet), reset
+// per test. Set to acceptedRepo to model an already-accepted student.
+let existingRepo: GitHubRepo | null = null
 
 vi.mock("@/domain/assignments", () => ({
   acceptAssignment: (...args: unknown[]) => acceptAssignment(...args),
@@ -34,6 +39,7 @@ vi.mock("@/hooks/usePagesAssignments", () => ({
           name: "Hello Python",
           mode: "individual",
           autograder: "default",
+          ...(assignmentClosed ? { closed: true } : {}),
         },
       ],
       isLoading: false,
@@ -55,7 +61,7 @@ vi.mock("@/hooks/useStudentClassrooms", () => ({
   },
 }))
 vi.mock("@/hooks/useGetRepo", () => ({
-  default: () => ({ data: null, isLoading: false }),
+  default: () => ({ data: existingRepo, isLoading: false }),
 }))
 vi.mock("@/hooks/useGetOwnOrgMembership", () => ({
   default: () => ({
@@ -171,6 +177,8 @@ beforeEach(() => {
   studentClassroomsData = []
   orgRole = "member"
   enrollmentVerdict = "enrolled"
+  assignmentClosed = false
+  existingRepo = null
   __resetGitHubHealthForTest()
 })
 
@@ -529,6 +537,46 @@ describe("AcceptAssignmentPage enrollment gate", () => {
     enrollmentVerdict = "unresolved"
     renderWith()
     expect(screen.queryByText("accept.notEnrolled.title")).toBeNull()
+    expect(
+      screen.queryByRole("button", { name: "accept.acceptButton" }),
+    ).not.toBeNull()
+  })
+})
+
+describe("AcceptAssignmentPage closed gate", () => {
+  const renderWith = () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    renderPage(client)
+  }
+
+  it("blocks a NEW accept on a closed assignment (no repo yet)", () => {
+    assignmentClosed = true
+    existingRepo = null
+    renderWith()
+    // The closed screen shows, and the accept CTA is gone.
+    expect(screen.queryByText("accept.closed.title")).not.toBeNull()
+    expect(
+      screen.queryByRole("button", { name: "accept.acceptButton" }),
+    ).toBeNull()
+  })
+
+  it("still lets an already-accepted student through (closed does not hide)", () => {
+    assignmentClosed = true
+    existingRepo = acceptedRepo
+    renderWith()
+    // Closed screen is NOT shown for a student whose repo already exists.
+    expect(screen.queryByText("accept.closed.title")).toBeNull()
+    // They reach their already-accepted view.
+    expect(screen.queryByText("accept.alreadyAcceptedHeading")).not.toBeNull()
+  })
+
+  it("does not show the closed screen when the assignment is open", () => {
+    assignmentClosed = false
+    existingRepo = null
+    renderWith()
+    expect(screen.queryByText("accept.closed.title")).toBeNull()
     expect(
       screen.queryByRole("button", { name: "accept.acceptButton" }),
     ).not.toBeNull()

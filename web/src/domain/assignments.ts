@@ -21,6 +21,8 @@ export {
   editAssignmentWithConflictRetry,
   setAssignmentLock,
   setAssignmentLockWithConflictRetry,
+  setAssignmentClosed,
+  setAssignmentClosedWithConflictRetry,
   preserveUnmanagedAssignmentKeys,
   tryGrantTeamTemplateRead,
   resolveTemplateGrant,
@@ -28,6 +30,8 @@ export {
   type CreateAssignmentResult,
   type SetAssignmentLockInput,
   type SetAssignmentLockResult,
+  type SetAssignmentClosedInput,
+  type SetAssignmentClosedResult,
 } from "./assignments/createEdit"
 export {
   createAssignmentRepo,

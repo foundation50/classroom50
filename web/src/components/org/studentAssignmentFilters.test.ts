@@ -166,4 +166,28 @@ describe("filterAndSortStudentAssignments", () => {
       expect(run(list)).toEqual(["open"])
     })
   })
+
+  describe("closed does not hide", () => {
+    it("still lists a closed assignment the student already accepted", () => {
+      const list = [a("closed", { closed: true })]
+      expect(run(list, { acceptedSlugs: new Set(["closed"]) })).toEqual([
+        "closed",
+      ])
+    })
+
+    it("still lists a released closed assignment (visibility is locked-only)", () => {
+      const list = [
+        a("closed", {
+          available_from: "2026-01-01T00:00:00Z",
+          closed: true,
+        }),
+      ]
+      expect(run(list)).toEqual(["closed"])
+    })
+
+    it("hides an assignment that is both closed and locked (locked wins)", () => {
+      const list = [a("both", { closed: true, locked: true })]
+      expect(run(list, { acceptedSlugs: new Set(["both"]) })).toEqual([])
+    })
+  })
 })

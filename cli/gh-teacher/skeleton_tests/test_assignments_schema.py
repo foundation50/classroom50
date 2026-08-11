@@ -93,6 +93,14 @@ class TestSchemaAccepts:
         assert _errors(_manifest(_entry(locked=True))) == []
         assert _errors(_manifest(_entry(locked=False))) == []
 
+    def test_closed_flag_accepted(self):
+        # closed is a boolean written by the web "Close submission" action; the
+        # schema must accept both values given additionalProperties:false. It is
+        # independent of locked, so both may be set together.
+        assert _errors(_manifest(_entry(closed=True))) == []
+        assert _errors(_manifest(_entry(closed=False))) == []
+        assert _errors(_manifest(_entry(closed=True, locked=True))) == []
+
     def test_allowed_files_accepted(self):
         # allowed_files is a CLI-written ordered list of gitignore-style
         # patterns; the schema must accept it given the assignment object
@@ -365,6 +373,9 @@ class TestSchemaRejects:
 
     def test_locked_must_be_boolean(self):
         assert _errors(_manifest(_entry(locked="yes"))) != []
+
+    def test_closed_must_be_boolean(self):
+        assert _errors(_manifest(_entry(closed="yes"))) != []
 
     @pytest.mark.parametrize(
         "submission_mode", ["Tag", "every_push", "push", "", None, True]

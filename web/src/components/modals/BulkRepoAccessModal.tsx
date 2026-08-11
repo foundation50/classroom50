@@ -1,6 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import type { TFunction } from "i18next"
 import { ShieldCheck } from "lucide-react"
 
 import { Alert, Button, Modal, Select } from "@/components/ui"
@@ -11,14 +10,9 @@ import {
   type BulkProgress,
   type BulkResultView,
 } from "@/components/bulk/resultView"
+import { runBulkRepoAccess } from "@/components/bulk/repoAccessFanOut"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
-import { describeGitHubApiFailure } from "@/components/modals/collaboratorHelpers"
-import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
-import { permissionSatisfies } from "@/domain/assignments/permissions"
-import { mapWithConcurrency } from "@/util/concurrency"
-import { studentRepoName } from "@/util/studentRepo"
 import { getName } from "@/util/students"
-import { GitHubAPIError } from "@/github-core/errors"
 import type { RepoPermission, Student } from "@/types/classroom"
 import { REPO_PERMISSIONS } from "@/types/classroom"
 
@@ -31,37 +25,6 @@ type BulkRepoAccessModalProps = {
   // The accepted students (their own login = their repo's owner segment).
   owners: string[]
   students?: Student[]
-}
-
-// A verified write that GitHub silently ignored: the PUT returned 204 but the
-// student's effective role didn't land on the target (the residual admin an
-// intended downgrade is meant to remove). Reported distinctly from a hard error.
-class AccessNotAppliedError extends Error {
-  readonly effective: string | undefined
-  constructor(effective: string | undefined) {
-    super(`access not applied (still ${effective ?? "unchanged"})`)
-    this.name = "AccessNotAppliedError"
-    this.effective = effective
-  }
-}
-
-// Map a rejected write to a localized reason for the result table. Reuses the
-// groupCollaborators failure vocabulary so this dialog stays consistent with
-// its per-repo sibling (RepoAccessModal) instead of assembling raw English.
-const describeFailure = (reason: unknown, t: TFunction): string | undefined => {
-  if (reason instanceof AccessNotAppliedError) {
-    return t("components.modals.repoAccess.notApplied", {
-      effective: reason.effective ?? "unknown",
-    })
-  }
-  const shared = describeGitHubApiFailure(reason, t)
-  if (shared) return shared
-  if (reason instanceof GitHubAPIError) {
-    return t("components.modals.groupCollaborators.failure.httpStatus", {
-      status: reason.status,
-    })
-  }
-  return reason instanceof Error ? reason.message : undefined
 }
 
 // Whole-assignment access editor: set every accepted student's role on their
@@ -118,78 +81,32 @@ export function BulkRepoAccessModal({
   const permissionLabel = (level: RepoPermission) =>
     t(`assignments.form.studentPermission.levels.${level}`)
 
-  type Outcome =
-    | { owner: string; status: "ok" }
-    | { owner: string; status: "deferred" }
-    | { owner: string; status: "failed"; detail?: string }
-
   const run = async () => {
     if (runningRef.current || total === 0) return
     runningRef.current = true
     setPhase("working")
     setResult(null)
-    let processed = 0
     setProgress({ processed: 0, total, message: "" })
 
-    // Set once we hit a secondary-rate-limit: stop launching NEW writes and
-    // report the untouched remainder as deferred rather than hammering GitHub
-    // into a deeper throttle (mirrors inviteRosterStudents' throttle handling).
-    let rateLimited = false
-
-    const outcomes = await mapWithConcurrency(
+    const { outcomes, rateLimited } = await runBulkRepoAccess({
       owners,
-      REPO_READ_CONCURRENCY,
-      async (owner): Promise<Outcome> => {
-        // The modal closed/unmounted, or an earlier task tripped the rate
-        // limit: don't start another write; mark the rest deferred.
-        if (rateLimited || !mountedRef.current) {
-          processed += 1
-          if (mountedRef.current) {
-            setProgress({ processed, total, message: displayFor(owner) })
-          }
-          return { owner, status: "deferred" }
-        }
-        const repo = studentRepoName(classroom, assignment, owner)
-        try {
-          const { effective } = await addCollaboratorMutation.mutateAsync({
-            org,
-            repo,
-            username: owner,
-            permission,
-            verify: true,
-          })
-          // The owner segment is the enrolled student — an org member, so
-          // GitHub honors the direct grant exactly. A higher residual means the
-          // requested (typically lower) role was silently ignored, the exact
-          // over-access an intended lockdown must catch.
-          if (
-            effective &&
-            !permissionSatisfies(
-              effective.permission,
-              effective.role_name,
-              permission,
-              false,
-            )
-          ) {
-            throw new AccessNotAppliedError(
-              effective.role_name || effective.permission,
-            )
-          }
-          return { owner, status: "ok" }
-        } catch (err) {
-          if (err instanceof GitHubAPIError && err.isRateLimited) {
-            rateLimited = true
-            return { owner, status: "deferred" }
-          }
-          return { owner, status: "failed", detail: describeFailure(err, t) }
-        } finally {
-          processed += 1
-          if (mountedRef.current) {
-            setProgress({ processed, total, message: displayFor(owner) })
-          }
+      org,
+      classroom,
+      assignment,
+      permission,
+      setCollaborator: (params) => addCollaboratorMutation.mutateAsync(params),
+      // Exact match: the enrolled student is an org member, so GitHub honors the
+      // direct grant exactly. A higher residual means the requested (typically
+      // lower) role was silently ignored — the over-access a lockdown must catch.
+      treatRequestedAsFloor: false,
+      t,
+      isMounted: () => mountedRef.current,
+      onProgress: (processed) => {
+        if (mountedRef.current) {
+          setProgress({ processed, total, message: "" })
         }
       },
-    )
+    })
 
     // The modal was closed mid-run: the fan-out finished (or bailed) but there's
     // no live component to show a result on.
@@ -322,14 +239,18 @@ export function BulkRepoAccessModal({
           <Spinner label={t("submissions.bulkAccess.working")} />
           <progress
             className="progress progress-primary w-full"
-            value={pct}
+            // Indeterminate until the first repo completes, so a slow write
+            // animates instead of sitting at 0%.
+            {...(progress.processed > 0 ? { value: pct } : {})}
             max={100}
           />
           <p className="text-sm text-base-content/70">
-            {t("submissions.bulkAccess.progress", {
-              processed: progress.processed,
-              total: progress.total,
-            })}
+            {progress.processed > 0
+              ? t("submissions.bulkAccess.progress", {
+                  processed: progress.processed,
+                  total: progress.total,
+                })
+              : t("submissions.bulkAccess.working")}
           </p>
         </div>
       )}

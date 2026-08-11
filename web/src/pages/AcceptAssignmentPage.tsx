@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  CalendarX,
   CheckCircle2,
   ChevronDown,
   GraduationCap,
@@ -281,7 +282,60 @@ const AssignmentLocked = ({
   )
 }
 
-// Shown when the viewer is an active org member but is NOT enrolled in this
+// Shown when the submission window is CLOSED and the viewer has not already
+// accepted. Unlike locked, closed only blocks a NEW accept: an already-accepted
+// student never reaches here (the gate checks repoExistsAlready), so they keep
+// their repo and the usual already-accepted view. Terminal, not retryable.
+const AssignmentClosed = ({
+  user,
+  assignment,
+}: {
+  user: GitHubUser | null
+  assignment?: string
+}) => {
+  const { t } = useTranslation()
+  return (
+    <AcceptLayout>
+      <AcceptCard>
+        <Card.Body className="gap-8">
+          <div>
+            <span className="badge badge-warning badge-soft gap-2">
+              <CalendarX aria-hidden="true" className="size-4" />
+              {t("accept.closed.badge")}
+            </span>
+
+            <h1 className="mt-6 text-2xl font-bold">
+              {t("accept.closed.title")}
+            </h1>
+
+            <p className="mt-2 text-base text-base-content/70">
+              <Trans
+                i18nKey="accept.closed.body"
+                values={{ assignment }}
+                components={{
+                  assignment: (
+                    <MonoLtr className="font-semibold text-base-content" />
+                  ),
+                }}
+              />
+            </p>
+          </div>
+
+          <div className="divider my-0" />
+
+          <div className="space-y-3">
+            <label className="label p-0 text-base font-semibold">
+              {t("accept.signedInAs")}
+            </label>
+
+            <UserInfo user={user} />
+          </div>
+        </Card.Body>
+      </AcceptCard>
+    </AcceptLayout>
+  )
+}
+
 // classroom (not on the `classroom50-<classroom>` student team) and holds no
 // staff role. Enrollment is derived from live team-membership reads, the same
 // signal roster/role resolution uses; a student can't read classroom.json, so
@@ -843,6 +897,12 @@ const AcceptAssignmentPage = () => {
 
   if (assignmentData.locked) {
     return <AssignmentLocked user={user} assignment={assignment} />
+  }
+
+  // Closed only blocks a NEW accept. An already-accepted student (their repo
+  // exists) still reaches the normal already-accepted view below.
+  if (assignmentData.closed && !repoExistsAlready) {
+    return <AssignmentClosed user={user} assignment={assignment} />
   }
 
   const description = assignmentDescription(assignmentData)

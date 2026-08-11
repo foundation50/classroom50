@@ -2210,6 +2210,11 @@
       "title": "This assignment is locked",
       "body": "Your teacher has locked <assignment>{{assignment}}</assignment>, so it can't be accepted right now. Check back later or ask your teacher to unlock it."
     },
+    "closed": {
+      "badge": "Closed",
+      "title": "Submissions are closed",
+      "body": "Your teacher has closed <assignment>{{assignment}}</assignment> to new submissions, so it can't be accepted right now. Ask your teacher to reopen it if you think this is a mistake."
+    },
     "notEnrolled": {
       "badge": "Unavailable",
       "title": "This assignment isn't available to you",
@@ -2287,6 +2292,7 @@
     "emptyRepoNote": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted.",
     "noAutograderNote": "This assignment has no built-in autograding — the teacher supplies their own CI in the template. Built-in scores and regrading are disabled; the table below shows who has accepted. The feedback pull request still works when enabled.",
     "lockedNotice": "This assignment is locked. Students can't accept or open it, and if it uses a private template the student team's access to that template has been removed. Existing repositories and their submissions are unaffected. Unlock it from the Actions menu (or the assignments list) to reopen it.",
+    "closedNotice": "Submissions are closed. New students can't accept this assignment. When you close from here, accepted students' repositories are set to read-only; existing work is preserved. Reopen it from the Actions menu to allow submissions again.",
     "lock": {
       "lockLabel": "Lock assignment",
       "unlockLabel": "Unlock assignment",
@@ -2582,6 +2588,42 @@
       "deferredSection_one": "{{count}} repository was not updated",
       "deferredSection_other": "{{count}} repositories were not updated",
       "deferredDetail": "Skipped — re-run to update."
+    },
+    "closeSubmission": {
+      "menuLabel": "Close submission",
+      "reopenLabel": "Reopen submission",
+      "menuTitle": "Close the submission window: block new accepts and set every student's repository to read-only",
+      "reopenMenuTitle": "Reopen the submission window: allow new accepts and restore write access",
+      "title": "Close submission",
+      "reopenTitle": "Reopen submission",
+      "subtitle_one": "Blocks new accepts and sets {{count}} student's repository to read-only.",
+      "subtitle_other": "Blocks new accepts and sets {{count}} students' repositories to read-only.",
+      "reopenSubtitle_one": "Allows new accepts and restores write access for {{count}} student's repository.",
+      "reopenSubtitle_other": "Allows new accepts and restores write access for {{count}} students' repositories.",
+      "noRepos": "No students have accepted this assignment yet. Closing still blocks new accepts.",
+      "warning_one": "This blocks any new student from accepting and sets {{count}} student's role on their own repository to read (pull). Existing work is preserved but becomes read-only until you reopen.",
+      "warning_other": "This blocks any new student from accepting and sets {{count}} students' roles on their own repositories to read (pull). Existing work is preserved but becomes read-only until you reopen.",
+      "reopenWarning_one": "This allows new accepts again and restores write access for {{count}} student's repository.",
+      "reopenWarning_other": "This allows new accepts again and restores write access for {{count}} students' repositories.",
+      "apply": "Close submission",
+      "reopenApply": "Reopen submission",
+      "finishHint": "The submission is closed to new accepts, but some repositories are not yet read-only. Finish closing to retry only those — this does not reopen the submission.",
+      "finishApply": "Finish closing",
+      "flagError": "The submission window could not be updated, so no repositories were changed. Try again.",
+      "working": "Updating repositories",
+      "progress": "Updated {{processed}} of {{total}}",
+      "resultHeadline": "Set {{count}} of {{total}} repositories to read-only.",
+      "resultHeadlineThrottled": "Set {{count}} of {{total}} repositories to read-only before GitHub rate-limited the request — re-run to finish the rest.",
+      "reopenResultHeadline": "Restored write access for {{count}} of {{total}} repositories.",
+      "reopenResultHeadlineThrottled": "Restored write access for {{count}} of {{total}} repositories before GitHub rate-limited the request — re-run to finish the rest.",
+      "failedSection_one": "{{count}} repository could not be updated",
+      "failedSection_other": "{{count}} repositories could not be updated",
+      "deferredSection_one": "{{count}} repository was not updated",
+      "deferredSection_other": "{{count}} repositories were not updated",
+      "deferredDetail": "Skipped — re-run to update.",
+      "statusBadge": {
+        "closed": "Closed"
+      }
     },
     "bulkFeatures": {
       "menuLabel": "Update repository features",

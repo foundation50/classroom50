@@ -666,6 +666,67 @@ func TestParseAssignments_LockedRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseAssignments_ClosedRoundTrip(t *testing.T) {
+	// closed=true parses onto the struct (not Extra), survives a
+	// re-encode/re-parse, and an entry without the field defaults to false.
+	// It coexists with locked (independent axes).
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "hello",
+      "name": "Hello",
+      "template": { "owner": "cs50", "repo": "hello-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default",
+      "closed": true,
+      "locked": true
+    },
+    {
+      "slug": "world",
+      "name": "World",
+      "template": { "owner": "cs50", "repo": "world-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default"
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	if !file.Assignments[0].Closed {
+		t.Errorf("hello.Closed = false, want true")
+	}
+	if !file.Assignments[0].Locked {
+		t.Errorf("hello.Locked = false, want true (closed and locked are independent)")
+	}
+	if file.Assignments[1].Closed {
+		t.Errorf("world.Closed = true, want false (field absent)")
+	}
+	if _, isExtra := file.Assignments[0].Extra["closed"]; isExtra {
+		t.Error("closed leaked into Extra (should be a known key)")
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"closed": true`) {
+		t.Errorf("encoded missing closed:\n%s", encoded)
+	}
+	if strings.Contains(string(encoded), `"closed": false`) {
+		t.Errorf("closed:false should omit, not serialize:\n%s", encoded)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if !again.Assignments[0].Closed || again.Assignments[1].Closed {
+		t.Errorf("closed not stable across round-trip: %#v", again.Assignments)
+	}
+}
+
 func TestParseAssignments_AllowedFilesRoundTrip(t *testing.T) {
 	// allowed_files parses, survives a re-encode/re-parse preserving
 	// order, and an entry without the field decodes to a nil slice.

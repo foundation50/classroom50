@@ -61,6 +61,10 @@ const matchesQuery = (assignment: Assignment, query: string): boolean => {
 // acceptance. The search/status/type/due facets narrow this set further; this
 // is the baseline the empty-state copy keys off (nothing listable vs. filters
 // hid everything).
+//
+// `closed` is intentionally NOT checked here: unlike `locked`, closing a
+// submission window only blocks a NEW accept (see the accept gate); it must not
+// hide the assignment from an already-accepted student.
 export const isListableToStudent = (
   assignment: Assignment,
   accepted: boolean,

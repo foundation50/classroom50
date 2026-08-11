@@ -340,6 +340,37 @@ func TestRunAssignmentReuse_CopiesVerbatim(t *testing.T) {
 	}
 }
 
+// TestRunAssignmentReuse_ResetsClosed guards that reusing a CLOSED source
+// assignment produces an OPEN copy: closed describes the source cohort's
+// submission window and has no meaning in a fresh target classroom (no accepted
+// repos yet), so reuse.go clears it. (Contrast Locked, which is carried.)
+func TestRunAssignmentReuse_ResetsClosed(t *testing.T) {
+	source := `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"o","repo":"hello-template","branch":"main"},"mode":"individual","autograder":"default","closed":true}]}`
+	server, fix := newReuseServer(t, reuseServerConfig{
+		sourceAssignments: source,
+		targetAssignments: emptyAssignmentsBody(),
+		targetClassroom:   targetClassroomBody(nil),
+		templatePrivate:   true,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runAssignmentReuse(client, &out, &errOut, baseReuseParams()); err != nil {
+		t.Fatalf("runAssignmentReuse: %v", err)
+	}
+	file := decodeReuse(t, fix)
+	if len(file.Assignments) != 1 {
+		t.Fatalf("target should have 1 assignment, got %d", len(file.Assignments))
+	}
+	if file.Assignments[0].Closed {
+		t.Errorf("reused assignment must start open, but closed was carried forward")
+	}
+	// A closed:false must collapse to an absent key on the wire (omitempty).
+	if strings.Contains(string(fix.committed), `"closed"`) {
+		t.Errorf("reused open assignment must omit the closed key:\n%s", fix.committed)
+	}
+}
+
 func TestRunAssignmentReuse_AutoSuffixOnCollision(t *testing.T) {
 	target := `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Existing","mode":"individual","autograder":"default"}]}`
 	server, fix := newReuseServer(t, reuseServerConfig{

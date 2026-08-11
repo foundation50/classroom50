@@ -186,6 +186,11 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		}
 		// Copy verbatim through the typed entry; only slug/name are overridable.
 		copied = srcFile.Assignments[idx]
+		// Closed describes the SOURCE cohort's submission window and has no
+		// meaning in a fresh target classroom (no accepted repos yet), so a reuse
+		// always starts with an open window. Locked is carried (it gates the
+		// template grant below); Closed is not.
+		copied.Closed = false
 
 		dstFile, err := loadAssignments(client, p.Org, p.To, parentSHA)
 		if err != nil {
