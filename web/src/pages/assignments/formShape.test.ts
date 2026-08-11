@@ -37,6 +37,8 @@ const base: CreateAssignmentFormValues = {
   student_permission: "",
   submission_mode: "every-push",
   submission_tags: "",
+  grading_choice: "auto",
+  grading_max_points: 100,
   repo_feature_issues: "inherit",
   repo_feature_wiki: "inherit",
   repo_feature_projects: "inherit",

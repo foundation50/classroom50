@@ -4,6 +4,7 @@ import type {
   RepoPermission,
   RepoFeatures,
   SubmissionMode,
+  Grading,
 } from "@/types/classroom"
 import { GitHubAPIError } from "@/github-core/errors"
 import { getRepo } from "@/github-core/repoReads"
@@ -387,6 +388,12 @@ export type CreateAssignmentInput = {
   // none (buildAssignmentEntry omits the key). Mutually exclusive with
   // empty_repo. Mirrors the CLI's --submission-tag.
   submission_tags?: string[]
+  // The teacher's grading intent (off/auto/manual) with a manual max_points.
+  // Undefined reads as "auto" (today's behavior). Orthogonal to the autograding
+  // tri-state; buildAssignmentEntry omits the block when it resolves to plain
+  // auto with no max. The mode is immutable after creation (edit rejects a
+  // change). Mirrors the CLI's grading object.
+  grading?: Grading
   // Per-assignment repo feature overrides (tri-state per key: undefined =
   // inherit, true = force on, false = force off). buildAssignmentEntry omits
   // the block when no key is set; accept resolves + applies it at fresh create.

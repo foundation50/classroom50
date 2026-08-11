@@ -1301,6 +1301,8 @@
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
         "studentPermissionInvalid": "Student repo access must be one of pull, triage, push, maintain, or admin.",
         "submissionModeInvalid": "Autograding trigger must be \"every-push\" or \"tag\".",
+        "gradingModeInvalid": "Grading must be \"off\", \"auto\", or \"manual\".",
+        "gradingMaxPointsInvalid": "Max points must be a whole number of at least {{min}}.",
         "releaseAssetsTooMany": "Choose at most {{max}} submission release files (currently {{count}}).",
         "releaseAssetsTooLarge": "Submission release file paths may total at most {{max}} UTF-8 bytes (8 KiB); currently {{bytes}}.",
         "releaseAssetsInvalidPath": "{{path}} is not an exact workspace-relative file path.",
