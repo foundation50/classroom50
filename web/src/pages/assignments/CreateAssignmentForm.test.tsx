@@ -556,6 +556,29 @@ describe("grading drives the autograding config", () => {
       screen.queryByText("assignments.form.autograding.notAutogradedNote"),
     ).toBeNull()
   })
+
+  it("locks the built-in autograder radios on edit (the choice is immutable)", () => {
+    // On edit the built-in choice maps to no_autograder/init_shim, which the
+    // domain layer refuses to change after creation, so the radios render
+    // disabled with the locked-help note.
+    const { container } = renderForm({
+      edit: true,
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "auto",
+        autograding_state: "built-in",
+      },
+    })
+    const radios = container.querySelectorAll<HTMLInputElement>(
+      'input[name="autograding_state"]',
+    )
+    expect(radios.length).toBe(2)
+    radios.forEach((radio) => expect(radio.disabled).toBe(true))
+    expect(
+      screen.getByText("assignments.form.autograding.lockedHelp"),
+    ).not.toBeNull()
+  })
 })
 
 // The section IA (R1/R2): the sections render in order with a status badge

@@ -599,6 +599,31 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.autograding_state).toBe("none")
   })
 
+  it("preserves built-in autograder config under Manual grading (built-in on)", () => {
+    // The built-in-only field clearing keys off the built-in autograder toggle
+    // (autograding_state), NOT the grading choice — so a built-in assignment
+    // graded Manually must KEEP its advanced config on submit even though the
+    // (immutable) Manual choice hides the panes in the UI. Guards the invariant
+    // deriveFormShape's showBuiltInConfig doc calls out.
+    const out = toSubmitValues({
+      ...base,
+      repo_source: "template",
+      template_repo: "acme/starter",
+      autograding_state: "built-in",
+      grading_choice: "manual",
+      grading_max_points: 50,
+      setup_command: "make",
+      allowed_files: "*\n!hello.py",
+      release_assets: "report.pdf",
+      pass_threshold_enabled: true,
+    })
+    expect(out.autograding_state).toBe("built-in")
+    expect(out.setup_command).toBe("make")
+    expect(out.allowed_files).toBe("*\n!hello.py")
+    expect(out.release_assets).toBe("report.pdf")
+    expect(out.pass_threshold_enabled).toBe(true)
+  })
+
   it("empty_repo forces the autograding state to 'empty' regardless of the picked value", () => {
     const out = toSubmitValues({
       ...base,
@@ -689,6 +714,31 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(values.autograding_state).toBe("built-in")
     const shape = deriveFormShape({ ...base, ...values })
     expect(shape.initShim).toBe(true)
+    expect(shape.emptyRepo).toBe(false)
+  })
+
+  it("round-trips a stored templated no_autograder assignment without dropping the flag", () => {
+    // A stored no_autograder (teacher-supplied CI on a template) must read back
+    // as a template source with the built-in autograder off, so deriveFormShape
+    // re-derives no_autograder:true — otherwise a re-save would drop the
+    // immutable flag and editAssignment's guard would reject the edit. Guards
+    // that noAutograder keys off the (template) source + built-in toggle, not
+    // the grading choice (this assignment is graded manually).
+    const values = assignmentToFormValues({
+      slug: "ci",
+      name: "Teacher CI",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "acme", repo: "starter", branch: "main" },
+      no_autograder: true,
+      grading: { mode: "manual", max_points: 50 },
+    })
+    expect(values.repo_source).toBe("template")
+    expect(values.autograding_state).toBe("none")
+    expect(values.grading_choice).toBe("manual")
+    const shape = deriveFormShape({ ...base, ...values })
+    expect(shape.noAutograder).toBe(true)
+    expect(shape.initShim).toBe(false)
     expect(shape.emptyRepo).toBe(false)
   })
 })

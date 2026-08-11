@@ -212,4 +212,23 @@ describe("ManualGradeCell", () => {
     // in save() is the real backstop: even if save() is invoked it must no-op.
     expect(mutate).not.toHaveBeenCalled()
   })
+
+  it("fires mutate only once when Enter is pressed twice before the save settles", async () => {
+    // The mocked mutate never resolves (no onSettled), so inFlightRef stays set
+    // after the first submit — a second Enter must not fire a second mutate,
+    // proving the synchronous latch (not just the across-render isPending check)
+    // blocks the duplicate config-repo write.
+    const user = userEvent.setup()
+    renderCell({ hasGrade: false })
+    await user.click(
+      screen.getByRole("button", {
+        name: "submissions.manualGrade.addLabel:alice",
+      }),
+    )
+    const input = screen.getByRole("spinbutton", {
+      name: "submissions.manualGrade.inputLabel:alice",
+    })
+    await user.type(input, "30{Enter}{Enter}")
+    expect(mutate).toHaveBeenCalledTimes(1)
+  })
 })

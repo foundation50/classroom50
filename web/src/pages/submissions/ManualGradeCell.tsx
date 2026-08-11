@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, Pencil, X } from "lucide-react"
 
@@ -51,16 +51,21 @@ export function ManualGradeCell({
   // representable (distinct from 0).
   const [draft, setDraft] = useState("")
   const mutation = useSetScoreOverride()
+  // A synchronous latch so two save() calls in the SAME tick (before
+  // mutation.isPending flips on the next render) can't both fire mutate.
+  const inFlightRef = useRef(false)
 
   const startEditing = () => {
     setDraft(hasGrade ? String(score) : "")
     mutation.reset()
+    inFlightRef.current = false
     setEditing(true)
   }
 
   const cancel = () => {
     setEditing(false)
     setDraft("")
+    inFlightRef.current = false
     mutation.reset()
   }
 
@@ -74,12 +79,14 @@ export function ManualGradeCell({
 
   const save = () => {
     if (validationError) return
-    // Guard against a double-submit: mutation.isPending only flips to true on
-    // the next render, so two fast synchronous Save clicks (or an Enter racing
-    // the button) would both fire mutate and write two config-repo commits for
-    // the same owner. The conflict retry makes that non-corrupting, just
-    // wasteful — skip the second call outright.
-    if (mutation.isPending) return
+    // Guard against a double-submit. mutation.isPending only flips true on the
+    // next render, so a synchronous latch (inFlightRef) is what actually blocks
+    // two save() calls in one tick (two fast Save clicks, or an Enter racing
+    // the button); the isPending check covers a later click after a re-render.
+    // The conflict retry makes a duplicate write non-corrupting, but a redundant
+    // config-repo commit is still wasteful.
+    if (inFlightRef.current || mutation.isPending) return
+    inFlightRef.current = true
     mutation.mutate(
       {
         org: ctx.org,
@@ -95,6 +102,9 @@ export function ManualGradeCell({
         onSuccess: () => {
           setEditing(false)
           setDraft("")
+        },
+        onSettled: () => {
+          inFlightRef.current = false
         },
       },
     )
