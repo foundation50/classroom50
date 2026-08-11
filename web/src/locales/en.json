@@ -2607,6 +2607,8 @@
       "reopenWarning_other": "This allows new accepts again and restores write access for {{count}} students' repositories.",
       "apply": "Close submission",
       "reopenApply": "Reopen submission",
+      "finishHint": "The submission is closed to new accepts, but some repositories are not yet read-only. Finish closing to retry only those — this does not reopen the submission.",
+      "finishApply": "Finish closing",
       "flagError": "The submission window could not be updated, so no repositories were changed. Try again.",
       "working": "Updating repositories",
       "progress": "Updated {{processed}} of {{total}}",

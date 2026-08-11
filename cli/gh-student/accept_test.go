@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/ui"
 )
 
@@ -35,6 +36,52 @@ func TestCheckAcceptableMode(t *testing.T) {
 			}
 			if !tc.wantErr && err != nil {
 				t.Errorf("mode %q: unexpected error %v", tc.mode, err)
+			}
+		})
+	}
+}
+
+// TestAssertAssignmentAcceptable pins the pre-generate access gates: an open
+// assignment is accepted; a closed assignment refuses a NEW submission with a
+// distinct message; and locked takes precedence over closed when both are set.
+func TestAssertAssignmentAcceptable(t *testing.T) {
+	cases := []struct {
+		name       string
+		entry      assignments.Entry
+		wantErr    bool
+		wantSubstr string
+	}{
+		{"open", assignments.Entry{}, false, ""},
+		{
+			"closed refuses a new submission",
+			assignments.Entry{Closed: true},
+			true,
+			"closed to new submissions",
+		},
+		{
+			"locked refuses accept",
+			assignments.Entry{Locked: true},
+			true,
+			"locked by your teacher",
+		},
+		{
+			"locked takes precedence over closed",
+			assignments.Entry{Locked: true, Closed: true},
+			true,
+			"locked by your teacher",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := assertAssignmentAcceptable(tc.entry, "hello")
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected an error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error %v", err)
+			}
+			if tc.wantErr && !strings.Contains(err.Error(), tc.wantSubstr) {
+				t.Errorf("error %q missing substring %q", err.Error(), tc.wantSubstr)
 			}
 		})
 	}

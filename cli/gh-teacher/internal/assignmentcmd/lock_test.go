@@ -161,6 +161,26 @@ func lockAssignmentsBody(locked bool) string {
 }`
 }
 
+// closedAssignmentsBody is lockAssignmentsBody's twin carrying closed:true, for
+// the re-add carry-forward test: closed is owned by the web "Close submission"
+// action, never `assignment add`, so a same-slug re-add must preserve it.
+func closedAssignmentsBody() string {
+	return `{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "hello",
+      "name": "Hello",
+      "template": { "owner": "o", "repo": "hello-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default",
+      "closed": true,
+      "feedback_pr": true
+    }
+  ]
+}`
+}
+
 func lockClassroomBody() string {
 	doc := map[string]any{
 		"schema":     "classroom50/classroom/v1",
@@ -323,6 +343,36 @@ func TestRunAssignmentAdd_PreservesLockAndSkipsGrant(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "locked") {
 		t.Errorf("expected a note that the assignment stayed locked, got %q", errOut.String())
+	}
+}
+
+// TestRunAssignmentAdd_PreservesClosed guards that re-running `assignment add`
+// on a same-slug CLOSED entry keeps it closed. closed is owned by the web
+// "Close submission" action, not `add`; without the carry-forward a same-slug
+// re-add would silently re-open a closed submission window.
+func TestRunAssignmentAdd_PreservesClosed(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments:     closedAssignmentsBody(), // already closed, not locked
+		classroom:       lockClassroomBody(),
+		templatePrivate: true,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:        "o",
+		Classroom:  "dst",
+		Slug:       "hello",
+		Name:       "Hello",
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template", Branch: "main"},
+		Mode:       assignment.ModeIndividual,
+		Autograder: "default",
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(re-add closed): %v", err)
+	}
+	if !decodeLock(t, fix).Assignments[0].Closed {
+		t.Errorf("re-adding a closed slug must keep it closed, but closed was cleared")
 	}
 }
 

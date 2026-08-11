@@ -187,4 +187,62 @@ describe("CloseSubmissionModal", () => {
     )
     expect(addMutateAsync).not.toHaveBeenCalled()
   })
+
+  it("offers 'finish closing' after a throttled close and re-runs the fan-out without flipping the flag again", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: true })
+    // First attempt: the very first write is rate-limited, deferring the rest.
+    addMutateAsync.mockImplementation(() => Promise.reject(apiError(429)))
+    renderModal("close", ["alice", "bob"])
+
+    fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.finishApply"),
+      ).toBeTruthy(),
+    )
+    // The finish hint explains the flag is already committed.
+    expect(
+      screen.getByText("submissions.closeSubmission.finishHint"),
+    ).toBeTruthy()
+    expect(setClosedMutateAsync).toHaveBeenCalledTimes(1)
+
+    // Finish closing: this time the writes succeed.
+    addMutateAsync.mockReset()
+    addMutateAsync.mockResolvedValue({ effective: undefined })
+    fireEvent.click(screen.getByText("submissions.closeSubmission.finishApply"))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.resultHeadline"),
+      ).toBeTruthy(),
+    )
+    // The flag was NOT flipped again — finish-only re-runs the fan-out.
+    expect(setClosedMutateAsync).toHaveBeenCalledTimes(1)
+    expect(addMutateAsync).toHaveBeenCalledTimes(2)
+    // And once the fan-out completes cleanly, the finish affordance is gone.
+    expect(
+      screen.queryByText("submissions.closeSubmission.finishApply"),
+    ).toBeNull()
+  })
+
+  it("reopen tolerates a residual role at or above write (floor comparison)", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: false })
+    // Requested push but the student legitimately holds admin — benign on reopen.
+    addMutateAsync.mockResolvedValue({
+      effective: { permission: "admin", role_name: "admin" },
+    })
+    renderModal("reopen", ["alice"])
+
+    fireEvent.click(screen.getByText("submissions.closeSubmission.reopenApply"))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.reopenResultHeadline"),
+      ).toBeTruthy(),
+    )
+    // No failed section: a higher-than-requested role is not a reopen failure.
+    expect(
+      screen.queryByText("submissions.closeSubmission.failedSection"),
+    ).toBeNull()
+  })
 })

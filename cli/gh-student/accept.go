@@ -339,6 +339,22 @@ func checkAcceptableMode(assignment, mode string) error {
 	return nil
 }
 
+// assertAssignmentAcceptable applies the pre-generate access gates in order:
+// locked (the stronger, visibility-affecting gate) before closed (the narrower
+// submission-window gate). Locked refuses every student including a re-run on
+// an already-accepted repo; closed refuses a new submission with a distinct
+// message. Both are advisory client-side (assignments.json is public) — the
+// enforceable boundary is the teacher's template/collaborator changes.
+func assertAssignmentAcceptable(entry assignments.Entry, assignment string) error {
+	if entry.Locked {
+		return fmt.Errorf("assignment %q is locked by your teacher and can't be accepted right now — ask them to unlock it", assignment)
+	}
+	if entry.Closed {
+		return fmt.Errorf("assignment %q is closed to new submissions — ask your teacher to reopen it", assignment)
+	}
+	return nil
+}
+
 // assertModeCoherentForCreate rejects a group-shaped entry (max_group_size >= 2)
 // whose mode isn't `group`: fresh-founding it would under-privilege the founder
 // and break `gh student invite`. Only on fresh create — a healthy repo must
@@ -387,19 +403,8 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		return err
 	}
 	lookup.Stop(fmt.Sprintf("Found assignment %s", assignment))
-	// A locked assignment is closed to every student, including a re-run on an
-	// already-accepted repo. For a private-template assignment the student
-	// team's template read is also gone, so the repo generation would fail
-	// anyway; this gate makes the refusal explicit and fast.
-	if entry.Locked {
-		return fmt.Errorf("assignment %q is locked by your teacher and can't be accepted right now — ask them to unlock it", assignment)
-	}
-	// Closed ends the submission window: unlike locked it only blocks a NEW
-	// accept and doesn't hide the assignment. Existing repos are unaffected, so
-	// this refuses a first accept (a re-run on an already-accepted repo would
-	// hit the same message, which is acceptable — the window is closed).
-	if entry.Closed {
-		return fmt.Errorf("assignment %q is closed to new submissions — ask your teacher to reopen it", assignment)
+	if err := assertAssignmentAcceptable(entry, assignment); err != nil {
+		return err
 	}
 	// The first accepter accepts a group assignment normally: the repo is
 	// created under their name and they add teammates via

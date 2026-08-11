@@ -1,6 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import type { TFunction } from "i18next"
 import { CalendarX } from "lucide-react"
 
 import { Alert, Button, Modal } from "@/components/ui"
@@ -11,15 +10,10 @@ import {
   type BulkProgress,
   type BulkResultView,
 } from "@/components/bulk/resultView"
+import { runBulkRepoAccess } from "@/components/bulk/repoAccessFanOut"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useSetAssignmentClosed from "@/hooks/mutations/useSetAssignmentClosed"
-import { describeGitHubApiFailure } from "@/components/modals/collaboratorHelpers"
-import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
-import { permissionSatisfies } from "@/domain/assignments/permissions"
-import { mapWithConcurrency } from "@/util/concurrency"
-import { studentRepoName } from "@/util/studentRepo"
 import { getName } from "@/util/students"
-import { GitHubAPIError } from "@/github-core/errors"
 import type { RepoPermission, Student } from "@/types/classroom"
 
 type CloseSubmissionModalProps = {
@@ -34,33 +28,6 @@ type CloseSubmissionModalProps = {
   // The accepted students (their own login = their repo's owner segment).
   owners: string[]
   students?: Student[]
-}
-
-// A verified write GitHub silently ignored: the PUT returned 204 but the
-// student's effective role didn't land on the target. Reported distinctly.
-class AccessNotAppliedError extends Error {
-  readonly effective: string | undefined
-  constructor(effective: string | undefined) {
-    super(`access not applied (still ${effective ?? "unchanged"})`)
-    this.name = "AccessNotAppliedError"
-    this.effective = effective
-  }
-}
-
-const describeFailure = (reason: unknown, t: TFunction): string | undefined => {
-  if (reason instanceof AccessNotAppliedError) {
-    return t("components.modals.repoAccess.notApplied", {
-      effective: reason.effective ?? "unknown",
-    })
-  }
-  const shared = describeGitHubApiFailure(reason, t)
-  if (shared) return shared
-  if (reason instanceof GitHubAPIError) {
-    return t("components.modals.groupCollaborators.failure.httpStatus", {
-      status: reason.status,
-    })
-  }
-  return reason instanceof Error ? reason.message : undefined
 }
 
 // Close/reopen the submission window as one action: flip the assignment's
@@ -103,6 +70,12 @@ export function CloseSubmissionModal({
   })
   const [result, setResult] = useState<BulkResultView | null>(null)
   const [flagError, setFlagError] = useState(false)
+  // True after a close run that flipped the flag but left some repos not
+  // read-only (deferred/failed). The flag is committed (new accepts are
+  // blocked), so the recovery is to re-run the read-only fan-out WITHOUT
+  // reopening — reopening would re-grant write first. Drives the "finish
+  // closing" affordance so a throttled close isn't stuck offering only Reopen.
+  const [fanOutIncomplete, setFanOutIncomplete] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -110,6 +83,7 @@ export function CloseSubmissionModal({
       setPhase("idle")
       setResult(null)
       setFlagError(false)
+      setFanOutIncomplete(false)
       setProgress({ processed: 0, total: 0, message: "" })
     }
   }, [open])
@@ -117,98 +91,61 @@ export function CloseSubmissionModal({
   const total = owners.length
   const displayFor = (login: string) => getName(login, students) || login
 
-  type Outcome =
-    | { owner: string; status: "ok" }
-    | { owner: string; status: "deferred" }
-    | { owner: string; status: "failed"; detail?: string }
-
-  const run = async () => {
+  // Set every accepted student's role on their own repo. `flipFlag` runs the
+  // full close/reopen (flag flip first, then fan-out); `finishOnly` skips the
+  // flag flip and re-runs just the fan-out to finish an interrupted close.
+  const run = async ({ flipFlag }: { flipFlag: boolean }) => {
     if (runningRef.current) return
     runningRef.current = true
     setPhase("working")
     setResult(null)
     setFlagError(false)
+    setFanOutIncomplete(false)
 
     // Flip the window flag FIRST: closing must block new accepts even if the
     // per-repo fan-out is later throttled or partially fails. If this write
     // fails, don't touch any repo — surface the error and stop.
-    try {
-      await setClosed.mutateAsync({
-        org,
-        classroom,
-        slug: assignment,
-        closed: closing,
-      })
-    } catch {
-      if (mountedRef.current) {
-        setFlagError(true)
-        setPhase("error")
+    if (flipFlag) {
+      try {
+        await setClosed.mutateAsync({
+          org,
+          classroom,
+          slug: assignment,
+          closed: closing,
+        })
+      } catch {
+        if (mountedRef.current) {
+          setFlagError(true)
+          setPhase("error")
+        }
+        runningRef.current = false
+        return
       }
-      runningRef.current = false
-      return
     }
 
-    let processed = 0
     setProgress({ processed: 0, total, message: "" })
-    let rateLimited = false
 
-    const outcomes = await mapWithConcurrency(
+    const { outcomes, rateLimited } = await runBulkRepoAccess({
       owners,
-      REPO_READ_CONCURRENCY,
-      async (owner): Promise<Outcome> => {
-        if (rateLimited || !mountedRef.current) {
-          processed += 1
-          if (mountedRef.current) {
-            setProgress({ processed, total, message: displayFor(owner) })
-          }
-          return { owner, status: "deferred" }
-        }
-        const repo = studentRepoName(classroom, assignment, owner)
-        try {
-          const { effective } = await addCollaboratorMutation.mutateAsync({
-            org,
-            repo,
-            username: owner,
-            permission,
-            verify: true,
-          })
-          // The owner is the enrolled student (an org member), so GitHub honors
-          // the direct grant exactly. A residual higher role means the requested
-          // (lower, on close) role was silently ignored — the over-access a
-          // lockdown must catch.
-          // On close (downgrade to pull), a residual role ABOVE pull is the
-          // over-access a lockdown must catch, so compare exactly (isOwner
-          // false). On reopen (restore push), a residual role at or above write
-          // is benign — treat the requested level as a floor (isOwner true) so a
-          // student who legitimately holds more than push isn't a false failure.
-          if (
-            effective &&
-            !permissionSatisfies(
-              effective.permission,
-              effective.role_name,
-              permission,
-              !closing,
-            )
-          ) {
-            throw new AccessNotAppliedError(
-              effective.role_name || effective.permission,
-            )
-          }
-          return { owner, status: "ok" }
-        } catch (err) {
-          if (err instanceof GitHubAPIError && err.isRateLimited) {
-            rateLimited = true
-            return { owner, status: "deferred" }
-          }
-          return { owner, status: "failed", detail: describeFailure(err, t) }
-        } finally {
-          processed += 1
-          if (mountedRef.current) {
-            setProgress({ processed, total, message: displayFor(owner) })
-          }
+      org,
+      classroom,
+      assignment,
+      permission,
+      setCollaborator: (params) => addCollaboratorMutation.mutateAsync(params),
+      // On close (downgrade to pull), a residual role ABOVE pull is the
+      // over-access a lockdown must catch, so compare exactly. On reopen
+      // (restore push), a residual at or above write is benign — treat the
+      // requested level as a floor so a student who legitimately holds more
+      // than push isn't a false failure.
+      treatRequestedAsFloor: !closing,
+      t,
+      isMounted: () => mountedRef.current,
+      onProgress: (processed, owner) => {
+        if (mountedRef.current) {
+          setProgress({ processed, total, message: displayFor(owner) })
         }
       },
-    )
+    })
 
     if (!mountedRef.current) {
       runningRef.current = false
@@ -260,6 +197,9 @@ export function CloseSubmissionModal({
           : []),
       ],
     })
+    // Closing left some repos not read-only: the flag is committed, so offer a
+    // finish-only re-run (no reopen) instead of stranding the teacher.
+    setFanOutIncomplete(closing && (failed.length > 0 || deferred.length > 0))
     setPhase(failed.length || deferred.length ? "error" : "complete")
     runningRef.current = false
   }
@@ -359,6 +299,11 @@ export function CloseSubmissionModal({
               rows={section.rows}
             />
           ))}
+          {fanOutIncomplete && (
+            <Alert tone="info" className="text-sm">
+              {t("submissions.closeSubmission.finishHint")}
+            </Alert>
+          )}
         </div>
       )}
 
@@ -369,10 +314,21 @@ export function CloseSubmissionModal({
             : t("common.cancel")}
         </Button>
         {phase === "idle" && (
-          <Button variant="primary" onClick={() => void run()}>
+          <Button
+            variant="primary"
+            onClick={() => void run({ flipFlag: true })}
+          >
             {closing
               ? t("submissions.closeSubmission.apply")
               : t("submissions.closeSubmission.reopenApply")}
+          </Button>
+        )}
+        {fanOutIncomplete && !busy && (
+          <Button
+            variant="primary"
+            onClick={() => void run({ flipFlag: false })}
+          >
+            {t("submissions.closeSubmission.finishApply")}
           </Button>
         )}
       </div>
