@@ -621,6 +621,73 @@ class TestIncludeAllBranches:
         assert _errors(_manifest(entry)) != []
 
 
+class TestGrading:
+    # `grading` records the teacher's grading intent (off / auto / manual) as a
+    # first-class GUI choice. ABSENT reads as auto (today's behavior). manual
+    # requires max_points (>= 1, since a 0 max is the ungraded sentinel a
+    # gradebook divides by); off/auto forbid max_points. The field is orthogonal
+    # to the autograding tri-state and to collection, so it is intentionally NOT
+    # coupled to empty_repo/no_autograder by any conditional.
+    def test_grading_absent_accepted(self):
+        # Covered by test_minimal_manifest, pinned here for intent.
+        assert _errors(_manifest(_entry())) == []
+
+    def test_grading_off_accepted(self):
+        assert _errors(_manifest(_entry(grading={"mode": "off"}))) == []
+
+    def test_grading_auto_accepted(self):
+        assert _errors(_manifest(_entry(grading={"mode": "auto"}))) == []
+
+    def test_grading_manual_with_max_points_accepted(self):
+        assert (
+            _errors(_manifest(_entry(grading={"mode": "manual", "max_points": 100})))
+            == []
+        )
+
+    def test_grading_manual_min_max_points_accepted(self):
+        assert (
+            _errors(_manifest(_entry(grading={"mode": "manual", "max_points": 1})))
+            == []
+        )
+
+    def test_grading_manual_requires_max_points(self):
+        assert _errors(_manifest(_entry(grading={"mode": "manual"}))) != []
+
+    def test_grading_manual_rejects_zero_max_points(self):
+        # 0 is the ungraded sentinel the submissions UI divides by; a configured
+        # manual max must be >= 1.
+        assert (
+            _errors(_manifest(_entry(grading={"mode": "manual", "max_points": 0})))
+            != []
+        )
+
+    @pytest.mark.parametrize("mode", ["off", "auto"])
+    def test_grading_non_manual_forbids_max_points(self, mode):
+        assert (
+            _errors(_manifest(_entry(grading={"mode": mode, "max_points": 50}))) != []
+        )
+
+    def test_grading_requires_mode(self):
+        assert _errors(_manifest(_entry(grading={}))) != []
+
+    @pytest.mark.parametrize("mode", ["Manual", "none", "", None, True])
+    def test_grading_bad_mode_rejected(self, mode):
+        assert _errors(_manifest(_entry(grading={"mode": mode}))) != []
+
+    def test_grading_unknown_key_rejected(self):
+        # The grading object is additionalProperties:false.
+        assert (
+            _errors(_manifest(_entry(grading={"mode": "auto", "weight": 2}))) != []
+        )
+
+    def test_grading_manual_coexists_with_no_autograder(self):
+        # grading is orthogonal to the autograding tri-state: a teacher-supplied
+        # CI (no_autograder) assignment graded manually is a legal combination —
+        # no conditional couples the two.
+        entry = _entry(no_autograder=True, grading={"mode": "manual", "max_points": 10})
+        assert _errors(_manifest(entry)) == []
+
+
 def _release_assets_errors(value):
     return _errors(_manifest(_entry(release_assets=value)))
 
