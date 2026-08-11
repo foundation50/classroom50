@@ -1199,17 +1199,17 @@
       },
       "submissionMode": {
         "label": "What counts as a submission",
-        "help": "\"Every push\" counts each push to the default branch (excluding the initial commit) as a submission, and — with a built-in autograder — grades each one. \"On submit only\" counts a submission only when a student submits (with gh student submit) or pushes a submit/* tag; regular pushes cost no Actions minutes, which matters for large classes. The autograder uses this same definition to decide when it runs.",
-        "editWarning": "Changing this only affects repositories created from now on. Repositories students already accepted keep the old trigger until you update them — use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
+        "help": "\"Every push to the default branch\" treats each push (other than the starting commit) as a submission — and, with a built-in autograder, grades each one. \"A tagged commit\" treats only tagged commits as submissions: a student submits with gh student submit or by pushing a tag, so ordinary pushes cost no Actions minutes, which matters for large classes.",
+        "editWarning": "Changing this only affects repositories created from now on. Repositories students already accepted keep the old setting until you update them — use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
         "choices": {
-          "everyPush": "Every push (default)",
-          "tag": "On submit only"
+          "everyPush": "Every push to the default branch",
+          "tag": "A tagged commit"
         }
       },
       "submissionTags": {
-        "label": "Milestone submission tags",
-        "help": "Optional tag names (one per line) that also trigger grading — e.g. phase1, phase2, complete. A student pushing a matching tag (git tag phase1 && git push origin phase1) gets that commit graded; the graded record still appears as a submit/* release. Simple globs like v* work too. Leave empty for none.",
-        "wildcardCaution": "A broad pattern like v* grades every matching tag a student pushes, including unrelated release tags. Prefer exact milestone names like phase1.",
+        "label": "Submission tags",
+        "help": "Optional tag names (one per line) whose commits also count as submissions — e.g. phase1, phase2, complete. A student pushing a matching tag (git tag phase1 && git push origin phase1) has that commit counted, and with a built-in autograder it is graded too. Simple patterns like v* match a family of tags. Leave empty for none.",
+        "wildcardCaution": "A broad pattern like v* matches every tag a student pushes, including unrelated release tags. Prefer exact names like phase1.",
         "commaHint": "Put one tag per line, not a comma-separated list — a comma becomes part of the tag name and will be rejected."
       },
       "repoFeatures": {

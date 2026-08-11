@@ -8,13 +8,12 @@ import type { AssignmentForm } from "../assignmentFormModel"
 
 // Submissions: the single source of truth for what counts as a submission.
 //
-// The whole submission definition — the mode (branch = every default-branch
-// push except the baseline; tag = on submit/milestone tags only) AND the
-// milestone tag patterns — is how the APP identifies submissions on the
-// submissions page. That is independent of the grading choice and of the repo
-// shape (empty, teacher-CI, or built-in shim): detection reads the repo's
-// commits/tags directly, with or without an autograder. So both controls always
-// render.
+// The whole submission definition — the mode (every push to the default branch,
+// or a tagged commit) AND the submission tag patterns — is how the APP
+// identifies submissions on the submissions page. That is independent of the
+// grading choice and of the repo shape (empty, teacher-CI, or built-in shim):
+// detection reads the repo's commits/tags directly, with or without an
+// autograder. So both controls always render.
 //
 // showBuiltInConfig only governs the shim-RETROFIT edit warnings: those advise
 // re-pulling existing repos' shims, which only exist for a built-in autograder.

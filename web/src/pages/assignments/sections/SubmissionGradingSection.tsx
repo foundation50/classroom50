@@ -7,17 +7,16 @@ import type { SectionStatus } from "./sectionStatus"
 import { SectionCard } from "./SectionCard"
 import { SubmissionsSubsection } from "./SubmissionsSubsection"
 
-// Submission and Grading: how the assignment is graded (off / auto / manual,
-// with a manual max-points) and — under the Submissions subsection — what
-// counts as a submission (the definition + milestone tags).
+// Submission and Grading: what counts as a submission (the Submissions
+// subsection — shown first, since grading is downstream of it) and how the
+// assignment is graded (off / auto / manual, with a manual max-points).
 //
-// The grading controls and the submission DEFINITION both apply to ANY
-// assignment (a bare or teacher-CI repo can still be graded by hand and can
-// still declare what counts as a submission), so they always render. Only the
-// shim-dependent affordances inside the Submissions subsection (milestone tags,
-// the retrofit edit warning) stay gated on showBuiltInConfig, because a bare
-// repo or teacher-supplied CI has no shim to trigger. Hidden fields keep their
-// (default) values, so the wire stays correct.
+// The submission definition and the grading controls both apply to ANY
+// assignment (a bare or teacher-CI repo can still declare what counts as a
+// submission and still be graded by hand), so they always render. Only the
+// shim-retrofit edit warnings inside the Submissions subsection stay gated on
+// showBuiltInConfig, because a bare repo or teacher-supplied CI has no shim to
+// retrofit. Hidden warnings don't change values, so the wire stays correct.
 export function SubmissionGradingSection({
   form,
   edit,
@@ -36,8 +35,6 @@ export function SubmissionGradingSection({
       description={t("assignments.form.submissionSectionHelp")}
     >
       <div className="flex flex-col gap-4">
-        <GradingChoiceField form={form} edit={edit} />
-        <div className="divider my-0" />
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold">
             {t("assignments.form.submissions.heading")}
@@ -59,6 +56,8 @@ export function SubmissionGradingSection({
             )}
           </form.Subscribe>
         </div>
+        <div className="divider my-0" />
+        <GradingChoiceField form={form} edit={edit} />
       </div>
     </SectionCard>
   )
