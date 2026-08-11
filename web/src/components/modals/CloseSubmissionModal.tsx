@@ -176,13 +176,18 @@ export function CloseSubmissionModal({
           // the direct grant exactly. A residual higher role means the requested
           // (lower, on close) role was silently ignored — the over-access a
           // lockdown must catch.
+          // On close (downgrade to pull), a residual role ABOVE pull is the
+          // over-access a lockdown must catch, so compare exactly (isOwner
+          // false). On reopen (restore push), a residual role at or above write
+          // is benign — treat the requested level as a floor (isOwner true) so a
+          // student who legitimately holds more than push isn't a false failure.
           if (
             effective &&
             !permissionSatisfies(
               effective.permission,
               effective.role_name,
               permission,
-              false,
+              !closing,
             )
           ) {
             throw new AccessNotAppliedError(

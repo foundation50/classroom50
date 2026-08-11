@@ -2292,7 +2292,7 @@
     "emptyRepoNote": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted.",
     "noAutograderNote": "This assignment has no built-in autograding — the teacher supplies their own CI in the template. Built-in scores and regrading are disabled; the table below shows who has accepted. The feedback pull request still works when enabled.",
     "lockedNotice": "This assignment is locked. Students can't accept or open it, and if it uses a private template the student team's access to that template has been removed. Existing repositories and their submissions are unaffected. Unlock it from the Actions menu (or the assignments list) to reopen it.",
-    "closedNotice": "Submissions are closed. New students can't accept this assignment, and accepted students' repositories have been set to read-only. Existing work is preserved. Reopen it from the Actions menu to allow submissions again.",
+    "closedNotice": "Submissions are closed. New students can't accept this assignment. When you close from here, accepted students' repositories are set to read-only; existing work is preserved. Reopen it from the Actions menu to allow submissions again.",
     "lock": {
       "lockLabel": "Lock assignment",
       "unlockLabel": "Unlock assignment",
