@@ -577,9 +577,11 @@ describe("assignment form section IA", () => {
     expect([...indices]).toEqual([...indices].sort((a, b) => a - b))
   })
 
-  it("shows the grading choice regardless of the grading mode", () => {
-    // Grading applies to any assignment, so the section + grading control
-    // render even when not autograded.
+  it("shows the grading choice and the submission definition regardless of the grading mode", () => {
+    // Grading applies to any assignment, and the submission DEFINITION is a
+    // property of the assignment itself (R3), so the section, the grading
+    // control, and the submission-mode definition all render even when not
+    // autograded.
     renderForm({
       defaultValues: { grading_choice: "manual", grading_max_points: 50 },
     })
@@ -587,16 +589,24 @@ describe("assignment form section IA", () => {
       screen.getByText("assignments.form.submissionSection"),
     ).not.toBeNull()
     expect(screen.getByText("assignments.form.grading.label")).not.toBeNull()
-    // The submission trigger needs a shim (grading = auto), so it stays hidden.
+    // The submission definition is always visible now.
     expect(
-      screen.queryByText("assignments.form.submissionMode.label"),
+      screen.getByText("assignments.form.submissionMode.label"),
+    ).not.toBeNull()
+    // Milestone tags are baked into the shim, so they stay hidden without a
+    // built-in autograder (grading != auto).
+    expect(
+      screen.queryByText("assignments.form.submissionTags.label"),
     ).toBeNull()
   })
 
-  it("shows the submission trigger controls only when grading is Autograded", () => {
+  it("shows the milestone-tags field only when grading is Autograded", () => {
     renderForm({ defaultValues: { grading_choice: "auto" } })
     expect(
       screen.getByText("assignments.form.submissionMode.label"),
+    ).not.toBeNull()
+    expect(
+      screen.getByText("assignments.form.submissionTags.label"),
     ).not.toBeNull()
   })
 

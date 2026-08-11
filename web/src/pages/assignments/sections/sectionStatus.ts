@@ -9,9 +9,10 @@ export type SectionStatus = "error" | "configured" | "default"
 
 // The sections, in render order. Each owns a disjoint slice of the form fields;
 // the status derivation keys off these lists so a field belongs to exactly one
-// section's badge. "submission" owns how a submission is defined (trigger +
-// milestone tags), split out of Autograding so the "what counts as a
-// submission" question has its own home, right after Repository Setup.
+// section's badge. "submission" (the Submission and Grading section, whose
+// Submissions subsection is the single source of truth for what counts as a
+// submission) owns the submission definition + milestone tags and the grading
+// choice, right after Repository Setup.
 export type SectionId =
   | "details"
   | "repository"
