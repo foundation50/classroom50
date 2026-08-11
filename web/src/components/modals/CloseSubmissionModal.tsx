@@ -140,6 +140,13 @@ export function CloseSubmissionModal({
       treatRequestedAsFloor: !closing,
       t,
       isMounted: () => mountedRef.current,
+      onStart: (owner) => {
+        if (mountedRef.current) {
+          // Show who is being processed the moment the write launches, so a
+          // single slow write reads as active rather than stuck at "0 of N".
+          setProgress((p) => ({ ...p, message: displayFor(owner) }))
+        }
+      },
       onProgress: (processed, owner) => {
         if (mountedRef.current) {
           setProgress({ processed, total, message: displayFor(owner) })
@@ -264,7 +271,10 @@ export function CloseSubmissionModal({
           <Spinner label={t("submissions.closeSubmission.working")} />
           <progress
             className="progress progress-primary w-full"
-            value={pct}
+            // Omit `value` until the first repo completes so the bar animates
+            // as an indeterminate track instead of sitting at 0% while a slow
+            // write is in flight; once something lands it reflects real pct.
+            {...(progress.processed > 0 ? { value: pct } : {})}
             max={100}
           />
           <p className="text-sm text-base-content/70">
@@ -273,6 +283,9 @@ export function CloseSubmissionModal({
               total: progress.total,
             })}
           </p>
+          {progress.message && (
+            <p className="text-xs text-base-content/60">{progress.message}</p>
+          )}
         </div>
       )}
 

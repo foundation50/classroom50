@@ -101,6 +101,11 @@ export function BulkRepoAccessModal({
       treatRequestedAsFloor: false,
       t,
       isMounted: () => mountedRef.current,
+      onStart: (owner) => {
+        if (mountedRef.current) {
+          setProgress((p) => ({ ...p, message: displayFor(owner) }))
+        }
+      },
       onProgress: (processed, owner) => {
         if (mountedRef.current) {
           setProgress({ processed, total, message: displayFor(owner) })
@@ -239,7 +244,9 @@ export function BulkRepoAccessModal({
           <Spinner label={t("submissions.bulkAccess.working")} />
           <progress
             className="progress progress-primary w-full"
-            value={pct}
+            // Indeterminate until the first repo completes, so a slow write
+            // animates instead of sitting at 0%.
+            {...(progress.processed > 0 ? { value: pct } : {})}
             max={100}
           />
           <p className="text-sm text-base-content/70">
@@ -248,6 +255,9 @@ export function BulkRepoAccessModal({
               total: progress.total,
             })}
           </p>
+          {progress.message && (
+            <p className="text-xs text-base-content/60">{progress.message}</p>
+          )}
         </div>
       )}
 
