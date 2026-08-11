@@ -6,6 +6,7 @@ import GitHub from "@/assets/github.svg?react"
 import { Badge, Modal, MonoLtr } from "@/components/ui"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
+import useGetAutogradeState from "@/hooks/useGetAutogradeState"
 import {
   CollaboratorIdentity,
   normalizeUsername,
@@ -40,6 +41,7 @@ const SubmissionDetails = ({
   repoData,
   repoLoading,
   latestCommitHref,
+  canPauseAutograding = false,
 }: {
   org: string
   repo: string
@@ -48,10 +50,15 @@ const SubmissionDetails = ({
   repoData?: GitHubRepo
   repoLoading?: boolean
   latestCommitHref?: string
+  // Whether this assignment autogrades (owner + default-autograder). Gates the
+  // read-only "Autograding" status row so it only shows where a shim exists.
+  canPauseAutograding?: boolean
 }) => {
   const { t } = useTranslation()
   const { data: collaborators, isLoading: collaboratorsLoading } =
     useGetRepoCollaborators(org, repo)
+  const { data: autogradeState, isLoading: autogradeLoading } =
+    useGetAutogradeState(org, repo, { enabled: canPauseAutograding })
 
   const ownerLogin = normalizeUsername(owner)
   const ownerAccess = useMemo(() => {
@@ -106,8 +113,39 @@ const SubmissionDetails = ({
       ),
     })
   }
+  // Autograding workflow state — a read-only mirror of the Pause/Resume action,
+  // so a teacher can see at a glance whether grading is on. Only for autograding
+  // assignments (canPauseAutograding); notGradable means no shim, so nothing to
+  // show. pausedByGitHub (fork/inactivity disable) is surfaced distinctly from a
+  // teacher pause since the remediation context differs.
+  if (
+    canPauseAutograding &&
+    autogradeState &&
+    autogradeState !== "notGradable"
+  ) {
+    rows.push({
+      label: t("submissions.manageModal.autograding"),
+      value:
+        autogradeState === "enabled" ? (
+          <Badge tone="success">
+            {t("submissions.manageModal.autogradingEnabled")}
+          </Badge>
+        ) : (
+          <Badge tone="warning">
+            {t(
+              autogradeState === "pausedByGitHub"
+                ? "submissions.manageModal.autogradingPausedByGitHub"
+                : "submissions.manageModal.autogradingPaused",
+            )}
+          </Badge>
+        ),
+    })
+  }
 
-  const loading = Boolean(repoLoading) || collaboratorsLoading
+  const loading =
+    Boolean(repoLoading) ||
+    collaboratorsLoading ||
+    (canPauseAutograding && autogradeLoading)
 
   // While the repo/collaborator reads are in flight, render a skeleton in the
   // panel's shape so the section reserves its space and doesn't pop in.
@@ -149,6 +187,21 @@ const SubmissionDetails = ({
           <div className="flex items-center justify-between gap-4">
             <dt className="text-base-content/60">
               {t("submissions.manageModal.access")}
+            </dt>
+            <dd>
+              <span
+                className="skeleton skeleton-shimmer inline-block h-4 w-16 align-middle"
+                aria-hidden="true"
+              />
+            </dd>
+          </div>
+        ) : null}
+        {/* Autograding status lands from its own read; hold its place with a
+            skeleton if the other rows resolved first. */}
+        {canPauseAutograding && autogradeLoading && !autogradeState ? (
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-base-content/60">
+              {t("submissions.manageModal.autograding")}
             </dt>
             <dd>
               <span
@@ -303,6 +356,7 @@ export const ManageSubmissionModal = ({
           repoData={repoData ?? undefined}
           repoLoading={repoLoading}
           latestCommitHref={latestCommitHref}
+          canPauseAutograding={action.canPauseAutograding}
         />
       ) : null}
 

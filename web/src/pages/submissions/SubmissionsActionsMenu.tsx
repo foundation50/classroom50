@@ -9,6 +9,8 @@ import {
   GitPullRequest,
   Lock,
   LockOpen,
+  Pause,
+  Play,
   RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
@@ -43,6 +45,8 @@ export function SubmissionsActionsMenu({
   onBulkAccess,
   onBulkFeatures,
   onBulkTrigger,
+  onBulkPause,
+  onBulkResume,
   locked = false,
   lockPending = false,
   onLockToggle,
@@ -88,6 +92,12 @@ export function SubmissionsActionsMenu({
   // each repo's shim to the assignment's submission_mode). Bulk-features gate
   // plus default-autograder only; omitted otherwise.
   onBulkTrigger?: () => void
+  // Opens the whole-assignment "Pause autograding" modal (disables the
+  // autograde workflow in every accepted repo). Same gate as onBulkTrigger.
+  onBulkPause?: () => void
+  // Opens the whole-assignment "Resume autograding" modal (re-enables the
+  // workflow). Same gate as onBulkPause; the pair reverse each other.
+  onBulkResume?: () => void
   // Current locked state, for the Lock/Unlock item's label and icon.
   locked?: boolean
   // Whether a lock/unlock is mid-flight, to disable the item and show progress.
@@ -321,6 +331,59 @@ export function SubmissionsActionsMenu({
                 {t("submissions.bulkTrigger.menuLabel")}
               </button>
             </li>
+            <div
+              className="my-1 border-t border-base-content/10"
+              role="separator"
+            />
+          </>
+        )}
+        {/* Pause / Resume autograding — disables/enables each repo's autograde
+            workflow via the GitHub Actions state (no file edit). Same authoring
+            tier + default-autograder gate as the trigger retrofit. */}
+        {(onBulkPause || onBulkResume) && (
+          <>
+            {onBulkPause && (
+              <li>
+                <button
+                  type="button"
+                  disabled={disabledActions}
+                  title={
+                    emptyRoster
+                      ? t("submissions.bulkAutograde.pauseTitleEmptyRoster")
+                      : t("submissions.bulkAutograde.pauseMenuTitle")
+                  }
+                  onClick={() => {
+                    closeMenu()
+                    if (disabledActions) return
+                    onBulkPause()
+                  }}
+                >
+                  <Pause aria-hidden="true" className="size-4" />
+                  {t("submissions.bulkAutograde.pauseMenuLabel")}
+                </button>
+              </li>
+            )}
+            {onBulkResume && (
+              <li>
+                <button
+                  type="button"
+                  disabled={disabledActions}
+                  title={
+                    emptyRoster
+                      ? t("submissions.bulkAutograde.resumeTitleEmptyRoster")
+                      : t("submissions.bulkAutograde.resumeMenuTitle")
+                  }
+                  onClick={() => {
+                    closeMenu()
+                    if (disabledActions) return
+                    onBulkResume()
+                  }}
+                >
+                  <Play aria-hidden="true" className="size-4" />
+                  {t("submissions.bulkAutograde.resumeMenuLabel")}
+                </button>
+              </li>
+            )}
             <div
               className="my-1 border-t border-base-content/10"
               role="separator"

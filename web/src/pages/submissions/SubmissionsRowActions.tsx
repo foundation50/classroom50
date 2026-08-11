@@ -2,6 +2,8 @@ import {
   Download,
   GitBranch,
   GitCommitHorizontal,
+  Pause,
+  Play,
   RefreshCw,
   ScrollText,
   Settings2,
@@ -19,6 +21,8 @@ import { ActionListRow } from "@/pages/submissions/actionLayout"
 import { ReviewButton } from "@/pages/submissions/ReviewButton"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import useDownloadSubmission from "@/hooks/mutations/useDownloadSubmission"
+import useGetAutogradeState from "@/hooks/useGetAutogradeState"
+import useSetAutogradeState from "@/hooks/mutations/useSetAutogradeState"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -296,6 +300,11 @@ export type SubmissionActionListProps = {
   submissionMode?: SubmissionMode
   // The assignment's milestone submission_tags (if any) for the same action.
   submissionTags?: string[]
+  // Whether the Pause/Resume-autograding action applies: owner + a gradable
+  // default-autograder assignment (same gate as submissionMode). Omitted/false
+  // hides the action — a non-owner can't disable workflows, and there's no
+  // autograde workflow to pause on empty_repo/no_autograder/custom assignments.
+  canPauseAutograding?: boolean
 }
 
 export const SubmissionActionList = ({
@@ -314,6 +323,7 @@ export const SubmissionActionList = ({
   onManageAccess,
   submissionMode,
   submissionTags,
+  canPauseAutograding = false,
 }: SubmissionActionListProps) => {
   const { t } = useTranslation()
   const commitHref = latestCommitHref ?? safeHttpUrl(commit)
@@ -375,6 +385,9 @@ export const SubmissionActionList = ({
               submissionTags={submissionTags}
               noRepo={!hasRepo}
             />
+          )}
+          {canPauseAutograding && (
+            <PauseAutogradingButton org={org} repo={repo} noRepo={!hasRepo} />
           )}
         </>
       )}
@@ -455,6 +468,97 @@ const UpdateTriggerButton = ({
       onClick={() => void run(handleClick)}
       disabled={noRepo || pending}
       ariaLabel={t("submissions.rowTrigger.aria", { repo })}
+    />
+  )
+}
+
+// Per-row Pause/Resume autograding. Flips the autograde workflow's GitHub
+// Actions state (disable/enable) WITHOUT editing the shim file. The label and
+// icon follow the repo's live state — Pause when enabled, Resume when paused —
+// and fall back to a neutral "Pause autograding" while the state read is
+// pending or failed (unknown), where a click reads state implicitly: pausing an
+// already-paused workflow is an idempotent no-op, so the fallback stays safe.
+const PauseAutogradingButton = ({
+  org,
+  repo,
+  noRepo,
+}: {
+  org: string
+  repo: string
+  noRepo: boolean
+}) => {
+  const { t } = useTranslation()
+  const { notify } = useToast()
+  const run = useSafeSubmit()
+  const {
+    data: state,
+    isLoading: stateLoading,
+    isError: stateError,
+  } = useGetAutogradeState(org, repo, { enabled: !noRepo })
+  const mutation = useSetAutogradeState()
+
+  // No autograde workflow (empty_repo/no_autograder/custom, or deleted): nothing
+  // to pause. The parent already gates on a default-autograder assignment, so
+  // this only fires for a stray repo without the shim — hide the action.
+  if (!noRepo && state === "notGradable") return null
+
+  // Paused (by teacher or by GitHub) → offer Resume; otherwise → offer Pause.
+  const isPaused = state === "paused" || state === "pausedByGitHub"
+  const action: "pause" | "resume" = isPaused ? "resume" : "pause"
+
+  // The label defaults to Pause when the state is unknown; disable the action
+  // until the state resolves (and if the read failed) so we never mislabel a
+  // GitHub-disabled repo as "enabled" or fire an action against a guessed state.
+  const stateUnknown = !noRepo && (stateLoading || stateError || state == null)
+
+  const handleClick = async () => {
+    if (noRepo) return
+    try {
+      const result = await mutation.mutateAsync({ org, repo, action })
+      notify({
+        tone: result.status === "notGradable" ? "warning" : "success",
+        message: t(
+          result.status === "notGradable"
+            ? "submissions.rowAutograde.outcome.notGradable"
+            : action === "pause"
+              ? "submissions.rowAutograde.outcome.paused"
+              : "submissions.rowAutograde.outcome.resumed",
+        ),
+      })
+    } catch (err) {
+      notify({
+        tone: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : t("submissions.rowAutograde.outcome.failed"),
+      })
+    }
+  }
+
+  return (
+    <ActionListRow
+      icon={isPaused ? Play : Pause}
+      title={t(
+        isPaused
+          ? "submissions.rowAutograde.resumeTitle"
+          : "submissions.rowAutograde.pauseTitle",
+      )}
+      description={t(
+        isPaused
+          ? "submissions.rowAutograde.resumeDescription"
+          : "submissions.rowAutograde.pauseDescription",
+      )}
+      onClick={() => void run(handleClick)}
+      disabled={noRepo || stateUnknown || mutation.isPending}
+      loading={stateUnknown}
+      loadingLabel={t("submissions.rowAutograde.pauseTitle")}
+      ariaLabel={t(
+        isPaused
+          ? "submissions.rowAutograde.resumeAria"
+          : "submissions.rowAutograde.pauseAria",
+        { repo },
+      )}
     />
   )
 }

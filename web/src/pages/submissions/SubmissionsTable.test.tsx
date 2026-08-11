@@ -23,6 +23,9 @@ vi.mock("@/hooks/useGetRepoCollaborators", () => ({
 vi.mock("@/hooks/useGetRepo", () => ({
   default: () => ({ data: undefined }),
 }))
+vi.mock("@/hooks/useGetAutogradeState", () => ({
+  default: () => ({ data: undefined, isLoading: false, isError: false }),
+}))
 vi.mock("@/hooks/useGetFeedbackPr", () => ({
   default: () => ({ refetch: vi.fn() }),
 }))
