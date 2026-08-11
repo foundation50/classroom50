@@ -22,11 +22,25 @@ const repoData = vi.fn(
 const collaboratorsData = vi.fn(
   () => ({ data: undefined }) as { data: unknown; isLoading?: boolean },
 )
+const autogradeStateData = vi.fn(
+  () =>
+    ({ data: undefined, isLoading: false, isError: false }) as {
+      data: unknown
+      isLoading?: boolean
+      isError?: boolean
+    },
+)
 vi.mock("@/hooks/useGetRepo", () => ({
   default: () => repoData(),
 }))
 vi.mock("@/hooks/useGetRepoCollaborators", () => ({
   default: () => collaboratorsData(),
+}))
+vi.mock("@/hooks/useGetAutogradeState", () => ({
+  default: () => autogradeStateData(),
+}))
+vi.mock("@/hooks/mutations/useSetAutogradeState", () => ({
+  default: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 vi.mock("@/hooks/useGetFeedbackPr", () => ({
   default: () => ({ refetch: vi.fn() }),
@@ -61,6 +75,11 @@ afterEach(() => {
   cleanup()
   repoData.mockReturnValue({ data: undefined })
   collaboratorsData.mockReturnValue({ data: undefined })
+  autogradeStateData.mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  })
 })
 
 describe("ManageSubmissionModal", () => {
@@ -114,6 +133,81 @@ describe("ManageSubmissionModal", () => {
       .getAllByRole("link")
       .filter((a) => a.getAttribute("href") === latest)
     expect(commitLinks.length).toBe(2)
+  })
+
+  it("shows the autograding status when the assignment autogrades", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-06-01T09:00:00Z" },
+    })
+    autogradeStateData.mockReturnValue({
+      data: "enabled",
+      isLoading: false,
+      isError: false,
+    })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{ ...individualAction, canPauseAutograding: true }}
+      />,
+    )
+    expect(screen.getByText("submissions.manageModal.autograding")).toBeTruthy()
+    expect(
+      screen.getByText("submissions.manageModal.autogradingEnabled"),
+    ).toBeTruthy()
+  })
+
+  it("labels a disabled workflow as paused", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-06-01T09:00:00Z" },
+    })
+    autogradeStateData.mockReturnValue({
+      data: "paused",
+      isLoading: false,
+      isError: false,
+    })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{ ...individualAction, canPauseAutograding: true }}
+      />,
+    )
+    expect(
+      screen.getByText("submissions.manageModal.autogradingPaused"),
+    ).toBeTruthy()
+  })
+
+  it("omits the autograding status for a non-autograding assignment", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-06-01T09:00:00Z" },
+    })
+    // Even if a state somehow resolved, the row is gated on canPauseAutograding.
+    autogradeStateData.mockReturnValue({
+      data: "enabled",
+      isLoading: false,
+      isError: false,
+    })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{ ...individualAction }}
+      />,
+    )
+    expect(screen.queryByText("submissions.manageModal.autograding")).toBeNull()
   })
 
   it("falls the commit action back to the graded snapshot when the default-branch tip is unresolved", () => {
