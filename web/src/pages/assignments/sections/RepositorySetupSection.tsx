@@ -418,10 +418,10 @@ export const RepoFeatureControls = ({
       <p className="mb-3 text-sm text-base-content/70">
         {t("assignments.form.repoFeatures.help")}
       </p>
-      {/* Inline rows — "Wiki: [choice]" — with the select sized to its content
-          (w-auto) rather than stretching the column, so each control reads as a
-          compact labeled dropdown. FormField isn't used here because it always
-          stacks the label above the control. */}
+      {/* Inline rows — "Wiki: [choice]" — label and select sit together (a
+          fixed-width label keeps the four selects vertically aligned) with the
+          select sized to its content (w-auto). FormField isn't used here
+          because it always stacks the label above the control. */}
       <div
         className={cx("flex flex-col gap-3", isRefreshing && "opacity-60")}
         aria-busy={isRefreshing}
@@ -429,8 +429,11 @@ export const RepoFeatureControls = ({
         {REPO_FEATURE_KEYS.map(({ field: fieldName, key }) => (
           <form.Field key={fieldName} name={fieldName}>
             {(field) => (
-              <div className="flex items-center justify-between gap-3">
-                <label htmlFor={field.name} className="label font-bold">
+              <div className="flex items-center gap-3">
+                <label
+                  htmlFor={field.name}
+                  className="label w-28 shrink-0 font-bold"
+                >
                   {t(`assignments.form.repoFeatures.${key}.label`)}
                 </label>
                 <Select
