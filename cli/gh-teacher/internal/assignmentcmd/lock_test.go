@@ -543,10 +543,10 @@ func TestRunAssignmentAdd_TemplateDropClearsIncludeAllBranches(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
-		Org:        "o",
-		Classroom:  "dst",
-		Slug:       "hello",
-		Name:       "Hello",
+		Org:       "o",
+		Classroom: "dst",
+		Slug:      "hello",
+		Name:      "Hello",
 		// --template omitted: the entry becomes template-less, so the mutable
 		// include_all_branches must be dropped rather than carried forward.
 		Mode:       assignment.ModeIndividual,
