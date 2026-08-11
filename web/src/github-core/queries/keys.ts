@@ -156,6 +156,14 @@ export const githubKeys = {
   releases: (owner: string, repo: string) =>
     [...githubKeys.all, "releases", owner, repo] as const,
 
+  // Detection reads (submission-configuration hybrid model): the default-branch
+  // commit log and the git-tag list for one student repo, used to count/show
+  // branch-mode pushes and tag-mode tags even when no submit/* Release exists.
+  defaultBranchCommits: (owner: string, repo: string, branch: string) =>
+    [...githubKeys.all, "default-branch-commits", owner, repo, branch] as const,
+  repoTags: (owner: string, repo: string) =>
+    [...githubKeys.all, "repo-tags", owner, repo] as const,
+
   // Autograding kill-switch mode (active/paused), derived live from org Actions
   // permissions. Invalidated after a pause/resume toggle.
   orgActionsMode: (owner: string) =>

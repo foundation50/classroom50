@@ -300,6 +300,15 @@ export type GitHubCommit = {
   } | null
 }
 
+// A lightweight git-tag entry from GET /repos/{owner}/{repo}/tags. Used by the
+// submission-detection subsystem to count/group tag-mode submissions.
+export type GitHubTag = {
+  name: string
+  commit: {
+    sha: string
+  }
+}
+
 export type GitHubTreeResponse = {
   tree: Array<{
     path: string
