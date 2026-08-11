@@ -33,7 +33,7 @@ vi.mock("@/context/github/GitHubProvider", () => ({
   useOptionalGitHubClient: () => useOptionalGitHubClient(),
 }))
 
-import { RepoFeatureControls } from "./sections/RepositoryFeaturesSection"
+import { RepoFeatureControls } from "./sections/RepositorySetupSection"
 import { useAssignmentForm } from "./assignmentFormModel"
 
 const t = ((key: string) => key) as unknown as TFunction
@@ -43,21 +43,32 @@ const t = ((key: string) => key) as unknown as TFunction
 function Harness({
   templateRepo,
   emptyRepo = false,
+  edit = false,
+  org,
 }: {
   templateRepo: string
   emptyRepo?: boolean
+  edit?: boolean
+  org?: string
 }) {
   const form = useAssignmentForm(undefined, () => {}, t)
   return (
     <RepoFeatureControls
       form={form}
+      edit={edit}
+      org={org}
       templateRepo={templateRepo}
       emptyRepo={emptyRepo}
     />
   )
 }
 
-function renderControls(props: { templateRepo: string; emptyRepo?: boolean }) {
+function renderControls(props: {
+  templateRepo: string
+  emptyRepo?: boolean
+  edit?: boolean
+  org?: string
+}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -125,11 +136,36 @@ describe("RepoFeatureControls — inherit label resolution", () => {
     )
   })
 
-  it("shows the Default label and does not query for an incomplete owner/repo ref", () => {
-    const { container } = renderControls({ templateRepo: "org-only" })
+  it("resolves a bare repo name against the org and reads the template", async () => {
+    // Regression: a bare "my-template" (no owner) used to leave the read
+    // disabled. It now resolves to <org>/my-template like the Template field.
+    getRepo.mockResolvedValue({ has_issues: true })
+    const { container } = renderControls({
+      templateRepo: "test-template-3branch",
+      org: "acme",
+    })
+    await waitFor(() =>
+      expect(getRepo).toHaveBeenCalledWith(
+        expect.anything(),
+        "acme",
+        "test-template-3branch",
+      ),
+    )
+    await waitFor(() =>
+      expect(inheritOption(container, "repo_feature_issues").textContent).toBe(
+        inheritOnKey,
+      ),
+    )
+  })
+
+  it("shows the Default label and does not query when the org is unknown", () => {
+    const { container } = renderControls({
+      templateRepo: "test-template-3branch",
+      org: undefined,
+    })
     expect(getRepo).not.toHaveBeenCalled()
-    // No resolvable template -> the default choice is "Default" (no override),
-    // not an inherit label — a template-less assignment doesn't force a value.
+    // A bare name can't resolve without an org, so the default choice is
+    // "Default" (no override) rather than an inherit label.
     expect(inheritOption(container, "repo_feature_issues").textContent).toBe(
       defaultKey,
     )
@@ -198,20 +234,43 @@ describe("RepoFeatureControls — loading + refresh", () => {
 })
 
 describe("RepoFeatureControls — override warning", () => {
-  const warningKey = "assignments.form.repoFeatures.overrideWarning"
+  const templateWarningKey = "assignments.form.repoFeatures.overrideTemplate"
+  const noTemplateWarningKey =
+    "assignments.form.repoFeatures.overrideNoTemplate"
+  const existingWarningKey = "assignments.form.repoFeatures.overrideExisting"
 
-  it("hides the override warning while every feature is on Inherit", () => {
-    renderControls({ templateRepo: "org/template" })
-    expect(screen.queryByText(warningKey)).toBeNull()
-  })
-
-  it("shows the override warning once any feature is forced on/off", () => {
-    const { container } = renderControls({ templateRepo: "org/template" })
-    expect(screen.queryByText(warningKey)).toBeNull()
+  const forceIssuesOff = (container: HTMLElement) => {
     const issuesSelect = container.querySelector<HTMLSelectElement>(
       "#repo_feature_issues",
     )!
     fireEvent.change(issuesSelect, { target: { value: "off" } })
-    expect(screen.getByText(warningKey)).toBeTruthy()
+  }
+
+  it("hides the override warning while every feature is on Inherit", () => {
+    renderControls({ templateRepo: "org/template" })
+    expect(screen.queryByText(templateWarningKey)).toBeNull()
+    expect(screen.queryByText(noTemplateWarningKey)).toBeNull()
+  })
+
+  it("shows the template-default warning once a feature is forced, with a template", () => {
+    const { container } = renderControls({ templateRepo: "org/template" })
+    forceIssuesOff(container)
+    expect(screen.getByText(templateWarningKey)).toBeTruthy()
+    // No template-less copy, and no edit-only "update existing" line on create.
+    expect(screen.queryByText(noTemplateWarningKey)).toBeNull()
+    expect(screen.queryByText(existingWarningKey)).toBeNull()
+  })
+
+  it("shows the no-template default warning when there is no template", () => {
+    const { container } = renderControls({ templateRepo: "" })
+    forceIssuesOff(container)
+    expect(screen.getByText(noTemplateWarningKey)).toBeTruthy()
+    expect(screen.queryByText(templateWarningKey)).toBeNull()
+  })
+
+  it("adds the update-existing line only in edit mode", () => {
+    const { container } = renderControls({ templateRepo: "", edit: true })
+    forceIssuesOff(container)
+    expect(screen.getByText(existingWarningKey, { exact: false })).toBeTruthy()
   })
 })

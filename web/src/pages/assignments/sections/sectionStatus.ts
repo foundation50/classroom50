@@ -14,12 +14,7 @@ export type SectionStatus = "error" | "configured" | "default"
 // submission) owns the submission definition + milestone tags and the grading
 // choice, right after Repository Setup.
 export type SectionId =
-  | "details"
-  | "repository"
-  | "submission"
-  | "autograding"
-  | "features"
-  | "schedule"
+  "details" | "repository" | "submission" | "autograding" | "schedule"
 
 // The fields each section owns, for both the error scan (which validation keys
 // map to this section) and the configured scan (which values to compare against
@@ -38,6 +33,10 @@ const SECTION_FIELDS: Record<
     "template_repo",
     "student_permission",
     "feedback_pr",
+    "repo_feature_issues",
+    "repo_feature_wiki",
+    "repo_feature_projects",
+    "repo_feature_pull_requests",
   ],
   autograding: [
     "autograding_state",
@@ -64,12 +63,6 @@ const SECTION_FIELDS: Record<
     "submission_tags",
     "grading_choice",
     "grading_max_points",
-  ],
-  features: [
-    "repo_feature_issues",
-    "repo_feature_wiki",
-    "repo_feature_projects",
-    "repo_feature_pull_requests",
   ],
   schedule: ["available_from_date", "due_date"],
 }

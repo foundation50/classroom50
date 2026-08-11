@@ -605,7 +605,6 @@ describe("assignment form section IA", () => {
     "assignments.form.repositorySetupSection",
     "assignments.form.submissionSection",
     "assignments.form.autograding.label",
-    "assignments.form.repositoryFeaturesSection",
     "assignments.form.scheduleSection",
   ]
 
