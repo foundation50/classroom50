@@ -634,12 +634,17 @@ describe("assignment form section IA", () => {
     expect([...indices]).toEqual([...indices].sort((a, b) => a - b))
   })
 
-  it("shows the full submission definition regardless of the grading mode", () => {
-    // Grading applies to any assignment, and the submission DEFINITION (mode +
-    // milestone tags) is how the app identifies submissions — independent of
-    // grading and repo shape — so both controls render even when not autograded.
+  it("shows the submission mode regardless of the grading mode; tags follow the mode", () => {
+    // Grading applies to any assignment, and the submission MODE is how the app
+    // identifies submissions — independent of grading and repo shape — so it
+    // renders even when not autograded. The tags field is shown only for the
+    // "tagged commit" mode (set it here to reveal it).
     renderForm({
-      defaultValues: { grading_choice: "manual", grading_max_points: 50 },
+      defaultValues: {
+        grading_choice: "manual",
+        grading_max_points: 50,
+        submission_mode: "tag",
+      },
     })
     expect(
       screen.getByText("assignments.form.submissionSection"),
@@ -648,26 +653,52 @@ describe("assignment form section IA", () => {
     expect(
       screen.getByText("assignments.form.submissionMode.label"),
     ).not.toBeNull()
-    // Milestone tags are the app's detection definition, not shim-only, so they
-    // are visible even without a built-in autograder.
+    // Tag mode reveals the milestone-tags field, even without a built-in
+    // autograder (it's the app's detection definition, not shim-only).
     expect(
       screen.getByText("assignments.form.submissionTags.label"),
     ).not.toBeNull()
   })
 
-  it("shows the submission definition for a bare (empty) repo too", () => {
-    // A bare repo has no shim, but the definition still drives how the
-    // submissions page counts pushes/tags, so both controls render.
+  it("shows the submission mode for a bare (empty) repo; tags follow the mode", () => {
+    // A bare repo has no shim, but the mode still drives how the submissions
+    // page counts pushes/tags, so it renders. Tags show only in "tag" mode.
     renderForm({
       defaultValues: {
         repo_source: "none",
         add_readme: false,
         grading_choice: "off",
+        submission_mode: "tag",
       },
     })
     expect(
       screen.getByText("assignments.form.submissionMode.label"),
     ).not.toBeNull()
+    expect(
+      screen.getByText("assignments.form.submissionTags.label"),
+    ).not.toBeNull()
+  })
+
+  it("hides submission tags in every-push mode and shows them in tag mode", () => {
+    const { rerender } = renderForm({
+      defaultValues: { submission_mode: "every-push" },
+    })
+    // every-push: mode control visible, tags field hidden.
+    expect(
+      screen.getByText("assignments.form.submissionMode.label"),
+    ).not.toBeNull()
+    expect(
+      screen.queryByText("assignments.form.submissionTags.label"),
+    ).toBeNull()
+    // Switching to "A tagged commit" reveals the tags field.
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          defaultValues={{ submission_mode: "tag" }}
+          onSubmit={() => {}}
+        />
+      </QueryClientProvider>,
+    )
     expect(
       screen.getByText("assignments.form.submissionTags.label"),
     ).not.toBeNull()

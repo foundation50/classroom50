@@ -319,7 +319,11 @@ describe("validateAssignmentForm — submission mode + milestone tags", () => {
   it("accepts valid milestone tag patterns", () => {
     expect(
       validateAssignmentForm(
-        { ...base, submission_tags: "phase1\nphase2\nv*" },
+        {
+          ...base,
+          submission_mode: "tag",
+          submission_tags: "phase1\nphase2\nv*",
+        },
         t,
       ).submission_tags,
     ).toBeUndefined()
@@ -333,9 +337,27 @@ describe("validateAssignmentForm — submission mode + milestone tags", () => {
     ["duplicate", "phase1\nphase1"],
   ])("flags an invalid milestone tag: %s", (_label, raw) => {
     expect(
-      validateAssignmentForm({ ...base, submission_tags: raw }, t)
-        .submission_tags,
+      validateAssignmentForm(
+        { ...base, submission_mode: "tag", submission_tags: raw },
+        t,
+      ).submission_tags,
     ).toBeDefined()
+  })
+
+  it("skips tag validation in every-push mode (field hidden, value ignored)", () => {
+    // The tags field is only shown for "A tagged commit"; a stale invalid value
+    // in every-push mode must not raise an error the teacher can't see to fix
+    // (toSubmitValues clears it there anyway).
+    expect(
+      validateAssignmentForm(
+        {
+          ...base,
+          submission_mode: "every-push",
+          submission_tags: "has space",
+        },
+        t,
+      ).submission_tags,
+    ).toBeUndefined()
   })
 })
 
@@ -597,6 +619,19 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.submission_mode).toBe("tag")
     expect(out.submission_tags).toBe("phase1")
     expect(out.autograding_state).toBe("none")
+  })
+
+  it("clears submission_tags in every-push mode (the field is hidden there)", () => {
+    // The tags field is shown only for "A tagged commit"; a stale value from a
+    // prior "tag" selection must not persist once the teacher switches back to
+    // every-push, so the wire matches what's visible.
+    const out = toSubmitValues({
+      ...base,
+      submission_mode: "every-push",
+      submission_tags: "phase1\nphase2",
+    })
+    expect(out.submission_mode).toBe("every-push")
+    expect(out.submission_tags).toBe("")
   })
 
   it("preserves built-in autograder config under Manual grading (built-in on)", () => {

@@ -436,12 +436,16 @@ export function validateAssignmentForm(
   }
 
   // Mirror the CLI's ValidateSubmissionTags so a bad pattern can't reach the
-  // file (the util returns its own user-readable message).
-  const submissionTagsError = validateSubmissionTags(
-    parseSubmissionTags(value.submission_tags),
-  )
-  if (submissionTagsError) {
-    errors.submission_tags = submissionTagsError
+  // file (the util returns its own user-readable message). Only validated in
+  // "tag" mode: the tags field is hidden and cleared on submit for every-push,
+  // so a stale value there must not raise an error the teacher can't see to fix.
+  if (value.submission_mode === "tag") {
+    const submissionTagsError = validateSubmissionTags(
+      parseSubmissionTags(value.submission_tags),
+    )
+    if (submissionTagsError) {
+      errors.submission_tags = submissionTagsError
+    }
   }
 
   // Guard the grading picker against a hand-tampered value.
@@ -519,12 +523,15 @@ export function toSubmitValues(
     pass_threshold_enabled: noBuiltIn ? false : value.pass_threshold_enabled,
     pass_threshold: Number(value.pass_threshold),
     student_permission: value.student_permission,
-    // The submission DEFINITION is how the app identifies submissions and is
-    // valid for every repo shape (with a shim it also drives the trigger;
-    // without one it's the detection definition), so it is NOT cleared by
-    // noBuiltIn — unlike the built-in-only autograder config above.
+    // The submission MODE is how the app identifies submissions and is valid
+    // for every repo shape (with a shim it also drives the trigger; without one
+    // it's the detection definition), so it is NOT cleared by noBuiltIn.
     submission_mode: value.submission_mode,
-    submission_tags: value.submission_tags,
+    // Tags only refine the "tagged commit" mode, and the form hides the field
+    // in every-push mode — so clear any stale value there to keep the wire
+    // consistent with what the teacher sees (no hidden tags persisting).
+    submission_tags:
+      value.submission_mode === "tag" ? value.submission_tags : "",
     // Grading intent is orthogonal to the autograding tri-state (a bare or
     // teacher-CI repo can still be graded manually), so it is NOT cleared by
     // noBuiltIn. Only the manual max-points is normalized: kept when manual,

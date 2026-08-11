@@ -8,12 +8,17 @@ import type { AssignmentForm } from "../assignmentFormModel"
 
 // Submissions: the single source of truth for what counts as a submission.
 //
-// The whole submission definition — the mode (every push to the default branch,
-// or a tagged commit) AND the submission tag patterns — is how the APP
-// identifies submissions on the submissions page. That is independent of the
-// grading choice and of the repo shape (empty, teacher-CI, or built-in shim):
-// detection reads the repo's commits/tags directly, with or without an
-// autograder. So both controls always render.
+// The submission MODE (every push to the default branch, or a tagged commit)
+// is how the APP identifies submissions on the submissions page — independent
+// of the grading choice and of the repo shape (empty, teacher-CI, or built-in
+// shim): detection reads the repo's commits/tags directly, with or without an
+// autograder. So the mode control always renders.
+//
+// The submission TAGS only refine the "tagged commit" mode (which tags count),
+// so the tags field is shown ONLY when the mode is "tag". In every-push mode
+// there is nothing for tag patterns to refine, so the field is hidden and the
+// submit path clears any stale value (see toSubmitValues) — the wire stays
+// consistent with what the teacher sees.
 //
 // showBuiltInConfig only governs the shim-RETROFIT edit warnings: those advise
 // re-pulling existing repos' shims, which only exist for a built-in autograder.
@@ -37,11 +42,17 @@ export function SubmissionsSubsection({
         edit={edit}
         showRetrofitWarning={showBuiltInConfig}
       />
-      <SubmissionTagsField
-        form={form}
-        edit={edit}
-        showRetrofitWarning={showBuiltInConfig}
-      />
+      <form.Subscribe selector={(state) => state.values.submission_mode}>
+        {(mode) =>
+          mode === "tag" ? (
+            <SubmissionTagsField
+              form={form}
+              edit={edit}
+              showRetrofitWarning={showBuiltInConfig}
+            />
+          ) : null
+        }
+      </form.Subscribe>
     </div>
   )
 }
