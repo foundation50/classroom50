@@ -85,6 +85,9 @@ export async function createAssignmentRepo(params: {
   // mutual exclusion with template is enforced at write time, so template
   // params are never set alongside this.
   bare?: boolean
+  // Templated only: copy ALL of the template's branches (not just the default)
+  // on POST /generate. Ignored for the bare/template-less paths (no generate).
+  includeAllBranches?: boolean
 }): Promise<AcceptRepoCreationResult> {
   const {
     client,
@@ -94,6 +97,7 @@ export async function createAssignmentRepo(params: {
     name,
     fallbackBranch,
     bare,
+    includeAllBranches = false,
   } = params
 
   const cleanTemplateRepo = templateRepo
@@ -110,7 +114,7 @@ export async function createAssignmentRepo(params: {
             owner,
             name,
             private: true,
-            include_all_branches: false,
+            include_all_branches: includeAllBranches,
           },
         },
       )
@@ -348,6 +352,10 @@ export type CreateAssignmentInput = {
   // autogrades. Mutually exclusive with empty_repo, a template, and
   // no_autograder. Immutable after creation. Mirrors the CLI's init_shim field.
   init_shim?: boolean
+  // Copy all template branches at generate (POST /generate include_all_branches).
+  // Requires a template; mutually exclusive with empty_repo/init_shim. Mutable.
+  // Mirrors the CLI's include_all_branches field.
+  include_all_branches?: boolean
   runs_on?: string
   container_image?: string
   container_user?: string

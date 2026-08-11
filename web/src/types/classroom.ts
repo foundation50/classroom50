@@ -166,6 +166,14 @@ export type Assignment = {
   // Omitted when false (CLI omitempty); absent reads as false. In lockstep with
   // the CLI's assignments-v1 schema (`init_shim`).
   init_shim?: boolean
+  // Copy ALL of the template's branches (not just the default) when each student
+  // repo is generated: accept passes include_all_branches to GitHub's POST
+  // /generate. Requires a template; mutually exclusive with empty_repo/init_shim
+  // (template-less, never generated); compatible with everything else (branches
+  // don't affect grading). Accept-time only and MUTABLE (not immutable — only
+  // affects repos generated from now on). Omitted when false; absent reads as
+  // false. In lockstep with the CLI's assignments-v1 schema (`include_all_branches`).
+  include_all_branches?: boolean
   // Lock the assignment against student access. Every student surface (accept
   // page, assignments list, submission view, and `gh student accept`) refuses
   // a locked assignment for EVERY student, including one who already accepted.

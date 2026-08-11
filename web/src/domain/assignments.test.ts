@@ -2972,6 +2972,38 @@ describe("createAssignmentRepo (bare / empty_repo)", () => {
 
     expect(getCreateBody()).toMatchObject({ auto_init: true })
   })
+
+  it("templated: passes include_all_branches to /generate (false and true)", async () => {
+    for (const want of [false, true]) {
+      let generateBody: Record<string, unknown> | undefined
+      const request = vi.fn(async (url: string, init?: unknown) => {
+        const method = (init as { method?: string })?.method ?? "GET"
+        if (method === "POST" && url.endsWith("/generate")) {
+          generateBody = (init as { body?: Record<string, unknown> }).body
+          return {
+            name: "cs101-actions-lab-alice",
+            full_name: "cs50/cs101-actions-lab-alice",
+            html_url: "https://github.com/cs50/cs101-actions-lab-alice",
+            default_branch: "main",
+          }
+        }
+        // Later provisioning requests are irrelevant to the generate-body check.
+        throw new Error(`unexpected request: ${method} ${url}`)
+      })
+      await createAssignmentRepo({
+        client: { request } as unknown as GitHubClient,
+        templateOwner: "acme",
+        templateRepo: "starter",
+        owner: "cs50",
+        name: "cs101-actions-lab-alice",
+        fallbackBranch: "main",
+        includeAllBranches: want,
+      }).catch(() => {
+        // Full templated flow makes further requests this minimal mock omits.
+      })
+      expect(generateBody).toMatchObject({ include_all_branches: want })
+    }
+  })
 })
 
 // Issue #413: GitHub refuses the create because the *destination* org doesn't let

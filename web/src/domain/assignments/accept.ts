@@ -747,6 +747,7 @@ export async function acceptAssignment(params: {
         name: studentRepoNameValue,
         fallbackBranch: sourceBranch || "main",
         bare: isEmptyRepo,
+        includeAllBranches: assignment.include_all_branches === true,
       }),
   )
 
