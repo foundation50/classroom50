@@ -20,6 +20,7 @@ import { OpenAllFeedbackPrsModal } from "@/pages/submissions/OpenAllFeedbackPrsM
 import { DownloadAllSubmissionsModal } from "@/pages/submissions/DownloadAllSubmissionsModal"
 import { BulkRepoAccessModal } from "@/components/modals/BulkRepoAccessModal"
 import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal"
+import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
 import {
@@ -280,6 +281,8 @@ const SubmissionsPageContent = () => {
   const [bulkAccessOpen, setBulkAccessOpen] = useState(false)
   const [bulkFeaturesOpen, setBulkFeaturesOpen] = useState(false)
   const [bulkTriggerOpen, setBulkTriggerOpen] = useState(false)
+  const [bulkPauseOpen, setBulkPauseOpen] = useState(false)
+  const [bulkResumeOpen, setBulkResumeOpen] = useState(false)
 
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
   // Gate on a resolved roster so a transient load/permission failure falls back
@@ -1092,6 +1095,30 @@ const SubmissionsPageContent = () => {
                 ? () => setBulkTriggerOpen(true)
                 : undefined
             }
+            // Pause / Resume autograding across every accepted repo — flips each
+            // autograde workflow's Actions state (no file edit). Same gate as
+            // the trigger retrofit (owner + individual + resolved default
+            // autograder + accepted repos exist).
+            onBulkPause={
+              isOwner &&
+              !isGroupAssignment &&
+              !skipsGrading &&
+              assignmentInfo != null &&
+              isDefaultAutograder(assignmentInfo.autograder) &&
+              acceptedSet.size > 0
+                ? () => setBulkPauseOpen(true)
+                : undefined
+            }
+            onBulkResume={
+              isOwner &&
+              !isGroupAssignment &&
+              !skipsGrading &&
+              assignmentInfo != null &&
+              isDefaultAutograder(assignmentInfo.autograder) &&
+              acceptedSet.size > 0
+                ? () => setBulkResumeOpen(true)
+                : undefined
+            }
             locked={isLockedAssignment}
             lockPending={setLock.isPending}
             // Lock/unlock is an authoring-tier action (teacher|hta), same gate
@@ -1133,6 +1160,17 @@ const SubmissionsPageContent = () => {
             : undefined
         }
         submissionTags={assignmentInfo?.submission_tags}
+        // Per-row Pause/Resume autograding: same gate as the bulk pause/resume
+        // (owner + individual + resolved default-autograder). Kept separate from
+        // submissionMode so the row action doesn't inherit the trigger action's
+        // group-assignment reach.
+        canPauseAutograding={
+          isOwner &&
+          !isGroupAssignment &&
+          !skipsGrading &&
+          assignmentInfo != null &&
+          isDefaultAutograder(assignmentInfo.autograder)
+        }
         initialLoading={initialLoading}
         nonSubmittersLoading={
           !nonSubmittersReady &&
@@ -1284,6 +1322,26 @@ const SubmissionsPageContent = () => {
         assignment={assignment}
         submissionMode={assignmentInfo?.submission_mode ?? "every-push"}
         submissionTags={assignmentInfo?.submission_tags}
+        owners={acceptedOwners}
+        students={students}
+      />
+      <BulkAutogradeStateModal
+        open={bulkPauseOpen}
+        onClose={() => setBulkPauseOpen(false)}
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+        action="pause"
+        owners={acceptedOwners}
+        students={students}
+      />
+      <BulkAutogradeStateModal
+        open={bulkResumeOpen}
+        onClose={() => setBulkResumeOpen(false)}
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+        action="resume"
         owners={acceptedOwners}
         students={students}
       />

@@ -166,6 +166,12 @@ export const githubKeys = {
   orgActionsUsage: (owner: string) =>
     [...githubKeys.all, "orgActionsUsage", owner] as const,
 
+  // The autograde workflow's Actions state for one student repo (active /
+  // disabled_manually / …), mapped to enabled|paused. Invalidated after a
+  // per-repo or bulk pause/resume so the row's action label flips.
+  autogradeState: (owner: string, repo: string) =>
+    [...githubKeys.all, "autogradeState", owner, repo] as const,
+
   // The org's Actions spending budget classification (hard-stop cap set?).
   orgActionsBudget: (owner: string) =>
     [...githubKeys.all, "orgActionsBudget", owner] as const,

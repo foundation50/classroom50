@@ -2608,6 +2608,53 @@
         "failed": "Could not update the workflow — try again."
       }
     },
+    "rowAutograde": {
+      "pauseTitle": "Pause autograding",
+      "pauseDescription": "Disable this repository's autograding workflow. The workflow file is left unchanged and grading can be resumed anytime.",
+      "pauseAria": "Pause autograding for {{repo}}",
+      "resumeTitle": "Resume autograding",
+      "resumeDescription": "Re-enable this repository's autograding workflow so pushes are graded again.",
+      "resumeAria": "Resume autograding for {{repo}}",
+      "outcome": {
+        "paused": "Autograding paused for this repository.",
+        "resumed": "Autograding resumed for this repository.",
+        "notGradable": "This repository has no autograding workflow — nothing to change.",
+        "failed": "Could not change the autograding state — try again."
+      }
+    },
+    "bulkAutograde": {
+      "pauseMenuLabel": "Pause autograding",
+      "pauseMenuTitle": "Disable the autograding workflow in every accepted student repository",
+      "pauseTitleEmptyRoster": "No students have accepted yet",
+      "resumeMenuLabel": "Resume autograding",
+      "resumeMenuTitle": "Re-enable the autograding workflow in every accepted student repository",
+      "resumeTitleEmptyRoster": "No students have accepted yet",
+      "pauseTitle": "Pause autograding",
+      "resumeTitle": "Resume autograding",
+      "pauseSubtitle_one": "Disables autograding on {{count}} student's repository.",
+      "pauseSubtitle_other": "Disables autograding on {{count}} students' repositories.",
+      "resumeSubtitle_one": "Re-enables autograding on {{count}} student's repository.",
+      "resumeSubtitle_other": "Re-enables autograding on {{count}} students' repositories.",
+      "noRepos": "No students have accepted this assignment yet, so there are no repositories to change.",
+      "pauseWarning_one": "This disables the autograding workflow in {{count}} student's repository. No files are changed, and you can resume autograding anytime.",
+      "pauseWarning_other": "This disables the autograding workflow in {{count}} students' repositories. No files are changed, and you can resume autograding anytime.",
+      "resumeWarning_one": "This re-enables the autograding workflow in {{count}} student's repository.",
+      "resumeWarning_other": "This re-enables the autograding workflow in {{count}} students' repositories.",
+      "pauseApply": "Pause all",
+      "resumeApply": "Resume all",
+      "working": "Updating repositories",
+      "progress": "Processed {{processed}} of {{total}}",
+      "pauseResultHeadline": "Paused autograding on {{done}} of {{total}} repositories.",
+      "resumeResultHeadline": "Resumed autograding on {{done}} of {{total}} repositories.",
+      "failedSection_one": "{{count}} repository could not be changed",
+      "failedSection_other": "{{count}} repositories could not be changed",
+      "deferredSection_one": "{{count}} repository was not processed",
+      "deferredSection_other": "{{count}} repositories were not processed",
+      "deferredDetail": "Skipped — re-run to change.",
+      "notGradableSection_one": "{{count}} repository has no autograding workflow",
+      "notGradableSection_other": "{{count}} repositories have no autograding workflow",
+      "notGradableDetail": "No autograding workflow exists — nothing to change."
+    },
     "rowRegrade": {
       "title": "Regrade this submission",
       "titleInFlight": "Regrade in progress…",

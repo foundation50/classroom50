@@ -113,6 +113,12 @@ export {
   type RepoFeaturePatch,
 } from "./mutations/collaborators"
 export {
+  getAutogradeState,
+  setAutogradeState,
+  AUTOGRADE_WORKFLOW_FILE,
+  type AutogradeState,
+} from "./mutations/autogradeState"
+export {
   createPullRequest,
   createBranchRef,
   ensureRepoLabel,

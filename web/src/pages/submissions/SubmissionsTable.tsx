@@ -230,6 +230,7 @@ const SubmissionsTable = ({
   emptyRepo = false,
   submissionMode,
   submissionTags,
+  canPauseAutograding = false,
   initialLoading = false,
   nonSubmittersLoading = false,
   page = 0,
@@ -273,6 +274,12 @@ const SubmissionsTable = ({
   submissionMode?: SubmissionMode
   // The assignment's milestone submission_tags for the same action.
   submissionTags?: string[]
+  // Whether the per-row Pause/Resume-autograding action applies. Gated by the
+  // page (owner + individual + resolved default-autograder), matching the bulk
+  // pause/resume gate so the row and menu entry points stay in lockstep — the
+  // GitHub workflow enable/disable acts on the individual repo's shim, which a
+  // group assignment's founder-managed repo doesn't have in the same way.
+  canPauseAutograding?: boolean
   // Core data (snapshot + roster) is still loading on first paint; render a
   // loading state rather than the "no submissions" empty state, which would
   // otherwise flash before data arrives.
@@ -843,6 +850,7 @@ const SubmissionsTable = ({
               : () => setAccessOwner(manageSubmission.owner),
             submissionMode,
             submissionTags,
+            canPauseAutograding,
           }}
         />
       )}
