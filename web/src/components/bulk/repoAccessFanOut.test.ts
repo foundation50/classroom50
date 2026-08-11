@@ -23,8 +23,7 @@ function apiError(status: number): GitHubAPIError {
 }
 
 describe("runBulkRepoAccess progress tracking", () => {
-  it("reports onStart before each write and onProgress up to the full count", async () => {
-    const events: string[] = []
+  it("reports onProgress up to the full count", async () => {
     const progressCounts: number[] = []
     const setCollaborator = vi.fn().mockResolvedValue({ effective: undefined })
 
@@ -38,20 +37,13 @@ describe("runBulkRepoAccess progress tracking", () => {
       treatRequestedAsFloor: false,
       t,
       isMounted: () => true,
-      onStart: (owner) => events.push(`start:${owner}`),
-      onProgress: (processed, owner) => {
-        events.push(`progress:${processed}:${owner}`)
+      onProgress: (processed) => {
         progressCounts.push(processed)
       },
     })
 
     expect(outcomes.every((o) => o.status === "ok")).toBe(true)
     expect(rateLimited).toBe(false)
-    // Both owners are started before the run resolves.
-    expect(events.filter((e) => e.startsWith("start:")).sort()).toEqual([
-      "start:alice",
-      "start:bob",
-    ])
     // The processed count is monotonically increasing and reaches N (no
     // stuck-at-0): the last progress tick reports every owner completed.
     expect(progressCounts).toEqual([1, 2])

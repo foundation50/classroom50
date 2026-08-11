@@ -101,14 +101,9 @@ export function BulkRepoAccessModal({
       treatRequestedAsFloor: false,
       t,
       isMounted: () => mountedRef.current,
-      onStart: (owner) => {
+      onProgress: (processed) => {
         if (mountedRef.current) {
-          setProgress((p) => ({ ...p, message: displayFor(owner) }))
-        }
-      },
-      onProgress: (processed, owner) => {
-        if (mountedRef.current) {
-          setProgress({ processed, total, message: displayFor(owner) })
+          setProgress({ processed, total, message: "" })
         }
       },
     })
@@ -250,14 +245,13 @@ export function BulkRepoAccessModal({
             max={100}
           />
           <p className="text-sm text-base-content/70">
-            {t("submissions.bulkAccess.progress", {
-              processed: progress.processed,
-              total: progress.total,
-            })}
+            {progress.processed > 0
+              ? t("submissions.bulkAccess.progress", {
+                  processed: progress.processed,
+                  total: progress.total,
+                })
+              : t("submissions.bulkAccess.working")}
           </p>
-          {progress.message && (
-            <p className="text-xs text-base-content/60">{progress.message}</p>
-          )}
         </div>
       )}
 

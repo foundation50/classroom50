@@ -79,10 +79,6 @@ type RunBulkRepoAccessParams = {
   // Guards setState-after-unmount and lets an in-flight run stop launching new
   // writes when the caller unmounts mid-fan-out.
   isMounted: () => boolean
-  // Called just before an owner's write is launched, so the UI can show which
-  // student is in flight immediately rather than only after the write resolves
-  // (important for a single slow write, where processed stays 0 until it lands).
-  onStart?: (owner: string) => void
   // Called after each owner is processed (success, failure, or deferral) with
   // the running processed count and the owner just handled.
   onProgress: (processed: number, owner: string) => void
@@ -104,7 +100,6 @@ export async function runBulkRepoAccess({
   treatRequestedAsFloor,
   t,
   isMounted,
-  onStart,
   onProgress,
 }: RunBulkRepoAccessParams): Promise<BulkAccessResult> {
   let processed = 0
@@ -124,7 +119,6 @@ export async function runBulkRepoAccess({
         if (isMounted()) onProgress(processed, owner)
         return { owner, status: "deferred" }
       }
-      if (isMounted()) onStart?.(owner)
       const repo = studentRepoName(classroom, assignment, owner)
       try {
         const { effective } = await setCollaborator({

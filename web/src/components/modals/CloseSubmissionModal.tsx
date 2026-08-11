@@ -140,16 +140,9 @@ export function CloseSubmissionModal({
       treatRequestedAsFloor: !closing,
       t,
       isMounted: () => mountedRef.current,
-      onStart: (owner) => {
+      onProgress: (processed) => {
         if (mountedRef.current) {
-          // Show who is being processed the moment the write launches, so a
-          // single slow write reads as active rather than stuck at "0 of N".
-          setProgress((p) => ({ ...p, message: displayFor(owner) }))
-        }
-      },
-      onProgress: (processed, owner) => {
-        if (mountedRef.current) {
-          setProgress({ processed, total, message: displayFor(owner) })
+          setProgress({ processed, total, message: "" })
         }
       },
     })
@@ -278,14 +271,13 @@ export function CloseSubmissionModal({
             max={100}
           />
           <p className="text-sm text-base-content/70">
-            {t("submissions.closeSubmission.progress", {
-              processed: progress.processed,
-              total: progress.total,
-            })}
+            {progress.processed > 0
+              ? t("submissions.closeSubmission.progress", {
+                  processed: progress.processed,
+                  total: progress.total,
+                })
+              : t("submissions.closeSubmission.working")}
           </p>
-          {progress.message && (
-            <p className="text-xs text-base-content/60">{progress.message}</p>
-          )}
         </div>
       )}
 
