@@ -380,13 +380,12 @@ export type CreateAssignmentInput = {
   student_permission?: RepoPermission
   // When the autograder fires. Undefined or "every-push" = the wire default
   // (buildAssignmentEntry omits it); "tag" = the shim grades only submit/* tag
-  // pushes. Mutually exclusive with empty_repo. Mirrors the CLI's
-  // --submission-mode.
+  // pushes. Mirrors the CLI's --submission-mode.
   submission_mode?: SubmissionMode
   // Teacher-named milestone tag patterns that also trigger grading (union
   // with the always-on submit/* namespace in the shim). Empty/undefined =
-  // none (buildAssignmentEntry omits the key). Mutually exclusive with
-  // empty_repo. Mirrors the CLI's --submission-tag.
+  // none (buildAssignmentEntry omits the key). Mirrors the CLI's
+  // --submission-tag.
   submission_tags?: string[]
   // The teacher's grading intent (off/auto/manual) with a manual max_points.
   // Undefined reads as "auto" (today's behavior). Orthogonal to the autograding

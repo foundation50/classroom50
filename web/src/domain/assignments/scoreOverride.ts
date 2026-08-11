@@ -119,8 +119,8 @@ function synthesizeOverrideRecord(
   }
 }
 
-// A submission record is a real autograder result (not our synthesized manual
-// one) when its submission tag isn't the manual sentinel.
+// True when this record is our synthesized manual override (its submission tag
+// starts with the manual sentinel), not a real autograder result.
 function isSynthesizedManual(record: SubmissionRecord): boolean {
   return (
     typeof record.submission === "string" &&
