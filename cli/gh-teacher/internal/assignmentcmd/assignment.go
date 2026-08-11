@@ -768,8 +768,12 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// include_all_branches is likewise GUI/manifest-owned (no flag), so carry
 		// it forward so a same-slug CLI re-add doesn't silently reset it. Unlike
 		// the above it is MUTABLE (no immutability check) — a teacher may change
-		// it; it only affects repos generated from now on.
-		if hasPrev {
+		// it; it only affects repos generated from now on. Gate on the current
+		// template: a re-add that drops --template turns the entry template-less,
+		// and include_all_branches only affects the generate call — carrying it
+		// onto a template-less entry would write a combination
+		// ValidateExistingEntry rejects, wedging every future read of the file.
+		if hasPrev && attemptEntry.Template != nil {
 			entry.IncludeAllBranches = file.Assignments[prevIdx].IncludeAllBranches
 			attemptEntry.IncludeAllBranches = entry.IncludeAllBranches
 		}
@@ -848,6 +852,16 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			}
 		}
 		committedLocked = attemptEntry.Locked
+		// Re-validate the fully assembled entry after every carry-forward: the
+		// initial ValidateAssignmentEntry ran on the flag-built `entry` before
+		// GUI/manifest-owned fields (include_all_branches, submission_mode, …)
+		// were carried forward, so a carry-forward that reconstructs an invalid
+		// combination (e.g. include_all_branches on a now-template-less entry)
+		// would otherwise be caught only on the next read — by which point the
+		// bad entry is already committed and wedges the file. Fail here instead.
+		if err := assignment.ValidateAssignmentEntry(attemptEntry); err != nil {
+			return nil, err
+		}
 		updated, replaced := assignment.UpsertAssignment(file.Assignments, attemptEntry)
 		if replaced {
 			action = "updated"

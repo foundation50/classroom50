@@ -21,7 +21,7 @@ const REPO_ROLES_DOCS_URL =
 //     toggle picks between an initialized repo (auto_init, README on) and a
 //     bare repo (README off). A template hides the README toggle (the template
 //     provides the initial commit) and shows an "Include all branches" toggle
-//     (deferred/coming-soon).
+//     (copy every branch at generate, default off).
 //   - Student repo access, and the Feedback PR (decoupled from autograding —
 //     available for any non-empty repo).
 // The source choice folds into empty_repo + template on submit via
@@ -102,7 +102,7 @@ export function RepositorySetupSection({
           </form.Field>
 
           {/* No-template branch: "Add a README" picks initialized vs bare.
-              Template branch: the template picker + a deferred "Include all
+              Template branch: the template picker + an "Include all
               branches" toggle. deriveFormShape decides which shows. */}
           <form.Subscribe selector={(state) => deriveFormShape(state.values)}>
             {(shape) =>

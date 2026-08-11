@@ -1154,7 +1154,7 @@
       },
       "includeAllBranches": {
         "label": "Include all branches",
-        "help": "Copy every branch and its history from the template, not just the default branch."
+        "help": "Copy every branch and its history from the template, not just the default branch. This applies to students who accept from now on; repositories already created are not changed."
       },
       "feedbackPr": "Feedback pull request",
       "feedbackPrHelp": "Open a pull request per repo for inline review of each submission.",
