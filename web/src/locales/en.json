@@ -1158,7 +1158,7 @@
       },
       "feedbackPr": "Feedback pull request",
       "feedbackPrHelp": "Open a pull request per repo for inline review of each submission.",
-      "feedbackPrEmptyRepoHelp": "Unavailable for empty repositories — there is no starter commit to diff against.",
+      "feedbackPrEmptyRepoHelp": "Unavailable for empty repositories. There is no starter commit to diff against.",
       "studentPermission": {
         "label": "Student repo access",
         "learnMore": "Learn more",
@@ -1226,8 +1226,12 @@
       "repoFeatures": {
         "heading": "Repository features",
         "refresh": "Refresh template settings",
-        "help": "Whether each student repository has Wikis, Issues, Projects, and Pull requests enabled. Applied when a student accepts (new repositories only); use the gradebook to change repositories already created. Inheriting a private template also copies its Wiki/Issues/Projects content, so keep answer keys out of a template you inherit from.",
-        "overrideWarning": "Applies to repositories created from now on; ones students already accepted aren't changed. With a template, the default follows the template at accept time (existing repositories don't drift when the template changes later); without a template, the default leaves GitHub's own repository defaults in place. To update existing repositories, use the bulk repository-features action on the submissions page.",
+        "help": "Whether each student repository has Wikis, Issues, Projects, and Pull requests enabled.",
+        "helpExisting": "Changes apply to repositories created from now on. To update ones students already accepted, use the gradebook.",
+        "templateContentWarning": "Inheriting a private template also copies its Wiki, Issues, and Projects content, so keep answer keys out of a template you inherit from.",
+        "overrideTemplate": "The default follows the template's settings when a student accepts. Existing repositories won't change if you update the template later.",
+        "overrideNoTemplate": "The default keeps GitHub's own repository defaults.",
+        "overrideExisting": "To update repositories students already accepted, use the bulk repository-features action on the submissions page.",
         "choices": {
           "default": "Default (GitHub default)",
           "inherit": "Inherit from template",

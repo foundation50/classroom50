@@ -282,6 +282,7 @@ export function RepositorySetupSection({
             {({ templateRepo, emptyRepo }) => (
               <RepoFeatureControls
                 form={form}
+                edit={edit}
                 templateRepo={templateRepo}
                 emptyRepo={emptyRepo}
               />
@@ -318,10 +319,12 @@ function parseOwnerRepo(ref: string): { owner: string; repo: string } | null {
 // and refresh behavior without mounting the whole section.
 export const RepoFeatureControls = ({
   form,
+  edit,
   templateRepo,
   emptyRepo,
 }: {
   form: AssignmentForm
+  edit: boolean
   templateRepo: string
   emptyRepo: boolean
 }) => {
@@ -417,7 +420,17 @@ export const RepoFeatureControls = ({
       </div>
       <p className="mb-3 text-sm text-base-content/70">
         {t("assignments.form.repoFeatures.help")}
+        {edit ? <> {t("assignments.form.repoFeatures.helpExisting")}</> : null}
       </p>
+      {/* Answer-key leak caveat: only relevant when inheriting a template,
+          since a template-less repo has no upstream content to copy. */}
+      {templated ? (
+        <Alert tone="warning" role="status" className="mb-3 text-sm">
+          <span>
+            {t("assignments.form.repoFeatures.templateContentWarning")}
+          </span>
+        </Alert>
+      ) : null}
       {/* Inline rows — "Wiki: [choice]" — label and select sit together (a
           fixed-width label keeps the four selects vertically aligned) with the
           select sized to its content (w-auto). FormField isn't used here
@@ -476,7 +489,14 @@ export const RepoFeatureControls = ({
         {(anyOverridden) =>
           anyOverridden ? (
             <Alert tone="warning" role="status" className="mt-3 text-sm">
-              <span>{t("assignments.form.repoFeatures.overrideWarning")}</span>
+              <span>
+                {templated
+                  ? t("assignments.form.repoFeatures.overrideTemplate")
+                  : t("assignments.form.repoFeatures.overrideNoTemplate")}
+                {edit ? (
+                  <> {t("assignments.form.repoFeatures.overrideExisting")}</>
+                ) : null}
+              </span>
             </Alert>
           ) : null
         }

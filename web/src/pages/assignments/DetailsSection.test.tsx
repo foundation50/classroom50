@@ -43,21 +43,28 @@ const t = ((key: string) => key) as unknown as TFunction
 function Harness({
   templateRepo,
   emptyRepo = false,
+  edit = false,
 }: {
   templateRepo: string
   emptyRepo?: boolean
+  edit?: boolean
 }) {
   const form = useAssignmentForm(undefined, () => {}, t)
   return (
     <RepoFeatureControls
       form={form}
+      edit={edit}
       templateRepo={templateRepo}
       emptyRepo={emptyRepo}
     />
   )
 }
 
-function renderControls(props: { templateRepo: string; emptyRepo?: boolean }) {
+function renderControls(props: {
+  templateRepo: string
+  emptyRepo?: boolean
+  edit?: boolean
+}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -198,20 +205,43 @@ describe("RepoFeatureControls — loading + refresh", () => {
 })
 
 describe("RepoFeatureControls — override warning", () => {
-  const warningKey = "assignments.form.repoFeatures.overrideWarning"
+  const templateWarningKey = "assignments.form.repoFeatures.overrideTemplate"
+  const noTemplateWarningKey =
+    "assignments.form.repoFeatures.overrideNoTemplate"
+  const existingWarningKey = "assignments.form.repoFeatures.overrideExisting"
 
-  it("hides the override warning while every feature is on Inherit", () => {
-    renderControls({ templateRepo: "org/template" })
-    expect(screen.queryByText(warningKey)).toBeNull()
-  })
-
-  it("shows the override warning once any feature is forced on/off", () => {
-    const { container } = renderControls({ templateRepo: "org/template" })
-    expect(screen.queryByText(warningKey)).toBeNull()
+  const forceIssuesOff = (container: HTMLElement) => {
     const issuesSelect = container.querySelector<HTMLSelectElement>(
       "#repo_feature_issues",
     )!
     fireEvent.change(issuesSelect, { target: { value: "off" } })
-    expect(screen.getByText(warningKey)).toBeTruthy()
+  }
+
+  it("hides the override warning while every feature is on Inherit", () => {
+    renderControls({ templateRepo: "org/template" })
+    expect(screen.queryByText(templateWarningKey)).toBeNull()
+    expect(screen.queryByText(noTemplateWarningKey)).toBeNull()
+  })
+
+  it("shows the template-default warning once a feature is forced, with a template", () => {
+    const { container } = renderControls({ templateRepo: "org/template" })
+    forceIssuesOff(container)
+    expect(screen.getByText(templateWarningKey)).toBeTruthy()
+    // No template-less copy, and no edit-only "update existing" line on create.
+    expect(screen.queryByText(noTemplateWarningKey)).toBeNull()
+    expect(screen.queryByText(existingWarningKey)).toBeNull()
+  })
+
+  it("shows the no-template default warning when there is no template", () => {
+    const { container } = renderControls({ templateRepo: "" })
+    forceIssuesOff(container)
+    expect(screen.getByText(noTemplateWarningKey)).toBeTruthy()
+    expect(screen.queryByText(templateWarningKey)).toBeNull()
+  })
+
+  it("adds the update-existing line only in edit mode", () => {
+    const { container } = renderControls({ templateRepo: "", edit: true })
+    forceIssuesOff(container)
+    expect(screen.getByText(existingWarningKey, { exact: false })).toBeTruthy()
   })
 })
