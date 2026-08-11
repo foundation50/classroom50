@@ -163,6 +163,7 @@ type AssignmentEntry struct {
 	AllowedFiles       []string         `json:"allowed_files,omitempty"`
 	ReleaseAssets      []string         `json:"release_assets,omitempty"`
 	PassThreshold      *int             `json:"pass_threshold,omitempty"`
+	Grading            *Grading         `json:"grading,omitempty"`
 	StudentPermission  string           `json:"student_permission,omitempty"`
 	SubmissionMode     string           `json:"submission_mode,omitempty"`
 	SubmissionTags     []string         `json:"submission_tags,omitempty"`
@@ -188,6 +189,7 @@ var knownEntryKeys = map[string]struct{}{
 	"init_shim":            {},
 	"include_all_branches": {},
 	"repo_features":        {},
+	"grading":              {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then strictly
@@ -321,6 +323,49 @@ func ValidatePassThreshold(n *int) error {
 	}
 	if *n < PassThresholdMin || *n > PassThresholdMax {
 		return fmt.Errorf("pass_threshold %d out of range (%d..%d)", *n, PassThresholdMin, PassThresholdMax)
+	}
+	return nil
+}
+
+// Grading records the teacher's grading intent as a first-class choice the GUI
+// surfaces: `auto` (autograded — the default; an absent block reads as auto),
+// `manual` (the teacher records scores by hand on the submissions page), or
+// `off` (not graded). ORTHOGONAL to the autograding tri-state
+// (empty_repo/no_autograder/init_shim) and to collection: nothing in the
+// grading pipeline reads it, so the two axes never need to agree and are not
+// coupled by any exclusion. MaxPoints is a pointer so absent stays distinct
+// from a would-be 0; it is required (and >= 1) for manual, forbidden otherwise.
+type Grading struct {
+	Mode      string `json:"mode"`
+	MaxPoints *int   `json:"max_points,omitempty"`
+}
+
+// GradingMaxPointsMin is the smallest legal manual max_points. Not 0: a
+// gradebook client divides score by max to show passing/failing and to tally
+// stats, and treats a 0 max as the "ungraded" sentinel — so a configured
+// manual max must be at least 1.
+const GradingMaxPointsMin = 1
+
+// ValidateGrading checks an optional grading block, mirroring the schema's
+// grading conditionals. A nil pointer (absent) is valid and means auto. When
+// present: mode must be a valid GradingMode; manual requires max_points >= 1;
+// off/auto must omit max_points.
+func ValidateGrading(g *Grading) error {
+	if g == nil {
+		return nil
+	}
+	if !contract.IsValidGradingMode(g.Mode) {
+		return fmt.Errorf("invalid grading.mode %q: must be one of %v", g.Mode, contract.GradingModes)
+	}
+	if g.Mode == contract.GradingModeManual {
+		if g.MaxPoints == nil {
+			return errors.New("grading.mode manual requires grading.max_points")
+		}
+		if *g.MaxPoints < GradingMaxPointsMin {
+			return fmt.Errorf("grading.max_points %d out of range (must be >= %d)", *g.MaxPoints, GradingMaxPointsMin)
+		}
+	} else if g.MaxPoints != nil {
+		return fmt.Errorf("grading.max_points is only valid for manual grading (mode is %q)", g.Mode)
 	}
 	return nil
 }
@@ -862,6 +907,9 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {
 		return err
 	}
+	if err := ValidateGrading(entry.Grading); err != nil {
+		return err
+	}
 	if err := ValidateStudentPermission(entry.StudentPermission); err != nil {
 		return err
 	}
@@ -1130,6 +1178,9 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {
+		return fmt.Errorf("entry %q: %w", entry.Slug, err)
+	}
+	if err := ValidateGrading(entry.Grading); err != nil {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidateStudentPermission(entry.StudentPermission); err != nil {
