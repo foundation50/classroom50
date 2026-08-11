@@ -139,6 +139,10 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   // create/edit form, so an edit must preserve it verbatim — otherwise saving
   // an edit would silently unlock a locked assignment.
   locked: "preserved",
+  // Owned by the separate close/reopen action (useSetAssignmentClosed), never
+  // the create/edit form, so an edit must preserve it verbatim — otherwise
+  // saving an edit would silently reopen a closed submission window.
+  closed: "preserved",
 }
 
 // Keys the edit form fully owns (Classroom-50-owned), derived from the
@@ -1121,6 +1125,24 @@ export type SetAssignmentLockInput = {
   locked: boolean
 }
 
+export type SetAssignmentClosedInput = {
+  org: string
+  classroom: string
+  slug: string
+  closed: boolean
+}
+
+export type SetAssignmentClosedResult = Omit<
+  CreateClassroomResult,
+  "updatedRef"
+> & {
+  // Present only when the flag actually changed; a no-op (already in the
+  // requested state) skips the commit and leaves this undefined.
+  updatedRef?: CreateClassroomResult["updatedRef"]
+  // The flag value that landed. Echoed so the caller doesn't reread.
+  closed: boolean
+}
+
 export type SetAssignmentLockResult = Omit<
   CreateClassroomResult,
   "updatedRef"
@@ -1349,4 +1371,99 @@ export async function setAssignmentLockWithConflictRetry(
   input: SetAssignmentLockInput,
 ) {
   return withGitConflictRetry(() => setAssignmentLock(client, input))
+}
+
+// Flip an assignment's `closed` flag in assignments.json. Unlike setAssignmentLock
+// this has NO template-access side effect: closing only ends the submission
+// window (the accept gate reads this flag). The teacher "Close submission" action
+// pairs this write with a per-repo collaborator downgrade handled by the caller.
+export async function setAssignmentClosed(
+  client: GitHubClient,
+  input: SetAssignmentClosedInput,
+): Promise<SetAssignmentClosedResult> {
+  const { org, classroom, slug, closed } = input
+  log.info("set assignment closed: started", { org, classroom, slug, closed })
+
+  const [, configBranch] = await Promise.all([
+    assertClassroomNotArchived(client, org, classroom),
+    getConfigRepoBranch(client, org),
+  ])
+  const ref = await getBranchRef(client, org, configBranch)
+  const commit = await getCommit(client, org, ref.object.sha)
+
+  const assignmentsFilePath = `${classroom}/assignments.json`
+  const currentAssignments = await getAssignmentsFile(client, {
+    org,
+    path: assignmentsFilePath,
+    ref: ref.object.sha,
+  })
+
+  const target = currentAssignments.assignments.find((a) => a.slug === slug)
+  if (!target) {
+    throw new Error(`Existing assignment matching ${slug} was not found.`)
+  }
+
+  const alreadyInState = Boolean(target.closed) === closed
+
+  let newCommitSha = ref.object.sha
+  let newTreeSha = commit.tree.sha
+  let updatedRef: CreateClassroomResult["updatedRef"] | undefined
+
+  if (!alreadyInState) {
+    const updatedEntry: Assignment = { ...target, closed }
+    // Collapse to the wire's absent-is-false shape (matches the CLI's
+    // omitempty), so reopening drops the key rather than writing `closed: false`.
+    if (!closed) delete updatedEntry.closed
+
+    const nextAssignments: AssignmentsFile = {
+      ...currentAssignments,
+      assignments: [
+        ...currentAssignments.assignments.filter((a) => a.slug !== slug),
+        updatedEntry,
+      ],
+    }
+
+    const tree = await createGitTree(client, {
+      org,
+      base_tree: commit.tree.sha,
+      tree: [
+        {
+          path: assignmentsFilePath,
+          mode: "100644",
+          type: "blob",
+          content: JSON.stringify(nextAssignments, null, 2) + "\n",
+        },
+      ],
+    })
+    const newCommit = await createGitCommit(client, {
+      org,
+      message: prefixCommit(
+        `${closed ? "Close" : "Reopen"} assignment: ${classroom}/${slug}`,
+      ),
+      tree_sha: tree.sha,
+      parents: [ref.object.sha],
+    })
+    updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
+    newCommitSha = newCommit.sha
+    newTreeSha = tree.sha
+  }
+
+  return {
+    previousCommitSha: ref.object.sha,
+    baseTreeSha: commit.tree.sha,
+    newTreeSha,
+    newCommitSha,
+    updatedRef,
+    closed,
+  }
+}
+
+// Same concurrency story as setAssignmentLock: the write hits classroom50's
+// default branch, so a concurrent write 409s; each attempt re-reads the ref and
+// file, so retrying is safe.
+export async function setAssignmentClosedWithConflictRetry(
+  client: GitHubClient,
+  input: SetAssignmentClosedInput,
+) {
+  return withGitConflictRetry(() => setAssignmentClosed(client, input))
 }

@@ -18,6 +18,7 @@ import {
   resolveTemplate,
   resolveTemplateGrant,
   setAssignmentLock,
+  setAssignmentClosed,
   TEMPLATE_READ_STAFF_ROLES,
   verifyTemplateAccess,
 } from "./assignments"
@@ -355,6 +356,21 @@ describe("preserveUnmanagedAssignmentKeys", () => {
     }
     const merged = preserveUnmanagedAssignmentKeys(existing, edited)
     expect(merged.due).toBeUndefined()
+  })
+
+  it("preserves closed (and locked) across an edit that never carries them", () => {
+    // Both flags are owned by their own actions, not the edit form; a rebuilt
+    // entry omits them, so the merge must carry them forward verbatim.
+    const existing: Assignment = { ...fullSource, closed: true, locked: true }
+    const edited: Assignment = {
+      slug: "hw1",
+      name: "Homework 1 (edited)",
+      mode: "individual",
+      autograder: "default",
+    }
+    const merged = preserveUnmanagedAssignmentKeys(existing, edited)
+    expect(merged.closed).toBe(true)
+    expect(merged.locked).toBe(true)
   })
 })
 
@@ -3812,6 +3828,132 @@ describe("setAssignmentLock", () => {
     expect(result.locked).toBe(true)
     expect(result.templateAccessWarning).toBeDefined()
     expect(result.templateAccessWarning).toContain("tmpl")
+  })
+})
+
+describe("setAssignmentClosed", () => {
+  const ORG = "cs50"
+  const CLASSROOM = "cs50"
+  const SLUG = "hw1"
+  const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
+
+  afterEach(() => vi.restoreAllMocks())
+
+  // A fake config repo serving the closed read-modify-commit flow. Unlike the
+  // lock client it must see NO team-repo mutation: closing has no template
+  // access side effect. Any team-repo request throws to prove that.
+  function makeClosedClient(opts: { closed?: boolean }): {
+    client: GitHubClient
+    committed: () => string | undefined
+    teamCalls: () => number
+  } {
+    let committed: string | undefined
+    let teamCalls = 0
+
+    const assignmentsFile = {
+      schema: "classroom50/assignments/v1",
+      assignments: [
+        {
+          slug: SLUG,
+          name: "Homework 1",
+          mode: "individual",
+          autograder: "default",
+          template: { owner: ORG, repo: "tmpl", branch: "main" },
+          ...(opts.closed ? { closed: true } : {}),
+        },
+      ],
+    }
+    const classroomJson: Record<string, unknown> = {
+      schema: "classroom50/classroom/v1",
+      short_name: CLASSROOM,
+    }
+
+    const request = vi.fn(
+      async (url: string, init?: { method?: string; body?: unknown }) => {
+        const method = init?.method ?? "GET"
+        if (/\/orgs\/[^/]+\/teams\//.test(url)) {
+          teamCalls += 1
+          throw new Error(`closed must not touch team access: ${method} ${url}`)
+        }
+        if (url.endsWith("/git/trees") && init?.body) {
+          const body = init.body as { tree?: { content?: string }[] }
+          committed = body.tree?.[0]?.content
+        }
+        if (/\/repos\/[^/]+\/classroom50$/.test(url))
+          return { default_branch: "main" }
+        if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
+        if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
+        if (url.includes(`/contents/${CLASSROOM}/classroom.json`)) {
+          return {
+            type: "file",
+            encoding: "base64",
+            content: b64(JSON.stringify(classroomJson)),
+          }
+        }
+        if (url.includes(`/contents/${CLASSROOM}/assignments.json`)) {
+          return {
+            type: "file",
+            encoding: "base64",
+            content: b64(JSON.stringify(assignmentsFile)),
+          }
+        }
+        if (url.endsWith("/git/trees")) return { sha: "newtree" }
+        if (url.endsWith("/git/commits")) return { sha: "newcommit" }
+        if (method === "PATCH" && url.includes("/git/refs/heads/main")) {
+          return { object: { sha: "newcommit" } }
+        }
+        throw new Error(`unexpected request: ${method} ${url}`)
+      },
+    )
+    const requestRaw = vi.fn(async () => JSON.stringify(classroomJson))
+
+    return {
+      client: {
+        request,
+        requestRaw,
+      } as unknown as GitHubClient,
+      committed: () => committed,
+      teamCalls: () => teamCalls,
+    }
+  }
+
+  it("closes: flips the flag and touches no template team access", async () => {
+    const { client, committed, teamCalls } = makeClosedClient({ closed: false })
+    const result = await setAssignmentClosed(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      closed: true,
+    })
+    expect(result.closed).toBe(true)
+    expect(committed()).toContain(`"closed": true`)
+    expect(teamCalls()).toBe(0)
+  })
+
+  it("reopens: clears the flag (absent-is-false wire shape)", async () => {
+    const { client, committed } = makeClosedClient({ closed: true })
+    const result = await setAssignmentClosed(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      closed: false,
+    })
+    expect(result.closed).toBe(false)
+    expect(committed()).not.toContain(`"closed"`)
+  })
+
+  it("no-ops when already in the requested state (no commit)", async () => {
+    const { client, committed } = makeClosedClient({ closed: true })
+    const result = await setAssignmentClosed(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      closed: true,
+    })
+    expect(result.closed).toBe(true)
+    // Already closed: the commit is skipped, so no tree content was captured.
+    expect(committed()).toBeUndefined()
+    expect(result.updatedRef).toBeUndefined()
   })
 })
 
