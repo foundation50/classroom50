@@ -382,6 +382,31 @@ func TestEntryCommitsShim(t *testing.T) {
 	}
 }
 
+// TestEntryInitShimAcceptRouting pins the exact tuple accept.go branches on to
+// send an init_shim assignment down the INITIALIZED-plus-shim path rather than
+// the bare path: the create step passes autoInit = !EmptyRepo (true here), the
+// shim render/commit is gated on CommitsShim() (true here), and it is not the
+// no_autograder no-shim state. This is the routing decision the end-to-end
+// accept relies on; if any of the three flipped, an init_shim repo would be
+// provisioned bare or shim-less, which is the exact regression to prevent.
+func TestEntryInitShimAcceptRouting(t *testing.T) {
+	e := Entry{InitShim: true, Autograder: "default"}
+	if e.EmptyRepo {
+		t.Error("init_shim entry must not be EmptyRepo (accept would create it bare, no commit)")
+	}
+	if !e.CommitsShim() {
+		t.Error("init_shim entry must CommitsShim() (accept would skip the shim render/commit)")
+	}
+	if e.NoAutograder {
+		t.Error("init_shim entry must not be NoAutograder (that is the no-shim state)")
+	}
+	// Sanity: the default autograder resolves to the default-shim path, so the
+	// accept gate `useDefaultShim && CommitsShim()` renders the shim.
+	if got := e.ResolveAutograder(); got != "default" {
+		t.Errorf("ResolveAutograder() = %q, want the default shim for init_shim", got)
+	}
+}
+
 func TestEntryDecodesFeedbackPR(t *testing.T) {
 	// feedback_pr decodes when present and defaults to false when absent —
 	// the accept flow gates the accept-time Feedback PR on it (issue #228).

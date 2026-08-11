@@ -20,6 +20,10 @@ describe("autogradingState predicates", () => {
     expect(isEmptyRepoAssignment({ ...base, empty_repo: true })).toBe(true)
     expect(isEmptyRepoAssignment({ ...base, empty_repo: false })).toBe(false)
     expect(isEmptyRepoAssignment(base)).toBe(false)
+    // An init_shim assignment is NOT empty_repo — accept.ts routes it to the
+    // initialized (auto_init) create path via `bare: isEmptyRepo`, so this
+    // must stay false or an init_shim repo would be provisioned bare (no shim).
+    expect(isEmptyRepoAssignment({ ...base, init_shim: true })).toBe(false)
   })
 
   it("isNoAutograderAssignment is strict-boolean true", () => {
