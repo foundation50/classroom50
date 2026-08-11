@@ -1131,10 +1131,6 @@
       "typeGroup": "Group project",
       "maxGroupSize": "Max group size",
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
-      "extensions": {
-        "label": "Per-student extensions (coming soon)",
-        "help": "Grant individual students or groups a later due date. Not yet available."
-      },
       "repoSource": {
         "label": "Start with a template",
         "lockedHelp": "The repository source can't be changed after creation: repositories students already accepted are not re-provisioned.",
