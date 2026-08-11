@@ -601,11 +601,14 @@ export const assignmentToFormValues = (
     feedback_pr: assignment.feedback_pr ?? true,
     empty_repo: assignment.empty_repo ?? false,
     // Fold the stored wire fields back into the UI source discriminator: a
-    // template means "template"; otherwise "none", and add_readme mirrors
-    // "not a bare repo" (a template-less non-empty repo is auto_init'd with a
-    // README today). A bare empty_repo reads as none + no README.
+    // template means "template"; otherwise "none". add_readme is true only for
+    // a template-less repo that is neither bare (empty_repo) nor shim-only
+    // (init_shim) — those two no-README states must round-trip to add_readme
+    // false so deriveFormShape re-derives empty_repo/init_shim, not a README
+    // repo (which would silently try to flip the immutable flag on re-save).
     repo_source: assignment.template ? "template" : "none",
-    add_readme: !(assignment.empty_repo ?? false),
+    add_readme:
+      !(assignment.empty_repo ?? false) && !(assignment.init_shim ?? false),
     // Derive the tri-state from the stored wire fields (empty_repo /
     // no_autograder / default), so an edit opens on the right autograding
     // option and a round-trip preserves it. Uses the #554 domain helper.

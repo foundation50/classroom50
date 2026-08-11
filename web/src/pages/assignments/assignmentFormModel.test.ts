@@ -8,6 +8,7 @@ import {
   formValuesToRepoFeatures,
   type CreateAssignmentFormValues,
 } from "./assignmentFormModel"
+import { deriveFormShape } from "./formShape"
 
 // Echo the i18n key (+ any interpolation) so assertions match on stable keys.
 const t = ((key: string) => key) as unknown as TFunction
@@ -517,6 +518,25 @@ describe("toSubmitValues — runtime field clearing", () => {
     })
     expect(out.empty_repo).toBe(false)
     expect(out.template_repo).toBe("acme/starter")
+  })
+
+  it("round-trips a stored init_shim assignment without flipping the flag", () => {
+    // A stored init_shim (no template, empty_repo false) must read back as the
+    // no-README + built-in combination so deriveFormShape re-derives init_shim
+    // — NOT as a README repo, which would try to flip the immutable flag.
+    const values = assignmentToFormValues({
+      slug: "scratch",
+      name: "Scratch",
+      mode: "individual",
+      autograder: "default",
+      init_shim: true,
+    })
+    expect(values.repo_source).toBe("none")
+    expect(values.add_readme).toBe(false)
+    expect(values.autograding_state).toBe("built-in")
+    const shape = deriveFormShape({ ...base, ...values })
+    expect(shape.initShim).toBe(true)
+    expect(shape.emptyRepo).toBe(false)
   })
 })
 
