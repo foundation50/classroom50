@@ -479,3 +479,89 @@ func TestRunAssignmentAdd_PreservesSubmissionTags(t *testing.T) {
 		t.Errorf("explicit --submission-tag must replace the set, got %v", got)
 	}
 }
+
+func includeAllBranchesAssignmentsBody() string {
+	return `{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "hello",
+      "name": "Hello",
+      "template": { "owner": "o", "repo": "hello-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default",
+      "include_all_branches": true,
+      "feedback_pr": true
+    }
+  ]
+}`
+}
+
+// TestRunAssignmentAdd_PreservesIncludeAllBranches is the carry-forward guard
+// for the mutable include_all_branches: a same-slug re-add that KEEPS the
+// template (the field has no --flag, so it's GUI/manifest-owned) must not
+// silently reset a prior true. Mirrors TestRunAssignmentAdd_PreservesSubmissionMode.
+func TestRunAssignmentAdd_PreservesIncludeAllBranches(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments: includeAllBranchesAssignmentsBody(),
+		classroom:   lockClassroomBody(),
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:        "o",
+		Classroom:  "dst",
+		Slug:       "hello",
+		Name:       "Hello",
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template", Branch: "main"},
+		Mode:       assignment.ModeIndividual,
+		Autograder: "default",
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(re-add templated): %v", err)
+	}
+	if !decodeLock(t, fix).Assignments[0].IncludeAllBranches {
+		t.Errorf("re-adding a templated entry must keep include_all_branches=true")
+	}
+}
+
+// TestRunAssignmentAdd_TemplateDropClearsIncludeAllBranches is the regression
+// guard for the wedge bug: a same-slug re-add that DROPS --template must NOT
+// carry include_all_branches:true onto the now-template-less entry. That combo
+// is rejected by ParseAssignments/ValidateExistingEntry, so committing it would
+// wedge every subsequent read of the file. The carry-forward is gated on the
+// current template, and a post-carry-forward ValidateAssignmentEntry backstops
+// it — so the committed entry is template-less, has no include_all_branches,
+// and re-parses cleanly (decodeLock parses, proving no wedge).
+func TestRunAssignmentAdd_TemplateDropClearsIncludeAllBranches(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments: includeAllBranchesAssignmentsBody(),
+		classroom:   lockClassroomBody(),
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:       "o",
+		Classroom: "dst",
+		Slug:      "hello",
+		Name:      "Hello",
+		// --template omitted: the entry becomes template-less, so the mutable
+		// include_all_branches must be dropped rather than carried forward.
+		Mode:       assignment.ModeIndividual,
+		Autograder: "default",
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(re-add dropping --template): %v", err)
+	}
+	// decodeLock re-parses the committed file through ParseAssignments; a
+	// template-less include_all_branches:true would fail that parse (the wedge).
+	got := decodeLock(t, fix).Assignments[0]
+	if got.Template != nil {
+		t.Errorf("dropping --template must produce a template-less entry, got template %+v", got.Template)
+	}
+	if got.IncludeAllBranches {
+		t.Errorf("include_all_branches must not carry forward onto a template-less entry (would wedge the file)")
+	}
+}

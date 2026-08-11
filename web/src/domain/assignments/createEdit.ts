@@ -111,6 +111,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   empty_repo: "classroom50-owned",
   no_autograder: "classroom50-owned",
   init_shim: "classroom50-owned",
+  include_all_branches: "classroom50-owned",
   // Rebuilt AND a closed object: the CLI decodes runtime strictly (RuntimeRef
   // has no Extra, DisallowUnknownFields; schema additionalProperties false), so
   // the rebuilt runtime must win and any unknown sub-key drops rather than
@@ -477,6 +478,28 @@ async function buildAssignmentEntry(
     }
   }
 
+  // include_all_branches only affects the templated generate call, so it
+  // requires a template and excludes the template-less states empty_repo /
+  // init_shim. Compatible with everything else (branches don't affect grading).
+  // Mirrors the CLI's validateIncludeAllBranchesExclusions.
+  if (input.include_all_branches) {
+    if (!input.template_repo.trim()) {
+      throw new Error(
+        "include_all_branches: requires a template — it only affects the template generate call.",
+      )
+    }
+    if (input.empty_repo) {
+      throw new Error(
+        "include_all_branches: mutually exclusive with empty_repo — a bare repo is never generated from a template.",
+      )
+    }
+    if (input.init_shim) {
+      throw new Error(
+        "include_all_branches: mutually exclusive with init_shim — an init_shim repo is template-less and never generated.",
+      )
+    }
+  }
+
   if (tests.length > 0) {
     await ensureDeclarativeTestsWritable(
       client,
@@ -535,6 +558,11 @@ async function buildAssignmentEntry(
   // otherwise-empty, template-less repo (marker + default shim, no README).
   if (input.init_shim) {
     entry.init_shim = true
+  }
+  // Written only when true (CLI omitempty). Copy all template branches at
+  // generate. No immutability check — it's mutable (only affects new accepts).
+  if (input.include_all_branches) {
+    entry.include_all_branches = true
   }
   // Omit the template block entirely for a template-less assignment, matching
   // the CLI's nil TemplateRef.

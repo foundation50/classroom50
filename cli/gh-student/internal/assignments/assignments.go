@@ -107,6 +107,13 @@ type Entry struct {
 	// produces submit/* releases. Mutually exclusive with EmptyRepo, a template,
 	// and NoAutograder. Absent reads as false (teacher CLI omits it when false).
 	InitShim bool `json:"init_shim,omitempty"`
+
+	// IncludeAllBranches opts a TEMPLATED assignment into copying ALL of the
+	// template's branches (not just the default) when the student repo is
+	// generated: accept passes include_all_branches to POST /generate. Only
+	// affects the templated path; the bare/template-less paths never generate.
+	// Absent reads as false (teacher CLI omits it when false).
+	IncludeAllBranches bool `json:"include_all_branches,omitempty"`
 }
 
 // IsTagSubmissionMode reports whether the entry grades only on submit/* tag

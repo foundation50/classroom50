@@ -141,32 +141,33 @@ type AssignmentsJSON struct {
 // changing it later requires retrofitting existing repos' shims (`gh teacher
 // assignment submission-mode`). Mutually exclusive with EmptyRepo (no shim).
 type AssignmentEntry struct {
-	Slug              string           `json:"slug"`
-	Name              string           `json:"name"`
-	Description       string           `json:"description,omitempty"`
-	Template          *TemplateRef     `json:"template,omitempty"`
-	Due               string           `json:"due,omitempty"`
-	DueMeta           *DueMeta         `json:"due_meta,omitempty"`
-	AvailableFrom     string           `json:"available_from,omitempty"`
-	AvailableFromMeta *DueMeta         `json:"available_from_meta,omitempty"`
-	Mode              string           `json:"mode"`
-	Autograder        string           `json:"autograder"`
-	MaxGroupSize      int              `json:"max_group_size,omitempty"`
-	Runtime           *RuntimeRef      `json:"runtime,omitempty"`
-	Tests             []TestSpec       `json:"tests,omitempty"`
-	FeedbackPR        bool             `json:"feedback_pr,omitempty"`
-	EmptyRepo         bool             `json:"empty_repo,omitempty"`
-	NoAutograder      bool             `json:"no_autograder,omitempty"`
-	InitShim          bool             `json:"init_shim,omitempty"`
-	Locked            bool             `json:"locked,omitempty"`
-	AllowedFiles      []string         `json:"allowed_files,omitempty"`
-	ReleaseAssets     []string         `json:"release_assets,omitempty"`
-	PassThreshold     *int             `json:"pass_threshold,omitempty"`
-	StudentPermission string           `json:"student_permission,omitempty"`
-	SubmissionMode    string           `json:"submission_mode,omitempty"`
-	SubmissionTags    []string         `json:"submission_tags,omitempty"`
-	RepoFeatures      *RepoFeatures    `json:"repo_features,omitempty"`
-	MigratedFrom      *MigratedFromRef `json:"migrated_from,omitempty"`
+	Slug               string           `json:"slug"`
+	Name               string           `json:"name"`
+	Description        string           `json:"description,omitempty"`
+	Template           *TemplateRef     `json:"template,omitempty"`
+	Due                string           `json:"due,omitempty"`
+	DueMeta            *DueMeta         `json:"due_meta,omitempty"`
+	AvailableFrom      string           `json:"available_from,omitempty"`
+	AvailableFromMeta  *DueMeta         `json:"available_from_meta,omitempty"`
+	Mode               string           `json:"mode"`
+	Autograder         string           `json:"autograder"`
+	MaxGroupSize       int              `json:"max_group_size,omitempty"`
+	Runtime            *RuntimeRef      `json:"runtime,omitempty"`
+	Tests              []TestSpec       `json:"tests,omitempty"`
+	FeedbackPR         bool             `json:"feedback_pr,omitempty"`
+	EmptyRepo          bool             `json:"empty_repo,omitempty"`
+	NoAutograder       bool             `json:"no_autograder,omitempty"`
+	InitShim           bool             `json:"init_shim,omitempty"`
+	IncludeAllBranches bool             `json:"include_all_branches,omitempty"`
+	Locked             bool             `json:"locked,omitempty"`
+	AllowedFiles       []string         `json:"allowed_files,omitempty"`
+	ReleaseAssets      []string         `json:"release_assets,omitempty"`
+	PassThreshold      *int             `json:"pass_threshold,omitempty"`
+	StudentPermission  string           `json:"student_permission,omitempty"`
+	SubmissionMode     string           `json:"submission_mode,omitempty"`
+	SubmissionTags     []string         `json:"submission_tags,omitempty"`
+	RepoFeatures       *RepoFeatures    `json:"repo_features,omitempty"`
+	MigratedFrom       *MigratedFromRef `json:"migrated_from,omitempty"`
 
 	// Extra holds unknown top-level entry keys, re-emitted verbatim so a
 	// read-modify-write never drops a field a newer binary/GUI added.
@@ -183,9 +184,10 @@ var knownEntryKeys = map[string]struct{}{
 	"locked": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
 	"student_permission": {}, "submission_mode": {}, "submission_tags": {},
-	"no_autograder": {},
-	"init_shim":     {},
-	"repo_features": {},
+	"no_autograder":        {},
+	"init_shim":            {},
+	"include_all_branches": {},
+	"repo_features":        {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then strictly
@@ -884,6 +886,11 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 			return err
 		}
 	}
+	if entry.IncludeAllBranches {
+		if err := validateIncludeAllBranchesExclusions(entry); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -983,6 +990,28 @@ func validateInitShimExclusions(entry AssignmentEntry) error {
 	}
 	if entry.Autograder != "" && entry.Autograder != contract.DefaultAutograderName {
 		return fmt.Errorf("init_shim is mutually exclusive with a non-default autograder (%q): init_shim commits the universal default shim, a custom autograder fetches a teacher-authored workflow instead", entry.Autograder)
+	}
+	return nil
+}
+
+// validateIncludeAllBranchesExclusions rejects the combinations
+// include_all_branches rules out. It only affects the templated generate call
+// (POST /generate include_all_branches), so it REQUIRES a template and is
+// mutually exclusive with the template-less states empty_repo and init_shim
+// (neither is ever generated). It is compatible with everything else, including
+// no_autograder and the grading-adjacent fields (branches do not affect
+// grading). Unlike empty_repo/no_autograder/init_shim it is NOT immutable —
+// changing it affects only repos generated from now on (no retrofit), so there
+// is no ValidateIncludeAllBranchesUnchanged.
+func validateIncludeAllBranchesExclusions(entry AssignmentEntry) error {
+	if entry.Template == nil {
+		return errors.New("include_all_branches requires a template: it only affects the template generate call; a template-less repo is never generated")
+	}
+	if entry.EmptyRepo {
+		return errors.New("include_all_branches is mutually exclusive with empty_repo: a bare repo is never generated from a template")
+	}
+	if entry.InitShim {
+		return errors.New("include_all_branches is mutually exclusive with init_shim: an init_shim repo is template-less and never generated")
 	}
 	return nil
 }
@@ -1124,6 +1153,11 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 	}
 	if entry.InitShim {
 		if err := validateInitShimExclusions(entry); err != nil {
+			return fmt.Errorf("entry %q: %w", entry.Slug, err)
+		}
+	}
+	if entry.IncludeAllBranches {
+		if err := validateIncludeAllBranchesExclusions(entry); err != nil {
 			return fmt.Errorf("entry %q: %w", entry.Slug, err)
 		}
 	}

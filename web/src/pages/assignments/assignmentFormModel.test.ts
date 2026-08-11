@@ -46,6 +46,7 @@ const base: CreateAssignmentFormValues = {
   empty_repo: false,
   repo_source: "none",
   add_readme: true,
+  include_all_branches: false,
   autograding_state: "built-in",
   runtime_env: "hosted",
   runs_on: "",
@@ -518,6 +519,24 @@ describe("toSubmitValues — runtime field clearing", () => {
     })
     expect(out.empty_repo).toBe(false)
     expect(out.template_repo).toBe("acme/starter")
+  })
+
+  it("include_all_branches passes through for a template source, clears otherwise", () => {
+    const templated = toSubmitValues({
+      ...base,
+      repo_source: "template",
+      template_repo: "acme/starter",
+      include_all_branches: true,
+    })
+    expect(templated.include_all_branches).toBe(true)
+    // No template -> cleared (a stale toggle can't reach the wire).
+    const noTemplate = toSubmitValues({
+      ...base,
+      repo_source: "none",
+      add_readme: true,
+      include_all_branches: true,
+    })
+    expect(noTemplate.include_all_branches).toBe(false)
   })
 
   it("round-trips a stored init_shim assignment without flipping the flag", () => {

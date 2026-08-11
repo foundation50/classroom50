@@ -82,6 +82,7 @@ const EditAssignmentForm = ({
                 empty_repo: values.empty_repo,
                 no_autograder: values.autograding_state === "none",
                 init_shim: deriveFormShape(values).initShim,
+                include_all_branches: values.include_all_branches,
                 runs_on: values.runs_on,
                 container_image: values.container_image,
                 container_user: values.container_user,

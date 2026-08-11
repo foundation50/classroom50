@@ -571,6 +571,56 @@ class TestInitShim:
         assert _errors(_manifest(self._entry(autograder="io-suite"))) != []
 
 
+class TestIncludeAllBranches:
+    # include_all_branches only affects the templated generate call, so it
+    # REQUIRES a template and is mutually exclusive with the template-less states
+    # empty_repo/init_shim; compatible with everything else. Mirrors Go's
+    # validateIncludeAllBranchesExclusions.
+    def _entry(self, **overrides):
+        # Keeps the default template (include_all_branches requires one).
+        return _entry(**{"include_all_branches": True, **overrides})
+
+    def test_include_all_branches_accepted_with_template(self):
+        assert _errors(_manifest(self._entry())) == []
+
+    def test_include_all_branches_permits_no_autograder_and_grading_fields(self):
+        assert _errors(_manifest(self._entry(no_autograder=True))) == []
+        assert (
+            _errors(
+                _manifest(
+                    self._entry(
+                        submission_mode="tag",
+                        tests=[
+                            {"name": "t", "type": "run", "run": "true", "points": 1}
+                        ],
+                    )
+                )
+            )
+            == []
+        )
+
+    def test_include_all_branches_false_accepted(self):
+        assert _errors(_manifest(_entry(include_all_branches=False))) == []
+
+    def test_include_all_branches_must_be_boolean(self):
+        assert _errors(_manifest(self._entry(include_all_branches="yes"))) != []
+
+    def test_include_all_branches_requires_template(self):
+        entry = self._entry()
+        del entry["template"]
+        assert _errors(_manifest(entry)) != []
+
+    def test_include_all_branches_rejects_empty_repo(self):
+        entry = self._entry(empty_repo=True)
+        del entry["template"]  # empty_repo also forbids a template
+        assert _errors(_manifest(entry)) != []
+
+    def test_include_all_branches_rejects_init_shim(self):
+        entry = self._entry(init_shim=True)
+        del entry["template"]  # init_shim also forbids a template
+        assert _errors(_manifest(entry)) != []
+
+
 def _release_assets_errors(value):
     return _errors(_manifest(_entry(release_assets=value)))
 

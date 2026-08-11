@@ -134,6 +134,10 @@
           "type": "boolean",
           "description": "Opt a TEMPLATE-LESS assignment into an initialized-but-README-less repo that carries ONLY the control files: accept creates the repo with an initial commit and commits the .classroom50.yaml marker + the universal default autograde shim (.github/workflows/autograde.yaml) — but NO README and no other starter content. UNLIKE empty_repo (which is a bare repo with zero commits and no shim, and which NEVER autogrades), an init_shim repo DOES autograde: it commits the default shim, produces submit/* releases, and is collected/regraded exactly like any built-in-autograder assignment — so the grading pipeline (collect_scores.py / regrade_repos.py / autograde-runner.yaml) treats it as a normal grading assignment and does NOT skip it. It is the 'built-in autograder on an otherwise-empty repo' state. REQUIRES the default autograder and NO template (a template provides its own starter content — use a plain templated assignment for that). Mutually exclusive with empty_repo (bare, no shim), template (starter content comes from the template), no_autograder (the no-shim state), and a non-default autograder (which fetches a teacher-authored workflow from Pages). PERMITS the grading-adjacent fields (tests/allowed_files/release_assets/pass_threshold/submission_mode/submission_tags/feedback_pr) because it autogrades. See the conditional at the assignment level. IMMUTABLE after creation like empty_repo/no_autograder: student repos are provisioned at accept time and never retrofitted, so writers must reject an edit that changes it. On the wire it is collapsed like empty_repo/no_autograder/feedback_pr: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
         },
+        "include_all_branches": {
+          "type": "boolean",
+          "description": "Opt a TEMPLATED assignment into copying ALL of the template's branches (not just the default branch) when each student repo is generated: accept passes include_all_branches to GitHub's POST /repos/{template}/generate. REQUIRES a template (it only affects the generate call — a template-less repo is never generated). Mutually exclusive with empty_repo and init_shim (both template-less, never generated). COMPATIBLE with everything else, including no_autograder (a templated teacher-supplied-CI assignment may still want all branches) and the grading-adjacent fields (branches do not affect grading — the grading pipeline never reads this field). ACCEPT-TIME ONLY and NOT immutable: it governs what NEW student repos get; changing it affects only repos generated from now on (like submission_mode, not like empty_repo — already-accepted repos are never re-generated). On the wire it is collapsed like feedback_pr: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
+        },
         "locked": {
           "type": "boolean",
           "description": "Lock the assignment against student access. The web accept page, the student assignments list, the student submission view, and `gh student accept` all refuse a locked assignment for EVERY student, including one who already accepted. UNLIKE available_from (which is listing-advisory only), this is intended as access control — but because assignments.json is published publicly to GitHub Pages, the client gates are still best-effort UX; a determined student can read the raw file. The ENFORCEABLE boundary applies only to a PRIVATE, in-org template: locking also removes the classroom STUDENT team's read on that template repo (teacher/head-TA/TA teams are left untouched), so no new student can generate a repo from it while locked; unlocking re-grants that read. Public-template and template-less assignments can only be UX-gated, never hard-blocked. Existing student repos are not deleted. On the wire it is collapsed like feedback_pr/empty_repo: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
@@ -255,6 +259,16 @@
               { "not": { "properties": { "empty_repo": { "const": true } }, "required": ["empty_repo"] } },
               { "not": { "properties": { "no_autograder": { "const": true } }, "required": ["no_autograder"] } },
               { "properties": { "autograder": { "const": "default" } } }
+            ]
+          }
+        },
+        {
+          "if": { "properties": { "include_all_branches": { "const": true } }, "required": ["include_all_branches"] },
+          "then": {
+            "allOf": [
+              { "required": ["template"] },
+              { "not": { "properties": { "empty_repo": { "const": true } }, "required": ["empty_repo"] } },
+              { "not": { "properties": { "init_shim": { "const": true } }, "required": ["init_shim"] } }
             ]
           }
         }

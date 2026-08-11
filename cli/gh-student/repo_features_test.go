@@ -184,7 +184,7 @@ func TestTemplatedInheritAppliesTemplateFeatures(t *testing.T) {
 	var out bytes.Buffer
 	_, _, branch, _, err := createTemplatedPrivateAssignmentRepoInOrg(
 		newTestRESTClient(t, server), ui.NewForced(&out, false), false,
-		"alice", "cs-principles", "hello", "o", tmpl, nil, /* inherit */
+		"alice", "cs-principles", "hello", "o", tmpl, nil /* inherit */, false,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -250,6 +250,7 @@ func TestTemplatedExplicitOverridePatchesSetKeys(t *testing.T) {
 		newTestRESTClient(t, server), ui.NewForced(&out, false), false,
 		"alice", "cs-principles", "hello", "o", tmpl,
 		&assignments.RepoFeatures{Issues: boolPtr(false)},
+		false,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -304,6 +305,7 @@ func TestTemplatedFeaturePatchFailsOpen(t *testing.T) {
 		newTestRESTClient(t, server), ui.NewForced(&out, false), false,
 		"alice", "cs-principles", "hello", "o", tmpl,
 		&assignments.RepoFeatures{Projects: boolPtr(true)}, // forces a PATCH that 422s
+		false,
 	)
 	if err != nil {
 		t.Fatalf("accept must not fail when the feature PATCH is rejected (fail-open): %v", err)
@@ -372,6 +374,7 @@ func TestTemplatedFeaturePatchRetriesWithForcedKeysOnly(t *testing.T) {
 		newTestRESTClient(t, server), ui.NewForced(&out, false), false,
 		"alice", "cs-principles", "hello", "o", tmpl,
 		&assignments.RepoFeatures{Issues: boolPtr(false)}, // forced OFF; projects inherited ON
+		false,
 	)
 	if err != nil {
 		t.Fatalf("accept must not fail: %v", err)
