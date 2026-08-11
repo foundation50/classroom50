@@ -343,6 +343,11 @@ export type CreateAssignmentInput = {
   // grading-adjacent fields; permits a template and the Feedback PR. Immutable
   // after creation. Mirrors the CLI's no_autograder field.
   no_autograder?: boolean
+  // Built-in autograder on an otherwise-empty, template-less repo: accept
+  // initializes the repo with only the marker + default shim (no README) and it
+  // autogrades. Mutually exclusive with empty_repo, a template, and
+  // no_autograder. Immutable after creation. Mirrors the CLI's init_shim field.
+  init_shim?: boolean
   runs_on?: string
   container_image?: string
   container_user?: string

@@ -8,6 +8,7 @@ import {
   formValuesToRepoFeatures,
   type CreateAssignmentFormValues,
 } from "./assignmentFormModel"
+import { deriveFormShape } from "./formShape"
 
 // Echo the i18n key (+ any interpolation) so assertions match on stable keys.
 const t = ((key: string) => key) as unknown as TFunction
@@ -43,6 +44,8 @@ const base: CreateAssignmentFormValues = {
   max_group_size: 2,
   feedback_pr: true,
   empty_repo: false,
+  repo_source: "none",
+  add_readme: true,
   autograding_state: "built-in",
   runtime_env: "hosted",
   runs_on: "",
@@ -440,6 +443,7 @@ describe("toSubmitValues — runtime field clearing", () => {
     // template and the Feedback PR (a templated repo has a baseline commit).
     const out = toSubmitValues({
       ...base,
+      repo_source: "template",
       autograding_state: "none",
       template_repo: "acme/starter",
       feedback_pr: true,
@@ -470,6 +474,69 @@ describe("toSubmitValues — runtime field clearing", () => {
       autograding_state: "built-in",
     })
     expect(out.autograding_state).toBe("empty")
+  })
+
+  it("no template + README maps to a non-empty repo (empty_repo false), template cleared", () => {
+    const out = toSubmitValues({
+      ...base,
+      repo_source: "none",
+      add_readme: true,
+      template_repo: "acme/starter",
+    })
+    expect(out.empty_repo).toBe(false)
+    expect(out.template_repo).toBe("")
+  })
+
+  it("no template + no README + none maps to a bare repo (empty_repo true)", () => {
+    const out = toSubmitValues({
+      ...base,
+      repo_source: "none",
+      add_readme: false,
+      autograding_state: "none",
+    })
+    expect(out.empty_repo).toBe(true)
+  })
+
+  it("no template + no README + built-in is NOT bare (init_shim case; empty_repo false)", () => {
+    const out = toSubmitValues({
+      ...base,
+      repo_source: "none",
+      add_readme: false,
+      autograding_state: "built-in",
+    })
+    // Built-in on an empty source commits a shim (init_shim), so it is not bare.
+    expect(out.empty_repo).toBe(false)
+    expect(out.autograding_state).toBe("built-in")
+  })
+
+  it("template source keeps the template and is never empty", () => {
+    const out = toSubmitValues({
+      ...base,
+      repo_source: "template",
+      add_readme: false,
+      template_repo: "acme/starter",
+    })
+    expect(out.empty_repo).toBe(false)
+    expect(out.template_repo).toBe("acme/starter")
+  })
+
+  it("round-trips a stored init_shim assignment without flipping the flag", () => {
+    // A stored init_shim (no template, empty_repo false) must read back as the
+    // no-README + built-in combination so deriveFormShape re-derives init_shim
+    // — NOT as a README repo, which would try to flip the immutable flag.
+    const values = assignmentToFormValues({
+      slug: "scratch",
+      name: "Scratch",
+      mode: "individual",
+      autograder: "default",
+      init_shim: true,
+    })
+    expect(values.repo_source).toBe("none")
+    expect(values.add_readme).toBe(false)
+    expect(values.autograding_state).toBe("built-in")
+    const shape = deriveFormShape({ ...base, ...values })
+    expect(shape.initShim).toBe(true)
+    expect(shape.emptyRepo).toBe(false)
   })
 })
 

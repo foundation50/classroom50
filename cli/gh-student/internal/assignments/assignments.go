@@ -98,6 +98,15 @@ type Entry struct {
 	// the template and permits the Feedback PR. Absent reads as false (the
 	// teacher CLI omits it when false).
 	NoAutograder bool `json:"no_autograder,omitempty"`
+
+	// InitShim marks a TEMPLATE-LESS assignment whose repo is initialized with
+	// ONLY the control files: accept creates the repo with an initial commit and
+	// lands the .classroom50.yaml marker + the default autograde shim, but NO
+	// README and no other starter content. UNLIKE EmptyRepo (bare, no commit, no
+	// shim, never autogrades) it DOES autograde: it commits the default shim and
+	// produces submit/* releases. Mutually exclusive with EmptyRepo, a template,
+	// and NoAutograder. Absent reads as false (teacher CLI omits it when false).
+	InitShim bool `json:"init_shim,omitempty"`
 }
 
 // IsTagSubmissionMode reports whether the entry grades only on submit/* tag

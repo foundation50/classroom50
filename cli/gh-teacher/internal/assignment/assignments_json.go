@@ -157,6 +157,7 @@ type AssignmentEntry struct {
 	FeedbackPR        bool             `json:"feedback_pr,omitempty"`
 	EmptyRepo         bool             `json:"empty_repo,omitempty"`
 	NoAutograder      bool             `json:"no_autograder,omitempty"`
+	InitShim          bool             `json:"init_shim,omitempty"`
 	Locked            bool             `json:"locked,omitempty"`
 	AllowedFiles      []string         `json:"allowed_files,omitempty"`
 	ReleaseAssets     []string         `json:"release_assets,omitempty"`
@@ -183,6 +184,7 @@ var knownEntryKeys = map[string]struct{}{
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
 	"student_permission": {}, "submission_mode": {}, "submission_tags": {},
 	"no_autograder": {},
+	"init_shim":     {},
 	"repo_features": {},
 }
 
@@ -877,6 +879,11 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 			return err
 		}
 	}
+	if entry.InitShim {
+		if err := validateInitShimExclusions(entry); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -954,6 +961,32 @@ func validateNoAutograderExclusions(entry AssignmentEntry) error {
 	return nil
 }
 
+// validateInitShimExclusions rejects the combinations init_shim rules out.
+// init_shim is the built-in-autograder-on-an-otherwise-empty-repo state: a
+// template-less repo initialized with ONLY the marker + default shim (no
+// README, no other starter content) that DOES autograde. So unlike empty_repo
+// it PERMITS the grading-adjacent fields; it just must not coexist with a
+// template (starter content comes from the template), empty_repo (bare, no
+// shim), no_autograder (the no-shim state), or a non-default autograder (which
+// fetches a teacher-authored Pages workflow). Like no_autograder it has no
+// `assignment add` flag yet (GUI/manifest-set), so error wording names the JSON
+// fields; the parse path wraps with the entry context.
+func validateInitShimExclusions(entry AssignmentEntry) error {
+	if entry.Template != nil {
+		return errors.New("init_shim is mutually exclusive with template: init_shim initializes a template-less repo with only the autograde shim; a templated assignment already gets its starter content from the template")
+	}
+	if entry.EmptyRepo {
+		return errors.New("init_shim is mutually exclusive with empty_repo: empty_repo is a bare repo with no shim, init_shim commits the shim")
+	}
+	if entry.NoAutograder {
+		return errors.New("init_shim is mutually exclusive with no_autograder: no_autograder commits no shim, init_shim commits the default shim")
+	}
+	if entry.Autograder != "" && entry.Autograder != contract.DefaultAutograderName {
+		return fmt.Errorf("init_shim is mutually exclusive with a non-default autograder (%q): init_shim commits the universal default shim, a custom autograder fetches a teacher-authored workflow instead", entry.Autograder)
+	}
+	return nil
+}
+
 // ValidateEmptyRepoUnchanged enforces empty_repo's immutability on upsert:
 // student repos are provisioned (or not) at accept time, so flipping the flag
 // after creation would strand every already-accepted repo on the old
@@ -973,6 +1006,17 @@ func ValidateEmptyRepoUnchanged(existing, updated AssignmentEntry) error {
 func ValidateNoAutograderUnchanged(existing, updated AssignmentEntry) error {
 	if existing.NoAutograder != updated.NoAutograder {
 		return fmt.Errorf("no_autograder cannot be changed after creation (assignment %q): student repos already accepted under the old setting are not retrofitted — remove the assignment and add it under a new slug instead", existing.Slug)
+	}
+	return nil
+}
+
+// ValidateInitShimUnchanged enforces init_shim's immutability on upsert,
+// mirroring ValidateEmptyRepoUnchanged/ValidateNoAutograderUnchanged: the shim
+// (or its absence) is baked into each student repo at accept time and never
+// retrofitted, so flipping the flag would strand every already-accepted repo.
+func ValidateInitShimUnchanged(existing, updated AssignmentEntry) error {
+	if existing.InitShim != updated.InitShim {
+		return fmt.Errorf("init_shim cannot be changed after creation (assignment %q): student repos already accepted under the old setting are not retrofitted — remove the assignment and add it under a new slug instead", existing.Slug)
 	}
 	return nil
 }
@@ -1075,6 +1119,11 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 	}
 	if entry.NoAutograder {
 		if err := validateNoAutograderExclusions(entry); err != nil {
+			return fmt.Errorf("entry %q: %w", entry.Slug, err)
+		}
+	}
+	if entry.InitShim {
+		if err := validateInitShimExclusions(entry); err != nil {
 			return fmt.Errorf("entry %q: %w", entry.Slug, err)
 		}
 	}

@@ -130,6 +130,10 @@
           "type": "boolean",
           "description": "Opt a TEMPLATED assignment into teacher-supplied CI: accept commits the .classroom50.yaml marker and the template's generated content but NO autograde shim — neither the universal default shim nor a Pages-fetched teacher-authored workflow. The teacher supplies their own .github/ CI inside the template. Autograding is disabled for the assignment; regrade and score collection skip it, exactly as they skip empty_repo (it produces no submit/* releases). REQUIRES a template (the template carries the workflows — use empty_repo for a bare repo with no CI). UNLIKE empty_repo it PERMITS the Feedback PR (a templated repo has starter content and a baseline commit to diff against). Mutually exclusive with empty_repo (a bare repo already commits no shim), with a non-default autograder (which fetches a teacher-authored workflow from Pages — the opposite of adding nothing), and with the grading-adjacent fields tests/allowed_files/release_assets/pass_threshold/submission_mode/submission_tags (no shim exists to trigger). See the conditional at the assignment level. IMMUTABLE after creation like empty_repo: student repos are provisioned (shim or no shim) at accept time and never retrofitted, so writers must reject an edit that changes it. On the wire it is collapsed like empty_repo/feedback_pr: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
         },
+        "init_shim": {
+          "type": "boolean",
+          "description": "Opt a TEMPLATE-LESS assignment into an initialized-but-README-less repo that carries ONLY the control files: accept creates the repo with an initial commit and commits the .classroom50.yaml marker + the universal default autograde shim (.github/workflows/autograde.yaml) — but NO README and no other starter content. UNLIKE empty_repo (which is a bare repo with zero commits and no shim, and which NEVER autogrades), an init_shim repo DOES autograde: it commits the default shim, produces submit/* releases, and is collected/regraded exactly like any built-in-autograder assignment — so the grading pipeline (collect_scores.py / regrade_repos.py / autograde-runner.yaml) treats it as a normal grading assignment and does NOT skip it. It is the 'built-in autograder on an otherwise-empty repo' state. REQUIRES the default autograder and NO template (a template provides its own starter content — use a plain templated assignment for that). Mutually exclusive with empty_repo (bare, no shim), template (starter content comes from the template), no_autograder (the no-shim state), and a non-default autograder (which fetches a teacher-authored workflow from Pages). PERMITS the grading-adjacent fields (tests/allowed_files/release_assets/pass_threshold/submission_mode/submission_tags/feedback_pr) because it autogrades. See the conditional at the assignment level. IMMUTABLE after creation like empty_repo/no_autograder: student repos are provisioned at accept time and never retrofitted, so writers must reject an edit that changes it. On the wire it is collapsed like empty_repo/no_autograder/feedback_pr: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
+        },
         "locked": {
           "type": "boolean",
           "description": "Lock the assignment against student access. The web accept page, the student assignments list, the student submission view, and `gh student accept` all refuse a locked assignment for EVERY student, including one who already accepted. UNLIKE available_from (which is listing-advisory only), this is intended as access control — but because assignments.json is published publicly to GitHub Pages, the client gates are still best-effort UX; a determined student can read the raw file. The ENFORCEABLE boundary applies only to a PRIVATE, in-org template: locking also removes the classroom STUDENT team's read on that template repo (teacher/head-TA/TA teams are left untouched), so no new student can generate a repo from it while locked; unlocking re-grants that read. Public-template and template-less assignments can only be UX-gated, never hard-blocked. Existing student repos are not deleted. On the wire it is collapsed like feedback_pr/empty_repo: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
@@ -239,6 +243,17 @@
               { "not": { "required": ["submission_mode"] } },
               { "not": { "required": ["submission_tags"] } },
               { "not": { "properties": { "empty_repo": { "const": true } }, "required": ["empty_repo"] } },
+              { "properties": { "autograder": { "const": "default" } } }
+            ]
+          }
+        },
+        {
+          "if": { "properties": { "init_shim": { "const": true } }, "required": ["init_shim"] },
+          "then": {
+            "allOf": [
+              { "not": { "required": ["template"] } },
+              { "not": { "properties": { "empty_repo": { "const": true } }, "required": ["empty_repo"] } },
+              { "not": { "properties": { "no_autograder": { "const": true } }, "required": ["no_autograder"] } },
               { "properties": { "autograder": { "const": "default" } } }
             ]
           }

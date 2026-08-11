@@ -156,6 +156,16 @@ export type Assignment = {
   // omitempty); absent reads as false. In lockstep with the CLI's
   // assignments-v1 schema (`no_autograder`).
   no_autograder?: boolean
+  // Built-in autograder on an otherwise-empty repo: a TEMPLATE-LESS assignment
+  // whose repo is initialized with ONLY the marker + default autograde shim (no
+  // README, no other starter content) and which DOES autograde (produces
+  // submit/* releases). UNLIKE empty_repo (bare, no shim, never grades) it
+  // commits the shim; it permits the grading-adjacent fields. Mutually
+  // exclusive with empty_repo, a template, no_autograder, and a non-default
+  // autograder; requires the default autograder. IMMUTABLE after creation.
+  // Omitted when false (CLI omitempty); absent reads as false. In lockstep with
+  // the CLI's assignments-v1 schema (`init_shim`).
+  init_shim?: boolean
   // Lock the assignment against student access. Every student surface (accept
   // page, assignments list, submission view, and `gh student accept`) refuses
   // a locked assignment for EVERY student, including one who already accepted.

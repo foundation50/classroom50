@@ -2548,6 +2548,30 @@ def test_is_no_autograder_is_strict_boolean_true():
     assert cs.skips_grading({"slug": "x"}) is False
 
 
+def test_is_init_shim_is_strict_boolean_and_still_grades():
+    # init_shim commits the default shim and DOES autograde, so it is strictly
+    # NOT part of skips_grading — the key regression guard for this feature.
+    assert cs.is_init_shim({"init_shim": True}) is True
+    assert cs.is_init_shim({"init_shim": False}) is False
+    assert cs.is_init_shim({}) is False
+    for non_bool in ("true", "yes", 1, [1], {"x": 1}):
+        assert cs.is_init_shim({"init_shim": non_bool}) is False, non_bool
+    # The whole point: an init_shim assignment is NOT skipped.
+    assert cs.skips_grading({"init_shim": True}) is False
+
+
+def test_valid_assignment_slugs_includes_init_shim():
+    # An init_shim assignment autogrades and produces submit/* releases, so it
+    # IS collectable — unlike empty_repo/no_autograder.
+    assignments = {
+        "assignments": [
+            {"slug": "hello"},
+            {"slug": "scratch", "init_shim": True},
+        ]
+    }
+    assert cs.valid_assignment_slugs(assignments) == ["hello", "scratch"]
+
+
 def test_runner_no_autograder_guard_uses_strict_predicate():
     # The runner's student-repo-facing guard must skip a no_autograder
     # assignment with the same strict predicate as the importable readers.

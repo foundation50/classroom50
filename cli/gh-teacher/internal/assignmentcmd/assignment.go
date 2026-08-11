@@ -758,6 +758,13 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			entry.NoAutograder = file.Assignments[prevIdx].NoAutograder
 			attemptEntry.NoAutograder = entry.NoAutograder
 		}
+		// init_shim is likewise GUI/manifest-owned (no --init-shim flag), so
+		// carry it forward before the immutability check for the same reason as
+		// no_autograder above.
+		if hasPrev {
+			entry.InitShim = file.Assignments[prevIdx].InitShim
+			attemptEntry.InitShim = entry.InitShim
+		}
 		// empty_repo is immutable: student repos were provisioned (or left
 		// bare) at accept time and are never retrofitted. Checked at parentSHA
 		// inside the build so a concurrent add/remove is observed on retry.
@@ -766,6 +773,9 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 				return nil, err
 			}
 			if err := assignment.ValidateNoAutograderUnchanged(file.Assignments[prevIdx], entry); err != nil {
+				return nil, err
+			}
+			if err := assignment.ValidateInitShimUnchanged(file.Assignments[prevIdx], entry); err != nil {
 				return nil, err
 			}
 		}

@@ -110,6 +110,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   // re-write the same value. The edit form shows it read-only.
   empty_repo: "classroom50-owned",
   no_autograder: "classroom50-owned",
+  init_shim: "classroom50-owned",
   // Rebuilt AND a closed object: the CLI decodes runtime strictly (RuntimeRef
   // has no Extra, DisallowUnknownFields; schema additionalProperties false), so
   // the rebuilt runtime must win and any unknown sub-key drops rather than
@@ -217,6 +218,14 @@ export async function editAssignment(
   ) {
     throw new Error(
       `no_autograder cannot be changed after creation (assignment "${slug}"): repositories students already accepted are not retrofitted. Create a new assignment under a different slug instead — reusing this slug (even after removing it) would leave already-accepted repos on the old setting.`,
+    )
+  }
+
+  // init_shim is immutable for the same reason: the shim is committed at accept
+  // time and never retrofitted. Mirrors the CLI's ValidateInitShimUnchanged.
+  if (Boolean(input.init_shim) !== Boolean(targetAssignment.init_shim)) {
+    throw new Error(
+      `init_shim cannot be changed after creation (assignment "${slug}"): repositories students already accepted are not retrofitted. Create a new assignment under a different slug instead — reusing this slug (even after removing it) would leave already-accepted repos on the old setting.`,
     )
   }
 
@@ -444,6 +453,30 @@ async function buildAssignmentEntry(
     }
   }
 
+  // init_shim is the built-in-autograder-on-an-otherwise-empty-repo state: a
+  // template-less repo initialized with only the marker + default shim that
+  // DOES autograde, so unlike empty_repo/no_autograder it PERMITS the
+  // grading-adjacent fields. It only rules out a template (starter content comes
+  // from the template), empty_repo (bare, no shim), and no_autograder (no shim).
+  // Mirrors the CLI's validateInitShimExclusions.
+  if (input.init_shim) {
+    if (input.template_repo.trim()) {
+      throw new Error(
+        "init_shim: mutually exclusive with a template — init_shim initializes a template-less repo with only the autograde shim.",
+      )
+    }
+    if (input.empty_repo) {
+      throw new Error(
+        "init_shim: mutually exclusive with empty_repo — empty_repo commits nothing, init_shim commits the default shim.",
+      )
+    }
+    if (input.no_autograder) {
+      throw new Error(
+        "init_shim: mutually exclusive with no_autograder — one commits the default shim, the other commits none.",
+      )
+    }
+  }
+
   if (tests.length > 0) {
     await ensureDeclarativeTestsWritable(
       client,
@@ -497,6 +530,11 @@ async function buildAssignmentEntry(
   // Written only when true (CLI omitempty). Teacher-supplied CI, no shim.
   if (input.no_autograder) {
     entry.no_autograder = true
+  }
+  // Written only when true (CLI omitempty). Built-in autograder on an
+  // otherwise-empty, template-less repo (marker + default shim, no README).
+  if (input.init_shim) {
+    entry.init_shim = true
   }
   // Omit the template block entirely for a template-less assignment, matching
   // the CLI's nil TemplateRef.

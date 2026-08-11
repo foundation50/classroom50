@@ -67,6 +67,11 @@ import {
 // unrepresentable rather than merely validated-against.
 export type RuntimeEnv = "hosted" | "container"
 
+// UI-only repository-source discriminator. "template" starts each repo from a
+// template; "none" creates a fresh repo (with or without a README). Folded into
+// the wire fields (template / empty_repo) by toSubmitValues.
+export type RepoSource = "template" | "none"
+
 export type CreateAssignmentFormValues = {
   name: string
   // URL/repo slug for the assignment (edited on create only).
@@ -85,6 +90,17 @@ export type CreateAssignmentFormValues = {
   // are hidden and their values cleared on submit, mirroring runtime_env's
   // conditional-clear idiom.
   empty_repo: boolean
+  // UI-only repository-source discriminator (never sent verbatim; folds into
+  // empty_repo + template_repo on submit). "template" = start from a template
+  // repo; "none" = no template. Default is "none", mirroring GitHub's own
+  // "create a repository" flow. Derived on read from whether a template is set.
+  repo_source: RepoSource
+  // UI-only, only meaningful when repo_source === "none": whether to initialize
+  // the repo with a README (an initial commit). README on maps to empty_repo:
+  // false (auto_init — a baseline commit, so branches/PRs/Feedback PR work);
+  // README off maps to empty_repo: true (a bare repo, no commit). Hidden when a
+  // template is chosen (the template provides the initial commit).
+  add_readme: boolean
   // UI-only autograding tri-state (never sent verbatim; mapped to wire fields
   // on submit): "empty" (bare repo — driven by empty_repo), "none" (templated,
   // teacher-supplied CI — maps to no_autograder: true, no shim), "built-in"
@@ -425,19 +441,24 @@ export function toSubmitValues(
   // feedback_pr (a templated repo has a baseline commit).
   const shape = deriveFormShape(value)
   const isContainer = shape.showContainerFields
-  const isEmptyRepo = shape.repositorySource === "empty"
+  const isEmptyRepo = shape.emptyRepo
+  // Only a template source keeps template_repo; the no-template sources
+  // ("readme"/"empty") clear it so a stale ref can't reach the wire.
+  const isTemplate = shape.repositorySource === "template"
   const noBuiltIn = !shape.showBuiltInConfig
   return {
     name: value.name.trim(),
     slug: slugify(value.slug),
     description: value.description.trim(),
     mode: value.mode,
-    template_repo: isEmptyRepo ? "" : value.template_repo.trim(),
+    template_repo: isTemplate ? value.template_repo.trim() : "",
     due_date: value.due_date.trim(),
     available_from_date: value.available_from_date.trim(),
     max_group_size: value.max_group_size,
     feedback_pr: isEmptyRepo ? false : value.feedback_pr,
     empty_repo: isEmptyRepo,
+    repo_source: value.repo_source,
+    add_readme: value.add_readme,
     autograding_state: shape.autogradingState,
     runtime_env: value.runtime_env,
     runs_on: value.runs_on.trim(),
@@ -491,7 +512,12 @@ export const useAssignmentForm = (
       max_group_size: defaultValues?.max_group_size || 2,
       feedback_pr: defaultValues?.feedback_pr ?? true,
       empty_repo: defaultValues?.empty_repo ?? false,
-      autograding_state: defaultValues?.autograding_state ?? "built-in",
+      // Default to an uninitialized (empty) repository with no template and no
+      // README, mirroring GitHub's "create a repository" defaults. Seeded from
+      // the stored wire fields on edit via assignmentToFormValues.
+      repo_source: defaultValues?.repo_source ?? "none",
+      add_readme: defaultValues?.add_readme ?? false,
+      autograding_state: defaultValues?.autograding_state ?? "none",
       runtime_env: defaultValues?.runtime_env || "hosted",
       runs_on: defaultValues?.runs_on || "",
       container_image: defaultValues?.container_image || "",
@@ -574,6 +600,15 @@ export const assignmentToFormValues = (
     max_group_size: assignment.max_group_size ?? 2,
     feedback_pr: assignment.feedback_pr ?? true,
     empty_repo: assignment.empty_repo ?? false,
+    // Fold the stored wire fields back into the UI source discriminator: a
+    // template means "template"; otherwise "none". add_readme is true only for
+    // a template-less repo that is neither bare (empty_repo) nor shim-only
+    // (init_shim) — those two no-README states must round-trip to add_readme
+    // false so deriveFormShape re-derives empty_repo/init_shim, not a README
+    // repo (which would silently try to flip the immutable flag on re-save).
+    repo_source: assignment.template ? "template" : "none",
+    add_readme:
+      !(assignment.empty_repo ?? false) && !(assignment.init_shim ?? false),
     // Derive the tri-state from the stored wire fields (empty_repo /
     // no_autograder / default), so an edit opens on the right autograding
     // option and a round-trip preserves it. Uses the #554 domain helper.

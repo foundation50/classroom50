@@ -331,6 +331,28 @@ func TestEntryDecodesNoAutograder(t *testing.T) {
 	}
 }
 
+func TestEntryDecodesInitShim(t *testing.T) {
+	// init_shim decodes when present and defaults to false when absent. The
+	// accept flow routes it to the initialized (non-bare) create path and
+	// commits the shim (CommitsShim true), so the wire contract matters.
+	var file assignmentsFile
+	if err := json.Unmarshal([]byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {"slug": "scratch", "name": "Scratch", "mode": "individual", "autograder": "default", "init_shim": true},
+    {"slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default"}
+  ]
+}`), &file); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !file.Assignments[0].InitShim {
+		t.Error("scratch.InitShim = false, want true")
+	}
+	if file.Assignments[1].InitShim {
+		t.Error("hello.InitShim = true, want false (field absent — back-compat)")
+	}
+}
+
 func TestEntryCommitsShim(t *testing.T) {
 	// CommitsShim is the accept-time gate: both no-shim states (empty_repo,
 	// no_autograder) suppress the shim; everything else commits it. This pins
@@ -344,6 +366,9 @@ func TestEntryCommitsShim(t *testing.T) {
 		{"plain templated (default autograder)", Entry{}, true},
 		{"empty_repo", Entry{EmptyRepo: true}, false},
 		{"no_autograder", Entry{NoAutograder: true}, false},
+		// init_shim commits the DEFAULT shim onto an initialized repo — it sets
+		// neither no-shim flag, so CommitsShim is true (the whole point).
+		{"init_shim", Entry{InitShim: true}, true},
 		// A hand-edited manifest could carry both; either alone already
 		// suppresses the shim, so the conjunction stays false.
 		{"both flags", Entry{EmptyRepo: true, NoAutograder: true}, false},
@@ -354,6 +379,31 @@ func TestEntryCommitsShim(t *testing.T) {
 				t.Errorf("CommitsShim() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestEntryInitShimAcceptRouting pins the exact tuple accept.go branches on to
+// send an init_shim assignment down the INITIALIZED-plus-shim path rather than
+// the bare path: the create step passes autoInit = !EmptyRepo (true here), the
+// shim render/commit is gated on CommitsShim() (true here), and it is not the
+// no_autograder no-shim state. This is the routing decision the end-to-end
+// accept relies on; if any of the three flipped, an init_shim repo would be
+// provisioned bare or shim-less, which is the exact regression to prevent.
+func TestEntryInitShimAcceptRouting(t *testing.T) {
+	e := Entry{InitShim: true, Autograder: "default"}
+	if e.EmptyRepo {
+		t.Error("init_shim entry must not be EmptyRepo (accept would create it bare, no commit)")
+	}
+	if !e.CommitsShim() {
+		t.Error("init_shim entry must CommitsShim() (accept would skip the shim render/commit)")
+	}
+	if e.NoAutograder {
+		t.Error("init_shim entry must not be NoAutograder (that is the no-shim state)")
+	}
+	// Sanity: the default autograder resolves to the default-shim path, so the
+	// accept gate `useDefaultShim && CommitsShim()` renders the shim.
+	if got := e.ResolveAutograder(); got != "default" {
+		t.Errorf("ResolveAutograder() = %q, want the default shim for init_shim", got)
 	}
 }
 

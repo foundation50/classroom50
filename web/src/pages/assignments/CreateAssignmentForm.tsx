@@ -1,12 +1,16 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Button, Card } from "@/components/ui"
-import { DetailsSection } from "./DetailsSection"
-import { AdvancedSection } from "./AdvancedSection"
-import { AutogradingSection } from "./AutogradingSection"
-import AutogradingTestsPane from "./AutogradingTestsPane"
+import { Button } from "@/components/ui"
+import { DetailsSection } from "./sections/DetailsSection"
+import { RepositorySetupSection } from "./sections/RepositorySetupSection"
+import { AutogradingSection } from "./sections/AutogradingSection"
+import { RepositoryFeaturesSection } from "./sections/RepositoryFeaturesSection"
+import { ScheduleSection } from "./sections/ScheduleSection"
+import { deriveSectionStatus } from "./sections/sectionStatus"
 import {
   useAssignmentForm,
+  validateAssignmentForm,
+  type AssignmentForm,
   type CreateAssignmentFormValues,
 } from "./assignmentFormModel"
 
@@ -15,6 +19,22 @@ import {
 // assignmentFormModel directly.
 export { assignmentToFormValues } from "./assignmentFormModel"
 export { formValuesToRepoFeatures } from "./assignmentFormModel"
+
+// The whole-form error list (submit-time validation errors that aren't bound to
+// a single field). Rendered once below the sections.
+const FormErrors = ({ form }: { form: AssignmentForm }) => (
+  <form.Subscribe selector={(state) => [state.errors]}>
+    {([errors]) => (
+      <div>
+        {errors.map((err) => (
+          <p className="text-error" key={String(err)}>
+            {String(err)}
+          </p>
+        ))}
+      </div>
+    )}
+  </form.Subscribe>
+)
 
 type CreateAssignmentFormProps = {
   defaultValues?: Partial<CreateAssignmentFormValues>
@@ -84,45 +104,84 @@ const CreateAssignmentForm = ({
     >
       {/* readOnly disables every descendant control. */}
       <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
-        <DetailsSection
-          form={form}
-          edit={edit}
-          org={org}
-          classroom={classroom}
-          slug={slug}
-          slugTouched={slugTouched}
-          setSlugTouched={setSlugTouched}
-          dueDateEnabled={dueDateEnabled}
-          setDueDateEnabled={setDueDateEnabled}
-          availableFromEnabled={availableFromEnabled}
-          setAvailableFromEnabled={setAvailableFromEnabled}
-        />
-
-        <Card bordered={false} className="w-full mb-6">
-          <Card.Body>
-            <AutogradingSection form={form} edit={edit} />
-          </Card.Body>
-        </Card>
-
-        <Card bordered={false} className="w-full mb-6">
-          <Card.Body>
-            <AdvancedSection form={form} org={org} />
-          </Card.Body>
-        </Card>
-
-        {/* Declarative tests belong to the built-in autograder only: hidden for
-            a bare repo (no shim) and for teacher-supplied CI (no built-in
-            grading). empty_repo always wins over a stale tri-state value. */}
+        {/* Per-section status (R2): derived from the live form values against
+            the baseline defaults and the same validator the save path uses, so
+            each section header reflects error / configured / default. */}
         <form.Subscribe
-          selector={(state) =>
-            !state.values.empty_repo &&
-            state.values.autograding_state === "built-in"
-          }
+          selector={(state) => [state.values, state.errorMap.onSubmit] as const}
         >
-          {(showsBuiltIn) =>
-            showsBuiltIn ? <AutogradingTestsPane form={form} /> : null
-          }
+          {([values]) => {
+            const defaults = form.options
+              .defaultValues as CreateAssignmentFormValues
+            const errors = validateAssignmentForm(values, t, {
+              takenSlugs,
+              edit,
+            })
+            return (
+              <>
+                <DetailsSection
+                  form={form}
+                  edit={edit}
+                  status={deriveSectionStatus(
+                    "details",
+                    values,
+                    defaults,
+                    errors,
+                  )}
+                  slugTouched={slugTouched}
+                  setSlugTouched={setSlugTouched}
+                />
+                <RepositorySetupSection
+                  form={form}
+                  edit={edit}
+                  status={deriveSectionStatus(
+                    "repository",
+                    values,
+                    defaults,
+                    errors,
+                  )}
+                  org={org}
+                  classroom={classroom}
+                  slug={slug}
+                />
+                <AutogradingSection
+                  form={form}
+                  edit={edit}
+                  status={deriveSectionStatus(
+                    "autograding",
+                    values,
+                    defaults,
+                    errors,
+                  )}
+                  org={org}
+                />
+                <RepositoryFeaturesSection
+                  form={form}
+                  status={deriveSectionStatus(
+                    "features",
+                    values,
+                    defaults,
+                    errors,
+                  )}
+                />
+                <ScheduleSection
+                  form={form}
+                  status={deriveSectionStatus(
+                    "schedule",
+                    values,
+                    defaults,
+                    errors,
+                  )}
+                  dueDateEnabled={dueDateEnabled}
+                  setDueDateEnabled={setDueDateEnabled}
+                  availableFromEnabled={availableFromEnabled}
+                  setAvailableFromEnabled={setAvailableFromEnabled}
+                />
+              </>
+            )
+          }}
         </form.Subscribe>
+        <FormErrors form={form} />
       </fieldset>
       <div className="divider" />
       <div className="card-actions justify-end p-2">

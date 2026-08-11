@@ -379,10 +379,22 @@ def is_no_autograder(entry: dict[str, Any]) -> bool:
     return entry.get("no_autograder") is True
 
 
+def is_init_shim(entry: dict[str, Any]) -> bool:
+    """True only when init_shim is the boolean `true` (strict, like
+    is_empty_repo). An init_shim assignment is a template-less repo initialized
+    with only the marker + default shim — it DOES autograde and produces
+    submit/* releases, so unlike empty_repo/no_autograder it is NOT part of
+    skips_grading(): collection and regrade treat it as a normal grading
+    assignment. Provided for symmetry and tests."""
+    return entry.get("init_shim") is True
+
+
 def skips_grading(entry: dict[str, Any]) -> bool:
     """True when the assignment never autogrades — either a bare empty_repo or a
     templated no_autograder (teacher-supplied CI). The "does not autograde"
-    predicate family; collection/regrade poll neither."""
+    predicate family; collection/regrade poll neither. NOTE: init_shim is
+    deliberately EXCLUDED — an init_shim repo commits the default shim and
+    autogrades, so it must be collected/regraded like any built-in assignment."""
     return is_empty_repo(entry) or is_no_autograder(entry)
 
 

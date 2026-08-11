@@ -602,6 +602,12 @@ export async function acceptAssignment(params: {
   // the Feedback PR. Mirrors the CLI student accept gate (entry.CommitsShim()).
   const isNoAutograder = assignment.no_autograder === true
 
+  // init_shim assignment: a TEMPLATE-LESS repo initialized with only the marker
+  // + default shim (no README) that DOES autograde. It sets neither empty_repo
+  // nor no_autograder, so it takes the ordinary initialized (non-bare) path and
+  // commits the shim — no special-casing beyond the fail-closed guards below.
+  const isInitShim = assignment.init_shim === true
+
   // Whether accept commits an autograde shim at all. Both no-shim states
   // suppress it; the inverse of the CLI's entry.CommitsShim(). empty_repo also
   // skips the whole setup/commit path (it commits nothing); no_autograder still
@@ -633,6 +639,16 @@ export async function acceptAssignment(params: {
   if (isNoAutograder && isEmptyRepo) {
     throw new AcceptStepError({
       key: "accept.errors.noAutograderWithEmptyRepo",
+      params: { assignmentSlug },
+    })
+  }
+
+  // init_shim is the template-less shim-only state; a hand-edited manifest could
+  // contradict it. Fail closed rather than half-apply. Mirrors the CLI student
+  // accept guards (accept.go: InitShim && Template / EmptyRepo / NoAutograder).
+  if (isInitShim && (assignment.template || isEmptyRepo || isNoAutograder)) {
+    throw new AcceptStepError({
+      key: "accept.errors.initShimInvalidCombo",
       params: { assignmentSlug },
     })
   }

@@ -3,6 +3,7 @@ import CreateAssignmentForm, {
   assignmentToFormValues,
   formValuesToRepoFeatures,
 } from "./CreateAssignmentForm"
+import { deriveFormShape } from "./formShape"
 import { type CreateAssignmentResult } from "@/domain/assignments"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useTrackPublishDeploy } from "@/hooks/useTrackPublishDeploy"
@@ -80,6 +81,7 @@ const EditAssignmentForm = ({
                 feedback_pr: values.feedback_pr,
                 empty_repo: values.empty_repo,
                 no_autograder: values.autograding_state === "none",
+                init_shim: deriveFormShape(values).initShim,
                 runs_on: values.runs_on,
                 container_image: values.container_image,
                 container_user: values.container_user,

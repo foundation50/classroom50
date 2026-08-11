@@ -235,11 +235,18 @@ describe("assignment slug field", () => {
 })
 
 describe("submission release files visibility", () => {
+  // release_assets is a built-in autograder field, so these render an
+  // initialized repo with built-in autograding selected (the default create
+  // form is now an empty repo with no built-in config).
   const renderForm = (defaultValues?: Partial<CreateAssignmentFormValues>) =>
     render(
       <QueryClientProvider client={new QueryClient()}>
         <CreateAssignmentForm
-          defaultValues={defaultValues}
+          defaultValues={{
+            add_readme: true,
+            autograding_state: "built-in",
+            ...defaultValues,
+          }}
           onSubmit={() => {}}
         />
       </QueryClientProvider>,
@@ -317,6 +324,8 @@ describe("assignment setup timeout", () => {
           defaultValues={{
             name: "Homework",
             slug: "hw1",
+            add_readme: true,
+            autograding_state: "built-in",
           }}
           onSubmit={onSubmit}
         />
@@ -416,11 +425,17 @@ describe("edit form re-disables Save after a successful save", () => {
 // runner targets self-hosted: the grade job skips managed setup there
 // (runner.environment != 'self-hosted'), so those options wouldn't apply.
 describe("self-hosted disables built-in runtime options", () => {
+  // The runtime fields are built-in autograder controls, so render an
+  // initialized repo with built-in autograding selected.
   const renderForm = (defaultValues?: Partial<CreateAssignmentFormValues>) =>
     render(
       <QueryClientProvider client={new QueryClient()}>
         <CreateAssignmentForm
-          defaultValues={defaultValues}
+          defaultValues={{
+            add_readme: true,
+            autograding_state: "built-in",
+            ...defaultValues,
+          }}
           onSubmit={() => {}}
         />
       </QueryClientProvider>,
@@ -450,10 +465,10 @@ describe("self-hosted disables built-in runtime options", () => {
   })
 })
 
-// The autograding tri-state selector: interactive on create, but the built-in
-// vs teacher-supplied choice maps to no_autograder — immutable after creation —
-// so it must render locked on edit (mirroring empty_repo). See AutogradingSection.
-describe("autograding tri-state selector", () => {
+// The autograding selector: "No built-in autograder" first + default; built-in
+// requires an initialized repo (README or template) and is disabled while the
+// repo is uninitialized; the none<->built-in choice is immutable on edit.
+describe("autograding selector", () => {
   const renderForm = (
     props: {
       edit?: boolean
@@ -477,14 +492,39 @@ describe("autograding tri-state selector", () => {
     none: container.querySelector<HTMLInputElement>("#autograding_state-none"),
   })
 
-  it("create: renders both choices enabled with no locked note", () => {
+  it("create default (empty repo): none selected, built-in still selectable (init_shim)", () => {
+    // The fresh create form defaults to an uninitialized repo (README off) with
+    // "No built-in autograder" selected — but built-in is now SELECTABLE
+    // (picking it commits a shim onto the repo, the init_shim state).
     const { container } = renderForm()
+    const { builtIn, none } = radios(container)
+    expect(none?.checked).toBe(true)
+    expect(builtIn?.disabled).toBe(false)
+    expect(
+      screen.queryByText("assignments.form.autograding.builtInNeedsInit"),
+    ).toBeNull()
+  })
+
+  it("initialized repo (README on): both choices enabled", () => {
+    const { container } = renderForm({
+      defaultValues: { repo_source: "none", add_readme: true },
+    })
     const { builtIn, none } = radios(container)
     expect(builtIn?.disabled).toBe(false)
     expect(none?.disabled).toBe(false)
-    expect(
-      screen.queryByText("assignments.form.autograding.lockedHelp"),
-    ).toBeNull()
+  })
+
+  it("none is the first option", () => {
+    const { container } = renderForm({
+      defaultValues: { repo_source: "none", add_readme: true },
+    })
+    const inputs = Array.from(
+      container.querySelectorAll<HTMLInputElement>(
+        "input[name='autograding_state']",
+      ),
+    )
+    expect(inputs[0]?.value).toBe("none")
+    expect(inputs[1]?.value).toBe("built-in")
   })
 
   it("edit: locks both choices and shows the immutability note", () => {
@@ -515,18 +555,107 @@ describe("autograding tri-state selector", () => {
     expect(none?.disabled).toBe(true)
   })
 
-  it("empty_repo: shows the read-only explanation and no radios", () => {
+  it("stored empty_repo on edit: radios locked, none selected", () => {
+    // A stored bare repo opens on "none" (derived), and the radios are locked
+    // on edit like every immutable field.
     const { container } = renderForm({
+      edit: true,
       defaultValues: assignmentToFormValues({
         ...baseAssignment,
         empty_repo: true,
       }),
     })
     const { builtIn, none } = radios(container)
-    expect(builtIn).toBeNull()
-    expect(none).toBeNull()
+    expect(none?.checked).toBe(true)
+    expect(builtIn?.disabled).toBe(true)
     expect(
-      screen.getByText("assignments.form.autograding.emptyExplain"),
+      screen.getByText("assignments.form.autograding.lockedHelp"),
     ).not.toBeNull()
+  })
+})
+
+// The five-section IA (R1/R2): the sections render in order with a status badge
+// each, and the two deferred affordances (R6/R14) render inert.
+describe("assignment form five-section IA", () => {
+  const renderForm = (props: {
+    edit?: boolean
+    defaultValues?: Partial<CreateAssignmentFormValues>
+  }) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          edit={props.edit}
+          defaultValues={props.defaultValues}
+          onSubmit={() => {}}
+        />
+      </QueryClientProvider>,
+    )
+
+  const sectionTitleKeys = [
+    "assignments.form.detailsSection",
+    "assignments.form.repositorySetupSection",
+    "assignments.form.autograding.label",
+    "assignments.form.repositoryFeaturesSection",
+    "assignments.form.scheduleSection",
+  ]
+
+  it("renders the five sections in order for create", () => {
+    renderForm({})
+    const headings = screen
+      .getAllByRole("heading", { level: 3 })
+      .map((h) => h.textContent)
+    // The section headings appear in the required order (other h3s may exist
+    // inside sections, so assert the five titles are a subsequence).
+    const indices = sectionTitleKeys.map((key) => headings.indexOf(key))
+    expect(indices.every((i) => i >= 0)).toBe(true)
+    expect([...indices]).toEqual([...indices].sort((a, b) => a - b))
+  })
+
+  it("renders the five sections in order for edit", () => {
+    renderForm({
+      edit: true,
+      defaultValues: assignmentToFormValues(baseAssignment),
+    })
+    for (const key of sectionTitleKeys) {
+      expect(screen.getByText(key)).not.toBeNull()
+    }
+  })
+
+  it("shows a per-section status badge (default on a fresh create form)", () => {
+    renderForm({})
+    // Details is untouched on a fresh form -> "default" badge present.
+    expect(
+      screen.getAllByText("assignments.form.sectionStatus.default").length,
+    ).toBeGreaterThan(0)
+  })
+
+  it("shows Add-a-README for the no-template source and reserves include-all-branches for a template", () => {
+    // No template (the default): the Add-a-README toggle shows, no
+    // include-all-branches affordance.
+    const noTemplate = renderForm({ defaultValues: { repo_source: "none" } })
+    expect(noTemplate.container.querySelector("#add_readme")).not.toBeNull()
+    expect(
+      noTemplate.container.querySelector("#include-all-branches-deferred"),
+    ).toBeNull()
+    cleanup()
+
+    // Template source: the README toggle is hidden and the deferred
+    // include-all-branches toggle renders disabled.
+    const templated = renderForm({
+      defaultValues: { repo_source: "template", template_repo: "acme/starter" },
+    })
+    expect(templated.container.querySelector("#add_readme")).toBeNull()
+    // The include-all-branches affordance is present but inert (wrapped in an
+    // aria-disabled container, mirroring the Extensions affordance).
+    const mirror = templated.container.querySelector<HTMLInputElement>(
+      "#include-all-branches-deferred",
+    )
+    expect(mirror).not.toBeNull()
+    expect(mirror?.closest("[aria-disabled='true']")).not.toBeNull()
+  })
+
+  it("reserves the schedule Extensions affordance as disabled", () => {
+    renderForm({})
+    expect(screen.getByText("assignments.form.extensions.label")).not.toBeNull()
   })
 })

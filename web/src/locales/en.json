@@ -1100,7 +1100,14 @@
     "goToAssignments": "Go to assignments",
     "form": {
       "detailsSection": "Details",
-      "settingsSection": "Settings",
+      "repositorySetupSection": "Repository Setup",
+      "repositoryFeaturesSection": "Repository Features",
+      "scheduleSection": "Schedule",
+      "sectionStatus": {
+        "error": "Needs attention",
+        "configured": "Configured",
+        "default": "Default"
+      },
       "optional": "optional",
       "name": "Assignment name",
       "namePlaceholder": "e.g., Loops Assignment",
@@ -1123,12 +1130,35 @@
       "typeGroup": "Group project",
       "maxGroupSize": "Max group size",
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
+      "customTriggersHeading": "Custom triggers",
+      "extensions": {
+        "label": "Per-student extensions (coming soon)",
+        "help": "Grant individual students or groups a later due date. Not yet available."
+      },
+      "repoSource": {
+        "label": "Start with a template",
+        "lockedHelp": "The repository source can't be changed after creation: repositories students already accepted are not re-provisioned.",
+        "none": {
+          "label": "No template",
+          "help": "Create a fresh repository for each student."
+        },
+        "template": {
+          "label": "Template repository",
+          "help": "Generate each student's repository from a template you provide."
+        }
+      },
+      "addReadme": {
+        "label": "Add a README",
+        "helpOn": "Initialize each repository with a README.md, creating an initial commit so branches, pull requests, and the Feedback PR work.",
+        "helpOff": "Create an empty repository with no initial commit. Autograding and the Feedback PR are unavailable until the student's first commit."
+      },
+      "includeAllBranches": {
+        "label": "Include all branches (coming soon)",
+        "help": "Copy every branch and its history from the template, not just the default branch. Not yet available."
+      },
       "feedbackPr": "Feedback pull request",
       "feedbackPrHelp": "Open a pull request per repo for inline review of each submission.",
       "feedbackPrEmptyRepoHelp": "Unavailable for empty repositories — there is no starter commit to diff against.",
-      "emptyRepo": "Empty repository",
-      "emptyRepoHelp": "Create each student's repository completely empty: no starter files, no autograding, no feedback pull request. For assignments where students build everything from scratch, including their own GitHub Actions. This choice is permanent for the assignment.",
-      "emptyRepoLocked": "It can't be changed after creation.",
       "studentPermission": {
         "label": "Student repo access",
         "learnMore": "Learn more",
@@ -1145,7 +1175,7 @@
       },
       "autograding": {
         "label": "Autograding",
-        "emptyExplain": "Autograding is unavailable for empty repositories. Change the repository source in Repository Setup to use a template if you want autograding.",
+        "modeLabel": "Autograding mode",
         "lockedHelp": "The autograding mode can't be changed after creation: repositories students already accepted are not retrofitted with (or stripped of) the autograding workflow.",
         "choices": {
           "built-in": {
@@ -1153,8 +1183,8 @@
             "help": "Classroom 50 adds its autograding workflow to each repo. Configure triggers, runtime, and tests below."
           },
           "none": {
-            "label": "No built-in autograder (teacher-supplied CI)",
-            "help": "Classroom 50 adds no autograding workflow. Your template supplies its own GitHub Actions CI. Scores are not collected."
+            "label": "No built-in autograder",
+            "help": "Classroom 50 adds no autograding workflow. A templated repo can supply its own GitHub Actions CI; an empty repo has none. Scores are not collected."
           }
         }
       },
@@ -2204,6 +2234,7 @@
     "errors": {
       "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template, which isn't valid. Ask your teacher to re-run assignment setup.",
       "noAutograderWithEmptyRepo": "Assignment \"{{assignmentSlug}}\" sets both no built-in autograder and an empty repository, which isn't valid. Ask your teacher to re-run assignment setup.",
+      "initShimInvalidCombo": "Assignment \"{{assignmentSlug}}\" combines the built-in-autograder-on-an-empty-repo setting with a template, an empty repository, or no built-in autograder, which isn't valid. Ask your teacher to re-run assignment setup.",
       "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup."
     },
     "progress": {

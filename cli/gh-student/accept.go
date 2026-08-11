@@ -430,6 +430,19 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	if entry.NoAutograder && !hasTemplate {
 		return fmt.Errorf("assignment %q sets no_autograder without a template — teacher-supplied CI needs a template that carries the workflows; the entry is invalid, ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
+	// init_shim is the built-in-autograder-on-an-empty-repo state: template-less,
+	// commits the default shim onto an initialized repo. A hand-edited manifest
+	// could contradict that; fail closed rather than half-apply (mirrors the
+	// empty_repo+template and no_autograder+empty_repo guards above).
+	if entry.InitShim && entry.Template != nil {
+		return fmt.Errorf("assignment %q sets both init_shim and a template — init_shim is the template-less shim-only state; the entry is invalid, ask your teacher to re-run `gh teacher assignment add`", assignment)
+	}
+	if entry.InitShim && entry.EmptyRepo {
+		return fmt.Errorf("assignment %q sets both init_shim and empty_repo — init_shim commits the shim, empty_repo commits nothing; the entry is invalid, ask your teacher to re-run `gh teacher assignment add`", assignment)
+	}
+	if entry.InitShim && entry.NoAutograder {
+		return fmt.Errorf("assignment %q sets both init_shim and no_autograder — one commits the default shim, the other commits none; the entry is invalid, ask your teacher to re-run `gh teacher assignment add`", assignment)
+	}
 
 	// 2) Resolve the autograder shim. A non-default (Pages-fetched) autograder
 	//    is teacher-authored and resolved up front so a fetch failure doesn't
