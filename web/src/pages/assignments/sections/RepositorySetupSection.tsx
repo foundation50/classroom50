@@ -418,44 +418,46 @@ export const RepoFeatureControls = ({
       <p className="mb-3 text-sm text-base-content/70">
         {t("assignments.form.repoFeatures.help")}
       </p>
+      {/* Inline rows — "Wiki: [choice]" — with the select sized to its content
+          (w-auto) rather than stretching the column, so each control reads as a
+          compact labeled dropdown. FormField isn't used here because it always
+          stacks the label above the control. */}
       <div
-        className={cx("grid grid-cols-1 gap-y-4", isRefreshing && "opacity-60")}
+        className={cx("flex flex-col gap-3", isRefreshing && "opacity-60")}
         aria-busy={isRefreshing}
       >
         {REPO_FEATURE_KEYS.map(({ field: fieldName, key }) => (
           <form.Field key={fieldName} name={fieldName}>
             {(field) => (
-              <FormField
-                htmlFor={field.name}
-                label={t(`assignments.form.repoFeatures.${key}.label`)}
-              >
-                {({ id, describedById }) => (
-                  <Select
-                    id={id}
-                    name={field.name}
-                    className="w-full"
-                    disabled={isRefreshing}
-                    aria-describedby={describedById}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) =>
-                      field.handleChange(
-                        e.target.value as typeof field.state.value,
-                      )
-                    }
-                  >
-                    <option value="inherit">
-                      {inheritLabel(resolvedInherit(key))}
-                    </option>
-                    <option value="on">
-                      {t("assignments.form.repoFeatures.choices.on")}
-                    </option>
-                    <option value="off">
-                      {t("assignments.form.repoFeatures.choices.off")}
-                    </option>
-                  </Select>
-                )}
-              </FormField>
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor={field.name} className="label font-bold">
+                  {t(`assignments.form.repoFeatures.${key}.label`)}
+                </label>
+                <Select
+                  id={field.name}
+                  name={field.name}
+                  selectSize="sm"
+                  className="w-auto min-w-0"
+                  disabled={isRefreshing}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) =>
+                    field.handleChange(
+                      e.target.value as typeof field.state.value,
+                    )
+                  }
+                >
+                  <option value="inherit">
+                    {inheritLabel(resolvedInherit(key))}
+                  </option>
+                  <option value="on">
+                    {t("assignments.form.repoFeatures.choices.on")}
+                  </option>
+                  <option value="off">
+                    {t("assignments.form.repoFeatures.choices.off")}
+                  </option>
+                </Select>
+              </div>
             )}
           </form.Field>
         ))}
