@@ -516,10 +516,12 @@ export function toSubmitValues(
     pass_threshold_enabled: noBuiltIn ? false : value.pass_threshold_enabled,
     pass_threshold: Number(value.pass_threshold),
     student_permission: value.student_permission,
-    // No shim (bare repo OR teacher-supplied CI) means no trigger to configure;
-    // clear a stale pick on submit (mirrors the other grading-adjacent clears).
-    submission_mode: noBuiltIn ? "every-push" : value.submission_mode,
-    submission_tags: noBuiltIn ? "" : value.submission_tags,
+    // The submission DEFINITION is how the app identifies submissions and is
+    // valid for every repo shape (with a shim it also drives the trigger;
+    // without one it's the detection definition), so it is NOT cleared by
+    // noBuiltIn — unlike the built-in-only autograder config above.
+    submission_mode: value.submission_mode,
+    submission_tags: value.submission_tags,
     // Grading intent is orthogonal to the autograding tri-state (a bare or
     // teacher-CI repo can still be graded manually), so it is NOT cleared by
     // noBuiltIn. Only the manual max-points is normalized: kept when manual,

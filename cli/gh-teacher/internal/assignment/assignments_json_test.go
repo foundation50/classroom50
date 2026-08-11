@@ -255,15 +255,17 @@ func TestParseAssignments_InvalidSubmissionMode(t *testing.T) {
 	}
 }
 
-// TestValidateAssignmentEntry_SubmissionModeEmptyRepo pins the write-side
-// mutual exclusion: a bare repo has no shim to trigger.
+// TestValidateAssignmentEntry_SubmissionModeEmptyRepo pins that the submission
+// definition is PERMITTED on a bare repo: there is no shim to trigger, but the
+// value still defines what the submissions page counts as a submission.
 func TestValidateAssignmentEntry_SubmissionModeEmptyRepo(t *testing.T) {
 	entry := AssignmentEntry{
 		Slug: "bare", Name: "Bare", Mode: "individual", Autograder: "default",
 		EmptyRepo: true, SubmissionMode: contract.SubmissionModeTag,
+		SubmissionTags: []string{"phase1", "v*"},
 	}
-	if err := ValidateAssignmentEntry(entry); err == nil {
-		t.Fatal("ValidateAssignmentEntry accepted empty_repo + submission_mode")
+	if err := ValidateAssignmentEntry(entry); err != nil {
+		t.Fatalf("ValidateAssignmentEntry rejected empty_repo + submission definition: %v", err)
 	}
 }
 
@@ -2098,6 +2100,16 @@ func TestValidateNoAutograderExclusions(t *testing.T) {
 		t.Errorf("template + feedback_pr should be permitted: %v", err)
 	}
 
+	// The submission definition is permitted on a no_autograder assignment: with
+	// no shim it carries no trigger, but it still defines what the submissions
+	// page counts (branch pushes / milestone tags).
+	okDef := base
+	okDef.SubmissionMode = "tag"
+	okDef.SubmissionTags = []string{"phase1", "v*"}
+	if err := validateNoAutograderExclusions(okDef); err != nil {
+		t.Errorf("submission definition should be permitted with no_autograder: %v", err)
+	}
+
 	cases := []struct {
 		name   string
 		mutate func(*AssignmentEntry)
@@ -2112,8 +2124,6 @@ func TestValidateNoAutograderExclusions(t *testing.T) {
 		{"allowed_files", func(e *AssignmentEntry) { e.AllowedFiles = []string{"*"} }, "allowed_files"},
 		{"release_assets", func(e *AssignmentEntry) { e.ReleaseAssets = []string{"r.pdf"} }, "release_assets"},
 		{"pass_threshold", func(e *AssignmentEntry) { n := 70; e.PassThreshold = &n }, "pass_threshold"},
-		{"submission_mode", func(e *AssignmentEntry) { e.SubmissionMode = "tag" }, "submission_mode"},
-		{"submission_tags", func(e *AssignmentEntry) { e.SubmissionTags = []string{"phase1"} }, "submission_tags"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

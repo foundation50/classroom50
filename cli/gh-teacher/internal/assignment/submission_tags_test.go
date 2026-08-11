@@ -149,14 +149,15 @@ func TestParseAssignments_InvalidSubmissionTags(t *testing.T) {
 	}
 }
 
-// TestValidateAssignmentEntry_SubmissionTagsEmptyRepo pins the write-side
-// mutual exclusion: a bare repo has no shim to trigger.
+// TestValidateAssignmentEntry_SubmissionTagsEmptyRepo pins that milestone tags
+// are PERMITTED on a bare repo: no shim triggers on them, but they still define
+// what the submissions page counts as a submission.
 func TestValidateAssignmentEntry_SubmissionTagsEmptyRepo(t *testing.T) {
 	entry := AssignmentEntry{
 		Slug: "bare", Name: "Bare", Mode: "individual", Autograder: "default",
 		EmptyRepo: true, SubmissionTags: []string{"phase1"},
 	}
-	if err := ValidateAssignmentEntry(entry); err == nil {
-		t.Fatal("ValidateAssignmentEntry accepted empty_repo + submission_tags")
+	if err := ValidateAssignmentEntry(entry); err != nil {
+		t.Fatalf("ValidateAssignmentEntry rejected empty_repo + submission_tags: %v", err)
 	}
 }

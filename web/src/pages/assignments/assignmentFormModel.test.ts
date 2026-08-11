@@ -538,11 +538,11 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.allowed_files).toBe("")
     expect(out.pass_threshold_enabled).toBe(false)
     expect(out.tests).toEqual([])
-    // The two newest grading-trigger fields must also clear for a bare repo
-    // (no shim to trigger) — pins the empty-repo clear set the autograding
-    // restructure reproduces.
-    expect(out.submission_mode).toBe("every-push")
-    expect(out.submission_tags).toBe("")
+    // The submission definition is preserved even for a bare repo: it is the
+    // app's detection rule (what the submissions page counts), not a shim
+    // trigger, so empty_repo no longer clears it.
+    expect(out.submission_mode).toBe("tag")
+    expect(out.submission_tags).toBe("phase1\nphase2")
     expect(out.release_assets).toBe("")
   })
 
@@ -591,8 +591,10 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.allowed_files).toBe("")
     expect(out.release_assets).toBe("")
     expect(out.pass_threshold_enabled).toBe(false)
-    expect(out.submission_mode).toBe("every-push")
-    expect(out.submission_tags).toBe("")
+    // Preserved: the submission definition is the app's detection rule, valid
+    // for any repo shape (not cleared with the built-in-only autograder config).
+    expect(out.submission_mode).toBe("tag")
+    expect(out.submission_tags).toBe("phase1")
     expect(out.autograding_state).toBe("none")
   })
 

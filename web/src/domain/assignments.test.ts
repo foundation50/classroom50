@@ -1073,7 +1073,6 @@ describe("editAssignment (preserved-entry integration)", () => {
       [{ allowed_files: "*.py" }, /restrict allowed files/],
       [{ release_assets: "report.pdf" }, /release/],
       [{ pass_threshold: 70 }, /passing threshold/],
-      [{ submission_mode: "tag" }, /no autograde shim/],
     ]
     for (const [overrides, want] of cases) {
       const { client } = makeBareClient(bareEntry)
@@ -1081,6 +1080,34 @@ describe("editAssignment (preserved-entry integration)", () => {
         editAssignment(client, editInput({ empty_repo: true, ...overrides })),
       ).rejects.toThrow(want)
     }
+  })
+
+  it("permits the submission definition alongside empty_repo (detection, not a trigger)", async () => {
+    // The submission definition is how the app identifies submissions on the
+    // submissions page; it is valid for a bare repo (no shim triggers on it).
+    const bareEntry: Assignment = {
+      slug: SLUG,
+      name: "Actions Lab",
+      mode: "individual",
+      autograder: "default",
+      feedback_pr: false,
+      empty_repo: true,
+    }
+    const { client, committedContent } = makeBareClient(bareEntry)
+    await editAssignment(
+      client,
+      editInput({
+        empty_repo: true,
+        submission_mode: "tag",
+        submission_tags: ["phase1", "v*"],
+      }),
+    )
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.submission_mode).toBe("tag")
+    expect(edited.submission_tags).toEqual(["phase1", "v*"])
   })
 
   // The write path's submission_mode branches (buildAssignmentEntry is not

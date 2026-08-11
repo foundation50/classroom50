@@ -437,19 +437,20 @@ class TestEmptyRepo:
     def test_empty_repo_rejects_pass_threshold(self):
         assert _errors(_manifest(self._bare_entry(pass_threshold=70))) != []
 
-    def test_empty_repo_rejects_submission_mode(self):
-        # A bare repo carries no autograde shim, so there is no trigger for
-        # submission_mode to configure. Mirrors Go's
-        # validateEmptyRepoExclusions.
-        assert _errors(_manifest(self._bare_entry(submission_mode="tag"))) != []
+    def test_empty_repo_allows_submission_mode(self):
+        # The submission definition is the app's detection rule, not a shim
+        # trigger, so a bare repo may set it (no shim triggers on it; the
+        # submissions page still counts pushes/tags accordingly). Mirrors Go's
+        # relaxed validateEmptyRepoExclusions.
+        assert _errors(_manifest(self._bare_entry(submission_mode="tag"))) == []
         assert (
-            _errors(_manifest(self._bare_entry(submission_mode="every-push"))) != []
+            _errors(_manifest(self._bare_entry(submission_mode="every-push"))) == []
         )
 
-    def test_empty_repo_rejects_submission_tags(self):
-        # Same shim-less reasoning as submission_mode.
+    def test_empty_repo_allows_submission_tags(self):
+        # Same detection-definition reasoning as submission_mode.
         assert (
-            _errors(_manifest(self._bare_entry(submission_tags=["phase1"]))) != []
+            _errors(_manifest(self._bare_entry(submission_tags=["phase1"]))) == []
         )
 
 
@@ -506,13 +507,20 @@ class TestNoAutograder:
             ("allowed_files", ["*"]),
             ("release_assets", ["report.pdf"]),
             ("pass_threshold", 70),
-            ("submission_mode", "tag"),
-            ("submission_tags", ["phase1"]),
         ],
     )
     def test_no_autograder_rejects_grading_fields(self, field, value):
         # No shim exists to grade, trigger, or attach assets to.
         assert _errors(_manifest(self._entry(**{field: value}))) != []
+
+    def test_no_autograder_allows_submission_definition(self):
+        # The submission definition is the app's detection rule, not a shim
+        # trigger, so a no_autograder assignment may set it. Mirrors Go's
+        # relaxed validateNoAutograderExclusions.
+        assert _errors(_manifest(self._entry(submission_mode="tag"))) == []
+        assert (
+            _errors(_manifest(self._entry(submission_tags=["phase1", "v*"]))) == []
+        )
 
 
 class TestInitShim:

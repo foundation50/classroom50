@@ -577,11 +577,10 @@ describe("assignment form section IA", () => {
     expect([...indices]).toEqual([...indices].sort((a, b) => a - b))
   })
 
-  it("shows the grading choice and the submission definition regardless of the grading mode", () => {
-    // Grading applies to any assignment, and the submission DEFINITION is a
-    // property of the assignment itself (R3), so the section, the grading
-    // control, and the submission-mode definition all render even when not
-    // autograded.
+  it("shows the full submission definition regardless of the grading mode", () => {
+    // Grading applies to any assignment, and the submission DEFINITION (mode +
+    // milestone tags) is how the app identifies submissions — independent of
+    // grading and repo shape — so both controls render even when not autograded.
     renderForm({
       defaultValues: { grading_choice: "manual", grading_max_points: 50 },
     })
@@ -589,19 +588,26 @@ describe("assignment form section IA", () => {
       screen.getByText("assignments.form.submissionSection"),
     ).not.toBeNull()
     expect(screen.getByText("assignments.form.grading.label")).not.toBeNull()
-    // The submission definition is always visible now.
     expect(
       screen.getByText("assignments.form.submissionMode.label"),
     ).not.toBeNull()
-    // Milestone tags are baked into the shim, so they stay hidden without a
-    // built-in autograder (grading != auto).
+    // Milestone tags are the app's detection definition, not shim-only, so they
+    // are visible even without a built-in autograder.
     expect(
-      screen.queryByText("assignments.form.submissionTags.label"),
-    ).toBeNull()
+      screen.getByText("assignments.form.submissionTags.label"),
+    ).not.toBeNull()
   })
 
-  it("shows the milestone-tags field only when grading is Autograded", () => {
-    renderForm({ defaultValues: { grading_choice: "auto" } })
+  it("shows the submission definition for a bare (empty) repo too", () => {
+    // A bare repo has no shim, but the definition still drives how the
+    // submissions page counts pushes/tags, so both controls render.
+    renderForm({
+      defaultValues: {
+        repo_source: "none",
+        add_readme: false,
+        grading_choice: "off",
+      },
+    })
     expect(
       screen.getByText("assignments.form.submissionMode.label"),
     ).not.toBeNull()

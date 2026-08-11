@@ -463,16 +463,6 @@ async function buildAssignmentEntry(
         "no_autograder: teacher-supplied CI can't have a passing threshold — no shim autogrades.",
       )
     }
-    if (input.submission_mode && input.submission_mode !== "every-push") {
-      throw new Error(
-        "no_autograder: teacher-supplied CI can't set a submission mode — no shim exists to trigger.",
-      )
-    }
-    if (input.submission_tags && input.submission_tags.length > 0) {
-      throw new Error(
-        "no_autograder: teacher-supplied CI can't set milestone tags — no shim exists to trigger.",
-      )
-    }
   }
 
   // init_shim is the built-in-autograder-on-an-otherwise-empty-repo state: a
@@ -790,16 +780,13 @@ async function buildAssignmentEntry(
   // submission_mode: omit the wire default (every-push) so an untouched
   // assignment stays byte-identical, mirroring the CLI's omitempty collapse.
   // Validate against the enum so a bad value can't produce a file the CLI
-  // refuses to parse; reject alongside empty_repo (no shim exists to trigger).
+  // refuses to parse. Permitted for every repo shape (including empty_repo /
+  // no_autograder): with no shim it carries no trigger, but it still defines
+  // what the submissions page counts as a submission.
   if (input.submission_mode && input.submission_mode !== "every-push") {
     if (!SUBMISSION_MODES.includes(input.submission_mode)) {
       throw new Error(
         `submission_mode: must be one of ${SUBMISSION_MODES.join(", ")} (got "${input.submission_mode}").`,
-      )
-    }
-    if (input.empty_repo) {
-      throw new Error(
-        "submission_mode: mutually exclusive with empty_repo — a bare repo has no autograde shim to trigger.",
       )
     }
     entry.submission_mode = input.submission_mode
@@ -807,16 +794,13 @@ async function buildAssignmentEntry(
 
   // submission_tags: omit when empty (no milestone tags — today's behavior),
   // mirroring the CLI's omitempty. Validate so a bad pattern can't produce a
-  // file the CLI refuses to parse; reject alongside empty_repo (no shim).
+  // file the CLI refuses to parse. Permitted for every repo shape: with a shim
+  // they widen the trigger; without one they are the submissions-page detection
+  // definition.
   if (input.submission_tags && input.submission_tags.length > 0) {
     const tagsError = validateSubmissionTags(input.submission_tags)
     if (tagsError) {
       throw new Error(`submission_tags: ${tagsError}`)
-    }
-    if (input.empty_repo) {
-      throw new Error(
-        "submission_tags: mutually exclusive with empty_repo — a bare repo has no autograde shim to trigger.",
-      )
     }
     entry.submission_tags = [...input.submission_tags]
   }

@@ -8,17 +8,20 @@ import type { AssignmentForm } from "../assignmentFormModel"
 
 // Submissions: the single source of truth for what counts as a submission.
 //
-// The submission DEFINITION (branch = every default-branch push except the
-// baseline; tag = on submit/milestone tags only) is a property of the
-// assignment itself, so it renders regardless of grading choice or repository
-// source (R3). Autograding and the Submissions page both CONSUME this
-// definition rather than owning it.
+// The whole submission definition — the mode (branch = every default-branch
+// push except the baseline; tag = on submit/milestone tags only) AND the
+// milestone tag patterns — is how the APP identifies submissions on the
+// submissions page. That is independent of the grading choice and of the repo
+// shape (empty, teacher-CI, or built-in shim): detection reads the repo's
+// commits/tags directly, with or without an autograder. So both controls always
+// render.
 //
-// The milestone-tags field is different: those patterns are baked into the
-// autograde shim's trigger (union with submit/*), so they only matter when a
-// built-in shim exists. The caller gates that field on showBuiltInConfig
-// (KTD5); the shim-retrofit edit warning on the mode field is likewise only
-// meaningful with a shim, so it takes showBuiltInConfig too.
+// showBuiltInConfig only governs the shim-RETROFIT edit warnings: those advise
+// re-pulling existing repos' shims, which only exist for a built-in autograder.
+// With no shim there is nothing to retrofit, so the warnings are suppressed —
+// but the fields themselves stay visible and are persisted (the wire permits
+// submission_mode/submission_tags on every repo shape; they act as the
+// detection definition when no shim triggers on them).
 export function SubmissionsSubsection({
   form,
   edit,
@@ -33,26 +36,28 @@ export function SubmissionsSubsection({
       <SubmissionModeField
         form={form}
         edit={edit}
-        showBuiltInConfig={showBuiltInConfig}
+        showRetrofitWarning={showBuiltInConfig}
       />
-      {showBuiltInConfig ? (
-        <SubmissionTagsField form={form} edit={edit} />
-      ) : null}
+      <SubmissionTagsField
+        form={form}
+        edit={edit}
+        showRetrofitWarning={showBuiltInConfig}
+      />
     </div>
   )
 }
 
 // The submission definition: branch (every default-branch push) vs tag (on
-// submit only). Always visible. The edit warning is a shim-retrofit notice, so
-// it only shows when a built-in shim exists (showBuiltInConfig).
+// submit only). Always visible. The retrofit edit warning only shows when a
+// built-in shim exists (there is a shim to update).
 function SubmissionModeField({
   form,
   edit,
-  showBuiltInConfig,
+  showRetrofitWarning,
 }: {
   form: AssignmentForm
   edit: boolean
-  showBuiltInConfig: boolean
+  showRetrofitWarning: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -85,7 +90,7 @@ function SubmissionModeField({
               </Select>
             )}
           </FormField>
-          {edit && showBuiltInConfig ? (
+          {edit && showRetrofitWarning ? (
             <form.Subscribe selector={(state) => state.values.submission_mode}>
               {(mode) =>
                 mode !==
@@ -109,9 +114,11 @@ function SubmissionModeField({
 function SubmissionTagsField({
   form,
   edit,
+  showRetrofitWarning,
 }: {
   form: AssignmentForm
   edit: boolean
+  showRetrofitWarning: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -155,7 +162,8 @@ function SubmissionTagsField({
                 //      error wouldn't explain the real fix.
                 //   2. a hard validation error (bad charset, duplicate,
                 //      stacked quantifier) — the exact save-path message.
-                //   3. broad-glob caution / edit-retrofit warning — advisory.
+                //   3. broad-glob caution — advisory (always shown).
+                //   4. edit-retrofit warning — advisory, shim-only.
                 const parsed = parseSubmissionTags(tags)
                 const hasComma = (tags ?? "").includes(",")
                 const validationError = validateSubmissionTags(parsed)
@@ -164,6 +172,7 @@ function SubmissionTagsField({
                 )
                 const changed =
                   edit &&
+                  showRetrofitWarning &&
                   tags !== (form.options.defaultValues?.submission_tags ?? "")
                 if (!hasComma && !validationError && !broad && !changed)
                   return null
