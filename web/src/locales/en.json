@@ -1195,11 +1195,11 @@
       },
       "submissions": {
         "heading": "Submissions",
-        "help": "What counts as a submission for this assignment — how the submissions page detects and counts each student's work. The autograder consumes this same definition."
+        "help": "How the submissions page detects and counts each student's work. The autograder uses the same definition."
       },
       "submissionMode": {
-        "label": "What counts as a submission",
-        "help": "\"Every push to the default branch\" treats each push (other than the starting commit) as a submission — and, with a built-in autograder, grades each one. \"A tagged commit\" treats only tagged commits as submissions: a student submits with gh student submit or by pushing a tag, so ordinary pushes cost no Actions minutes, which matters for large classes.",
+        "label": "Submission type",
+        "help": "\"Every push to the default branch\" counts each push (other than the starting commit). \"A tagged commit\" counts only tagged commits — a student submits with gh student submit or by pushing a tag, so ordinary pushes cost no Actions minutes.",
         "editWarning": "Changing this only affects repositories created from now on. Repositories students already accepted keep the old setting until you update them — use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
         "choices": {
           "everyPush": "Every push to the default branch",
@@ -1208,7 +1208,7 @@
       },
       "submissionTags": {
         "label": "Submission tags",
-        "help": "Optional tag names (one per line) whose commits also count as submissions — e.g. phase1, phase2, complete. A student pushing a matching tag (git tag phase1 && git push origin phase1) has that commit counted, and with a built-in autograder it is graded too. Simple patterns like v* match a family of tags. Leave empty for none.",
+        "help": "Optional tag names (one per line) whose commits also count — e.g. phase1, phase2. Patterns like v* match a family of tags. Leave empty for none.",
         "wildcardCaution": "A broad pattern like v* matches every tag a student pushes, including unrelated release tags. Prefer exact names like phase1.",
         "commaHint": "Put one tag per line, not a comma-separated list — a comma becomes part of the tag name and will be rejected."
       },
