@@ -70,6 +70,11 @@ export type SubmissionRow = {
   late?: boolean
   // Last (re-)graded instant of the latest submission (mirrors submissions[0]).
   gradedAt?: string
+  // The entry carries a teacher override (`override: true` in scores.json): the
+  // latest score was set/frozen by hand rather than (only) autograded. The
+  // table marks it so a hand-entered grade is distinguishable from an
+  // autograded one. Mirrors the collector's per-entry override flag.
+  overridden?: boolean
   // A row with a submission the collector recorded as present but not graded
   // (no score yet) — rendered as "submitted, not yet collected" rather than a
   // 0/0 score. Excluded from graded stats/average and the CSV score column.
@@ -150,6 +155,7 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
         submissionCount: entry.submissions.length,
         late: latest.late,
         gradedAt: latest.graded_at,
+        overridden: entry.override === true,
         submissions: sorted.map((s) => ({
           datetime: s.datetime,
           commit: s.commit,
