@@ -121,7 +121,6 @@ export type Grading = {
   max_points?: number
 }
 
-
 // Per-assignment repo feature overrides (tri-state per key: absent = inherit,
 // true = force on, false = force off). The `repo_features` block on Assignment,
 // and the value the create/edit form round-trips. In lockstep with the CLI's

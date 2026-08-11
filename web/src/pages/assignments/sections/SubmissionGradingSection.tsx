@@ -89,7 +89,9 @@ function GradingChoiceField({
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) =>
-                    field.handleChange(e.target.value as typeof field.state.value)
+                    field.handleChange(
+                      e.target.value as typeof field.state.value,
+                    )
                   }
                 >
                   <option value="off">
@@ -109,7 +111,11 @@ function GradingChoiceField({
                 {(choice) =>
                   choice !==
                   (form.options.defaultValues?.grading_choice ?? "auto") ? (
-                    <Alert tone="warning" role="status" className="mt-2 text-sm">
+                    <Alert
+                      tone="warning"
+                      role="status"
+                      className="mt-2 text-sm"
+                    >
                       <span>{t("assignments.form.grading.editWarning")}</span>
                     </Alert>
                   ) : null

@@ -243,7 +243,8 @@ export async function editAssignment(
   // existing scores. Absent reads as "auto", so compare the resolved modes.
   // max_points is NOT immutable — it's only a display max, safe to adjust.
   if (
-    (input.grading?.mode ?? "auto") !== (targetAssignment.grading?.mode ?? "auto")
+    (input.grading?.mode ?? "auto") !==
+    (targetAssignment.grading?.mode ?? "auto")
   ) {
     throw new Error(
       `grading mode cannot be changed after creation (assignment "${slug}"): scores already recorded under the old grading mode would be misread. Create a new assignment under a different slug instead.`,
@@ -849,9 +850,7 @@ async function buildAssignmentEntry(
     }
   } else if (input.grading?.max_points !== undefined) {
     // Defensive: an auto/absent grading must not carry max_points.
-    throw new Error(
-      "grading.max_points: only valid for manual grading.",
-    )
+    throw new Error("grading.max_points: only valid for manual grading.")
   }
 
   // repo_features: write only the keys the teacher set (undefined = inherit),

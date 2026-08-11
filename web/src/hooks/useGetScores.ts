@@ -136,7 +136,18 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
           (a, b) =>
             new Date(b.datetime).getTime() - new Date(a.datetime).getTime(),
         )
-      const latest = sorted[0]
+      // For a teacher-overridden entry, the displayed grade must be the manual
+      // override record, not whichever submission sorts newest by datetime — a
+      // real autograded submission's datetime is the student-controllable
+      // committer date and could be future-dated above the override. Prefer the
+      // synthesized manual record (submission tag `submit/manual-*`) when the
+      // entry is overridden; the writer also clamps its datetime to sort first,
+      // so this is defense-in-depth for entries written before that clamp.
+      const overrideRecord =
+        entry.override === true
+          ? sorted.find((s) => s.submission.startsWith("submit/manual-"))
+          : undefined
+      const latest = overrideRecord ?? sorted[0]
 
       const usernames =
         entry.member_usernames && entry.member_usernames.length > 0

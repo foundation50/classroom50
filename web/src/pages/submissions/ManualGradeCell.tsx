@@ -2,8 +2,8 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, Pencil, X } from "lucide-react"
 
-import { Badge, Button, Input, Spinner } from "@/components/ui"
-import { scoreTone } from "@/pages/submissions/dashboard"
+import { Button, Input, Spinner } from "@/components/ui"
+import { ScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { useSetScoreOverride } from "@/hooks/mutations/useSetScoreOverride"
 
 export type ManualGradeContext = {
@@ -177,20 +177,15 @@ export function ManualGradeCell({
   }
 
   // Idle: the current grade (or an "Add grade" ghost for an ungraded row), plus
-  // an edit affordance.
-  const tone = scoreTone(score, max, thresholdFraction)
+  // an edit affordance. Reuses the shared ScoreBadge (one recipe, one source).
   return (
     <div className="flex items-center gap-1.5">
       {hasGrade ? (
-        tone.ghost ? (
-          <Badge ghost>
-            {score}/{max}
-          </Badge>
-        ) : (
-          <Badge tone={tone.tone}>
-            {score}/{max}
-          </Badge>
-        )
+        <ScoreBadge
+          score={score}
+          max={max}
+          thresholdFraction={thresholdFraction}
+        />
       ) : (
         <span className="text-sm text-base-content/50">
           {t("submissions.manualGrade.notGraded")}

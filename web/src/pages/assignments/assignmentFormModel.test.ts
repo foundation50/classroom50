@@ -363,10 +363,8 @@ describe("validateAssignmentForm — grading", () => {
 
   it("flags a hand-tampered grading choice", () => {
     expect(
-      validateAssignmentForm(
-        { ...base, grading_choice: "partial" as never },
-        t,
-      ).grading_choice,
+      validateAssignmentForm({ ...base, grading_choice: "partial" as never }, t)
+        .grading_choice,
     ).toBe("assignments.form.validation.gradingModeInvalid")
   })
 

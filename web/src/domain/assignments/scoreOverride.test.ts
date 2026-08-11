@@ -91,6 +91,7 @@ type WrittenScores = {
           score: number
           "max-score": number
           schema: string
+          datetime: string
         }[]
       }[]
     }
@@ -237,13 +238,19 @@ describe("editScoreOverride", () => {
       "max-score": 100,
       tests: [],
     }
-    const manual = { ...real, submission: "submit/manual-2026-02-02T00-00-00Z", score: 90 }
+    const manual = {
+      ...real,
+      submission: "submit/manual-2026-02-02T00-00-00Z",
+      score: 90,
+    }
     const scores = {
       schema: "classroom50/scores/v1",
       assignments: {
         [ASSIGNMENT]: {
           type: "individual",
-          entries: [{ owner: "alice", override: true, submissions: [manual, real] }],
+          entries: [
+            { owner: "alice", override: true, submissions: [manual, real] },
+          ],
         },
       },
     }
@@ -262,6 +269,109 @@ describe("editScoreOverride", () => {
     expect(entry.submissions).toHaveLength(1)
     expect(entry.submissions[0].submission).toBe(
       "submit/2026-01-01T00-00-00Z-abc1234",
+    )
+  })
+
+  it("throws (never commits) when the scores.json read fails with a non-404", async () => {
+    // A transient 5xx/429/network read failure must NOT be treated as an absent
+    // file: committing the empty scaffold would overwrite the whole gradebook.
+    let committed = ""
+    const request = vi.fn(async (url: string, init?: { method?: string }) => {
+      const method = init?.method ?? "GET"
+      if (method === "GET" && /\/repos\/[^/]+\/classroom50$/.test(url)) {
+        return { default_branch: "main" }
+      }
+      if (method === "GET" && url.includes("/git/ref/heads/main")) {
+        return { object: { sha: "refsha" } }
+      }
+      if (method === "GET" && url.includes("/git/commits/refsha")) {
+        return { tree: { sha: "basetree" } }
+      }
+      if (method === "GET" && url.includes("/contents/cs50/scores.json")) {
+        throw new GitHubAPIError({
+          status: 500,
+          url,
+          message: "Server Error",
+          body: null,
+          rateLimit: {
+            limit: null,
+            remaining: null,
+            used: null,
+            reset: null,
+            resource: null,
+            retryAfter: null,
+          },
+        })
+      }
+      if (method === "POST") {
+        committed = "SHOULD-NOT-COMMIT"
+        return { sha: "x" }
+      }
+      throw new Error(`unexpected request: ${method} ${url}`)
+    })
+    const requestRaw = vi.fn(async () => {
+      throw notFound("classroom.json")
+    })
+    const client = { request, requestRaw } as unknown as GitHubClient
+    await expect(
+      editScoreOverride(client, {
+        org: ORG,
+        classroom: CLASSROOM,
+        assignment: ASSIGNMENT,
+        owner: "alice",
+        assignmentType: "individual",
+        score: 10,
+        maxPoints: 50,
+      }),
+    ).rejects.toThrow()
+    expect(committed).toBe("")
+  })
+
+  it("clamps the override datetime above a future-dated real submission", async () => {
+    // A real autograded submission's datetime is the student-controllable
+    // committer date and can be in the future; the override record must still
+    // sort as the newest submission so the displayed grade is the override.
+    const future = {
+      schema: "classroom50/result/v1",
+      classroom: CLASSROOM,
+      assignment_type: "individual",
+      owner: "alice",
+      submission: "submit/2099-01-01T00-00-00Z-abc1234",
+      commit: "c",
+      release: "r",
+      review: "v",
+      datetime: "2099-01-01T00:00:00Z",
+      score: 10,
+      "max-score": 100,
+      tests: [],
+    }
+    const scores = {
+      schema: "classroom50/scores/v1",
+      assignments: {
+        [ASSIGNMENT]: {
+          type: "individual",
+          entries: [{ owner: "alice", submissions: [future] }],
+        },
+      },
+    }
+    const { client, committed } = makeClient(scores)
+    await editScoreOverride(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      assignment: ASSIGNMENT,
+      owner: "alice",
+      assignmentType: "individual",
+      score: 95,
+      maxPoints: 100,
+    })
+    const written = JSON.parse(committed()) as WrittenScores
+    const entry = written.assignments[ASSIGNMENT].entries[0]
+    const overrideRec = entry.submissions[0]
+    expect(overrideRec.submission.startsWith("submit/manual-")).toBe(true)
+    // The override's datetime must be strictly later than the future-dated
+    // real submission so a datetime-desc sort puts the override first.
+    expect(new Date(overrideRec.datetime).getTime()).toBeGreaterThan(
+      new Date("2099-01-01T00:00:00Z").getTime(),
     )
   })
 })

@@ -11,6 +11,7 @@ import {
 } from "@/github-core/mutations"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { decodeBase64Utf8 } from "@/util/github"
+import { GitHubAPIError } from "@/github-core/errors"
 import { prefixCommit } from "@/util/commit"
 import { withGitConflictRetry, assertClassroomNotArchived } from "../classrooms"
 
@@ -90,11 +91,18 @@ export type SetScoreOverrideResult = {
 // the rest are non-empty). Readers key off score/max-score/datetime, which are
 // real. `graded_by` is deliberately NOT stored — the config-repo commit author
 // is the authoritative, GitHub-authenticated "who".
+//
+// `sentinelIso` is the wall-clock stamp used only for the placeholder tag;
+// `datetimeIso` is the record's sort key, clamped by the caller so the override
+// always sorts as the newest submission (a real autograded submission's
+// datetime is the student-controllable committer date and could otherwise be
+// future-dated above the override — see editScoreOverride).
 function synthesizeOverrideRecord(
   input: SetScoreOverrideInput,
-  nowIso: string,
+  sentinelIso: string,
+  datetimeIso: string,
 ): SubmissionRecord {
-  const sentinel = `submit/manual-${nowIso.replace(/[:.]/g, "-")}`
+  const sentinel = `submit/manual-${sentinelIso.replace(/[:.]/g, "-")}`
   return {
     schema: RESULT_SCHEMA,
     classroom: input.classroom,
@@ -104,7 +112,7 @@ function synthesizeOverrideRecord(
     commit: sentinel,
     release: sentinel,
     review: sentinel,
-    datetime: nowIso,
+    datetime: datetimeIso,
     score: input.score ?? 0,
     "max-score": input.maxPoints ?? 0,
     tests: [],
@@ -128,8 +136,9 @@ async function readScoresFile(
   classroom: string,
   ref: string,
 ): Promise<ScoresFile> {
+  let file: { type: "file"; encoding: "base64"; content: string }
   try {
-    const file = await client.request<{
+    file = await client.request<{
       type: "file"
       encoding: "base64"
       content: string
@@ -138,13 +147,23 @@ async function readScoresFile(
         classroom,
       )}?ref=${encodeURIComponent(ref)}`,
     )
-    const parsed = JSON.parse(decodeBase64Utf8(file.content)) as ScoresFile
-    if (!parsed.assignments) parsed.assignments = {}
-    return parsed
-  } catch {
-    // Absent scores.json (never collected): scaffold so an override can seed it.
-    return { schema: SCORES_SCHEMA, assignments: {} }
+  } catch (err) {
+    // ONLY a genuine 404 means the file is absent (never collected) — scaffold
+    // so an override can seed it. Any other error (5xx / rate-limit / network)
+    // is NOT proof of absence: swallowing it here would let the caller commit a
+    // full-content blob that replaces the whole gradebook with this scaffold.
+    // Rethrow so the write fails loudly and the caller can retry, mirroring
+    // assertClassroomNotArchived's non-404 rethrow.
+    if (err instanceof GitHubAPIError && err.isNotFound) {
+      return { schema: SCORES_SCHEMA, assignments: {} }
+    }
+    throw err
   }
+  // Decode/parse OUTSIDE the 404-tolerated region: a truncated or malformed
+  // body must fail the save, not scaffold an empty gradebook over real scores.
+  const parsed = JSON.parse(decodeBase64Utf8(file.content)) as ScoresFile
+  if (!parsed.assignments) parsed.assignments = {}
+  return parsed
 }
 
 // Upsert (or clear) a teacher score override for one repo owner in scores.json,
@@ -200,17 +219,34 @@ export async function editScoreOverride(
         }
       }
     } else {
-      const record = synthesizeOverrideRecord(input, nowIso)
-      if (idx >= 0) {
-        const entry = bucket.entries[idx]
-        const realSubmissions = (entry.submissions ?? []).filter(
-          (s) => !isSynthesizedManual(s),
-        )
+      const existingEntry = idx >= 0 ? bucket.entries[idx] : undefined
+      const realSubmissions = (existingEntry?.submissions ?? []).filter(
+        (s) => !isSynthesizedManual(s),
+      )
+      // Clamp the override datetime to strictly after the newest existing
+      // submission so the override always sorts as the latest row. A real
+      // autograded submission's datetime is the student-controllable committer
+      // date and can be future-dated; without this clamp bucketToRows (which
+      // sorts by datetime desc) would show that autograded score under the
+      // "Manual" badge. max(now, newest+1s).
+      const newestExistingMs = realSubmissions.reduce((max, s) => {
+        const ms = new Date(s.datetime).getTime()
+        return Number.isFinite(ms) && ms > max ? ms : max
+      }, 0)
+      const overrideMs = Math.max(
+        new Date(nowIso).getTime(),
+        newestExistingMs + 1000,
+      )
+      const overrideIso = new Date(overrideMs)
+        .toISOString()
+        .replace(/\.\d+Z$/, "Z")
+      const record = synthesizeOverrideRecord(input, nowIso, overrideIso)
+      if (existingEntry) {
         // The override record leads (newest first); real history is retained
         // beneath it so clearing can restore it.
         bucket.entries[idx] = {
-          ...entry,
-          owner: entry.owner ?? owner,
+          ...existingEntry,
+          owner: existingEntry.owner ?? owner,
           override: true,
           submissions: [record, ...realSubmissions],
         }

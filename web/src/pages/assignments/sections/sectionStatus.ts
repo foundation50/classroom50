@@ -58,7 +58,12 @@ const SECTION_FIELDS: Record<
     "pass_threshold",
     "tests",
   ],
-  submission: ["submission_mode", "submission_tags", "grading_choice", "grading_max_points"],
+  submission: [
+    "submission_mode",
+    "submission_tags",
+    "grading_choice",
+    "grading_max_points",
+  ],
   features: [
     "repo_feature_issues",
     "repo_feature_wiki",

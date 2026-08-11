@@ -24,7 +24,6 @@ import {
   TablePagination,
   rtlFlip,
 } from "@/components/ui"
-import { scoreTone } from "@/pages/submissions/dashboard"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
 import type { SubmissionSort } from "@/pages/submissions/dashboard"
 import {
@@ -50,6 +49,7 @@ import {
   RepoRowActions,
 } from "@/pages/submissions/SubmissionsRowActions"
 import { ManageSubmissionModal } from "@/pages/submissions/ManageSubmissionModal"
+import { ScoreBadge as SharedScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { ManualGradeCell } from "@/pages/submissions/ManualGradeCell"
 import type { ManualGradeContext } from "@/pages/submissions/ManualGradeCell"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
@@ -65,30 +65,10 @@ const formatDateTime = (datetime: string) =>
     timeStyle: "short",
   })
 
-// Score chip via the shared scoreTone recipe (one mapping for table + history):
-// success/error tone for graded rows, neutral ghost for ungraded.
-const ScoreBadge = ({
-  score,
-  max,
-  thresholdFraction,
-  size,
-}: {
-  score: number
-  max: number
-  thresholdFraction: number | null
-  size?: "xs" | "sm" | "md"
-}) => {
-  const t = scoreTone(score, max, thresholdFraction)
-  return (
-    <Badge
-      size={size}
-      ghost={"ghost" in t && t.ghost}
-      tone={"tone" in t ? t.tone : "neutral"}
-    >
-      {score}/{max}
-    </Badge>
-  )
-}
+// Score chip: the shared ScoreBadge (one recipe, one source — see
+// ./ScoreBadge). Imported rather than re-implemented so the manual-grade cell
+// and this table can't drift.
+const ScoreBadge = SharedScoreBadge
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
