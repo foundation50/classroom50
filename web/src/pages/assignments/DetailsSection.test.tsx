@@ -44,16 +44,19 @@ function Harness({
   templateRepo,
   emptyRepo = false,
   edit = false,
+  org,
 }: {
   templateRepo: string
   emptyRepo?: boolean
   edit?: boolean
+  org?: string
 }) {
   const form = useAssignmentForm(undefined, () => {}, t)
   return (
     <RepoFeatureControls
       form={form}
       edit={edit}
+      org={org}
       templateRepo={templateRepo}
       emptyRepo={emptyRepo}
     />
@@ -64,6 +67,7 @@ function renderControls(props: {
   templateRepo: string
   emptyRepo?: boolean
   edit?: boolean
+  org?: string
 }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -132,11 +136,36 @@ describe("RepoFeatureControls — inherit label resolution", () => {
     )
   })
 
-  it("shows the Default label and does not query for an incomplete owner/repo ref", () => {
-    const { container } = renderControls({ templateRepo: "org-only" })
+  it("resolves a bare repo name against the org and reads the template", async () => {
+    // Regression: a bare "my-template" (no owner) used to leave the read
+    // disabled. It now resolves to <org>/my-template like the Template field.
+    getRepo.mockResolvedValue({ has_issues: true })
+    const { container } = renderControls({
+      templateRepo: "test-template-3branch",
+      org: "acme",
+    })
+    await waitFor(() =>
+      expect(getRepo).toHaveBeenCalledWith(
+        expect.anything(),
+        "acme",
+        "test-template-3branch",
+      ),
+    )
+    await waitFor(() =>
+      expect(inheritOption(container, "repo_feature_issues").textContent).toBe(
+        inheritOnKey,
+      ),
+    )
+  })
+
+  it("shows the Default label and does not query when the org is unknown", () => {
+    const { container } = renderControls({
+      templateRepo: "test-template-3branch",
+      org: undefined,
+    })
     expect(getRepo).not.toHaveBeenCalled()
-    // No resolvable template -> the default choice is "Default" (no override),
-    // not an inherit label — a template-less assignment doesn't force a value.
+    // A bare name can't resolve without an org, so the default choice is
+    // "Default" (no override) rather than an inherit label.
     expect(inheritOption(container, "repo_feature_issues").textContent).toBe(
       defaultKey,
     )

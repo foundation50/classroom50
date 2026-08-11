@@ -8,10 +8,12 @@
 export {
   verifyTemplateAccess,
   resolveTemplate,
+  parseTemplateRef,
   type AcceptStepId,
   type AcceptStepStatus,
   type OnAcceptStepUpdate,
   type TemplateAccessVerification,
+  type ParsedTemplate,
 } from "./assignments/accessPrimitives"
 export {
   editAssignment,

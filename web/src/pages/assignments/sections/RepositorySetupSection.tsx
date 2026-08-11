@@ -4,6 +4,7 @@ import { ExternalLink, RefreshCw } from "lucide-react"
 import { Alert, Button, cx, FormField, Select } from "@/components/ui"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { getRepo } from "@/github-core/repoReads"
+import { parseTemplateRef } from "@/domain/assignments"
 import { REPO_PERMISSIONS, defaultStudentPermission } from "@/types/classroom"
 import { TemplateField } from "../TemplateField"
 import { ToggleRow } from "../AdvancedRuntimeFields"
@@ -283,6 +284,7 @@ export function RepositorySetupSection({
               <RepoFeatureControls
                 form={form}
                 edit={edit}
+                org={org}
                 templateRepo={templateRepo}
                 emptyRepo={emptyRepo}
               />
@@ -307,12 +309,25 @@ const REPO_FEATURE_KEYS = [
   { field: "repo_feature_pull_requests", key: "pull_requests" },
 ] as const
 
-// Parse an `owner/repo` template ref for the advisory feature read. Tolerates a
-// bare repo (no owner) by returning null — the read only runs on a full ref.
-function parseOwnerRepo(ref: string): { owner: string; repo: string } | null {
-  const parts = ref.split("/")
-  if (parts.length !== 2 || !parts[0] || !parts[1]) return null
-  return { owner: parts[0], repo: parts[1] }
+// Resolve a template ref for the advisory feature read, accepting the same
+// inputs the Template field does: `owner/repo`, `owner/repo@branch`, and a bare
+// `repo` name (owner defaults to the org). Returns null on an empty/invalid ref
+// or an unresolved owner (a bare name with no org), so the read (and the
+// refresh button) stay gated on a resolvable template. Reuses the canonical
+// parseTemplateRef so a bare name like "my-template" enables the read instead
+// of silently disabling it.
+function parseTemplateRefSafe(
+  ref: string,
+  org: string | undefined,
+): { owner: string; repo: string } | null {
+  if (!ref.trim()) return null
+  try {
+    const { owner, repo } = parseTemplateRef(ref, org ?? "")
+    // A bare name with no org resolves to an empty owner — not usable.
+    return owner && repo ? { owner, repo } : null
+  } catch {
+    return null
+  }
 }
 
 // Exported for focused unit tests of the resolved-inherit label, loading state,
@@ -320,17 +335,19 @@ function parseOwnerRepo(ref: string): { owner: string; repo: string } | null {
 export const RepoFeatureControls = ({
   form,
   edit,
+  org,
   templateRepo,
   emptyRepo,
 }: {
   form: AssignmentForm
   edit: boolean
+  org?: string
   templateRepo: string
   emptyRepo: boolean
 }) => {
   const { t } = useTranslation()
   const client = useOptionalGitHubClient()
-  const parsed = parseOwnerRepo(templateRepo)
+  const parsed = parseTemplateRefSafe(templateRepo, org)
 
   // Read the template's current feature flags so the "Inherit from template"
   // choice can name its resolved outcome (e.g. "matches template: on").
