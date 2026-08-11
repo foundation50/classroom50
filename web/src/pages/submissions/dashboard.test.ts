@@ -27,6 +27,7 @@ import {
   hasAccepted,
   latestAssignmentPush,
   latestCollectedAt,
+  mergeDetectedSubmissions,
   mergeLiveRows,
   nonSubmitterStatus,
   pageBounds,
@@ -1206,6 +1207,53 @@ describe("mergeLiveRows", () => {
       ],
     )
     expect(merged.map((r) => r.owner)).toEqual(["new", "old"])
+  })
+})
+
+describe("mergeDetectedSubmissions", () => {
+  const detected = (owner: string, count: number) => ({ owner, count })
+
+  it("keeps rows unchanged when detection reveals nothing more", () => {
+    const rows = [row({ owner: "alice", score: 8, submissionCount: 3 })]
+    const merged = mergeDetectedSubmissions(rows, [detected("alice", 2)])
+    expect(merged).toHaveLength(1)
+    expect(merged[0].score).toBe(8)
+    expect(merged[0].submissionCount).toBe(3)
+    expect(merged[0].staleCount).toBeUndefined()
+  })
+
+  it("raises a row's count when detection finds more, preserving the grade", () => {
+    const rows = [row({ owner: "alice", score: 9, submissionCount: 1 })]
+    const merged = mergeDetectedSubmissions(rows, [detected("Alice", 4)])
+    expect(merged).toHaveLength(1)
+    expect(merged[0].score).toBe(9) // grade stays from the snapshot
+    expect(merged[0].pending).toBeUndefined()
+    expect(merged[0].submissionCount).toBe(4)
+    expect(merged[0].staleCount).toBe(true)
+  })
+
+  it("never lowers a row's count and never overwrites a score", () => {
+    const rows = [row({ owner: "alice", score: 7, submissionCount: 5 })]
+    const merged = mergeDetectedSubmissions(rows, [detected("alice", 2)])
+    expect(merged[0].submissionCount).toBe(5)
+    expect(merged[0].score).toBe(7)
+  })
+
+  it("adds a pending row for a detection-only owner with no snapshot/release", () => {
+    const merged = mergeDetectedSubmissions(
+      [row({ owner: "alice" })],
+      [detected("bob", 3)],
+    )
+    const bob = merged.find((r) => r.owner === "bob")
+    expect(bob?.pending).toBe(true)
+    expect(bob?.submissionCount).toBe(3)
+    expect(bob?.score).toBe(0)
+    expect(bob?.["max-score"]).toBe(0)
+  })
+
+  it("ignores a detection-only owner with a zero count", () => {
+    const merged = mergeDetectedSubmissions([], [detected("bob", 0)])
+    expect(merged).toEqual([])
   })
 })
 

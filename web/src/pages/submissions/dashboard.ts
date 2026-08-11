@@ -159,6 +159,60 @@ export function mergeLiveRows(
   return [...merged, ...liveOnly]
 }
 
+// Detected-submission presence for one repo, from the detection subsystem
+// (branch-mode default-branch pushes or tag-mode git tags). Like the live
+// overlay, this is count/presence only — grades never come from here (KTD6).
+export type DetectedPresence = {
+  owner: string
+  count: number
+}
+
+// Merge detected submissions onto rows already reconciled with the live
+// overlay, the second overlay on the same snapshot (KTD6). Same discipline as
+// mergeLiveRows: detection can only REVEAL more submissions than are already
+// counted (max wins), never fewer, and never sets a score. A detection-only
+// owner (pushes/tags but no submit/* release and no snapshot entry) becomes a
+// pending row so the teacher sees the work exists, ungraded.
+export function mergeDetectedSubmissions(
+  rows: SubmissionRow[],
+  detected: DetectedPresence[],
+): SubmissionRow[] {
+  const detectedByOwner = new Map<string, DetectedPresence>()
+  for (const d of detected) {
+    detectedByOwner.set(d.owner.trim().toLowerCase(), d)
+  }
+
+  const merged = rows.map((row) => {
+    const d = detectedByOwner.get(row.owner.trim().toLowerCase())
+    if (!d || d.count <= row.submissionCount) return row
+    return { ...row, submissionCount: d.count, staleCount: true }
+  })
+
+  const knownOwners = new Set(
+    rows.map((row) => row.owner.trim().toLowerCase()),
+  )
+
+  const detectedOnly = detected
+    .filter(
+      (d) => d.count > 0 && !knownOwners.has(d.owner.trim().toLowerCase()),
+    )
+    .map<SubmissionRow>((d) => ({
+      usernames: [d.owner],
+      owner: d.owner,
+      datetime: "",
+      commit: "",
+      release: "",
+      review: "",
+      score: 0,
+      "max-score": 0,
+      submissionCount: Math.max(1, d.count),
+      pending: true,
+      submissions: [],
+    }))
+
+  return [...merged, ...detectedOnly]
+}
+
 // The most recent push time across this assignment's repos, or null when none
 // have been pushed / none exist. Used as a cheap staleness heuristic for the
 // collected snapshot: if any assignment repo was pushed AFTER the last collect

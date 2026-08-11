@@ -47,6 +47,7 @@ import {
   hasAccepted,
   latestAssignmentPush,
   latestCollectedAt,
+  mergeDetectedSubmissions,
   mergeLiveRows,
   reconcileNonSubmitters,
   rosterScopedRows,
@@ -61,6 +62,7 @@ import {
 } from "@/pages/submissions/dashboard"
 import useGetScores from "@/hooks/useGetScores"
 import useLiveSubmissions from "@/hooks/useLiveSubmissions"
+import useDetectedSubmissions from "@/hooks/useDetectedSubmissions"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
@@ -427,26 +429,56 @@ const SubmissionsPageContent = () => {
     enabled: liveCapable,
   })
 
+  // Detection overlay (submission-configuration hybrid model): the same
+  // page-scoped owners as the live fan-out, reading each repo's default-branch
+  // pushes (branch mode) or git tags (tag mode) so a submission shows even
+  // without a submit/* release. Grades still come from the snapshot/live side.
+  const { detected: detectedSubmissions, refetch: refetchDetected } =
+    useDetectedSubmissions({
+      org,
+      classroom,
+      assignment,
+      mode: assignmentInfo?.submission_mode,
+      submissionTags: assignmentInfo?.submission_tags,
+      repoOwners: livePageOwners,
+      enabled: liveCapable,
+    })
+
   // Overlay live presence over the snapshot for a live-capable viewer (snapshot
   // wins per owner for GRADES; live adds a pending row for an as-yet-uncollected
-  // submitter and bumps stale counts). A non-capable viewer (TA/HTA) uses the
-  // collected snapshot ALONE. Then roster-scope, gated on a resolved roster so a
-  // transient failure falls back to unscoped rows rather than blanking a
-  // populated gradebook.
+  // submitter and bumps stale counts), then overlay detection the same way (a
+  // second count/presence-only overlay on the same snapshot — KTD6). A
+  // non-capable viewer (TA/HTA) uses the collected snapshot ALONE. Then
+  // roster-scope, gated on a resolved roster so a transient failure falls back
+  // to unscoped rows rather than blanking a populated gradebook.
   const scoresInfo = useMemo(() => {
-    const merged = liveCapable
-      ? mergeLiveRows(
-          snapshotRows,
-          liveSubmissions.map((s) => ({
-            owner: s.owner,
-            datetime: s.submittedAt,
-            release: s.releaseUrl,
-            submissionCount: s.submissionCount,
-          })),
-        )
-      : snapshotRows
+    if (!liveCapable) {
+      return rosterReady
+        ? rosterScopedRows(snapshotRows, students)
+        : snapshotRows
+    }
+    const withLive = mergeLiveRows(
+      snapshotRows,
+      liveSubmissions.map((s) => ({
+        owner: s.owner,
+        datetime: s.submittedAt,
+        release: s.releaseUrl,
+        submissionCount: s.submissionCount,
+      })),
+    )
+    const merged = mergeDetectedSubmissions(
+      withLive,
+      detectedSubmissions.map((d) => ({ owner: d.owner, count: d.count })),
+    )
     return rosterReady ? rosterScopedRows(merged, students) : merged
-  }, [liveCapable, snapshotRows, liveSubmissions, rosterReady, students])
+  }, [
+    liveCapable,
+    snapshotRows,
+    liveSubmissions,
+    detectedSubmissions,
+    rosterReady,
+    students,
+  ])
 
   // Repos whose latest submission landed after the deadline. `late` is computed
   // upstream (collect_scores.py) from push time, not grade time.
@@ -1021,7 +1053,10 @@ const SubmissionsPageContent = () => {
                     // collect.
                     collectScores.collect()
                     refetchOrgRepos()
-                    if (liveCapable) refetchLive()
+                    if (liveCapable) {
+                      refetchLive()
+                      refetchDetected()
+                    }
                   }
             }
           />
