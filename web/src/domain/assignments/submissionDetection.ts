@@ -85,6 +85,8 @@ export function detectTagSubmissions(
 // The total number of submissions a detected set represents — the sum of each
 // entry's count (a glob group counts its matches). This is the value the merge
 // layer compares against the snapshot count (max wins, KTD6).
-export function detectedSubmissionCount(detected: DetectedSubmission[]): number {
+export function detectedSubmissionCount(
+  detected: DetectedSubmission[],
+): number {
   return detected.reduce((sum, d) => sum + d.count, 0)
 }

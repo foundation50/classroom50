@@ -46,7 +46,11 @@ describe("detectTagSubmissions", () => {
     const tags = [tag("phase1"), tag("other")]
     const detected = detectTagSubmissions(tags, ["phase1"])
     expect(detected).toHaveLength(1)
-    expect(detected[0]).toMatchObject({ kind: "tag", label: "phase1", count: 1 })
+    expect(detected[0]).toMatchObject({
+      kind: "tag",
+      label: "phase1",
+      count: 1,
+    })
   })
 
   it("yields nothing for an exact tag that is absent", () => {

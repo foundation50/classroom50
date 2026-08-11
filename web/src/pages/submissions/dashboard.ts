@@ -188,9 +188,7 @@ export function mergeDetectedSubmissions(
     return { ...row, submissionCount: d.count, staleCount: true }
   })
 
-  const knownOwners = new Set(
-    rows.map((row) => row.owner.trim().toLowerCase()),
-  )
+  const knownOwners = new Set(rows.map((row) => row.owner.trim().toLowerCase()))
 
   const detectedOnly = detected
     .filter(
