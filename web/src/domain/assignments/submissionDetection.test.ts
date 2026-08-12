@@ -4,6 +4,7 @@ import {
   detectBranchSubmissions,
   detectTagSubmissions,
   detectedSubmissionCount,
+  detectedTagHref,
   detectedTagLabel,
   detectedTagRef,
   jumpableTagEntries,
@@ -129,5 +130,37 @@ describe("detectedTagLabel", () => {
 
   it("leaves a milestone tag unchanged", () => {
     expect(detectedTagLabel("phase1")).toBe("phase1")
+  })
+})
+
+describe("detectedTagHref", () => {
+  it("builds a tree URL at the tag name for an exact tag", () => {
+    expect(
+      detectedTagHref(
+        { kind: "tag", label: "phase1", count: 1, sha: "aaa1111" },
+        "acme",
+        "cs101-hw1-alice",
+      ),
+    ).toBe("https://github.com/acme/cs101-hw1-alice/tree/phase1")
+  })
+
+  it("builds a tree URL at the representative sha for a glob group", () => {
+    expect(
+      detectedTagHref(
+        { kind: "tag-group", label: "v*", count: 2, sha: "bbb2222" },
+        "acme",
+        "cs101-hw1-alice",
+      ),
+    ).toBe("https://github.com/acme/cs101-hw1-alice/tree/bbb2222")
+  })
+
+  it("returns undefined when the ref can't form a safe link", () => {
+    expect(
+      detectedTagHref(
+        { kind: "tag-group", label: "v*", count: 2 },
+        "acme",
+        "cs101-hw1-alice",
+      ),
+    ).toBeUndefined()
   })
 })

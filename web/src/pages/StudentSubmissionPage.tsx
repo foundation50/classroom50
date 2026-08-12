@@ -20,14 +20,13 @@ import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
-import { repoTreeAtRefUrl } from "@/util/orgUrl"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { safeHttpUrl } from "@/util/url"
 import type { GitHubRelease } from "@/github-core/types"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import {
+  detectedTagHref,
   detectedTagLabel,
-  detectedTagRef,
   jumpableTagEntries,
 } from "@/domain/assignments/submissionDetection"
 import type { Assignment, SubmissionMode } from "@/types/classroom"
@@ -126,9 +125,7 @@ const AssignmentMeta = ({
 }
 
 // The student's tagged submissions (tag mode only): one jump-to-tree link per
-// detected tag or tag group. Branch-mode `commit` entries carry no tag and are
-// excluded, so the card renders only tag/tag-group entries; when none exist it
-// shows the empty hint so the student knows to push a tag.
+// entry, or an empty hint prompting the student to push a tag.
 const TaggedSubmissionsCard = ({
   entries,
   org,
@@ -154,15 +151,14 @@ const TaggedSubmissionsCard = ({
         <Card as={EnterDiv} bordered={false} className="border border-base-200">
           <ul className="divide-y divide-base-200">
             {tagEntries.map((entry) => {
-              const isGroup = entry.kind === "tag-group"
-              const ref = detectedTagRef(entry)
-              const href = ref ? repoTreeAtRefUrl(org, repo, ref) : undefined
-              const label = isGroup
-                ? t("submissions.student.tagGroupCount", {
-                    pattern: entry.label,
-                    count: entry.count,
-                  })
-                : detectedTagLabel(entry.label)
+              const href = detectedTagHref(entry, org, repo)
+              const label =
+                entry.kind === "tag-group"
+                  ? t("submissions.student.tagGroupCount", {
+                      pattern: entry.label,
+                      count: entry.count,
+                    })
+                  : detectedTagLabel(entry.label)
               return (
                 <li
                   key={`${entry.kind}-${entry.label}`}

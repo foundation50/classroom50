@@ -1,6 +1,7 @@
 import type { GitHubCommit, GitHubTag } from "@/github-core/types"
 import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
 import { matchesSubmissionTag } from "@/util/submissionTags"
+import { repoTreeAtRefUrl } from "@/util/orgUrl"
 
 // Pure derivation for the submission-detection subsystem (KTD6/KTD7): turn raw
 // repo state (default-branch commits, git tags) plus the submission definition
@@ -92,9 +93,9 @@ export function detectedSubmissionCount(
   return detected.reduce((sum, d) => sum + d.count, 0)
 }
 
-// The entries that can be "jumped to" as a tag: exact tags and glob groups.
-// Branch-mode `commit` entries carry no tag to jump to, so both submission
-// views filter them out before rendering jump links.
+// The entries that can be "jumped to" as a tag: branch-mode `commit` entries
+// carry no tag, so both submission views filter them out before rendering jump
+// links.
 export function jumpableTagEntries(
   entries: DetectedSubmission[],
 ): DetectedSubmission[] {
@@ -107,6 +108,17 @@ export function jumpableTagEntries(
 // sets one). Callers build the tree URL with repoTreeAtRefUrl.
 export function detectedTagRef(entry: DetectedSubmission): string | undefined {
   return entry.kind === "tag-group" ? entry.sha : entry.label
+}
+
+// The tree URL a detected tag entry jumps to, or undefined when it can't form a
+// safe link. Both views share this so the jump target stays identical.
+export function detectedTagHref(
+  entry: DetectedSubmission,
+  org: string,
+  repo: string,
+): string | undefined {
+  const ref = detectedTagRef(entry)
+  return ref ? repoTreeAtRefUrl(org, repo, ref) : undefined
 }
 
 // A friendly display label for an exact detected tag: strip the canonical

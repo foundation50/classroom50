@@ -16,7 +16,6 @@ import {
   resolveStudent,
 } from "@/util/students"
 import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
-import { repoTreeAtRefUrl } from "@/util/orgUrl"
 import { safeHttpUrl } from "@/util/url"
 import Avatar from "@/components/avatar"
 import {
@@ -60,8 +59,8 @@ import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import {
+  detectedTagHref,
   detectedTagLabel,
-  detectedTagRef,
   jumpableTagEntries,
 } from "@/domain/assignments/submissionDetection"
 import type { Student, SubmissionMode } from "@/types/classroom"
@@ -125,10 +124,8 @@ const HistoryLink = ({
   )
 
 // The tagged-submissions block in the expanded row: one jump-to-tree link per
-// detected tag or tag group. Branch-mode `commit` entries carry no tag to jump
-// to and are skipped, so the section renders only when tag/tag-group entries
-// exist. An exact tag jumps to its own ref; a glob group has no single tag, so
-// it jumps to its representative commit sha and shows the pattern + match count.
+// entry. `entries` are the already-jumpable tag/tag-group entries (see
+// jumpableTagEntries); a glob group shows its pattern + match count.
 const TaggedSubmissions = ({
   entries,
   org,
@@ -139,8 +136,7 @@ const TaggedSubmissions = ({
   repo: string
 }) => {
   const { t } = useTranslation()
-  const tagEntries = jumpableTagEntries(entries)
-  if (tagEntries.length === 0) return null
+  if (entries.length === 0) return null
 
   return (
     <div className="mt-2 flex flex-col gap-1.5">
@@ -148,16 +144,15 @@ const TaggedSubmissions = ({
         {t("submissions.table.taggedSubmissions")}
       </span>
       <ul className="flex flex-col gap-1">
-        {tagEntries.map((entry) => {
-          const isGroup = entry.kind === "tag-group"
-          const ref = detectedTagRef(entry)
-          const href = ref ? repoTreeAtRefUrl(org, repo, ref) : undefined
-          const label = isGroup
-            ? t("submissions.table.tagGroupCount", {
-                pattern: entry.label,
-                count: entry.count,
-              })
-            : detectedTagLabel(entry.label)
+        {entries.map((entry) => {
+          const href = detectedTagHref(entry, org, repo)
+          const label =
+            entry.kind === "tag-group"
+              ? t("submissions.table.tagGroupCount", {
+                  pattern: entry.label,
+                  count: entry.count,
+                })
+              : detectedTagLabel(entry.label)
           return (
             <li
               key={`${entry.kind}-${entry.label}`}
@@ -188,7 +183,7 @@ const SubmissionHistory = ({
   isGroup,
   students,
   thresholdFraction,
-  detectedEntries,
+  jumpableTags,
   org,
   repo,
 }: {
@@ -197,7 +192,7 @@ const SubmissionHistory = ({
   isGroup: boolean
   students: Student[]
   thresholdFraction: number | null
-  detectedEntries?: DetectedSubmission[]
+  jumpableTags: DetectedSubmission[]
   org: string
   repo: string
 }) => {
@@ -245,9 +240,9 @@ const SubmissionHistory = ({
           </span>
         </li>
       ))}
-      {detectedEntries && detectedEntries.length > 0 ? (
+      {jumpableTags.length > 0 ? (
         <li>
-          <TaggedSubmissions entries={detectedEntries} org={org} repo={repo} />
+          <TaggedSubmissions entries={jumpableTags} org={org} repo={repo} />
         </li>
       ) : null}
       <li className="text-xs text-base-content/70">
@@ -676,7 +671,7 @@ const SubmissionsTable = ({
                 isGroup={isGroup}
                 students={students}
                 thresholdFraction={passBar}
-                detectedEntries={rest.detectedEntries}
+                jumpableTags={jumpableTags}
                 org={org}
                 repo={repo}
               />
