@@ -30,6 +30,12 @@ const usePagesAssignments = (
     queryKey: ["pages", "assignments", org, classroom, secret ?? ""],
     queryFn: () => fetchPagesAssignments(org ?? "", classroom ?? "", secret),
     enabled: (options?.enabled ?? true) && Boolean(org && classroom),
+    // Pages is a public projection that changes rarely; cache it for 10 minutes.
+    // Don't retry — a 404 (protected/unprotected path mismatch or a not-yet-
+    // published classroom) is a definitive answer, and retry-storming it just
+    // delays the honest empty/error state.
+    staleTime: 10 * 60 * 1000,
+    retry: false,
   })
 
   return {

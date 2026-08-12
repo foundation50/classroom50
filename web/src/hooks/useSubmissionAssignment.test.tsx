@@ -90,4 +90,27 @@ describe("useSubmissionAssignment", () => {
     )
     expect(result.current.assignment).toBeUndefined()
   })
+
+  it("exposes a stable empty assignments list when data is undefined", () => {
+    configData = undefined
+    const { result, rerender } = renderHook(() =>
+      useSubmissionAssignment("acme", "cs101", "hw1", { source: "config" }),
+    )
+    const first = result.current.assignments
+    expect(first).toEqual([])
+    rerender()
+    // Same reference across renders so callers memoizing on it don't churn.
+    expect(result.current.assignments).toBe(first)
+  })
+
+  it("exposes the full list for sibling-slug callers", () => {
+    configData = { assignments: [assignment("hw1"), assignment("hw2")] }
+    const { result } = renderHook(() =>
+      useSubmissionAssignment("acme", "cs101", "hw1", { source: "config" }),
+    )
+    expect(result.current.assignments.map((a) => a.slug)).toEqual([
+      "hw1",
+      "hw2",
+    ])
+  })
 })

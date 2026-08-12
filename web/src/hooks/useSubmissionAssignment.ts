@@ -1,6 +1,12 @@
+import { useMemo } from "react"
+
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import type { Assignment } from "@/types/classroom"
+
+// A stable empty list so consumers memoizing on `assignments` don't churn every
+// render while the underlying query is still `undefined`.
+const EMPTY_ASSIGNMENTS: Assignment[] = []
 
 // Where an assignment's metadata is read from. The rule (single-sourced here):
 //   - "config" — the PRIVATE config repo (classroom50/<classroom>/assignments
@@ -45,8 +51,18 @@ export function useSubmissionAssignment(
     assignmentSlug: assignment,
   })
 
+  // Stable list reference: fall back to the shared EMPTY_ASSIGNMENTS (not a
+  // fresh []) while the query is undefined, so a caller memoizing on
+  // `assignments` doesn't recompute every render during load.
+  const assignments = useMemo(
+    () =>
+      useConfig
+        ? (configQuery.data?.assignments ?? EMPTY_ASSIGNMENTS)
+        : (pagesQuery.data ?? EMPTY_ASSIGNMENTS),
+    [useConfig, configQuery.data, pagesQuery.data],
+  )
+
   if (useConfig) {
-    const assignments = configQuery.data?.assignments ?? []
     return {
       assignment: assignments.find((a) => a.slug === assignment),
       assignments,
@@ -56,7 +72,7 @@ export function useSubmissionAssignment(
   }
   return {
     assignment: pagesQuery.assignment,
-    assignments: pagesQuery.data ?? [],
+    assignments,
     isLoading: pagesQuery.isLoading,
     isError: pagesQuery.isError,
   }

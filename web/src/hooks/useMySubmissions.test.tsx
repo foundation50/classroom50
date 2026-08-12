@@ -13,18 +13,20 @@ vi.mock("@/hooks/useGetSubmissionReleases", () => ({
 }))
 
 const taggedSpy = vi.fn()
+let taggedError = false
 vi.mock("@/hooks/useGetMyTaggedSubmissions", () => ({
   default: (...args: unknown[]) => {
     taggedSpy(...args)
-    return { data: [], isError: false }
+    return { data: [], isError: taggedError }
   },
 }))
 
 const pushSpy = vi.fn()
+let pushError = false
 vi.mock("@/hooks/useGetMyPushSubmissions", () => ({
   default: (...args: unknown[]) => {
     pushSpy(...args)
-    return { data: [], isError: false }
+    return { data: [], isError: pushError }
   },
 }))
 
@@ -34,6 +36,8 @@ beforeEach(() => {
   releasesSpy.mockReset()
   taggedSpy.mockReset()
   pushSpy.mockReset()
+  taggedError = false
+  pushError = false
 })
 
 afterEach(() => vi.clearAllMocks())
@@ -74,5 +78,30 @@ describe("useMySubmissions", () => {
       undefined,
       undefined,
     )
+  })
+
+  it("folds only the ACTIVE mode's read error into submissionListError", () => {
+    // Tag error is ignored in every-push mode...
+    taggedError = true
+    pushError = false
+    const everyPush = renderHook(() =>
+      useMySubmissions("acme", "cs101", "hw1", "alice", { mode: "every-push" }),
+    )
+    expect(everyPush.result.current.submissionListError).toBe(false)
+
+    // ...and the push error is ignored in tag mode.
+    taggedError = false
+    pushError = true
+    const tag = renderHook(() =>
+      useMySubmissions("acme", "cs101", "hw1", "alice", { mode: "tag" }),
+    )
+    expect(tag.result.current.submissionListError).toBe(false)
+
+    // The active mode's error surfaces.
+    pushError = true
+    const active = renderHook(() =>
+      useMySubmissions("acme", "cs101", "hw1", "alice", { mode: "every-push" }),
+    )
+    expect(active.result.current.submissionListError).toBe(true)
   })
 })
