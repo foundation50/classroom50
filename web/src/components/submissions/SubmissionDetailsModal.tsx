@@ -5,16 +5,19 @@ import { GitCommitHorizontal, Tag } from "lucide-react"
 import GitHub from "@/assets/github.svg?react"
 import { Button, Modal, MonoLtr } from "@/components/ui"
 
-// One row in the submission-details list. `kind` picks the icon and the action
-// label ("View tag" vs "View commit"); `href` is the already-built, safe GitHub
-// link (omit to render the row inert, e.g. a detected tag whose ref can't be
-// resolved). `sublabel` carries a secondary line such as the submission time.
+// One row in the submission-details list. `kind` picks the icon and the primary
+// action label ("View tag" vs "View commit"); `href` is the already-built, safe
+// GitHub link (omit to render the row inert, e.g. a detected tag whose ref
+// can't be resolved). `sublabel` carries a secondary line such as the
+// submission time. `releaseHref`, when present, adds a secondary "View grade"
+// link to this submission's graded release.
 export type SubmissionDetailItem = {
   key: string
   kind: "tag" | "commit"
   label: string
   sublabel?: string
   href?: string
+  releaseHref?: string
 }
 
 // A type-aware, read-only modal listing an assignment's submissions for one
@@ -158,6 +161,16 @@ export function SubmissionDetailsModal({
                     {t("submissions.details.unavailable")}
                   </span>
                 )}
+                {item.releaseHref ? (
+                  <a
+                    className="link link-hover inline-flex shrink-0 items-center gap-1"
+                    href={item.releaseHref}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t("submissions.details.viewGrade")}
+                  </a>
+                ) : null}
               </li>
             )
           })}

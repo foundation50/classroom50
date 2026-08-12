@@ -190,20 +190,46 @@ describe("StudentSubmissionPage submission type", () => {
     )
   })
 
-  it("shows the empty state with a tags link in tag mode when there are no tags", async () => {
+  it("renders as a one-row table with the student column set", () => {
+    assignmentData = assignment({ submission_mode: "every-push" })
+    pushData = [commit("aaa", "2026-06-20T10:00:00Z")]
+    render(<StudentSubmissionPage />)
+    // The student view mirrors the teacher table's columns (minus score/manage).
+    expect(screen.getByText("submissions.table.colStudent")).toBeTruthy()
+    expect(screen.getByText("submissions.table.colSubmissions")).toBeTruthy()
+    expect(screen.getByText("submissions.table.colLastSubmitted")).toBeTruthy()
+    expect(screen.getByText("submissions.table.colActions")).toBeTruthy()
+    // The identity cell links the student's own repo.
+    const repoLink = screen.getByRole("link", { name: "cs101-hw1-alice" })
+    expect(repoLink.getAttribute("href")).toBe(
+      "https://github.com/acme/cs101-hw1-alice",
+    )
+  })
+
+  it("folds the graded release into a per-commit View grade link", async () => {
     const user = userEvent.setup()
-    assignmentData = assignment({ submission_mode: "tag" })
-    taggedData = []
+    assignmentData = assignment({ submission_mode: "every-push" })
+    pushData = [commit("abc1234", "2026-06-21T10:00:00Z")]
+    releasesData = [
+      {
+        id: 1,
+        tag_name: "submit/2026-06-21T10-00-00Z-abc1234",
+        name: null,
+        html_url:
+          "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2F...",
+        draft: false,
+        prerelease: false,
+        created_at: "2026-06-21T10:05:00Z",
+        published_at: "2026-06-21T10:05:00Z",
+      },
+    ]
     render(<StudentSubmissionPage />)
     await user.click(
-      screen.getByRole("button", { name: "submissions.type.countTag" }),
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
     )
-    expect(screen.getByText("submissions.details.emptyTag")).toBeTruthy()
-    const emptyLink = screen.getByRole("link", {
-      name: /submissions\.details\.emptyLinkTags/,
+    const gradeLink = screen.getByRole("link", {
+      name: "submissions.details.viewGrade",
     })
-    expect(emptyLink.getAttribute("href")).toBe(
-      "https://github.com/acme/cs101-hw1-alice/tags",
-    )
+    expect(gradeLink.getAttribute("href")).toContain("/releases/tag/")
   })
 })

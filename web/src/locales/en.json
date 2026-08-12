@@ -2304,6 +2304,7 @@
       "viewSubmissions": "View submissions",
       "viewTag": "View tag",
       "viewCommit": "View commit",
+      "viewGrade": "View grade",
       "unavailable": "Unavailable",
       "pushEntry": "Push #{{number}}",
       "emptyEveryPush": "No pushes to the default branch yet. The repository still exists — open it to see the code.",
@@ -2807,18 +2808,15 @@
       "membersDescription": "View and manage the group's members"
     },
     "student": {
-      "submittedAt": "Submitted {{date}}",
       "descriptionLabel": "Assignment details",
-      "viewGrade": "View grade",
-      "unavailable": "Unavailable",
       "modeGroup": "Group",
       "modeIndividual": "Individual",
       "detailsTitle": "Your submissions",
+      "tableCaption": "Your submission for this assignment",
+      "notSubmittedYet": "Not submitted yet",
       "loadError": "Could not load your submissions.",
       "notAccepted": "You haven't accepted this assignment yet. <acceptLink>Accept it</acceptLink> to get your repository, then push your work to be graded.",
       "locked": "This assignment is locked by your teacher and isn't available right now. Check back later or ask your teacher to unlock it.",
-      "noGradedYet": "No graded submission yet. Push to your assignment repository from the command line and the autograder will publish your result here.",
-      "openMyRepo": "Open my repository",
       "submitGuide": {
         "title": "Submit from the command line",
         "intro": "Submit your work for grading from a terminal.",
@@ -2855,7 +2853,6 @@
         "unsafePath": "Skipped \"{{name}}\" — its path isn't allowed.",
         "reservedPath": "Skipped \"{{path}}\" — that path is managed by Classroom 50 and can't be uploaded."
       },
-      "releasesIntro": "Each submission opens its graded release on GitHub, with your score and per-test results.",
       "fallbackTitle": "Submission",
       "missingParams": "Missing classroom or assignment information."
     }

@@ -9,7 +9,6 @@ import {
   resolveStudent,
 } from "@/util/students"
 import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
-import { safeHttpUrl } from "@/util/url"
 import Avatar from "@/components/avatar"
 import { Badge, Button, Spinner, TablePagination } from "@/components/ui"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
@@ -48,19 +47,17 @@ import {
   type SubmissionDetailItem,
 } from "@/components/submissions/SubmissionDetailsModal"
 import {
+  buildSubmissionDetailItems,
   submissionEmptyState,
-  tagDetailItems,
 } from "@/components/submissions/submissionDetailItems"
+import {
+  LastSubmittedCell,
+  SubmissionCountCell,
+} from "@/components/submissions/SubmissionRowCells"
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import type { Student, SubmissionMode } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-
-const formatDateTime = (datetime: string) =>
-  new Date(datetime).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  })
 
 // Score chip: the shared ScoreBadge (one recipe, one source — see
 // ./ScoreBadge). Imported rather than re-implemented so the manual-grade cell
@@ -94,11 +91,10 @@ type SubmissionDetailsContext = {
   items: SubmissionDetailItem[]
 }
 
-// Build the type-aware detail items for a row. Tag mode lists the detected
-// tag/tag-group submissions (opening the tag's tree); every-push mode lists the
-// collected commit attempts (opening each commit). A branch-mode repo has no
-// tags, and a tag-mode repo's collected commits aren't the submission unit, so
-// each mode reads only its own source.
+// Build the type-aware detail items for a row via the shared builder: tag
+// entries in tag mode, the collected commit attempts as push submissions
+// otherwise. Each attempt links its commit and (when present) its graded
+// release.
 function buildDetailItems(
   row: SubmissionRow,
   mode: SubmissionMode,
@@ -106,18 +102,21 @@ function buildDetailItems(
   repo: string,
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): SubmissionDetailItem[] {
-  if (mode === "tag") {
-    return tagDetailItems(row.detectedEntries ?? [], org, repo, t)
-  }
-  return row.submissions.map((s, i) => ({
-    key: `${s.datetime}-${s.commit}-${i}`,
-    kind: "commit" as const,
-    label: t("submissions.details.pushEntry", {
-      number: row.submissions.length - i,
-    }),
-    sublabel: formatDateTime(s.datetime),
-    href: safeHttpUrl(s.commit),
-  }))
+  return buildSubmissionDetailItems(
+    {
+      tags: row.detectedEntries ?? [],
+      commits: row.submissions.map((s, i) => ({
+        key: `${s.datetime}-${s.commit}-${i}`,
+        commitHref: s.commit,
+        datetime: s.datetime,
+        releaseHref: s.release,
+      })),
+    },
+    mode,
+    org,
+    repo,
+    t,
+  )
 }
 
 const SubmissionsTable = ({
@@ -352,30 +351,12 @@ const SubmissionsTable = ({
           )}
         </td>
         <td>
-          <div className="flex items-center gap-1.5">
-            {/* The count chip always opens the type-aware details modal — even
-                for 0/1 submissions — so the behavior is predictable and the
-                modal owns the empty state. */}
-            <button
-              type="button"
-              className="badge max-xl:text-xs whitespace-nowrap gap-1 hover:badge-neutral cursor-pointer"
-              title={t("submissions.table.viewSubmissionsTitle")}
-              onClick={openDetails}
-            >
-              {t(submissionModeCountKey(assignmentMode), {
-                count: submissionCount,
-              })}
-            </button>
-            {rest.staleCount && (
-              <Badge
-                tone="info"
-                size="sm"
-                title={t("submissions.table.staleCountTitle")}
-              >
-                {t("submissions.table.staleCount")}
-              </Badge>
-            )}
-          </div>
+          <SubmissionCountCell
+            mode={assignmentMode}
+            count={submissionCount}
+            onOpen={openDetails}
+            staleCount={rest.staleCount}
+          />
         </td>
         <td>
           {emptyRepo ? (
@@ -426,38 +407,12 @@ const SubmissionsTable = ({
           )}
         </td>
         <td>
-          <div className="flex flex-col gap-0.5">
-            <div className="flex items-center gap-2">
-              <span className="whitespace-nowrap">
-                {formatDateTime(datetime)}
-              </span>
-              {late ? (
-                <Badge tone="error" title={t("submissions.table.lateRowTitle")}>
-                  {t("submissions.table.late")}
-                </Badge>
-              ) : null}
-            </div>
-            {rest.gradedAt && rest.gradedAt !== datetime ? (
-              <span
-                className="whitespace-nowrap text-xs text-base-content/70"
-                title={t("submissions.table.gradedAtTitle")}
-              >
-                {t("submissions.table.gradedAt", {
-                  date: formatDateTime(rest.gradedAt),
-                })}
-              </span>
-            ) : null}
-            {rest.liveLatestAt ? (
-              <span
-                className="whitespace-nowrap text-xs text-info"
-                title={t("submissions.table.liveLatestTitle")}
-              >
-                {t("submissions.table.liveLatest", {
-                  date: formatDateTime(rest.liveLatestAt),
-                })}
-              </span>
-            ) : null}
-          </div>
+          <LastSubmittedCell
+            datetime={datetime}
+            late={late}
+            gradedAt={rest.gradedAt}
+            liveLatestAt={rest.liveLatestAt}
+          />
         </td>
         <td>
           <div className="flex items-center gap-1">

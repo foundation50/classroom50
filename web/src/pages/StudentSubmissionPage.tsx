@@ -2,18 +2,18 @@ import { Link, useParams } from "@tanstack/react-router"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import {
-  ExternalLink,
   UserRound,
   UsersRound,
   CalendarClock,
-  GitCommitHorizontal,
   Tag,
+  GitCommitHorizontal,
 } from "lucide-react"
 
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
+import Avatar from "@/components/avatar"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetSubmissionReleases from "@/hooks/useGetSubmissionReleases"
@@ -34,58 +34,44 @@ import {
 import type { Assignment, SubmissionMode } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-import { Alert, Badge, Button, Card, Markdown } from "@/components/ui"
+import { Alert, Badge, Markdown } from "@/components/ui"
 import {
   SubmissionDetailsModal,
   type SubmissionDetailItem,
 } from "@/components/submissions/SubmissionDetailsModal"
 import {
+  buildSubmissionDetailItems,
   submissionEmptyState,
-  tagDetailItems,
+  type PushSubmission,
 } from "@/components/submissions/submissionDetailItems"
+import {
+  LastSubmittedCell,
+  SubmissionCountCell,
+} from "@/components/submissions/SubmissionRowCells"
+import { StudentRowActions } from "@/pages/submissions/StudentRowActions"
 import SubmitGuidance from "@/components/SubmitGuidance"
 
-// Strips the `submit/` tag prefix for a friendlier label, falling back to the
-// release name when present.
-const releaseLabel = (release: GitHubRelease): string =>
-  release.name?.trim() || release.tag_name.replace(/^submit\//, "")
+// A submit/<UTC-ts>-<short-sha> release tag → its trailing short sha, so a
+// push submission can link the graded release published at its commit. Returns
+// undefined for a milestone or malformed tag (no reliable per-commit release).
+const releaseShaFromTag = (tagName: string): string | undefined => {
+  if (!tagName.startsWith("submit/")) return undefined
+  const sha = tagName.slice(tagName.lastIndexOf("-") + 1)
+  return sha || undefined
+}
 
-const ReleaseRow = ({ release }: { release: GitHubRelease }) => {
-  const { t } = useTranslation()
-  // html_url is from the GitHub API (always http(s)); guard anyway to keep the
-  // no-unsafe-href rule uniform across views.
-  const href = safeHttpUrl(release.html_url)
-  const when = release.published_at ?? release.created_at
-
-  return (
-    <li className="flex items-center justify-between gap-4 px-4 py-3">
-      <div className="min-w-0">
-        <p className="truncate font-medium">{releaseLabel(release)}</p>
-        <p className="text-sm text-base-content/70">
-          {t("submissions.student.submittedAt", {
-            date: formatDueDateTime(when),
-          })}
-        </p>
-      </div>
-      {href ? (
-        <Button
-          as="a"
-          variant="outline"
-          size="sm"
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          className="shrink-0"
-        >
-          {t("submissions.student.viewGrade")}
-        </Button>
-      ) : (
-        <span className="text-sm text-base-content/70">
-          {t("submissions.student.unavailable")}
-        </span>
-      )}
-    </li>
-  )
+// short sha → graded release URL, built from the student's submit/* releases.
+// Push submissions match their commit into this to fold in a "View grade" link.
+const releaseHrefByShaFrom = (
+  releases: GitHubRelease[] | undefined,
+): Map<string, string> => {
+  const map = new Map<string, string>()
+  for (const release of releases ?? []) {
+    const sha = releaseShaFromTag(release.tag_name)
+    const href = safeHttpUrl(release.html_url)
+    if (sha && href) map.set(sha, href)
+  }
+  return map
 }
 
 const AssignmentMeta = ({
@@ -149,9 +135,6 @@ const SubmissionBody = ({
   // Capability-URL secret for a protected classroom; threads into the accept
   // link. Undefined for unprotected.
   secret?: string
-  // The assignment's submission definition. Tag mode surfaces the student's
-  // tagged submissions with jump-to-tag links and tag-workflow guidance;
-  // absent/every-push keeps the release-centric view.
   submissionMode?: SubmissionMode
   submissionTags?: string[]
 }) => {
@@ -166,7 +149,7 @@ const SubmissionBody = ({
   } = useGetSubmissionReleases(org, classroom, assignment, user?.login)
   // Type-aware submission reads, each gated to its mode so the other mode costs
   // no request: tag mode reads the repo's tags; every-push mode reads the
-  // default-branch commits (minus the baseline). Both feed the details modal.
+  // default-branch commits (minus the baseline).
   const { data: taggedSubmissions, isError: taggedIsError } =
     useGetMyTaggedSubmissions(
       isTagMode ? org : undefined,
@@ -195,36 +178,50 @@ const SubmissionBody = ({
 
   const repoName = studentRepoName(classroom, assignment, user?.login ?? "")
 
-  // Type-aware submission list for the details modal: tags (tag mode) or
-  // default-branch commits (every-push). Built here so both accepted states
-  // share one source.
-  const detailItems: SubmissionDetailItem[] = isTagMode
-    ? tagDetailItems(taggedSubmissions ?? [], org, repoName, t)
-    : (pushSubmissions ?? []).map((commit, i) => ({
-        key: `${commit.sha}-${i}`,
-        kind: "commit" as const,
-        label: t("submissions.details.pushEntry", {
-          number: (pushSubmissions?.length ?? 0) - i,
-        }),
-        sublabel: commit.commit.author?.date
-          ? formatDueDateTime(commit.commit.author.date)
-          : undefined,
-        href: safeHttpUrl(commit.html_url),
-      }))
-  const submissionCount = detailItems.length
   const [detailsOpen, setDetailsOpen] = useState(false)
 
+  // Fold graded releases into the submission list: push submissions link the
+  // release published at their commit; the newest release is offered as a
+  // direct "autograder details" shortcut in the actions cell.
+  const releaseHrefBySha = releaseHrefByShaFrom(releases)
+  const latestReleaseHref = safeHttpUrl(releases?.[0]?.html_url)
+
+  const commitSubmissions: PushSubmission[] = (pushSubmissions ?? []).map(
+    (commit, i) => ({
+      key: `${commit.sha}-${i}`,
+      commitHref: commit.html_url,
+      datetime: commit.commit.author?.date,
+      releaseHref: releaseHrefBySha.get(commit.sha.slice(0, 7)),
+    }),
+  )
+
+  const detailItems: SubmissionDetailItem[] = buildSubmissionDetailItems(
+    { tags: taggedSubmissions ?? [], commits: commitSubmissions },
+    submissionMode,
+    org,
+    repoName,
+    t,
+  )
+  const submissionCount = detailItems.length
+
+  // The newest submission's time for the "last submitted" cell: the newest
+  // push's commit date in every-push mode, else the newest graded release's
+  // publish time (a tag submission's time isn't carried by detection). Absent
+  // until the first submission lands.
+  const latestSubmittedAt = isTagMode
+    ? (releases?.[0]?.published_at ?? releases?.[0]?.created_at ?? undefined)
+    : pushSubmissions?.[0]?.commit.author?.date
+
   // The active-mode submission-list read (tags in tag mode, pushes in
-  // every-push). A transient/permission failure here must not render a
-  // misleading "0 submissions" for an accepted student, so it joins the error
-  // branch below rather than falling through to an empty count.
+  // every-push). A transient/permission failure must not render a misleading
+  // "0 submissions" for an accepted student, so it joins the error branch.
   const submissionListError = isTagMode ? taggedIsError : pushIsError
 
   if (isLoading || repoLoading) {
     return (
       <div className="mt-8 space-y-4">
         <div className="skeleton skeleton-shimmer h-24 w-full rounded-box" />
-        <div className="skeleton skeleton-shimmer h-64 w-full rounded-box" />
+        <div className="skeleton skeleton-shimmer h-40 w-full rounded-box" />
       </div>
     )
   }
@@ -267,30 +264,88 @@ const SubmissionBody = ({
     )
   }
 
-  // Type-aware count chip + shared details modal, reused across the accepted
-  // states. The chip always opens the modal (even for 0/1), which owns the
-  // per-type list and the "no submissions" repository link.
-  const summary = (
-    <>
-      <button
-        type="button"
-        className="badge badge-lg gap-1 hover:badge-neutral cursor-pointer"
-        title={t("submissions.details.viewSubmissions")}
-        onClick={() => setDetailsOpen(true)}
-      >
-        {isTagMode ? (
-          <Tag aria-hidden="true" className="size-3.5" />
-        ) : (
-          <GitCommitHorizontal aria-hidden="true" className="size-3.5" />
-        )}
-        {t(submissionModeCountKey(submissionMode), { count: submissionCount })}
-      </button>
+  const repoHref = studentRepo.html_url
+
+  return (
+    <EnterDiv className="mt-6 space-y-4">
+      {/* One-row, teacher-style submissions table for the student's own repo.
+          The count chip opens the shared details modal (tags or pushes); the
+          student column set omits the teacher-only score and management
+          actions. */}
+      <div className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
+        <table className="table">
+          <caption className="sr-only">
+            {t("submissions.student.tableCaption")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("submissions.table.colStudent")}</th>
+              <th scope="col">{t("submissions.table.colSubmissions")}</th>
+              <th scope="col">{t("submissions.table.colLastSubmitted")}</th>
+              <th scope="col">{t("submissions.table.colActions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <Avatar
+                  name={user?.name || user?.login || ""}
+                  initials=""
+                  github={user?.login || ""}
+                  subtitle={
+                    <a
+                      className="link link-hover font-mono text-xs"
+                      href={repoHref}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {repoName}
+                    </a>
+                  }
+                />
+              </td>
+              <td>
+                <SubmissionCountCell
+                  mode={submissionMode}
+                  count={submissionCount}
+                  onOpen={() => setDetailsOpen(true)}
+                />
+              </td>
+              <td>
+                {latestSubmittedAt ? (
+                  <LastSubmittedCell datetime={latestSubmittedAt} />
+                ) : (
+                  <span className="text-base-content/50">
+                    {t("submissions.student.notSubmittedYet")}
+                  </span>
+                )}
+              </td>
+              <td>
+                <StudentRowActions
+                  repo={repoName}
+                  repoHref={repoHref}
+                  hasRepo
+                  latestReleaseHref={latestReleaseHref}
+                  onViewSubmissions={() => setDetailsOpen(true)}
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <SubmitGuidance
+        repoHtmlUrl={repoHref}
+        submissionMode={submissionMode}
+        submissionTags={submissionTags}
+      />
+
       {detailsOpen ? (
         <SubmissionDetailsModal
           onClose={() => setDetailsOpen(false)}
           title={t("submissions.student.detailsTitle")}
           repo={repoName}
-          repoHref={studentRepo.html_url}
+          repoHref={repoHref}
           countLabel={t(submissionModeCountKey(submissionMode), {
             count: submissionCount,
           })}
@@ -299,79 +354,12 @@ const SubmissionBody = ({
             submissionMode,
             org,
             repoName,
-            safeHttpUrl(studentRepo.html_url),
+            safeHttpUrl(repoHref),
             t,
           )}
         />
       ) : null}
-    </>
-  )
-
-  if (!releases || releases.length === 0) {
-    return (
-      <EnterDiv className="mt-6 space-y-4">
-        <Alert tone="info">
-          <div>{t("submissions.student.noGradedYet")}</div>
-        </Alert>
-        {/* Upload submission intentionally hidden — it does a destructive
-            replace-all of the student's repo and has no per-assignment or
-            classroom opt-out yet. See
-            https://github.com/foundation50/classroom50/issues/428 */}
-        <div className="flex flex-wrap items-center gap-2">
-          {summary}
-          <Button
-            as="a"
-            variant="outline"
-            size="sm"
-            href={studentRepo.html_url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <ExternalLink aria-hidden="true" className="size-4" />
-            {t("submissions.student.openMyRepo")}
-          </Button>
-        </div>
-        <SubmitGuidance
-          repoHtmlUrl={studentRepo.html_url}
-          submissionMode={submissionMode}
-          submissionTags={submissionTags}
-        />
-      </EnterDiv>
-    )
-  }
-
-  return (
-    <div className="mt-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-base-content/70">
-          {t("submissions.student.releasesIntro")}
-        </p>
-        {/* Upload submission intentionally hidden — see issue #428
-            (https://github.com/foundation50/classroom50/issues/428). */}
-        <div className="flex flex-wrap items-center gap-2">
-          {summary}
-          <Button
-            as="a"
-            variant="outline"
-            size="sm"
-            href={studentRepo.html_url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <ExternalLink aria-hidden="true" className="size-4" />
-            {t("submissions.student.openMyRepo")}
-          </Button>
-        </div>
-      </div>
-
-      <Card as={EnterDiv} bordered={false} className="border border-base-200">
-        <ul className="divide-y divide-base-200">
-          {releases.map((release) => (
-            <ReleaseRow key={release.id} release={release} />
-          ))}
-        </ul>
-      </Card>
-    </div>
+    </EnterDiv>
   )
 }
 
