@@ -6,6 +6,7 @@ import {
   getConfigRepoBranch,
 } from "@/github-core/configRepoReads"
 import { prefixCommit } from "@/util/commit"
+import { nextAvailableSlug } from "@/util/slug"
 import { validateReleaseAssets } from "@/util/releaseAssets"
 import {
   createGitCommit,
@@ -36,33 +37,10 @@ export type CopyAssignmentInput = {
   canGrantTemplateAccess?: boolean
 }
 
-// First slug not in `taken`, suffixing `-2`, `-3`, … A base ending in `-<n>`
-// continues from n+1 ("hw1-2" -> "hw1-3", not "hw1-2-2"). Case-insensitive, to
-// match GitHub repo naming and the server-side check. Pure; prefills the reuse
-// modals — the write path re-checks authoritatively.
-export function nextAvailableSlug(
-  base: string,
-  taken: Iterable<string>,
-): string {
-  const takenSet = new Set(Array.from(taken, (s) => s.trim().toLowerCase()))
-  const isFree = (candidate: string) => !takenSet.has(candidate.toLowerCase())
-
-  if (isFree(base)) return base
-
-  // Split off a trailing "-<n>" so we increment it rather than append again.
-  const match = /^(.*?)-(\d+)$/.exec(base)
-  const stem = match ? match[1] : base
-  let n = match ? Number(match[2]) + 1 : 2
-
-  // Bounded defensively; a classroom never has thousands of same-stem slugs.
-  for (let i = 0; i < 10000; i++) {
-    const candidate = `${stem}-${n}`
-    if (isFree(candidate)) return candidate
-    n++
-  }
-  // Unreachable in practice, but never silently return a taken slug.
-  return `${stem}-${Date.now()}`
-}
+// First slug not in `taken`; the shared generator lives in @/util/slug so the
+// create form and the reuse modals share one implementation. Re-exported for
+// the existing @/domain/assignments barrel and reuse-flow call sites.
+export { nextAvailableSlug }
 
 // Build the target classroom's record, overriding slug/name. Pure: deep-copies
 // (no shared mutable structure) and drops undefined keys to stay omitempty-clean
