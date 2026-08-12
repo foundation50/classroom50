@@ -3,7 +3,6 @@ import { Alert, FormField, Input, Select } from "@/components/ui"
 import { GRADING_MAX_POINTS_MIN } from "@/types/classroom"
 import type { AssignmentForm } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
-import type { SectionStatus } from "./sectionStatus"
 import { SectionCard } from "./SectionCard"
 import { SubmissionsSubsection } from "./SubmissionsSubsection"
 
@@ -20,18 +19,18 @@ import { SubmissionsSubsection } from "./SubmissionsSubsection"
 export function SubmissionGradingSection({
   form,
   edit,
-  status,
+  onReset,
 }: {
   form: AssignmentForm
   edit: boolean
-  status: SectionStatus
+  onReset?: () => void
 }) {
   const { t } = useTranslation()
 
   return (
     <SectionCard
       title={t("assignments.form.submissionSection")}
-      status={status}
+      onReset={onReset}
       description={t("assignments.form.submissionSectionHelp")}
     >
       <div className="flex flex-col gap-4">

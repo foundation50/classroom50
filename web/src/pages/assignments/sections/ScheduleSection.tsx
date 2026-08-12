@@ -2,7 +2,6 @@ import { useTranslation } from "react-i18next"
 import { Input } from "@/components/ui"
 import { ToggleRow } from "../AdvancedRuntimeFields"
 import type { AssignmentForm } from "../assignmentFormModel"
-import type { SectionStatus } from "./sectionStatus"
 import { SectionCard } from "./SectionCard"
 
 // Schedule (IA overhaul U8): the opt-in release-date and due-date pickers. The
@@ -10,14 +9,14 @@ import { SectionCard } from "./SectionCard"
 // the section split.
 export function ScheduleSection({
   form,
-  status,
+  onReset,
   dueDateEnabled,
   setDueDateEnabled,
   availableFromEnabled,
   setAvailableFromEnabled,
 }: {
   form: AssignmentForm
-  status: SectionStatus
+  onReset?: () => void
   dueDateEnabled: boolean
   setDueDateEnabled: (enabled: boolean) => void
   availableFromEnabled: boolean
@@ -31,7 +30,10 @@ export function ScheduleSection({
     .find((part) => part.type === "timeZoneName")?.value
 
   return (
-    <SectionCard title={t("assignments.form.scheduleSection")} status={status}>
+    <SectionCard
+      title={t("assignments.form.scheduleSection")}
+      onReset={onReset}
+    >
       <div className="flex flex-col gap-4">
         <form.Field name="available_from_date">
           {(field) => (

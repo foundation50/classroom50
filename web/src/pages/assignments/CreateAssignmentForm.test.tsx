@@ -183,6 +183,27 @@ describe("assignment slug field", () => {
     expect(slugInput(container).value).toBe("loops-assignment")
   })
 
+  it("create: auto-fills a unique slug when the name's slug is taken", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm(
+      <CreateAssignmentForm takenSlugs={["loops"]} onSubmit={() => {}} />,
+    )
+    await user.type(nameInput(container), "Loops")
+    // The plain slug "loops" collides, so the auto-fill suffixes it.
+    expect(slugInput(container).value).toBe("loops-2")
+  })
+
+  it("create: blurring an emptied slug restores a unique name-derived default", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm(
+      <CreateAssignmentForm takenSlugs={["loops"]} onSubmit={() => {}} />,
+    )
+    await user.type(nameInput(container), "Loops")
+    await user.clear(slugInput(container))
+    await user.tab()
+    expect(slugInput(container).value).toBe("loops-2")
+  })
+
   it("create: editing the slug stops auto-fill from the name", async () => {
     const user = userEvent.setup()
     const { container } = renderForm(
@@ -421,6 +442,65 @@ describe("edit form re-disables Save after a successful save", () => {
 
     // A rejected write must not re-baseline, so Save stays enabled.
     await vi.waitFor(() => expect(saveButton().disabled).toBe(false))
+  })
+
+  it("Discard changes reverts edits and hides once pristine", async () => {
+    const user = userEvent.setup()
+    renderForm(vi.fn())
+
+    const discardButton = () =>
+      screen.queryByRole("button", {
+        name: "assignments.form.discardChanges",
+      })
+    const name = screen.getByRole("textbox", {
+      name: "assignments.form.name",
+    }) as HTMLInputElement
+
+    // Pristine: no Discard affordance.
+    expect(discardButton()).toBeNull()
+
+    await user.type(name, " updated")
+    expect(discardButton()).not.toBeNull()
+
+    await user.click(discardButton()!)
+    // Reverts to the stored name and the affordance disappears again.
+    expect(name.value).toBe(baseAssignment.name)
+    expect(discardButton()).toBeNull()
+    expect(saveButton().disabled).toBe(true)
+  })
+
+  it("Discard changes re-syncs the schedule pickers with the restored dates", async () => {
+    const user = userEvent.setup()
+    const withDue: Assignment = {
+      ...baseAssignment,
+      due: "2026-09-01T23:59:00Z",
+    }
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          edit
+          defaultValues={assignmentToFormValues(withDue)}
+          onSubmit={vi.fn()}
+        />
+      </QueryClientProvider>,
+    )
+    const dueToggle = () =>
+      container.querySelector<HTMLInputElement>("#due_date-enabled")!
+    // Stored due date -> picker starts shown.
+    expect(dueToggle().checked).toBe(true)
+
+    // Turn the picker off (clears due_date), making the form dirty.
+    await user.click(dueToggle())
+    expect(dueToggle().checked).toBe(false)
+
+    // Discard restores the stored due date AND re-shows its picker.
+    await user.click(
+      screen.getByRole("button", {
+        name: "assignments.form.discardChanges",
+      }),
+    )
+    expect(dueToggle().checked).toBe(true)
+    expect(screen.getByLabelText("assignments.form.dueDate")).not.toBeNull()
   })
 })
 // Built-in runtime options (language versions + apt) are disabled when the
@@ -703,12 +783,46 @@ describe("assignment form section IA", () => {
     ).not.toBeNull()
   })
 
-  it("shows a per-section status badge (default on a fresh create form)", () => {
+  it("shows no per-section Reset control on a fresh create form", () => {
     renderForm({})
-    // Details is untouched on a fresh form -> "default" badge present.
+    // Nothing is configured yet, so no section offers a reset.
     expect(
-      screen.getAllByText("assignments.form.sectionStatus.default").length,
-    ).toBeGreaterThan(0)
+      screen.queryAllByRole("button", {
+        name: "assignments.form.resetSection",
+      }).length,
+    ).toBe(0)
+  })
+
+  it("create: a configured section shows a Reset that restores its defaults", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm({})
+    const nameInput = container.querySelector<HTMLInputElement>("#name")!
+    await user.type(nameInput, "Homework 1")
+    // Details is now configured -> a Reset control appears.
+    const reset = screen.getAllByRole("button", {
+      name: "assignments.form.resetSection",
+    })
+    expect(reset.length).toBeGreaterThan(0)
+    await user.click(reset[0])
+    // The name is back to its default and the reset control is gone again.
+    expect(nameInput.value).toBe("")
+    expect(
+      screen.queryAllByRole("button", {
+        name: "assignments.form.resetSection",
+      }).length,
+    ).toBe(0)
+  })
+
+  it("edit: never renders a per-section Reset control", () => {
+    renderForm({
+      edit: true,
+      defaultValues: assignmentToFormValues(baseAssignment),
+    })
+    expect(
+      screen.queryAllByRole("button", {
+        name: "assignments.form.resetSection",
+      }).length,
+    ).toBe(0)
   })
 
   it("shows Add-a-README for the no-template source and an enabled include-all-branches toggle for a template", () => {
@@ -732,5 +846,78 @@ describe("assignment form section IA", () => {
     )
     expect(branches).not.toBeNull()
     expect(branches?.disabled).toBe(false)
+  })
+})
+
+describe("validation error highlighting and scroll-to-first-error", () => {
+  const renderForm = (ui: ReactElement) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        {ui}
+      </QueryClientProvider>,
+    )
+
+  it("submitting with an empty required name marks the field invalid", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    const { container } = renderForm(
+      <CreateAssignmentForm onSubmit={onSubmit} />,
+    )
+    // Name is required and empty on a fresh create form.
+    await user.click(
+      screen.getByRole("button", { name: "assignments.form.createButton" }),
+    )
+    expect(onSubmit).not.toHaveBeenCalled()
+    // The role="alert" message renders once validation runs.
+    expect(
+      await screen.findByText("assignments.form.validation.nameRequired"),
+    ).not.toBeNull()
+    const nameInput = container.querySelector<HTMLInputElement>("#name")!
+    expect(nameInput.getAttribute("aria-invalid")).toBe("true")
+  })
+
+  it("scrolls the first invalid field into view on a failed submit", async () => {
+    const user = userEvent.setup()
+    const scrollIntoView = vi.fn()
+    const focus = vi.fn()
+    // happy-dom doesn't implement scrollIntoView; stub it on the prototype.
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(
+      scrollIntoView,
+    )
+    vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(focus)
+
+    renderForm(<CreateAssignmentForm onSubmit={vi.fn()} />)
+    await user.click(
+      screen.getByRole("button", { name: "assignments.form.createButton" }),
+    )
+    await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+    expect(focus).toHaveBeenCalled()
+
+    vi.restoreAllMocks()
+  })
+
+  it("does not scroll when the form is valid", async () => {
+    const user = userEvent.setup()
+    const scrollIntoView = vi.fn()
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(
+      scrollIntoView,
+    )
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const { container } = renderForm(
+      <CreateAssignmentForm
+        takenSlugs={[]}
+        defaultValues={{ name: "Homework 1", slug: "homework-1" }}
+        onSubmit={onSubmit}
+      />,
+    )
+    // Sanity: no validation alert on a filled valid form.
+    expect(container.querySelector('[aria-invalid="true"]')).toBeNull()
+    await user.click(
+      screen.getByRole("button", { name: "assignments.form.createButton" }),
+    )
+    await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(scrollIntoView).not.toHaveBeenCalled()
+
+    vi.restoreAllMocks()
   })
 })

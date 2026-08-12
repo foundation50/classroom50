@@ -6,7 +6,12 @@ import { RepositorySetupSection } from "./sections/RepositorySetupSection"
 import { AutogradingSection } from "./sections/AutogradingSection"
 import { SubmissionGradingSection } from "./sections/SubmissionGradingSection"
 import { ScheduleSection } from "./sections/ScheduleSection"
-import { deriveSectionStatus } from "./sections/sectionStatus"
+import {
+  SECTION_FIELDS,
+  sectionIsConfigured,
+  errorKeyMatchesField,
+  type SectionId,
+} from "./sections/sectionFields"
 import {
   useAssignmentForm,
   validateAssignmentForm,
@@ -91,55 +96,99 @@ const CreateAssignmentForm = ({
     Boolean(form.state.values.available_from_date),
   )
 
+  // Restore one section's fields to their create defaults. Because
+  // deriveFormShape is a pure view over values, resetting the owned fields also
+  // restores that section's derived visibility (e.g. Repository's template
+  // fields hide again). Offered on create only; edit mode uses Discard changes.
+  const resetSection = (section: SectionId) => {
+    const defaults = form.options.defaultValues as CreateAssignmentFormValues
+    for (const field of SECTION_FIELDS[section]) {
+      form.setFieldValue(field, defaults[field])
+    }
+    if (section === "details") {
+      // Re-arm the name->slug auto-fill; the slug is back at its default.
+      setSlugTouched(false)
+    }
+    if (section === "schedule") {
+      // The date pickers are opt-in; a reset clears the dates, so collapse the
+      // pickers to match (they seed from a present value otherwise).
+      setDueDateEnabled(false)
+      setAvailableFromEnabled(false)
+    }
+  }
+
+  // Edit-mode discard: revert all unsaved edits to the stored assignment. The
+  // schedule pickers' shown/hidden state lives in local state (seeded on mount),
+  // so re-sync it from the restored values or a discard would leave a stored
+  // date hidden behind a collapsed, out-of-sync picker.
+  const discardChanges = () => {
+    form.reset()
+    const restored = form.options.defaultValues as CreateAssignmentFormValues
+    setDueDateEnabled(Boolean(restored.due_date))
+    setAvailableFromEnabled(Boolean(restored.available_from_date))
+  }
+
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
+        // Validate up front so we can point the teacher at the first problem
+        // regardless of how (or whether) the form library propagates the
+        // submit-validator errors onto individual field DOM nodes.
+        const errors = validateAssignmentForm(form.state.values, t, {
+          takenSlugs,
+          edit,
+        })
         // handleSubmit re-throws an onSubmit rejection (an edit-mode mutateAsync
         // failure); the caller's onError banner already surfaces it, so swallow
         // it here to avoid an unhandled rejection.
         void form.handleSubmit().catch(() => {})
+        if (Object.keys(errors).length === 0) return
+        // Error keys may be indexed (e.g. "tests[0].name"), so match the owning
+        // field by prefix — in section render order, first errored field wins.
+        const orderedFields = (
+          Object.keys(SECTION_FIELDS) as SectionId[]
+        ).flatMap((section) => SECTION_FIELDS[section])
+        const firstErroredField = orderedFields.find((field) =>
+          Object.keys(errors).some((key) => errorKeyMatchesField(key, field)),
+        )
+        if (!firstErroredField) return
+        const target = document.getElementById(firstErroredField)
+        if (!target) return
+        target.scrollIntoView({ behavior: "smooth", block: "center" })
+        target.focus({ preventScroll: true })
       }}
     >
       {/* readOnly disables every descendant control. */}
       <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
-        {/* Per-section status (R2): derived from the live form values against
-            the baseline defaults and the same validator the save path uses, so
-            each section header reflects error / configured / default. */}
-        <form.Subscribe
-          selector={(state) => [state.values, state.errorMap.onSubmit] as const}
-        >
-          {([values]) => {
+        {/* Per-section Reset (create only): shown when a section differs from
+            its create defaults, restoring just that section in one click. Edit
+            mode offers a single Discard changes affordance instead. */}
+        <form.Subscribe selector={(state) => state.values}>
+          {(values) => {
             const defaults = form.options
               .defaultValues as CreateAssignmentFormValues
-            const errors = validateAssignmentForm(values, t, {
-              takenSlugs,
-              edit,
-            })
+            // Only create mode offers per-section reset; in edit mode the
+            // baseline is the stored assignment and Discard changes reverts all.
+            const onReset = (section: SectionId) =>
+              !edit && sectionIsConfigured(section, values, defaults)
+                ? () => resetSection(section)
+                : undefined
             return (
               <>
                 <DetailsSection
                   form={form}
                   edit={edit}
-                  status={deriveSectionStatus(
-                    "details",
-                    values,
-                    defaults,
-                    errors,
-                  )}
+                  onReset={onReset("details")}
                   slugTouched={slugTouched}
                   setSlugTouched={setSlugTouched}
+                  takenSlugs={takenSlugs}
                 />
                 <RepositorySetupSection
                   form={form}
                   edit={edit}
-                  status={deriveSectionStatus(
-                    "repository",
-                    values,
-                    defaults,
-                    errors,
-                  )}
+                  onReset={onReset("repository")}
                   org={org}
                   classroom={classroom}
                   slug={slug}
@@ -147,32 +196,17 @@ const CreateAssignmentForm = ({
                 <SubmissionGradingSection
                   form={form}
                   edit={edit}
-                  status={deriveSectionStatus(
-                    "submission",
-                    values,
-                    defaults,
-                    errors,
-                  )}
+                  onReset={onReset("submission")}
                 />
                 <AutogradingSection
                   form={form}
                   edit={edit}
-                  status={deriveSectionStatus(
-                    "autograding",
-                    values,
-                    defaults,
-                    errors,
-                  )}
+                  onReset={onReset("autograding")}
                   org={org}
                 />
                 <ScheduleSection
                   form={form}
-                  status={deriveSectionStatus(
-                    "schedule",
-                    values,
-                    defaults,
-                    errors,
-                  )}
+                  onReset={onReset("schedule")}
                   dueDateEnabled={dueDateEnabled}
                   setDueDateEnabled={setDueDateEnabled}
                   availableFromEnabled={availableFromEnabled}
@@ -205,23 +239,37 @@ const CreateAssignmentForm = ({
             ]}
           >
             {([canSubmit, isSubmitting, isDefaultValue]) => (
-              <Button
-                variant="primary"
-                type="submit"
-                loading={isSubmitting || loading}
-                disabled={
-                  !canSubmit ||
-                  isSubmitting ||
-                  loading ||
-                  (edit && isDefaultValue)
-                }
-              >
-                {isSubmitting || loading
-                  ? null
-                  : edit
-                    ? t("assignments.form.saveChanges")
-                    : t("assignments.form.createButton")}
-              </Button>
+              <>
+                {/* Edit mode: revert all unsaved edits back to the stored
+                    assignment. Shown only while the form is dirty. */}
+                {edit && !isDefaultValue ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={discardChanges}
+                    disabled={isSubmitting || loading}
+                  >
+                    {t("assignments.form.discardChanges")}
+                  </Button>
+                ) : null}
+                <Button
+                  variant="primary"
+                  type="submit"
+                  loading={isSubmitting || loading}
+                  disabled={
+                    !canSubmit ||
+                    isSubmitting ||
+                    loading ||
+                    (edit && isDefaultValue)
+                  }
+                >
+                  {isSubmitting || loading
+                    ? null
+                    : edit
+                      ? t("assignments.form.saveChanges")
+                      : t("assignments.form.createButton")}
+                </Button>
+              </>
             )}
           </form.Subscribe>
         )}

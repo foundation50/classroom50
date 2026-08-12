@@ -1104,11 +1104,9 @@
       "submissionSection": "Submission and grading",
       "submissionSectionHelp": "Define what counts as a submission for this assignment — when the autograder runs and which tags a student can push to submit.",
       "scheduleSection": "Schedule",
-      "sectionStatus": {
-        "error": "Needs attention",
-        "configured": "Configured",
-        "default": "Default"
-      },
+      "reset": "Reset",
+      "resetSection": "Reset this section to its default settings",
+      "discardChanges": "Discard changes",
       "optional": "optional",
       "name": "Assignment name",
       "namePlaceholder": "e.g., Loops Assignment",

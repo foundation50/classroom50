@@ -10,7 +10,6 @@ import { TemplateField } from "../TemplateField"
 import { ToggleRow } from "../AdvancedRuntimeFields"
 import type { AssignmentForm, RepoSource } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
-import type { SectionStatus } from "./sectionStatus"
 import { SectionCard } from "./SectionCard"
 
 // GitHub's own reference for the repo role ladder (read/triage/write/maintain/
@@ -34,14 +33,14 @@ const REPO_ROLES_DOCS_URL =
 export function RepositorySetupSection({
   form,
   edit,
-  status,
+  onReset,
   org,
   classroom,
   slug,
 }: {
   form: AssignmentForm
   edit: boolean
-  status: SectionStatus
+  onReset?: () => void
   org?: string
   classroom?: string
   slug?: string
@@ -51,7 +50,7 @@ export function RepositorySetupSection({
   return (
     <SectionCard
       title={t("assignments.form.repositorySetupSection")}
-      status={status}
+      onReset={onReset}
     >
       <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2 sm:items-start">
         <div className="flex flex-col gap-4">
