@@ -7,6 +7,7 @@ import {
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import { repoTagsUrl } from "@/util/orgUrl"
 import { safeHttpUrl } from "@/util/url"
+import { formatSubmissionDateTime } from "@/util/formatDate"
 import type { SubmissionMode } from "@/types/classroom"
 import type { SubmissionDetailItem } from "@/components/submissions/SubmissionDetailsModal"
 
@@ -61,7 +62,9 @@ export function commitDetailItems(
     key: commit.key,
     kind: "commit",
     label: t("submissions.details.pushEntry", { number: commits.length - i }),
-    sublabel: commit.datetime ? formatDateTime(commit.datetime) : undefined,
+    sublabel: commit.datetime
+      ? formatSubmissionDateTime(commit.datetime)
+      : undefined,
     href: safeHttpUrl(commit.commitHref),
     releaseHref: safeHttpUrl(commit.releaseHref),
   }))
@@ -88,12 +91,6 @@ export function buildSubmissionDetailItems(
     ? tagDetailItems(tags, org, repo, t)
     : commitDetailItems(commits, t)
 }
-
-const formatDateTime = (datetime: string) =>
-  new Date(datetime).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  })
 
 // The details modal's no-submissions copy + repository link, keyed by mode:
 // tag mode points at the tags page (submissions arrive as tags), every-push at

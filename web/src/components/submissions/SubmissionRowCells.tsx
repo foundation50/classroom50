@@ -3,13 +3,24 @@ import { GitCommitHorizontal, Tag } from "lucide-react"
 
 import { Badge } from "@/components/ui"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
+import { formatSubmissionDateTime } from "@/util/formatDate"
 import type { SubmissionMode } from "@/types/classroom"
 
-const formatDateTime = (datetime: string) =>
-  new Date(datetime).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  })
+// The mode's submission icon: a tag for tag mode, a commit for every-push.
+// Shared by the count chip and the two mode badges (student page, teacher
+// heading) so the mode iconography stays consistent.
+export const SubmissionModeIcon = ({
+  mode,
+  className = "size-3.5",
+}: {
+  mode: SubmissionMode | undefined
+  className?: string
+}) =>
+  mode === "tag" ? (
+    <Tag aria-hidden="true" className={className} />
+  ) : (
+    <GitCommitHorizontal aria-hidden="true" className={className} />
+  )
 
 // The type-aware submission-count chip, shared by the teacher table and the
 // student page. Always a button so it consistently opens the details modal —
@@ -37,11 +48,7 @@ export const SubmissionCountCell = ({
         title={t("submissions.table.viewSubmissionsTitle")}
         onClick={onOpen}
       >
-        {mode === "tag" ? (
-          <Tag aria-hidden="true" className="size-3.5" />
-        ) : (
-          <GitCommitHorizontal aria-hidden="true" className="size-3.5" />
-        )}
+        <SubmissionModeIcon mode={mode} />
         {t(submissionModeCountKey(mode), { count })}
       </button>
       {staleCount ? (
@@ -75,7 +82,9 @@ export const LastSubmittedCell = ({
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex items-center gap-2">
-        <span className="whitespace-nowrap">{formatDateTime(datetime)}</span>
+        <span className="whitespace-nowrap">
+          {formatSubmissionDateTime(datetime)}
+        </span>
         {late ? (
           <Badge tone="error" title={t("submissions.table.lateRowTitle")}>
             {t("submissions.table.late")}
@@ -87,7 +96,9 @@ export const LastSubmittedCell = ({
           className="whitespace-nowrap text-xs text-base-content/70"
           title={t("submissions.table.gradedAtTitle")}
         >
-          {t("submissions.table.gradedAt", { date: formatDateTime(gradedAt) })}
+          {t("submissions.table.gradedAt", {
+            date: formatSubmissionDateTime(gradedAt),
+          })}
         </span>
       ) : null}
       {liveLatestAt ? (
@@ -96,7 +107,7 @@ export const LastSubmittedCell = ({
           title={t("submissions.table.liveLatestTitle")}
         >
           {t("submissions.table.liveLatest", {
-            date: formatDateTime(liveLatestAt),
+            date: formatSubmissionDateTime(liveLatestAt),
           })}
         </span>
       ) : null}

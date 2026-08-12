@@ -1,13 +1,7 @@
 import { Link, useParams } from "@tanstack/react-router"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import {
-  UserRound,
-  UsersRound,
-  CalendarClock,
-  Tag,
-  GitCommitHorizontal,
-} from "lucide-react"
+import { UserRound, UsersRound, CalendarClock } from "lucide-react"
 
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
@@ -26,7 +20,7 @@ import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { safeHttpUrl } from "@/util/url"
-import type { GitHubRelease } from "@/github-core/types"
+import type { GitHubCommit, GitHubRelease } from "@/github-core/types"
 import {
   submissionModeBadgeKey,
   submissionModeCountKey,
@@ -47,6 +41,7 @@ import {
 import {
   LastSubmittedCell,
   SubmissionCountCell,
+  SubmissionModeIcon,
 } from "@/components/submissions/SubmissionRowCells"
 import { StudentRowActions } from "@/pages/submissions/StudentRowActions"
 import SubmitGuidance from "@/components/SubmitGuidance"
@@ -72,6 +67,22 @@ const releaseHrefByShaFrom = (
     if (sha && href) map.set(sha, href)
   }
   return map
+}
+
+// Map the student's default-branch commits to push submissions, folding in a
+// per-commit "View grade" link where a graded release matches the commit sha.
+// Wraps the tag-parse + release-map so the component body stays declarative.
+const toPushSubmissions = (
+  commits: GitHubCommit[] | undefined,
+  releases: GitHubRelease[] | undefined,
+): PushSubmission[] => {
+  const releaseHrefBySha = releaseHrefByShaFrom(releases)
+  return (commits ?? []).map((commit, i) => ({
+    key: `${commit.sha}-${i}`,
+    commitHref: commit.html_url,
+    datetime: commit.commit.author?.date,
+    releaseHref: releaseHrefBySha.get(commit.sha.slice(0, 7)),
+  }))
 }
 
 const AssignmentMeta = ({
@@ -100,11 +111,7 @@ const AssignmentMeta = ({
         </Badge>
       ) : null}
       <Badge ghost className="gap-1">
-        {submissionMode === "tag" ? (
-          <Tag aria-hidden="true" className="size-3.5" />
-        ) : (
-          <GitCommitHorizontal aria-hidden="true" className="size-3.5" />
-        )}
+        <SubmissionModeIcon mode={submissionMode} />
         {t(submissionModeBadgeKey(submissionMode))}
       </Badge>
       <Badge
@@ -181,19 +188,11 @@ const SubmissionBody = ({
   const [detailsOpen, setDetailsOpen] = useState(false)
 
   // Fold graded releases into the submission list: push submissions link the
+  // Fold graded releases into the submission list: push submissions link the
   // release published at their commit; the newest release is offered as a
   // direct "autograder details" shortcut in the actions cell.
-  const releaseHrefBySha = releaseHrefByShaFrom(releases)
   const latestReleaseHref = safeHttpUrl(releases?.[0]?.html_url)
-
-  const commitSubmissions: PushSubmission[] = (pushSubmissions ?? []).map(
-    (commit, i) => ({
-      key: `${commit.sha}-${i}`,
-      commitHref: commit.html_url,
-      datetime: commit.commit.author?.date,
-      releaseHref: releaseHrefBySha.get(commit.sha.slice(0, 7)),
-    }),
-  )
+  const commitSubmissions = toPushSubmissions(pushSubmissions, releases)
 
   const detailItems: SubmissionDetailItem[] = buildSubmissionDetailItems(
     { tags: taggedSubmissions ?? [], commits: commitSubmissions },
@@ -227,12 +226,8 @@ const SubmissionBody = ({
   }
 
   if (isError || repoIsError || submissionListError) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : repoError instanceof Error
-          ? repoError.message
-          : ""
+    const firstError = [error, repoError].find((e) => e instanceof Error)
+    const message = firstError instanceof Error ? firstError.message : ""
     return (
       <Alert tone="error" className="mt-6">
         {t("submissions.student.loadError")}

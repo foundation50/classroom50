@@ -163,7 +163,7 @@ export function SubmissionDetailsModal({
                 )}
                 {item.releaseHref ? (
                   <a
-                    className="link link-hover inline-flex shrink-0 items-center gap-1"
+                    className="link link-hover inline-flex shrink-0 items-center gap-1 text-base-content/70 before:me-1 before:text-base-content/30 before:content-['·']"
                     href={item.releaseHref}
                     target="_blank"
                     rel="noreferrer"

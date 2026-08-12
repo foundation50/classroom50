@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import Papa from "papaparse"
-import { GitCommitHorizontal, Tag } from "lucide-react"
 
 import { useQueryClient } from "@tanstack/react-query"
 import { useParams, Navigate } from "@tanstack/react-router"
@@ -26,6 +25,7 @@ import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateM
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
 import { submissionModeBadgeKey } from "@/domain/assignments/submissionDetection"
+import { SubmissionModeIcon } from "@/components/submissions/SubmissionRowCells"
 import {
   assignmentSkipsGrading,
   isNoAutograderAssignment,
@@ -947,14 +947,7 @@ const SubmissionsPageContent = () => {
             )}
             {assignmentInfo && (
               <Badge ghost size="md" className="gap-1">
-                {(assignmentInfo.submission_mode ?? "every-push") === "tag" ? (
-                  <Tag aria-hidden="true" className="size-3.5" />
-                ) : (
-                  <GitCommitHorizontal
-                    aria-hidden="true"
-                    className="size-3.5"
-                  />
-                )}
+                <SubmissionModeIcon mode={assignmentInfo.submission_mode} />
                 {t(submissionModeBadgeKey(assignmentInfo.submission_mode))}
               </Badge>
             )}
