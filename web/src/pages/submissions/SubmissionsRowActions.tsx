@@ -272,8 +272,9 @@ export const RepoRowActions = ({
 //
 // Gating mirrors the old cluster: repo-only actions (Review, access, regrade,
 // download) disable only when no repo exists; submission-only links
-// (commit, details) dim until an attempt lands; `emptyRepo` assignments omit
-// the PR/access/details/regrade actions entirely.
+// (commit, details) dim until an attempt lands; assignments that skip built-in
+// grading (empty_repo OR no_autograder — this receives skipsGrading) omit the
+// PR/access/details/regrade actions entirely.
 export type SubmissionActionListProps = {
   mode: AssignmentMode
   org: string

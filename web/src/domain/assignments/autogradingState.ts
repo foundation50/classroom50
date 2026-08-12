@@ -37,6 +37,8 @@ export function assignmentSkipsGrading(assignment: Assignment): boolean {
 // on (empty repo / no built-in autograding / built-in autograding). Derived
 // from the wire fields so the form and every read surface agree; no_autograder
 // is the wire representation of the "none" state.
+// NOTE: distinct from github-core's `AutogradeWorkflowState` (enabled/paused/…),
+// which is the runtime workflow pause/resume state, not this form choice.
 export type AutogradingState = "empty" | "none" | "built-in"
 
 /**

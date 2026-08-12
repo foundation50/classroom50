@@ -3,7 +3,9 @@ import { deriveSectionStatus } from "./sectionStatus"
 import type { CreateAssignmentFormValues } from "../assignmentFormModel"
 
 // The create-form baseline defaults; deriveSectionStatus compares against these
-// to tell "configured" from "default". Mirrors useAssignmentForm's defaults.
+// to tell "configured" from "default". These MUST match useAssignmentForm's
+// create defaults (assignmentFormModel.ts): a fresh create form is an
+// uninitialized repo with no README, no built-in autograding, and grading off.
 const defaults: CreateAssignmentFormValues = {
   name: "",
   slug: "",
@@ -16,9 +18,9 @@ const defaults: CreateAssignmentFormValues = {
   feedback_pr: true,
   empty_repo: false,
   repo_source: "none",
-  add_readme: true,
+  add_readme: false,
   include_all_branches: false,
-  autograding_state: "built-in",
+  autograding_state: "none",
   runtime_env: "hosted",
   runs_on: "",
   container_image: "",
@@ -38,7 +40,7 @@ const defaults: CreateAssignmentFormValues = {
   student_permission: "",
   submission_mode: "every-push",
   submission_tags: "",
-  grading_choice: "auto",
+  grading_choice: "off",
   grading_max_points: 100,
   repo_feature_issues: "inherit",
   repo_feature_wiki: "inherit",

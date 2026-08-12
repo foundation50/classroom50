@@ -153,7 +153,7 @@ When submit finishes, it prints two URLs:
   assignment, only `gh student submit` (or a hand-pushed `submit/*` tag)
   grades; regular pushes save your work without grading it.
 - **Pull after teacher-side workflow updates.** If your teacher changes the
-  assignment's grading trigger, a small commit lands in your repo. Run
+  assignment's autograding trigger, a small commit lands in your repo. Run
   `git pull` before your next push, or git will report a conflict.
 - **History is preserved.** Submissions stack as commits; prior commits stay
   reachable for review.

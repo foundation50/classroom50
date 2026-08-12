@@ -27,7 +27,8 @@ export type DataFreshnessProps = {
   // Repos the live fan-out couldn't read (owner only); > 0 shows a warning so
   // an incomplete live status doesn't look authoritative.
   errorCount?: number
-  // empty_repo assignments never autograde; show that instead of freshness.
+  // The assignment skips built-in grading (empty_repo OR no_autograder — fed
+  // skipsGrading); show a note instead of freshness. noAutograder picks the note.
   emptyRepo?: boolean
   // no_autograder assignments also never autograde, but keep the Feedback PR —
   // pick the accurate note (only meaningful when emptyRepo is true).

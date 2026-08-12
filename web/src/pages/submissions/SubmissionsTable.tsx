@@ -248,8 +248,10 @@ const SubmissionsTable = ({
   filtered?: boolean
   // Clears the active search + filters (wired to the controls' clearAll).
   onClearFilters?: () => void
-  // empty_repo assignment: never autogrades, so score badges and the
-  // Feedback-PR/regrade actions are hidden (repos + accept state stay useful).
+  // The assignment skips built-in grading (empty_repo OR no_autograder): score
+  // badges and the regrade action are hidden. Fed skipsGrading by the page. Note
+  // no_autograder repos are templated and keep the Feedback PR — the wire flag
+  // this receives is skipsGrading, not empty_repo alone.
   emptyRepo?: boolean
   // The assignment's submission_mode, enabling the per-repo "Update
   // autograding trigger" action in the manage hub. Omitted (action hidden)

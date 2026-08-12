@@ -17,17 +17,20 @@ import { GitHubAPIError } from "../errors"
 export const AUTOGRADE_WORKFLOW_FILE = "autograde.yaml"
 
 // The teacher-facing autograding state, derived from the workflow's GitHub state.
+// NOTE: distinct from domain/assignments/autogradingState.ts's `AutogradingState`
+// ("empty" | "none" | "built-in"), which is the assignment-form repo-source
+// choice. This one is the runtime workflow pause/resume state.
 //  - enabled       → workflow active, grading runs (offer Pause)
 //  - paused        → teacher-disabled (disabled_manually) (offer Resume)
 //  - pausedByGitHub → disabled_fork/_inactivity: GitHub disabled it, not the
 //    teacher; Resume (enable) is still the correct remediation
 //  - notGradable   → no autograde workflow (empty_repo/no_autograder/custom, or
 //    repo not accepted yet) — a first-class non-error state, not a failure
-export type AutogradeState =
+export type AutogradeWorkflowState =
   "enabled" | "paused" | "pausedByGitHub" | "notGradable"
 
 // Map GitHub's workflow `state` enum onto the teacher-facing state.
-function toAutogradeState(githubState: string): AutogradeState {
+function toAutogradeState(githubState: string): AutogradeWorkflowState {
   switch (githubState) {
     case "active":
       return "enabled"
@@ -49,7 +52,7 @@ export async function getAutogradeState(params: {
   client: GitHubClient
   org: string
   repo: string
-}): Promise<AutogradeState> {
+}): Promise<AutogradeWorkflowState> {
   const { client, org, repo } = params
   try {
     const wf = await client.request<{ state?: string }>(
