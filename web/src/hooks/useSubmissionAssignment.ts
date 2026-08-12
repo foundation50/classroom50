@@ -1,11 +1,11 @@
-import { useMemo } from "react"
-
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import type { Assignment } from "@/types/classroom"
 
-// A stable empty list so consumers memoizing on `assignments` don't churn every
-// render while the underlying query is still `undefined`.
+// A stable empty list (not a fresh `[]`) so a caller memoizing on `assignments`
+// doesn't churn while the underlying query is still `undefined`. react-query
+// keeps a resolved `data` referentially stable, so this covers the load window
+// and no memo is needed (matches the useGetStudents idiom).
 const EMPTY_ASSIGNMENTS: Assignment[] = []
 
 // Where an assignment's metadata is read from. The rule (single-sourced here):
@@ -51,30 +51,20 @@ export function useSubmissionAssignment(
     assignmentSlug: assignment,
   })
 
-  // Stable list reference: fall back to the shared EMPTY_ASSIGNMENTS (not a
-  // fresh []) while the query is undefined, so a caller memoizing on
-  // `assignments` doesn't recompute every render during load.
-  const assignments = useMemo(
-    () =>
-      useConfig
-        ? (configQuery.data?.assignments ?? EMPTY_ASSIGNMENTS)
-        : (pagesQuery.data ?? EMPTY_ASSIGNMENTS),
-    [useConfig, configQuery.data, pagesQuery.data],
-  )
+  const active = useConfig ? configQuery : pagesQuery
+  const assignments = useConfig
+    ? (configQuery.data?.assignments ?? EMPTY_ASSIGNMENTS)
+    : (pagesQuery.data ?? EMPTY_ASSIGNMENTS)
 
-  if (useConfig) {
-    return {
-      assignment: assignments.find((a) => a.slug === assignment),
-      assignments,
-      isLoading: configQuery.isLoading,
-      isError: configQuery.isError,
-    }
-  }
   return {
-    assignment: pagesQuery.assignment,
+    // The config path finds by slug over its list; the pages path delegates the
+    // find to usePagesAssignments (via assignmentSlug).
+    assignment: useConfig
+      ? assignments.find((a) => a.slug === assignment)
+      : pagesQuery.assignment,
     assignments,
-    isLoading: pagesQuery.isLoading,
-    isError: pagesQuery.isError,
+    isLoading: active.isLoading,
+    isError: active.isError,
   }
 }
 
