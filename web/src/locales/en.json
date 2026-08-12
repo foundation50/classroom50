@@ -2301,6 +2301,7 @@
     },
     "details": {
       "viewRepository": "View repository",
+      "viewSubmissions": "View submissions",
       "viewTag": "View tag",
       "viewCommit": "View commit",
       "unavailable": "Unavailable",

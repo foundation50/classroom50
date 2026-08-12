@@ -167,19 +167,21 @@ const SubmissionBody = ({
   // Type-aware submission reads, each gated to its mode so the other mode costs
   // no request: tag mode reads the repo's tags; every-push mode reads the
   // default-branch commits (minus the baseline). Both feed the details modal.
-  const { data: taggedSubmissions } = useGetMyTaggedSubmissions(
-    isTagMode ? org : undefined,
-    isTagMode ? classroom : undefined,
-    isTagMode ? assignment : undefined,
-    isTagMode ? user?.login : undefined,
-    submissionTags,
-  )
-  const { data: pushSubmissions } = useGetMyPushSubmissions(
-    isTagMode ? undefined : org,
-    isTagMode ? undefined : classroom,
-    isTagMode ? undefined : assignment,
-    isTagMode ? undefined : user?.login,
-  )
+  const { data: taggedSubmissions, isError: taggedIsError } =
+    useGetMyTaggedSubmissions(
+      isTagMode ? org : undefined,
+      isTagMode ? classroom : undefined,
+      isTagMode ? assignment : undefined,
+      isTagMode ? user?.login : undefined,
+      submissionTags,
+    )
+  const { data: pushSubmissions, isError: pushIsError } =
+    useGetMyPushSubmissions(
+      isTagMode ? undefined : org,
+      isTagMode ? undefined : classroom,
+      isTagMode ? undefined : assignment,
+      isTagMode ? undefined : user?.login,
+    )
   // Distinguish "never accepted" (no repo) from "accepted but not yet graded".
   // getRepo returns null only on a true 404; a 403/5xx throws, so read the repo
   // query's error too — else a transient/permission failure falls through to
@@ -223,6 +225,12 @@ const SubmissionBody = ({
   const submissionCount = detailItems.length
   const [detailsOpen, setDetailsOpen] = useState(false)
 
+  // The active-mode submission-list read (tags in tag mode, pushes in
+  // every-push). A transient/permission failure here must not render a
+  // misleading "0 submissions" for an accepted student, so it joins the error
+  // branch below rather than falling through to an empty count.
+  const submissionListError = isTagMode ? taggedIsError : pushIsError
+
   if (isLoading || repoLoading) {
     return (
       <div className="mt-8 space-y-4">
@@ -232,7 +240,7 @@ const SubmissionBody = ({
     )
   }
 
-  if (isError || repoIsError) {
+  if (isError || repoIsError || submissionListError) {
     const message =
       error instanceof Error
         ? error.message
@@ -278,6 +286,7 @@ const SubmissionBody = ({
       <button
         type="button"
         className="badge badge-lg gap-1 hover:badge-neutral cursor-pointer"
+        title={t("submissions.details.viewSubmissions")}
         onClick={() => setDetailsOpen(true)}
       >
         {isTagMode ? (

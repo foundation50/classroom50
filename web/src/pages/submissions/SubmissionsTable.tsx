@@ -93,7 +93,6 @@ type SubmissionDetailsContext = {
   subtitle?: string
   repo: string
   repoHref: string
-  submissionCount: number
   items: SubmissionDetailItem[]
 }
 
@@ -334,7 +333,6 @@ const SubmissionsTable = ({
             ),
         repo,
         repoHref,
-        submissionCount,
         items: buildDetailItems(
           { usernames, score, datetime, submissionCount, late, ...rest },
           assignmentMode,
@@ -780,7 +778,7 @@ const SubmissionsTable = ({
           repo={detailsContext.repo}
           repoHref={detailsContext.repoHref}
           countLabel={t(submissionModeCountKey(assignmentMode), {
-            count: detailsContext.submissionCount,
+            count: detailsContext.items.length,
           })}
           items={detailsContext.items}
           emptyLabel={
