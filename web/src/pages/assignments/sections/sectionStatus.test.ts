@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { deriveSectionStatus } from "./sectionStatus"
+import { sectionIsConfigured } from "./sectionStatus"
 import type { CreateAssignmentFormValues } from "../assignmentFormModel"
 
-// The create-form baseline defaults; deriveSectionStatus compares against these
-// to tell "configured" from "default". These MUST match useAssignmentForm's
-// create defaults (assignmentFormModel.ts): a fresh create form is an
-// uninitialized repo with no README, no built-in autograding, and grading off.
+// The create-form baseline defaults; sectionIsConfigured compares against these
+// to decide whether a section differs from its defaults (so a Reset control
+// appears). These MUST match useAssignmentForm's create defaults
+// (assignmentFormModel.ts): a fresh create form is an uninitialized repo with
+// no README, no built-in autograding, and grading off.
 const defaults: CreateAssignmentFormValues = {
   name: "",
   slug: "",
@@ -51,74 +52,27 @@ const defaults: CreateAssignmentFormValues = {
   tests: [],
 }
 
-describe("deriveSectionStatus", () => {
-  it("reports 'default' for an untouched section", () => {
-    expect(deriveSectionStatus("details", defaults, defaults, {})).toBe(
-      "default",
-    )
-    expect(deriveSectionStatus("schedule", defaults, defaults, {})).toBe(
-      "default",
-    )
+describe("sectionIsConfigured", () => {
+  it("is false for an untouched section", () => {
+    expect(sectionIsConfigured("details", defaults, defaults)).toBe(false)
+    expect(sectionIsConfigured("schedule", defaults, defaults)).toBe(false)
   })
 
-  it("reports 'configured' once the section holds a non-default value", () => {
+  it("is true once the section holds a non-default value", () => {
     const values = { ...defaults, name: "Homework 1" }
-    expect(deriveSectionStatus("details", values, defaults, {})).toBe(
-      "configured",
-    )
+    expect(sectionIsConfigured("details", values, defaults)).toBe(true)
     // A field another section owns doesn't flip Details.
     const withDue = { ...defaults, due_date: "2026-09-01T23:59" }
-    expect(deriveSectionStatus("details", withDue, defaults, {})).toBe(
-      "default",
-    )
-    expect(deriveSectionStatus("schedule", withDue, defaults, {})).toBe(
-      "configured",
-    )
+    expect(sectionIsConfigured("details", withDue, defaults)).toBe(false)
+    expect(sectionIsConfigured("schedule", withDue, defaults)).toBe(true)
   })
 
   it("attributes the folded repo-feature choices to the repository section", () => {
     const wikiOff = { ...defaults, repo_feature_wiki: "off" as const }
-    expect(deriveSectionStatus("repository", wikiOff, defaults, {})).toBe(
-      "configured",
-    )
+    expect(sectionIsConfigured("repository", wikiOff, defaults)).toBe(true)
     // All features left at "inherit" (and no other repo field changed) reads
-    // default — the four repo_feature_* fields fold into this one badge.
-    expect(deriveSectionStatus("repository", defaults, defaults, {})).toBe(
-      "default",
-    )
-  })
-
-  it("reports 'error' when a validation error names one of the section's fields", () => {
-    expect(
-      deriveSectionStatus("details", defaults, defaults, {
-        name: "assignments.form.validation.nameRequired",
-      }),
-    ).toBe("error")
-    // The error belongs to Details, not Repository Setup.
-    expect(
-      deriveSectionStatus("repository", defaults, defaults, {
-        name: "assignments.form.validation.nameRequired",
-      }),
-    ).toBe("default")
-  })
-
-  it("routes an indexed test error to the autograding section", () => {
-    // validateAssignmentForm keys per-test errors as "tests[0].name" etc.; the
-    // status must attribute those to the section that owns "tests".
-    expect(
-      deriveSectionStatus("autograding", defaults, defaults, {
-        "tests[0].name": "bad",
-      }),
-    ).toBe("error")
-  })
-
-  it("error wins over configured", () => {
-    const values = { ...defaults, name: "Homework 1" }
-    expect(
-      deriveSectionStatus("details", values, defaults, {
-        name: "assignments.form.validation.nameRequired",
-      }),
-    ).toBe("error")
+    // unconfigured — the four repo_feature_* fields fold into this one section.
+    expect(sectionIsConfigured("repository", defaults, defaults)).toBe(false)
   })
 
   it("treats any declarative test as configured autograding", () => {
@@ -126,50 +80,22 @@ describe("deriveSectionStatus", () => {
       ...defaults,
       tests: [{ name: "t", run: "pytest", points: 1 } as never],
     }
-    expect(deriveSectionStatus("autograding", values, defaults, {})).toBe(
-      "configured",
-    )
+    expect(sectionIsConfigured("autograding", values, defaults)).toBe(true)
   })
 
   it("attributes the submission trigger + tags to the submission section", () => {
     const tagMode = { ...defaults, submission_mode: "tag" as const }
-    expect(deriveSectionStatus("submission", tagMode, defaults, {})).toBe(
-      "configured",
-    )
-    // Those fields no longer flip Autograding — they moved to their own section.
-    expect(deriveSectionStatus("autograding", tagMode, defaults, {})).toBe(
-      "default",
-    )
+    expect(sectionIsConfigured("submission", tagMode, defaults)).toBe(true)
+    // Those fields belong to submission, not autograding.
+    expect(sectionIsConfigured("autograding", tagMode, defaults)).toBe(false)
     const withTags = { ...defaults, submission_tags: "phase1" }
-    expect(deriveSectionStatus("submission", withTags, defaults, {})).toBe(
-      "configured",
-    )
+    expect(sectionIsConfigured("submission", withTags, defaults)).toBe(true)
   })
 
   it("attributes the grading choice + max points to the submission section", () => {
     const manual = { ...defaults, grading_choice: "manual" as const }
-    expect(deriveSectionStatus("submission", manual, defaults, {})).toBe(
-      "configured",
-    )
+    expect(sectionIsConfigured("submission", manual, defaults)).toBe(true)
     const maxChanged = { ...defaults, grading_max_points: 42 }
-    expect(deriveSectionStatus("submission", maxChanged, defaults, {})).toBe(
-      "configured",
-    )
-    // A grading validation error routes to the submission section.
-    expect(
-      deriveSectionStatus("submission", defaults, defaults, {
-        grading_max_points: "bad",
-      }),
-    ).toBe("error")
-  })
-
-  it("routes a submission_tags validation error to the submission section", () => {
-    const errors = { submission_tags: "bad" }
-    expect(deriveSectionStatus("submission", defaults, defaults, errors)).toBe(
-      "error",
-    )
-    expect(deriveSectionStatus("autograding", defaults, defaults, errors)).toBe(
-      "default",
-    )
+    expect(sectionIsConfigured("submission", maxChanged, defaults)).toBe(true)
   })
 })

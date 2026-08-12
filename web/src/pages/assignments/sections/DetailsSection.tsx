@@ -5,7 +5,6 @@ import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
 import { FieldLabel } from "../AdvancedRuntimeFields"
 import type { AssignmentForm } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
-import type { SectionStatus } from "./sectionStatus"
 import { SectionCard } from "./SectionCard"
 
 // Assignment Details (IA overhaul U4): the assignment's identity — name, slug,
@@ -15,14 +14,14 @@ import { SectionCard } from "./SectionCard"
 export function DetailsSection({
   form,
   edit,
-  status,
+  onReset,
   slugTouched,
   setSlugTouched,
   takenSlugs,
 }: {
   form: AssignmentForm
   edit: boolean
-  status: SectionStatus
+  onReset?: () => void
   slugTouched: boolean
   setSlugTouched: (touched: boolean) => void
   // Existing assignment slugs, so the create-mode auto-fill can pick a slug
@@ -32,7 +31,7 @@ export function DetailsSection({
   const { t } = useTranslation()
 
   return (
-    <SectionCard title={t("assignments.form.detailsSection")} status={status}>
+    <SectionCard title={t("assignments.form.detailsSection")} onReset={onReset}>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <form.Field name="name">
           {(field) => (

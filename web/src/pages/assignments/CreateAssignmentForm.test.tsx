@@ -443,6 +443,31 @@ describe("edit form re-disables Save after a successful save", () => {
     // A rejected write must not re-baseline, so Save stays enabled.
     await vi.waitFor(() => expect(saveButton().disabled).toBe(false))
   })
+
+  it("Discard changes reverts edits and hides once pristine", async () => {
+    const user = userEvent.setup()
+    renderForm(vi.fn())
+
+    const discardButton = () =>
+      screen.queryByRole("button", {
+        name: "assignments.form.discardChanges",
+      })
+    const name = screen.getByRole("textbox", {
+      name: "assignments.form.name",
+    }) as HTMLInputElement
+
+    // Pristine: no Discard affordance.
+    expect(discardButton()).toBeNull()
+
+    await user.type(name, " updated")
+    expect(discardButton()).not.toBeNull()
+
+    await user.click(discardButton()!)
+    // Reverts to the stored name and the affordance disappears again.
+    expect(name.value).toBe(baseAssignment.name)
+    expect(discardButton()).toBeNull()
+    expect(saveButton().disabled).toBe(true)
+  })
 })
 // Built-in runtime options (language versions + apt) are disabled when the
 // runner targets self-hosted: the grade job skips managed setup there
@@ -724,12 +749,46 @@ describe("assignment form section IA", () => {
     ).not.toBeNull()
   })
 
-  it("shows a per-section status badge (default on a fresh create form)", () => {
+  it("shows no per-section Reset control on a fresh create form", () => {
     renderForm({})
-    // Details is untouched on a fresh form -> "default" badge present.
+    // Nothing is configured yet, so no section offers a reset.
     expect(
-      screen.getAllByText("assignments.form.sectionStatus.default").length,
-    ).toBeGreaterThan(0)
+      screen.queryAllByRole("button", {
+        name: "assignments.form.resetSection",
+      }).length,
+    ).toBe(0)
+  })
+
+  it("create: a configured section shows a Reset that restores its defaults", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm({})
+    const nameInput = container.querySelector<HTMLInputElement>("#name")!
+    await user.type(nameInput, "Homework 1")
+    // Details is now configured -> a Reset control appears.
+    const reset = screen.getAllByRole("button", {
+      name: "assignments.form.resetSection",
+    })
+    expect(reset.length).toBeGreaterThan(0)
+    await user.click(reset[0])
+    // The name is back to its default and the reset control is gone again.
+    expect(nameInput.value).toBe("")
+    expect(
+      screen.queryAllByRole("button", {
+        name: "assignments.form.resetSection",
+      }).length,
+    ).toBe(0)
+  })
+
+  it("edit: never renders a per-section Reset control", () => {
+    renderForm({
+      edit: true,
+      defaultValues: assignmentToFormValues(baseAssignment),
+    })
+    expect(
+      screen.queryAllByRole("button", {
+        name: "assignments.form.resetSection",
+      }).length,
+    ).toBe(0)
   })
 
   it("shows Add-a-README for the no-template source and an enabled include-all-branches toggle for a template", () => {

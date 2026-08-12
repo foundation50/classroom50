@@ -5,7 +5,6 @@ import { AdvancedSection } from "../AdvancedSection"
 import AutogradingTestsPane from "../AutogradingTestsPane"
 import { AutogradingStateField } from "./AutogradingStateField"
 import { Alert } from "@/components/ui"
-import type { SectionStatus } from "./sectionStatus"
 import { SectionCard } from "./SectionCard"
 
 // Autograding: the built-in-autograder toggle plus the runtime/setup/allowed-
@@ -18,12 +17,12 @@ import { SectionCard } from "./SectionCard"
 // (showBuiltInConfig).
 export function AutogradingSection({
   form,
-  status,
+  onReset,
   org,
   edit = false,
 }: {
   form: AssignmentForm
-  status: SectionStatus
+  onReset?: () => void
   org?: string
   // On edit the built-in choice is locked (it maps to no_autograder/init_shim,
   // which the domain layer refuses to change after creation).
@@ -32,10 +31,7 @@ export function AutogradingSection({
   const { t } = useTranslation()
 
   return (
-    <SectionCard
-      title={t("assignments.form.autograding.label")}
-      status={status}
-    >
+    <SectionCard title={t("assignments.form.autograding.label")} onReset={onReset}>
       <form.Subscribe selector={(state) => deriveFormShape(state.values)}>
         {(shape) =>
           !shape.showAutogradingConfig ? (

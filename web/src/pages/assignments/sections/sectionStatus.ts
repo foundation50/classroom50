@@ -1,26 +1,22 @@
 import type { CreateAssignmentFormValues } from "../assignmentFormModel"
 
-// Per-section status (R2): a teacher scans the section headers to see progress
-// without reading each section's contents.
-//   - "error"      : a field the section owns has a validation error.
-//   - "configured" : no error, and the section holds a non-default value.
-//   - "default"    : no error and every owned field is still at its default.
-export type SectionStatus = "error" | "configured" | "default"
-
-// The sections, in render order. Each owns a disjoint slice of the form fields;
-// the status derivation keys off these lists so a field belongs to exactly one
-// section's badge. "submission" (the Submission and Grading section, whose
-// Submissions subsection is the single source of truth for what counts as a
-// submission) owns the submission definition + milestone tags and the grading
-// choice, right after Repository Setup.
+// The form's sections, in render order. Each owns a disjoint slice of the form
+// fields; the reset control keys off these lists so a field belongs to exactly
+// one section. "submission" (the Submission and Grading section) owns the
+// submission definition + milestone tags and the grading choice, right after
+// Repository Setup.
 export type SectionId =
-  "details" | "repository" | "submission" | "autograding" | "schedule"
+  | "details"
+  | "repository"
+  | "submission"
+  | "autograding"
+  | "schedule"
 
-// The fields each section owns, for both the error scan (which validation keys
-// map to this section) and the configured scan (which values to compare against
-// their default). Kept here as the single ownership map so a moved field
-// updates its badge in one place.
-const SECTION_FIELDS: Record<
+// The fields each section owns. Used to decide whether a section differs from
+// its create defaults (so a Reset control appears) and to restore just that
+// section's fields on reset. Kept here as the single ownership map so a moved
+// field updates its section in one place.
+export const SECTION_FIELDS: Record<
   SectionId,
   ReadonlyArray<keyof CreateAssignmentFormValues>
 > = {
@@ -67,21 +63,10 @@ const SECTION_FIELDS: Record<
   schedule: ["available_from_date", "due_date"],
 }
 
-// A validation error key belongs to a section when it names one of that
-// section's fields, or is an indexed sub-key of one (e.g. "tests[0].name"
-// belongs to autograding's "tests"). This mirrors validateAssignmentForm's
-// keying so the badge and the field-level error stay in agreement.
-function errorBelongsToSection(errorKey: string, section: SectionId): boolean {
-  return SECTION_FIELDS[section].some(
-    (field) => errorKey === field || errorKey.startsWith(`${field}[`),
-  )
-}
-
-// Whether the section holds any non-default value. Compared against the form's
-// baseline defaults (the create-form initial state), so an untouched section
-// reads "default" and a filled one reads "configured". Fields the section
-// doesn't own are ignored.
-function sectionIsConfigured(
+// Whether the section holds any non-default value, compared against the form's
+// baseline (create) defaults. An untouched section reads false (no Reset shown);
+// a changed one reads true. Fields the section doesn't own are ignored.
+export function sectionIsConfigured(
   section: SectionId,
   values: CreateAssignmentFormValues,
   defaults: CreateAssignmentFormValues,
@@ -92,19 +77,4 @@ function sectionIsConfigured(
     if (field === "tests") return Array.isArray(value) && value.length > 0
     return value !== defaults[field]
   })
-}
-
-export function deriveSectionStatus(
-  section: SectionId,
-  values: CreateAssignmentFormValues,
-  defaults: CreateAssignmentFormValues,
-  errors: Record<string, string>,
-): SectionStatus {
-  const hasError = Object.keys(errors).some((key) =>
-    errorBelongsToSection(key, section),
-  )
-  if (hasError) return "error"
-  return sectionIsConfigured(section, values, defaults)
-    ? "configured"
-    : "default"
 }
