@@ -781,20 +781,25 @@ async function buildAssignmentEntry(
     }
   }
 
-  // submission_mode: omit the wire default (every-push) so an untouched
-  // assignment stays byte-identical, mirroring the CLI's omitempty collapse.
-  // Validate against the enum so a bad value can't produce a file the CLI
-  // refuses to parse. Permitted for every repo shape (including empty_repo /
-  // no_autograder): with no shim it carries no trigger, but it still defines
-  // what the submissions page counts as a submission.
-  if (input.submission_mode && input.submission_mode !== "every-push") {
-    if (!SUBMISSION_MODES.includes(input.submission_mode)) {
-      throw new Error(
-        `submission_mode: must be one of ${SUBMISSION_MODES.join(", ")} (got "${input.submission_mode}").`,
-      )
-    }
-    entry.submission_mode = input.submission_mode
+  // submission_mode: ALWAYS write it explicitly (default every-push when
+  // unset), NOT collapsed to the wire default. This is the migration signal:
+  // an assignment written by 1.28+ code always carries an explicit
+  // submission_mode, so a legacy pre-1.28 file (which omits it) is
+  // distinguishable and the classroom migration banner can target only genuine
+  // legacy files (see MIGRATION(v1.28) in SubmissionsPage / ClassroomMigrationBanner).
+  // An explicit "every-push" is legal on the wire — the Go reader accepts it
+  // ("other writers may emit it", ValidateSubmissionMode) and the schema
+  // permits it. Validate against the enum so a bad value can't produce a file
+  // the CLI refuses to parse. Permitted for every repo shape (including
+  // empty_repo / no_autograder): with no shim it carries no trigger, but it
+  // still defines what the submissions page counts as a submission.
+  const resolvedSubmissionMode = input.submission_mode ?? "every-push"
+  if (!SUBMISSION_MODES.includes(resolvedSubmissionMode)) {
+    throw new Error(
+      `submission_mode: must be one of ${SUBMISSION_MODES.join(", ")} (got "${resolvedSubmissionMode}").`,
+    )
   }
+  entry.submission_mode = resolvedSubmissionMode
 
   // submission_tags: omit when empty (no milestone tags — today's behavior),
   // mirroring the CLI's omitempty. Validate so a bad pattern can't produce a

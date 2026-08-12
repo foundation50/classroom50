@@ -1129,14 +1129,15 @@ describe("editAssignment (preserved-entry integration)", () => {
 
   // The write path's submission_mode branches (buildAssignmentEntry is not
   // exported — assert through editAssignment, like the sibling tests above):
-  // "tag" lands in the entry; the wire default (explicit or absent) is
-  // omitted, mirroring the CLI's omitempty collapse; junk is rejected before
-  // a file the CLI would refuse to parse can be written.
-  it("writes submission_mode tag and omits the every-push wire default", async () => {
+  // 1.28+ ALWAYS writes submission_mode explicitly (the migration signal), so
+  // "tag" and "every-push" both land verbatim and an absent input defaults to
+  // an explicit "every-push"; junk is rejected before a file the CLI would
+  // refuse to parse can be written.
+  it("always writes submission_mode explicitly (the 1.28 migration signal)", async () => {
     for (const [input, want] of [
       ["tag", "tag"],
-      ["every-push", undefined],
-      [undefined, undefined],
+      ["every-push", "every-push"],
+      [undefined, "every-push"],
     ] as const) {
       const { client, committedContent } = makeClient()
       await editAssignment(client, editInput({ submission_mode: input }))
