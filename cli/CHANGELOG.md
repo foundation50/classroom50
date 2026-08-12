@@ -17,6 +17,18 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.28.0](https://github.com/foundation50/classroom50/compare/cli-v1.27.2...cli-v1.28.0) (2026-08-12)
+
+
+### Features
+
+* add include_all_branches for template assignments ([#562](https://github.com/foundation50/classroom50/issues/562)) ([60c00e8](https://github.com/foundation50/classroom50/commit/60c00e8c9bd2e7616378ab2971627da01c990e08))
+* add no_autograder assignment state for teacher-supplied CI ([#554](https://github.com/foundation50/classroom50/issues/554)) ([bd58fce](https://github.com/foundation50/classroom50/commit/bd58fce09ed8553f041338e9d0aa333ce91ff374))
+* per-assignment submission triggers — modes and milestone tags ([#477](https://github.com/foundation50/classroom50/issues/477)) ([#531](https://github.com/foundation50/classroom50/issues/531)) ([90c45a7](https://github.com/foundation50/classroom50/commit/90c45a749d047e4087543b04d417ad3cd0112626))
+* **web:** add Close submission bulk action ([#571](https://github.com/foundation50/classroom50/issues/571)) ([7897d9a](https://github.com/foundation50/classroom50/commit/7897d9a100d9c24a2fe0bb18ccee51d8fc5b9349))
+* **web:** overhaul the assignment form and add empty-repo autograding ([#561](https://github.com/foundation50/classroom50/issues/561)) ([8fe3af3](https://github.com/foundation50/classroom50/commit/8fe3af374b02a210e84b07563f59733d96f7dea5))
+* **web:** submission configuration, grading modes, and manual scoring ([#565](https://github.com/foundation50/classroom50/issues/565)) ([812cc0c](https://github.com/foundation50/classroom50/commit/812cc0c2078e33ea7af8cc981ade72a7d33faaad))
+
 ## [1.27.2](https://github.com/foundation50/classroom50/compare/cli-v1.27.1...cli-v1.27.2) (2026-08-09)
 
 
