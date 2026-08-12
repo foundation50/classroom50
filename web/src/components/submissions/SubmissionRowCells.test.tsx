@@ -72,4 +72,20 @@ describe("LastSubmittedCell", () => {
     expect(screen.getByText("submissions.table.late")).toBeTruthy()
     expect(screen.getByText(/submissions\.table\.gradedAt/)).toBeTruthy()
   })
+
+  it("shows a 'not yet collected' placeholder instead of 'Invalid Date' for an empty datetime", () => {
+    // A detection-only / not-yet-collected row carries an empty datetime; it
+    // must not render "Invalid Date".
+    render(<LastSubmittedCell datetime="" />)
+    expect(screen.getByText("submissions.table.notCollectedYet")).toBeTruthy()
+    expect(screen.queryByText("Invalid Date")).toBeNull()
+  })
+
+  it("still surfaces a real latest-push time on the live sub-line when the primary datetime is empty", () => {
+    render(
+      <LastSubmittedCell datetime="" liveLatestAt="2026-06-21T10:00:00Z" />,
+    )
+    expect(screen.getByText("submissions.table.notCollectedYet")).toBeTruthy()
+    expect(screen.getByText(/submissions\.table\.liveLatest/)).toBeTruthy()
+  })
 })

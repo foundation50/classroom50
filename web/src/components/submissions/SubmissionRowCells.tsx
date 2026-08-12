@@ -67,6 +67,11 @@ export const SubmissionCountCell = ({
 // The "last submitted" cell: the latest submission time plus optional teacher-
 // only sub-lines (late badge, graded-at, live-latest). The student view passes
 // only `datetime`, so the sub-lines collapse away.
+//
+// A detection-only / not-yet-collected teacher row carries no graded submission
+// time (empty `datetime`), so the primary line shows a neutral "not yet
+// collected" placeholder instead of a formatted "Invalid Date". A real latest-
+// push time, when known, still surfaces on the `liveLatestAt` sub-line.
 export const LastSubmittedCell = ({
   datetime,
   late = false,
@@ -79,12 +84,22 @@ export const LastSubmittedCell = ({
   liveLatestAt?: string
 }) => {
   const { t } = useTranslation()
+  const hasDatetime = !Number.isNaN(new Date(datetime).getTime())
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex items-center gap-2">
-        <span className="whitespace-nowrap">
-          {formatSubmissionDateTime(datetime)}
-        </span>
+        {hasDatetime ? (
+          <span className="whitespace-nowrap">
+            {formatSubmissionDateTime(datetime)}
+          </span>
+        ) : (
+          <span
+            className="whitespace-nowrap text-base-content/50"
+            title={t("submissions.table.notCollectedYetTitle")}
+          >
+            {t("submissions.table.notCollectedYet")}
+          </span>
+        )}
         {late ? (
           <Badge tone="error" title={t("submissions.table.lateRowTitle")}>
             {t("submissions.table.late")}

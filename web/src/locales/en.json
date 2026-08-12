@@ -2496,6 +2496,8 @@
       "gradedAtTitle": "When the autograder last (re-)graded this submission. Regrading updates this without changing the submission time.",
       "liveLatest": "Latest push {{date}} · not yet graded",
       "liveLatestTitle": "A newer submission was pushed after the last collection, so it isn't graded yet. Run \"Sync submissions now\" to grade and score it.",
+      "notCollectedYet": "Not yet collected",
+      "notCollectedYetTitle": "This student has pushed work that hasn't been collected yet, so there's no recorded submission time. Run \"Sync submissions now\" to collect it.",
       "members": "Members",
       "openRepoLabel": "Open repository {{repo}}",
       "viewRepo": "View repo",

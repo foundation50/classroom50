@@ -78,11 +78,20 @@ export const formatDueDateTime = (dateString: string): string => {
 // Absolute submission timestamp (medium date + short time) in the viewer's
 // locale — the recipe the submission table cells, details items, and the manage
 // hub all render submission/commit times with. One source so they can't drift.
-export const formatSubmissionDateTime = (datetime: string): string =>
-  new Date(datetime).toLocaleString(undefined, {
+// A missing/unparseable value returns the localized "invalid date" string
+// rather than the raw "Invalid Date" the platform would produce, matching the
+// due-date formatters; callers that want to hide the row entirely should guard
+// on the value before calling (e.g. a not-yet-collected row shows a placeholder).
+export const formatSubmissionDateTime = (datetime: string): string => {
+  const date = new Date(datetime)
+  if (Number.isNaN(date.getTime())) {
+    return i18n.t("formatDate.invalidDate")
+  }
+  return date.toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   })
+}
 
 // Unlike DateTimeFormat above, an unsupported-but-well-formed tag must fall back
 // to English, not the browser default — hence the supportedLocalesOf check.

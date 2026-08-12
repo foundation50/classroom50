@@ -8,8 +8,28 @@ import {
   formatDueDateTime,
   formatInvitedAt,
   formatRelativeToNow,
+  formatSubmissionDateTime,
   isPastDue,
 } from "./formatDate"
+
+describe("formatSubmissionDateTime", () => {
+  it("formats a valid timestamp", () => {
+    expect(formatSubmissionDateTime("2026-06-23T12:00:00Z")).toContain("2026")
+  })
+
+  it("returns the localized invalid-date string for an empty value", () => {
+    // A detection-only / not-yet-collected row has no submission time; the
+    // formatter must not leak the platform's raw "Invalid Date".
+    expect(formatSubmissionDateTime("")).toBe(i18n.t("formatDate.invalidDate"))
+    expect(formatSubmissionDateTime("")).not.toBe("Invalid Date")
+  })
+
+  it("returns the localized invalid-date string for an unparseable value", () => {
+    expect(formatSubmissionDateTime("not-a-date")).toBe(
+      i18n.t("formatDate.invalidDate"),
+    )
+  })
+})
 
 describe("formatDueDate", () => {
   it("formats a bare YYYY-MM-DD as a date with no time", () => {
