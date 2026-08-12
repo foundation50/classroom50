@@ -27,13 +27,12 @@ export type PushSubmission = {
   releaseHref?: string | null
 }
 
-// A normalized tag submission collected in scores.json, used as the FALLBACK
-// tag source for a viewer without the owner-only detection overlay (a non-owner
-// staff viewer, or the owner before detection resolves): the collected count is
-// present for everyone, so the modal must list SOMETHING rather than a false
-// "no tagged submissions" empty state that contradicts the count chip. Each
-// carries its jump targets (the release, else the commit) as raw URLs the
-// builder guards.
+// A normalized tag submission collected in scores.json — the FALLBACK tag
+// source for a viewer without the owner-only detection overlay (a non-owner
+// staff viewer, or the owner before detection resolves). The collected count is
+// present for everyone, so the modal lists these rather than a false "no tagged
+// submissions" state that contradicts the count chip. Jump targets (release,
+// else commit) are raw URLs the builder guards.
 export type CollectedTagSubmission = {
   key: string
   datetime?: string

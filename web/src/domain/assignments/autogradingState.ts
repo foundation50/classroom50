@@ -58,14 +58,10 @@ export function deriveAutogradingState(
 // come from a template, and what grading (if any) runs. Single source so the
 // teacher gradebook and the student page describe an assignment identically.
 //
-// The three states map to the autograding tri-state, but the badge is framed
-// around the STARTER CODE the student sees (template vs empty), because that is
-// what the badge's detail message explains:
-//   - empty      -> "No template": bare repos, nothing autogrades.
-//   - none       -> "Template + custom CI": templated, teacher-supplied CI runs
-//                   instead of built-in autograding/scores/feedback PR.
-//   - built-in   -> "Template" when a template repo is set, else "Built-in
-//                   autograder" (an init_shim, template-less repo that grades).
+// The three autograding-tri-state states are framed around the STARTER CODE the
+// student sees (template vs empty), since that's what the badge's detail message
+// explains: empty -> "No template"; none -> "Template + custom CI"; built-in ->
+// "Template" when a template is set, else "Built-in autograder".
 export type AssignmentSetupInfo = {
   state: AutogradingState
   hasTemplate: boolean

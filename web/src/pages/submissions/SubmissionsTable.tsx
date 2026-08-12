@@ -96,21 +96,15 @@ type SubmissionDetailsContext = {
 }
 
 // Build the type-aware detail items for a row via the shared builder: tag
-// entries in tag mode, the default-branch pushes otherwise.
+// entries in tag mode, default-branch pushes otherwise.
 //
-// Every-push commits come from the DETECTED entries (`row.detectedEntries`,
-// kind "commit") — the same source the count chip is bumped from — so the modal
-// lists exactly the pushes the chip counts, even before a collect ingests them.
-// Each detected commit links its commit page and, when a collected attempt at
-// that sha carries a graded release, folds in a "View grade" link. When there
-// are no detected commits (e.g. a non-owner viewer, whose chip also uses the
-// collected count), fall back to the collected `submissions`.
-//
-// Tag mode is symmetric: detected tag entries drive the list for an owner with
-// the detection overlay; a viewer without it (a non-owner staff member, or the
-// owner before detection resolves) falls back to the collected `submissions`
-// so the modal never renders a false "no tagged submissions" empty state beside
-// a positive count chip.
+// The list is driven by the DETECTED entries (`row.detectedEntries`) — the same
+// source the count chip is bumped from — so it lists exactly what the chip
+// counts, even before a collect ingests them; a detected push folds in a "View
+// grade" link when a collected attempt at that sha carries a graded release.
+// A viewer without the detection overlay (a non-owner, or the owner before
+// detection resolves) falls back to the collected `submissions`, so the modal
+// never shows a false "no submissions" state beside a positive count chip.
 function buildDetailItems(
   row: SubmissionRow,
   mode: SubmissionMode,

@@ -29,13 +29,11 @@ export const githubTemplateRepoUrl = (
 ): string =>
   `https://github.com/${owner}/${repo}${branch ? `/tree/${branch}` : ""}`
 
-// Deep-link to a repo's tree at a git ref (a tag or a commit sha) — the code
-// state at that ref, used by the submissions views to open a tag or commit.
-// The ref is a tag name or sha built from GitHub data or a validated
-// submission_tags pattern; each path segment is encoded so a slash-bearing tag
-// (e.g. `submit/2026-...`) stays a real path while other metacharacters are
-// escaped, and the result is guarded through safeHttpUrl. Returns undefined
-// when the inputs can't form a safe http(s) URL, so callers can omit the link.
+// Deep-link to a repo's tree at a git ref (tag or commit sha), used by the
+// submissions views to open a tag or commit. Each path segment is encoded
+// separately so a slash-bearing tag (e.g. `submit/2026-...`) stays a real path
+// while other metacharacters are escaped, then guarded through safeHttpUrl.
+// Returns undefined when the inputs can't form a safe http(s) URL.
 export const repoTreeAtRefUrl = (
   org: string,
   repo: string,

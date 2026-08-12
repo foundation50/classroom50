@@ -5,15 +5,13 @@ import { GitCommitHorizontal, Tag } from "lucide-react"
 import GitHub from "@/assets/github.svg?react"
 import { Button, Modal, MonoLtr } from "@/components/ui"
 
-// One row in the submission-details list. `kind` picks the icon and the primary
-// action label ("View tag" vs "View commit"); `href` is the already-built, safe
-// GitHub link (omit to render the row inert, e.g. a detected tag whose ref
-// can't be resolved). `sublabel` carries a secondary line such as the
-// submission time. `releaseHref`, when present, adds a secondary "View grade"
-// link to this submission's graded release. `count` is how many underlying
-// submissions this row represents (1 for a single tag/commit; N for a glob
-// group that bundles N tags into one jumpable row) — so the modal header count
-// can match the row's count chip even when a group renders as one row.
+// One row in the submission-details list. `kind` picks the icon and action
+// label ("View tag" vs "View commit"); `href` is the already-built, safe GitHub
+// link (omit to render the row inert). `sublabel` is a secondary line such as
+// the submission time; `releaseHref` adds a "View grade" link. `count` is how
+// many submissions the row represents (1 for a single tag/commit; N for a glob
+// group that bundles N tags into one row), so the modal header count matches
+// the row's count chip even when a group renders as one row.
 export type SubmissionDetailItem = {
   key: string
   kind: "tag" | "commit"
@@ -25,9 +23,8 @@ export type SubmissionDetailItem = {
 }
 
 // The number of SUBMISSIONS a detail-item list represents: the sum of each
-// item's `count`, so a glob group (one row, N tags) contributes N. Single
-// source both submission views use for the count chip and the modal header, so
-// the chip and the modal can never disagree on a glob group's total.
+// item's `count`, so a glob group (one row, N tags) contributes N. Shared by
+// the count chip and the modal header so they can't disagree on a group's total.
 export function detailItemsCount(items: SubmissionDetailItem[]): number {
   return items.reduce((sum, item) => sum + item.count, 0)
 }
