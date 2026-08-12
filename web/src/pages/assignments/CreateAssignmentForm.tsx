@@ -9,8 +9,9 @@ import { ScheduleSection } from "./sections/ScheduleSection"
 import {
   SECTION_FIELDS,
   sectionIsConfigured,
+  errorKeyMatchesField,
   type SectionId,
-} from "./sections/sectionStatus"
+} from "./sections/sectionFields"
 import {
   useAssignmentForm,
   validateAssignmentForm,
@@ -144,18 +145,15 @@ const CreateAssignmentForm = ({
         // it here to avoid an unhandled rejection.
         void form.handleSubmit().catch(() => {})
         if (Object.keys(errors).length === 0) return
-        // The first errored field in section render order. Error keys may be
-        // indexed (e.g. "tests[0].name"), so match the owning field by prefix.
+        // Error keys may be indexed (e.g. "tests[0].name"), so match the owning
+        // field by prefix — in section render order, first errored field wins.
         const orderedFields = (
           Object.keys(SECTION_FIELDS) as SectionId[]
         ).flatMap((section) => SECTION_FIELDS[section])
         const firstErroredField = orderedFields.find((field) =>
-          Object.keys(errors).some(
-            (key) => key === field || key.startsWith(`${field}[`),
-          ),
+          Object.keys(errors).some((key) => errorKeyMatchesField(key, field)),
         )
         if (!firstErroredField) return
-        // The field element is already in the DOM, so scroll immediately.
         const target = document.getElementById(firstErroredField)
         if (!target) return
         target.scrollIntoView({ behavior: "smooth", block: "center" })

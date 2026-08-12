@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { sectionIsConfigured } from "./sectionStatus"
+import { errorKeyMatchesField, sectionIsConfigured } from "./sectionFields"
 import type { CreateAssignmentFormValues } from "../assignmentFormModel"
 
 // The create-form baseline defaults; sectionIsConfigured compares against these
@@ -97,5 +97,24 @@ describe("sectionIsConfigured", () => {
     expect(sectionIsConfigured("submission", manual, defaults)).toBe(true)
     const maxChanged = { ...defaults, grading_max_points: 42 }
     expect(sectionIsConfigured("submission", maxChanged, defaults)).toBe(true)
+  })
+})
+
+describe("errorKeyMatchesField", () => {
+  it("matches an exact field key", () => {
+    expect(errorKeyMatchesField("name", "name")).toBe(true)
+    expect(errorKeyMatchesField("name", "slug")).toBe(false)
+  })
+
+  it("matches an indexed sub-key of the field", () => {
+    // validateAssignmentForm keys per-test errors as "tests[0].name".
+    expect(errorKeyMatchesField("tests[0].name", "tests")).toBe(true)
+    expect(errorKeyMatchesField("tests[2].run", "tests")).toBe(true)
+  })
+
+  it("does not match a different field with a shared prefix", () => {
+    expect(errorKeyMatchesField("submission_tags", "submission_mode")).toBe(
+      false,
+    )
   })
 })

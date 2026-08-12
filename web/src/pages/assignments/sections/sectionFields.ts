@@ -74,3 +74,14 @@ export function sectionIsConfigured(
     return value !== defaults[field]
   })
 }
+
+// Whether a validateAssignmentForm error key belongs to a field, matching the
+// field itself or an indexed sub-key of it (e.g. "tests[0].name" -> "tests").
+// The single source of truth for that keying convention, so a caller mapping
+// errors back to fields can't drift from validateAssignmentForm.
+export function errorKeyMatchesField(
+  errorKey: string,
+  field: keyof CreateAssignmentFormValues,
+): boolean {
+  return errorKey === field || errorKey.startsWith(`${field}[`)
+}
