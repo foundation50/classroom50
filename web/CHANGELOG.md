@@ -17,6 +17,15 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.28.1](https://github.com/foundation50/classroom50/compare/web-v1.28.0...web-v1.28.1) (2026-08-12)
+
+
+### Features
+
+* **web:** copy template About and topics to student repos ([#580](https://github.com/foundation50/classroom50/issues/580)) ([5231d85](https://github.com/foundation50/classroom50/commit/5231d85703e4e4b40791537bb087f6357675033d))
+* **web:** rename autograding trigger field to Submission type ([#581](https://github.com/foundation50/classroom50/issues/581)) ([1e07dca](https://github.com/foundation50/classroom50/commit/1e07dcafac515cdc5d4600a32ff21c2814b5b1cd))
+* **web:** show explicit "Copied" feedback in the share link modal ([#578](https://github.com/foundation50/classroom50/issues/578)) ([4c7c8d0](https://github.com/foundation50/classroom50/commit/4c7c8d0e38164e9c8e9ad3dbf7499e647ee71b57))
+
 ## [1.28.0](https://github.com/foundation50/classroom50/compare/web-v1.27.2...web-v1.28.0) (2026-08-12)
 
 
