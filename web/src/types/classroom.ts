@@ -195,6 +195,18 @@ export type Assignment = {
   // affects repos generated from now on). Omitted when false; absent reads as
   // false. In lockstep with the CLI's assignments-v1 schema (`include_all_branches`).
   include_all_branches?: boolean
+  // Copy the TEMPLATE repo's About (description) onto each student repo at
+  // accept time, on fresh create only (GitHub's POST /generate drops it).
+  // Requires a template; best-effort/fail-open; not retrofitted or re-asserted
+  // on re-accept. Omitted when false; absent reads as false. In lockstep with
+  // the CLI's assignments-v1 schema (`copy_about`).
+  copy_about?: boolean
+  // Copy the TEMPLATE repo's Topics onto each student repo at accept time, on
+  // fresh create only (applied via PUT /repos/{o}/{r}/topics). Requires a
+  // template; best-effort/fail-open; not retrofitted or re-asserted on
+  // re-accept. Omitted when false; absent reads as false. In lockstep with the
+  // CLI's assignments-v1 schema (`copy_topics`).
+  copy_topics?: boolean
   // Lock the assignment against student access. Every student surface (accept
   // page, assignments list, submission view, and `gh student accept`) refuses
   // a locked assignment for EVERY student, including one who already accepted.

@@ -357,6 +357,11 @@ export type CreateAssignmentInput = {
   // Requires a template; mutually exclusive with empty_repo/init_shim. Mutable.
   // Mirrors the CLI's include_all_branches field.
   include_all_branches?: boolean
+  // Copy the template's About (description) / Topics onto each student repo at
+  // accept time (issue #569). Require a template; mutable. buildAssignmentEntry
+  // omits each when false. Mirror the assignments-v1 copy_about / copy_topics.
+  copy_about?: boolean
+  copy_topics?: boolean
   runs_on?: string
   container_image?: string
   container_user?: string

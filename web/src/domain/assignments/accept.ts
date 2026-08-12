@@ -45,8 +45,10 @@ import {
   founderPermission,
   assertAssignmentModeCoherent,
   patchRepoSurface,
+  applyRepoAboutTopics,
   resolveRepoFeaturesPatch,
   explicitRepoFeaturesPatch,
+  type RepoAboutTopics,
 } from "./permissions"
 import type { RepoFeaturePatch } from "@/github-core/mutations"
 import { createAssignmentRepo } from "./repoCreation"
@@ -169,6 +171,9 @@ function grantFounderAccessStep(params: {
   // fail-open retry body. Empty `full` ({}) skips the request (templated +
   // all-inherit); best-effort/fail-open.
   repoFeatures: RepoFeatureApply
+  // Template About/Topics to copy onto the repo (issue #569), applied after the
+  // feature PATCH, best-effort/fail-open. `{}` = nothing to copy.
+  repoAboutTopics: RepoAboutTopics
   onStepUpdate?: OnAcceptStepUpdate
 }) {
   const {
@@ -179,6 +184,7 @@ function grantFounderAccessStep(params: {
     mode,
     studentPermission,
     repoFeatures,
+    repoAboutTopics,
     onStepUpdate,
   } = params
   return withAcceptStep(
@@ -200,6 +206,7 @@ function grantFounderAccessStep(params: {
         repoFeatures.full,
         repoFeatures.explicit,
       )
+      await applyRepoAboutTopics(client, org, repo, repoAboutTopics)
       await addFounderCollaborator({
         client,
         owner: org,
@@ -223,6 +230,8 @@ async function provisionAcceptedRepo(params: {
   studentPermission?: RepoPermission
   // Resolved repo-feature PATCH, forwarded to the founder-access step.
   repoFeatures: RepoFeatureApply
+  // Template About/Topics to copy, forwarded to the founder-access step.
+  repoAboutTopics: RepoAboutTopics
   branch: string
   metadataYaml: string
   autogradeYaml: string
@@ -239,6 +248,7 @@ async function provisionAcceptedRepo(params: {
     mode,
     studentPermission,
     repoFeatures,
+    repoAboutTopics,
     branch,
     metadataYaml,
     autogradeYaml,
@@ -306,6 +316,7 @@ async function provisionAcceptedRepo(params: {
     mode,
     studentPermission,
     repoFeatures,
+    repoAboutTopics,
     onStepUpdate,
   })
 }
@@ -562,20 +573,36 @@ export async function acceptAssignment(params: {
     rf.wiki === undefined ||
     rf.projects === undefined ||
     rf.pull_requests === undefined
+  // Also read the template when copy_about / copy_topics is set: like the
+  // feature flags, GitHub's POST /generate drops the template's About and
+  // Topics, so an opted-in assignment must re-read and re-apply them (#569).
+  const wantsAbout = assignment.copy_about === true
+  const wantsTopics = assignment.copy_topics === true
+  const needsTemplateRead = anyInherit || wantsAbout || wantsTopics
   let templateFeatures: RepoFeaturePatch | null = null
-  if (assignment.template && sourceOwner && sourceRepo && anyInherit) {
+  let repoAboutTopics: RepoAboutTopics = {}
+  if (assignment.template && sourceOwner && sourceRepo && needsTemplateRead) {
     try {
       const tmpl = await getRepo(client, sourceOwner, sourceRepo)
       if (tmpl) {
-        templateFeatures = {
-          has_issues: tmpl.has_issues,
-          has_wiki: tmpl.has_wiki,
-          has_projects: tmpl.has_projects,
-          has_pull_requests: tmpl.has_pull_requests,
+        if (anyInherit) {
+          templateFeatures = {
+            has_issues: tmpl.has_issues,
+            has_wiki: tmpl.has_wiki,
+            has_projects: tmpl.has_projects,
+            has_pull_requests: tmpl.has_pull_requests,
+          }
+        }
+        // Drop empty values: never blank a repo's About or clear its topics.
+        const description = wantsAbout ? tmpl.description?.trim() : undefined
+        const topics = wantsTopics ? tmpl.topics : undefined
+        repoAboutTopics = {
+          ...(description ? { description } : {}),
+          ...(topics && topics.length > 0 ? { topics } : {}),
         }
       }
     } catch (err) {
-      log.debug("accept: template feature read failed (non-fatal)", {
+      log.debug("accept: template read failed (non-fatal)", {
         sourceOwner,
         sourceRepo,
         err,
@@ -826,6 +853,7 @@ export async function acceptAssignment(params: {
         mode: assignment.mode,
         studentPermission: assignment.student_permission,
         repoFeatures,
+        repoAboutTopics,
         onStepUpdate,
       })
     }
@@ -993,6 +1021,10 @@ export async function acceptAssignment(params: {
       // the healthy already-accepted branch and both CLIs (which skip the PATCH
       // on 422-already-exists).
       repoFeatures: { full: {}, explicit: {} },
+      // Same reasoning: About/Topics are copied on FRESH create only, never
+      // re-applied when repairing an already-existing repo (a re-accept), so a
+      // student's own later edit survives. Nothing to copy on this path.
+      repoAboutTopics: {},
       branch: created.repo.default_branch || sourceBranch,
       metadataYaml,
       autogradeYaml,
@@ -1031,6 +1063,7 @@ export async function acceptAssignment(params: {
     mode: assignment.mode,
     studentPermission: assignment.student_permission,
     repoFeatures,
+    repoAboutTopics,
     branch: targetBranch,
     metadataYaml,
     autogradeYaml,

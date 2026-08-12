@@ -6,6 +6,7 @@ import type {
 } from "@/types/classroom"
 import type { GitHubRepo } from "@/github-core/types"
 import type { RepoFeaturePatch } from "@/github-core/mutations"
+import { replaceRepoTopics } from "@/github-core/mutations"
 import { defaultStudentPermission } from "@/types/classroom"
 import { localizedError } from "@/types/localizedMessage"
 import { log } from "./accessPrimitives"
@@ -243,5 +244,58 @@ export async function patchRepoSurface(
       patch,
       err: finalErr,
     })
+  }
+}
+
+// The template's About/Topics resolved for copy at accept time (issue #569).
+// A key is present only when the assignment opted in (copy_about / copy_topics)
+// AND the template actually had a non-empty value — an empty template value is
+// dropped at resolve time so we never blank a student repo's existing About or
+// clear its topics. `{}` means "nothing to copy" (no template, opted out, or
+// the template read failed / was empty).
+export type RepoAboutTopics = { description?: string; topics?: string[] }
+
+// Copy the template's About/Topics onto a just-created student repo,
+// best-effort/fail-open — same contract as patchRepoSurface: this runs inside
+// the throwing accept "access" step, so a rejected write (e.g. an org that
+// blocks topics) is logged and swallowed rather than stranding the student.
+// About rides PATCH /repos/{owner}/{repo} (description); Topics use the
+// separate PUT /repos/{owner}/{repo}/topics. Each is applied independently so a
+// topics rejection can't drop a successful About copy. Nothing set = no request.
+export async function applyRepoAboutTopics(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  about: RepoAboutTopics,
+) {
+  if (about.description !== undefined) {
+    try {
+      await client.request<GitHubRepo>(`/repos/${owner}/${repo}`, {
+        method: "PATCH",
+        body: { description: about.description },
+      })
+    } catch (err) {
+      log.warn("accept: copy-About PATCH failed (non-fatal)", {
+        owner,
+        repo,
+        err,
+      })
+    }
+  }
+  if (about.topics !== undefined) {
+    try {
+      await replaceRepoTopics({
+        client,
+        org: owner,
+        repo,
+        topics: about.topics,
+      })
+    } catch (err) {
+      log.warn("accept: copy-Topics PUT failed (non-fatal)", {
+        owner,
+        repo,
+        err,
+      })
+    }
   }
 }

@@ -114,6 +114,8 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   no_autograder: "classroom50-owned",
   init_shim: "classroom50-owned",
   include_all_branches: "classroom50-owned",
+  copy_about: "classroom50-owned",
+  copy_topics: "classroom50-owned",
   // Rebuilt AND a closed object: the CLI decodes runtime strictly (RuntimeRef
   // has no Extra, DisallowUnknownFields; schema additionalProperties false), so
   // the rebuilt runtime must win and any unknown sub-key drops rather than
@@ -515,6 +517,21 @@ async function buildAssignmentEntry(
     }
   }
 
+  // copy_about / copy_topics copy the template's About/Topics onto each student
+  // repo at accept time, so both require a template (there is nothing to copy
+  // from otherwise). Compatible with everything else. Mirrors the schema's
+  // copy_about/copy_topics template-required rules. Issue #569.
+  if (input.copy_about && !input.template_repo.trim()) {
+    throw new Error(
+      "copy_about: requires a template — it copies the template repo's About onto each student repo.",
+    )
+  }
+  if (input.copy_topics && !input.template_repo.trim()) {
+    throw new Error(
+      "copy_topics: requires a template — it copies the template repo's Topics onto each student repo.",
+    )
+  }
+
   if (tests.length > 0) {
     await ensureDeclarativeTestsWritable(
       client,
@@ -578,6 +595,16 @@ async function buildAssignmentEntry(
   // generate. No immutability check — it's mutable (only affects new accepts).
   if (input.include_all_branches) {
     entry.include_all_branches = true
+  }
+  // Written only when true (omitempty). Copy the template's About/Topics onto
+  // each student repo at accept time (issue #569). Mutable (only affects new
+  // accepts). The template-required guard above already rejected them without
+  // a template, so no extra check here.
+  if (input.copy_about) {
+    entry.copy_about = true
+  }
+  if (input.copy_topics) {
+    entry.copy_topics = true
   }
   // Omit the template block entirely for a template-less assignment, matching
   // the CLI's nil TemplateRef.

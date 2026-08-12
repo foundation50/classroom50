@@ -1152,6 +1152,14 @@
         "label": "Include all branches",
         "help": "Copy every branch and its history from the template, not just the default branch. This applies to students who accept from now on; repositories already created are not changed."
       },
+      "copyAbout": {
+        "label": "Copy About from template",
+        "help": "Copy the template's About (its description) onto each student repository. GitHub does not copy it automatically. This applies to students who accept from now on; repositories already created are not changed."
+      },
+      "copyTopics": {
+        "label": "Copy topics from template",
+        "help": "Copy the template's topics onto each student repository. GitHub does not copy them automatically. This applies to students who accept from now on; repositories already created are not changed."
+      },
       "feedbackPr": "Feedback pull request",
       "feedbackPrHelp": "Open a pull request per repo for inline review of each submission.",
       "feedbackPrEmptyRepoHelp": "Unavailable for empty repositories. There is no starter commit to diff against.",

@@ -143,6 +143,39 @@ export function RepositorySetupSection({
                         />
                       )}
                     </form.Field>
+
+                    {/* Copy the template's About + Topics onto each student
+                        repo at accept time (issue #569). Template-only; default
+                        off. GitHub's generate drops both, so accept re-applies. */}
+                    <form.Field name="copy_about">
+                      {(aboutField) => (
+                        <ToggleRow
+                          id={aboutField.name}
+                          checked={aboutField.state.value}
+                          onChange={(checked) =>
+                            aboutField.handleChange(checked)
+                          }
+                          onBlur={aboutField.handleBlur}
+                          label={t("assignments.form.copyAbout.label")}
+                          help={t("assignments.form.copyAbout.help")}
+                        />
+                      )}
+                    </form.Field>
+
+                    <form.Field name="copy_topics">
+                      {(topicsField) => (
+                        <ToggleRow
+                          id={topicsField.name}
+                          checked={topicsField.state.value}
+                          onChange={(checked) =>
+                            topicsField.handleChange(checked)
+                          }
+                          onBlur={topicsField.handleBlur}
+                          label={t("assignments.form.copyTopics.label")}
+                          help={t("assignments.form.copyTopics.help")}
+                        />
+                      )}
+                    </form.Field>
                   </>
                 ) : shape.showAddReadme ? (
                   <form.Field name="add_readme">

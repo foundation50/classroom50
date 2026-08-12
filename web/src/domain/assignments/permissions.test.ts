@@ -4,6 +4,7 @@ import {
   resolveRepoFeaturesPatch,
   explicitRepoFeaturesPatch,
   patchRepoSurface,
+  applyRepoAboutTopics,
 } from "./permissions"
 
 describe("resolveRepoFeaturesPatch", () => {
@@ -147,5 +148,77 @@ describe("explicitRepoFeaturesPatch", () => {
 
   it("returns an empty patch when nothing is forced", () => {
     expect(explicitRepoFeaturesPatch(undefined)).toEqual({})
+  })
+})
+
+describe("applyRepoAboutTopics (issue #569)", () => {
+  it("sends no request when nothing is set", async () => {
+    const request = vi.fn()
+    const client = { request } as unknown as GitHubClient
+    await applyRepoAboutTopics(client, "org", "repo", {})
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it("PATCHes the description for About", async () => {
+    const request = vi.fn().mockResolvedValue({})
+    const client = { request } as unknown as GitHubClient
+    await applyRepoAboutTopics(client, "org", "repo", {
+      description: "A nice starter",
+    })
+    expect(request).toHaveBeenCalledWith("/repos/org/repo", {
+      method: "PATCH",
+      body: { description: "A nice starter" },
+    })
+  })
+
+  it("PUTs the topics as { names }", async () => {
+    const request = vi.fn().mockResolvedValue({})
+    const client = { request } as unknown as GitHubClient
+    await applyRepoAboutTopics(client, "org", "repo", {
+      topics: ["python", "hw"],
+    })
+    expect(request).toHaveBeenCalledWith("/repos/org/repo/topics", {
+      method: "PUT",
+      body: { names: ["python", "hw"] },
+    })
+  })
+
+  it("applies both independently in one call", async () => {
+    const request = vi.fn().mockResolvedValue({})
+    const client = { request } as unknown as GitHubClient
+    await applyRepoAboutTopics(client, "org", "repo", {
+      description: "d",
+      topics: ["t"],
+    })
+    expect(request).toHaveBeenCalledTimes(2)
+  })
+
+  it("fails open: an About PATCH rejection is swallowed and does not block topics", async () => {
+    // The description PATCH 422s; the topics PUT still runs and the call
+    // resolves (accept must never be stranded by a best-effort copy).
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("422"))
+      .mockResolvedValueOnce({})
+    const client = { request } as unknown as GitHubClient
+    await expect(
+      applyRepoAboutTopics(client, "org", "repo", {
+        description: "d",
+        topics: ["t"],
+      }),
+    ).resolves.toBeUndefined()
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(request).toHaveBeenLastCalledWith("/repos/org/repo/topics", {
+      method: "PUT",
+      body: { names: ["t"] },
+    })
+  })
+
+  it("fails open: a topics PUT rejection is swallowed", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("403 topics blocked"))
+    const client = { request } as unknown as GitHubClient
+    await expect(
+      applyRepoAboutTopics(client, "org", "repo", { topics: ["t"] }),
+    ).resolves.toBeUndefined()
   })
 })
