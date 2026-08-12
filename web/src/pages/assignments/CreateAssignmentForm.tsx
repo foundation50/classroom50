@@ -116,6 +116,17 @@ const CreateAssignmentForm = ({
     }
   }
 
+  // Edit-mode discard: revert all unsaved edits to the stored assignment. The
+  // schedule pickers' shown/hidden state lives in local state (seeded on mount),
+  // so re-sync it from the restored values or a discard would leave a stored
+  // date hidden behind a collapsed, out-of-sync picker.
+  const discardChanges = () => {
+    form.reset()
+    const restored = form.options.defaultValues as CreateAssignmentFormValues
+    setDueDateEnabled(Boolean(restored.due_date))
+    setAvailableFromEnabled(Boolean(restored.available_from_date))
+  }
+
   return (
     <form
       onSubmit={(e) => {
@@ -237,7 +248,7 @@ const CreateAssignmentForm = ({
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => form.reset()}
+                    onClick={discardChanges}
                     disabled={isSubmitting || loading}
                   >
                     {t("assignments.form.discardChanges")}

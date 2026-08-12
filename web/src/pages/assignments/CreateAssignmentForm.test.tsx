@@ -468,6 +468,40 @@ describe("edit form re-disables Save after a successful save", () => {
     expect(discardButton()).toBeNull()
     expect(saveButton().disabled).toBe(true)
   })
+
+  it("Discard changes re-syncs the schedule pickers with the restored dates", async () => {
+    const user = userEvent.setup()
+    const withDue: Assignment = {
+      ...baseAssignment,
+      due: "2026-09-01T23:59:00Z",
+    }
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          edit
+          defaultValues={assignmentToFormValues(withDue)}
+          onSubmit={vi.fn()}
+        />
+      </QueryClientProvider>,
+    )
+    const dueToggle = () =>
+      container.querySelector<HTMLInputElement>("#due_date-enabled")!
+    // Stored due date -> picker starts shown.
+    expect(dueToggle().checked).toBe(true)
+
+    // Turn the picker off (clears due_date), making the form dirty.
+    await user.click(dueToggle())
+    expect(dueToggle().checked).toBe(false)
+
+    // Discard restores the stored due date AND re-shows its picker.
+    await user.click(
+      screen.getByRole("button", {
+        name: "assignments.form.discardChanges",
+      }),
+    )
+    expect(dueToggle().checked).toBe(true)
+    expect(screen.getByLabelText("assignments.form.dueDate")).not.toBeNull()
+  })
 })
 // Built-in runtime options (language versions + apt) are disabled when the
 // runner targets self-hosted: the grade job skips managed setup there
