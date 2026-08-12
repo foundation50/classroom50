@@ -432,6 +432,19 @@ const SubmissionsPageContent = () => {
     enabled: liveCapable,
   })
 
+  // MIGRATION(v1.28): legacy-preserving gate. Safe to simplify (drop the
+  // submissionTrackingMigrated term, always enable) in a future version once no
+  // legacy (submission_mode-absent) files remain. Greppable tag: MIGRATION(v1.28).
+  // The detection overlay is a submission-configuration feature that did not
+  // exist pre-1.28, so a file written before it (no submission_mode field) must
+  // keep its pre-1.28 submit/*-only counts until a teacher explicitly migrates.
+  // The presence of an explicit submission_mode is the opt-in signal the
+  // classroom-wide migration writes; absent = legacy = overlay off. The live
+  // submit/* overlay (useLiveSubmissions) stays on either way, so a legacy
+  // file's owner experience is byte-identical to pre-1.28.
+  const submissionTrackingMigrated =
+    assignmentInfo?.submission_mode !== undefined
+
   // Detection overlay (submission-configuration hybrid model): the same
   // page-scoped owners as the live fan-out, reading each repo's default-branch
   // pushes (branch mode) or git tags (tag mode) so a submission shows even
@@ -444,7 +457,7 @@ const SubmissionsPageContent = () => {
       mode: assignmentInfo?.submission_mode,
       submissionTags: assignmentInfo?.submission_tags,
       repoOwners: livePageOwners,
-      enabled: liveCapable,
+      enabled: liveCapable && submissionTrackingMigrated,
     })
 
   // Overlay live presence over the snapshot for a live-capable viewer (snapshot
