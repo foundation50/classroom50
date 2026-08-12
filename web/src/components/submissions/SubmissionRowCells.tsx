@@ -1,8 +1,11 @@
 import { useTranslation } from "react-i18next"
 import { GitCommitHorizontal, Tag } from "lucide-react"
 
-import { Badge } from "@/components/ui"
-import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
+import { Badge, type BadgeSize } from "@/components/ui"
+import {
+  submissionModeBadgeKey,
+  submissionModeCountKey,
+} from "@/domain/assignments/submissionDetection"
 import { formatSubmissionDateTime } from "@/util/formatDate"
 import type { SubmissionMode } from "@/types/classroom"
 
@@ -21,6 +24,27 @@ export const SubmissionModeIcon = ({
   ) : (
     <GitCommitHorizontal aria-hidden="true" className={className} />
   )
+
+// The "what counts as a submission" mode badge, shared by the teacher heading
+// and the student page so their wording can't drift. `skipsGrading` drops the
+// "is graded" claim for assignments that never autograde.
+export const SubmissionModeBadge = ({
+  mode,
+  skipsGrading = false,
+  size,
+}: {
+  mode: SubmissionMode | undefined
+  skipsGrading?: boolean
+  size?: BadgeSize
+}) => {
+  const { t } = useTranslation()
+  return (
+    <Badge ghost size={size} className="gap-1">
+      <SubmissionModeIcon mode={mode} />
+      {t(submissionModeBadgeKey(mode, skipsGrading))}
+    </Badge>
+  )
+}
 
 // The type-aware submission-count chip, shared by the teacher table and the
 // student page. Always a button so it consistently opens the details modal —

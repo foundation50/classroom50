@@ -24,8 +24,7 @@ import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal
 import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
-import { submissionModeBadgeKey } from "@/domain/assignments/submissionDetection"
-import { SubmissionModeIcon } from "@/components/submissions/SubmissionRowCells"
+import { SubmissionModeBadge } from "@/components/submissions/SubmissionRowCells"
 import { AssignmentSetupBadge } from "@/components/submissions/AssignmentSetupBadge"
 import {
   assignmentSkipsGrading,
@@ -949,15 +948,11 @@ const SubmissionsPageContent = () => {
               </Badge>
             )}
             {assignmentInfo && (
-              <Badge ghost size="md" className="gap-1">
-                <SubmissionModeIcon mode={assignmentInfo.submission_mode} />
-                {t(
-                  submissionModeBadgeKey(
-                    assignmentInfo.submission_mode,
-                    skipsGrading,
-                  ),
-                )}
-              </Badge>
+              <SubmissionModeBadge
+                mode={assignmentInfo.submission_mode}
+                skipsGrading={skipsGrading}
+                size="md"
+              />
             )}
             {assignmentInfo && (
               <AssignmentSetupBadge assignment={assignmentInfo} size="md" />

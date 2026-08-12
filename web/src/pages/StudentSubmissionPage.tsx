@@ -19,10 +19,8 @@ import { studentRepoName } from "@/util/studentRepo"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { safeHttpUrl } from "@/util/url"
 import type { GitHubCommit, GitHubRelease } from "@/github-core/types"
-import {
-  submissionModeBadgeKey,
-  submissionModeCountKey,
-} from "@/domain/assignments/submissionDetection"
+import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
+import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import { assignmentSkipsGrading } from "@/domain/assignments/autogradingState"
 import type { Assignment, SubmissionMode } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
@@ -42,7 +40,7 @@ import {
 import {
   LastSubmittedCell,
   SubmissionCountCell,
-  SubmissionModeIcon,
+  SubmissionModeBadge,
 } from "@/components/submissions/SubmissionRowCells"
 import { StudentRowActions } from "@/pages/submissions/StudentRowActions"
 import SubmitGuidance from "@/components/SubmitGuidance"
@@ -51,7 +49,7 @@ import SubmitGuidance from "@/components/SubmitGuidance"
 // push submission can link the graded release published at its commit. Returns
 // undefined for a milestone or malformed tag (no reliable per-commit release).
 const releaseShaFromTag = (tagName: string): string | undefined => {
-  if (!tagName.startsWith("submit/")) return undefined
+  if (!tagName.startsWith(SUBMISSION_TAG_PREFIX)) return undefined
   const sha = tagName.slice(tagName.lastIndexOf("-") + 1)
   return sha || undefined
 }
@@ -111,15 +109,10 @@ const AssignmentMeta = ({
           {t("submissions.student.modeIndividual")}
         </Badge>
       ) : null}
-      <Badge ghost className="gap-1">
-        <SubmissionModeIcon mode={submissionMode} />
-        {t(
-          submissionModeBadgeKey(
-            submissionMode,
-            assignmentSkipsGrading(assignment),
-          ),
-        )}
-      </Badge>
+      <SubmissionModeBadge
+        mode={submissionMode}
+        skipsGrading={assignmentSkipsGrading(assignment)}
+      />
       <AssignmentSetupBadge assignment={assignment} size="sm" />
       <Badge
         tone={overdue ? "error" : "neutral"}

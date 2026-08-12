@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 
 import { CopyableCode } from "@/components/ui"
+import { isGlobPattern } from "@/domain/assignments/submissionDetection"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import type { SubmissionMode } from "@/types/classroom"
 
@@ -8,7 +9,7 @@ import type { SubmissionMode } from "@/types/classroom"
 // pattern that is a literal tag name (no glob metacharacters), so the copied
 // command is runnable. Falls back to a generic name when only globs are set.
 const exampleMilestoneTag = (submissionTags?: string[]): string => {
-  const literal = submissionTags?.find((p) => !/[*?+[\]]/.test(p))
+  const literal = submissionTags?.find((p) => !isGlobPattern(p))
   return literal ?? "milestone"
 }
 

@@ -23,7 +23,7 @@ export type DetectedSubmission = {
 
 // A glob pattern uses any Actions tag-filter metacharacter; an exact pattern is
 // a literal tag name. Only globs GROUP their matches into one submission set.
-function isGlobPattern(pattern: string): boolean {
+export function isGlobPattern(pattern: string): boolean {
   return /[*?+[\]]/.test(pattern)
 }
 

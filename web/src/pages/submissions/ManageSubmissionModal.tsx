@@ -17,11 +17,9 @@ import {
   type SubmissionActionListProps,
 } from "@/pages/submissions/SubmissionsRowActions"
 import { ActionListRow } from "@/pages/submissions/actionLayout"
-import { formatSubmissionDateTime } from "@/util/formatDate"
+import { formatSubmissionDateTime as formatDateTime } from "@/util/formatDate"
 import type { GitHubRepo } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
-
-const formatDateTime = formatSubmissionDateTime
 
 // Read-only context above the action list: accept time (repo creation), last
 // push, the enrolled owner's effective access, and any extra collaborators.
