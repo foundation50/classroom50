@@ -4048,8 +4048,9 @@ describe("migrateClassroomAssignments", () => {
     expect(result.migratedCount).toBe(3)
     expect(result.alreadyMigratedCount).toBe(0)
     const written = committed()!
-    // Every entry now carries an explicit every-push mode and auto grading.
-    expect(written.match(/"submission_mode": "every-push"/g)).toHaveLength(3)
+    // Every entry now carries an explicit tag mode (preserving pre-1.28
+    // submit/*-release counting) and auto grading.
+    expect(written.match(/"submission_mode": "tag"/g)).toHaveLength(3)
     expect(written.match(/"mode": "auto"/g)).toHaveLength(3)
   })
 
@@ -4070,7 +4071,7 @@ describe("migrateClassroomAssignments", () => {
 
   it("migrates only the legacy entries, leaving already-migrated ones untouched", async () => {
     const { client, committed } = makeMigrateClient([
-      legacyEntry("hw1", { submission_mode: "tag" }),
+      legacyEntry("hw1", { submission_mode: "every-push" }),
       legacyEntry("hw2"),
     ])
     const result = await migrateClassroomAssignments(client, {
@@ -4080,9 +4081,10 @@ describe("migrateClassroomAssignments", () => {
     expect(result.migratedCount).toBe(1)
     expect(result.alreadyMigratedCount).toBe(1)
     const written = committed()!
-    // The pre-migrated tag entry keeps its mode; only the legacy one gains one.
-    expect(written).toContain(`"submission_mode": "tag"`)
-    expect(written.match(/"submission_mode": "every-push"/g)).toHaveLength(1)
+    // The pre-migrated every-push entry keeps its mode; the legacy one gains
+    // tag mode (the pre-1.28-preserving default), so both survive distinctly.
+    expect(written).toContain(`"submission_mode": "every-push"`)
+    expect(written.match(/"submission_mode": "tag"/g)).toHaveLength(1)
   })
 
   it("preserves an entry's grading and unknown fields verbatim", async () => {

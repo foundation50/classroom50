@@ -1500,17 +1500,20 @@ function isSubmissionTrackingMigrated(entry: Assignment): boolean {
 }
 
 // Normalize an unmigrated entry into the new canonical shape by writing the
-// fields that pre-1.28 left absent: submission_mode = "every-push" (the wire
-// default, so behavior is unchanged) and, when grading is absent, an explicit
-// grading: { mode: "auto" } so the file self-documents. Immutable provisioning
-// flags (empty_repo/no_autograder/init_shim), locked/closed, and every other
-// field are left exactly as-is. Returns the entry unchanged when already
-// migrated.
+// fields that pre-1.28 left absent: submission_mode = "tag" and, when grading
+// is absent, an explicit grading: { mode: "auto" } so the file self-documents.
+// "tag" (NOT "every-push") is what preserves pre-1.28 counting: before 1.28 a
+// submission was a submit/* release, and tag-mode detection counts exactly the
+// always-unioned submit/* namespace — every-push would instead start counting
+// every default-branch push, inflating the count for an untouched file.
+// Immutable provisioning flags (empty_repo/no_autograder/init_shim),
+// locked/closed, and every other field are left exactly as-is. Returns the
+// entry unchanged when already migrated.
 function normalizeEntryForMigration(entry: Assignment): Assignment {
   if (isSubmissionTrackingMigrated(entry)) return entry
   const migrated: Assignment = {
     ...entry,
-    submission_mode: SUBMISSION_MODES[0],
+    submission_mode: "tag",
   }
   if (migrated.grading === undefined) {
     migrated.grading = { mode: "auto" }
@@ -1520,12 +1523,13 @@ function normalizeEntryForMigration(entry: Assignment): Assignment {
 
 // Migrate every eligible assignment in a classroom's assignments.json to the
 // new submission-configuration semantics in ONE commit: write an explicit
-// submission_mode (and grading: auto) onto each legacy entry so the detection
-// overlay opts in, while preserving pre-1.28 behavior byte-for-byte (every-push
-// is the wire default). This is a content normalization WITHIN v1 — the schema
-// sentinel is untouched and no version bump occurs. Unknown fields round-trip
-// via the whole-entry spread. Mirrors setAssignmentClosed's no-op short-circuit:
-// an all-migrated file skips the commit.
+// submission_mode: "tag" (and grading: auto) onto each legacy entry so the
+// detection overlay opts in while PRESERVING pre-1.28 counting — a submission
+// was a submit/* release before 1.28, and tag mode counts exactly the
+// always-unioned submit/* namespace. This is a content normalization WITHIN v1
+// — the schema sentinel is untouched and no version bump occurs. Unknown fields
+// round-trip via the whole-entry spread. Mirrors setAssignmentClosed's no-op
+// short-circuit: an all-migrated file skips the commit.
 export async function migrateClassroomAssignments(
   client: GitHubClient,
   input: MigrateClassroomAssignmentsInput,
