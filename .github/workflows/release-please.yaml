@@ -43,13 +43,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      # web--tag_name is the "web" package's path-prefixed output (path == its
-      # component). The deploy job gates on it; empty => no release, robust to the
-      # boolean/string coercion that silently skipped deploy on v1.12/v1.13.
-      # (The CLI dispatch reads steps.release.outputs directly, so no cli output
-      # is needed here.)
-      web_tag: ${{ steps.release.outputs['web--tag_name'] }}
+      # Effective release tags for this run (see "Resolve effective release
+      # tags"). Empty => no release for this commit, so deploy/publish are gated
+      # off. Resolving them separately (vs reading steps.release.outputs) lets a
+      # re-run finish a release whose tags release-please already created — a
+      # transient failure downstream of tagging used to strand the release AND
+      # report green on re-run (empty tag_name => everything skipped).
+      web_tag: ${{ steps.tags.outputs.web_tag }}
+      cli_tag: ${{ steps.tags.outputs.cli_tag }}
     steps:
+      - uses: actions/checkout@v7
+
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         with:
@@ -63,16 +67,68 @@ jobs:
           RP_OUTPUTS: ${{ toJSON(steps.release.outputs) }}
         run: echo "$RP_OUTPUTS"
 
+      # Prefer release-please's own tag outputs. When they're empty this can be
+      # either (a) a plain push with no release, or (b) a re-run of the run that
+      # released, where the release commit is already tagged so release-please
+      # reports nothing. Distinguish them: reconstruct web-v<ver>/cli-v<ver> from
+      # the manifest and adopt them ONLY if the tag exists AND points at THIS
+      # commit (github.sha). A normal push (tag absent or on another commit) thus
+      # still yields empty tags and never deploys — while a re-run of the release
+      # run resumes and completes it idempotently.
+      - name: Resolve effective release tags
+        id: tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RP_WEB_TAG: ${{ steps.release.outputs['web--tag_name'] }}
+          RP_CLI_TAG: ${{ steps.release.outputs['cli--tag_name'] }}
+        run: |
+          set -euo pipefail
+
+          # Emit a resolved tag for a package: pass through release-please's tag,
+          # else fall back to the manifest tag if it exists on THIS commit. A
+          # false trailing `if` returns 0, so the no-release path yields an empty
+          # tag without tripping `set -e`; keep that `if` last.
+          resolve() {
+            local pkg="$1" rp_tag="$2"
+            if [ -n "$rp_tag" ]; then
+              printf '%s' "$rp_tag"
+              return
+            fi
+            local ver
+            ver="$(jq -r --arg p "$pkg" '.[$p] // empty' .release-please-manifest.json)"
+            [ -n "$ver" ] || return 0
+            local tag="${pkg}-v${ver}"
+            local tag_sha
+            tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" \
+              --jq '.object.sha' 2>/dev/null || true)"
+            # Annotated tags resolve to a tag object; dereference to the commit.
+            if [ -n "$tag_sha" ]; then
+              local obj_type
+              obj_type="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_sha}" \
+                --jq '.object.sha' 2>/dev/null || true)"
+              [ -n "$obj_type" ] && tag_sha="$obj_type"
+            fi
+            if [ "$tag_sha" = "$GITHUB_SHA" ]; then
+              printf '%s' "$tag"
+            fi
+          }
+
+          web_tag="$(resolve web "$RP_WEB_TAG")"
+          cli_tag="$(resolve cli "$RP_CLI_TAG")"
+          echo "web_tag=$web_tag" >>"$GITHUB_OUTPUT"
+          echo "cli_tag=$cli_tag" >>"$GITHUB_OUTPUT"
+          echo "Resolved web_tag='$web_tag' cli_tag='$cli_tag' (sha $GITHUB_SHA)"
+
       # "Latest" on this repo tracks the web app (classroom50.org). release-please
       # marks every release it creates as latest (no make_latest option —
       # googleapis/release-please#2317), so pin it explicitly: web is latest, the
       # cli-v* release never is.
       - name: Pin the Latest release to web
-        if: ${{ steps.release.outputs['web--tag_name'] != '' }}
+        if: ${{ steps.tags.outputs.web_tag != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WEB_TAG: ${{ steps.release.outputs['web--tag_name'] }}
-          CLI_TAG: ${{ steps.release.outputs['cli--tag_name'] }}
+          WEB_TAG: ${{ steps.tags.outputs.web_tag }}
+          CLI_TAG: ${{ steps.tags.outputs.cli_tag }}
         run: |
           set -euo pipefail
           if [ -n "$CLI_TAG" ]; then
@@ -90,37 +146,79 @@ jobs:
       # the dispatched run so a failed CLI publish fails this release rather than
       # reporting green while gh-teacher/gh-student got no binaries.
       - name: Publish CLI extensions for the new tag
-        if: ${{ steps.release.outputs['cli--tag_name'] != '' }}
+        if: ${{ steps.tags.outputs.cli_tag != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CLI_TAG: ${{ steps.release.outputs['cli--tag_name'] }}
+          CLI_TAG: ${{ steps.tags.outputs.cli_tag }}
         run: |
           set -euo pipefail
 
-          # Record the newest existing cli-release run so we can identify the one
-          # we're about to create (gh workflow run returns no run id).
-          before="$(gh run list --workflow cli-release.yaml --repo "$GITHUB_REPOSITORY" \
-            --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          # Retry a gh call through transient GitHub-side failures (e.g. a TLS
+          # cert blip once stranded a release here). Fail only after retries.
+          gh_retry() {
+            local n=0 max=5 delay=5
+            until gh "$@"; do
+              n=$((n + 1))
+              if [ "$n" -ge "$max" ]; then
+                echo "::error::gh $* failed after $max attempts." >&2
+                return 1
+              fi
+              echo "gh $* failed (attempt $n/$max); retrying in ${delay}s…" >&2
+              sleep "$delay"
+              delay=$((delay * 2))
+            done
+          }
 
-          gh workflow run cli-release.yaml --repo "$GITHUB_REPOSITORY" --ref "$CLI_TAG" -f tag="$CLI_TAG"
+          # Idempotent: on a re-run, a successful cli-release for this tag may
+          # already exist — reuse it instead of dispatching a duplicate. If one
+          # is still in progress, wait on it; otherwise dispatch a fresh run.
+          existing="$(gh_retry run list --workflow cli-release.yaml --repo "$GITHUB_REPOSITORY" \
+            --limit 30 --json databaseId,headBranch,status,conclusion \
+            --jq "[.[] | select(.headBranch == \"${CLI_TAG}\")] | first // empty")"
 
-          # Poll for the run dispatch created after `before`. Registration is not
-          # instantaneous, so retry briefly before giving up.
           run_id=""
-          for _ in $(seq 1 30); do
-            run_id="$(gh run list --workflow cli-release.yaml --repo "$GITHUB_REPOSITORY" \
-              --event workflow_dispatch --limit 10 \
-              --json databaseId --jq "[.[].databaseId | select(. > ${before})] | max // empty")"
-            [ -n "$run_id" ] && break
-            sleep 5
-          done
+          if [ -n "$existing" ]; then
+            status="$(printf '%s' "$existing" | jq -r '.status')"
+            conclusion="$(printf '%s' "$existing" | jq -r '.conclusion')"
+            run_id="$(printf '%s' "$existing" | jq -r '.databaseId')"
+            if [ "$status" = "completed" ] && [ "$conclusion" = "success" ]; then
+              echo "cli-release for $CLI_TAG already succeeded (run $run_id); nothing to publish."
+              exit 0
+            fi
+            if [ "$status" = "completed" ]; then
+              echo "Prior cli-release for $CLI_TAG ended '$conclusion'; dispatching a fresh run."
+              run_id=""
+            else
+              echo "cli-release for $CLI_TAG already in progress (run $run_id); waiting on it."
+            fi
+          fi
+
           if [ -z "$run_id" ]; then
-            echo "::error::Dispatched cli-release.yaml but could not find the new run to wait on."
-            exit 1
+            # Record the newest existing cli-release run so we can identify the
+            # one we're about to create (gh workflow run returns no run id).
+            before="$(gh_retry run list --workflow cli-release.yaml --repo "$GITHUB_REPOSITORY" \
+              --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+
+            gh_retry workflow run cli-release.yaml --repo "$GITHUB_REPOSITORY" --ref "$CLI_TAG" -f tag="$CLI_TAG"
+
+            # Poll for the run dispatch created after `before`. Registration is
+            # not instantaneous, so retry briefly before giving up.
+            for _ in $(seq 1 30); do
+              run_id="$(gh_retry run list --workflow cli-release.yaml --repo "$GITHUB_REPOSITORY" \
+                --event workflow_dispatch --limit 10 \
+                --json databaseId --jq "[.[].databaseId | select(. > ${before})] | max // empty")"
+              [ -n "$run_id" ] && break
+              sleep 5
+            done
+            if [ -z "$run_id" ]; then
+              echo "::error::Dispatched cli-release.yaml but could not find the new run to wait on."
+              exit 1
+            fi
           fi
 
           echo "Waiting on cli-release run $run_id ($CLI_TAG)…"
           # Exit non-zero (failing this release) if the CLI publish run fails.
+          # Not wrapped in gh_retry: a failed run must fail fast, not be re-watched.
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
 
   # Build + deploy the freshly tagged web release to production. Gated on a real
