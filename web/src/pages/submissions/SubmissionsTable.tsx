@@ -59,7 +59,11 @@ import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
-import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
+import {
+  detectedTagLabel,
+  detectedTagRef,
+  jumpableTagEntries,
+} from "@/domain/assignments/submissionDetection"
 import type { Student, SubmissionMode } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 
@@ -120,13 +124,6 @@ const HistoryLink = ({
     </span>
   )
 
-// A friendly label for a detected tag entry: strip the canonical submit/ prefix
-// so `submit/2026-...` reads as the timestamp, leaving milestone tags as-is.
-const tagLabel = (label: string): string =>
-  label.startsWith(SUBMISSION_TAG_PREFIX)
-    ? label.slice(SUBMISSION_TAG_PREFIX.length)
-    : label
-
 // The tagged-submissions block in the expanded row: one jump-to-tree link per
 // detected tag or tag group. Branch-mode `commit` entries carry no tag to jump
 // to and are skipped, so the section renders only when tag/tag-group entries
@@ -142,9 +139,7 @@ const TaggedSubmissions = ({
   repo: string
 }) => {
   const { t } = useTranslation()
-  const tagEntries = entries.filter(
-    (e) => e.kind === "tag" || e.kind === "tag-group",
-  )
+  const tagEntries = jumpableTagEntries(entries)
   if (tagEntries.length === 0) return null
 
   return (
@@ -155,16 +150,14 @@ const TaggedSubmissions = ({
       <ul className="flex flex-col gap-1">
         {tagEntries.map((entry) => {
           const isGroup = entry.kind === "tag-group"
-          // A group jumps to its representative commit (no single tag); an exact
-          // tag jumps to the tag ref itself.
-          const ref = isGroup ? entry.sha : entry.label
+          const ref = detectedTagRef(entry)
           const href = ref ? repoTreeAtRefUrl(org, repo, ref) : undefined
           const label = isGroup
             ? t("submissions.table.tagGroupCount", {
                 pattern: entry.label,
                 count: entry.count,
               })
-            : tagLabel(entry.label)
+            : detectedTagLabel(entry.label)
           return (
             <li
               key={`${entry.kind}-${entry.label}`}
@@ -454,10 +447,9 @@ const SubmissionsTable = ({
     // Detected tag/tag-group entries the expanded history can jump to (branch-
     // mode commit entries carry no tag and are excluded here, matching what
     // TaggedSubmissions renders).
-    const jumpableTags =
-      rest.detectedEntries?.filter(
-        (e) => e.kind === "tag" || e.kind === "tag-group",
-      ) ?? []
+    const jumpableTags = rest.detectedEntries
+      ? jumpableTagEntries(rest.detectedEntries)
+      : []
     // Expandability is driven by the COLLECTED history, not the (possibly
     // live-inflated) count: a `staleCount` row shows more submissions than
     // scores.json has ingested, so expanding would reveal fewer entries than the

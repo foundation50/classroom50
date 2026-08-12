@@ -1,4 +1,5 @@
 import type { GitHubCommit, GitHubTag } from "@/github-core/types"
+import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
 import { matchesSubmissionTag } from "@/util/submissionTags"
 
 // Pure derivation for the submission-detection subsystem (KTD6/KTD7): turn raw
@@ -89,4 +90,31 @@ export function detectedSubmissionCount(
   detected: DetectedSubmission[],
 ): number {
   return detected.reduce((sum, d) => sum + d.count, 0)
+}
+
+// The entries that can be "jumped to" as a tag: exact tags and glob groups.
+// Branch-mode `commit` entries carry no tag to jump to, so both submission
+// views filter them out before rendering jump links.
+export function jumpableTagEntries(
+  entries: DetectedSubmission[],
+): DetectedSubmission[] {
+  return entries.filter((e) => e.kind === "tag" || e.kind === "tag-group")
+}
+
+// The git ref a detected tag entry jumps to: an exact tag jumps to the tag name
+// itself; a glob group has no single tag, so it jumps to its representative
+// commit sha. Undefined when a group has no sha (defensive — detection always
+// sets one). Callers build the tree URL with repoTreeAtRefUrl.
+export function detectedTagRef(entry: DetectedSubmission): string | undefined {
+  return entry.kind === "tag-group" ? entry.sha : entry.label
+}
+
+// A friendly display label for an exact detected tag: strip the canonical
+// submit/ prefix so `submit/2026-...` reads as the timestamp; milestone tags
+// are shown as-is. Groups are labeled by their pattern + count in the view
+// (i18n), so this is only used for exact tags.
+export function detectedTagLabel(label: string): string {
+  return label.startsWith(SUBMISSION_TAG_PREFIX)
+    ? label.slice(SUBMISSION_TAG_PREFIX.length)
+    : label
 }

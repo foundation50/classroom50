@@ -4,8 +4,12 @@ import {
   detectBranchSubmissions,
   detectTagSubmissions,
   detectedSubmissionCount,
+  detectedTagLabel,
+  detectedTagRef,
+  jumpableTagEntries,
 } from "./submissionDetection"
 import type { GitHubCommit, GitHubTag } from "@/github-core/types"
+import type { DetectedSubmission } from "./submissionDetection"
 
 function commit(sha: string): GitHubCommit {
   return {
@@ -83,5 +87,47 @@ describe("detectTagSubmissions", () => {
     expect(detectedSubmissionCount(detected)).toBe(3)
     expect(detected[0]).toMatchObject({ kind: "tag", label: "v1" })
     expect(detected[1]).toMatchObject({ kind: "tag-group", count: 2 })
+  })
+})
+
+describe("jumpableTagEntries", () => {
+  const entries: DetectedSubmission[] = [
+    { kind: "commit", label: "aaa1111", count: 1, sha: "aaa1111" },
+    { kind: "tag", label: "phase1", count: 1, sha: "bbb2222" },
+    { kind: "tag-group", label: "v*", count: 2, sha: "ccc3333" },
+  ]
+
+  it("keeps only tag and tag-group entries (commit entries have no tag)", () => {
+    expect(jumpableTagEntries(entries)).toEqual([entries[1], entries[2]])
+  })
+
+  it("returns an empty array when there are no tags", () => {
+    expect(jumpableTagEntries([entries[0]])).toEqual([])
+  })
+})
+
+describe("detectedTagRef", () => {
+  it("uses the tag name for an exact tag", () => {
+    expect(
+      detectedTagRef({ kind: "tag", label: "phase1", count: 1, sha: "aaa" }),
+    ).toBe("phase1")
+  })
+
+  it("uses the representative commit sha for a glob group", () => {
+    expect(
+      detectedTagRef({ kind: "tag-group", label: "v*", count: 3, sha: "bbb" }),
+    ).toBe("bbb")
+  })
+})
+
+describe("detectedTagLabel", () => {
+  it("strips the canonical submit/ prefix", () => {
+    expect(detectedTagLabel("submit/2026-01-02T03-04-05Z-abc1234")).toBe(
+      "2026-01-02T03-04-05Z-abc1234",
+    )
+  })
+
+  it("leaves a milestone tag unchanged", () => {
+    expect(detectedTagLabel("phase1")).toBe("phase1")
   })
 })

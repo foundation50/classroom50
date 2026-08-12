@@ -25,6 +25,11 @@ import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { safeHttpUrl } from "@/util/url"
 import type { GitHubRelease } from "@/github-core/types"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
+import {
+  detectedTagLabel,
+  detectedTagRef,
+  jumpableTagEntries,
+} from "@/domain/assignments/submissionDetection"
 import type { Assignment, SubmissionMode } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
@@ -36,13 +41,6 @@ import { Tag } from "lucide-react"
 // release name when present.
 const releaseLabel = (release: GitHubRelease): string =>
   release.name?.trim() || release.tag_name.replace(/^submit\//, "")
-
-const SUBMIT_PREFIX = "submit/"
-
-// A friendly label for a detected tag entry: strip the canonical submit/ prefix
-// so `submit/2026-...` reads as the timestamp; milestone tags are shown as-is.
-const detectedTagLabel = (label: string): string =>
-  label.startsWith(SUBMIT_PREFIX) ? label.slice(SUBMIT_PREFIX.length) : label
 
 const ReleaseRow = ({ release }: { release: GitHubRelease }) => {
   const { t } = useTranslation()
@@ -141,9 +139,7 @@ const TaggedSubmissionsCard = ({
   repo: string
 }) => {
   const { t } = useTranslation()
-  const tagEntries = entries.filter(
-    (e) => e.kind === "tag" || e.kind === "tag-group",
-  )
+  const tagEntries = jumpableTagEntries(entries)
 
   return (
     <div className="space-y-2">
@@ -159,7 +155,7 @@ const TaggedSubmissionsCard = ({
           <ul className="divide-y divide-base-200">
             {tagEntries.map((entry) => {
               const isGroup = entry.kind === "tag-group"
-              const ref = isGroup ? entry.sha : entry.label
+              const ref = detectedTagRef(entry)
               const href = ref ? repoTreeAtRefUrl(org, repo, ref) : undefined
               const label = isGroup
                 ? t("submissions.student.tagGroupCount", {
