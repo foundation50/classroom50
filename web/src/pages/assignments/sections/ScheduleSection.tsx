@@ -30,7 +30,10 @@ export function ScheduleSection({
     .find((part) => part.type === "timeZoneName")?.value
 
   return (
-    <SectionCard title={t("assignments.form.scheduleSection")} onReset={onReset}>
+    <SectionCard
+      title={t("assignments.form.scheduleSection")}
+      onReset={onReset}
+    >
       <div className="flex flex-col gap-4">
         <form.Field name="available_from_date">
           {(field) => (

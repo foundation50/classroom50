@@ -887,4 +887,3 @@ describe("validation error highlighting and scroll-to-first-error", () => {
     vi.restoreAllMocks()
   })
 })
-

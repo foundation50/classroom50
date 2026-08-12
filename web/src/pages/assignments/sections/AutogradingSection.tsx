@@ -31,7 +31,10 @@ export function AutogradingSection({
   const { t } = useTranslation()
 
   return (
-    <SectionCard title={t("assignments.form.autograding.label")} onReset={onReset}>
+    <SectionCard
+      title={t("assignments.form.autograding.label")}
+      onReset={onReset}
+    >
       <form.Subscribe selector={(state) => deriveFormShape(state.values)}>
         {(shape) =>
           !shape.showAutogradingConfig ? (

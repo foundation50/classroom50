@@ -6,11 +6,7 @@ import type { CreateAssignmentFormValues } from "../assignmentFormModel"
 // submission definition + milestone tags and the grading choice, right after
 // Repository Setup.
 export type SectionId =
-  | "details"
-  | "repository"
-  | "submission"
-  | "autograding"
-  | "schedule"
+  "details" | "repository" | "submission" | "autograding" | "schedule"
 
 // The fields each section owns. Used to decide whether a section differs from
 // its create defaults (so a Reset control appears) and to restore just that
