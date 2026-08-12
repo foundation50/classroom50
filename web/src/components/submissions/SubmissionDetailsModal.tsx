@@ -10,7 +10,10 @@ import { Button, Modal, MonoLtr } from "@/components/ui"
 // GitHub link (omit to render the row inert, e.g. a detected tag whose ref
 // can't be resolved). `sublabel` carries a secondary line such as the
 // submission time. `releaseHref`, when present, adds a secondary "View grade"
-// link to this submission's graded release.
+// link to this submission's graded release. `count` is how many underlying
+// submissions this row represents (1 for a single tag/commit; N for a glob
+// group that bundles N tags into one jumpable row) — so the modal header count
+// can match the row's count chip even when a group renders as one row.
 export type SubmissionDetailItem = {
   key: string
   kind: "tag" | "commit"
@@ -18,6 +21,15 @@ export type SubmissionDetailItem = {
   sublabel?: string
   href?: string
   releaseHref?: string
+  count: number
+}
+
+// The number of SUBMISSIONS a detail-item list represents: the sum of each
+// item's `count`, so a glob group (one row, N tags) contributes N. Single
+// source both submission views use for the count chip and the modal header, so
+// the chip and the modal can never disagree on a glob group's total.
+export function detailItemsCount(items: SubmissionDetailItem[]): number {
+  return items.reduce((sum, item) => sum + item.count, 0)
 }
 
 // A type-aware, read-only modal listing an assignment's submissions for one

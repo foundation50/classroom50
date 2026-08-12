@@ -65,12 +65,13 @@ vi.mock("@/hooks/useMySubmissions", () => ({
 }))
 
 let assignmentData: Assignment | undefined
+let assignmentError = false
 vi.mock("@/hooks/useSubmissionAssignment", () => ({
   useSubmissionAssignment: () => ({
     assignment: assignmentData,
     assignments: assignmentData ? [assignmentData] : [],
     isLoading: false,
-    isError: false,
+    isError: assignmentError,
   }),
 }))
 
@@ -111,6 +112,7 @@ beforeEach(() => {
   taggedData = []
   pushData = []
   assignmentData = assignment()
+  assignmentError = false
 })
 
 afterEach(cleanup)
@@ -207,5 +209,15 @@ describe("StudentSubmissionPage submission type", () => {
       name: "submissions.details.viewGrade",
     })
     expect(gradeLink.getAttribute("href")).toContain("/releases/tag/")
+  })
+
+  it("surfaces an error (not the submission table) when the assignment metadata read fails", () => {
+    // A transient Pages metadata failure must surface rather than degrade to a
+    // slug title + default push mode. The submission table should not render.
+    assignmentError = true
+    assignmentData = undefined
+    render(<StudentSubmissionPage />)
+    expect(screen.getByText("submissions.student.loadError")).toBeTruthy()
+    expect(screen.queryByText("submissions.table.colSubmissions")).toBeNull()
   })
 })

@@ -27,10 +27,26 @@ export type PushSubmission = {
   releaseHref?: string | null
 }
 
+// A normalized tag submission collected in scores.json, used as the FALLBACK
+// tag source for a viewer without the owner-only detection overlay (a non-owner
+// staff viewer, or the owner before detection resolves): the collected count is
+// present for everyone, so the modal must list SOMETHING rather than a false
+// "no tagged submissions" empty state that contradicts the count chip. Each
+// carries its jump targets (the release, else the commit) as raw URLs the
+// builder guards.
+export type CollectedTagSubmission = {
+  key: string
+  datetime?: string
+  commitHref?: string | null
+  releaseHref?: string | null
+}
+
 // Map detected tag/tag-group entries to details-modal items. Shared by the
 // teacher table and the student page (byte-identical before extraction): an
 // exact tag shows its stripped label and jumps to its tree; a glob group shows
-// its pattern + match count and jumps to its representative commit.
+// its pattern + match count and jumps to its representative commit. A group's
+// `count` is its match count so the modal header (sum of item counts) matches
+// the count chip even though the group renders as one row.
 export function tagDetailItems(
   entries: DetectedSubmission[],
   org: string,
@@ -48,6 +64,31 @@ export function tagDetailItems(
           })
         : detectedTagLabel(entry.label),
     href: detectedTagHref(entry, org, repo),
+    count: entry.count,
+  }))
+}
+
+// Fallback tag items from the collected scores.json history when no detection
+// overlay is available. One row per collected submission, newest first (the
+// caller supplies them newest-first), jumping to the graded release (else the
+// commit). Numbered #N…#1 so the newest reads highest, matching the push list.
+// Each represents one submission, so `count` is 1.
+export function collectedTagDetailItems(
+  submissions: CollectedTagSubmission[],
+  t: Translate,
+): SubmissionDetailItem[] {
+  return submissions.map((submission, i) => ({
+    key: submission.key,
+    kind: "tag",
+    label: t("submissions.details.tagEntry", {
+      number: submissions.length - i,
+    }),
+    sublabel: submission.datetime
+      ? formatSubmissionDateTime(submission.datetime)
+      : undefined,
+    href:
+      safeHttpUrl(submission.releaseHref) ?? safeHttpUrl(submission.commitHref),
+    count: 1,
   }))
 }
 
@@ -67,29 +108,38 @@ export function commitDetailItems(
       : undefined,
     href: safeHttpUrl(commit.commitHref),
     releaseHref: safeHttpUrl(commit.releaseHref),
+    count: 1,
   }))
 }
 
 // The one type-aware item builder both views use: tag entries in tag mode, push
 // submissions otherwise. Each view feeds only its own mode's source (a
 // branch-mode repo has no tags; a tag-mode repo's commits aren't the submission
-// unit), so the unused side is simply empty.
+// unit), so the unused side is simply empty. In tag mode, when the detection
+// overlay is empty (a viewer without it) but collected tag submissions exist,
+// fall back to those so the modal never contradicts a positive count chip.
 export function buildSubmissionDetailItems(
   {
     tags,
     commits,
+    collectedTags = [],
   }: {
     tags: DetectedSubmission[]
     commits: PushSubmission[]
+    collectedTags?: CollectedTagSubmission[]
   },
   mode: SubmissionMode | undefined,
   org: string,
   repo: string,
   t: Translate,
 ): SubmissionDetailItem[] {
-  return resolveSubmissionMode(mode) === "tag"
-    ? tagDetailItems(tags, org, repo, t)
-    : commitDetailItems(commits, t)
+  if (resolveSubmissionMode(mode) !== "tag") {
+    return commitDetailItems(commits, t)
+  }
+  const detected = tagDetailItems(tags, org, repo, t)
+  return detected.length > 0
+    ? detected
+    : collectedTagDetailItems(collectedTags, t)
 }
 
 // The details modal's no-submissions copy + repository link, keyed by mode:

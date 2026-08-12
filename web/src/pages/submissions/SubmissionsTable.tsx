@@ -45,12 +45,14 @@ import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import {
   SubmissionDetailsModal,
+  detailItemsCount,
   type SubmissionDetailItem,
 } from "@/components/submissions/SubmissionDetailsModal"
 import {
   buildSubmissionDetailItems,
   submissionEmptyState,
   type PushSubmission,
+  type CollectedTagSubmission,
 } from "@/components/submissions/submissionDetailItems"
 import {
   LastSubmittedCell,
@@ -94,7 +96,6 @@ type SubmissionDetailsContext = {
 }
 
 // Build the type-aware detail items for a row via the shared builder: tag
-// Build the type-aware detail items for a row via the shared builder: tag
 // entries in tag mode, the default-branch pushes otherwise.
 //
 // Every-push commits come from the DETECTED entries (`row.detectedEntries`,
@@ -104,6 +105,12 @@ type SubmissionDetailsContext = {
 // that sha carries a graded release, folds in a "View grade" link. When there
 // are no detected commits (e.g. a non-owner viewer, whose chip also uses the
 // collected count), fall back to the collected `submissions`.
+//
+// Tag mode is symmetric: detected tag entries drive the list for an owner with
+// the detection overlay; a viewer without it (a non-owner staff member, or the
+// owner before detection resolves) falls back to the collected `submissions`
+// so the modal never renders a false "no tagged submissions" empty state beside
+// a positive count chip.
 function buildDetailItems(
   row: SubmissionRow,
   mode: SubmissionMode,
@@ -142,8 +149,19 @@ function buildDetailItems(
           releaseHref: s.release,
         }))
 
+  // Tag-mode fallback for a viewer without the detection overlay: the collected
+  // attempts, jumping to the graded release (else the commit).
+  const collectedTags: CollectedTagSubmission[] = row.submissions.map(
+    (s, i) => ({
+      key: `tag-${s.datetime}-${s.commit}-${i}`,
+      datetime: s.datetime,
+      commitHref: s.commit,
+      releaseHref: s.release,
+    }),
+  )
+
   return buildSubmissionDetailItems(
-    { tags: row.detectedEntries ?? [], commits },
+    { tags: row.detectedEntries ?? [], commits, collectedTags },
     mode,
     org,
     repo,
@@ -748,12 +766,13 @@ const SubmissionsTable = ({
           subtitle={detailsContext.subtitle}
           repo={detailsContext.repo}
           repoHref={detailsContext.repoHref}
-          // Counts the listed detail items so the modal header always matches
-          // the rows shown. This can differ from the row's count chip, which
-          // reads the collected scores.json count and may be live-inflated
-          // ahead of what's listable (the "New" stale badge explains the gap).
+          // Counts the SUBMISSIONS the listed items represent (a glob group's
+          // row counts its N matches via detailItemsCount) so the modal header
+          // matches the row's count chip even for a group. This can still differ
+          // from the chip when the collected count is live-inflated ahead of
+          // what's listable (the "New" stale badge explains that gap).
           countLabel={t(submissionModeCountKey(assignmentMode), {
-            count: detailsContext.items.length,
+            count: detailItemsCount(detailsContext.items),
           })}
           items={detailsContext.items}
           {...submissionEmptyState(

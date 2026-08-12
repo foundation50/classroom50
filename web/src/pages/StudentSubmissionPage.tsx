@@ -29,6 +29,7 @@ import { EnterDiv } from "@/lib/motionComponents"
 import { Alert, Badge, Markdown } from "@/components/ui"
 import {
   SubmissionDetailsModal,
+  detailItemsCount,
   type SubmissionDetailItem,
 } from "@/components/submissions/SubmissionDetailsModal"
 import {
@@ -186,7 +187,10 @@ const SubmissionBody = ({
     repoName,
     t,
   )
-  const submissionCount = detailItems.length
+  // The number of SUBMISSIONS the listed items represent — a glob group's row
+  // counts its N matches (detailItemsCount), so this stays consistent with the
+  // teacher chip for the same tags rather than counting group rows.
+  const submissionCount = detailItemsCount(detailItems)
 
   // The newest submission's time for the "last submitted" cell: the newest
   // push's commit date in every-push mode, else the newest graded release's
@@ -241,7 +245,14 @@ const SubmissionBody = ({
     )
   }
 
-  const repoHref = studentRepo.html_url
+  // Guard the repo URL from the GitHub API before rendering it as a link, so it
+  // goes through the same safeHttpUrl check as every other href on this page
+  // (the empty-state link already did). The API always returns an https
+  // github.com URL, so this is a consistency guard; fall back to the raw value
+  // for the components that require a definite string and derive their own URLs.
+  const rawRepoHref = studentRepo.html_url
+  const safeRepoHref = safeHttpUrl(rawRepoHref)
+  const repoHref = safeRepoHref ?? rawRepoHref
 
   return (
     <EnterDiv className="mt-6 space-y-4">
@@ -331,7 +342,7 @@ const SubmissionBody = ({
             submissionMode,
             org,
             repoName,
-            safeHttpUrl(repoHref),
+            safeRepoHref,
             t,
           )}
         />
@@ -364,12 +375,11 @@ const StudentSubmissionPage = () => {
   // from PUBLIC GitHub Pages (source:"pages") — students can't read the private
   // config repo. The capability secret unlocks a protected classroom's Pages
   // path.
-  const { assignment: assignmentData } = useSubmissionAssignment(
-    org,
-    classroom,
-    assignment,
-    { source: "pages", secret },
-  )
+  const { assignment: assignmentData, isError: assignmentError } =
+    useSubmissionAssignment(org, classroom, assignment, {
+      source: "pages",
+      secret,
+    })
 
   const description = assignmentDescription(assignmentData)
   const submissionMode = assignmentData?.submission_mode
@@ -398,7 +408,16 @@ const StudentSubmissionPage = () => {
         </div>
       ) : null}
       {org && classroom && assignment ? (
-        assignmentData?.locked ? (
+        assignmentError ? (
+          // A failed Pages metadata read must surface, not silently degrade to
+          // the raw slug title + default (push) mode — which would render the
+          // wrong guidance for a tag-mode assignment. SubmissionBody would show
+          // its own error for the submission reads, but the mode/title come from
+          // here, so guard this read too.
+          <Alert tone="error" className="mt-6">
+            {t("submissions.student.loadError")}
+          </Alert>
+        ) : assignmentData?.locked ? (
           <EnterDiv className="alert alert-warning alert-soft mt-6">
             <div>{t("submissions.student.locked")}</div>
           </EnterDiv>

@@ -2307,6 +2307,7 @@
       "viewGrade": "View grade",
       "unavailable": "Unavailable",
       "pushEntry": "Push #{{number}}",
+      "tagEntry": "Submission #{{number}}",
       "emptyEveryPush": "No pushes to the default branch yet. The repository still exists — open it to see the code.",
       "emptyTag": "No tagged submissions yet. The repository still exists — open its tags to see submissions as they arrive.",
       "emptyLinkDefaultBranch": "View repository",

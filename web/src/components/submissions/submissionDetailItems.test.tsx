@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest"
 
 import {
   buildSubmissionDetailItems,
+  collectedTagDetailItems,
   commitDetailItems,
   submissionEmptyState,
   tagDetailItems,
 } from "./submissionDetailItems"
+import { detailItemsCount } from "./SubmissionDetailsModal"
 
 // The test i18n stand-in: echoes the key so assertions can match on it.
 const t = (key: string) => key
@@ -88,6 +90,120 @@ describe("tagDetailItems", () => {
     expect(items[0].label).toBe("submissions.type.tagGroupCount")
     expect(items[0].href).toBe(
       "https://github.com/acme/cs101-hw1-alice/tree/bbb2222",
+    )
+  })
+
+  it("carries a glob group's match count so the header can sum to the chip", () => {
+    const items = tagDetailItems(
+      [{ kind: "tag-group", label: "v*", count: 3, sha: "bbb2222" }],
+      "acme",
+      "cs101-hw1-alice",
+      t,
+    )
+    // One row, but it represents 3 submissions — detailItemsCount sums them so
+    // the modal header matches the count chip (fixes chip/modal divergence).
+    expect(items).toHaveLength(1)
+    expect(items[0].count).toBe(3)
+    expect(detailItemsCount(items)).toBe(3)
+  })
+})
+
+describe("detailItemsCount", () => {
+  it("sums per-item counts (a glob group contributes its matches)", () => {
+    const items = tagDetailItems(
+      [
+        { kind: "tag", label: "phase1", count: 1, sha: "aaa1111" },
+        { kind: "tag-group", label: "v*", count: 3, sha: "bbb2222" },
+      ],
+      "acme",
+      "cs101-hw1-alice",
+      t,
+    )
+    expect(items).toHaveLength(2)
+    expect(detailItemsCount(items)).toBe(4)
+  })
+})
+
+describe("collectedTagDetailItems", () => {
+  it("numbers collected tag submissions newest-first, prefers the release href, count 1", () => {
+    const items = collectedTagDetailItems(
+      [
+        {
+          key: "t1",
+          datetime: "2026-06-21T10:00:00Z",
+          commitHref: "https://github.com/x/y/commit/bbb",
+          releaseHref: "https://github.com/x/y/releases/tag/z",
+        },
+        {
+          key: "t2",
+          datetime: "2026-06-20T10:00:00Z",
+          commitHref: "https://github.com/x/y/commit/aaa",
+          releaseHref: null,
+        },
+      ],
+      t,
+    )
+    expect(items).toHaveLength(2)
+    expect(items.every((i) => i.kind === "tag")).toBe(true)
+    // Newest first is #2, oldest #1.
+    expect(items[0].label).toBe("submissions.details.tagEntry")
+    // Release href preferred; falls back to the commit href when absent.
+    expect(items[0].href).toBe("https://github.com/x/y/releases/tag/z")
+    expect(items[1].href).toBe("https://github.com/x/y/commit/aaa")
+    expect(detailItemsCount(items)).toBe(2)
+  })
+
+  it("drops unsafe hrefs", () => {
+    const items = collectedTagDetailItems(
+      [{ key: "t", releaseHref: "javascript:alert(1)", commitHref: null }],
+      t,
+    )
+    expect(items[0].href).toBeUndefined()
+  })
+})
+
+describe("buildSubmissionDetailItems tag fallback", () => {
+  it("falls back to collected tags when no detection overlay is present", () => {
+    // A non-owner viewer: detectedEntries (tags) is empty, but collected
+    // submissions exist. The modal must list them, not render a false empty
+    // state that contradicts the positive count chip.
+    const items = buildSubmissionDetailItems(
+      {
+        tags: [],
+        commits: [],
+        collectedTags: [
+          {
+            key: "t1",
+            datetime: "2026-06-21T10:00:00Z",
+            releaseHref: "https://github.com/x/y/releases/tag/z",
+          },
+        ],
+      },
+      "tag",
+      "acme",
+      "cs101-hw1-alice",
+      t,
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0].kind).toBe("tag")
+    expect(items[0].href).toBe("https://github.com/x/y/releases/tag/z")
+  })
+
+  it("prefers detected tag entries over the collected fallback", () => {
+    const items = buildSubmissionDetailItems(
+      {
+        tags: [{ kind: "tag", label: "phase1", count: 1, sha: "aaa1111" }],
+        commits: [],
+        collectedTags: [{ key: "t1", releaseHref: "https://x/releases/tag/z" }],
+      },
+      "tag",
+      "acme",
+      "cs101-hw1-alice",
+      t,
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0].href).toBe(
+      "https://github.com/acme/cs101-hw1-alice/tree/phase1",
     )
   })
 })
