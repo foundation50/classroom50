@@ -53,3 +53,64 @@ export function deriveAutogradingState(
   if (isNoAutograderAssignment(assignment)) return "none"
   return "built-in"
 }
+
+// The setup a submission view surfaces in its heading: whether student repos
+// come from a template, and what grading (if any) runs. Single source so the
+// teacher gradebook and the student page describe an assignment identically.
+//
+// The three states map to the autograding tri-state, but the badge is framed
+// around the STARTER CODE the student sees (template vs empty), because that is
+// what the badge's detail message explains:
+//   - empty      -> "No template": bare repos, nothing autogrades.
+//   - none       -> "Template + custom CI": templated, teacher-supplied CI runs
+//                   instead of built-in autograding/scores/feedback PR.
+//   - built-in   -> "Template" when a template repo is set, else "Built-in
+//                   autograder" (an init_shim, template-less repo that grades).
+export type AssignmentSetupInfo = {
+  state: AutogradingState
+  hasTemplate: boolean
+  // i18n keys the shared badge + its detail modal render. The detail key's
+  // message explains what is enabled/disabled for this setup.
+  badgeKey: string
+  detailKey: string
+  // The badge tone: neutral for the fully-featured built-in path, info for the
+  // reduced-capability setups so a teacher/student notices grading is limited.
+  tone: "neutral" | "info"
+}
+
+export function assignmentSetupInfo(
+  assignment: Assignment,
+): AssignmentSetupInfo {
+  const state = deriveAutogradingState(assignment)
+  const hasTemplate = Boolean(assignment.template)
+
+  if (state === "empty") {
+    return {
+      state,
+      hasTemplate: false,
+      badgeKey: "submissions.setup.badgeEmpty",
+      detailKey: "submissions.setup.detailEmpty",
+      tone: "info",
+    }
+  }
+  if (state === "none") {
+    return {
+      state,
+      hasTemplate,
+      badgeKey: "submissions.setup.badgeCustomCi",
+      detailKey: "submissions.setup.detailCustomCi",
+      tone: "info",
+    }
+  }
+  return {
+    state,
+    hasTemplate,
+    badgeKey: hasTemplate
+      ? "submissions.setup.badgeTemplate"
+      : "submissions.setup.badgeBuiltIn",
+    detailKey: hasTemplate
+      ? "submissions.setup.detailTemplate"
+      : "submissions.setup.detailBuiltIn",
+    tone: "neutral",
+  }
+}

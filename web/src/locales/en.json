@@ -2301,6 +2301,18 @@
       "tagGroupCount_one": "{{pattern}} · {{count}} tag",
       "tagGroupCount_other": "{{pattern}} · {{count}} tags"
     },
+    "setup": {
+      "badgeTemplate": "Template",
+      "badgeBuiltIn": "Built-in autograder",
+      "badgeCustomCi": "Template · custom CI",
+      "badgeEmpty": "No template",
+      "viewDetailsTitle": "How this assignment is set up",
+      "viewTemplate": "View template ({{repo}})",
+      "detailTemplate": "Student repositories are generated from a template repository and autograded with the built-in autograder — scores and the feedback pull request are enabled. Students clone their repository, do their work, and submit.",
+      "detailBuiltIn": "Student repositories are created from the built-in autograder starter (no template) and are autograded — scores and the feedback pull request are enabled. Students clone their repository, do their work, and submit.",
+      "detailCustomCi": "Student repositories are generated from a template that supplies its own CI — the built-in autograder, scores, and the feedback pull request are disabled. Any grading is whatever the template's own workflows do. Students clone their repository, do their work, and push.",
+      "detailEmpty": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted."
+    },
     "details": {
       "viewRepository": "View repository",
       "viewSubmissions": "View submissions",

@@ -33,6 +33,7 @@ import {
   detailItemsCount,
   type SubmissionDetailItem,
 } from "@/components/submissions/SubmissionDetailsModal"
+import { AssignmentSetupBadge } from "@/components/submissions/AssignmentSetupBadge"
 import {
   buildSubmissionDetailItems,
   submissionEmptyState,
@@ -119,6 +120,7 @@ const AssignmentMeta = ({
           ),
         )}
       </Badge>
+      <AssignmentSetupBadge assignment={assignment} size="sm" />
       <Badge
         tone={overdue ? "error" : "neutral"}
         ghost={!overdue}
