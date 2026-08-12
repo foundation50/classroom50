@@ -9,7 +9,6 @@ import {
   resolveStudent,
 } from "@/util/students"
 import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
-import { repoTagsUrl } from "@/util/orgUrl"
 import { safeHttpUrl } from "@/util/url"
 import Avatar from "@/components/avatar"
 import { Badge, Button, Spinner, TablePagination } from "@/components/ui"
@@ -48,13 +47,12 @@ import {
   SubmissionDetailsModal,
   type SubmissionDetailItem,
 } from "@/components/submissions/SubmissionDetailsModal"
-import type { SubmissionRow } from "@/hooks/useGetScores"
 import {
-  detectedTagHref,
-  detectedTagLabel,
-  jumpableTagEntries,
-  submissionModeCountKey,
-} from "@/domain/assignments/submissionDetection"
+  submissionEmptyState,
+  tagDetailItems,
+} from "@/components/submissions/submissionDetailItems"
+import type { SubmissionRow } from "@/hooks/useGetScores"
+import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import type { Student, SubmissionMode } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 
@@ -109,21 +107,7 @@ function buildDetailItems(
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): SubmissionDetailItem[] {
   if (mode === "tag") {
-    const tags = row.detectedEntries
-      ? jumpableTagEntries(row.detectedEntries)
-      : []
-    return tags.map((entry) => ({
-      key: `${entry.kind}-${entry.label}`,
-      kind: "tag" as const,
-      label:
-        entry.kind === "tag-group"
-          ? t("submissions.type.tagGroupCount", {
-              pattern: entry.label,
-              count: entry.count,
-            })
-          : detectedTagLabel(entry.label),
-      href: detectedTagHref(entry, org, repo),
-    }))
+    return tagDetailItems(row.detectedEntries ?? [], org, repo, t)
   }
   return row.submissions.map((s, i) => ({
     key: `${s.datetime}-${s.commit}-${i}`,
@@ -781,21 +765,13 @@ const SubmissionsTable = ({
             count: detailsContext.items.length,
           })}
           items={detailsContext.items}
-          emptyLabel={
-            assignmentMode === "tag"
-              ? t("submissions.details.emptyTag")
-              : t("submissions.details.emptyEveryPush")
-          }
-          emptyLinkLabel={
-            assignmentMode === "tag"
-              ? t("submissions.details.emptyLinkTags")
-              : t("submissions.details.emptyLinkDefaultBranch")
-          }
-          emptyLinkHref={
-            assignmentMode === "tag"
-              ? repoTagsUrl(org, detailsContext.repo)
-              : detailsContext.repoHref
-          }
+          {...submissionEmptyState(
+            assignmentMode,
+            org,
+            detailsContext.repo,
+            detailsContext.repoHref,
+            t,
+          )}
         />
       )}
 

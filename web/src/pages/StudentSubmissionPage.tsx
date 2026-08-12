@@ -24,14 +24,10 @@ import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
-import { repoTagsUrl } from "@/util/orgUrl"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { safeHttpUrl } from "@/util/url"
 import type { GitHubRelease } from "@/github-core/types"
 import {
-  detectedTagHref,
-  detectedTagLabel,
-  jumpableTagEntries,
   submissionModeBadgeKey,
   submissionModeCountKey,
 } from "@/domain/assignments/submissionDetection"
@@ -43,6 +39,10 @@ import {
   SubmissionDetailsModal,
   type SubmissionDetailItem,
 } from "@/components/submissions/SubmissionDetailsModal"
+import {
+  submissionEmptyState,
+  tagDetailItems,
+} from "@/components/submissions/submissionDetailItems"
 import SubmitGuidance from "@/components/SubmitGuidance"
 
 // Strips the `submit/` tag prefix for a friendlier label, falling back to the
@@ -199,18 +199,7 @@ const SubmissionBody = ({
   // default-branch commits (every-push). Built here so both accepted states
   // share one source.
   const detailItems: SubmissionDetailItem[] = isTagMode
-    ? jumpableTagEntries(taggedSubmissions ?? []).map((entry) => ({
-        key: `${entry.kind}-${entry.label}`,
-        kind: "tag" as const,
-        label:
-          entry.kind === "tag-group"
-            ? t("submissions.type.tagGroupCount", {
-                pattern: entry.label,
-                count: entry.count,
-              })
-            : detectedTagLabel(entry.label),
-        href: detectedTagHref(entry, org, repoName),
-      }))
+    ? tagDetailItems(taggedSubmissions ?? [], org, repoName, t)
     : (pushSubmissions ?? []).map((commit, i) => ({
         key: `${commit.sha}-${i}`,
         kind: "commit" as const,
@@ -306,21 +295,13 @@ const SubmissionBody = ({
             count: submissionCount,
           })}
           items={detailItems}
-          emptyLabel={
-            isTagMode
-              ? t("submissions.details.emptyTag")
-              : t("submissions.details.emptyEveryPush")
-          }
-          emptyLinkLabel={
-            isTagMode
-              ? t("submissions.details.emptyLinkTags")
-              : t("submissions.details.emptyLinkDefaultBranch")
-          }
-          emptyLinkHref={
-            isTagMode
-              ? repoTagsUrl(org, repoName)
-              : safeHttpUrl(studentRepo.html_url)
-          }
+          {...submissionEmptyState(
+            submissionMode,
+            org,
+            repoName,
+            safeHttpUrl(studentRepo.html_url),
+            t,
+          )}
         />
       ) : null}
     </>
