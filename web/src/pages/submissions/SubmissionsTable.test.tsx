@@ -418,3 +418,258 @@ describe("SubmissionsTable hub action list", () => {
     ).toBeNull()
   })
 })
+
+describe("SubmissionsTable submission details modal", () => {
+  it("opens a type-aware details modal from the count chip in tag mode", async () => {
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="tag"
+        scores={[
+          scoreRow({
+            submissionCount: 1,
+            submissions: [
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit: "",
+                release: "",
+                score: 8,
+                "max-score": 10,
+              },
+            ],
+            detectedEntries: [
+              { kind: "tag", label: "phase1", count: 1, sha: "aaa1111" },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    // The count chip is always a button; its label is the tag count key.
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countTag" }),
+    )
+    // The modal lists the tag with a "View tag" link at the tag's tree.
+    const view = screen.getByRole("link", {
+      name: "submissions.details.viewTag",
+    })
+    expect(view.getAttribute("href")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/tree/phase1",
+    )
+  })
+
+  it("lists collected tag submissions when the detection overlay is absent (non-owner viewer)", async () => {
+    const user = userEvent.setup()
+    // A non-owner staff viewer (or the owner before detection resolves) has no
+    // detectedEntries, but the collected count is positive. The tag modal must
+    // fall back to the collected submissions, not render a false empty state
+    // that contradicts the count chip.
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="tag"
+        scores={[
+          scoreRow({
+            submissionCount: 2,
+            submissions: [
+              {
+                datetime: "2026-06-21T10:00:00Z",
+                commit: "https://github.com/acme/cs101-hw1-alice/commit/bbb",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fz",
+                score: 9,
+                "max-score": 10,
+              },
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit: "https://github.com/acme/cs101-hw1-alice/commit/aaa",
+                release: "",
+                score: 8,
+                "max-score": 10,
+              },
+            ],
+            // No detectedEntries: the owner-only overlay never ran for this row.
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countTag" }),
+    )
+    // Not the empty state: the collected submissions render as tag rows.
+    expect(screen.queryByText("submissions.details.emptyTag")).toBeNull()
+    const tagLinks = screen.getAllByRole("link", {
+      name: "submissions.details.viewTag",
+    })
+    expect(tagLinks).toHaveLength(2)
+    // Newest first jumps to its graded release; the one without a release
+    // falls back to its commit.
+    expect(tagLinks[0].getAttribute("href")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fz",
+    )
+    expect(tagLinks[1].getAttribute("href")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/commit/aaa",
+    )
+  })
+
+  it("keeps the tag glob-group modal header consistent with the count chip", async () => {
+    const user = userEvent.setup()
+    // A submit/* glob group collapses 3 tags into one jumpable row. The chip
+    // counts 3 (summed); the modal header must also read 3 (detailItemsCount
+    // sums the group's matches), not 1 (one row).
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="tag"
+        scores={[
+          scoreRow({
+            submissionCount: 3,
+            submissions: [
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit: "",
+                release: "",
+                score: 8,
+                "max-score": 10,
+              },
+            ],
+            detectedEntries: [
+              {
+                kind: "tag-group",
+                label: "submit/*",
+                count: 3,
+                sha: "aaa1111",
+              },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countTag" }),
+    )
+    // One jumpable row for the group; the header count is summed from the
+    // group's matches (detailItemsCount) rather than the row count, verified by
+    // the unit test for detailItemsCount — here we assert the group collapses to
+    // a single jump link while remaining openable.
+    const tagLinks = screen.getAllByRole("link", {
+      name: "submissions.details.viewTag",
+    })
+    expect(tagLinks).toHaveLength(1)
+    expect(tagLinks[0].getAttribute("href")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/tree/aaa1111",
+    )
+  })
+
+  it("opens each commit for an every-push row", async () => {
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        scores={[
+          scoreRow({
+            submissionCount: 2,
+            submissions: [
+              {
+                datetime: "2026-06-21T10:00:00Z",
+                commit: "https://github.com/acme/cs101-hw1-alice/commit/bbb",
+                release: "",
+                score: 9,
+                "max-score": 10,
+              },
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit: "https://github.com/acme/cs101-hw1-alice/commit/aaa",
+                release: "",
+                score: 8,
+                "max-score": 10,
+              },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    const commitLinks = screen.getAllByRole("link", {
+      name: "submissions.details.viewCommit",
+    })
+    expect(commitLinks).toHaveLength(2)
+    expect(commitLinks[0].getAttribute("href")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/commit/bbb",
+    )
+  })
+
+  it("lists detected pushes in the modal when nothing is collected yet", async () => {
+    const user = userEvent.setup()
+    // Reproduces the 3-vs-0 bug: the chip counts DETECTED default-branch
+    // commits (submissionCount bumped by the detection overlay) while nothing
+    // has been collected (submissions empty). The modal must list the detected
+    // commits, not 0.
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        scores={[
+          scoreRow({
+            submissionCount: 3,
+            pending: true,
+            submissions: [],
+            detectedEntries: [
+              { kind: "commit", label: "ccc3333", count: 1, sha: "ccc3333" },
+              { kind: "commit", label: "bbb2222", count: 1, sha: "bbb2222" },
+              { kind: "commit", label: "aaa1111", count: 1, sha: "aaa1111" },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    const commitLinks = screen.getAllByRole("link", {
+      name: "submissions.details.viewCommit",
+    })
+    expect(commitLinks).toHaveLength(3)
+    expect(commitLinks[0].getAttribute("href")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/commit/ccc3333",
+    )
+  })
+
+  it("shows the empty state with a tags link when a tag-mode row has no submissions", async () => {
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="tag"
+        scores={[
+          scoreRow({
+            submissionCount: 0,
+            // No detected tags AND no collected submissions: genuinely empty, so
+            // the modal shows the empty state rather than the collected-tag
+            // fallback (which only fires when collected submissions exist).
+            submissions: [],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countTag" }),
+    )
+    expect(screen.getByText("submissions.details.emptyTag")).toBeTruthy()
+    const emptyLink = screen.getByRole("link", {
+      name: /submissions\.details\.emptyLinkTags/,
+    })
+    expect(emptyLink.getAttribute("href")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/tags",
+    )
+  })
+})

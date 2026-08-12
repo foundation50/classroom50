@@ -12,7 +12,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { can } from "@/authz"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
-import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
+import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 
 import GitHub from "@/assets/github.svg?react"
@@ -43,7 +43,7 @@ const EditAssignmentFormStudent = ({
   // private classroom.json). Empty for unprotected -> plain path.
   const { secret } = useDotClassroom50(org, assignmentRepo?.name ?? "")
   const { isLoading: loadingPublic, assignment: assignmentData } =
-    useGetPublicAssignment(org, classroom, assignment, secret)
+    usePagesAssignments(org, classroom, secret, { assignmentSlug: assignment })
 
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
 

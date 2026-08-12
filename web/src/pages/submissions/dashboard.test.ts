@@ -1268,6 +1268,53 @@ describe("mergeDetectedSubmissions", () => {
     expect(merged[0].staleCount).toBe(false)
     expect(merged[0].score).toBe(9)
   })
+
+  it("attaches detected entries to a matched row even when the count doesn't rise", () => {
+    const rows = [row({ owner: "alice", score: 8, submissionCount: 3 })]
+    const entries = [
+      { kind: "tag" as const, label: "phase1", count: 1, sha: "aaa1111" },
+    ]
+    const merged = mergeDetectedSubmissions(rows, [
+      { owner: "alice", count: 1, entries },
+    ])
+    // Count stays (snapshot is higher) but the tag breakdown is carried for the
+    // expanded history to render.
+    expect(merged[0].submissionCount).toBe(3)
+    expect(merged[0].detectedEntries).toEqual(entries)
+  })
+
+  it("carries entries onto a count-raising row too", () => {
+    const rows = [row({ owner: "alice", score: 9, submissionCount: 1 })]
+    const entries = [
+      { kind: "tag" as const, label: "phase1", count: 1, sha: "aaa1111" },
+      { kind: "tag" as const, label: "phase2", count: 1, sha: "bbb2222" },
+    ]
+    const merged = mergeDetectedSubmissions(rows, [
+      { owner: "alice", count: 2, entries },
+    ])
+    expect(merged[0].submissionCount).toBe(2)
+    expect(merged[0].staleCount).toBe(true)
+    expect(merged[0].detectedEntries).toEqual(entries)
+  })
+
+  it("leaves detectedEntries undefined when there is no overlay or no entries", () => {
+    const rows = [row({ owner: "alice", submissionCount: 2 })]
+    const merged = mergeDetectedSubmissions(rows, [detected("alice", 1)])
+    expect(merged[0].detectedEntries).toBeUndefined()
+  })
+
+  it("carries entries onto a detection-only pending row", () => {
+    const entries = [
+      { kind: "tag" as const, label: "phase1", count: 1, sha: "aaa1111" },
+    ]
+    const merged = mergeDetectedSubmissions(
+      [row({ owner: "alice" })],
+      [{ owner: "bob", count: 1, entries }],
+    )
+    const bob = merged.find((r) => r.owner === "bob")
+    expect(bob?.pending).toBe(true)
+    expect(bob?.detectedEntries).toEqual(entries)
+  })
 })
 
 describe("displayPageOwners", () => {

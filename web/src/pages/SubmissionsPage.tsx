@@ -24,6 +24,8 @@ import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal
 import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
+import { SubmissionModeBadge } from "@/components/submissions/SubmissionRowCells"
+import { AssignmentSetupBadge } from "@/components/submissions/AssignmentSetupBadge"
 import {
   assignmentSkipsGrading,
   isNoAutograderAssignment,
@@ -64,7 +66,7 @@ import {
 import useGetScores from "@/hooks/useGetScores"
 import useLiveSubmissions from "@/hooks/useLiveSubmissions"
 import useDetectedSubmissions from "@/hooks/useDetectedSubmissions"
-import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
+import { useSubmissionAssignment } from "@/hooks/useSubmissionAssignment"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
@@ -132,7 +134,12 @@ const SubmissionsPageContent = () => {
     isError: scoresError,
     error: scoresErrorObj,
   } = useGetScores(org, classroom)
-  const { data: assignmentData } = useGetClassroomAssignments(org, classroom)
+  // Teacher gradebook is staff-gated by the route, so its assignment metadata
+  // comes from the PRIVATE config repo (source:"config"); students never reach
+  // this page. `assignments` carries the sibling list for repo-prefix
+  // disambiguation below.
+  const { assignment: assignmentInfo, assignments: allAssignments } =
+    useSubmissionAssignment(org, classroom, assignment, { source: "config" })
   // Team-driven usernames: the classroom GitHub teams are authoritative for
   // enrollment; roster.csv enriches display only. The dashboard consumes
   // Student[], so map enrolled team rows into that shape (see
@@ -159,9 +166,6 @@ const SubmissionsPageContent = () => {
   // staff testing the autograde flow appear while staff who never accepted stay
   // hidden. Students are always shown (a not-yet-accepted student still lists as
   // "not accepted"), unchanged.
-  const assignmentInfo = assignmentData?.assignments.find(
-    (a) => a.slug === assignment,
-  )
   const isGroupAssignment = assignmentInfo?.mode === "group"
   // Assignments that never autograde (empty_repo bare repos, or no_autograder
   // teacher-supplied CI) produce no submit/* releases. Grading UI (Regrade all,
@@ -195,8 +199,8 @@ const SubmissionsPageContent = () => {
   // Sibling slugs guard group-repo attribution against a slug-extending sibling
   // ("hw1-bonus" under "hw1"); see existingGroupRepos.
   const siblingSlugs = useMemo(
-    () => (assignmentData?.assignments ?? []).map((a) => a.slug),
-    [assignmentData],
+    () => allAssignments.map((a) => a.slug),
+    [allAssignments],
   )
   const groupRepoList = useMemo(
     () =>
@@ -484,7 +488,11 @@ const SubmissionsPageContent = () => {
     )
     const merged = mergeDetectedSubmissions(
       withLive,
-      detectedSubmissions.map((d) => ({ owner: d.owner, count: d.count })),
+      detectedSubmissions.map((d) => ({
+        owner: d.owner,
+        count: d.count,
+        entries: d.entries,
+      })),
     )
     return rosterReady ? rosterScopedRows(merged, students) : merged
   }, [
@@ -939,6 +947,16 @@ const SubmissionsPageContent = () => {
                 {t("submissions.closeSubmission.statusBadge.closed")}
               </Badge>
             )}
+            {assignmentInfo && (
+              <SubmissionModeBadge
+                mode={assignmentInfo.submission_mode}
+                skipsGrading={skipsGrading}
+                size="md"
+              />
+            )}
+            {assignmentInfo && (
+              <AssignmentSetupBadge assignment={assignmentInfo} size="md" />
+            )}
             {assignmentInfo?.template && (
               <GitHubLink
                 href={githubTemplateRepoUrl(
@@ -1235,6 +1253,10 @@ const SubmissionsPageContent = () => {
             : undefined
         }
         submissionTags={assignmentInfo?.submission_tags}
+        // The assignment's real submission_mode (independent of the autograder
+        // gate above) — drives the type-aware submission-details modal and the
+        // count wording, which apply regardless of who authored the shim.
+        assignmentMode={assignmentInfo?.submission_mode ?? "every-push"}
         // Manual grading: staff may enter/edit scores inline. Gated on an org
         // OWNER (the same write-capability gate every other mutating control on
         // this page uses — a non-owner can't write the config repo's

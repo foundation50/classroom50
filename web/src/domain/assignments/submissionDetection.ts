@@ -1,5 +1,8 @@
 import type { GitHubCommit, GitHubTag } from "@/github-core/types"
+import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
 import { matchesSubmissionTag } from "@/util/submissionTags"
+import { repoTreeAtRefUrl } from "@/util/orgUrl"
+import type { SubmissionMode } from "@/types/classroom"
 
 // Pure derivation for the submission-detection subsystem (KTD6/KTD7): turn raw
 // repo state (default-branch commits, git tags) plus the submission definition
@@ -20,7 +23,7 @@ export type DetectedSubmission = {
 
 // A glob pattern uses any Actions tag-filter metacharacter; an exact pattern is
 // a literal tag name. Only globs GROUP their matches into one submission set.
-function isGlobPattern(pattern: string): boolean {
+export function isGlobPattern(pattern: string): boolean {
   return /[*?+[\]]/.test(pattern)
 }
 
@@ -89,4 +92,82 @@ export function detectedSubmissionCount(
   detected: DetectedSubmission[],
 ): number {
   return detected.reduce((sum, d) => sum + d.count, 0)
+}
+
+// The entries that can be "jumped to" as a tag: branch-mode `commit` entries
+// carry no tag, so both submission views filter them out before rendering jump
+// links.
+export function jumpableTagEntries(
+  entries: DetectedSubmission[],
+): DetectedSubmission[] {
+  return entries.filter((e) => e.kind === "tag" || e.kind === "tag-group")
+}
+
+// The git ref a detected tag entry jumps to: an exact tag jumps to the tag name
+// itself; a glob group has no single tag, so it jumps to its representative
+// commit sha. Undefined when a group has no sha (defensive — detection always
+// sets one). Callers build the tree URL with repoTreeAtRefUrl.
+export function detectedTagRef(entry: DetectedSubmission): string | undefined {
+  return entry.kind === "tag-group" ? entry.sha : entry.label
+}
+
+// The tree URL a detected tag entry jumps to, or undefined when it can't form a
+// safe link. Both views share this so the jump target stays identical.
+export function detectedTagHref(
+  entry: DetectedSubmission,
+  org: string,
+  repo: string,
+): string | undefined {
+  const ref = detectedTagRef(entry)
+  return ref ? repoTreeAtRefUrl(org, repo, ref) : undefined
+}
+
+// The submission mode resolved to its wire default: an absent mode is
+// every-push (writers omit it). Both submission views key their type-aware
+// wording off this.
+export function resolveSubmissionMode(
+  mode: SubmissionMode | undefined,
+): SubmissionMode {
+  return mode ?? "every-push"
+}
+
+// The i18n key for the "what counts as a submission" heading badge, keyed by
+// mode. Single source so the teacher heading and the student page agree.
+// `skipsGrading` (empty_repo or no_autograder — the assignment never
+// autogrades) drops the "is graded" claim: for those assignments a push/tag is
+// still the submission unit, but nothing is graded, so the badge describes what
+// counts without promising a grade.
+export function submissionModeBadgeKey(
+  mode: SubmissionMode | undefined,
+  skipsGrading = false,
+): string {
+  if (resolveSubmissionMode(mode) === "tag") {
+    return skipsGrading
+      ? "submissions.type.badgeTagNoGrade"
+      : "submissions.type.badgeTag"
+  }
+  return skipsGrading
+    ? "submissions.type.badgeEveryPushNoGrade"
+    : "submissions.type.badgeEveryPush"
+}
+
+// The i18n (pluralized) key for a submission count, keyed by mode:
+// "N tagged submissions" vs "N pushes to the default branch". Callers pass
+// `{ count }` to t().
+export function submissionModeCountKey(
+  mode: SubmissionMode | undefined,
+): string {
+  return resolveSubmissionMode(mode) === "tag"
+    ? "submissions.type.countTag"
+    : "submissions.type.countEveryPush"
+}
+
+// A friendly display label for an exact detected tag: strip the canonical
+// submit/ prefix so `submit/2026-...` reads as the timestamp; milestone tags
+// are shown as-is. Groups are labeled by their pattern + count in the view
+// (i18n), so this is only used for exact tags.
+export function detectedTagLabel(label: string): string {
+  return label.startsWith(SUBMISSION_TAG_PREFIX)
+    ? label.slice(SUBMISSION_TAG_PREFIX.length)
+    : label
 }

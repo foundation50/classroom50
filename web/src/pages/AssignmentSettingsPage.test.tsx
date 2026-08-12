@@ -65,8 +65,8 @@ vi.mock("@/auth/useGithubAuth", () => ({
 vi.mock("@/hooks/useGetAssignmentRepo", () => ({
   default: () => ({ data: null, isLoading: false }),
 }))
-vi.mock("@/hooks/useGetPublicAssignment", () => ({
-  default: () => ({ data: null, isLoading: false }),
+vi.mock("@/hooks/usePagesAssignments", () => ({
+  default: () => ({ data: null, isLoading: false, assignment: undefined }),
 }))
 vi.mock("@/hooks/useDotClassroom50", () => ({
   default: () => ({ data: null, isLoading: false }),

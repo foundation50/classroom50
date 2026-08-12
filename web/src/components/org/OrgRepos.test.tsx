@@ -19,7 +19,7 @@ vi.mock("@/hooks/useGetMyOrgRepos", () => ({
 vi.mock("@/hooks/useDotClassroom50", () => ({
   default: () => ({}),
 }))
-vi.mock("@/hooks/useGetPublicAssignment", () => ({
+vi.mock("@/hooks/usePagesAssignments", () => ({
   default: () => ({ assignment: undefined }),
 }))
 

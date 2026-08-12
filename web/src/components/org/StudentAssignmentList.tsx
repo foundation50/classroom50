@@ -388,7 +388,7 @@ export function StudentAssignmentList({
     data: assignments,
     isLoading: loadingAssignmentsData,
     isError,
-  } = usePagesAssignments(org, classroom, secret, !loadingSecret)
+  } = usePagesAssignments(org, classroom, secret, { enabled: !loadingSecret })
   const isLoading = loadingSecret || loadingAssignmentsData
   const { data: repos } = useGetOrgRepos(org)
 

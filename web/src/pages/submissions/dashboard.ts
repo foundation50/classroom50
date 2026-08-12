@@ -4,6 +4,7 @@
 
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/github-core/types"
+import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import type { Student } from "@/types/classroom"
 import type { BadgeTone } from "@/components/ui"
 import type { TeamRosterRow } from "@/util/teamRoster"
@@ -84,22 +85,18 @@ export function submissionRosterStudents(
 
 // Fold live submission presence (submit/* releases read directly from student
 // repos) into the collected snapshot rows. `scores.json` stays the source of
-// record for GRADES: a snapshot row keeps its graded score, history, and
-// review link. Live data contributes two things on top:
+// record for GRADES; live contributes only:
 //
-//   - COUNT: a snapshot row's `submissionCount` is raised to the live count
-//     when the student has pushed more submit/* releases than the last collect
-//     ingested (the #347 lag). The row is flagged `staleCount` so the table can
-//     hint that the newest push isn't graded yet. Live never LOWERS a count
-//     (a live read is one page / a lower bound; the snapshot may legitimately
-//     hold more), so the merged count is max(snapshot, live).
-//   - PRESENCE: live adds a row ONLY for an owner absent from the snapshot — a
-//     student who pushed but hasn't been collected yet. Such a row is `pending`
-//     (no grade) with the live count, so the table shows "submitted, not yet
-//     collected" rather than a fake 0/0.
+//   - COUNT: raise a row's `submissionCount` to the live count when the student
+//     pushed more submit/* releases than the last collect ingested (the #347
+//     lag), flagging `staleCount`. Live never LOWERS a count (a live read is one
+//     page, a lower bound), so the merge is max(snapshot, live).
+//   - PRESENCE: add a `pending` row (no grade) only for an owner absent from the
+//     snapshot — pushed but not yet collected — so the table shows "submitted,
+//     not yet collected" rather than a fake 0/0.
 //
-// Owner match is case-insensitive; the union preserves snapshot order (with
-// counts updated in place), then appends live-only rows newest-first.
+// Owner match is case-insensitive; snapshot order is preserved, then live-only
+// rows appended newest-first.
 export type LiveSubmissionPresence = {
   owner: string
   datetime: string
@@ -165,9 +162,12 @@ export function mergeLiveRows(
 // Detected-submission presence for one repo, from the detection subsystem
 // (branch-mode default-branch pushes or tag-mode git tags). Like the live
 // overlay, this is count/presence only — grades never come from here (KTD6).
+// `entries` is the per-submission breakdown (tags/commits) the expanded history
+// surfaces as jump-to-tag links; omitted when the caller only needs the count.
 export type DetectedPresence = {
   owner: string
   count: number
+  entries?: DetectedSubmission[]
 }
 
 // Merge detected submissions onto rows already reconciled with the live
@@ -187,9 +187,23 @@ export function mergeDetectedSubmissions(
 
   const merged = rows.map((row) => {
     const d = detectedByOwner.get(row.owner.trim().toLowerCase())
-    if (!d || d.count <= row.submissionCount) return row
+    if (!d) return row
+    // Attach the detected breakdown (tags/commits) regardless of the count —
+    // the expanded history lists tagged submissions even when scores.json
+    // already counts them. Detection can only REVEAL more submissions than are
+    // already counted (max wins), never fewer, and never sets a score; only a
+    // higher count bumps the total and flags staleCount.
+    const withEntries =
+      d.entries && d.entries.length > 0
+        ? { ...row, detectedEntries: d.entries }
+        : row
+    if (d.count <= row.submissionCount) return withEntries
     // staleCount off for overrides — see mergeLiveRows.
-    return { ...row, submissionCount: d.count, staleCount: !row.overridden }
+    return {
+      ...withEntries,
+      submissionCount: d.count,
+      staleCount: !row.overridden,
+    }
   })
 
   const knownOwners = new Set(rows.map((row) => row.owner.trim().toLowerCase()))
@@ -209,6 +223,7 @@ export function mergeDetectedSubmissions(
       "max-score": 0,
       submissionCount: Math.max(1, d.count),
       pending: true,
+      detectedEntries: d.entries,
       submissions: [],
     }))
 
@@ -216,18 +231,14 @@ export function mergeDetectedSubmissions(
 }
 
 // The most recent push time across this assignment's repos, or null when none
-// have been pushed / none exist. Used as a cheap staleness heuristic for the
-// collected snapshot: if any assignment repo was pushed AFTER the last collect
-// run, scores.json is (probably) out of date and the teacher should re-collect.
+// exist. A cheap staleness heuristic: a repo pushed AFTER the last collect run
+// means scores.json is (probably) out of date.
 //
-// Reads the already-loaded org repo list (each `GitHubRepo` carries `pushed_at`
-// from `GET /orgs/{org}/repos`), so it costs NO extra API call. Individual repos
-// (`<classroom>-<assignment>-<user>`) and group repos
-// (`<classroom>-<assignment>-<founder>`) share one prefix, so a single prefix
-// match covers both. Sibling assignments whose slug extends this one
-// (`hw1-bonus` under `hw1`) are excluded the same way existingGroupRepos guards
-// them, and the org config repo (`classroom50`) never matches the prefix so it's
-// naturally excluded. Returns an ISO timestamp string (the repo's `pushed_at`).
+// Reads the already-loaded org repo list (`pushed_at` from `GET
+// /orgs/{org}/repos`), so it costs NO extra API call. Individual and group
+// repos share the `<classroom>-<assignment>-` prefix; sibling assignments whose
+// slug extends this one (`hw1-bonus` under `hw1`) are excluded like
+// existingGroupRepos guards them. Returns the winning repo's ISO `pushed_at`.
 export function latestAssignmentPush(
   repos: GitHubRepo[] | null | undefined,
   classroom: string,
@@ -295,8 +306,8 @@ export function latestCollectedAt(
   return aMs >= bMs ? (a ?? null) : (b ?? null)
 }
 
-// the assignment sets no threshold — then every row is "ungraded" (as is an
-// ungraded/zero-max row).
+// Whether a row passes the threshold. Ungraded when the assignment sets no
+// threshold, or the row has no/zero/NaN max score.
 export type PassState = "passing" | "failing" | "ungraded"
 
 export function rowPassState(
@@ -460,15 +471,10 @@ export type SubmissionSort = "recent" | "oldest" | "name-asc" | "name-desc"
 // student accepted iff `<classroom>-<assignment>-<username>` exists. Independent
 // of submission — a repo can exist without a graded push.
 //
-// Forward-construct each student's expected repo name rather than reverse-parsing
-// a `<classroom>-<assignment>-` prefix: prefix-stripping over-matches a sibling
-// whose slug extends this one (assignment "hw" would capture `cs-hw-bonus-alice`
-// from "hw-bonus"), polluting the set and risking a 404 when the modal rebuilds
-// a URL. (existingGroupRepos below must reverse-parse and so guards this
-// explicitly against the sibling assignment list.)
-//
-// Group assignments are excluded (repo named after the owner, not each member),
-// so callers offer the accepted filter for individual assignments only.
+// Forward-constructs each student's expected repo name rather than reverse-
+// parsing the prefix, which would over-match a sibling whose slug extends this
+// one (assignment "hw" capturing `cs-hw-bonus-alice` from "hw-bonus"). Group
+// assignments are excluded (repo named after the owner, not each member).
 export function acceptedUsernames(
   repos: GitHubRepo[] | null | undefined,
   classroom: string,
@@ -902,14 +908,11 @@ export type DisplayItem =
 export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 export const DEFAULT_PAGE_SIZE: number = PAGE_SIZE_OPTIONS[0]
 
-// Build the ordered display list for an INDIVIDUAL assignment: one item per
-// roster student, in the roster's (name-sorted) order, each resolved to the
-// student's submission row when one exists (owner match, case-insensitive) or a
-// non-submitter item otherwise. `rows` are the already filtered/sorted submitted
-// rows; `nonSubmitters` the already filtered non-submitter students. A student
-// present in neither filtered set (filtered out) is omitted. Interleaving by
-// the roster spine — rather than concatenating the two groups — is what makes a
-// page a clean deterministic slice of the roster.
+// The ordered display list for an INDIVIDUAL assignment: one item per roster
+// student in the roster's (name-sorted) order, resolved to the student's
+// submission row (owner match, case-insensitive) or a non-submitter item. A
+// student in neither filtered set is omitted. Interleaving by the roster spine
+// — not concatenating the two groups — makes a page a clean roster slice.
 export function buildRosterDisplayItems(
   roster: Student[],
   rows: SubmissionRow[],
@@ -1081,15 +1084,12 @@ function ownerSortKey(owner: string, names: Map<string, string>): string {
   return names.get(owner.trim().toLowerCase()) || owner.toLowerCase()
 }
 
-// The repo owners on the CURRENTLY RENDERED page, in the table's own display
-// order under the active sort — so the live fan-out reads exactly the repos the
-// user is looking at, whatever sort produced them. Built from the SNAPSHOT
-// display list using the same builders SubmissionsTable uses, so the fanned page
-// and the rendered page line up. It must NOT be fed the live-merged rows: a
-// live-only pending row exists only after the fan-out, so using it here would
-// feed the fan-out's own output back into its input and loop.
-// `nonSubmitter`/`groupRepo` items resolve to their owner login so an
-// as-yet-uncollected or accepted-not-submitted repo is still read.
+// The repo owners on the CURRENTLY RENDERED page, in display order under the
+// active sort, so the live fan-out reads exactly the repos the user sees. Built
+// from the SNAPSHOT display list (same builders SubmissionsTable uses) — it must
+// NOT be fed the live-merged rows: a live-only pending row exists only after the
+// fan-out, so using it here would feed the fan-out's output back into its input
+// and loop. `nonSubmitter`/`groupRepo` items resolve to their owner login.
 export function displayPageOwners({
   isGroup,
   sort,

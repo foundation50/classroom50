@@ -1,6 +1,7 @@
 // Context-relevant github.com deep-links for an org login, built here rather
 // than inline so the heading/subtitle links stay consistent across pages.
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
+import { safeHttpUrl } from "@/util/url"
 
 export const githubOrgUrl = (org: string): string =>
   `https://github.com/orgs/${org}/repositories`
@@ -27,3 +28,53 @@ export const githubTemplateRepoUrl = (
   branch?: string,
 ): string =>
   `https://github.com/${owner}/${repo}${branch ? `/tree/${branch}` : ""}`
+
+// Deep-link to a repo's tree at a git ref (tag or commit sha), used by the
+// submissions views to open a tag or commit. Each path segment is encoded
+// separately so a slash-bearing tag (e.g. `submit/2026-...`) stays a real path
+// while other metacharacters are escaped, then guarded through safeHttpUrl.
+// Returns undefined when the inputs can't form a safe http(s) URL.
+export const repoTreeAtRefUrl = (
+  org: string,
+  repo: string,
+  ref: string,
+): string | undefined => {
+  if (!org || !repo || !ref) return undefined
+  const encodedRef = ref
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")
+  return safeHttpUrl(
+    `https://github.com/${encodeURIComponent(org)}/${encodeURIComponent(
+      repo,
+    )}/tree/${encodedRef}`,
+  )
+}
+
+// The repo's tags listing page. Used as the "no submissions yet" destination
+// for a tag-mode assignment (there is no single tag to open, so point at where
+// tags will appear). safeHttpUrl-guarded; undefined on blank input.
+export const repoTagsUrl = (org: string, repo: string): string | undefined => {
+  if (!org || !repo) return undefined
+  return safeHttpUrl(
+    `https://github.com/${encodeURIComponent(org)}/${encodeURIComponent(
+      repo,
+    )}/tags`,
+  )
+}
+
+// A repo's commit page for a sha. Used to link a detected default-branch push
+// (every-push mode) to its commit. safeHttpUrl-guarded; undefined on blank
+// input.
+export const repoCommitUrl = (
+  org: string,
+  repo: string,
+  sha: string,
+): string | undefined => {
+  if (!org || !repo || !sha) return undefined
+  return safeHttpUrl(
+    `https://github.com/${encodeURIComponent(org)}/${encodeURIComponent(
+      repo,
+    )}/commit/${encodeURIComponent(sha)}`,
+  )
+}

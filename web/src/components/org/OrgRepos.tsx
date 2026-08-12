@@ -17,7 +17,7 @@ import type { GitHubRepo } from "@/github-core/types"
 import { assignmentDescription } from "@/types/classroom"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
-import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
+import usePagesAssignments from "@/hooks/usePagesAssignments"
 import { EnterDiv } from "@/lib/motionComponents"
 
 const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
@@ -25,11 +25,11 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
   const [descriptionOpen, setDescriptionOpen] = useState(false)
   const cl50Yaml = useDotClassroom50(org, repo.name)
   const { classroom, assignment, secret } = cl50Yaml
-  const { assignment: assignmentData } = useGetPublicAssignment(
+  const { assignment: assignmentData } = usePagesAssignments(
     org,
     classroom,
-    assignment,
     secret,
+    { assignmentSlug: assignment },
   )
 
   const description = assignmentDescription(assignmentData)

@@ -12,7 +12,7 @@ import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRolePr
 import { can } from "@/authz"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
-import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
+import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import { studentRepoName } from "@/util/studentRepo"
@@ -68,11 +68,11 @@ export const AssignmentSidebarMenu = ({
     enabled: isActuallyStaff,
   })
   const secret = studentSecret || classroomMeta?.secret
-  const { assignment: publicAssignment } = useGetPublicAssignment(
+  const { assignment: publicAssignment } = usePagesAssignments(
     org,
     classroom,
-    assignment,
     secret,
+    { assignmentSlug: assignment },
   )
   const assignmentName =
     teacherAssignments?.assignments.find((a) => a.slug === assignment)?.name ||

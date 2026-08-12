@@ -1,77 +1,96 @@
 import { Link, useParams } from "@tanstack/react-router"
+import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import {
-  ExternalLink,
-  UserRound,
-  UsersRound,
-  CalendarClock,
-} from "lucide-react"
+import { UserRound, UsersRound, CalendarClock } from "lucide-react"
 
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
+import Avatar from "@/components/avatar"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import useGetSubmissionReleases from "@/hooks/useGetSubmissionReleases"
-import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
+import useMySubmissions from "@/hooks/useMySubmissions"
+import { useSubmissionAssignment } from "@/hooks/useSubmissionAssignment"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { safeHttpUrl } from "@/util/url"
-import type { GitHubRelease } from "@/github-core/types"
-import type { Assignment } from "@/types/classroom"
+import type { GitHubCommit, GitHubRelease } from "@/github-core/types"
+import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
+import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
+import { assignmentSkipsGrading } from "@/domain/assignments/autogradingState"
+import type { Assignment, SubmissionMode } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-import { Alert, Badge, Button, Card, Markdown } from "@/components/ui"
+import { Alert, Badge, Markdown } from "@/components/ui"
+import {
+  SubmissionDetailsModal,
+  detailItemsCount,
+  type SubmissionDetailItem,
+} from "@/components/submissions/SubmissionDetailsModal"
+import { AssignmentSetupBadge } from "@/components/submissions/AssignmentSetupBadge"
+import {
+  buildSubmissionDetailItems,
+  submissionEmptyState,
+  type PushSubmission,
+} from "@/components/submissions/submissionDetailItems"
+import {
+  LastSubmittedCell,
+  SubmissionCountCell,
+  SubmissionModeBadge,
+} from "@/components/submissions/SubmissionRowCells"
+import { StudentRowActions } from "@/pages/submissions/StudentRowActions"
 import SubmitGuidance from "@/components/SubmitGuidance"
 
-// Strips the `submit/` tag prefix for a friendlier label, falling back to the
-// release name when present.
-const releaseLabel = (release: GitHubRelease): string =>
-  release.name?.trim() || release.tag_name.replace(/^submit\//, "")
-
-const ReleaseRow = ({ release }: { release: GitHubRelease }) => {
-  const { t } = useTranslation()
-  // html_url is from the GitHub API (always http(s)); guard anyway to keep the
-  // no-unsafe-href rule uniform across views.
-  const href = safeHttpUrl(release.html_url)
-  const when = release.published_at ?? release.created_at
-
-  return (
-    <li className="flex items-center justify-between gap-4 px-4 py-3">
-      <div className="min-w-0">
-        <p className="truncate font-medium">{releaseLabel(release)}</p>
-        <p className="text-sm text-base-content/70">
-          {t("submissions.student.submittedAt", {
-            date: formatDueDateTime(when),
-          })}
-        </p>
-      </div>
-      {href ? (
-        <Button
-          as="a"
-          variant="outline"
-          size="sm"
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          className="shrink-0"
-        >
-          {t("submissions.student.viewGrade")}
-        </Button>
-      ) : (
-        <span className="text-sm text-base-content/70">
-          {t("submissions.student.unavailable")}
-        </span>
-      )}
-    </li>
-  )
+// A submit/<UTC-ts>-<short-sha> release tag → its trailing short sha, so a
+// push submission can link the graded release published at its commit. Returns
+// undefined for a milestone or malformed tag (no reliable per-commit release).
+const releaseShaFromTag = (tagName: string): string | undefined => {
+  if (!tagName.startsWith(SUBMISSION_TAG_PREFIX)) return undefined
+  const sha = tagName.slice(tagName.lastIndexOf("-") + 1)
+  return sha || undefined
 }
 
-const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
+// short sha → graded release URL, built from the student's submit/* releases.
+// Push submissions match their commit into this to fold in a "View grade" link.
+const releaseHrefByShaFrom = (
+  releases: GitHubRelease[] | undefined,
+): Map<string, string> => {
+  const map = new Map<string, string>()
+  for (const release of releases ?? []) {
+    const sha = releaseShaFromTag(release.tag_name)
+    const href = safeHttpUrl(release.html_url)
+    if (sha && href) map.set(sha, href)
+  }
+  return map
+}
+
+// Map the student's default-branch commits to push submissions, folding in a
+// per-commit "View grade" link where a graded release matches the commit sha.
+// Wraps the tag-parse + release-map so the component body stays declarative.
+const toPushSubmissions = (
+  commits: GitHubCommit[] | undefined,
+  releases: GitHubRelease[] | undefined,
+): PushSubmission[] => {
+  const releaseHrefBySha = releaseHrefByShaFrom(releases)
+  return (commits ?? []).map((commit, i) => ({
+    key: `${commit.sha}-${i}`,
+    commitHref: commit.html_url,
+    datetime: commit.commit.author?.date,
+    releaseHref: releaseHrefBySha.get(commit.sha.slice(0, 7)),
+  }))
+}
+
+const AssignmentMeta = ({
+  assignment,
+  submissionMode,
+}: {
+  assignment?: Assignment
+  submissionMode?: SubmissionMode
+}) => {
   const { t } = useTranslation()
   if (!assignment) return null
   const due = assignment.due
@@ -90,6 +109,11 @@ const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
           {t("submissions.student.modeIndividual")}
         </Badge>
       ) : null}
+      <SubmissionModeBadge
+        mode={submissionMode}
+        skipsGrading={assignmentSkipsGrading(assignment)}
+      />
+      <AssignmentSetupBadge assignment={assignment} size="sm" />
       <Badge
         tone={overdue ? "error" : "neutral"}
         ghost={!overdue}
@@ -109,6 +133,8 @@ const SubmissionBody = ({
   classroom,
   assignment,
   secret,
+  submissionMode,
+  submissionTags,
 }: {
   org: string
   classroom: string
@@ -116,15 +142,24 @@ const SubmissionBody = ({
   // Capability-URL secret for a protected classroom; threads into the accept
   // link. Undefined for unprotected.
   secret?: string
+  submissionMode?: SubmissionMode
+  submissionTags?: string[]
 }) => {
   const { t } = useTranslation()
   const { user } = useGithubAuth()
+  const isTagMode = submissionMode === "tag"
   const {
-    data: releases,
-    isLoading,
-    isError,
-    error,
-  } = useGetSubmissionReleases(org, classroom, assignment, user?.login)
+    releases,
+    tags: taggedSubmissions,
+    pushes: pushSubmissions,
+    releasesLoading,
+    releasesError,
+    releasesErrorObj,
+    submissionListError,
+  } = useMySubmissions(org, classroom, assignment, user?.login, {
+    mode: submissionMode,
+    submissionTags,
+  })
   // Distinguish "never accepted" (no repo) from "accepted but not yet graded".
   // getRepo returns null only on a true 404; a 403/5xx throws, so read the repo
   // query's error too — else a transient/permission failure falls through to
@@ -136,22 +171,50 @@ const SubmissionBody = ({
     error: repoError,
   } = useGetAssignmentRepo(org, classroom, assignment, user?.login)
 
-  if (isLoading || repoLoading) {
+  const repoName = studentRepoName(classroom, assignment, user?.login ?? "")
+
+  const [detailsOpen, setDetailsOpen] = useState(false)
+
+  // Fold graded releases into the submission list: push submissions link the
+  // release published at their commit; the newest release is offered as a
+  // direct "autograder details" shortcut in the actions cell.
+  const latestReleaseHref = safeHttpUrl(releases?.[0]?.html_url)
+  const commitSubmissions = toPushSubmissions(pushSubmissions, releases)
+
+  const detailItems: SubmissionDetailItem[] = buildSubmissionDetailItems(
+    { tags: taggedSubmissions, commits: commitSubmissions },
+    submissionMode,
+    org,
+    repoName,
+    t,
+  )
+  // The number of SUBMISSIONS the listed items represent — a glob group's row
+  // counts its N matches (detailItemsCount), so this stays consistent with the
+  // teacher chip for the same tags rather than counting group rows.
+  const submissionCount = detailItemsCount(detailItems)
+
+  // The newest submission's time for the "last submitted" cell: the newest
+  // push's commit date in every-push mode, else the newest graded release's
+  // publish time (a tag submission's time isn't carried by detection). Absent
+  // until the first submission lands.
+  const latestSubmittedAt = isTagMode
+    ? (releases?.[0]?.published_at ?? releases?.[0]?.created_at ?? undefined)
+    : pushSubmissions?.[0]?.commit.author?.date
+
+  if (releasesLoading || repoLoading) {
     return (
       <div className="mt-8 space-y-4">
         <div className="skeleton skeleton-shimmer h-24 w-full rounded-box" />
-        <div className="skeleton skeleton-shimmer h-64 w-full rounded-box" />
+        <div className="skeleton skeleton-shimmer h-40 w-full rounded-box" />
       </div>
     )
   }
 
-  if (isError || repoIsError) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : repoError instanceof Error
-          ? repoError.message
-          : ""
+  if (releasesError || repoIsError || submissionListError) {
+    const firstError = [releasesErrorObj, repoError].find(
+      (e) => e instanceof Error,
+    )
+    const message = firstError instanceof Error ? firstError.message : ""
     return (
       <Alert tone="error" className="mt-6">
         {t("submissions.student.loadError")}
@@ -183,65 +246,109 @@ const SubmissionBody = ({
     )
   }
 
-  if (!releases || releases.length === 0) {
-    return (
-      <EnterDiv className="mt-6 space-y-4">
-        <Alert tone="info">
-          <div>{t("submissions.student.noGradedYet")}</div>
-        </Alert>
-        {/* Upload submission intentionally hidden — it does a destructive
-            replace-all of the student's repo and has no per-assignment or
-            classroom opt-out yet. See
-            https://github.com/foundation50/classroom50/issues/428 */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            as="a"
-            variant="outline"
-            size="sm"
-            href={studentRepo.html_url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <ExternalLink aria-hidden="true" className="size-4" />
-            {t("submissions.student.openMyRepo")}
-          </Button>
-        </div>
-        <SubmitGuidance repoHtmlUrl={studentRepo.html_url} />
-      </EnterDiv>
-    )
-  }
+  // Guard the repo URL from the GitHub API before rendering it as a link, so it
+  // goes through the same safeHttpUrl check as every other href on this page
+  // (the empty-state link already did). The API always returns an https
+  // github.com URL, so this is a consistency guard; fall back to the raw value
+  // for the components that require a definite string and derive their own URLs.
+  const rawRepoHref = studentRepo.html_url
+  const safeRepoHref = safeHttpUrl(rawRepoHref)
+  const repoHref = safeRepoHref ?? rawRepoHref
 
   return (
-    <div className="mt-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-base-content/70">
-          {t("submissions.student.releasesIntro")}
-        </p>
-        {/* Upload submission intentionally hidden — see issue #428
-            (https://github.com/foundation50/classroom50/issues/428). */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            as="a"
-            variant="outline"
-            size="sm"
-            href={studentRepo.html_url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <ExternalLink aria-hidden="true" className="size-4" />
-            {t("submissions.student.openMyRepo")}
-          </Button>
-        </div>
+    <EnterDiv className="mt-6 space-y-4">
+      {/* One-row, teacher-style submissions table for the student's own repo.
+          The count chip opens the shared details modal (tags or pushes); the
+          student column set omits the teacher-only score and management
+          actions. */}
+      <div className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
+        <table className="table">
+          <caption className="sr-only">
+            {t("submissions.student.tableCaption")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("submissions.table.colStudent")}</th>
+              <th scope="col">{t("submissions.table.colSubmissions")}</th>
+              <th scope="col">{t("submissions.table.colLastSubmitted")}</th>
+              <th scope="col">{t("submissions.table.colActions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <Avatar
+                  name={user?.name || user?.login || ""}
+                  initials=""
+                  github={user?.login || ""}
+                  subtitle={
+                    <a
+                      className="link link-hover font-mono text-xs"
+                      href={repoHref}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {repoName}
+                    </a>
+                  }
+                />
+              </td>
+              <td>
+                <SubmissionCountCell
+                  mode={submissionMode}
+                  count={submissionCount}
+                  onOpen={() => setDetailsOpen(true)}
+                />
+              </td>
+              <td>
+                {latestSubmittedAt ? (
+                  <LastSubmittedCell datetime={latestSubmittedAt} />
+                ) : (
+                  <span className="text-base-content/50">
+                    {t("submissions.student.notSubmittedYet")}
+                  </span>
+                )}
+              </td>
+              <td>
+                <StudentRowActions
+                  repo={repoName}
+                  repoHref={repoHref}
+                  hasRepo
+                  latestReleaseHref={latestReleaseHref}
+                  onViewSubmissions={() => setDetailsOpen(true)}
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <Card as={EnterDiv} bordered={false} className="border border-base-200">
-        <ul className="divide-y divide-base-200">
-          {releases.map((release) => (
-            <ReleaseRow key={release.id} release={release} />
-          ))}
-        </ul>
-      </Card>
-    </div>
+      <SubmitGuidance
+        repoHtmlUrl={repoHref}
+        submissionMode={submissionMode}
+        submissionTags={submissionTags}
+      />
+
+      {detailsOpen ? (
+        <SubmissionDetailsModal
+          onClose={() => setDetailsOpen(false)}
+          title={t("submissions.student.detailsTitle")}
+          repo={repoName}
+          repoHref={repoHref}
+          countLabel={t(submissionModeCountKey(submissionMode), {
+            count: submissionCount,
+          })}
+          items={detailItems}
+          {...submissionEmptyState(
+            submissionMode,
+            org,
+            repoName,
+            safeRepoHref,
+            t,
+          )}
+        />
+      ) : null}
+    </EnterDiv>
   )
 }
 
@@ -265,14 +372,19 @@ const StudentSubmissionPage = () => {
   const { data: classroomMeta } = useGetClassroom(org, classroom)
   const secret = repoSecret || classroomMeta?.secret || undefined
 
-  const { assignment: assignmentData } = useGetPublicAssignment(
-    org,
-    classroom,
-    assignment,
-    secret,
-  )
+  // Student page is student-gated by the route, so its assignment metadata comes
+  // from PUBLIC GitHub Pages (source:"pages") — students can't read the private
+  // config repo. The capability secret unlocks a protected classroom's Pages
+  // path.
+  const { assignment: assignmentData, isError: assignmentError } =
+    useSubmissionAssignment(org, classroom, assignment, {
+      source: "pages",
+      secret,
+    })
 
   const description = assignmentDescription(assignmentData)
+  const submissionMode = assignmentData?.submission_mode
+  const submissionTags = assignmentData?.submission_tags
 
   return (
     <PageShell>
@@ -284,7 +396,10 @@ const StudentSubmissionPage = () => {
           t("submissions.student.fallbackTitle")
         }
       />
-      <AssignmentMeta assignment={assignmentData} />
+      <AssignmentMeta
+        assignment={assignmentData}
+        submissionMode={submissionMode}
+      />
       {description ? (
         <div className="mt-3 flex flex-col gap-1">
           <span className="text-sm font-medium text-base-content/70">
@@ -294,7 +409,16 @@ const StudentSubmissionPage = () => {
         </div>
       ) : null}
       {org && classroom && assignment ? (
-        assignmentData?.locked ? (
+        assignmentError ? (
+          // A failed Pages metadata read must surface, not silently degrade to
+          // the raw slug title + default (push) mode — which would render the
+          // wrong guidance for a tag-mode assignment. SubmissionBody would show
+          // its own error for the submission reads, but the mode/title come from
+          // here, so guard this read too.
+          <Alert tone="error" className="mt-6">
+            {t("submissions.student.loadError")}
+          </Alert>
+        ) : assignmentData?.locked ? (
           <EnterDiv className="alert alert-warning alert-soft mt-6">
             <div>{t("submissions.student.locked")}</div>
           </EnterDiv>
@@ -304,6 +428,8 @@ const StudentSubmissionPage = () => {
             classroom={classroom}
             assignment={assignment}
             secret={secret}
+            submissionMode={submissionMode}
+            submissionTags={submissionTags}
           />
         )
       ) : (
