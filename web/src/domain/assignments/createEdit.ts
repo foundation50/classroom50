@@ -1467,3 +1467,145 @@ export async function setAssignmentClosedWithConflictRetry(
 ) {
   return withGitConflictRetry(() => setAssignmentClosed(client, input))
 }
+
+// MIGRATION(v1.28): the whole assignments.json schema-migration flow below
+// (types, helpers, and the writer) is a one-time normalization of pre-1.28
+// files to the current schema. Safe to remove in a future version once no
+// legacy (submission_mode-absent) files remain in the wild. Greppable tag:
+// MIGRATION(v1.28).
+export type MigrateClassroomAssignmentsInput = {
+  org: string
+  classroom: string
+}
+
+export type MigrateClassroomAssignmentsResult = Omit<
+  CreateClassroomResult,
+  "updatedRef"
+> & {
+  // Present only when at least one entry was normalized; an all-migrated file
+  // (or an empty classroom) skips the commit and leaves this undefined.
+  updatedRef?: CreateClassroomResult["updatedRef"]
+  // Entries this run wrote explicit fields onto.
+  migratedCount: number
+  // Entries already carrying an explicit submission_mode (left untouched).
+  alreadyMigratedCount: number
+}
+
+// An entry is "migrated" once it carries an explicit submission_mode. That
+// presence is the opt-in signal SubmissionsPage reads to enable the detection
+// overlay, so a legacy file (no submission_mode) keeps its pre-1.28
+// submit/*-only counts until a teacher runs this classroom-wide normalization.
+function isSubmissionTrackingMigrated(entry: Assignment): boolean {
+  return entry.submission_mode !== undefined
+}
+
+// Normalize an unmigrated entry into the new canonical shape by writing the
+// fields that pre-1.28 left absent: submission_mode = "every-push" (the wire
+// default, so behavior is unchanged) and, when grading is absent, an explicit
+// grading: { mode: "auto" } so the file self-documents. Immutable provisioning
+// flags (empty_repo/no_autograder/init_shim), locked/closed, and every other
+// field are left exactly as-is. Returns the entry unchanged when already
+// migrated.
+function normalizeEntryForMigration(entry: Assignment): Assignment {
+  if (isSubmissionTrackingMigrated(entry)) return entry
+  const migrated: Assignment = {
+    ...entry,
+    submission_mode: SUBMISSION_MODES[0],
+  }
+  if (migrated.grading === undefined) {
+    migrated.grading = { mode: "auto" }
+  }
+  return migrated
+}
+
+// Migrate every eligible assignment in a classroom's assignments.json to the
+// new submission-configuration semantics in ONE commit: write an explicit
+// submission_mode (and grading: auto) onto each legacy entry so the detection
+// overlay opts in, while preserving pre-1.28 behavior byte-for-byte (every-push
+// is the wire default). This is a content normalization WITHIN v1 — the schema
+// sentinel is untouched and no version bump occurs. Unknown fields round-trip
+// via the whole-entry spread. Mirrors setAssignmentClosed's no-op short-circuit:
+// an all-migrated file skips the commit.
+export async function migrateClassroomAssignments(
+  client: GitHubClient,
+  input: MigrateClassroomAssignmentsInput,
+): Promise<MigrateClassroomAssignmentsResult> {
+  const { org, classroom } = input
+  log.info("migrate classroom assignments: started", { org, classroom })
+
+  const [, configBranch] = await Promise.all([
+    assertClassroomNotArchived(client, org, classroom),
+    getConfigRepoBranch(client, org),
+  ])
+  const ref = await getBranchRef(client, org, configBranch)
+  const commit = await getCommit(client, org, ref.object.sha)
+
+  const assignmentsFilePath = `${classroom}/assignments.json`
+  const currentAssignments = await getAssignmentsFile(client, {
+    org,
+    path: assignmentsFilePath,
+    ref: ref.object.sha,
+  })
+
+  const alreadyMigratedCount = currentAssignments.assignments.filter(
+    isSubmissionTrackingMigrated,
+  ).length
+  const migratedCount =
+    currentAssignments.assignments.length - alreadyMigratedCount
+
+  let newCommitSha = ref.object.sha
+  let newTreeSha = commit.tree.sha
+  let updatedRef: CreateClassroomResult["updatedRef"] | undefined
+
+  if (migratedCount > 0) {
+    const nextAssignments: AssignmentsFile = {
+      ...currentAssignments,
+      assignments: currentAssignments.assignments.map(
+        normalizeEntryForMigration,
+      ),
+    }
+
+    const tree = await createGitTree(client, {
+      org,
+      base_tree: commit.tree.sha,
+      tree: [
+        {
+          path: assignmentsFilePath,
+          mode: "100644",
+          type: "blob",
+          content: JSON.stringify(nextAssignments, null, 2) + "\n",
+        },
+      ],
+    })
+    const newCommit = await createGitCommit(client, {
+      org,
+      message: prefixCommit(
+        `Migrate submission tracking: ${classroom} (${migratedCount} assignment${migratedCount === 1 ? "" : "s"})`,
+      ),
+      tree_sha: tree.sha,
+      parents: [ref.object.sha],
+    })
+    updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
+    newCommitSha = newCommit.sha
+    newTreeSha = tree.sha
+  }
+
+  return {
+    previousCommitSha: ref.object.sha,
+    baseTreeSha: commit.tree.sha,
+    newTreeSha,
+    newCommitSha,
+    updatedRef,
+    migratedCount,
+    alreadyMigratedCount,
+  }
+}
+
+// Same concurrency story as the other assignments.json writers: retry on a
+// concurrent-write 409, each attempt re-reading the ref and file.
+export async function migrateClassroomAssignmentsWithConflictRetry(
+  client: GitHubClient,
+  input: MigrateClassroomAssignmentsInput,
+) {
+  return withGitConflictRetry(() => migrateClassroomAssignments(client, input))
+}

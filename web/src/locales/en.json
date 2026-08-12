@@ -2621,6 +2621,18 @@
         "closed": "Closed"
       }
     },
+    "migrateTracking": {
+      "bannerText": "This classroom's configuration uses an older format. Migrate it to the latest schema to enable the newest assignment and submissions features.",
+      "bannerAction": "Migrate configuration",
+      "title": "Migrate classroom configuration",
+      "subtitle": "Update this classroom's assignments to the latest configuration schema.",
+      "warning": "This records each assignment's settings explicitly so every tool reads them the same way and the newest features (such as live submission tracking) are enabled. It does not change any grade, deadline, or student's access, and you can keep working as before.",
+      "apply": "Migrate configuration",
+      "working": "Updating assignments",
+      "resultHeadline_one": "Migrated {{count}} assignment.",
+      "resultHeadline_other": "Migrated {{count}} assignments.",
+      "error": "The assignments could not be updated. Try again."
+    },
     "bulkFeatures": {
       "menuLabel": "Update repository features",
       "menuTitle": "Turn Issues, Wiki, Projects, or Pull requests on or off across every student repository",
