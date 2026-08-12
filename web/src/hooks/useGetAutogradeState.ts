@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { githubKeys } from "@/github-core/queries"
-import { getAutogradeState, type AutogradeState } from "@/github-core/mutations"
+import {
+  getAutogradeState,
+  type AutogradeWorkflowState,
+} from "@/github-core/mutations"
 
 // The autograde workflow's live state for one repo, so a row action can show
 // Pause (enabled) vs Resume (paused). Read lazily — the manage hub enables it
@@ -17,7 +20,7 @@ export function useGetAutogradeState(
 ) {
   const client = useGitHubClient()
 
-  return useQuery<AutogradeState>({
+  return useQuery<AutogradeWorkflowState>({
     queryKey: githubKeys.autogradeState(org ?? "", repo ?? ""),
     queryFn: () =>
       getAutogradeState({ client, org: org ?? "", repo: repo ?? "" }),

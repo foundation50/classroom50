@@ -227,28 +227,51 @@ export const DownloadButton = ({
 }
 
 // The per-repo Actions cell, shared by every row family (submitted,
-// non-submitter, group). It now holds just two affordances: the leading
-// Open-repo shortcut (`header`) and a single Manage trigger that opens the
-// submission hub (ManageSubmissionModal), where every other action —
-// commit, Review, access, details, regrade, download — lives as a labeled row.
-// Consolidating keeps the dense table to one GitHub-repo shortcut plus one
-// entry point that scales as we add actions, instead of a growing icon cluster.
+// non-submitter, group). It now holds a small set of shortcuts: the leading
+// Open-repo link (`header`), a direct "View autograder details" link to the
+// latest submission release (a teacher's most common jump, so it skips the hub),
+// and a single Manage trigger that opens the submission hub
+// (ManageSubmissionModal), where every other action — commit, Review, access,
+// regrade, download — lives as a labeled row. Keeping the dense table to these
+// few shortcuts plus one entry point scales as we add actions, instead of a
+// growing icon cluster.
 export const RepoRowActions = ({
   owner,
   header,
+  release,
+  skipsGrading = false,
   onManage,
 }: {
   owner: string
   // The leading affordance for this row family (Open-repo link for individuals,
   // repo link for groups).
   header: React.ReactNode
+  // The submission's latest release page (autograder result). When present, a
+  // direct "View autograder details" shortcut links it (skipping the hub). The
+  // shortcut is hidden when there's no result to view — before a submission
+  // lands, or for assignments that skip built-in grading (see skipsGrading).
+  release?: string | null
+  // The assignment skips built-in grading (empty_repo OR no_autograder): there's
+  // no autograder result, so the details shortcut is hidden entirely.
+  skipsGrading?: boolean
   // Opens the submission hub for this row.
   onManage: () => void
 }) => {
   const { t } = useTranslation()
+  const releaseHref = skipsGrading ? null : safeHttpUrl(release)
   return (
     <>
       {header}
+      {releaseHref && (
+        <ActionIconLink
+          href={releaseHref}
+          icon={ScrollText}
+          label={t("submissions.table.viewDetails")}
+          title={t("submissions.table.viewDetails")}
+          emptyLabel={t("submissions.table.viewDetails")}
+          emptyTitle={t("submissions.table.viewDetails")}
+        />
+      )}
       <Button
         variant="ghost"
         size="sm"
@@ -272,8 +295,9 @@ export const RepoRowActions = ({
 //
 // Gating mirrors the old cluster: repo-only actions (Review, access, regrade,
 // download) disable only when no repo exists; submission-only links
-// (commit, details) dim until an attempt lands; `emptyRepo` assignments omit
-// the PR/access/details/regrade actions entirely.
+// (commit, details) dim until an attempt lands; assignments that skip built-in
+// grading (empty_repo OR no_autograder — this receives skipsGrading) omit the
+// PR/access/details/regrade actions entirely.
 export type SubmissionActionListProps = {
   mode: AssignmentMode
   org: string

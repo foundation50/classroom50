@@ -116,7 +116,7 @@ export {
   getAutogradeState,
   setAutogradeState,
   AUTOGRADE_WORKFLOW_FILE,
-  type AutogradeState,
+  type AutogradeWorkflowState,
 } from "./mutations/autogradeState"
 export {
   createPullRequest,

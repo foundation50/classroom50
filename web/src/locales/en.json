@@ -1100,8 +1100,8 @@
     "goToAssignments": "Go to assignments",
     "form": {
       "detailsSection": "Details",
-      "repositorySetupSection": "Repository Setup",
-      "submissionSection": "Submission and Grading",
+      "repositorySetupSection": "Repository setup",
+      "submissionSection": "Submission and grading",
       "submissionSectionHelp": "Define what counts as a submission for this assignment — when the autograder runs and which tags a student can push to submit.",
       "scheduleSection": "Schedule",
       "sectionStatus": {
@@ -1171,7 +1171,7 @@
       },
       "autograding": {
         "label": "Autograding",
-        "notAutogradedNote": "Autograding options apply only when this assignment is set to \"Autograded\" in the Submission and Grading section above. Change the grading choice to Autograded to configure the autograder.",
+        "notAutogradedNote": "Autograding options apply only when this assignment is set to \"Autograded\" in the Submission and grading section above. Change the grading choice to Autograded to configure the autograder.",
         "modeLabel": "Built-in autograder",
         "lockedHelp": "Whether the built-in autograder is used can't be changed after creation: repositories students already accepted are not re-provisioned.",
         "choices": {
@@ -1205,7 +1205,7 @@
         "help": "How the submissions page detects and counts each student's work. The autograder uses the same definition."
       },
       "submissionMode": {
-        "label": "Submission type",
+        "label": "Autograding trigger",
         "help": "\"Every push to the default branch\" counts each push (other than the starting commit). \"A tagged commit\" counts only tagged commits — a student submits with gh student submit or by pushing a tag, so ordinary pushes cost no Actions minutes.",
         "editWarning": "Changing this only affects repositories created from now on. Repositories students already accepted keep the old setting until you update them — use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
         "choices": {
@@ -1412,7 +1412,7 @@
       "unlockAria": "Unlock {{name}}",
       "lockTitleModal": "Lock assignment?",
       "unlockTitleModal": "Unlock assignment?",
-      "lockDescription": "This closes <assignment>{{assignment}}</assignment> to every student — including those who already accepted — on the accept page, the assignments list, the submission view, and the CLI. If it uses a private template, the student team's read on that template is removed too (staff access is unaffected). Existing student repositories are not deleted.",
+      "lockDescription": "This locks <assignment>{{assignment}}</assignment> to every student — including those who already accepted — on the accept page, the assignments list, the submission view, and the CLI. If it uses a private template, the student team's read on that template is removed too (staff access is unaffected). Existing student repositories are not deleted.",
       "unlockDescription": "This reopens <assignment>{{assignment}}</assignment> to students. If it uses a private template, the student team's read on that template is restored so students can accept again.",
       "lockConfirm": "Lock assignment",
       "unlockConfirm": "Unlock assignment",
@@ -2292,11 +2292,11 @@
     "lock": {
       "lockLabel": "Lock assignment",
       "unlockLabel": "Unlock assignment",
-      "lockTitle": "Close this assignment to students and, for a private template, remove the student team's read on it",
+      "lockTitle": "Lock this assignment so students can't access or accept it, and, for a private template, remove the student team's read on it",
       "unlockTitle": "Reopen this assignment to students and restore private-template access",
       "lockTitleModal": "Lock assignment?",
       "unlockTitleModal": "Unlock assignment?",
-      "lockDescription": "This closes <assignment>{{assignment}}</assignment> to every student — including those who already accepted — on the accept page, the assignments list, the submission view, and the CLI. If it uses a private template, the student team's read on that template is removed too (staff access is unaffected). Existing student repositories are not deleted.",
+      "lockDescription": "This locks <assignment>{{assignment}}</assignment> to every student — including those who already accepted — on the accept page, the assignments list, the submission view, and the CLI. If it uses a private template, the student team's read on that template is removed too (staff access is unaffected). Existing student repositories are not deleted.",
       "unlockDescription": "This reopens <assignment>{{assignment}}</assignment> to students. If it uses a private template, the student team's read on that template is restored so students can accept again.",
       "lockSuccess": "Assignment locked.",
       "unlockSuccess": "Assignment unlocked."

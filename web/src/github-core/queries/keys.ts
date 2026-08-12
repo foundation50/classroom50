@@ -175,8 +175,8 @@ export const githubKeys = {
     [...githubKeys.all, "orgActionsUsage", owner] as const,
 
   // The autograde workflow's Actions state for one student repo, mapped to an
-  // AutogradeState. Invalidated after a per-repo or bulk pause/resume so the
-  // row's action label flips.
+  // AutogradeWorkflowState. Invalidated after a per-repo or bulk pause/resume so
+  // the row's action label flips.
   autogradeState: (owner: string, repo: string) =>
     [...githubKeys.all, "autogradeState", owner, repo] as const,
 
