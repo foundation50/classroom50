@@ -761,6 +761,10 @@ const SubmissionsTable = ({
           subtitle={detailsContext.subtitle}
           repo={detailsContext.repo}
           repoHref={detailsContext.repoHref}
+          // Counts the listed detail items so the modal header always matches
+          // the rows shown. This can differ from the row's count chip, which
+          // reads the collected scores.json count and may be live-inflated
+          // ahead of what's listable (the "New" stale badge explains the gap).
           countLabel={t(submissionModeCountKey(assignmentMode), {
             count: detailsContext.items.length,
           })}
