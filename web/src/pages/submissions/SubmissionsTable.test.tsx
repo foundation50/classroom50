@@ -501,6 +501,43 @@ describe("SubmissionsTable submission details modal", () => {
     )
   })
 
+  it("lists detected pushes in the modal when nothing is collected yet", async () => {
+    const user = userEvent.setup()
+    // Reproduces the 3-vs-0 bug: the chip counts DETECTED default-branch
+    // commits (submissionCount bumped by the detection overlay) while nothing
+    // has been collected (submissions empty). The modal must list the detected
+    // commits, not 0.
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        scores={[
+          scoreRow({
+            submissionCount: 3,
+            pending: true,
+            submissions: [],
+            detectedEntries: [
+              { kind: "commit", label: "ccc3333", count: 1, sha: "ccc3333" },
+              { kind: "commit", label: "bbb2222", count: 1, sha: "bbb2222" },
+              { kind: "commit", label: "aaa1111", count: 1, sha: "aaa1111" },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    const commitLinks = screen.getAllByRole("link", {
+      name: "submissions.details.viewCommit",
+    })
+    expect(commitLinks).toHaveLength(3)
+    expect(commitLinks[0].getAttribute("href")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/commit/ccc3333",
+    )
+  })
+
   it("shows the empty state with a tags link when a tag-mode row has no tags", async () => {
     const user = userEvent.setup()
     render(

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { githubTemplateRepoUrl, repoTreeAtRefUrl, repoTagsUrl } from "./orgUrl"
+import {
+  githubTemplateRepoUrl,
+  repoTreeAtRefUrl,
+  repoTagsUrl,
+  repoCommitUrl,
+} from "./orgUrl"
 
 describe("githubTemplateRepoUrl", () => {
   it("links to the repo root when no branch is given", () => {
@@ -63,5 +68,18 @@ describe("repoTagsUrl", () => {
   it("returns undefined for blank inputs", () => {
     expect(repoTagsUrl("", "repo")).toBeUndefined()
     expect(repoTagsUrl("acme", "")).toBeUndefined()
+  })
+})
+
+describe("repoCommitUrl", () => {
+  it("links to a repo's commit page for a sha", () => {
+    expect(repoCommitUrl("acme", "cs101-hw1-alice", "abc1234")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/commit/abc1234",
+    )
+  })
+
+  it("returns undefined for blank inputs", () => {
+    expect(repoCommitUrl("", "repo", "abc")).toBeUndefined()
+    expect(repoCommitUrl("acme", "repo", "")).toBeUndefined()
   })
 })

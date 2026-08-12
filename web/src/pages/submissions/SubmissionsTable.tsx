@@ -9,6 +9,7 @@ import {
   resolveStudent,
 } from "@/util/students"
 import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
+import { repoCommitUrl } from "@/util/orgUrl"
 import Avatar from "@/components/avatar"
 import { Badge, Button, Spinner, TablePagination } from "@/components/ui"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
@@ -49,6 +50,7 @@ import {
 import {
   buildSubmissionDetailItems,
   submissionEmptyState,
+  type PushSubmission,
 } from "@/components/submissions/submissionDetailItems"
 import {
   LastSubmittedCell,
@@ -92,9 +94,16 @@ type SubmissionDetailsContext = {
 }
 
 // Build the type-aware detail items for a row via the shared builder: tag
-// entries in tag mode, the collected commit attempts as push submissions
-// otherwise. Each attempt links its commit and (when present) its graded
-// release.
+// Build the type-aware detail items for a row via the shared builder: tag
+// entries in tag mode, the default-branch pushes otherwise.
+//
+// Every-push commits come from the DETECTED entries (`row.detectedEntries`,
+// kind "commit") — the same source the count chip is bumped from — so the modal
+// lists exactly the pushes the chip counts, even before a collect ingests them.
+// Each detected commit links its commit page and, when a collected attempt at
+// that sha carries a graded release, folds in a "View grade" link. When there
+// are no detected commits (e.g. a non-owner viewer, whose chip also uses the
+// collected count), fall back to the collected `submissions`.
 function buildDetailItems(
   row: SubmissionRow,
   mode: SubmissionMode,
@@ -102,16 +111,39 @@ function buildDetailItems(
   repo: string,
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): SubmissionDetailItem[] {
+  const detectedCommits = (row.detectedEntries ?? []).filter(
+    (e) => e.kind === "commit",
+  )
+  // sha (short or full, whichever the collected commit URL ends with) -> the
+  // graded release URL for that attempt, so a detected push can link its grade.
+  const releaseByCommit = new Map<string, string>()
+  for (const s of row.submissions) {
+    const sha = s.commit?.split("/").pop()
+    if (sha && s.release) releaseByCommit.set(sha, s.release)
+  }
+
+  const commits: PushSubmission[] =
+    detectedCommits.length > 0
+      ? detectedCommits.map((e) => ({
+          key: `commit-${e.sha ?? e.label}`,
+          commitHref: e.sha ? repoCommitUrl(org, repo, e.sha) : undefined,
+          // Detection doesn't carry a per-commit time; the collected attempt
+          // (when present) does, matched by sha below.
+          datetime: undefined,
+          releaseHref: e.sha
+            ? (releaseByCommit.get(e.sha) ??
+              releaseByCommit.get(e.sha.slice(0, 7)))
+            : undefined,
+        }))
+      : row.submissions.map((s, i) => ({
+          key: `${s.datetime}-${s.commit}-${i}`,
+          commitHref: s.commit,
+          datetime: s.datetime,
+          releaseHref: s.release,
+        }))
+
   return buildSubmissionDetailItems(
-    {
-      tags: row.detectedEntries ?? [],
-      commits: row.submissions.map((s, i) => ({
-        key: `${s.datetime}-${s.commit}-${i}`,
-        commitHref: s.commit,
-        datetime: s.datetime,
-        releaseHref: s.release,
-      })),
-    },
+    { tags: row.detectedEntries ?? [], commits },
     mode,
     org,
     repo,
