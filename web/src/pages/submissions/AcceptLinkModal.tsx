@@ -90,6 +90,7 @@ export function AcceptLinkModal({
           copied={copiedUrl}
           onCopy={copyUrl}
           label={t("submissions.accept.copyLink")}
+          copiedLabel={t("submissions.accept.copied")}
         />
 
         <details className="group/cli">
@@ -106,6 +107,7 @@ export function AcceptLinkModal({
             copied={copiedCli}
             onCopy={copyCli}
             label={t("submissions.accept.copyCli")}
+            copiedLabel={t("submissions.accept.copied")}
           />
         </details>
       </div>

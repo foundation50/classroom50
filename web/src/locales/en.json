@@ -2374,6 +2374,7 @@
       "unlistedNote": "This classroom uses an unlisted URL, so the link includes the access key — treat it like a shared password and send the full link as-is.",
       "copyLink": "Copy accept link",
       "copyCli": "Copy CLI command",
+      "copied": "Copied",
       "preferCli": "Prefer the command line?",
       "warnNoStudents": "No students can accept this link in <classroom>{{classroom}}</classroom> yet. Add students to the roster and invite them to the organization first.",
       "shareWithCount_one": "Sharing with <count>{{count}} student</count> who can accept this assignment.",
