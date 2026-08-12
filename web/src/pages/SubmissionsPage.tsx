@@ -484,7 +484,11 @@ const SubmissionsPageContent = () => {
     )
     const merged = mergeDetectedSubmissions(
       withLive,
-      detectedSubmissions.map((d) => ({ owner: d.owner, count: d.count })),
+      detectedSubmissions.map((d) => ({
+        owner: d.owner,
+        count: d.count,
+        entries: d.entries,
+      })),
     )
     return rosterReady ? rosterScopedRows(merged, students) : merged
   }, [

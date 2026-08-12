@@ -14,24 +14,35 @@ import MissingParams from "@/components/MissingParams"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetSubmissionReleases from "@/hooks/useGetSubmissionReleases"
+import useGetMyTaggedSubmissions from "@/hooks/useGetMyTaggedSubmissions"
 import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
+import { repoTreeAtRefUrl } from "@/util/orgUrl"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { safeHttpUrl } from "@/util/url"
 import type { GitHubRelease } from "@/github-core/types"
-import type { Assignment } from "@/types/classroom"
+import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
+import type { Assignment, SubmissionMode } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Alert, Badge, Button, Card, Markdown } from "@/components/ui"
 import SubmitGuidance from "@/components/SubmitGuidance"
+import { Tag } from "lucide-react"
 
 // Strips the `submit/` tag prefix for a friendlier label, falling back to the
 // release name when present.
 const releaseLabel = (release: GitHubRelease): string =>
   release.name?.trim() || release.tag_name.replace(/^submit\//, "")
+
+const SUBMIT_PREFIX = "submit/"
+
+// A friendly label for a detected tag entry: strip the canonical submit/ prefix
+// so `submit/2026-...` reads as the timestamp; milestone tags are shown as-is.
+const detectedTagLabel = (label: string): string =>
+  label.startsWith(SUBMIT_PREFIX) ? label.slice(SUBMIT_PREFIX.length) : label
 
 const ReleaseRow = ({ release }: { release: GitHubRelease }) => {
   const { t } = useTranslation()
@@ -71,7 +82,13 @@ const ReleaseRow = ({ release }: { release: GitHubRelease }) => {
   )
 }
 
-const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
+const AssignmentMeta = ({
+  assignment,
+  submissionMode,
+}: {
+  assignment?: Assignment
+  submissionMode?: SubmissionMode
+}) => {
   const { t } = useTranslation()
   if (!assignment) return null
   const due = assignment.due
@@ -90,6 +107,12 @@ const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
           {t("submissions.student.modeIndividual")}
         </Badge>
       ) : null}
+      <Badge ghost className="gap-1">
+        <Tag aria-hidden="true" className="size-3.5" />
+        {submissionMode === "tag"
+          ? t("submissions.student.modeTag")
+          : t("submissions.student.modeEveryPush")}
+      </Badge>
       <Badge
         tone={overdue ? "error" : "neutral"}
         ghost={!overdue}
@@ -104,11 +127,93 @@ const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
   )
 }
 
+// The student's tagged submissions (tag mode only): one jump-to-tree link per
+// detected tag or tag group. Branch-mode `commit` entries carry no tag and are
+// excluded, so the card renders only tag/tag-group entries; when none exist it
+// shows the empty hint so the student knows to push a tag.
+const TaggedSubmissionsCard = ({
+  entries,
+  org,
+  repo,
+}: {
+  entries: DetectedSubmission[]
+  org: string
+  repo: string
+}) => {
+  const { t } = useTranslation()
+  const tagEntries = entries.filter(
+    (e) => e.kind === "tag" || e.kind === "tag-group",
+  )
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-base-content/70">
+        {t("submissions.student.taggedIntro")}
+      </p>
+      {tagEntries.length === 0 ? (
+        <Alert tone="info">
+          <div>{t("submissions.student.taggedEmpty")}</div>
+        </Alert>
+      ) : (
+        <Card as={EnterDiv} bordered={false} className="border border-base-200">
+          <ul className="divide-y divide-base-200">
+            {tagEntries.map((entry) => {
+              const isGroup = entry.kind === "tag-group"
+              const ref = isGroup ? entry.sha : entry.label
+              const href = ref ? repoTreeAtRefUrl(org, repo, ref) : undefined
+              const label = isGroup
+                ? t("submissions.student.tagGroupCount", {
+                    pattern: entry.label,
+                    count: entry.count,
+                  })
+                : detectedTagLabel(entry.label)
+              return (
+                <li
+                  key={`${entry.kind}-${entry.label}`}
+                  className="flex items-center justify-between gap-4 px-4 py-3"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Tag
+                      aria-hidden="true"
+                      className="size-4 shrink-0 text-base-content/70"
+                    />
+                    <span className="truncate font-medium">{label}</span>
+                  </span>
+                  {href ? (
+                    <Button
+                      as="a"
+                      variant="outline"
+                      size="sm"
+                      href={href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="shrink-0"
+                    >
+                      <ExternalLink aria-hidden="true" className="size-4" />
+                      {t("submissions.student.jumpToTag")}
+                    </Button>
+                  ) : (
+                    <span className="text-sm text-base-content/70">
+                      {t("submissions.student.unavailable")}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </Card>
+      )}
+    </div>
+  )
+}
+
 const SubmissionBody = ({
   org,
   classroom,
   assignment,
   secret,
+  submissionMode,
+  submissionTags,
 }: {
   org: string
   classroom: string
@@ -116,15 +221,31 @@ const SubmissionBody = ({
   // Capability-URL secret for a protected classroom; threads into the accept
   // link. Undefined for unprotected.
   secret?: string
+  // The assignment's submission definition. Tag mode surfaces the student's
+  // tagged submissions with jump-to-tag links and tag-workflow guidance;
+  // absent/every-push keeps the release-centric view.
+  submissionMode?: SubmissionMode
+  submissionTags?: string[]
 }) => {
   const { t } = useTranslation()
   const { user } = useGithubAuth()
+  const isTagMode = submissionMode === "tag"
   const {
     data: releases,
     isLoading,
     isError,
     error,
   } = useGetSubmissionReleases(org, classroom, assignment, user?.login)
+  // Tagged submissions (tag mode only): read the student's own repo tags and
+  // derive the detected tag/tag-group entries. The query is disabled outside
+  // tag mode, so every-push assignments cost no extra read.
+  const { data: taggedSubmissions } = useGetMyTaggedSubmissions(
+    isTagMode ? org : undefined,
+    isTagMode ? classroom : undefined,
+    isTagMode ? assignment : undefined,
+    isTagMode ? user?.login : undefined,
+    submissionTags,
+  )
   // Distinguish "never accepted" (no repo) from "accepted but not yet graded".
   // getRepo returns null only on a true 404; a 403/5xx throws, so read the repo
   // query's error too — else a transient/permission failure falls through to
@@ -135,6 +256,8 @@ const SubmissionBody = ({
     isError: repoIsError,
     error: repoError,
   } = useGetAssignmentRepo(org, classroom, assignment, user?.login)
+
+  const repoName = studentRepoName(classroom, assignment, user?.login ?? "")
 
   if (isLoading || repoLoading) {
     return (
@@ -206,7 +329,18 @@ const SubmissionBody = ({
             {t("submissions.student.openMyRepo")}
           </Button>
         </div>
-        <SubmitGuidance repoHtmlUrl={studentRepo.html_url} />
+        {isTagMode ? (
+          <TaggedSubmissionsCard
+            entries={taggedSubmissions ?? []}
+            org={org}
+            repo={repoName}
+          />
+        ) : null}
+        <SubmitGuidance
+          repoHtmlUrl={studentRepo.html_url}
+          submissionMode={submissionMode}
+          submissionTags={submissionTags}
+        />
       </EnterDiv>
     )
   }
@@ -233,6 +367,14 @@ const SubmissionBody = ({
           </Button>
         </div>
       </div>
+
+      {isTagMode ? (
+        <TaggedSubmissionsCard
+          entries={taggedSubmissions ?? []}
+          org={org}
+          repo={repoName}
+        />
+      ) : null}
 
       <Card as={EnterDiv} bordered={false} className="border border-base-200">
         <ul className="divide-y divide-base-200">
@@ -273,6 +415,8 @@ const StudentSubmissionPage = () => {
   )
 
   const description = assignmentDescription(assignmentData)
+  const submissionMode = assignmentData?.submission_mode
+  const submissionTags = assignmentData?.submission_tags
 
   return (
     <PageShell>
@@ -284,7 +428,10 @@ const StudentSubmissionPage = () => {
           t("submissions.student.fallbackTitle")
         }
       />
-      <AssignmentMeta assignment={assignmentData} />
+      <AssignmentMeta
+        assignment={assignmentData}
+        submissionMode={submissionMode}
+      />
       {description ? (
         <div className="mt-3 flex flex-col gap-1">
           <span className="text-sm font-medium text-base-content/70">
@@ -304,6 +451,8 @@ const StudentSubmissionPage = () => {
             classroom={classroom}
             assignment={assignment}
             secret={secret}
+            submissionMode={submissionMode}
+            submissionTags={submissionTags}
           />
         )
       ) : (

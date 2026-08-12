@@ -4,6 +4,7 @@ import {
   Inbox,
   ScrollText,
   SearchX,
+  Tag,
 } from "lucide-react"
 import { Fragment, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
@@ -15,6 +16,7 @@ import {
   resolveStudent,
 } from "@/util/students"
 import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
+import { repoTreeAtRefUrl } from "@/util/orgUrl"
 import { safeHttpUrl } from "@/util/url"
 import Avatar from "@/components/avatar"
 import {
@@ -56,6 +58,8 @@ import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsM
 import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
+import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
+import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
 import type { Student, SubmissionMode } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 
@@ -116,19 +120,93 @@ const HistoryLink = ({
     </span>
   )
 
-// Expanded per-row history: every submission for a repo, newest first.
+// A friendly label for a detected tag entry: strip the canonical submit/ prefix
+// so `submit/2026-...` reads as the timestamp, leaving milestone tags as-is.
+const tagLabel = (label: string): string =>
+  label.startsWith(SUBMISSION_TAG_PREFIX)
+    ? label.slice(SUBMISSION_TAG_PREFIX.length)
+    : label
+
+// The tagged-submissions block in the expanded row: one jump-to-tree link per
+// detected tag or tag group. Branch-mode `commit` entries carry no tag to jump
+// to and are skipped, so the section renders only when tag/tag-group entries
+// exist. An exact tag jumps to its own ref; a glob group has no single tag, so
+// it jumps to its representative commit sha and shows the pattern + match count.
+const TaggedSubmissions = ({
+  entries,
+  org,
+  repo,
+}: {
+  entries: DetectedSubmission[]
+  org: string
+  repo: string
+}) => {
+  const { t } = useTranslation()
+  const tagEntries = entries.filter(
+    (e) => e.kind === "tag" || e.kind === "tag-group",
+  )
+  if (tagEntries.length === 0) return null
+
+  return (
+    <div className="mt-2 flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-base-content/70">
+        {t("submissions.table.taggedSubmissions")}
+      </span>
+      <ul className="flex flex-col gap-1">
+        {tagEntries.map((entry) => {
+          const isGroup = entry.kind === "tag-group"
+          // A group jumps to its representative commit (no single tag); an exact
+          // tag jumps to the tag ref itself.
+          const ref = isGroup ? entry.sha : entry.label
+          const href = ref ? repoTreeAtRefUrl(org, repo, ref) : undefined
+          const label = isGroup
+            ? t("submissions.table.tagGroupCount", {
+                pattern: entry.label,
+                count: entry.count,
+              })
+            : tagLabel(entry.label)
+          return (
+            <li
+              key={`${entry.kind}-${entry.label}`}
+              className="flex items-center gap-2 text-sm"
+            >
+              <Tag className="size-3.5 shrink-0 text-base-content/70" />
+              <span className="truncate">{label}</span>
+              <span className="ms-auto">
+                <HistoryLink
+                  href={href}
+                  icon={GitCommitHorizontal}
+                  label={t("submissions.table.jumpToTag")}
+                />
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+// Expanded per-row history: every submission for a repo, newest first, plus any
+// detected tagged submissions with jump-to-tag links.
 const SubmissionHistory = ({
   submissions,
   repoHref,
   isGroup,
   students,
   thresholdFraction,
+  detectedEntries,
+  org,
+  repo,
 }: {
   submissions: SubmissionAttempt[]
   repoHref: string
   isGroup: boolean
   students: Student[]
   thresholdFraction: number | null
+  detectedEntries?: DetectedSubmission[]
+  org: string
+  repo: string
 }) => {
   const { t } = useTranslation()
   return (
@@ -174,6 +252,11 @@ const SubmissionHistory = ({
           </span>
         </li>
       ))}
+      {detectedEntries && detectedEntries.length > 0 ? (
+        <li>
+          <TaggedSubmissions entries={detectedEntries} org={org} repo={repo} />
+        </li>
+      ) : null}
       <li className="text-xs text-base-content/70">
         <Trans
           i18nKey="submissions.table.fullHistory"
@@ -368,11 +451,19 @@ const SubmissionsTable = ({
   }: SubmissionRow) => {
     const repo = studentRepoName(classroom, assignment, rest.owner)
     const repoHref = studentRepoUrl(org, classroom, assignment, rest.owner)
+    // Detected tag/tag-group entries the expanded history can jump to (branch-
+    // mode commit entries carry no tag and are excluded here, matching what
+    // TaggedSubmissions renders).
+    const jumpableTags =
+      rest.detectedEntries?.filter(
+        (e) => e.kind === "tag" || e.kind === "tag-group",
+      ) ?? []
     // Expandability is driven by the COLLECTED history, not the (possibly
     // live-inflated) count: a `staleCount` row shows more submissions than
     // scores.json has ingested, so expanding would reveal fewer entries than the
-    // badge claims. Only offer expand when there is real multi-entry history.
-    const canExpand = rest.submissions.length > 1
+    // badge claims. Only offer expand when there is real multi-entry history —
+    // OR when there are tagged submissions to jump to, even for a single push.
+    const canExpand = rest.submissions.length > 1 || jumpableTags.length > 0
     const isOpen = !!expanded[rest.owner]
     return (
       <Fragment key={rest.owner}>
@@ -593,6 +684,9 @@ const SubmissionsTable = ({
                 isGroup={isGroup}
                 students={students}
                 thresholdFraction={passBar}
+                detectedEntries={rest.detectedEntries}
+                org={org}
+                repo={repo}
               />
             </td>
           </tr>

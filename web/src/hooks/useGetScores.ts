@@ -5,6 +5,7 @@ import { jsonFileQuery } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_QUERIES } from "@/lib/logScopes"
+import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 
 const log = logger.scope(LOG_SCOPE_QUERIES)
 
@@ -90,6 +91,12 @@ export type SubmissionRow = {
   // "latest push <time>, not yet graded" without moving the graded submission
   // time. Owner-only (only the owner's live fan-out runs).
   liveLatestAt?: string
+  // The detection overlay's per-submission breakdown for this repo (tag-mode
+  // git tags or branch-mode commits), carried so the expanded history can list
+  // tagged submissions with a jump-to-tag link. Grades never come from here;
+  // like `staleCount`, this is owner-only and present only when the detection
+  // fan-out found entries for the repo.
+  detectedEntries?: DetectedSubmission[]
   // Per-attempt history, newest first; the summary fields above mirror submissions[0].
   submissions: SubmissionAttempt[]
 }

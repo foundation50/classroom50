@@ -4,6 +4,7 @@
 
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/github-core/types"
+import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import type { Student } from "@/types/classroom"
 import type { BadgeTone } from "@/components/ui"
 import type { TeamRosterRow } from "@/util/teamRoster"
@@ -165,9 +166,12 @@ export function mergeLiveRows(
 // Detected-submission presence for one repo, from the detection subsystem
 // (branch-mode default-branch pushes or tag-mode git tags). Like the live
 // overlay, this is count/presence only — grades never come from here (KTD6).
+// `entries` is the per-submission breakdown (tags/commits) the expanded history
+// surfaces as jump-to-tag links; omitted when the caller only needs the count.
 export type DetectedPresence = {
   owner: string
   count: number
+  entries?: DetectedSubmission[]
 }
 
 // Merge detected submissions onto rows already reconciled with the live
@@ -187,9 +191,23 @@ export function mergeDetectedSubmissions(
 
   const merged = rows.map((row) => {
     const d = detectedByOwner.get(row.owner.trim().toLowerCase())
-    if (!d || d.count <= row.submissionCount) return row
+    if (!d) return row
+    // Attach the detected breakdown (tags/commits) regardless of the count —
+    // the expanded history lists tagged submissions even when scores.json
+    // already counts them. Detection can only REVEAL more submissions than are
+    // already counted (max wins), never fewer, and never sets a score; only a
+    // higher count bumps the total and flags staleCount.
+    const withEntries =
+      d.entries && d.entries.length > 0
+        ? { ...row, detectedEntries: d.entries }
+        : row
+    if (d.count <= row.submissionCount) return withEntries
     // staleCount off for overrides — see mergeLiveRows.
-    return { ...row, submissionCount: d.count, staleCount: !row.overridden }
+    return {
+      ...withEntries,
+      submissionCount: d.count,
+      staleCount: !row.overridden,
+    }
   })
 
   const knownOwners = new Set(rows.map((row) => row.owner.trim().toLowerCase()))
@@ -209,6 +227,7 @@ export function mergeDetectedSubmissions(
       "max-score": 0,
       submissionCount: Math.max(1, d.count),
       pending: true,
+      detectedEntries: d.entries,
       submissions: [],
     }))
 

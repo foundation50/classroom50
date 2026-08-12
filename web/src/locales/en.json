@@ -2488,6 +2488,10 @@
       "submittedBy": "by {{name}}",
       "review": "Review",
       "reviewAria": "Open feedback pull request",
+      "taggedSubmissions": "Tagged submissions",
+      "jumpToTag": "Jump to tag",
+      "tagGroupCount_one": "{{pattern}} · {{count}} tag",
+      "tagGroupCount_other": "{{pattern}} · {{count}} tags",
       "fullHistory": "Open the <repoLink>repository</repoLink> for the full commit history."
     },
     "manualGrade": {
@@ -2799,6 +2803,13 @@
       "unavailable": "Unavailable",
       "modeGroup": "Group",
       "modeIndividual": "Individual",
+      "modeEveryPush": "Every push is graded",
+      "modeTag": "Graded on tags",
+      "taggedIntro": "Your tagged submissions. Jump to the code at any tag.",
+      "taggedEmpty": "No tagged submissions yet. Push a submission tag from the command line and it will appear here.",
+      "jumpToTag": "Jump to tag",
+      "tagGroupCount_one": "{{pattern}} · {{count}} tag",
+      "tagGroupCount_other": "{{pattern}} · {{count}} tags",
       "loadError": "Could not load your submissions.",
       "notAccepted": "You haven't accepted this assignment yet. <acceptLink>Accept it</acceptLink> to get your repository, then push your work to be graded.",
       "locked": "This assignment is locked by your teacher and isn't available right now. Check back later or ask your teacher to unlock it.",
@@ -2810,7 +2821,11 @@
         "step1": "Clone your assignment repository (once):",
         "step2": "From inside the repository, submit your work for grading:",
         "copyClone": "Copy clone command",
-        "copySubmit": "Copy submit command"
+        "copySubmit": "Copy submit command",
+        "tagIntro": "This assignment is graded on tags. Commit and push your work, then push a tag to submit it for grading.",
+        "tagStep2": "From inside the repository, submit your work — this pushes a submission tag that triggers grading:",
+        "milestoneStep": "Or push a milestone tag your teacher set up (for example, {{tags}}):",
+        "copyMilestone": "Copy milestone tag command"
       },
       "upload": {
         "open": "Upload submission",
