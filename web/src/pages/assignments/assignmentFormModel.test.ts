@@ -47,6 +47,8 @@ const base: CreateAssignmentFormValues = {
   repo_source: "none",
   add_readme: true,
   include_all_branches: false,
+  copy_about: false,
+  copy_topics: false,
   autograding_state: "built-in",
   runtime_env: "hosted",
   runs_on: "",
@@ -731,6 +733,53 @@ describe("toSubmitValues — runtime field clearing", () => {
       include_all_branches: true,
     })
     expect(noTemplate.include_all_branches).toBe(false)
+  })
+
+  it("copy_about/copy_topics pass through for a template source, clear otherwise", () => {
+    const templated = toSubmitValues({
+      ...base,
+      repo_source: "template",
+      template_repo: "acme/starter",
+      copy_about: true,
+      copy_topics: true,
+    })
+    expect(templated.copy_about).toBe(true)
+    expect(templated.copy_topics).toBe(true)
+    // No template -> cleared (nothing to copy from; a stale toggle can't reach
+    // the wire).
+    const noTemplate = toSubmitValues({
+      ...base,
+      repo_source: "none",
+      add_readme: true,
+      copy_about: true,
+      copy_topics: true,
+    })
+    expect(noTemplate.copy_about).toBe(false)
+    expect(noTemplate.copy_topics).toBe(false)
+  })
+
+  it("round-trips stored copy_about/copy_topics flags", () => {
+    const values = assignmentToFormValues({
+      slug: "hw",
+      name: "HW",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "acme", repo: "starter", branch: "main" },
+      copy_about: true,
+      copy_topics: true,
+    })
+    expect(values.copy_about).toBe(true)
+    expect(values.copy_topics).toBe(true)
+    // Absent flags read back as false.
+    const bare = assignmentToFormValues({
+      slug: "hw2",
+      name: "HW2",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "acme", repo: "starter", branch: "main" },
+    })
+    expect(bare.copy_about).toBe(false)
+    expect(bare.copy_topics).toBe(false)
   })
 
   it("round-trips a stored init_shim assignment without flipping the flag", () => {

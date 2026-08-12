@@ -110,6 +110,7 @@ export {
   addRepoCollaborator,
   removeRepoCollaborator,
   setRepoFeatures,
+  replaceRepoTopics,
   type RepoFeaturePatch,
 } from "./mutations/collaborators"
 export {

@@ -109,6 +109,10 @@ export type GitHubRepo = {
   // rely on it.
   created_at?: string
   description?: string | null
+  // Repository topics (GET /repos returns them). Used by accept to copy the
+  // template's Topics onto a student repo (issue #569). Optional — most callers
+  // ignore them.
+  topics?: string[]
   owner?: {
     login: string
     id: number

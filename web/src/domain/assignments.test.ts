@@ -1156,6 +1156,28 @@ describe("editAssignment (preserved-entry integration)", () => {
     ).rejects.toThrow(/submission_mode: must be one of every-push, tag/)
   })
 
+  // copy_about / copy_topics (issue #569): template-required guard + omitempty.
+  it("rejects copy_about / copy_topics without a template", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(client, editInput({ copy_about: true })),
+    ).rejects.toThrow(/copy_about: requires a template/)
+    await expect(
+      editAssignment(client, editInput({ copy_topics: true })),
+    ).rejects.toThrow(/copy_topics: requires a template/)
+  })
+
+  it("omits copy_about / copy_topics when false (template-less)", async () => {
+    const { client, committedContent } = makeClient()
+    await editAssignment(client, editInput())
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.copy_about).toBeUndefined()
+    expect(edited.copy_topics).toBeUndefined()
+  })
+
   // Route-table client like makeClient(), but seeded with a caller-supplied
   // existing entry (the empty_repo tests need a bare one).
   function makeBareClient(entry: Assignment): {

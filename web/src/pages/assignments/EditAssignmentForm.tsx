@@ -83,6 +83,8 @@ const EditAssignmentForm = ({
                 no_autograder: deriveFormShape(values).noAutograder,
                 init_shim: deriveFormShape(values).initShim,
                 include_all_branches: values.include_all_branches,
+                copy_about: values.copy_about,
+                copy_topics: values.copy_topics,
                 runs_on: values.runs_on,
                 container_image: values.container_image,
                 container_user: values.container_user,

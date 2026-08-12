@@ -17,6 +17,8 @@ const base: CreateAssignmentFormValues = {
   repo_source: "none",
   add_readme: true,
   include_all_branches: false,
+  copy_about: false,
+  copy_topics: false,
   autograding_state: "built-in",
   runtime_env: "hosted",
   runs_on: "",

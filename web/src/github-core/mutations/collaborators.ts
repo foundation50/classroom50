@@ -104,12 +104,15 @@ export async function removeRepoCollaborator(params: {
 }
 
 // The GitHub repo-feature toggles PATCH /repos accepts. Only the keys present
-// are changed. Shared with the accept path's RepoFeaturePatch shape.
+// are changed. Shared with the accept path's RepoFeaturePatch shape. The About
+// (`description`) rides the same PATCH — accept copies the template's About
+// onto a student repo through this body (issue #569).
 export type RepoFeaturePatch = {
   has_issues?: boolean
   has_wiki?: boolean
   has_projects?: boolean
   has_pull_requests?: boolean
+  description?: string
 }
 
 // Set a repo's feature toggles (Issues/Wiki/Projects/Pull requests) via
@@ -128,6 +131,27 @@ export async function setRepoFeatures(params: {
     {
       method: "PATCH",
       body: features,
+    },
+  )
+}
+
+// Replace a repo's Topics via PUT /repos/{org}/{repo}/topics (the modern
+// endpoint — no preview media type needed; the body is { names }). Used by
+// accept to copy the template's Topics onto a student repo (issue #569).
+// Throws on failure so the accept path's own fail-open wrapper decides whether
+// to swallow it (topics are best-effort, never a reason to fail accept).
+export async function replaceRepoTopics(params: {
+  client: GitHubClient
+  org: string
+  repo: string
+  topics: string[]
+}): Promise<void> {
+  const { client, org, repo, topics } = params
+  await client.request(
+    `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}/topics`,
+    {
+      method: "PUT",
+      body: { names: topics },
     },
   )
 }
