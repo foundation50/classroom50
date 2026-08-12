@@ -13,6 +13,7 @@ import {
 } from "./sections/sectionStatus"
 import {
   useAssignmentForm,
+  validateAssignmentForm,
   type AssignmentForm,
   type CreateAssignmentFormValues,
 } from "./assignmentFormModel"
@@ -120,10 +121,34 @@ const CreateAssignmentForm = ({
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
+        // Validate up front so we can point the teacher at the first problem
+        // regardless of how (or whether) the form library propagates the
+        // submit-validator errors onto individual field DOM nodes.
+        const errors = validateAssignmentForm(form.state.values, t, {
+          takenSlugs,
+          edit,
+        })
         // handleSubmit re-throws an onSubmit rejection (an edit-mode mutateAsync
         // failure); the caller's onError banner already surfaces it, so swallow
         // it here to avoid an unhandled rejection.
         void form.handleSubmit().catch(() => {})
+        if (Object.keys(errors).length === 0) return
+        // The first errored field in section render order. Error keys may be
+        // indexed (e.g. "tests[0].name"), so match the owning field by prefix.
+        const orderedFields = (
+          Object.keys(SECTION_FIELDS) as SectionId[]
+        ).flatMap((section) => SECTION_FIELDS[section])
+        const firstErroredField = orderedFields.find((field) =>
+          Object.keys(errors).some(
+            (key) => key === field || key.startsWith(`${field}[`),
+          ),
+        )
+        if (!firstErroredField) return
+        // The field element is already in the DOM, so scroll immediately.
+        const target = document.getElementById(firstErroredField)
+        if (!target) return
+        target.scrollIntoView({ behavior: "smooth", block: "center" })
+        target.focus({ preventScroll: true })
       }}
     >
       {/* readOnly disables every descendant control. */}

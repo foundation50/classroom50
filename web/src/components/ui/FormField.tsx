@@ -1,4 +1,4 @@
-import { HelpCircle } from "lucide-react"
+import { HelpCircle, TriangleAlert } from "lucide-react"
 import { useId, type ReactNode } from "react"
 
 import { Button } from "./Button"
@@ -107,6 +107,12 @@ export function FormField({
             </span>
           ) : null}
         </label>
+        {/* An invalid field gets an exclamation marker next to its label so the
+            error is visible at a glance; the role="alert" message below carries
+            the accessible announcement, so the icon is decorative. */}
+        {invalid ? (
+          <TriangleAlert aria-hidden="true" className="size-4 text-error" />
+        ) : null}
         {help ? <HelpTooltip help={help} /> : null}
         {labelExtra}
       </div>

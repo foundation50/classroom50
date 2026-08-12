@@ -34,36 +34,47 @@ export function DetailsSection({
     <SectionCard title={t("assignments.form.detailsSection")} onReset={onReset}>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <form.Field name="name">
-          {(field) => (
-            <FormField
-              htmlFor={field.name}
-              required
-              label={t("assignments.form.name")}
-            >
-              {({ id }) => (
-                <Input
-                  id={id}
-                  name={field.name}
-                  required
-                  aria-required="true"
-                  placeholder={t("assignments.form.namePlaceholder")}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => {
-                    field.handleChange(e.target.value)
-                    if (!edit && !slugTouched) {
-                      // Auto-fill a slug that's already unique in this
-                      // classroom, so a collision doesn't wait until submit.
-                      form.setFieldValue(
-                        "slug",
-                        nextAvailableSlug(slugify(e.target.value), takenSlugs ?? []),
-                      )
-                    }
-                  }}
-                />
-              )}
-            </FormField>
-          )}
+          {(field) => {
+            const nameError =
+              field.state.meta.errors.length > 0
+                ? String(field.state.meta.errors[0])
+                : undefined
+            return (
+              <FormField
+                htmlFor={field.name}
+                required
+                label={t("assignments.form.name")}
+                error={nameError}
+              >
+                {({ id, describedById, invalid }) => (
+                  <Input
+                    id={id}
+                    name={field.name}
+                    aria-required="true"
+                    invalid={invalid}
+                    aria-describedby={describedById}
+                    placeholder={t("assignments.form.namePlaceholder")}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => {
+                      field.handleChange(e.target.value)
+                      if (!edit && !slugTouched) {
+                        // Auto-fill a slug that's already unique in this
+                        // classroom, so a collision doesn't wait until submit.
+                        form.setFieldValue(
+                          "slug",
+                          nextAvailableSlug(
+                            slugify(e.target.value),
+                            takenSlugs ?? [],
+                          ),
+                        )
+                      }
+                    }}
+                  />
+                )}
+              </FormField>
+            )
+          }}
         </form.Field>
 
         <form.Field name="slug">
@@ -88,7 +99,6 @@ export function DetailsSection({
                   <Input
                     id={id}
                     name={field.name}
-                    required={!edit}
                     aria-required={!edit}
                     // The slug is the assignment's repo-path identity; renaming
                     // isn't supported, so it's read-only on edit.
