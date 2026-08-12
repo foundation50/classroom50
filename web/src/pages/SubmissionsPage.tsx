@@ -66,7 +66,7 @@ import {
 import useGetScores from "@/hooks/useGetScores"
 import useLiveSubmissions from "@/hooks/useLiveSubmissions"
 import useDetectedSubmissions from "@/hooks/useDetectedSubmissions"
-import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
+import { useSubmissionAssignment } from "@/hooks/useSubmissionAssignment"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
@@ -134,7 +134,12 @@ const SubmissionsPageContent = () => {
     isError: scoresError,
     error: scoresErrorObj,
   } = useGetScores(org, classroom)
-  const { data: assignmentData } = useGetClassroomAssignments(org, classroom)
+  // Teacher gradebook is staff-gated by the route, so its assignment metadata
+  // comes from the PRIVATE config repo (source:"config"); students never reach
+  // this page. `assignments` carries the sibling list for repo-prefix
+  // disambiguation below.
+  const { assignment: assignmentInfo, assignments: allAssignments } =
+    useSubmissionAssignment(org, classroom, assignment, { source: "config" })
   // Team-driven usernames: the classroom GitHub teams are authoritative for
   // enrollment; roster.csv enriches display only. The dashboard consumes
   // Student[], so map enrolled team rows into that shape (see
@@ -161,9 +166,6 @@ const SubmissionsPageContent = () => {
   // staff testing the autograde flow appear while staff who never accepted stay
   // hidden. Students are always shown (a not-yet-accepted student still lists as
   // "not accepted"), unchanged.
-  const assignmentInfo = assignmentData?.assignments.find(
-    (a) => a.slug === assignment,
-  )
   const isGroupAssignment = assignmentInfo?.mode === "group"
   // Assignments that never autograde (empty_repo bare repos, or no_autograder
   // teacher-supplied CI) produce no submit/* releases. Grading UI (Regrade all,
@@ -197,8 +199,8 @@ const SubmissionsPageContent = () => {
   // Sibling slugs guard group-repo attribution against a slug-extending sibling
   // ("hw1-bonus" under "hw1"); see existingGroupRepos.
   const siblingSlugs = useMemo(
-    () => (assignmentData?.assignments ?? []).map((a) => a.slug),
-    [assignmentData],
+    () => allAssignments.map((a) => a.slug),
+    [allAssignments],
   )
   const groupRepoList = useMemo(
     () =>

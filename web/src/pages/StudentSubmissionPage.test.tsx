@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
-import type { GitHubCommit } from "@/github-core/types"
+import type { GitHubCommit, GitHubRelease } from "@/github-core/types"
 import type { Assignment } from "@/types/classroom"
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -47,37 +47,31 @@ vi.mock("@/hooks/useGetAssignmentRepo", () => ({
   }),
 }))
 
-let releasesData: unknown[] = []
-vi.mock("@/hooks/useGetSubmissionReleases", () => ({
+// The page consumes one consolidated submissions hook; drive its return
+// directly (per-hook gating is covered by useMySubmissions' own test).
+let releasesData: GitHubRelease[] = []
+let taggedData: DetectedSubmission[] = []
+let pushData: GitHubCommit[] = []
+vi.mock("@/hooks/useMySubmissions", () => ({
   default: () => ({
-    data: releasesData,
-    isLoading: false,
-    isError: false,
-    error: null,
+    releases: releasesData,
+    tags: taggedData,
+    pushes: pushData,
+    releasesLoading: false,
+    releasesError: false,
+    releasesErrorObj: null,
+    submissionListError: false,
   }),
 }))
 
-let taggedData: DetectedSubmission[] = []
-const taggedSpy = vi.fn()
-vi.mock("@/hooks/useGetMyTaggedSubmissions", () => ({
-  default: (...args: unknown[]) => {
-    taggedSpy(...args)
-    return { data: taggedData }
-  },
-}))
-
-let pushData: GitHubCommit[] = []
-const pushSpy = vi.fn()
-vi.mock("@/hooks/useGetMyPushSubmissions", () => ({
-  default: (...args: unknown[]) => {
-    pushSpy(...args)
-    return { data: pushData }
-  },
-}))
-
 let assignmentData: Assignment | undefined
-vi.mock("@/hooks/useGetPublicAssignment", () => ({
-  default: () => ({ assignment: assignmentData }),
+vi.mock("@/hooks/useSubmissionAssignment", () => ({
+  useSubmissionAssignment: () => ({
+    assignment: assignmentData,
+    assignments: assignmentData ? [assignmentData] : [],
+    isLoading: false,
+    isError: false,
+  }),
 }))
 
 vi.mock("@/hooks/useGetClassroom", () => ({
@@ -117,8 +111,6 @@ beforeEach(() => {
   taggedData = []
   pushData = []
   assignmentData = assignment()
-  taggedSpy.mockReset()
-  pushSpy.mockReset()
 })
 
 afterEach(cleanup)
@@ -129,18 +121,9 @@ describe("StudentSubmissionPage submission type", () => {
     pushData = [commit("aaa", "2026-06-20T10:00:00Z")]
     render(<StudentSubmissionPage />)
     expect(screen.getByText("submissions.type.badgeEveryPush")).toBeTruthy()
-    // The count chip is the every-push count key; the tagged hook stays disabled
-    // (undefined args) so tag reads don't fire in push mode.
     expect(
       screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
     ).toBeTruthy()
-    expect(taggedSpy).toHaveBeenCalledWith(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    )
   })
 
   it("opens the details modal with each commit in every-push mode", async () => {
@@ -180,13 +163,6 @@ describe("StudentSubmissionPage submission type", () => {
     })
     expect(view.getAttribute("href")).toBe(
       "https://github.com/acme/cs101-hw1-alice/tree/phase1",
-    )
-    // The push hook stays disabled in tag mode.
-    expect(pushSpy).toHaveBeenCalledWith(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
     )
   })
 

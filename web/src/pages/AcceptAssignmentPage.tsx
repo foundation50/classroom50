@@ -722,7 +722,7 @@ const AcceptAssignmentPage = () => {
     useClassroomEnrollment(org, classroom, username)
 
   const { data: assignmentsData, isLoading: loadingAssignmentsData } =
-    usePagesAssignments(org, classroom, secret, !loadingSecret)
+    usePagesAssignments(org, classroom, secret, { enabled: !loadingSecret })
   const loadingAssignments = loadingSecret || loadingAssignmentsData
   const {
     data: orgInvite,

@@ -10,10 +10,8 @@ import MissingParams from "@/components/MissingParams"
 import Avatar from "@/components/avatar"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import useGetSubmissionReleases from "@/hooks/useGetSubmissionReleases"
-import useGetMyTaggedSubmissions from "@/hooks/useGetMyTaggedSubmissions"
-import useGetMyPushSubmissions from "@/hooks/useGetMyPushSubmissions"
-import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
+import useMySubmissions from "@/hooks/useMySubmissions"
+import { useSubmissionAssignment } from "@/hooks/useSubmissionAssignment"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
@@ -149,29 +147,17 @@ const SubmissionBody = ({
   const { user } = useGithubAuth()
   const isTagMode = submissionMode === "tag"
   const {
-    data: releases,
-    isLoading,
-    isError,
-    error,
-  } = useGetSubmissionReleases(org, classroom, assignment, user?.login)
-  // Type-aware submission reads, each gated to its mode so the other mode costs
-  // no request: tag mode reads the repo's tags; every-push mode reads the
-  // default-branch commits (minus the baseline).
-  const { data: taggedSubmissions, isError: taggedIsError } =
-    useGetMyTaggedSubmissions(
-      isTagMode ? org : undefined,
-      isTagMode ? classroom : undefined,
-      isTagMode ? assignment : undefined,
-      isTagMode ? user?.login : undefined,
-      submissionTags,
-    )
-  const { data: pushSubmissions, isError: pushIsError } =
-    useGetMyPushSubmissions(
-      isTagMode ? undefined : org,
-      isTagMode ? undefined : classroom,
-      isTagMode ? undefined : assignment,
-      isTagMode ? undefined : user?.login,
-    )
+    releases,
+    tags: taggedSubmissions,
+    pushes: pushSubmissions,
+    releasesLoading,
+    releasesError,
+    releasesErrorObj,
+    submissionListError,
+  } = useMySubmissions(org, classroom, assignment, user?.login, {
+    mode: submissionMode,
+    submissionTags,
+  })
   // Distinguish "never accepted" (no repo) from "accepted but not yet graded".
   // getRepo returns null only on a true 404; a 403/5xx throws, so read the repo
   // query's error too — else a transient/permission failure falls through to
@@ -194,7 +180,7 @@ const SubmissionBody = ({
   const commitSubmissions = toPushSubmissions(pushSubmissions, releases)
 
   const detailItems: SubmissionDetailItem[] = buildSubmissionDetailItems(
-    { tags: taggedSubmissions ?? [], commits: commitSubmissions },
+    { tags: taggedSubmissions, commits: commitSubmissions },
     submissionMode,
     org,
     repoName,
@@ -210,12 +196,7 @@ const SubmissionBody = ({
     ? (releases?.[0]?.published_at ?? releases?.[0]?.created_at ?? undefined)
     : pushSubmissions?.[0]?.commit.author?.date
 
-  // The active-mode submission-list read (tags in tag mode, pushes in
-  // every-push). A transient/permission failure must not render a misleading
-  // "0 submissions" for an accepted student, so it joins the error branch.
-  const submissionListError = isTagMode ? taggedIsError : pushIsError
-
-  if (isLoading || repoLoading) {
+  if (releasesLoading || repoLoading) {
     return (
       <div className="mt-8 space-y-4">
         <div className="skeleton skeleton-shimmer h-24 w-full rounded-box" />
@@ -224,8 +205,10 @@ const SubmissionBody = ({
     )
   }
 
-  if (isError || repoIsError || submissionListError) {
-    const firstError = [error, repoError].find((e) => e instanceof Error)
+  if (releasesError || repoIsError || submissionListError) {
+    const firstError = [releasesErrorObj, repoError].find(
+      (e) => e instanceof Error,
+    )
     const message = firstError instanceof Error ? firstError.message : ""
     return (
       <Alert tone="error" className="mt-6">
@@ -377,11 +360,15 @@ const StudentSubmissionPage = () => {
   const { data: classroomMeta } = useGetClassroom(org, classroom)
   const secret = repoSecret || classroomMeta?.secret || undefined
 
-  const { assignment: assignmentData } = useGetPublicAssignment(
+  // Student page is student-gated by the route, so its assignment metadata comes
+  // from PUBLIC GitHub Pages (source:"pages") — students can't read the private
+  // config repo. The capability secret unlocks a protected classroom's Pages
+  // path.
+  const { assignment: assignmentData } = useSubmissionAssignment(
     org,
     classroom,
     assignment,
-    secret,
+    { source: "pages", secret },
   )
 
   const description = assignmentDescription(assignmentData)
