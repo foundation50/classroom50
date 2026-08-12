@@ -23,6 +23,7 @@ import {
   submissionModeBadgeKey,
   submissionModeCountKey,
 } from "@/domain/assignments/submissionDetection"
+import { assignmentSkipsGrading } from "@/domain/assignments/autogradingState"
 import type { Assignment, SubmissionMode } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
@@ -111,7 +112,12 @@ const AssignmentMeta = ({
       ) : null}
       <Badge ghost className="gap-1">
         <SubmissionModeIcon mode={submissionMode} />
-        {t(submissionModeBadgeKey(submissionMode))}
+        {t(
+          submissionModeBadgeKey(
+            submissionMode,
+            assignmentSkipsGrading(assignment),
+          ),
+        )}
       </Badge>
       <Badge
         tone={overdue ? "error" : "neutral"}

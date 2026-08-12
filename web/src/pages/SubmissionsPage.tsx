@@ -950,7 +950,12 @@ const SubmissionsPageContent = () => {
             {assignmentInfo && (
               <Badge ghost size="md" className="gap-1">
                 <SubmissionModeIcon mode={assignmentInfo.submission_mode} />
-                {t(submissionModeBadgeKey(assignmentInfo.submission_mode))}
+                {t(
+                  submissionModeBadgeKey(
+                    assignmentInfo.submission_mode,
+                    skipsGrading,
+                  ),
+                )}
               </Badge>
             )}
             {assignmentInfo?.template && (

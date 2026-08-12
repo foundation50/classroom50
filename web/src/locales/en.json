@@ -2291,7 +2291,9 @@
     "noDueDate": "No due date",
     "type": {
       "badgeEveryPush": "Every push to the default branch is graded",
+      "badgeEveryPushNoGrade": "Every push to the default branch counts",
       "badgeTag": "Graded on submission tags",
+      "badgeTagNoGrade": "Submitted by tag",
       "countEveryPush_one": "{{count}} push to the default branch",
       "countEveryPush_other": "{{count}} pushes to the default branch",
       "countTag_one": "{{count}} tagged submission",

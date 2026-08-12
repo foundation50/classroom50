@@ -643,7 +643,7 @@ describe("SubmissionsTable submission details modal", () => {
     )
   })
 
-  it("shows the empty state with a tags link when a tag-mode row has no tags", async () => {
+  it("shows the empty state with a tags link when a tag-mode row has no submissions", async () => {
     const user = userEvent.setup()
     render(
       <SubmissionsTable
@@ -652,15 +652,10 @@ describe("SubmissionsTable submission details modal", () => {
         scores={[
           scoreRow({
             submissionCount: 0,
-            submissions: [
-              {
-                datetime: "2026-06-20T10:00:00Z",
-                commit: "",
-                release: "",
-                score: 0,
-                "max-score": 10,
-              },
-            ],
+            // No detected tags AND no collected submissions: genuinely empty, so
+            // the modal shows the empty state rather than the collected-tag
+            // fallback (which only fires when collected submissions exist).
+            submissions: [],
           }),
         ]}
         acceptedUsernames={new Set(["alice"])}

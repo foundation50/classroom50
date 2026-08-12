@@ -193,4 +193,17 @@ describe("submissionModeBadgeKey / submissionModeCountKey", () => {
       "submissions.type.countEveryPush",
     )
   })
+
+  it("drops the 'is graded' claim when the assignment skips grading", () => {
+    expect(submissionModeBadgeKey("every-push", true)).toBe(
+      "submissions.type.badgeEveryPushNoGrade",
+    )
+    expect(submissionModeBadgeKey("tag", true)).toBe(
+      "submissions.type.badgeTagNoGrade",
+    )
+    // Grading enabled keeps the graded wording.
+    expect(submissionModeBadgeKey("every-push", false)).toBe(
+      "submissions.type.badgeEveryPush",
+    )
+  })
 })
