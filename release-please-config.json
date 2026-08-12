@@ -7,8 +7,7 @@
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": true,
       "include-v-in-tag": true,
-      "tag-separator": "-",
-      "release-as": "1.28.1"
+      "tag-separator": "-"
     },
     "cli": {
       "release-type": "go",
@@ -16,8 +15,7 @@
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": true,
       "include-v-in-tag": true,
-      "tag-separator": "-",
-      "release-as": "1.28.1"
+      "tag-separator": "-"
     }
   },
   "plugins": [
