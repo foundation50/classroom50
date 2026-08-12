@@ -8,6 +8,9 @@ import {
   detectedTagLabel,
   detectedTagRef,
   jumpableTagEntries,
+  resolveSubmissionMode,
+  submissionModeBadgeKey,
+  submissionModeCountKey,
 } from "./submissionDetection"
 import type { GitHubCommit, GitHubTag } from "@/github-core/types"
 import type { DetectedSubmission } from "./submissionDetection"
@@ -162,5 +165,32 @@ describe("detectedTagHref", () => {
         "cs101-hw1-alice",
       ),
     ).toBeUndefined()
+  })
+})
+
+describe("resolveSubmissionMode", () => {
+  it("defaults an absent mode to every-push (the wire default)", () => {
+    expect(resolveSubmissionMode(undefined)).toBe("every-push")
+  })
+
+  it("passes through an explicit mode", () => {
+    expect(resolveSubmissionMode("tag")).toBe("tag")
+    expect(resolveSubmissionMode("every-push")).toBe("every-push")
+  })
+})
+
+describe("submissionModeBadgeKey / submissionModeCountKey", () => {
+  it("maps tag mode to the tag keys", () => {
+    expect(submissionModeBadgeKey("tag")).toBe("submissions.type.badgeTag")
+    expect(submissionModeCountKey("tag")).toBe("submissions.type.countTag")
+  })
+
+  it("maps every-push (and absent) mode to the every-push keys", () => {
+    expect(submissionModeBadgeKey("every-push")).toBe(
+      "submissions.type.badgeEveryPush",
+    )
+    expect(submissionModeCountKey(undefined)).toBe(
+      "submissions.type.countEveryPush",
+    )
   })
 })

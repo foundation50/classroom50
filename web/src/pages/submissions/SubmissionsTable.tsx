@@ -1,13 +1,6 @@
-import {
-  ChevronRight,
-  GitCommitHorizontal,
-  Inbox,
-  ScrollText,
-  SearchX,
-  Tag,
-} from "lucide-react"
-import { Fragment, useMemo, useState } from "react"
-import { Trans, useTranslation } from "react-i18next"
+import { Inbox, SearchX } from "lucide-react"
+import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import {
   getName,
@@ -16,15 +9,10 @@ import {
   resolveStudent,
 } from "@/util/students"
 import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
+import { repoTagsUrl } from "@/util/orgUrl"
 import { safeHttpUrl } from "@/util/url"
 import Avatar from "@/components/avatar"
-import {
-  Badge,
-  Button,
-  Spinner,
-  TablePagination,
-  rtlFlip,
-} from "@/components/ui"
+import { Badge, Button, Spinner, TablePagination } from "@/components/ui"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
 import type { SubmissionSort } from "@/pages/submissions/dashboard"
 import {
@@ -56,12 +44,16 @@ import type { ManualGradeContext } from "@/pages/submissions/ManualGradeCell"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
-import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
-import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
+import {
+  SubmissionDetailsModal,
+  type SubmissionDetailItem,
+} from "@/components/submissions/SubmissionDetailsModal"
+import type { SubmissionRow } from "@/hooks/useGetScores"
 import {
   detectedTagHref,
   detectedTagLabel,
   jumpableTagEntries,
+  submissionModeCountKey,
 } from "@/domain/assignments/submissionDetection"
 import type { Student, SubmissionMode } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
@@ -76,8 +68,6 @@ const formatDateTime = (datetime: string) =>
 // ./ScoreBadge). Imported rather than re-implemented so the manual-grade cell
 // and this table can't drift.
 const ScoreBadge = SharedScoreBadge
-
-type IconComponent = React.ComponentType<{ className?: string }>
 
 // The row context the submission hub (ManageSubmissionModal) renders from,
 // captured when the row's Manage control is clicked. `title`/`subtitle` are the
@@ -94,175 +84,57 @@ type ManageSubmissionContext = {
   release?: string | null
   displayName?: string
 }
-// Inline commit/details link in the expanded history row: external link when a
-// URL is present, else dimmed non-clickable text (label shown beside the icon,
-// unlike the icon-only row-action above).
-const HistoryLink = ({
-  href,
-  icon: Icon,
-  label,
-}: {
-  href: string | null | undefined
-  icon: IconComponent
-  label: string
-}) =>
-  href ? (
-    <a
-      className="link link-hover inline-flex items-center gap-1"
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-    >
-      <Icon className="size-3.5" />
-      {label}
-    </a>
-  ) : (
-    <span className="inline-flex items-center gap-1 text-base-content/70">
-      <Icon className="size-3.5" />
-      {label}
-    </span>
-  )
 
-// The tagged-submissions block in the expanded row: one jump-to-tree link per
-// entry. `entries` are the already-jumpable tag/tag-group entries (see
-// jumpableTagEntries); a glob group shows its pattern + match count.
-const TaggedSubmissions = ({
-  entries,
-  org,
-  repo,
-}: {
-  entries: DetectedSubmission[]
-  org: string
+// The context the type-aware submission-details modal renders from, captured
+// when a row's submission-count chip is clicked.
+type SubmissionDetailsContext = {
+  owner: string
+  title: string
+  subtitle?: string
   repo: string
-}) => {
-  const { t } = useTranslation()
-  if (entries.length === 0) return null
-
-  return (
-    <div className="mt-2 flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-base-content/70">
-        {t("submissions.table.taggedSubmissions")}
-      </span>
-      <ul className="flex flex-col gap-1">
-        {entries.map((entry) => {
-          const href = detectedTagHref(entry, org, repo)
-          const label =
-            entry.kind === "tag-group"
-              ? t("submissions.table.tagGroupCount", {
-                  pattern: entry.label,
-                  count: entry.count,
-                })
-              : detectedTagLabel(entry.label)
-          return (
-            <li
-              key={`${entry.kind}-${entry.label}`}
-              className="flex items-center gap-2 text-sm"
-            >
-              <Tag className="size-3.5 shrink-0 text-base-content/70" />
-              <span className="truncate">{label}</span>
-              <span className="ms-auto">
-                <HistoryLink
-                  href={href}
-                  icon={GitCommitHorizontal}
-                  label={t("submissions.table.jumpToTag")}
-                />
-              </span>
-            </li>
-          )
-        })}
-      </ul>
-    </div>
-  )
+  repoHref: string
+  submissionCount: number
+  items: SubmissionDetailItem[]
 }
 
-// Expanded per-row history: every submission for a repo, newest first, plus any
-// detected tagged submissions with jump-to-tag links.
-const SubmissionHistory = ({
-  submissions,
-  repoHref,
-  isGroup,
-  students,
-  thresholdFraction,
-  jumpableTags,
-  org,
-  repo,
-}: {
-  submissions: SubmissionAttempt[]
-  repoHref: string
-  isGroup: boolean
-  students: Student[]
-  thresholdFraction: number | null
-  jumpableTags: DetectedSubmission[]
-  org: string
-  repo: string
-}) => {
-  const { t } = useTranslation()
-  return (
-    <ol className="flex flex-col gap-2">
-      {submissions.map((s, i) => (
-        <li
-          key={`${s.datetime}-${s.commit}`}
-          className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-box border border-base-content/5 bg-base-100 px-3 py-2 text-sm"
-        >
-          <span className="text-base-content/70 w-6 shrink-0">
-            #{submissions.length - i}
-          </span>
-          <span className="w-44 shrink-0">{formatDateTime(s.datetime)}</span>
-          <ScoreBadge
-            score={s.score}
-            max={s["max-score"]}
-            thresholdFraction={thresholdFraction}
-            size="sm"
-          />
-          {s.late ? (
-            <Badge tone="error" title={t("submissions.table.lateHistoryTitle")}>
-              {t("submissions.table.late")}
-            </Badge>
-          ) : null}
-          {isGroup && s.submittedBy ? (
-            <span className="text-base-content/70">
-              {t("submissions.table.submittedBy", {
-                name: getName(s.submittedBy, students) || s.submittedBy,
-              })}
-            </span>
-          ) : null}
-          <span className="ms-auto flex gap-3">
-            <HistoryLink
-              href={safeHttpUrl(s.commit)}
-              icon={GitCommitHorizontal}
-              label={t("submissions.table.commit")}
-            />
-            <HistoryLink
-              href={safeHttpUrl(s.release)}
-              icon={ScrollText}
-              label={t("submissions.table.details")}
-            />
-          </span>
-        </li>
-      ))}
-      {jumpableTags.length > 0 ? (
-        <li>
-          <TaggedSubmissions entries={jumpableTags} org={org} repo={repo} />
-        </li>
-      ) : null}
-      <li className="text-xs text-base-content/70">
-        <Trans
-          i18nKey="submissions.table.fullHistory"
-          components={{
-            repoLink: (
-              // eslint-disable-next-line jsx-a11y/anchor-has-content, jsx-a11y/control-has-associated-label -- <Trans> injects the translated link text
-              <a
-                className="link"
-                href={repoHref}
-                target="_blank"
-                rel="noreferrer"
-              />
-            ),
-          }}
-        />
-      </li>
-    </ol>
-  )
+// Build the type-aware detail items for a row. Tag mode lists the detected
+// tag/tag-group submissions (opening the tag's tree); every-push mode lists the
+// collected commit attempts (opening each commit). A branch-mode repo has no
+// tags, and a tag-mode repo's collected commits aren't the submission unit, so
+// each mode reads only its own source.
+function buildDetailItems(
+  row: SubmissionRow,
+  mode: SubmissionMode,
+  org: string,
+  repo: string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): SubmissionDetailItem[] {
+  if (mode === "tag") {
+    const tags = row.detectedEntries
+      ? jumpableTagEntries(row.detectedEntries)
+      : []
+    return tags.map((entry) => ({
+      key: `${entry.kind}-${entry.label}`,
+      kind: "tag" as const,
+      label:
+        entry.kind === "tag-group"
+          ? t("submissions.type.tagGroupCount", {
+              pattern: entry.label,
+              count: entry.count,
+            })
+          : detectedTagLabel(entry.label),
+      href: detectedTagHref(entry, org, repo),
+    }))
+  }
+  return row.submissions.map((s, i) => ({
+    key: `${s.datetime}-${s.commit}-${i}`,
+    kind: "commit" as const,
+    label: t("submissions.details.pushEntry", {
+      number: row.submissions.length - i,
+    }),
+    sublabel: formatDateTime(s.datetime),
+    href: safeHttpUrl(s.commit),
+  }))
 }
 
 const SubmissionsTable = ({
@@ -283,6 +155,7 @@ const SubmissionsTable = ({
   emptyRepo = false,
   submissionMode,
   submissionTags,
+  assignmentMode = "every-push",
   manualGrade,
   canPauseAutograding = false,
   initialLoading = false,
@@ -330,6 +203,10 @@ const SubmissionsTable = ({
   submissionMode?: SubmissionMode
   // The assignment's milestone submission_tags for the same action.
   submissionTags?: string[]
+  // The assignment's real submission_mode (independent of the autograder gate
+  // that shapes `submissionMode` above). Drives the type-aware count wording
+  // and the submission-details modal. Absent reads as every-push.
+  assignmentMode?: SubmissionMode
   // When set, the assignment is graded MANUALLY and the viewer may enter/edit
   // scores inline. Carries the write context (org/classroom/assignment/type/
   // max points). Omitted for autograded assignments or a viewer who can't write.
@@ -363,9 +240,11 @@ const SubmissionsTable = ({
 }) => {
   const { t } = useTranslation()
   const passBar = thresholdFraction ?? null
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const toggle = (owner: string) =>
-    setExpanded((prev) => ({ ...prev, [owner]: !prev[owner] }))
+
+  // The submission whose type-aware details modal is open, or null. Captured
+  // from the row so the modal renders without re-deriving.
+  const [detailsContext, setDetailsContext] =
+    useState<SubmissionDetailsContext | null>(null)
 
   // The owner (group founder) whose collaborators modal is open, or null.
   const [manageOwner, setManageOwner] = useState<string | null>(null)
@@ -439,246 +318,221 @@ const SubmissionsTable = ({
   }: SubmissionRow) => {
     const repo = studentRepoName(classroom, assignment, rest.owner)
     const repoHref = studentRepoUrl(org, classroom, assignment, rest.owner)
-    // Detected tag/tag-group entries the expanded history can jump to (branch-
-    // mode commit entries carry no tag and are excluded here, matching what
-    // TaggedSubmissions renders).
-    const jumpableTags = rest.detectedEntries
-      ? jumpableTagEntries(rest.detectedEntries)
-      : []
-    // Expandability is driven by the COLLECTED history, not the (possibly
-    // live-inflated) count: a `staleCount` row shows more submissions than
-    // scores.json has ingested, so expanding would reveal fewer entries than the
-    // badge claims. Only offer expand when there is real multi-entry history —
-    // OR when there are tagged submissions to jump to, even for a single push.
-    const canExpand = rest.submissions.length > 1 || jumpableTags.length > 0
-    const isOpen = !!expanded[rest.owner]
+    // Open the type-aware submission-details modal for this row. Always
+    // available (even for 0/1 submissions), so the count chip has one
+    // predictable behavior; the modal itself renders the empty state.
+    const openDetails = () =>
+      setDetailsContext({
+        owner: rest.owner,
+        title: isGroup ? repo : getName(rest.owner, students) || rest.owner,
+        subtitle: isGroup
+          ? undefined
+          : identitySubtitle(
+              getName(rest.owner, students),
+              rest.owner,
+              getSection(rest.owner, students),
+            ),
+        repo,
+        repoHref,
+        submissionCount,
+        items: buildDetailItems(
+          { usernames, score, datetime, submissionCount, late, ...rest },
+          assignmentMode,
+          org,
+          repo,
+          t,
+        ),
+      })
     return (
-      <Fragment key={rest.owner}>
-        <tr>
-          <td>
-            {isGroup ? (
-              <GroupMembers
-                org={org}
-                repoName={repo}
-                usernames={usernames}
-                students={students}
-                repoHref={repoHref}
-                repoLabel={repo}
-              />
-            ) : (
-              <Avatar
-                name={getName(usernames[0], students)}
-                initials={getInitials(usernames[0], students)}
-                github={usernames[0]}
-                subtitle={identitySubtitle(
-                  getName(usernames[0], students),
-                  usernames[0],
-                  getSection(usernames[0], students),
-                )}
-                onClick={() => setProfileUsername(usernames[0])}
-              />
-            )}
-          </td>
-          <td>
-            <div className="flex items-center gap-1.5">
-              {canExpand ? (
-                <button
-                  type="button"
-                  className="badge max-xl:text-xs whitespace-nowrap gap-1 hover:badge-neutral cursor-pointer"
-                  aria-expanded={isOpen}
-                  title={
-                    isOpen
-                      ? t("submissions.table.hideSubmissions")
-                      : t("submissions.table.showSubmissions")
-                  }
-                  onClick={() => toggle(rest.owner)}
-                >
-                  <ChevronRight
-                    aria-hidden="true"
-                    className={`size-3.5 transition-transform ${rtlFlip} ${isOpen ? "rotate-90" : ""}`}
-                  />
-                  {t("submissions.table.submissionCount", {
-                    count: submissionCount,
-                  })}
-                </button>
-              ) : (
-                <label className="badge max-xl:text-xs whitespace-nowrap">
-                  {t("submissions.table.submissionCount", {
-                    count: submissionCount,
-                  })}
-                </label>
+      <tr key={rest.owner}>
+        <td>
+          {isGroup ? (
+            <GroupMembers
+              org={org}
+              repoName={repo}
+              usernames={usernames}
+              students={students}
+              repoHref={repoHref}
+              repoLabel={repo}
+            />
+          ) : (
+            <Avatar
+              name={getName(usernames[0], students)}
+              initials={getInitials(usernames[0], students)}
+              github={usernames[0]}
+              subtitle={identitySubtitle(
+                getName(usernames[0], students),
+                usernames[0],
+                getSection(usernames[0], students),
               )}
-              {rest.staleCount && (
-                <Badge
-                  tone="info"
-                  size="sm"
-                  title={t("submissions.table.staleCountTitle")}
-                >
-                  {t("submissions.table.staleCount")}
-                </Badge>
-              )}
-            </div>
-          </td>
-          <td>
-            {emptyRepo ? (
-              <span
-                className="text-base-content/50"
-                title={t("submissions.table.noGradingTitle")}
+              onClick={() => setProfileUsername(usernames[0])}
+            />
+          )}
+        </td>
+        <td>
+          <div className="flex items-center gap-1.5">
+            {/* The count chip always opens the type-aware details modal — even
+                for 0/1 submissions — so the behavior is predictable and the
+                modal owns the empty state. */}
+            <button
+              type="button"
+              className="badge max-xl:text-xs whitespace-nowrap gap-1 hover:badge-neutral cursor-pointer"
+              title={t("submissions.table.viewSubmissionsTitle")}
+              onClick={openDetails}
+            >
+              {t(submissionModeCountKey(assignmentMode), {
+                count: submissionCount,
+              })}
+            </button>
+            {rest.staleCount && (
+              <Badge
+                tone="info"
+                size="sm"
+                title={t("submissions.table.staleCountTitle")}
               >
-                —
-              </span>
-            ) : manualGrade && !(isGroup && rest.pending) ? (
-              // A pending GROUP row comes from the live/detection overlay before
-              // collection, so its `usernames` is just the founder ([owner]) —
-              // the real members aren't known yet. Grading it here would write
-              // member_usernames:[founder] and mis-credit the group (the other
-              // members would read as non-submitters and never see the grade),
-              // so fall through to the pending badge until collection resolves
-              // the member list. Individual pending rows and any collected group
-              // row are safe to grade inline.
-              <ManualGradeCell
-                owner={rest.owner}
+                {t("submissions.table.staleCount")}
+              </Badge>
+            )}
+          </div>
+        </td>
+        <td>
+          {emptyRepo ? (
+            <span
+              className="text-base-content/50"
+              title={t("submissions.table.noGradingTitle")}
+            >
+              —
+            </span>
+          ) : manualGrade && !(isGroup && rest.pending) ? (
+            // A pending GROUP row comes from the live/detection overlay before
+            // collection, so its `usernames` is just the founder ([owner]) —
+            // the real members aren't known yet. Grading it here would write
+            // member_usernames:[founder] and mis-credit the group (the other
+            // members would read as non-submitters and never see the grade),
+            // so fall through to the pending badge until collection resolves
+            // the member list. Individual pending rows and any collected group
+            // row are safe to grade inline.
+            <ManualGradeCell
+              owner={rest.owner}
+              score={score}
+              max={rest["max-score"]}
+              hasGrade={!rest.pending}
+              thresholdFraction={passBar}
+              ctx={{ ...manualGrade, memberUsernames: usernames }}
+            />
+          ) : rest.pending ? (
+            <Badge ghost title={t("submissions.table.pendingGradeTitle")}>
+              {t("submissions.table.pendingGrade")}
+            </Badge>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <ScoreBadge
                 score={score}
                 max={rest["max-score"]}
-                hasGrade={!rest.pending}
                 thresholdFraction={passBar}
-                ctx={{ ...manualGrade, memberUsernames: usernames }}
               />
-            ) : rest.pending ? (
-              <Badge ghost title={t("submissions.table.pendingGradeTitle")}>
-                {t("submissions.table.pendingGrade")}
-              </Badge>
+              {rest.overridden ? (
+                <Badge
+                  ghost
+                  size="sm"
+                  title={t("submissions.table.overriddenTitle")}
+                >
+                  {t("submissions.table.overridden")}
+                </Badge>
+              ) : null}
+            </div>
+          )}
+        </td>
+        <td>
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              <span className="whitespace-nowrap">
+                {formatDateTime(datetime)}
+              </span>
+              {late ? (
+                <Badge tone="error" title={t("submissions.table.lateRowTitle")}>
+                  {t("submissions.table.late")}
+                </Badge>
+              ) : null}
+            </div>
+            {rest.gradedAt && rest.gradedAt !== datetime ? (
+              <span
+                className="whitespace-nowrap text-xs text-base-content/70"
+                title={t("submissions.table.gradedAtTitle")}
+              >
+                {t("submissions.table.gradedAt", {
+                  date: formatDateTime(rest.gradedAt),
+                })}
+              </span>
+            ) : null}
+            {rest.liveLatestAt ? (
+              <span
+                className="whitespace-nowrap text-xs text-info"
+                title={t("submissions.table.liveLatestTitle")}
+              >
+                {t("submissions.table.liveLatest", {
+                  date: formatDateTime(rest.liveLatestAt),
+                })}
+              </span>
+            ) : null}
+          </div>
+        </td>
+        <td>
+          <div className="flex items-center gap-1">
+            {isGroup ? (
+              <RepoRowActions
+                owner={rest.owner}
+                release={rest.release}
+                skipsGrading={emptyRepo}
+                header={<GroupActionControls repo={repo} repoHref={repoHref} />}
+                onManage={() =>
+                  setManageSubmission({
+                    owner: rest.owner,
+                    isGroup: true,
+                    title: repo,
+                    repo,
+                    repoHref,
+                    hasRepo: true,
+                    commit: rest.commit,
+                    release: rest.release,
+                  })
+                }
+              />
             ) : (
-              <div className="flex items-center gap-1.5">
-                <ScoreBadge
-                  score={score}
-                  max={rest["max-score"]}
-                  thresholdFraction={passBar}
-                />
-                {rest.overridden ? (
-                  <Badge
-                    ghost
-                    size="sm"
-                    title={t("submissions.table.overriddenTitle")}
-                  >
-                    {t("submissions.table.overridden")}
-                  </Badge>
-                ) : null}
-              </div>
-            )}
-          </td>
-          <td>
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-2">
-                <span className="whitespace-nowrap">
-                  {formatDateTime(datetime)}
-                </span>
-                {late ? (
-                  <Badge
-                    tone="error"
-                    title={t("submissions.table.lateRowTitle")}
-                  >
-                    {t("submissions.table.late")}
-                  </Badge>
-                ) : null}
-              </div>
-              {rest.gradedAt && rest.gradedAt !== datetime ? (
-                <span
-                  className="whitespace-nowrap text-xs text-base-content/70"
-                  title={t("submissions.table.gradedAtTitle")}
-                >
-                  {t("submissions.table.gradedAt", {
-                    date: formatDateTime(rest.gradedAt),
-                  })}
-                </span>
-              ) : null}
-              {rest.liveLatestAt ? (
-                <span
-                  className="whitespace-nowrap text-xs text-info"
-                  title={t("submissions.table.liveLatestTitle")}
-                >
-                  {t("submissions.table.liveLatest", {
-                    date: formatDateTime(rest.liveLatestAt),
-                  })}
-                </span>
-              ) : null}
-            </div>
-          </td>
-          <td>
-            <div className="flex items-center gap-1">
-              {isGroup ? (
-                <RepoRowActions
-                  owner={rest.owner}
-                  release={rest.release}
-                  skipsGrading={emptyRepo}
-                  header={
-                    <GroupActionControls repo={repo} repoHref={repoHref} />
-                  }
-                  onManage={() =>
-                    setManageSubmission({
-                      owner: rest.owner,
-                      isGroup: true,
-                      title: repo,
-                      repo,
-                      repoHref,
-                      hasRepo: true,
-                      commit: rest.commit,
-                      release: rest.release,
-                    })
-                  }
-                />
-              ) : (
-                <RepoRowActions
-                  owner={rest.owner}
-                  release={rest.release}
-                  skipsGrading={emptyRepo}
-                  header={
-                    <IndividualRowHeader
-                      repo={repo}
-                      repoHref={repoHref}
-                      hasRepo
-                    />
-                  }
-                  onManage={() =>
-                    setManageSubmission({
-                      owner: rest.owner,
-                      isGroup: false,
-                      title: getName(rest.owner, students) || rest.owner,
-                      subtitle: identitySubtitle(
-                        getName(rest.owner, students),
-                        rest.owner,
-                        getSection(rest.owner, students),
-                      ),
-                      repo,
-                      repoHref,
-                      hasRepo: true,
-                      commit: rest.commit,
-                      release: rest.release,
-                      displayName: getName(rest.owner, students) || undefined,
-                    })
-                  }
-                />
-              )}
-            </div>
-          </td>
-        </tr>
-        {canExpand && isOpen && (
-          <tr>
-            <td colSpan={5} className="bg-base-200/40">
-              <SubmissionHistory
-                submissions={rest.submissions}
-                repoHref={repoHref}
-                isGroup={isGroup}
-                students={students}
-                thresholdFraction={passBar}
-                jumpableTags={jumpableTags}
-                org={org}
-                repo={repo}
+              <RepoRowActions
+                owner={rest.owner}
+                release={rest.release}
+                skipsGrading={emptyRepo}
+                header={
+                  <IndividualRowHeader
+                    repo={repo}
+                    repoHref={repoHref}
+                    hasRepo
+                  />
+                }
+                onManage={() =>
+                  setManageSubmission({
+                    owner: rest.owner,
+                    isGroup: false,
+                    title: getName(rest.owner, students) || rest.owner,
+                    subtitle: identitySubtitle(
+                      getName(rest.owner, students),
+                      rest.owner,
+                      getSection(rest.owner, students),
+                    ),
+                    repo,
+                    repoHref,
+                    hasRepo: true,
+                    commit: rest.commit,
+                    release: rest.release,
+                    displayName: getName(rest.owner, students) || undefined,
+                  })
+                }
               />
-            </td>
-          </tr>
-        )}
-      </Fragment>
+            )}
+          </div>
+        </td>
+      </tr>
     )
   }
 
@@ -916,6 +770,36 @@ const SubmissionsTable = ({
           />
         )}
       </EnterDiv>
+
+      {detailsContext && (
+        <SubmissionDetailsModal
+          key={`details-${detailsContext.owner}`}
+          onClose={() => setDetailsContext(null)}
+          title={detailsContext.title}
+          subtitle={detailsContext.subtitle}
+          repo={detailsContext.repo}
+          repoHref={detailsContext.repoHref}
+          countLabel={t(submissionModeCountKey(assignmentMode), {
+            count: detailsContext.submissionCount,
+          })}
+          items={detailsContext.items}
+          emptyLabel={
+            assignmentMode === "tag"
+              ? t("submissions.details.emptyTag")
+              : t("submissions.details.emptyEveryPush")
+          }
+          emptyLinkLabel={
+            assignmentMode === "tag"
+              ? t("submissions.details.emptyLinkTags")
+              : t("submissions.details.emptyLinkDefaultBranch")
+          }
+          emptyLinkHref={
+            assignmentMode === "tag"
+              ? repoTagsUrl(org, detailsContext.repo)
+              : detailsContext.repoHref
+          }
+        />
+      )}
 
       {manageSubmission && (
         <ManageSubmissionModal

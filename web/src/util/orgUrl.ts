@@ -30,12 +30,12 @@ export const githubTemplateRepoUrl = (
   `https://github.com/${owner}/${repo}${branch ? `/tree/${branch}` : ""}`
 
 // Deep-link to a repo's tree at a git ref (a tag or a commit sha) — the code
-// state at that ref, used by the submissions views to "jump to a tag". The ref
-// is a tag name or sha built from GitHub data or a validated submission_tags
-// pattern; each path segment is encoded so a slash-bearing tag (e.g.
-// `submit/2026-...`) stays a real path while other metacharacters are escaped,
-// and the result is guarded through safeHttpUrl. Returns undefined when the
-// inputs can't form a safe http(s) URL, so callers can omit the link.
+// state at that ref, used by the submissions views to open a tag or commit.
+// The ref is a tag name or sha built from GitHub data or a validated
+// submission_tags pattern; each path segment is encoded so a slash-bearing tag
+// (e.g. `submit/2026-...`) stays a real path while other metacharacters are
+// escaped, and the result is guarded through safeHttpUrl. Returns undefined
+// when the inputs can't form a safe http(s) URL, so callers can omit the link.
 export const repoTreeAtRefUrl = (
   org: string,
   repo: string,
@@ -50,5 +50,17 @@ export const repoTreeAtRefUrl = (
     `https://github.com/${encodeURIComponent(org)}/${encodeURIComponent(
       repo,
     )}/tree/${encodedRef}`,
+  )
+}
+
+// The repo's tags listing page. Used as the "no submissions yet" destination
+// for a tag-mode assignment (there is no single tag to open, so point at where
+// tags will appear). safeHttpUrl-guarded; undefined on blank input.
+export const repoTagsUrl = (org: string, repo: string): string | undefined => {
+  if (!org || !repo) return undefined
+  return safeHttpUrl(
+    `https://github.com/${encodeURIComponent(org)}/${encodeURIComponent(
+      repo,
+    )}/tags`,
   )
 }

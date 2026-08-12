@@ -2,6 +2,7 @@ import type { GitHubCommit, GitHubTag } from "@/github-core/types"
 import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
 import { matchesSubmissionTag } from "@/util/submissionTags"
 import { repoTreeAtRefUrl } from "@/util/orgUrl"
+import type { SubmissionMode } from "@/types/classroom"
 
 // Pure derivation for the submission-detection subsystem (KTD6/KTD7): turn raw
 // repo state (default-branch commits, git tags) plus the submission definition
@@ -119,6 +120,36 @@ export function detectedTagHref(
 ): string | undefined {
   const ref = detectedTagRef(entry)
   return ref ? repoTreeAtRefUrl(org, repo, ref) : undefined
+}
+
+// The submission mode resolved to its wire default: an absent mode is
+// every-push (writers omit it). Both submission views key their type-aware
+// wording off this.
+export function resolveSubmissionMode(
+  mode: SubmissionMode | undefined,
+): SubmissionMode {
+  return mode ?? "every-push"
+}
+
+// The i18n key for the "what counts as a submission" heading badge, keyed by
+// mode. Single source so the teacher heading and the student page agree.
+export function submissionModeBadgeKey(
+  mode: SubmissionMode | undefined,
+): string {
+  return resolveSubmissionMode(mode) === "tag"
+    ? "submissions.type.badgeTag"
+    : "submissions.type.badgeEveryPush"
+}
+
+// The i18n (pluralized) key for a submission count, keyed by mode:
+// "N tagged submissions" vs "N pushes to the default branch". Callers pass
+// `{ count }` to t().
+export function submissionModeCountKey(
+  mode: SubmissionMode | undefined,
+): string {
+  return resolveSubmissionMode(mode) === "tag"
+    ? "submissions.type.countTag"
+    : "submissions.type.countEveryPush"
 }
 
 // A friendly display label for an exact detected tag: strip the canonical

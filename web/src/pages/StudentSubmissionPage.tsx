@@ -1,10 +1,13 @@
 import { Link, useParams } from "@tanstack/react-router"
+import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import {
   ExternalLink,
   UserRound,
   UsersRound,
   CalendarClock,
+  GitCommitHorizontal,
+  Tag,
 } from "lucide-react"
 
 import Breadcrumb from "@/components/breadcrumb"
@@ -15,26 +18,32 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetSubmissionReleases from "@/hooks/useGetSubmissionReleases"
 import useGetMyTaggedSubmissions from "@/hooks/useGetMyTaggedSubmissions"
+import useGetMyPushSubmissions from "@/hooks/useGetMyPushSubmissions"
 import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
+import { repoTagsUrl } from "@/util/orgUrl"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { safeHttpUrl } from "@/util/url"
 import type { GitHubRelease } from "@/github-core/types"
-import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import {
   detectedTagHref,
   detectedTagLabel,
   jumpableTagEntries,
+  submissionModeBadgeKey,
+  submissionModeCountKey,
 } from "@/domain/assignments/submissionDetection"
 import type { Assignment, SubmissionMode } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Alert, Badge, Button, Card, Markdown } from "@/components/ui"
+import {
+  SubmissionDetailsModal,
+  type SubmissionDetailItem,
+} from "@/components/submissions/SubmissionDetailsModal"
 import SubmitGuidance from "@/components/SubmitGuidance"
-import { Tag } from "lucide-react"
 
 // Strips the `submit/` tag prefix for a friendlier label, falling back to the
 // release name when present.
@@ -105,10 +114,12 @@ const AssignmentMeta = ({
         </Badge>
       ) : null}
       <Badge ghost className="gap-1">
-        <Tag aria-hidden="true" className="size-3.5" />
-        {submissionMode === "tag"
-          ? t("submissions.student.modeTag")
-          : t("submissions.student.modeEveryPush")}
+        {submissionMode === "tag" ? (
+          <Tag aria-hidden="true" className="size-3.5" />
+        ) : (
+          <GitCommitHorizontal aria-hidden="true" className="size-3.5" />
+        )}
+        {t(submissionModeBadgeKey(submissionMode))}
       </Badge>
       <Badge
         tone={overdue ? "error" : "neutral"}
@@ -120,81 +131,6 @@ const AssignmentMeta = ({
           ? t("submissions.dueDate", { date: formatDueDateTime(due) })
           : t("submissions.noDueDate")}
       </Badge>
-    </div>
-  )
-}
-
-// The student's tagged submissions (tag mode only): one jump-to-tree link per
-// entry, or an empty hint prompting the student to push a tag.
-const TaggedSubmissionsCard = ({
-  entries,
-  org,
-  repo,
-}: {
-  entries: DetectedSubmission[]
-  org: string
-  repo: string
-}) => {
-  const { t } = useTranslation()
-  const tagEntries = jumpableTagEntries(entries)
-
-  return (
-    <div className="space-y-2">
-      <p className="text-sm text-base-content/70">
-        {t("submissions.student.taggedIntro")}
-      </p>
-      {tagEntries.length === 0 ? (
-        <Alert tone="info">
-          <div>{t("submissions.student.taggedEmpty")}</div>
-        </Alert>
-      ) : (
-        <Card as={EnterDiv} bordered={false} className="border border-base-200">
-          <ul className="divide-y divide-base-200">
-            {tagEntries.map((entry) => {
-              const href = detectedTagHref(entry, org, repo)
-              const label =
-                entry.kind === "tag-group"
-                  ? t("submissions.student.tagGroupCount", {
-                      pattern: entry.label,
-                      count: entry.count,
-                    })
-                  : detectedTagLabel(entry.label)
-              return (
-                <li
-                  key={`${entry.kind}-${entry.label}`}
-                  className="flex items-center justify-between gap-4 px-4 py-3"
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <Tag
-                      aria-hidden="true"
-                      className="size-4 shrink-0 text-base-content/70"
-                    />
-                    <span className="truncate font-medium">{label}</span>
-                  </span>
-                  {href ? (
-                    <Button
-                      as="a"
-                      variant="outline"
-                      size="sm"
-                      href={href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="shrink-0"
-                    >
-                      <ExternalLink aria-hidden="true" className="size-4" />
-                      {t("submissions.student.jumpToTag")}
-                    </Button>
-                  ) : (
-                    <span className="text-sm text-base-content/70">
-                      {t("submissions.student.unavailable")}
-                    </span>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        </Card>
-      )}
     </div>
   )
 }
@@ -228,15 +164,21 @@ const SubmissionBody = ({
     isError,
     error,
   } = useGetSubmissionReleases(org, classroom, assignment, user?.login)
-  // Tagged submissions (tag mode only): read the student's own repo tags and
-  // derive the detected tag/tag-group entries. The query is disabled outside
-  // tag mode, so every-push assignments cost no extra read.
+  // Type-aware submission reads, each gated to its mode so the other mode costs
+  // no request: tag mode reads the repo's tags; every-push mode reads the
+  // default-branch commits (minus the baseline). Both feed the details modal.
   const { data: taggedSubmissions } = useGetMyTaggedSubmissions(
     isTagMode ? org : undefined,
     isTagMode ? classroom : undefined,
     isTagMode ? assignment : undefined,
     isTagMode ? user?.login : undefined,
     submissionTags,
+  )
+  const { data: pushSubmissions } = useGetMyPushSubmissions(
+    isTagMode ? undefined : org,
+    isTagMode ? undefined : classroom,
+    isTagMode ? undefined : assignment,
+    isTagMode ? undefined : user?.login,
   )
   // Distinguish "never accepted" (no repo) from "accepted but not yet graded".
   // getRepo returns null only on a true 404; a 403/5xx throws, so read the repo
@@ -250,6 +192,36 @@ const SubmissionBody = ({
   } = useGetAssignmentRepo(org, classroom, assignment, user?.login)
 
   const repoName = studentRepoName(classroom, assignment, user?.login ?? "")
+
+  // Type-aware submission list for the details modal: tags (tag mode) or
+  // default-branch commits (every-push). Built here so both accepted states
+  // share one source.
+  const detailItems: SubmissionDetailItem[] = isTagMode
+    ? jumpableTagEntries(taggedSubmissions ?? []).map((entry) => ({
+        key: `${entry.kind}-${entry.label}`,
+        kind: "tag" as const,
+        label:
+          entry.kind === "tag-group"
+            ? t("submissions.type.tagGroupCount", {
+                pattern: entry.label,
+                count: entry.count,
+              })
+            : detectedTagLabel(entry.label),
+        href: detectedTagHref(entry, org, repoName),
+      }))
+    : (pushSubmissions ?? []).map((commit, i) => ({
+        key: `${commit.sha}-${i}`,
+        kind: "commit" as const,
+        label: t("submissions.details.pushEntry", {
+          number: (pushSubmissions?.length ?? 0) - i,
+        }),
+        sublabel: commit.commit.author?.date
+          ? formatDueDateTime(commit.commit.author.date)
+          : undefined,
+        href: safeHttpUrl(commit.html_url),
+      }))
+  const submissionCount = detailItems.length
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   if (isLoading || repoLoading) {
     return (
@@ -298,6 +270,53 @@ const SubmissionBody = ({
     )
   }
 
+  // Type-aware count chip + shared details modal, reused across the accepted
+  // states. The chip always opens the modal (even for 0/1), which owns the
+  // per-type list and the "no submissions" repository link.
+  const summary = (
+    <>
+      <button
+        type="button"
+        className="badge badge-lg gap-1 hover:badge-neutral cursor-pointer"
+        onClick={() => setDetailsOpen(true)}
+      >
+        {isTagMode ? (
+          <Tag aria-hidden="true" className="size-3.5" />
+        ) : (
+          <GitCommitHorizontal aria-hidden="true" className="size-3.5" />
+        )}
+        {t(submissionModeCountKey(submissionMode), { count: submissionCount })}
+      </button>
+      {detailsOpen ? (
+        <SubmissionDetailsModal
+          onClose={() => setDetailsOpen(false)}
+          title={t("submissions.student.detailsTitle")}
+          repo={repoName}
+          repoHref={studentRepo.html_url}
+          countLabel={t(submissionModeCountKey(submissionMode), {
+            count: submissionCount,
+          })}
+          items={detailItems}
+          emptyLabel={
+            isTagMode
+              ? t("submissions.details.emptyTag")
+              : t("submissions.details.emptyEveryPush")
+          }
+          emptyLinkLabel={
+            isTagMode
+              ? t("submissions.details.emptyLinkTags")
+              : t("submissions.details.emptyLinkDefaultBranch")
+          }
+          emptyLinkHref={
+            isTagMode
+              ? repoTagsUrl(org, repoName)
+              : safeHttpUrl(studentRepo.html_url)
+          }
+        />
+      ) : null}
+    </>
+  )
+
   if (!releases || releases.length === 0) {
     return (
       <EnterDiv className="mt-6 space-y-4">
@@ -309,6 +328,7 @@ const SubmissionBody = ({
             classroom opt-out yet. See
             https://github.com/foundation50/classroom50/issues/428 */}
         <div className="flex flex-wrap items-center gap-2">
+          {summary}
           <Button
             as="a"
             variant="outline"
@@ -321,13 +341,6 @@ const SubmissionBody = ({
             {t("submissions.student.openMyRepo")}
           </Button>
         </div>
-        {isTagMode ? (
-          <TaggedSubmissionsCard
-            entries={taggedSubmissions ?? []}
-            org={org}
-            repo={repoName}
-          />
-        ) : null}
         <SubmitGuidance
           repoHtmlUrl={studentRepo.html_url}
           submissionMode={submissionMode}
@@ -346,6 +359,7 @@ const SubmissionBody = ({
         {/* Upload submission intentionally hidden — see issue #428
             (https://github.com/foundation50/classroom50/issues/428). */}
         <div className="flex flex-wrap items-center gap-2">
+          {summary}
           <Button
             as="a"
             variant="outline"
@@ -359,14 +373,6 @@ const SubmissionBody = ({
           </Button>
         </div>
       </div>
-
-      {isTagMode ? (
-        <TaggedSubmissionsCard
-          entries={taggedSubmissions ?? []}
-          org={org}
-          repo={repoName}
-        />
-      ) : null}
 
       <Card as={EnterDiv} bordered={false} className="border border-base-200">
         <ul className="divide-y divide-base-200">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import Papa from "papaparse"
+import { GitCommitHorizontal, Tag } from "lucide-react"
 
 import { useQueryClient } from "@tanstack/react-query"
 import { useParams, Navigate } from "@tanstack/react-router"
@@ -24,6 +25,7 @@ import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal
 import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
+import { submissionModeBadgeKey } from "@/domain/assignments/submissionDetection"
 import {
   assignmentSkipsGrading,
   isNoAutograderAssignment,
@@ -943,6 +945,19 @@ const SubmissionsPageContent = () => {
                 {t("submissions.closeSubmission.statusBadge.closed")}
               </Badge>
             )}
+            {assignmentInfo && (
+              <Badge ghost size="md" className="gap-1">
+                {(assignmentInfo.submission_mode ?? "every-push") === "tag" ? (
+                  <Tag aria-hidden="true" className="size-3.5" />
+                ) : (
+                  <GitCommitHorizontal
+                    aria-hidden="true"
+                    className="size-3.5"
+                  />
+                )}
+                {t(submissionModeBadgeKey(assignmentInfo.submission_mode))}
+              </Badge>
+            )}
             {assignmentInfo?.template && (
               <GitHubLink
                 href={githubTemplateRepoUrl(
@@ -1239,6 +1254,10 @@ const SubmissionsPageContent = () => {
             : undefined
         }
         submissionTags={assignmentInfo?.submission_tags}
+        // The assignment's real submission_mode (independent of the autograder
+        // gate above) — drives the type-aware submission-details modal and the
+        // count wording, which apply regardless of who authored the shim.
+        assignmentMode={assignmentInfo?.submission_mode ?? "every-push"}
         // Manual grading: staff may enter/edit scores inline. Gated on an org
         // OWNER (the same write-capability gate every other mutating control on
         // this page uses — a non-owner can't write the config repo's

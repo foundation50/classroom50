@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { githubTemplateRepoUrl, repoTreeAtRefUrl } from "./orgUrl"
+import { githubTemplateRepoUrl, repoTreeAtRefUrl, repoTagsUrl } from "./orgUrl"
 
 describe("githubTemplateRepoUrl", () => {
   it("links to the repo root when no branch is given", () => {
@@ -50,5 +50,18 @@ describe("repoTreeAtRefUrl", () => {
     expect(repoTreeAtRefUrl("", "repo", "phase1")).toBeUndefined()
     expect(repoTreeAtRefUrl("acme", "", "phase1")).toBeUndefined()
     expect(repoTreeAtRefUrl("acme", "repo", "")).toBeUndefined()
+  })
+})
+
+describe("repoTagsUrl", () => {
+  it("links to the repo's tags listing page", () => {
+    expect(repoTagsUrl("acme", "cs101-hw1-alice")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/tags",
+    )
+  })
+
+  it("returns undefined for blank inputs", () => {
+    expect(repoTagsUrl("", "repo")).toBeUndefined()
+    expect(repoTagsUrl("acme", "")).toBeUndefined()
   })
 })

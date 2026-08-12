@@ -419,12 +419,13 @@ describe("SubmissionsTable hub action list", () => {
   })
 })
 
-describe("SubmissionsTable tagged submissions", () => {
-  it("makes a single-attempt row expandable when it has jumpable tags", async () => {
+describe("SubmissionsTable submission details modal", () => {
+  it("opens a type-aware details modal from the count chip in tag mode", async () => {
     const user = userEvent.setup()
     render(
       <SubmissionsTable
         {...baseProps}
+        assignmentMode="tag"
         scores={[
           scoreRow({
             submissionCount: 1,
@@ -445,38 +446,43 @@ describe("SubmissionsTable tagged submissions", () => {
         acceptedUsernames={new Set(["alice"])}
       />,
     )
-    const toggle = screen.getByRole("button", {
-      name: "submissions.table.submissionCount",
+    // The count chip is always a button; its label is the tag count key.
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countTag" }),
+    )
+    // The modal lists the tag with a "View tag" link at the tag's tree.
+    const view = screen.getByRole("link", {
+      name: "submissions.details.viewTag",
     })
-    await user.click(toggle)
-    // The tagged section renders the tag with a jump-to-tree link at the tag ref.
-    const jump = screen.getByRole("link", {
-      name: "submissions.table.jumpToTag",
-    })
-    expect(jump.getAttribute("href")).toBe(
+    expect(view.getAttribute("href")).toBe(
       "https://github.com/acme/cs101-hw1-alice/tree/phase1",
     )
   })
 
-  it("jumps a glob tag-group to its representative commit sha", async () => {
+  it("opens each commit for an every-push row", async () => {
     const user = userEvent.setup()
     render(
       <SubmissionsTable
         {...baseProps}
+        assignmentMode="every-push"
         scores={[
           scoreRow({
-            submissionCount: 1,
+            submissionCount: 2,
             submissions: [
               {
+                datetime: "2026-06-21T10:00:00Z",
+                commit: "https://github.com/acme/cs101-hw1-alice/commit/bbb",
+                release: "",
+                score: 9,
+                "max-score": 10,
+              },
+              {
                 datetime: "2026-06-20T10:00:00Z",
-                commit: "",
+                commit: "https://github.com/acme/cs101-hw1-alice/commit/aaa",
                 release: "",
                 score: 8,
                 "max-score": 10,
               },
-            ],
-            detectedEntries: [
-              { kind: "tag-group", label: "v*", count: 3, sha: "bbb2222" },
             ],
           }),
         ]}
@@ -484,47 +490,49 @@ describe("SubmissionsTable tagged submissions", () => {
       />,
     )
     await user.click(
-      screen.getByRole("button", { name: "submissions.table.submissionCount" }),
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
     )
-    const jump = screen.getByRole("link", {
-      name: "submissions.table.jumpToTag",
+    const commitLinks = screen.getAllByRole("link", {
+      name: "submissions.details.viewCommit",
     })
-    expect(jump.getAttribute("href")).toBe(
-      "https://github.com/acme/cs101-hw1-alice/tree/bbb2222",
+    expect(commitLinks).toHaveLength(2)
+    expect(commitLinks[0].getAttribute("href")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/commit/bbb",
     )
   })
 
-  it("shows no tagged section and no expander for a branch-mode (commit-only) row", () => {
+  it("shows the empty state with a tags link when a tag-mode row has no tags", async () => {
+    const user = userEvent.setup()
     render(
       <SubmissionsTable
         {...baseProps}
+        assignmentMode="tag"
         scores={[
           scoreRow({
-            submissionCount: 1,
+            submissionCount: 0,
             submissions: [
               {
                 datetime: "2026-06-20T10:00:00Z",
                 commit: "",
                 release: "",
-                score: 8,
+                score: 0,
                 "max-score": 10,
               },
-            ],
-            detectedEntries: [
-              { kind: "commit", label: "aaa1111", count: 1, sha: "aaa1111" },
             ],
           }),
         ]}
         acceptedUsernames={new Set(["alice"])}
       />,
     )
-    // A single commit-only row is not expandable, so the count chip is a plain
-    // label, not a toggle button.
-    expect(
-      screen.queryByRole("button", {
-        name: "submissions.table.submissionCount",
-      }),
-    ).toBeNull()
-    expect(screen.queryByText("submissions.table.taggedSubmissions")).toBeNull()
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countTag" }),
+    )
+    expect(screen.getByText("submissions.details.emptyTag")).toBeTruthy()
+    const emptyLink = screen.getByRole("link", {
+      name: /submissions\.details\.emptyLinkTags/,
+    })
+    expect(emptyLink.getAttribute("href")).toBe(
+      "https://github.com/acme/cs101-hw1-alice/tags",
+    )
   })
 })
