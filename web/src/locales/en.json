@@ -1213,7 +1213,7 @@
         "help": "How the submissions page detects and counts each student's work. The autograder uses the same definition."
       },
       "submissionMode": {
-        "label": "Autograding trigger",
+        "label": "Submission type",
         "help": "\"Every push to the default branch\" counts each push (other than the starting commit). \"A tagged commit\" counts only tagged commits — a student submits with gh student submit or by pushing a tag, so ordinary pushes cost no Actions minutes.",
         "editWarning": "Changing this only affects repositories created from now on. Repositories students already accepted keep the old setting until you update them — use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
         "choices": {
