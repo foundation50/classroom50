@@ -130,6 +130,7 @@ const CreateAssignmentForm = ({
                   )}
                   slugTouched={slugTouched}
                   setSlugTouched={setSlugTouched}
+                  takenSlugs={takenSlugs}
                 />
                 <RepositorySetupSection
                   form={form}

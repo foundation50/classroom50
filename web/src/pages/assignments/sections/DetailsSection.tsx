@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { slugify } from "@/util/slug"
+import { nextAvailableSlug, slugify } from "@/util/slug"
 import { FormField, Input, Textarea } from "@/components/ui"
 import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
 import { FieldLabel } from "../AdvancedRuntimeFields"
@@ -18,12 +18,16 @@ export function DetailsSection({
   status,
   slugTouched,
   setSlugTouched,
+  takenSlugs,
 }: {
   form: AssignmentForm
   edit: boolean
   status: SectionStatus
   slugTouched: boolean
   setSlugTouched: (touched: boolean) => void
+  // Existing assignment slugs, so the create-mode auto-fill can pick a slug
+  // that's already unique instead of surfacing a conflict only at submit.
+  takenSlugs?: string[]
 }) {
   const { t } = useTranslation()
 
@@ -49,7 +53,12 @@ export function DetailsSection({
                   onChange={(e) => {
                     field.handleChange(e.target.value)
                     if (!edit && !slugTouched) {
-                      form.setFieldValue("slug", slugify(e.target.value))
+                      // Auto-fill a slug that's already unique in this
+                      // classroom, so a collision doesn't wait until submit.
+                      form.setFieldValue(
+                        "slug",
+                        nextAvailableSlug(slugify(e.target.value), takenSlugs ?? []),
+                      )
                     }
                   }}
                 />
@@ -92,11 +101,15 @@ export function DetailsSection({
                     onBlur={(e) => {
                       // Normalize on blur so what the teacher sees is what's
                       // saved (the repo path segment). An emptied slug falls
-                      // back to the name-derived default, so leaving it blank
-                      // restores the auto slug.
+                      // back to a unique name-derived default, so leaving it
+                      // blank restores the auto slug.
                       const normalized = slugify(e.target.value)
                       field.handleChange(
-                        normalized || slugify(form.state.values.name),
+                        normalized ||
+                          nextAvailableSlug(
+                            slugify(form.state.values.name),
+                            takenSlugs ?? [],
+                          ),
                       )
                       field.handleBlur()
                     }}

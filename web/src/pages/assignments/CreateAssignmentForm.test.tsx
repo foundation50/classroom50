@@ -183,6 +183,27 @@ describe("assignment slug field", () => {
     expect(slugInput(container).value).toBe("loops-assignment")
   })
 
+  it("create: auto-fills a unique slug when the name's slug is taken", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm(
+      <CreateAssignmentForm takenSlugs={["loops"]} onSubmit={() => {}} />,
+    )
+    await user.type(nameInput(container), "Loops")
+    // The plain slug "loops" collides, so the auto-fill suffixes it.
+    expect(slugInput(container).value).toBe("loops-2")
+  })
+
+  it("create: blurring an emptied slug restores a unique name-derived default", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm(
+      <CreateAssignmentForm takenSlugs={["loops"]} onSubmit={() => {}} />,
+    )
+    await user.type(nameInput(container), "Loops")
+    await user.clear(slugInput(container))
+    await user.tab()
+    expect(slugInput(container).value).toBe("loops-2")
+  })
+
   it("create: editing the slug stops auto-fill from the name", async () => {
     const user = userEvent.setup()
     const { container } = renderForm(
