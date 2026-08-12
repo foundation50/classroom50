@@ -531,6 +531,8 @@ const SubmissionsTable = ({
               {isGroup ? (
                 <RepoRowActions
                   owner={rest.owner}
+                  release={rest.release}
+                  skipsGrading={emptyRepo}
                   header={
                     <GroupActionControls repo={repo} repoHref={repoHref} />
                   }
@@ -550,6 +552,8 @@ const SubmissionsTable = ({
               ) : (
                 <RepoRowActions
                   owner={rest.owner}
+                  release={rest.release}
+                  skipsGrading={emptyRepo}
                   header={
                     <IndividualRowHeader
                       repo={repo}
@@ -716,6 +720,7 @@ const SubmissionsTable = ({
                   actions = (
                     <RepoRowActions
                       owner={student.username}
+                      skipsGrading={emptyRepo}
                       header={
                         <IndividualRowHeader
                           repo={repoName}
@@ -777,6 +782,7 @@ const SubmissionsTable = ({
                   actions={
                     <RepoRowActions
                       owner={owner}
+                      skipsGrading={emptyRepo}
                       header={
                         <GroupActionControls
                           repo={repoName}
