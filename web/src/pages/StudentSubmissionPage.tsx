@@ -188,7 +188,6 @@ const SubmissionBody = ({
   const [detailsOpen, setDetailsOpen] = useState(false)
 
   // Fold graded releases into the submission list: push submissions link the
-  // Fold graded releases into the submission list: push submissions link the
   // release published at their commit; the newest release is offered as a
   // direct "autograder details" shortcut in the actions cell.
   const latestReleaseHref = safeHttpUrl(releases?.[0]?.html_url)
