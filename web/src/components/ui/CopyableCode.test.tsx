@@ -36,4 +36,34 @@ describe("CopyableCode", () => {
     const btn = screen.getByRole("button", { name: "Copy" })
     expect(btn.className).toContain("btn-success")
   })
+
+  it("stays icon-only (no visible text) without copiedLabel", () => {
+    render(<CopyableCode value="x" copied onCopy={() => {}} label="Copy" />)
+    expect(screen.queryByText("Copy")).toBeNull()
+  })
+
+  it("spells out the state and announces it when copiedLabel is set", () => {
+    const { rerender } = render(
+      <CopyableCode
+        value="x"
+        copied={false}
+        onCopy={() => {}}
+        label="Copy"
+        copiedLabel="Copied"
+      />,
+    )
+    expect(screen.getByText("Copy")).not.toBeNull()
+
+    rerender(
+      <CopyableCode
+        value="x"
+        copied
+        onCopy={() => {}}
+        label="Copy"
+        copiedLabel="Copied"
+      />,
+    )
+    // The button text and the aria-live region both read "Copied".
+    expect(screen.getAllByText("Copied").length).toBeGreaterThanOrEqual(2)
+  })
 })
