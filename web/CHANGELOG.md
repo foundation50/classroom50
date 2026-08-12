@@ -17,6 +17,23 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.28.0](https://github.com/foundation50/classroom50/compare/web-v1.27.2...web-v1.28.0) (2026-08-12)
+
+
+### Features
+
+* add autograding tri-state selector to the assignment form ([#558](https://github.com/foundation50/classroom50/issues/558)) ([d1c8888](https://github.com/foundation50/classroom50/commit/d1c888801d608cc45a597820299da645cd8aab69))
+* add include_all_branches for template assignments ([#562](https://github.com/foundation50/classroom50/issues/562)) ([60c00e8](https://github.com/foundation50/classroom50/commit/60c00e8c9bd2e7616378ab2971627da01c990e08))
+* add no_autograder assignment state for teacher-supplied CI ([#554](https://github.com/foundation50/classroom50/issues/554)) ([bd58fce](https://github.com/foundation50/classroom50/commit/bd58fce09ed8553f041338e9d0aa333ce91ff374))
+* per-assignment submission triggers — modes and milestone tags ([#477](https://github.com/foundation50/classroom50/issues/477)) ([#531](https://github.com/foundation50/classroom50/issues/531)) ([90c45a7](https://github.com/foundation50/classroom50/commit/90c45a749d047e4087543b04d417ad3cd0112626))
+* **web:** add Close submission bulk action ([#571](https://github.com/foundation50/classroom50/issues/571)) ([7897d9a](https://github.com/foundation50/classroom50/commit/7897d9a100d9c24a2fe0bb18ccee51d8fc5b9349))
+* **web:** add pause/resume autograding on the submissions page ([#563](https://github.com/foundation50/classroom50/issues/563)) ([37aed48](https://github.com/foundation50/classroom50/commit/37aed48c6d7e4012ab3672c88bb47a846a5a5688))
+* **web:** add per-row autograder-details shortcut and unify 1.28 terminology ([#575](https://github.com/foundation50/classroom50/issues/575)) ([53b3eeb](https://github.com/foundation50/classroom50/commit/53b3eeb63df485032cb7f498c984dfca5c4cd2a2))
+* **web:** opt-in assignments.json schema migration with legacy gate ([#574](https://github.com/foundation50/classroom50/issues/574)) ([3f0b525](https://github.com/foundation50/classroom50/commit/3f0b5250a65e9b10e0e6e07fc8eaa291d47d0272))
+* **web:** overhaul the assignment form and add empty-repo autograding ([#561](https://github.com/foundation50/classroom50/issues/561)) ([8fe3af3](https://github.com/foundation50/classroom50/commit/8fe3af374b02a210e84b07563f59733d96f7dea5))
+* **web:** remove inert per-student extensions affordance ([#573](https://github.com/foundation50/classroom50/issues/573)) ([547fced](https://github.com/foundation50/classroom50/commit/547fced534023459b56a60cf2d4efd17ba4f28b0))
+* **web:** submission configuration, grading modes, and manual scoring ([#565](https://github.com/foundation50/classroom50/issues/565)) ([812cc0c](https://github.com/foundation50/classroom50/commit/812cc0c2078e33ea7af8cc981ade72a7d33faaad))
+
 ## [1.27.2](https://github.com/foundation50/classroom50/compare/web-v1.27.1...web-v1.27.2) (2026-08-09)
 
 
