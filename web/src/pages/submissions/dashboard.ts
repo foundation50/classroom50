@@ -13,6 +13,7 @@ import { rowToStudent } from "@/util/teamRoster"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import { getName, nameFromParts } from "@/util/students"
 import { studentRepoName } from "@/util/studentRepo"
+import { escapeCsvFormulaInjection } from "@/util/csv"
 
 // Whether a row's grade still belongs to a current roster member. A row is
 // credited to `usernames` (group members, else [owner]); keep it when ANY
@@ -260,7 +261,13 @@ export function mergeDetectedSubmissions(
         "max-score": 0,
         submissionCount: Math.max(1, d.count),
         pending: true,
-        late: liveLateness(detectedAt, dueDate),
+        // Derive `late` only from a trustworthy time. A commit's committer
+        // date is server-recorded on push; a tag entry's time is decoded from
+        // the student-authored `submit/<ts>` tag NAME, which a student can
+        // backdate to read on-time. So only branch-mode commit entries feed
+        // lateness here; a tag-mode pending row leaves `late` undefined until
+        // the collector marks it from the authoritative release datetime.
+        late: liveLateness(latestCommitDetectedAt(d.entries), dueDate),
         detectedEntries: d.entries,
         submissions: [],
       }
@@ -287,6 +294,20 @@ function newerDetectedAt(
     if (Number.isFinite(referenceMs) && detectedMs <= referenceMs) return null
   }
   return detectedAt
+}
+
+// The newest time among branch-mode COMMIT detections only, or "" when none
+// carry one. Used to derive `late` for a pending row: a commit's committer
+// date is server-recorded on push, whereas a tag entry's time is decoded from
+// the student-authored `submit/<ts>` tag name and can be backdated to dodge a
+// late flag — so tag times must never feed lateness (the collector marks tag
+// lateness later from the authoritative release datetime).
+function latestCommitDetectedAt(
+  entries: DetectedSubmission[] | undefined,
+): string {
+  return (
+    latestDetectedAt((entries ?? []).filter((e) => e.kind === "commit")) ?? ""
+  )
 }
 
 // The most recent push time across this assignment's repos, or null when none
@@ -936,7 +957,12 @@ export function buildScoresCsvRows(
       (a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime(),
     )
     .map(({ usernames, score, datetime, submissionCount, late, ...rest }) => ({
-      usernames: usernames.join(", "),
+      // Free-text columns can carry student-influenceable content (a repo/
+      // commit/release/review URL, a group's joined logins), so neutralize
+      // spreadsheet formula injection on them. The numeric/enum/timestamp
+      // columns below are our own generated values and must round-trip
+      // byte-exact, so they are NOT escaped.
+      usernames: escapeCsvFormulaInjection(usernames.join(", ")),
       // A pending live row (submitted, not yet collected) has no real grade —
       // export a blank score, not a 0, so importing the CSV can't record a
       // graded zero for a student who actually submitted.
@@ -948,13 +974,13 @@ export function buildScoresCsvRows(
       // Invalid Date.
       submitted_at: isoOrBlank(datetime),
       late: late ? "yes" : "no",
-      commit: rest.commit,
-      review: rest.review,
-      release: rest.release,
+      commit: escapeCsvFormulaInjection(rest.commit),
+      review: escapeCsvFormulaInjection(rest.review),
+      release: escapeCsvFormulaInjection(rest.release),
     }))
 
   const nonSubmittedRows: ScoresCsvRow[] = nonSubmitters.map((student) => ({
-    usernames: student.username,
+    usernames: escapeCsvFormulaInjection(student.username),
     score: 0,
     max_score: "",
     submissions: 0,

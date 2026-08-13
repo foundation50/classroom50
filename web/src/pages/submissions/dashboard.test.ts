@@ -868,6 +868,26 @@ describe("buildScoresCsvRows", () => {
     expect(out[0].submitted_at).toBe("")
     expect(out[0].score).toBe("")
   })
+
+  it("neutralizes CSV formula injection in free-text columns", () => {
+    // A commit/release/review URL (or a group's joined logins) can carry a
+    // leading formula trigger; guard it so a spreadsheet renders it as text.
+    const out = buildScoresCsvRows(
+      [
+        row({
+          usernames: ["=cmd()"],
+          commit: "=HYPERLINK(1)",
+          review: "+evil",
+          release: "@x",
+        }),
+      ],
+      [],
+    )
+    expect(out[0].usernames).toBe("'=cmd()")
+    expect(out[0].commit).toBe("'=HYPERLINK(1)")
+    expect(out[0].review).toBe("'+evil")
+    expect(out[0].release).toBe("'@x")
+  })
 })
 
 describe("selectActiveWorkflowAction", () => {
@@ -1476,6 +1496,57 @@ describe("mergeDetectedSubmissions", () => {
     )
     expect(merged[0].datetime).toBe("")
     expect(merged[0].late).toBeUndefined()
+  })
+
+  it("never derives lateness from a tag entry's decoded time (student-controllable)", () => {
+    // A submit/* tag's time is decoded from the tag NAME, which a student can
+    // backdate — so even a dated tag entry must NOT set `late`. The row still
+    // SHOWS the tag time on the last-submitted cell; only the late flag is
+    // withheld (the collector marks it later from the release datetime).
+    const entries = [
+      {
+        kind: "tag" as const,
+        label: "submit/2026-06-01T09-00-00Z-abc1234",
+        count: 1,
+        sha: "abc1234",
+        datetime: "2026-06-01T09:00:00Z",
+      },
+    ]
+    const merged = mergeDetectedSubmissions(
+      [],
+      [{ owner: "bob", count: 1, entries }],
+      "2026-06-21T00:00:00Z",
+    )
+    // Time is shown (a pre-due tag), but late is withheld rather than false.
+    expect(merged[0].datetime).toBe("2026-06-01T09:00:00Z")
+    expect(merged[0].late).toBeUndefined()
+  })
+
+  it("derives lateness from a commit entry even when a dated tag entry is also present", () => {
+    // A mixed detection set (a commit plus a tag) still trusts only the
+    // commit's committer date for `late`.
+    const entries = [
+      {
+        kind: "commit" as const,
+        label: "ddd4444",
+        count: 1,
+        sha: "ddd4444",
+        datetime: "2026-06-25T10:00:00Z",
+      },
+      {
+        kind: "tag" as const,
+        label: "submit/2026-06-01T09-00-00Z-ddd4444",
+        count: 1,
+        sha: "ddd4444",
+        datetime: "2026-06-01T09:00:00Z",
+      },
+    ]
+    const merged = mergeDetectedSubmissions(
+      [],
+      [{ owner: "bob", count: 2, entries }],
+      "2026-06-21T00:00:00Z",
+    )
+    expect(merged[0].late).toBe(true)
   })
 
   it("surfaces a newer detected push time on a count-raising row", () => {
