@@ -155,10 +155,14 @@ How each student's repository is created:
   `<repo>` if it's in this organization. See
   [Assignment Templates](Assignment-Templates) for requirements.
 - **Add a README** (no-template assignments) — whether the repository starts
-  with an initial commit. Leaving it **off** creates a completely **empty
-  repository**: no initial commit, and autograding and the feedback pull
-  request are unavailable until the student's first commit. Use it when
-  students build everything from scratch.
+  with an initial commit. With it **off**, what students get depends on the
+  built-in autograder choice below:
+  - autograder **off** → a **truly bare repository**: no commit, no
+    autograding, and no feedback pull request (permanently — not just until the
+    student's first commit). Use it when students build everything from
+    scratch, including their own GitHub Actions.
+  - autograder **on** → an initialized repository carrying only the control
+    files (no README, no starter content) that grades normally.
 - **Include all branches** (templated) — copy **all** of the template's
   branches into each student repository, not just the default branch. Useful
   for multi-branch starter repos.

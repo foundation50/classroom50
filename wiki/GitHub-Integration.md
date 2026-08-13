@@ -59,16 +59,18 @@ Run once per machine, or after a token rotation:
 gh teacher login
 ```
 
-This checks your existing `gh` credentials first: a token that already carries
-the required scopes is **reused untouched** (no re-auth, no rewrite of your `gh`
-configuration). Only an absent or under-scoped gh-managed token triggers
-`gh auth login -s admin:org -s read:org -s repo -s workflow` — with a warning
-first, since that rewrites your stored `gh` auth. An under-scoped token supplied
-via `GH_TOKEN` or your keyring can't be refreshed by `gh`, so the CLI errors
-with remediation instead. It's the unified Classroom 50 scope set —
-`gh teacher login` and `gh student login` request the same scopes, so
+This wraps `gh auth login -s admin:org -s read:org -s repo -s workflow` — the
+unified Classroom 50 scope set, shared with `gh student login`, so
 authenticating one CLI covers the other. (`delete_repo` is not included — opt
 in with `gh teacher login -s delete_repo` for teardown.)
+
+You often don't need to run it. Every other command checks your existing `gh`
+credentials first: a sufficiently-scoped token is reused untouched, and an
+under-scoped token that `gh` manages is widened in place with `gh auth refresh`
+(your token is kept). `login` itself always re-runs `gh auth login`, which
+**replaces** your stored github.com token — so when one already exists, the CLI
+warns and asks for confirmation before proceeding. See
+[Will `gh teacher login` disturb my existing `gh` setup?](Troubleshooting#will-gh-teacher-login-disturb-my-existing-gh-setup).
 
 | Scope | Required for |
 |---|---|

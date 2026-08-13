@@ -130,13 +130,13 @@ commit** is skipped (nothing to grade); your first real submit always grades.
 ## `whoami` / `login` / `logout`
 
 - `whoami` — prints the authenticated GitHub user.
-- `login` — checks your existing `gh` credentials first and **reuses them if
-  they already carry the required scopes** (`admin:org`, `read:org`, `repo`,
-  `workflow` — the unified set shared with `gh teacher login`). Only an absent
-  or under-scoped gh-managed token triggers `gh auth login`, with a warning
-  before your stored gh auth is rewritten; an under-scoped token supplied via
-  `GH_TOKEN` or your keyring errors with remediation instead. Add scopes with
-  `-s`.
+- `login` — wraps `gh auth login` with the unified scope set (`admin:org`,
+  `read:org`, `repo`, `workflow`, shared with `gh teacher login`); add scopes
+  with `-s`. It replaces your stored github.com token, so when one already
+  exists it warns and asks for confirmation. `accept` and `submit` don't need
+  it: they reuse a sufficiently-scoped token untouched and widen an
+  under-scoped gh-managed one in place. See
+  [Will `gh teacher login` disturb my existing `gh` setup?](Troubleshooting#will-gh-teacher-login-disturb-my-existing-gh-setup).
 - `logout` — runs `gh auth logout`.
 
 ## Contributing

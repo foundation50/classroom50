@@ -116,26 +116,40 @@ prompt choices, which is why this appears on some machines and not others.
 
 ## Will `gh teacher login` disturb my existing `gh` setup?
 
-The Classroom 50 CLIs share the GitHub CLI's credential store (`hosts.yml`), so
-this is worth knowing if you already use `gh` for other work:
+The Classroom 50 CLIs share the GitHub CLI's credential store, so this is worth
+knowing if you already use `gh` for other work.
 
-- A stored token that **already carries** the required scopes (`admin:org`,
-  `read:org`, `repo`, `workflow`) is **reused untouched** — `login` changes
-  nothing.
-- An absent or under-scoped **gh-managed** token triggers `gh auth login`,
-  which mints a new token and **rewrites your stored `gh` auth for
-  github.com**; the CLI warns before doing so. If you'd rather add scopes to
-  your existing token in place, run `gh auth refresh -s admin:org,workflow`
-  yourself first.
-- A token supplied via **`GH_TOKEN`** (or your keyring) can't be refreshed by
-  `gh`, so an under-scoped one produces an error with remediation rather than
-  a silent rewrite.
-- With **multiple `gh` accounts**, the CLIs use whichever account is active
-  for github.com (`gh auth status`); switch with `gh auth switch` before
-  running teacher/student commands.
+**Running any teacher/student command** (not `login`) never disturbs a working
+setup unnecessarily:
 
-Not sure whether you need to log in at all? `gh teacher audit <org>` is
-read-only and a good first probe of your existing credentials.
+- A stored token that already carries the required scopes (`admin:org`,
+  `read:org`, `repo`, `workflow`) is **reused untouched**.
+- An under-scoped token that `gh` manages (its config file or OS keyring) is
+  widened in place with `gh auth refresh` — your existing token is kept, not
+  replaced, and no other `gh` settings change.
+- An under-scoped token from **`GH_TOKEN` / `GITHUB_TOKEN`** can't be widened by
+  `gh`, so you get an error naming the missing scopes: re-issue that token with
+  them, or unset the variable and sign in.
+- With no stored token at all, the command starts a sign-in for you.
+
+**Running `login` explicitly is the one clobbering path.** `gh teacher login`
+wraps `gh auth login`, which mints a **new** token and replaces your stored
+github.com auth. When a token already exists, the CLI warns and asks
+`Proceed and let gh auth login replace it? [y/N]` — the default is **No**, and
+declining leaves your auth untouched and prints the alternatives:
+
+```sh
+gh auth refresh -h github.com -s admin:org,read:org,repo,workflow   # widen in place
+export GH_TOKEN=<a PAT with those scopes>                           # or bring your own
+```
+
+So if `gh` is already set up, you usually don't need `login` at all — just run
+the command you want and let it add any missing scope in place.
+
+With **multiple `gh` accounts**, the CLIs use whichever account is active for
+github.com (`gh auth status`); switch with `gh auth switch` first. Not sure
+whether anything needs fixing? `gh teacher audit <org>` is read-only and a good
+first probe.
 
 ## "Not an admin" on `gh teacher invite`
 

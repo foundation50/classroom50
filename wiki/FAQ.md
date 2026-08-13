@@ -134,16 +134,22 @@ the same menu gives finer control over the role students hold on their repos.
 
 ### What's the difference between "template-less" and "empty repository"?
 
-- **Template-less** (no template chosen, **Add a README** on): students get a
-  repo containing only the autograder setup — good for write-from-scratch or
-  short-answer work.
-- **Empty repository** (no template, **Add a README** off): a completely bare
-  repo with no initial commit — no starter files **and** no autograding or
-  feedback pull request. Use it when students build everything themselves,
-  including their own GitHub Actions.
+Both start from no template; the difference is what (if anything) is committed:
 
-**The empty-repository choice is permanent** for an assignment — you can't
-switch it on or off after creating the assignment.
+- **Template-less with a README** (**Add a README** on): students get a repo
+  with an initial commit and the autograder setup — good for write-from-scratch
+  or short-answer work.
+- **Empty repository** (**Add a README** off, built-in autograder off): a
+  completely bare repo with no commit at all — no starter files **and** no
+  autograding or feedback pull request, ever. Use it when students build
+  everything themselves, including their own GitHub Actions.
+- (**Add a README** off with the built-in autograder **on** is a third,
+  in-between shape: an initialized repo carrying only the control files, no
+  README, which grades normally.)
+
+**These repository-shape choices are permanent** for an assignment — you can't
+switch them after creating it, because repositories students already accepted
+can't be retrofitted.
 
 ### How do group assignments work?
 
@@ -170,7 +176,7 @@ write an `autograder.py`. See [Autograders](Autograders).
 
 ### Can I turn autograding off, or reduce Actions usage?
 
-Yes, several levers, from least to most drastic:
+Yes, several levers:
 
 - **Grade on submit only** — set the assignment's **Submission type** to **A
   tagged commit** (`--submission-mode tag` in the CLI). Students' regular
@@ -180,24 +186,26 @@ Yes, several levers, from least to most drastic:
   grade. You can also name **milestone tags** (`--submission-tag phase1`) so
   students grade specific checkpoints with plain git. See
   [Autograders → Which commits grade](Autograders#which-commits-grade).
-- **Don't use the built-in autograder at all** — when creating an assignment,
-  pick **Do not use the built-in autograder**. Accept then installs no
-  autograding workflow: a templated assignment runs only your template's own
-  CI (if any), and score collection skips the assignment. The right choice for
-  project-shaped assignments graded by hand or by your own CI.
+- **Pause autograding for one assignment** (reversible) — **Pause autograding**
+  in the submissions page's **Actions** menu disables the built-in
+  `autograde.yaml` workflow in every student repository (via GitHub's
+  workflow-disable API — no files change). Students' other workflows keep
+  running, and **Resume autograding** re-enables it. Offered on individual
+  assignments that use the built-in autograder, once students have accepted.
 - Create an assignment with **no autograding tests**, and no grading runs
   (Classroom 50 still uses a lightweight workflow to tag submissions and
   support written feedback, which uses far fewer Actions minutes).
-- **Pause autograding for one assignment** — **Pause autograding** in the
-  submissions page's **Actions** menu disables the built-in `autograde.yaml`
-  workflow in every student repository (via GitHub's workflow-disable API — no
-  files change). Students' other workflows keep running, and **Resume
-  autograding** re-enables it anytime.
-- **Pause autograding org-wide** from the organization's Actions settings in
-  the web app. **Caution:** this stops **all** workflows in student
-  repositories, not just autograding — any CI your students run stops too.
-  Setup also creates a **$0 Actions spending cap** (only when the organization
-  has none) so a runaway workflow can't run up a bill.
+- **Don't use the built-in autograder at all** (permanent) — when creating an
+  assignment, pick **Do not use the built-in autograder**. Accept then installs
+  no autograding workflow: a templated assignment runs only your template's own
+  CI (if any), and score collection skips the assignment. The right choice for
+  project-shaped assignments graded by hand or by your own CI. Can't be changed
+  after the assignment is created.
+- **Pause autograding org-wide** — the organization's Actions settings in the
+  web app. **Caution:** this stops **all** workflows in student repositories,
+  not just autograding — any CI your students run stops too. Setup also creates
+  a **$0 Actions spending cap** (only when the organization has none) so a
+  runaway workflow can't run up a bill.
 
 ### Can I use my own (self-hosted) runners?
 
@@ -321,11 +329,10 @@ though Classroom 50 only acts on classroom ones. This matches the CLI's behavior
 
 One feature uses it: **Tear down organization** (org settings → Danger zone),
 which resets an organization by deleting the repositories Classroom 50 manages
-— and only after you type an explicit confirmation. Nothing else ever deletes
-a repository. Classroom 50 has no server, so the token never leaves your
-browser and nobody else can act on your organization with it. If you'd rather
-not grant it at all, the CLIs never request `delete_repo` unless you opt in
-(`gh teacher login -s delete_repo`). See
+— and only after you type an explicit confirmation. Nothing else ever deletes a
+repository, and because there's no Classroom 50 server, the token stays in your
+browser. The CLIs don't request it at all unless you opt in
+(`gh teacher login -s delete_repo`). Details:
 [GitHub Integration](GitHub-Integration#2-teacher-authentication).
 
 ### Can I edit the config files in the `classroom50` repo by hand?

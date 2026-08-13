@@ -683,10 +683,13 @@ interrupted run stays safe to re-run).
 ## `whoami` / `login` / `logout`
 
 - `whoami` — prints the authenticated GitHub user.
-- `login` — reuses your existing `gh` credentials when they already carry the
-  required scopes (`admin:org`, `read:org`, `repo`, `workflow`); only an absent
-  or under-scoped gh-managed token triggers `gh auth login`, with a warning
-  before your stored `gh` auth is rewritten. Add scopes with `-s`.
+- `login` — wraps `gh auth login` with the required scopes (`admin:org`,
+  `read:org`, `repo`, `workflow`); add more with `-s`. It always mints a new
+  token and **replaces** your stored github.com auth, so when one already
+  exists it warns and asks for confirmation first. Other commands don't: they
+  reuse a sufficiently-scoped token untouched, and widen an under-scoped
+  gh-managed one in place with `gh auth refresh`. See
+  [Will `gh teacher login` disturb my existing `gh` setup?](Troubleshooting#will-gh-teacher-login-disturb-my-existing-gh-setup).
 - `logout` — runs `gh auth logout`.
 
 ## Contributing
