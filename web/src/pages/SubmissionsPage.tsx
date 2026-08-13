@@ -25,7 +25,6 @@ import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateM
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
 import { SubmissionModeBadge } from "@/components/submissions/SubmissionRowCells"
-import { AssignmentSetupBadge } from "@/components/submissions/AssignmentSetupBadge"
 import {
   assignmentSkipsGrading,
   isNoAutograderAssignment,
@@ -953,9 +952,6 @@ const SubmissionsPageContent = () => {
                 skipsGrading={skipsGrading}
                 size="md"
               />
-            )}
-            {assignmentInfo && (
-              <AssignmentSetupBadge assignment={assignmentInfo} size="md" />
             )}
             {assignmentInfo?.template && (
               <GitHubLink
