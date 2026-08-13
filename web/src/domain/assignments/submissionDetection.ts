@@ -132,22 +132,14 @@ export function resolveSubmissionMode(
 }
 
 // The i18n key for the "what counts as a submission" heading badge, keyed by
-// mode. Single source so the teacher heading and the student page agree.
-// `skipsGrading` (empty_repo or no_autograder — the assignment never
-// autogrades) drops the "is graded" claim: for those assignments a push/tag is
-// still the submission unit, but nothing is graded, so the badge describes what
-// counts without promising a grade.
+// mode. Single source so the teacher heading and the student page agree. The
+// badge only describes what counts; whether it is graded is the separate
+// autograding badge's job (see AutogradingBadge).
 export function submissionModeBadgeKey(
   mode: SubmissionMode | undefined,
-  skipsGrading = false,
 ): string {
-  if (resolveSubmissionMode(mode) === "tag") {
-    return skipsGrading
-      ? "submissions.type.badgeTagNoGrade"
-      : "submissions.type.badgeTag"
-  }
-  return skipsGrading
-    ? "submissions.type.badgeEveryPushNoGrade"
+  return resolveSubmissionMode(mode) === "tag"
+    ? "submissions.type.badgeTag"
     : "submissions.type.badgeEveryPush"
 }
 

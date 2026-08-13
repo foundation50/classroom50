@@ -21,7 +21,7 @@ import { safeHttpUrl } from "@/util/url"
 import type { GitHubCommit, GitHubRelease } from "@/github-core/types"
 import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
-import { assignmentSkipsGrading } from "@/domain/assignments/autogradingState"
+import { deriveAutogradingState } from "@/domain/assignments/autogradingState"
 import type { Assignment, SubmissionMode } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
@@ -37,6 +37,7 @@ import {
   type PushSubmission,
 } from "@/components/submissions/submissionDetailItems"
 import {
+  AutogradingBadge,
   LastSubmittedCell,
   SubmissionCountCell,
   SubmissionModeBadge,
@@ -108,10 +109,8 @@ const AssignmentMeta = ({
           {t("submissions.student.modeIndividual")}
         </Badge>
       ) : null}
-      <SubmissionModeBadge
-        mode={submissionMode}
-        skipsGrading={assignmentSkipsGrading(assignment)}
-      />
+      <SubmissionModeBadge mode={submissionMode} />
+      <AutogradingBadge state={deriveAutogradingState(assignment)} />
       <Badge
         tone={overdue ? "error" : "neutral"}
         ghost={!overdue}

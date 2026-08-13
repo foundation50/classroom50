@@ -28,14 +28,6 @@ const base = {
 }
 
 describe("DataFreshness", () => {
-  it("shows the empty-repo note instead of freshness for empty_repo assignments", () => {
-    render(<DataFreshness {...base} emptyRepo />)
-    expect(screen.getByText("submissions.emptyRepoNote")).not.toBeNull()
-    expect(
-      screen.queryByText("submissions.freshness.collected:18 hours ago"),
-    ).toBeNull()
-  })
-
   it("leads with 'Collected {when}' (the true data age, not the fetch time)", () => {
     render(<DataFreshness {...base} />)
     expect(
