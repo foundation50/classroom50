@@ -237,7 +237,7 @@ Import an existing GitHub Classroom into `<target>/classroom50`.
 
 ```sh
 gh teacher classroom migrate --source <id-or-org> --target <org> [--dry-run]
-gh teacher classroom migrate --source 95884 --target cs50-fall-2026 --short-name cs-principles --term Spring-2026
+gh teacher classroom migrate --source 95884 --target cs50-fall-2026 --short-name cs-principles --term Fall-2026
 ```
 
 For each assignment, it copies the source starter repo into the target

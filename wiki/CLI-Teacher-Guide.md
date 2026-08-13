@@ -226,7 +226,7 @@ Create a classroom:
 
 ```sh
 gh teacher classroom add <org> <short-name> --name "<full name>" --term <term>
-gh teacher classroom add cs50-fall-2026 cs-principles --name "CS Principles" --term Spring-2026
+gh teacher classroom add cs50-fall-2026 cs-principles --name "CS Principles" --term Fall-2026
 ```
 
 The `<short-name>` must match `^[a-z0-9][a-z0-9-]{1,38}$` (2–39 characters,
