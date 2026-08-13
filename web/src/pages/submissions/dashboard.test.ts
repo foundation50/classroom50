@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest"
-
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
@@ -21,6 +20,7 @@ import {
   displayItemOwner,
   displayPageOwners,
   distinctSections,
+  effectiveCollectedAt,
   existingGroupRepos,
   filterAndSortRows,
   filterNonSubmitters,
@@ -1112,6 +1112,71 @@ describe("latestCollectedAt", () => {
       "2026-06-20T10:00:00Z",
     )
     expect(latestCollectedAt("not-a-date", null)).toBeNull()
+  })
+})
+
+describe("effectiveCollectedAt", () => {
+  const stamp = "2026-06-24T10:00:00Z"
+  const lastRun = "2026-06-25T10:00:00Z"
+  const tracked = "2026-06-26T10:00:00Z"
+
+  it("prefers the bucket stamp over the org-wide run timestamp", () => {
+    // The newer lastRun may have been a scoped sync of another assignment, so
+    // the older bucket stamp must win.
+    expect(
+      effectiveCollectedAt({
+        bucketCollectedAt: stamp,
+        collectorStampsBuckets: true,
+        lastRunCompletedAt: lastRun,
+        trackedCompletedAt: null,
+      }),
+    ).toBe(stamp)
+  })
+
+  it("lets our own tracked run beat an older bucket stamp", () => {
+    expect(
+      effectiveCollectedAt({
+        bucketCollectedAt: stamp,
+        collectorStampsBuckets: true,
+        lastRunCompletedAt: null,
+        trackedCompletedAt: tracked,
+      }),
+    ).toBe(tracked)
+  })
+
+  it("ignores the run fallback for an unstamped bucket under a stamp-aware collector", () => {
+    // A successful scoped run of ANOTHER assignment must not make this
+    // never-collected bucket read as fresh.
+    expect(
+      effectiveCollectedAt({
+        bucketCollectedAt: null,
+        collectorStampsBuckets: true,
+        lastRunCompletedAt: lastRun,
+        trackedCompletedAt: null,
+      }),
+    ).toBeNull()
+  })
+
+  it("still counts our own tracked run for an unstamped bucket", () => {
+    expect(
+      effectiveCollectedAt({
+        bucketCollectedAt: null,
+        collectorStampsBuckets: true,
+        lastRunCompletedAt: lastRun,
+        trackedCompletedAt: tracked,
+      }),
+    ).toBe(tracked)
+  })
+
+  it("falls back to run timestamps for a wholly unstamped (pre-stamp) file", () => {
+    expect(
+      effectiveCollectedAt({
+        bucketCollectedAt: null,
+        collectorStampsBuckets: false,
+        lastRunCompletedAt: lastRun,
+        trackedCompletedAt: null,
+      }),
+    ).toBe(lastRun)
   })
 })
 

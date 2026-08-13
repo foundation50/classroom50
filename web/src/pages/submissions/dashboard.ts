@@ -327,6 +327,39 @@ export function latestCollectedAt(
   return aMs >= bMs ? (a ?? null) : (b ?? null)
 }
 
+/**
+ * The assignment page's "last collected" instant. Precedence:
+ *
+ * 1. Bucket stamp (`collected_at`) — authoritative for THIS assignment; the
+ *    tracked run we just dispatched still participates (it's scoped to this
+ *    very assignment and finishes before the scores.json refetch lands).
+ * 2. No stamp but the collector is stamp-aware (another bucket carries one):
+ *    the latest successful run may have been a scoped sync of a DIFFERENT
+ *    assignment (the runs API can't see dispatch inputs), so borrowing the
+ *    org-wide run timestamp would read "just collected" for a bucket no run
+ *    walked. Only our own tracked dispatch counts.
+ * 3. Wholly unstamped file — a pre-stamp collector, where every run was
+ *    org-wide, so the run-based fallback stays sound.
+ */
+export function effectiveCollectedAt(params: {
+  bucketCollectedAt: string | null
+  collectorStampsBuckets: boolean
+  lastRunCompletedAt: string | null
+  trackedCompletedAt: string | null
+}): string | null {
+  const {
+    bucketCollectedAt,
+    collectorStampsBuckets,
+    lastRunCompletedAt,
+    trackedCompletedAt,
+  } = params
+  if (bucketCollectedAt) {
+    return latestCollectedAt(bucketCollectedAt, trackedCompletedAt)
+  }
+  if (collectorStampsBuckets) return trackedCompletedAt
+  return latestCollectedAt(lastRunCompletedAt, trackedCompletedAt)
+}
+
 // Whether a row passes the threshold. Ungraded when the assignment sets no
 // threshold, or the row has no/zero/NaN max score.
 export type PassState = "passing" | "failing" | "ungraded"

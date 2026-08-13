@@ -51,7 +51,7 @@ import {
   filterNonSubmitters,
   hasAccepted,
   latestAssignmentPush,
-  latestCollectedAt,
+  effectiveCollectedAt,
   mergeDetectedSubmissions,
   mergeLiveRows,
   reconcileNonSubmitters,
@@ -173,9 +173,10 @@ const SubmissionsPageContent = () => {
   // Assignments that never autograde (empty_repo bare repos, or no_autograder
   // teacher-supplied CI) produce no submit/* releases. Grading UI (Regrade all,
   // per-row regrade, scores, live polling, the trigger retrofit) is hidden and
-  // the header's grading badge explains why. Collect stays enabled — it's
-  // org-wide and collect_scores.py skips these assignments itself. Mirrors the
-  // Python skips_grading() predicate family.
+  // the header's grading badge explains why — including collect/freshness,
+  // since a collect scoped to this assignment would be skipped by
+  // collect_scores.py anyway. Mirrors the Python skips_grading() predicate
+  // family.
   const skipsGrading = assignmentInfo
     ? assignmentSkipsGrading(assignmentInfo)
     : false
@@ -811,29 +812,24 @@ const SubmissionsPageContent = () => {
     [orgRepos, classroom, assignment, siblingSlugs],
   )
 
-  // Effective "last collected" prefers the run we just dispatched and know
-  // finished over the status=completed query, which can still report the prior
-  // run while GitHub's Actions list catches up. Gating on phase "completed"
-  // means conclusion === "success" (see useGitHubOperation), so a failed/timed
-  // -out run never relaxes the button. Both the freshness label and the
-  // staleness color read this one value so they can't disagree.
+  // Gating trackedCompletedAt on phase "completed" means conclusion ===
+  // "success" (see useGitHubOperation), so a failed/timed-out run never
+  // relaxes the button. Both the freshness label and the staleness color read
+  // the one effectiveCollectedAt value so they can't disagree; that helper
+  // owns the bucket-stamp vs run-timestamp precedence.
   const lastRunCompletedAt =
     lastRun?.status === "completed" ? lastRun.created_at : null
   const trackedCompletedAt =
     collectScores.phase === "completed"
       ? (collectScores.run?.created_at ?? null)
       : null
-  // When the bucket carries its own `collected_at` stamp, it is authoritative
-  // for THIS assignment: an org-wide run timestamp can't tell whether a scoped
-  // run (another assignment's "Sync now") touched this bucket, so trusting it
-  // would overstate freshness. The tracked run still participates — it's a
-  // collect we dispatched for this very assignment and completes before the
-  // scores.json refetch lands. Buckets from an older collector (no stamp) fall
-  // back to the run-based derivation.
-  const bucketCollectedAt = scoresData?.collectedAt?.[assignment ?? ""] ?? null
-  const effectiveLastCollectedAt = bucketCollectedAt
-    ? latestCollectedAt(bucketCollectedAt, trackedCompletedAt)
-    : latestCollectedAt(lastRunCompletedAt, trackedCompletedAt)
+  const effectiveLastCollectedAt = effectiveCollectedAt({
+    bucketCollectedAt: scoresData?.collectedAt?.[assignment ?? ""] ?? null,
+    collectorStampsBuckets:
+      Object.keys(scoresData?.collectedAt ?? {}).length > 0,
+    lastRunCompletedAt,
+    trackedCompletedAt,
+  })
 
   const lastCollectedLabel = effectiveLastCollectedAt
     ? formatRelativeToNow(new Date(effectiveLastCollectedAt))

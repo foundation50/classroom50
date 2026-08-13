@@ -30,10 +30,12 @@ on:
 permissions:
   contents: write       # write scores.json + commit
 
-# Serialize same-scope runs; different scopes may overlap (each writes only its
-# own classroom's scores.json, and the push step rebases on a mid-run advance).
+# Serialize same-classroom runs (scoped or not); only runs for DIFFERENT
+# classrooms may overlap. The org-wide nightly ('all') still overlaps a scoped
+# run on the same scores.json, so the push step below rebases with -X theirs to
+# self-resolve the same-line collected_at/entry conflicts that overlap creates.
 concurrency:
-  group: collect-${{ github.event.inputs.classroom || 'all' }}-${{ github.event.inputs.assignment || 'all' }}
+  group: collect-${{ github.event.inputs.classroom || 'all' }}
   cancel-in-progress: false
 
 jobs:
@@ -75,17 +77,26 @@ jobs:
             git add '*/scores.json'
             git -c user.name=classroom50-bot -c user.email=bot@classroom50 \
                 commit -m "[Classroom 50] collect: refresh scores.json"
-            # The branch can advance mid-run (a teacher edit, or a collect
-            # scoped to another classroom — the concurrency group only
-            # serializes same-scope runs). Rebase our scores.json commit onto
-            # the new tip and retry instead of failing the whole collection.
+            # The branch can advance mid-run: a teacher edit, a collect for
+            # another classroom, or the org-wide nightly overlapping a scoped
+            # run on the SAME scores.json (the concurrency group only
+            # serializes same-classroom runs). Rebase our commit onto the new
+            # tip and retry instead of failing the whole collection. -X theirs
+            # self-resolves same-line conflicts (e.g. both runs re-stamped a
+            # bucket's collected_at) in favor of OUR replayed commit — "theirs"
+            # during a rebase is the commit being replayed — so an overlapping
+            # nightly can't abort a teacher's scoped sync. Set -e would kill
+            # the step on a failed pull, so guard it and abort the half-done
+            # rebase before retrying.
             for attempt in 1 2 3; do
               if git push; then
                 exit 0
               fi
               echo "push rejected (attempt ${attempt}); rebasing onto the remote tip"
-              git -c user.name=classroom50-bot -c user.email=bot@classroom50 \
-                  pull --rebase
+              if ! git -c user.name=classroom50-bot -c user.email=bot@classroom50 \
+                  pull --rebase -X theirs; then
+                git rebase --abort || true
+              fi
             done
             git push
           else
