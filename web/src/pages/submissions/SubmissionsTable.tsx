@@ -128,9 +128,7 @@ function buildDetailItems(
       ? detectedCommits.map((e) => ({
           key: `commit-${e.sha ?? e.label}`,
           commitHref: e.sha ? repoCommitUrl(org, repo, e.sha) : undefined,
-          // Detection doesn't carry a per-commit time; the collected attempt
-          // (when present) does, matched by sha below.
-          datetime: undefined,
+          datetime: e.datetime,
           releaseHref: e.sha
             ? (releaseByCommit.get(e.sha) ??
               releaseByCommit.get(e.sha.slice(0, 7)))

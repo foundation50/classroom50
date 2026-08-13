@@ -493,6 +493,7 @@ const SubmissionsPageContent = () => {
         count: d.count,
         entries: d.entries,
       })),
+      assignmentInfo?.due,
     )
     return rosterReady ? rosterScopedRows(merged, students) : merged
   }, [

@@ -4,6 +4,7 @@
 
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/github-core/types"
+import { latestDetectedAt } from "@/domain/assignments/submissionDetection"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import type { Student } from "@/types/classroom"
 import type { BadgeTone } from "@/components/ui"
@@ -196,10 +197,17 @@ export type DetectedPresence = {
 // mergeLiveRows: detection can only REVEAL more submissions than are already
 // counted (max wins), never fewer, and never sets a score. A detection-only
 // owner (pushes/tags but no submit/* release and no snapshot entry) becomes a
-// pending row so the teacher sees the work exists, ungraded.
+// pending row so the teacher sees the work exists, ungraded — carrying the
+// newest detected submission time (commit dates in branch mode; encoded
+// submit/* timestamps or milestone commit lookups in tag mode) so the "last
+// submitted" cell shows when the work landed instead of a bare "not yet
+// collected".
 export function mergeDetectedSubmissions(
   rows: SubmissionRow[],
   detected: DetectedPresence[],
+  // The assignment's due date (ISO), used only to derive `late` for PENDING
+  // detection-only rows — mirrors the mergeLiveRows parameter.
+  dueDate?: string | null,
 ): SubmissionRow[] {
   const detectedByOwner = new Map<string, DetectedPresence>()
   for (const d of detected) {
@@ -224,6 +232,12 @@ export function mergeDetectedSubmissions(
       ...withEntries,
       submissionCount: d.count,
       staleCount: !row.overridden,
+      // Surface the newest detected push on the live sub-line when it beats
+      // both the row's recorded time and any release-based live latest, so a
+      // stale-count row says WHEN the newer work landed, not just that it did.
+      liveLatestAt:
+        newerDetectedAt(d.entries, row.datetime, row.liveLatestAt) ??
+        row.liveLatestAt,
     }
   })
 
@@ -233,22 +247,46 @@ export function mergeDetectedSubmissions(
     .filter(
       (d) => d.count > 0 && !knownOwners.has(d.owner.trim().toLowerCase()),
     )
-    .map<SubmissionRow>((d) => ({
-      usernames: [d.owner],
-      owner: d.owner,
-      datetime: "",
-      commit: "",
-      release: "",
-      review: "",
-      score: 0,
-      "max-score": 0,
-      submissionCount: Math.max(1, d.count),
-      pending: true,
-      detectedEntries: d.entries,
-      submissions: [],
-    }))
+    .map<SubmissionRow>((d) => {
+      const detectedAt = latestDetectedAt(d.entries) ?? ""
+      return {
+        usernames: [d.owner],
+        owner: d.owner,
+        datetime: detectedAt,
+        commit: "",
+        release: "",
+        review: "",
+        score: 0,
+        "max-score": 0,
+        submissionCount: Math.max(1, d.count),
+        pending: true,
+        late: liveLateness(detectedAt, dueDate),
+        detectedEntries: d.entries,
+        submissions: [],
+      }
+    })
 
   return [...merged, ...detectedOnly]
+}
+
+// The newest detected time when it's strictly newer than BOTH reference
+// instants (the row's recorded submission and any already-set live latest);
+// null otherwise, so an older/equal detection never displaces either.
+function newerDetectedAt(
+  entries: DetectedSubmission[] | undefined,
+  rowDatetime: string,
+  currentLiveLatestAt: string | undefined,
+): string | null {
+  const detectedAt = latestDetectedAt(entries)
+  if (!detectedAt) return null
+  const detectedMs = new Date(detectedAt).getTime()
+  if (!Number.isFinite(detectedMs)) return null
+  for (const reference of [rowDatetime, currentLiveLatestAt]) {
+    if (!reference) continue
+    const referenceMs = new Date(reference).getTime()
+    if (Number.isFinite(referenceMs) && detectedMs <= referenceMs) return null
+  }
+  return detectedAt
 }
 
 // The most recent push time across this assignment's repos, or null when none
@@ -905,7 +943,10 @@ export function buildScoresCsvRows(
       score: rest.pending ? "" : score,
       max_score: rest.pending ? "" : rest["max-score"],
       submissions: submissionCount,
-      submitted_at: new Date(datetime).toISOString(),
+      // A detection-only row can still be dateless (e.g. a milestone tag
+      // whose commit lookup failed) — export a blank rather than crashing on
+      // Invalid Date.
+      submitted_at: isoOrBlank(datetime),
       late: late ? "yes" : "no",
       commit: rest.commit,
       review: rest.review,
@@ -925,6 +966,12 @@ export function buildScoresCsvRows(
   }))
 
   return [...submittedRows, ...nonSubmittedRows]
+}
+
+// The ISO form of a row's submission time, or "" for an absent/unparseable one.
+function isoOrBlank(datetime: string): string {
+  const ms = new Date(datetime).getTime()
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : ""
 }
 
 // Which workflow action a single contextual "View …" link points at, and which

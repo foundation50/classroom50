@@ -62,6 +62,9 @@ export function tagDetailItems(
             count: entry.count,
           })
         : detectedTagLabel(entry.label),
+    sublabel: entry.datetime
+      ? formatSubmissionDateTime(entry.datetime)
+      : undefined,
     href: detectedTagHref(entry, org, repo),
     count: entry.count,
   }))

@@ -2,9 +2,11 @@ import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import type { GitHubClient } from "@/github-core/client"
 import {
   REPO_READ_CONCURRENCY,
   githubKeys,
+  getCommitDatetime,
   getOldestCommitShaForPath,
   listDefaultBranchCommits,
   listRepoTags,
@@ -127,10 +129,11 @@ export function useDetectedSubmissions({
                   // assignment with no milestone patterns — the common case,
                   // where students push submit/* tags via `gh student submit` —
                   // would detect nothing. submit/* is a glob, so it groups.
-                  return detectTagSubmissions(tags, [
+                  const entries = detectTagSubmissions(tags, [
                     ...(submissionTags ?? []),
                     `${SUBMISSION_TAG_PREFIX}*`,
                   ])
+                  return dateMilestoneTagEntries(client, org!, repo, entries)
                 }
                 // Branch mode: resolve the default branch, its baseline, and the
                 // commit log, then exclude the baseline commit.
@@ -192,6 +195,51 @@ export function useDetectedSubmissions({
       void refetch()
     },
   }
+}
+
+// At most this many per-commit date lookups per repo. Milestone patterns are
+// capped at 20 and repos typically carry 1-3, so the cap only bites on a
+// pathological tag set — where the newest submit/* time (free, from the tag
+// name) usually covers the row anyway.
+const MILESTONE_DATE_LOOKUP_CAP = 10
+
+// Fill the datetime of milestone tag entries by reading their tagged commit:
+// canonical submit/* names encode their time (already parsed by detection),
+// but a milestone tag's only time source is its commit. Lookups are deduped
+// by sha; a failed read leaves the entry dateless rather than voiding the
+// batch. Runs inside the caller's read slot, so the extra requests stay
+// within the fan-out's aggregate bound.
+async function dateMilestoneTagEntries(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+  entries: DetectedSubmission[],
+): Promise<DetectedSubmission[]> {
+  const dateless = entries.filter((e) => !e.datetime && e.sha)
+  if (dateless.length === 0) return entries
+
+  const shas = [...new Set(dateless.map((e) => e.sha!))].slice(
+    0,
+    MILESTONE_DATE_LOOKUP_CAP,
+  )
+  const dateBySha = new Map<string, string>()
+  for (const sha of shas) {
+    try {
+      const date = await getCommitDatetime(client, org, repo, sha)
+      if (date) dateBySha.set(sha, date)
+    } catch (err) {
+      // Best-effort enrichment: a failed lookup must not void the detection
+      // entries we already have. Cancellation still propagates.
+      if ((err as Error)?.name === "AbortError") throw err
+    }
+  }
+  if (dateBySha.size === 0) return entries
+
+  return entries.map((e) => {
+    if (e.datetime || !e.sha) return e
+    const date = dateBySha.get(e.sha)
+    return date ? { ...e, datetime: date } : e
+  })
 }
 
 export default useDetectedSubmissions

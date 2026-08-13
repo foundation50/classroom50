@@ -8,18 +8,23 @@ import {
   detectedTagLabel,
   detectedTagRef,
   jumpableTagEntries,
+  latestDetectedAt,
   resolveSubmissionMode,
   submissionModeBadgeKey,
   submissionModeCountKey,
+  submitTagDatetime,
 } from "./submissionDetection"
 import type { GitHubCommit, GitHubTag } from "@/github-core/types"
 import type { DetectedSubmission } from "./submissionDetection"
 
-function commit(sha: string): GitHubCommit {
+function commit(sha: string, date?: string): GitHubCommit {
   return {
     sha,
     html_url: `https://x/commit/${sha}`,
-    commit: { message: sha },
+    commit: {
+      message: sha,
+      committer: date ? { date } : undefined,
+    },
     author: null,
   }
 }
@@ -46,6 +51,56 @@ describe("detectBranchSubmissions", () => {
     const commits = [commit("c2"), commit("c1")]
     const detected = detectBranchSubmissions(commits, null)
     expect(detectedSubmissionCount(detected)).toBe(2)
+  })
+
+  it("carries each commit's time (committer date, else author date)", () => {
+    const authored: GitHubCommit = {
+      sha: "c1",
+      html_url: "https://x/commit/c1",
+      commit: { message: "c1", author: { date: "2026-06-01T00:00:00Z" } },
+      author: null,
+    }
+    const detected = detectBranchSubmissions(
+      [commit("c2", "2026-06-02T00:00:00Z"), authored],
+      null,
+    )
+    expect(detected.map((d) => d.datetime)).toEqual([
+      "2026-06-02T00:00:00Z",
+      "2026-06-01T00:00:00Z",
+    ])
+  })
+})
+
+describe("latestDetectedAt", () => {
+  it("returns the newest entry time regardless of order", () => {
+    const detected = detectBranchSubmissions(
+      [
+        commit("c1", "2026-06-01T00:00:00Z"),
+        commit("c2", "2026-06-03T00:00:00Z"),
+      ],
+      null,
+    )
+    expect(latestDetectedAt(detected)).toBe("2026-06-03T00:00:00Z")
+  })
+
+  it("returns null when no entry carries a time (tag detection)", () => {
+    const detected = detectTagSubmissions([tag("phase1")], ["phase1"])
+    expect(latestDetectedAt(detected)).toBeNull()
+    expect(latestDetectedAt(undefined)).toBeNull()
+  })
+
+  it("ignores unparseable datetimes", () => {
+    expect(
+      latestDetectedAt([
+        { kind: "commit", label: "bad", count: 1, datetime: "not-a-date" },
+        {
+          kind: "commit",
+          label: "ok",
+          count: 1,
+          datetime: "2026-06-02T00:00:00Z",
+        },
+      ]),
+    ).toBe("2026-06-02T00:00:00Z")
   })
 })
 
@@ -91,6 +146,51 @@ describe("detectTagSubmissions", () => {
     expect(detectedSubmissionCount(detected)).toBe(3)
     expect(detected[0]).toMatchObject({ kind: "tag", label: "v1" })
     expect(detected[1]).toMatchObject({ kind: "tag-group", count: 2 })
+  })
+
+  it("decodes a canonical submit/* tag's time from its name", () => {
+    const detected = detectTagSubmissions(
+      [tag("submit/2026-06-20T10-30-00Z-abc1234")],
+      ["submit/*"],
+    )
+    expect(detected[0].datetime).toBe("2026-06-20T10:30:00Z")
+  })
+
+  it("dates a submit/* group by its newest member and uses that member's sha", () => {
+    const older = tag("submit/2026-06-19T08-00-00Z-abc1234", "sha-old")
+    const newer = tag("submit/2026-06-21T09-00-00Z-def5678", "sha-new")
+    const detected = detectTagSubmissions([older, newer], ["submit/*"])
+    expect(detected[0]).toMatchObject({
+      kind: "tag-group",
+      count: 2,
+      sha: "sha-new",
+      datetime: "2026-06-21T09:00:00Z",
+    })
+  })
+
+  it("leaves a milestone tag/group dateless (its time comes from a commit lookup)", () => {
+    const detected = detectTagSubmissions(
+      [tag("phase1"), tag("v1"), tag("v2")],
+      ["phase1", "v*"],
+    )
+    expect(detected[0].datetime).toBeUndefined()
+    expect(detected[1].datetime).toBeUndefined()
+    // Without an encoded time the group keeps the list's first match as sha.
+    expect(detected[1].sha).toBe("sha-v1")
+  })
+})
+
+describe("submitTagDatetime", () => {
+  it("parses the buildSubmitTag format back to ISO", () => {
+    expect(submitTagDatetime("submit/2026-06-20T10-30-05Z-abc1234")).toBe(
+      "2026-06-20T10:30:05Z",
+    )
+  })
+
+  it("returns undefined for milestone and malformed names", () => {
+    expect(submitTagDatetime("phase1")).toBeUndefined()
+    expect(submitTagDatetime("submit/not-a-timestamp")).toBeUndefined()
+    expect(submitTagDatetime("submit/2026-06-20T10-30-05Z")).toBeUndefined()
   })
 })
 

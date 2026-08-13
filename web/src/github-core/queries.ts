@@ -53,6 +53,7 @@ export {
 export {
   listDefaultBranchCommits,
   listRepoTags,
+  getCommitDatetime,
   defaultBranchCommitsQuery,
   repoTagsQuery,
 } from "./queries/repoDetectionReads"

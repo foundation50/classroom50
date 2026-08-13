@@ -48,6 +48,8 @@ const base = {
 
 // A URL router for the branch-mode reads: repo object (default_branch),
 // the marker commit list (baseline), and the default-branch commit log.
+// Branch commits get a representative `commit` payload (the real list-commits
+// response always carries one) so detection can read the commit time.
 function branchClient(opts: {
   defaultBranch?: string | null
   baselineCommits?: Array<{ sha: string }>
@@ -63,7 +65,15 @@ function branchClient(opts: {
       return Promise.resolve(opts.baselineCommits ?? [])
     }
     if (url.includes("/commits?sha=")) {
-      return Promise.resolve(opts.branchCommits ?? [])
+      return Promise.resolve(
+        (opts.branchCommits ?? []).map((c) => ({
+          ...c,
+          commit: {
+            message: c.sha,
+            committer: { date: "2026-06-20T10:00:00Z" },
+          },
+        })),
+      )
     }
     return Promise.resolve([])
   }
@@ -147,15 +157,20 @@ describe("useDetectedSubmissions — branch mode", () => {
 
 describe("useDetectedSubmissions — tag mode", () => {
   it("groups glob-matching tags into one submission set", async () => {
-    request.mockImplementation((url: string) =>
-      url.includes("/tags")
-        ? Promise.resolve([
-            { name: "v1", commit: { sha: "a" } },
-            { name: "v2", commit: { sha: "b" } },
-            { name: "other", commit: { sha: "c" } },
-          ])
-        : Promise.resolve([]),
-    )
+    request.mockImplementation((url: string) => {
+      if (url.includes("/tags"))
+        return Promise.resolve([
+          { name: "v1", commit: { sha: "a" } },
+          { name: "v2", commit: { sha: "b" } },
+          { name: "other", commit: { sha: "c" } },
+        ])
+      if (url.includes("/commits/"))
+        return Promise.resolve({
+          sha: "a",
+          commit: { message: "m", committer: { date: "2026-06-20T10:00:00Z" } },
+        })
+      return Promise.resolve([])
+    })
     const { result } = renderHook(
       () =>
         useDetectedSubmissions({
@@ -172,7 +187,35 @@ describe("useDetectedSubmissions — tag mode", () => {
     expect(result.current.detected[0].entries[0]).toMatchObject({
       kind: "tag-group",
       label: "v*",
+      // A milestone group's time comes from its representative commit lookup.
+      datetime: "2026-06-20T10:00:00Z",
     })
+  })
+
+  it("leaves a milestone tag dateless when its commit lookup 404s, without erroring", async () => {
+    request.mockImplementation((url: string) => {
+      if (url.includes("/tags"))
+        return Promise.resolve([{ name: "phase1", commit: { sha: "a" } }])
+      if (url.includes("/commits/")) return Promise.reject(apiError(404))
+      return Promise.resolve([])
+    })
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "tag",
+          submissionTags: ["phase1"],
+          repoOwners: ["a"],
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.errorCount).toBe(0)
+    expect(result.current.detected[0].entries[0]).toMatchObject({
+      kind: "tag",
+      label: "phase1",
+    })
+    expect(result.current.detected[0].entries[0].datetime).toBeUndefined()
   })
 
   it("counts submit/* tags even with no milestone patterns configured", async () => {
@@ -208,6 +251,13 @@ describe("useDetectedSubmissions — tag mode", () => {
     expect(result.current.detected).toHaveLength(1)
     // The two submit/* tags group under the submit/* glob; "random" is ignored.
     expect(result.current.detected[0].count).toBe(2)
+    // Their time is decoded from the newest name — no commit lookup fired.
+    expect(result.current.detected[0].entries[0].datetime).toBe(
+      "2026-01-02T00:00:00Z",
+    )
+    expect(
+      request.mock.calls.some(([url]) => String(url).includes("/commits/")),
+    ).toBe(false)
   })
 })
 
@@ -217,6 +267,11 @@ describe("useDetectedSubmissions — fan-out contract", () => {
       if (url.includes("cs101-hw1-bad")) return Promise.reject(apiError(500))
       if (url.includes("/tags"))
         return Promise.resolve([{ name: "phase1", commit: { sha: "a" } }])
+      if (url.includes("/commits/"))
+        return Promise.resolve({
+          sha: "a",
+          commit: { message: "m", committer: { date: "2026-06-20T10:00:00Z" } },
+        })
       return Promise.resolve([])
     })
     const { result } = renderHook(

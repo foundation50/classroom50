@@ -137,10 +137,11 @@ export const SubmissionCountCell = ({
 // only sub-lines (late badge, graded-at, live-latest). The student view passes
 // only `datetime`, so the sub-lines collapse away.
 //
-// A detection-only / not-yet-collected teacher row carries no graded submission
-// time (empty `datetime`), so the primary line shows a neutral "not yet
-// collected" placeholder instead of a formatted "Invalid Date". A real latest-
-// push time, when known, still surfaces on the `liveLatestAt` sub-line.
+// A not-yet-collected teacher row without any detectable time (e.g. a
+// milestone tag whose commit lookup failed) carries an empty `datetime`, so
+// the primary line shows a neutral "not yet collected" placeholder instead of
+// a formatted "Invalid Date". Branch-mode commits, canonical submit/* tags,
+// and dated milestone tags all render a real timestamp.
 export const LastSubmittedCell = ({
   datetime,
   late = false,

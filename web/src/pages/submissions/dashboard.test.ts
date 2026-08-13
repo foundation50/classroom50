@@ -857,6 +857,17 @@ describe("buildScoresCsvRows", () => {
       release: "",
     })
   })
+
+  it("exports a blank submitted_at (not a crash) for a dateless pending row", () => {
+    // A detection-only row can still be dateless; toISOString on an
+    // Invalid Date would throw and break the whole export.
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["bob"], datetime: "", pending: true })],
+      [],
+    )
+    expect(out[0].submitted_at).toBe("")
+    expect(out[0].score).toBe("")
+  })
 })
 
 describe("selectActiveWorkflowAction", () => {
@@ -1422,6 +1433,97 @@ describe("mergeDetectedSubmissions", () => {
     const bob = merged.find((r) => r.owner === "bob")
     expect(bob?.pending).toBe(true)
     expect(bob?.detectedEntries).toEqual(entries)
+  })
+
+  it("gives a detection-only row the newest detected push time and lateness", () => {
+    // Branch-mode detection carries commit times; the pending row's "last
+    // submitted" must show WHEN the push landed, not "not yet collected".
+    const entries = [
+      {
+        kind: "commit" as const,
+        label: "bbb2222",
+        count: 1,
+        sha: "bbb2222",
+        datetime: "2026-06-22T10:00:00Z",
+      },
+      {
+        kind: "commit" as const,
+        label: "aaa1111",
+        count: 1,
+        sha: "aaa1111",
+        datetime: "2026-06-20T10:00:00Z",
+      },
+    ]
+    const merged = mergeDetectedSubmissions(
+      [],
+      [{ owner: "bob", count: 2, entries }],
+      "2026-06-21T00:00:00Z",
+    )
+    expect(merged[0].datetime).toBe("2026-06-22T10:00:00Z")
+    expect(merged[0].late).toBe(true)
+  })
+
+  it("leaves a dateless detection-only row's time empty and lateness unknown", () => {
+    // A tag entry can stay dateless (milestone tag whose commit lookup
+    // failed); never guess lateness.
+    const entries = [
+      { kind: "tag" as const, label: "phase1", count: 1, sha: "aaa1111" },
+    ]
+    const merged = mergeDetectedSubmissions(
+      [],
+      [{ owner: "bob", count: 1, entries }],
+      "2026-06-21T00:00:00Z",
+    )
+    expect(merged[0].datetime).toBe("")
+    expect(merged[0].late).toBeUndefined()
+  })
+
+  it("surfaces a newer detected push time on a count-raising row", () => {
+    const rows = [
+      row({
+        owner: "alice",
+        submissionCount: 1,
+        datetime: "2026-06-20T10:00:00Z",
+      }),
+    ]
+    const entries = [
+      {
+        kind: "commit" as const,
+        label: "bbb2222",
+        count: 1,
+        sha: "bbb2222",
+        datetime: "2026-06-25T10:00:00Z",
+      },
+    ]
+    const merged = mergeDetectedSubmissions(rows, [
+      { owner: "alice", count: 2, entries },
+    ])
+    expect(merged[0].liveLatestAt).toBe("2026-06-25T10:00:00Z")
+  })
+
+  it("never lets an older detection displace the row time or a newer live latest", () => {
+    const rows = [
+      row({
+        owner: "alice",
+        submissionCount: 1,
+        datetime: "2026-06-20T10:00:00Z",
+        liveLatestAt: "2026-06-26T10:00:00Z",
+      }),
+    ]
+    const entries = [
+      {
+        kind: "commit" as const,
+        label: "bbb2222",
+        count: 1,
+        sha: "bbb2222",
+        datetime: "2026-06-25T10:00:00Z",
+      },
+    ]
+    const merged = mergeDetectedSubmissions(rows, [
+      { owner: "alice", count: 2, entries },
+    ])
+    expect(merged[0].liveLatestAt).toBe("2026-06-26T10:00:00Z")
+    expect(merged[0].datetime).toBe("2026-06-20T10:00:00Z")
   })
 })
 
