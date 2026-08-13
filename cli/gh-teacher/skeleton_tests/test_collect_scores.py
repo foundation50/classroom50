@@ -1210,6 +1210,27 @@ class TestCollectClassroomTeamDriven:
         assert mode_flip == 0
         assert "have no members" in capsys.readouterr().err
 
+    def test_unknown_assignment_mode_warns_and_collects_as_individual(
+        self, monkeypatch, capsys
+    ):
+        # A typo'd mode (e.g. "grupo") must not silently collect as an
+        # individual assignment: every submission would be rejected by the
+        # owner-identity check and read as a mode flip. Warn loudly, then
+        # proceed with the individual default (today's fallback behavior).
+        stub_team_members(monkeypatch, ["alice"])
+        monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
+        cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={},
+            assignments={"assignments": [
+                {"slug": "hello", "name": "H", "mode": "grupo", "tests": []}
+            ]},
+            service_token="token",
+        )
+        err = capsys.readouterr().err
+        assert "grupo" in err
+        assert "individual" in err
+
     def test_team_read_404_warns_and_skips(self, monkeypatch, capsys):
         import urllib.error
 
@@ -1861,6 +1882,17 @@ class TestErrorClassification:
                 "token",
             )
 
+    def test_missing_asset_error_names_the_release_not_latest(self):
+        # download_result_asset runs once PER release (the full history walk),
+        # so its error must name the release it inspected — "latest submit
+        # release" would misdirect debugging toward the wrong release.
+        with pytest.raises(cs.AssetMissingError, match="submit/2026-06-01T10-00-00Z"):
+            cs.download_result_asset(
+                "https://api.github.com",
+                {"tag_name": "submit/2026-06-01T10-00-00Z", "assets": []},
+                "token",
+            )
+
     def test_duplicate_result_assets_are_rejected(self):
         # Normal releases have a single result.json (library uses
         # --clobber). Duplicates make grading ambiguous, so reject.
@@ -2136,6 +2168,28 @@ class TestAllSubmitReleases:
         monkeypatch.setattr(cs, "_http_get_with_headers", boom)
         assert cs.all_submit_releases("https://api.github.com", "o", "r", "token") == []
 
+    def test_skips_draft_releases(self, monkeypatch):
+        # A read-write token also sees draft releases. The runner never
+        # publishes drafts, so a draft submit/* tag is hand-made noise — a
+        # draft's assets aren't downloadable via the public asset URL either,
+        # so ingesting it would fail downstream. Skip drafts entirely.
+        body = json.dumps([
+            {"tag_name": "submit/2026-06-03T10-00-00Z", "draft": True},
+            {"tag_name": "submit/2026-06-01T10-00-00Z", "draft": False},
+            {"tag_name": "submit/2026-05-01T10-00-00Z"},
+        ]).encode("utf-8")
+
+        class NoHeaders:
+            def get(self, name):
+                return None
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", lambda *a, **k: (body, NoHeaders()))
+        releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
+        assert [r["tag_name"] for r in releases] == [
+            "submit/2026-06-01T10-00-00Z",
+            "submit/2026-05-01T10-00-00Z",
+        ]
+
     def test_paginates_via_link_header(self, monkeypatch):
         page1 = json.dumps([{"tag_name": f"submit/p1-{i}"} for i in range(100)]).encode("utf-8")
         page2 = json.dumps([{"tag_name": "submit/last"}]).encode("utf-8")
@@ -2185,6 +2239,32 @@ class TestMain:
         monkeypatch.setenv("GH_API_URL", "http://127.0.0.1:9999")
         assert cs.main() == 0
         assert seen == ["http://127.0.0.1:9999"]
+
+    def test_filter_matching_no_classroom_exits_nonzero(self, tmp_path, monkeypatch, capsys):
+        # A dispatch scoped to a classroom that doesn't exist in the config
+        # repo (typo, or the repo checkout predates the classroom) must FAIL,
+        # not report a successful run that collected nothing — the web app's
+        # freshness tracking treats a green run as "collected".
+        write_minimal_classroom(tmp_path)
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        monkeypatch.setenv("CLASSROOM_FILTER", "no-such-classroom")
+
+        assert cs.main() == 1
+        err = capsys.readouterr().err
+        assert "no-such-classroom" in err
+
+    def test_no_classrooms_without_filter_still_exits_zero(self, tmp_path, monkeypatch):
+        # An empty config repo with the nightly cron enabled legitimately has
+        # nothing to collect — that stays a clean no-op, unlike a no-match
+        # explicit filter.
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        monkeypatch.delenv("CLASSROOM_FILTER", raising=False)
+
+        assert cs.main() == 0
 
     def test_hard_http_error_prints_actionable_message(self, tmp_path, monkeypatch, capsys):
         # Hard HTTP failures must surface a clean workflow error,

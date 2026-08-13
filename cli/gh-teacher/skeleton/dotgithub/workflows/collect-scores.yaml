@@ -67,6 +67,18 @@ jobs:
             git add '*/scores.json'
             git -c user.name=classroom50-bot -c user.email=bot@classroom50 \
                 commit -m "[Classroom 50] collect: refresh scores.json"
+            # The branch can advance mid-run (a teacher edit, or a collect
+            # scoped to another classroom — the concurrency group only
+            # serializes same-scope runs). Rebase our scores.json commit onto
+            # the new tip and retry instead of failing the whole collection.
+            for attempt in 1 2 3; do
+              if git push; then
+                exit 0
+              fi
+              echo "push rejected (attempt ${attempt}); rebasing onto the remote tip"
+              git -c user.name=classroom50-bot -c user.email=bot@classroom50 \
+                  pull --rebase
+            done
             git push
           else
             echo "no scores.json changes to commit"

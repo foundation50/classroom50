@@ -145,10 +145,16 @@ def main() -> int:
 
     classroom_dirs = list(iter_classrooms(base_dir, classroom_filter))
     if not classroom_dirs:
-        msg = f"no classrooms found in {base_dir}"
         if classroom_filter:
-            msg += f" matching CLASSROOM_FILTER={classroom_filter!r}"
-        print(msg)
+            # An explicit filter matching nothing is a FAILED run (typo, or a
+            # stale checkout) — a green run that collected nothing would read
+            # as "collected" to the web app's freshness tracking.
+            emit_error(
+                f"no classroom in {base_dir} matches "
+                f"CLASSROOM_FILTER={classroom_filter!r}"
+            )
+            return 1
+        print(f"no classrooms found in {base_dir}")
         return 0
 
     total_changes = 0
@@ -574,7 +580,19 @@ def collect_classroom(
                 f"timestamp with timezone; skipping late-marking for this assignment"
             )
 
-        is_group = (entry.get("mode") or "").lower() == "group"
+        raw_mode = entry.get("mode")
+        is_group = (raw_mode or "").lower() == "group"
+        if isinstance(raw_mode, str) and raw_mode and raw_mode.lower() not in (
+            "individual",
+            "group",
+        ):
+            # A typo'd mode would silently collect as individual and reject
+            # every group submission via the owner-identity check (reading as
+            # a mode flip) — name the real cause up front.
+            emit_warning(
+                f"{classroom_short}/{slug}: unknown mode {raw_mode!r} — "
+                f"expected 'individual' or 'group'; collecting as individual"
+            )
         assignment_type = "group" if is_group else "individual"
 
         submitted = 0
@@ -1017,7 +1035,7 @@ class ScoresFileError(Exception):
 
 
 class AssetMissingError(Exception):
-    """Raised when the latest submit release has no result.json asset."""
+    """Raised when a submit release has no result.json asset."""
 
 
 def strict_json_loads(raw: str) -> Any:
@@ -1453,6 +1471,11 @@ def all_submit_releases(
                     f"GET {url}: expected release object at index {i}, got {type(release).__name__}"
                 )
             if (release.get("tag_name") or "").startswith(SUBMIT_TAG_PREFIX):
+                # A read-write token also lists draft releases. The runner
+                # never publishes drafts, so a draft submit/* tag is hand-made
+                # noise whose assets aren't downloadable anyway — skip it.
+                if release.get("draft") is True:
+                    continue
                 releases.append(release)
         link_header = headers.get("Link") if headers else None
         next_url = _next_page_link(link_header)
@@ -1712,10 +1735,16 @@ def download_result_asset(
         c for c in (release.get("assets") or [])
         if (c.get("name") or "").lower() == RESULT_ASSET_NAME
     ]
+    # Runs once per release in the history walk, so errors name THIS release.
+    release_label = release.get("tag_name") or release.get("url") or "release"
     if not matches:
-        raise AssetMissingError(f"{RESULT_ASSET_NAME} asset missing from latest submit release")
+        raise AssetMissingError(
+            f"{RESULT_ASSET_NAME} asset missing from {release_label}"
+        )
     if len(matches) > 1:
-        raise ValueError(f"latest submit release has {len(matches)} {RESULT_ASSET_NAME} assets")
+        raise ValueError(
+            f"{release_label} has {len(matches)} {RESULT_ASSET_NAME} assets"
+        )
 
     asset_url = matches[0].get("url")
     if not asset_url:
