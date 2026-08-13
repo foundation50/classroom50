@@ -1,4 +1,4 @@
-import { Info, RefreshCw } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Alert, Button, cx } from "@/components/ui"
@@ -12,6 +12,8 @@ import { Alert, Button, cx } from "@/components/ui"
 // to flag that the snapshot is out of date; otherwise it's a quiet "Refresh
 // submissions". Following data-freshness UX guidance: never let
 // stale data look authoritative, and give the user a direct way to refresh it.
+// Assignments that skip built-in grading have no collect/freshness at all —
+// the page omits this component and the header's grading badge explains why.
 export type DataFreshnessProps = {
   // Relative "x ago" of the last completed collect run — when the submission
   // data was produced org-wide. Null when never collected.
@@ -27,12 +29,6 @@ export type DataFreshnessProps = {
   // Repos the live fan-out couldn't read (owner only); > 0 shows a warning so
   // an incomplete live status doesn't look authoritative.
   errorCount?: number
-  // The assignment skips built-in grading (empty_repo OR no_autograder — fed
-  // skipsGrading); show a note instead of freshness. noAutograder picks the note.
-  emptyRepo?: boolean
-  // no_autograder assignments also never autograde, but keep the Feedback PR —
-  // pick the accurate note (only meaningful when emptyRepo is true).
-  noAutograder?: boolean
 }
 
 export function DataFreshness({
@@ -41,25 +37,8 @@ export function DataFreshness({
   collecting,
   onRefresh,
   errorCount = 0,
-  emptyRepo = false,
-  noAutograder = false,
 }: DataFreshnessProps) {
   const { t } = useTranslation()
-
-  if (emptyRepo) {
-    return (
-      <div className="flex items-start gap-2 text-sm text-base-content/70">
-        <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        <p>
-          {t(
-            noAutograder
-              ? "submissions.noAutograderNote"
-              : "submissions.emptyRepoNote",
-          )}
-        </p>
-      </div>
-    )
-  }
 
   const collectedLine = lastCollectedLabel
     ? t("submissions.freshness.collected", { when: lastCollectedLabel })

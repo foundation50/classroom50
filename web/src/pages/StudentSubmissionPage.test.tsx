@@ -117,6 +117,27 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
+describe("StudentSubmissionPage grading badge", () => {
+  it("shows the autograded badge for built-in autograding", () => {
+    render(<StudentSubmissionPage />)
+    expect(screen.getByText("submissions.grading.badgeBuiltIn")).toBeTruthy()
+  })
+
+  it("shows the teacher-CI badge for no_autograder assignments", () => {
+    assignmentData = assignment({ no_autograder: true })
+    render(<StudentSubmissionPage />)
+    expect(
+      screen.getByText("submissions.grading.badgeNoAutograder"),
+    ).toBeTruthy()
+  })
+
+  it("shows the no-autograding badge for empty_repo assignments", () => {
+    assignmentData = assignment({ empty_repo: true })
+    render(<StudentSubmissionPage />)
+    expect(screen.getByText("submissions.grading.badgeEmptyRepo")).toBeTruthy()
+  })
+})
+
 describe("StudentSubmissionPage submission type", () => {
   it("shows the every-push type badge and the push-count chip by default", () => {
     assignmentData = assignment({ submission_mode: "every-push" })

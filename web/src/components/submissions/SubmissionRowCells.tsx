@@ -1,11 +1,12 @@
 import { useTranslation } from "react-i18next"
-import { GitCommitHorizontal, Tag } from "lucide-react"
+import { Bot, CircleOff, GitCommitHorizontal, Tag } from "lucide-react"
 
 import { Badge, type BadgeSize } from "@/components/ui"
 import {
   submissionModeBadgeKey,
   submissionModeCountKey,
 } from "@/domain/assignments/submissionDetection"
+import type { AutogradingState } from "@/domain/assignments/autogradingState"
 import { formatSubmissionDateTime } from "@/util/formatDate"
 import type { SubmissionMode } from "@/types/classroom"
 
@@ -26,22 +27,66 @@ export const SubmissionModeIcon = ({
   )
 
 // The "what counts as a submission" mode badge, shared by the teacher heading
-// and the student page so their wording can't drift. `skipsGrading` drops the
-// "is graded" claim for assignments that never autograde.
+// and the student page so their wording can't drift. Grading is described by
+// the separate AutogradingBadge, so this badge never claims a grade.
 export const SubmissionModeBadge = ({
   mode,
-  skipsGrading = false,
   size,
 }: {
   mode: SubmissionMode | undefined
-  skipsGrading?: boolean
   size?: BadgeSize
 }) => {
   const { t } = useTranslation()
   return (
     <Badge ghost size={size} className="gap-1">
       <SubmissionModeIcon mode={mode} />
-      {t(submissionModeBadgeKey(mode, skipsGrading))}
+      {t(submissionModeBadgeKey(mode))}
+    </Badge>
+  )
+}
+
+// Label + hover detail per autograding tri-state. Built-in autograding needs
+// no elaboration; the two no-grading states carry the "what's disabled / what
+// still works" detail that used to be a full-width dashboard note.
+const autogradingBadgeContent: Record<
+  AutogradingState,
+  { label: string; title?: string }
+> = {
+  "built-in": { label: "submissions.grading.badgeBuiltIn" },
+  none: {
+    label: "submissions.grading.badgeNoAutograder",
+    title: "submissions.grading.titleNoAutograder",
+  },
+  empty: {
+    label: "submissions.grading.badgeEmptyRepo",
+    title: "submissions.grading.titleEmptyRepo",
+  },
+}
+
+// The "how is it graded" badge, paired with SubmissionModeBadge on the teacher
+// heading and the student page. Keyed off the autograding tri-state so the
+// 2-mode x 3-grading combinations stay two independent badges. The detail is
+// hover text for sighted users and sr-only text for screen readers.
+export const AutogradingBadge = ({
+  state,
+  size,
+}: {
+  state: AutogradingState
+  size?: BadgeSize
+}) => {
+  const { t } = useTranslation()
+  const { label, title } = autogradingBadgeContent[state]
+  const Icon = state === "built-in" ? Bot : CircleOff
+  return (
+    <Badge
+      ghost
+      size={size}
+      className="gap-1"
+      title={title ? t(title) : undefined}
+    >
+      <Icon aria-hidden="true" className="size-3.5" />
+      {t(label)}
+      {title && <span className="sr-only">{t(title)}</span>}
     </Badge>
   )
 }

@@ -24,10 +24,13 @@ import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal
 import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
-import { SubmissionModeBadge } from "@/components/submissions/SubmissionRowCells"
+import {
+  AutogradingBadge,
+  SubmissionModeBadge,
+} from "@/components/submissions/SubmissionRowCells"
 import {
   assignmentSkipsGrading,
-  isNoAutograderAssignment,
+  deriveAutogradingState,
 } from "@/domain/assignments/autogradingState"
 import { DataFreshness } from "@/pages/submissions/DataFreshness"
 import { ConfirmModal } from "@/components/modals"
@@ -169,9 +172,9 @@ const SubmissionsPageContent = () => {
   // Assignments that never autograde (empty_repo bare repos, or no_autograder
   // teacher-supplied CI) produce no submit/* releases. Grading UI (Regrade all,
   // per-row regrade, scores, live polling, the trigger retrofit) is hidden and
-  // a notice explains why. Collect stays enabled — it's org-wide and
-  // collect_scores.py skips these assignments itself. Mirrors the Python
-  // skips_grading() predicate family.
+  // the header's grading badge explains why. Collect stays enabled — it's
+  // org-wide and collect_scores.py skips these assignments itself. Mirrors the
+  // Python skips_grading() predicate family.
   const skipsGrading = assignmentInfo
     ? assignmentSkipsGrading(assignmentInfo)
     : false
@@ -179,11 +182,6 @@ const SubmissionsPageContent = () => {
   // repo-management bulk actions (access/features) key off this — a
   // no_autograder repo is templated and DOES have repos to manage.
   const isEmptyRepoAssignment = assignmentInfo?.empty_repo === true
-  // Distinguishes the two skips-grading states for the freshness note wording
-  // (no_autograder keeps the Feedback PR; empty_repo does not).
-  const isNoAutograder = assignmentInfo
-    ? isNoAutograderAssignment(assignmentInfo)
-    : false
   // Locked assignments are closed to students (accept + submission surfaces
   // refuse them); the gradebook stays fully functional for staff, so this is a
   // heads-up banner, not a gate.
@@ -947,11 +945,16 @@ const SubmissionsPageContent = () => {
               </Badge>
             )}
             {assignmentInfo && (
-              <SubmissionModeBadge
-                mode={assignmentInfo.submission_mode}
-                skipsGrading={skipsGrading}
-                size="md"
-              />
+              <>
+                <SubmissionModeBadge
+                  mode={assignmentInfo.submission_mode}
+                  size="md"
+                />
+                <AutogradingBadge
+                  state={deriveAutogradingState(assignmentInfo)}
+                  size="md"
+                />
+              </>
             )}
             {assignmentInfo?.template && (
               <GitHubLink
@@ -1074,33 +1077,35 @@ const SubmissionsPageContent = () => {
         // name-ordered, unfiltered view, so hide Sort + Status while live.
         hideSortAndStatus={liveCapable}
         onShare={() => setAcceptOpen(true)}
+        // No collect/freshness exists for assignments that skip built-in
+        // grading — the header's grading badge explains why.
         leading={
-          <DataFreshness
-            lastCollectedLabel={lastCollectedLabel}
-            stale={snapshotStale}
-            collecting={collecting}
-            errorCount={liveErrorCount}
-            emptyRepo={skipsGrading}
-            noAutograder={isNoAutograder}
-            onRefresh={
-              collecting || emptyRoster.show
-                ? undefined
-                : () => {
-                    // Sync = re-collect (rebuild scores.json). Re-read the org
-                    // repo list too so the staleness line re-derives against the
-                    // newest pushes (latestPush would otherwise stay frozen at
-                    // page load), and re-run the live fan-out for a live-capable
-                    // viewer so presence refreshes alongside the dispatched
-                    // collect.
-                    collectScores.collect()
-                    refetchOrgRepos()
-                    if (liveCapable) {
-                      refetchLive()
-                      refetchDetected()
+          skipsGrading ? undefined : (
+            <DataFreshness
+              lastCollectedLabel={lastCollectedLabel}
+              stale={snapshotStale}
+              collecting={collecting}
+              errorCount={liveErrorCount}
+              onRefresh={
+                collecting || emptyRoster.show
+                  ? undefined
+                  : () => {
+                      // Sync = re-collect (rebuild scores.json). Re-read the org
+                      // repo list too so the staleness line re-derives against the
+                      // newest pushes (latestPush would otherwise stay frozen at
+                      // page load), and re-run the live fan-out for a live-capable
+                      // viewer so presence refreshes alongside the dispatched
+                      // collect.
+                      collectScores.collect()
+                      refetchOrgRepos()
+                      if (liveCapable) {
+                        refetchLive()
+                        refetchDetected()
+                      }
                     }
-                  }
-            }
-          />
+              }
+            />
+          )
         }
         trailing={
           <SubmissionsActionsMenu
