@@ -45,6 +45,8 @@ type ScoreEntry = {
 type AssignmentBucket = {
   type: "individual" | "group"
   entries: ScoreEntry[]
+  // e.g. the collector's `collected_at` — preserved verbatim on RMW.
+  [key: string]: unknown
 }
 
 type ScoresFile = {
@@ -267,8 +269,11 @@ export async function editScoreOverride(
       }
     }
 
-    // Drop an emptied bucket so the file stays clean.
-    if (bucket.entries.length === 0) {
+    // Drop an emptied bucket so the file stays clean — unless the collector
+    // stamped it: an empty `{type, entries: [], collected_at}` bucket is the
+    // deliberate "checked at T, nothing found" freshness marker, and deleting
+    // it would regress the page to the org-wide run fallback.
+    if (bucket.entries.length === 0 && !("collected_at" in bucket)) {
       delete scores.assignments[assignment]
     } else {
       scores.assignments[assignment] = bucket

@@ -18,8 +18,10 @@ type File struct {
 
 // AssignmentBucket is one assignment's gradebook — its mode (`type`) plus
 // per-repo entries. Each entry decodes as a tolerant map[string]any (download
-// reads only a few well-known keys).
+// reads only a few well-known keys). CollectedAt is the optional per-bucket
+// freshness stamp written by collect_scores.py; empty when absent.
 type AssignmentBucket struct {
-	Type    string           `json:"type"`
-	Entries []map[string]any `json:"entries"`
+	Type        string           `json:"type"`
+	Entries     []map[string]any `json:"entries"`
+	CollectedAt string           `json:"collected_at,omitempty"`
 }

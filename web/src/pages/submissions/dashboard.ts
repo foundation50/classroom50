@@ -4,6 +4,7 @@
 
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/github-core/types"
+import { latestDetectedAt } from "@/domain/assignments/submissionDetection"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import type { Student } from "@/types/classroom"
 import type { BadgeTone } from "@/components/ui"
@@ -12,6 +13,7 @@ import { rowToStudent } from "@/util/teamRoster"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import { getName, nameFromParts } from "@/util/students"
 import { studentRepoName } from "@/util/studentRepo"
+import { escapeCsvFormulaInjection } from "@/util/csv"
 
 // Whether a row's grade still belongs to a current roster member. A row is
 // credited to `usernames` (group members, else [owner]); keep it when ANY
@@ -108,6 +110,9 @@ export type LiveSubmissionPresence = {
 export function mergeLiveRows(
   snapshotRows: SubmissionRow[],
   liveRows: LiveSubmissionPresence[],
+  // The assignment's due date (ISO), used only to derive `late` for PENDING
+  // live-only rows — collected rows keep the collector-computed `late`.
+  dueDate?: string | null,
 ): SubmissionRow[] {
   const liveByOwner = new Map<string, LiveSubmissionPresence>()
   for (const live of liveRows) {
@@ -153,10 +158,28 @@ export function mergeLiveRows(
       // At least 1 (the release we just saw); use the live count when higher.
       submissionCount: Math.max(1, live.submissionCount),
       pending: true,
+      // The collector isn't here to compute `late` for this not-yet-collected
+      // row, so derive it from the live submission time vs the due date —
+      // otherwise a pending late submission reads as on-time until the next
+      // collect. Left undefined (never guessed) without a parseable pair.
+      late: liveLateness(live.datetime, dueDate),
       submissions: [],
     }))
 
   return [...merged, ...liveOnly]
+}
+
+// `late` for a pending live row: submission time strictly after the due date.
+// Undefined (unknown, not "on time") when either side is missing/unparseable.
+function liveLateness(
+  submittedAt: string,
+  dueDate: string | null | undefined,
+): boolean | undefined {
+  if (!dueDate) return undefined
+  const submittedMs = new Date(submittedAt).getTime()
+  const dueMs = new Date(dueDate).getTime()
+  if (!Number.isFinite(submittedMs) || !Number.isFinite(dueMs)) return undefined
+  return submittedMs > dueMs
 }
 
 // Detected-submission presence for one repo, from the detection subsystem
@@ -175,10 +198,17 @@ export type DetectedPresence = {
 // mergeLiveRows: detection can only REVEAL more submissions than are already
 // counted (max wins), never fewer, and never sets a score. A detection-only
 // owner (pushes/tags but no submit/* release and no snapshot entry) becomes a
-// pending row so the teacher sees the work exists, ungraded.
+// pending row so the teacher sees the work exists, ungraded — carrying the
+// newest detected submission time (commit dates in branch mode; encoded
+// submit/* timestamps or milestone commit lookups in tag mode) so the "last
+// submitted" cell shows when the work landed instead of a bare "not yet
+// collected".
 export function mergeDetectedSubmissions(
   rows: SubmissionRow[],
   detected: DetectedPresence[],
+  // The assignment's due date (ISO), used only to derive `late` for PENDING
+  // detection-only rows — mirrors the mergeLiveRows parameter.
+  dueDate?: string | null,
 ): SubmissionRow[] {
   const detectedByOwner = new Map<string, DetectedPresence>()
   for (const d of detected) {
@@ -203,6 +233,12 @@ export function mergeDetectedSubmissions(
       ...withEntries,
       submissionCount: d.count,
       staleCount: !row.overridden,
+      // Surface the newest detected push on the live sub-line when it beats
+      // both the row's recorded time and any release-based live latest, so a
+      // stale-count row says WHEN the newer work landed, not just that it did.
+      liveLatestAt:
+        newerDetectedAt(d.entries, row.datetime, row.liveLatestAt) ??
+        row.liveLatestAt,
     }
   })
 
@@ -212,22 +248,66 @@ export function mergeDetectedSubmissions(
     .filter(
       (d) => d.count > 0 && !knownOwners.has(d.owner.trim().toLowerCase()),
     )
-    .map<SubmissionRow>((d) => ({
-      usernames: [d.owner],
-      owner: d.owner,
-      datetime: "",
-      commit: "",
-      release: "",
-      review: "",
-      score: 0,
-      "max-score": 0,
-      submissionCount: Math.max(1, d.count),
-      pending: true,
-      detectedEntries: d.entries,
-      submissions: [],
-    }))
+    .map<SubmissionRow>((d) => {
+      const detectedAt = latestDetectedAt(d.entries) ?? ""
+      return {
+        usernames: [d.owner],
+        owner: d.owner,
+        datetime: detectedAt,
+        commit: "",
+        release: "",
+        review: "",
+        score: 0,
+        "max-score": 0,
+        submissionCount: Math.max(1, d.count),
+        pending: true,
+        // Derive `late` only from a trustworthy time. A commit's committer
+        // date is server-recorded on push; a tag entry's time is decoded from
+        // the student-authored `submit/<ts>` tag NAME, which a student can
+        // backdate to read on-time. So only branch-mode commit entries feed
+        // lateness here; a tag-mode pending row leaves `late` undefined until
+        // the collector marks it from the authoritative release datetime.
+        late: liveLateness(latestCommitDetectedAt(d.entries), dueDate),
+        detectedEntries: d.entries,
+        submissions: [],
+      }
+    })
 
   return [...merged, ...detectedOnly]
+}
+
+// The newest detected time when it's strictly newer than BOTH reference
+// instants (the row's recorded submission and any already-set live latest);
+// null otherwise, so an older/equal detection never displaces either.
+function newerDetectedAt(
+  entries: DetectedSubmission[] | undefined,
+  rowDatetime: string,
+  currentLiveLatestAt: string | undefined,
+): string | null {
+  const detectedAt = latestDetectedAt(entries)
+  if (!detectedAt) return null
+  const detectedMs = new Date(detectedAt).getTime()
+  if (!Number.isFinite(detectedMs)) return null
+  for (const reference of [rowDatetime, currentLiveLatestAt]) {
+    if (!reference) continue
+    const referenceMs = new Date(reference).getTime()
+    if (Number.isFinite(referenceMs) && detectedMs <= referenceMs) return null
+  }
+  return detectedAt
+}
+
+// The newest time among branch-mode COMMIT detections only, or "" when none
+// carry one. Used to derive `late` for a pending row: a commit's committer
+// date is server-recorded on push, whereas a tag entry's time is decoded from
+// the student-authored `submit/<ts>` tag name and can be backdated to dodge a
+// late flag — so tag times must never feed lateness (the collector marks tag
+// lateness later from the authoritative release datetime).
+function latestCommitDetectedAt(
+  entries: DetectedSubmission[] | undefined,
+): string {
+  return (
+    latestDetectedAt((entries ?? []).filter((e) => e.kind === "commit")) ?? ""
+  )
 }
 
 // The most recent push time across this assignment's repos, or null when none
@@ -304,6 +384,39 @@ export function latestCollectedAt(
   if (!aOk) return b ?? null
   if (!bOk) return a ?? null
   return aMs >= bMs ? (a ?? null) : (b ?? null)
+}
+
+/**
+ * The assignment page's "last collected" instant. Precedence:
+ *
+ * 1. Bucket stamp (`collected_at`) — authoritative for THIS assignment; the
+ *    tracked run we just dispatched still participates (it's scoped to this
+ *    very assignment and finishes before the scores.json refetch lands).
+ * 2. No stamp but the collector is stamp-aware (another bucket carries one):
+ *    the latest successful run may have been a scoped sync of a DIFFERENT
+ *    assignment (the runs API can't see dispatch inputs), so borrowing the
+ *    org-wide run timestamp would read "just collected" for a bucket no run
+ *    walked. Only our own tracked dispatch counts.
+ * 3. Wholly unstamped file — a pre-stamp collector, where every run was
+ *    org-wide, so the run-based fallback stays sound.
+ */
+export function effectiveCollectedAt(params: {
+  bucketCollectedAt: string | null
+  collectorStampsBuckets: boolean
+  lastRunCompletedAt: string | null
+  trackedCompletedAt: string | null
+}): string | null {
+  const {
+    bucketCollectedAt,
+    collectorStampsBuckets,
+    lastRunCompletedAt,
+    trackedCompletedAt,
+  } = params
+  if (bucketCollectedAt) {
+    return latestCollectedAt(bucketCollectedAt, trackedCompletedAt)
+  }
+  if (collectorStampsBuckets) return trackedCompletedAt
+  return latestCollectedAt(lastRunCompletedAt, trackedCompletedAt)
 }
 
 // Whether a row passes the threshold. Ungraded when the assignment sets no
@@ -844,22 +957,30 @@ export function buildScoresCsvRows(
       (a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime(),
     )
     .map(({ usernames, score, datetime, submissionCount, late, ...rest }) => ({
-      usernames: usernames.join(", "),
+      // Free-text columns can carry student-influenceable content (a repo/
+      // commit/release/review URL, a group's joined logins), so neutralize
+      // spreadsheet formula injection on them. The numeric/enum/timestamp
+      // columns below are our own generated values and must round-trip
+      // byte-exact, so they are NOT escaped.
+      usernames: escapeCsvFormulaInjection(usernames.join(", ")),
       // A pending live row (submitted, not yet collected) has no real grade —
       // export a blank score, not a 0, so importing the CSV can't record a
       // graded zero for a student who actually submitted.
       score: rest.pending ? "" : score,
       max_score: rest.pending ? "" : rest["max-score"],
       submissions: submissionCount,
-      submitted_at: new Date(datetime).toISOString(),
+      // A detection-only row can still be dateless (e.g. a milestone tag
+      // whose commit lookup failed) — export a blank rather than crashing on
+      // Invalid Date.
+      submitted_at: isoOrBlank(datetime),
       late: late ? "yes" : "no",
-      commit: rest.commit,
-      review: rest.review,
-      release: rest.release,
+      commit: escapeCsvFormulaInjection(rest.commit),
+      review: escapeCsvFormulaInjection(rest.review),
+      release: escapeCsvFormulaInjection(rest.release),
     }))
 
   const nonSubmittedRows: ScoresCsvRow[] = nonSubmitters.map((student) => ({
-    usernames: student.username,
+    usernames: escapeCsvFormulaInjection(student.username),
     score: 0,
     max_score: "",
     submissions: 0,
@@ -871,6 +992,12 @@ export function buildScoresCsvRows(
   }))
 
   return [...submittedRows, ...nonSubmittedRows]
+}
+
+// The ISO form of a row's submission time, or "" for an absent/unparseable one.
+function isoOrBlank(datetime: string): string {
+  const ms = new Date(datetime).getTime()
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : ""
 }
 
 // Which workflow action a single contextual "View …" link points at, and which

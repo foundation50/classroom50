@@ -295,6 +295,12 @@ export type GitHubCommit = {
       name?: string
       date?: string
     }
+    // Committer date is when the commit object was (re)created — the better
+    // "when was this pushed" proxy, since author date survives rebases.
+    committer?: {
+      name?: string
+      date?: string
+    }
   }
   // The GitHub account, when the commit author is a known user (null for a
   // workflow/bot-authored commit that isn't linked to an account).

@@ -51,7 +51,7 @@ import {
   filterNonSubmitters,
   hasAccepted,
   latestAssignmentPush,
-  latestCollectedAt,
+  effectiveCollectedAt,
   mergeDetectedSubmissions,
   mergeLiveRows,
   reconcileNonSubmitters,
@@ -98,6 +98,7 @@ import {
   REGRADE_WORKFLOW,
 } from "@/github-core/workflows"
 import { githubKeys } from "@/github-core/queries"
+import { CollectInputsUnsupportedError } from "@/github-core/mutations"
 import {
   formatDueDateTime,
   formatRelativeToNow,
@@ -172,9 +173,10 @@ const SubmissionsPageContent = () => {
   // Assignments that never autograde (empty_repo bare repos, or no_autograder
   // teacher-supplied CI) produce no submit/* releases. Grading UI (Regrade all,
   // per-row regrade, scores, live polling, the trigger retrofit) is hidden and
-  // the header's grading badge explains why. Collect stays enabled — it's
-  // org-wide and collect_scores.py skips these assignments itself. Mirrors the
-  // Python skips_grading() predicate family.
+  // the header's grading badge explains why — including collect/freshness,
+  // since a collect scoped to this assignment would be skipped by
+  // collect_scores.py anyway. Mirrors the Python skips_grading() predicate
+  // family.
   const skipsGrading = assignmentInfo
     ? assignmentSkipsGrading(assignmentInfo)
     : false
@@ -482,6 +484,7 @@ const SubmissionsPageContent = () => {
         release: s.releaseUrl,
         submissionCount: s.submissionCount,
       })),
+      assignmentInfo?.due,
     )
     const merged = mergeDetectedSubmissions(
       withLive,
@@ -490,6 +493,7 @@ const SubmissionsPageContent = () => {
         count: d.count,
         entries: d.entries,
       })),
+      assignmentInfo?.due,
     )
     return rosterReady ? rosterScopedRows(merged, students) : merged
   }, [
@@ -499,6 +503,7 @@ const SubmissionsPageContent = () => {
     detectedSubmissions,
     rosterReady,
     students,
+    assignmentInfo?.due,
   ])
 
   // Repos whose latest submission landed after the deadline. `late` is computed
@@ -733,7 +738,13 @@ const SubmissionsPageContent = () => {
     })
   }, [effectiveFilters, query, unsubmittedGroupRepos, students])
 
-  const collectScores = useTriggerScoreCollection(org)
+  // Scope the manual collect to this assignment: the workflow serializes runs
+  // per scope and the Python side collects only the matching slug, so "Sync
+  // now" here doesn't rebuild every classroom's gradebook.
+  const collectScores = useTriggerScoreCollection(
+    org,
+    classroom && assignment ? { classroom, assignment } : undefined,
+  )
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
   const { notify } = useToast()
   // Lock/unlock this assignment. The page owns the mutation (like Regrade all)
@@ -802,22 +813,24 @@ const SubmissionsPageContent = () => {
     [orgRepos, classroom, assignment, siblingSlugs],
   )
 
-  // Effective "last collected" prefers the run we just dispatched and know
-  // finished over the status=completed query, which can still report the prior
-  // run while GitHub's Actions list catches up. Gating on phase "completed"
-  // means conclusion === "success" (see useGitHubOperation), so a failed/timed
-  // -out run never relaxes the button. Both the freshness label and the
-  // staleness color read this one value so they can't disagree.
+  // Gating trackedCompletedAt on phase "completed" means conclusion ===
+  // "success" (see useGitHubOperation), so a failed/timed-out run never
+  // relaxes the button. Both the freshness label and the staleness color read
+  // the one effectiveCollectedAt value so they can't disagree; that helper
+  // owns the bucket-stamp vs run-timestamp precedence.
   const lastRunCompletedAt =
     lastRun?.status === "completed" ? lastRun.created_at : null
   const trackedCompletedAt =
     collectScores.phase === "completed"
       ? (collectScores.run?.created_at ?? null)
       : null
-  const effectiveLastCollectedAt = latestCollectedAt(
+  const effectiveLastCollectedAt = effectiveCollectedAt({
+    bucketCollectedAt: scoresData?.collectedAt?.[assignment ?? ""] ?? null,
+    collectorStampsBuckets:
+      Object.keys(scoresData?.collectedAt ?? {}).length > 0,
     lastRunCompletedAt,
     trackedCompletedAt,
-  )
+  })
 
   const lastCollectedLabel = effectiveLastCollectedAt
     ? formatRelativeToNow(new Date(effectiveLastCollectedAt))
@@ -1006,12 +1019,18 @@ const SubmissionsPageContent = () => {
           )}
           {collectScores.phase === "failed" && (
             <Alert tone="error" role="status">
-              {collectScores.error instanceof Error
-                ? t("submissions.collect.statusFailedWithReason", {
-                    reason: collectScores.error.message,
-                  })
-                : t("submissions.collect.statusFailed")}{" "}
-              {t("submissions.collect.statusFailedHint")}
+              {collectScores.error instanceof CollectInputsUnsupportedError ? (
+                t("submissions.collect.workflowOutdated")
+              ) : (
+                <>
+                  {collectScores.error instanceof Error
+                    ? t("submissions.collect.statusFailedWithReason", {
+                        reason: collectScores.error.message,
+                      })
+                    : t("submissions.collect.statusFailed")}{" "}
+                  {t("submissions.collect.statusFailedHint")}
+                </>
+              )}
             </Alert>
           )}
           {collectScores.phase === "timeout" && (

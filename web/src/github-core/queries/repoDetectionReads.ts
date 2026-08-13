@@ -53,6 +53,27 @@ export async function listRepoTags(
   )
 }
 
+// One commit's ISO time (committer date, else author date), or null when the
+// commit can't be read or carries no date. Used to date a milestone tag —
+// the tags list is dateless and only canonical submit/* names encode a time.
+export async function getCommitDatetime(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  sha: string,
+): Promise<string | null> {
+  const commit = await tolerateGitHubError(
+    () =>
+      client.request<GitHubCommit>(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+          repo,
+        )}/commits/${encodeURIComponent(sha)}`,
+      ),
+    null,
+  )
+  return commit?.commit.committer?.date ?? commit?.commit.author?.date ?? null
+}
+
 export function defaultBranchCommitsQuery(
   client: GitHubClient,
   owner: string,

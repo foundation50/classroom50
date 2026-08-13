@@ -19,6 +19,9 @@ on:
       classroom:
         description: "Classroom short-name (leave blank to collect all)"
         required: false
+      assignment:
+        description: "Assignment slug (leave blank to collect the whole classroom; requires classroom to be meaningful)"
+        required: false
   schedule:
     # Nightly autopilot. Comment out the next line if you only want
     # manual triggers.
@@ -27,6 +30,12 @@ on:
 permissions:
   contents: write       # write scores.json + commit
 
+# Serialize same-classroom runs (scoped or not); only runs for DIFFERENT
+# classrooms may overlap. The org-wide nightly ('all') still overlaps a scoped
+# run on the same scores.json, so on a push race the step below re-runs the
+# collector against the freshly-pulled tree (re-applying this run's per-owner
+# upserts onto the other run's already-committed entries) instead of a blind
+# text merge that could drop them.
 concurrency:
   group: collect-${{ github.event.inputs.classroom || 'all' }}
   cancel-in-progress: false
@@ -34,6 +43,11 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
+    # Bound the job: the commit/push retry below can loop, and with
+    # cancel-in-progress: false a wedged git operation would otherwise hold the
+    # same-classroom concurrency slot until GitHub's ~6h default, stalling every
+    # queued scoped/nightly run behind it. Fail loudly instead.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -58,16 +72,59 @@ jobs:
           # Optional restriction to a single classroom; empty
           # means "collect all classrooms in this config repo".
           CLASSROOM_FILTER: ${{ github.event.inputs.classroom || '' }}
+          # Optional further restriction to one assignment slug (the web app's
+          # per-assignment "Sync now"); empty means every assignment.
+          ASSIGNMENT_FILTER: ${{ github.event.inputs.assignment || '' }}
         run: python3 .github/scripts/collect_scores.py
 
       - name: Commit and push
+        env:
+          # Re-collection on a push race needs the same inputs as the step above.
+          CLASSROOM50_SERVICE_TOKEN: ${{ secrets.CLASSROOM50_SERVICE_TOKEN }}
+          CLASSROOM_FILTER: ${{ github.event.inputs.classroom || '' }}
+          ASSIGNMENT_FILTER: ${{ github.event.inputs.assignment || '' }}
         run: |
           set -euo pipefail
-          if [ -n "$(git status --porcelain '*/scores.json' 2>/dev/null)" ]; then
+          commit_scores() {
+            if [ -z "$(git status --porcelain '*/scores.json' 2>/dev/null)" ]; then
+              return 1  # nothing to commit
+            fi
             git add '*/scores.json'
             git -c user.name=classroom50-bot -c user.email=bot@classroom50 \
                 commit -m "[Classroom 50] collect: refresh scores.json"
-            git push
-          else
+            return 0
+          }
+
+          if ! commit_scores; then
             echo "no scores.json changes to commit"
+            exit 0
           fi
+
+          # The branch can advance mid-run: a teacher edit, a collect for
+          # another classroom, or the org-wide nightly overlapping a scoped run
+          # on the SAME scores.json (the concurrency group only serializes
+          # same-classroom runs). On a push race, fast-forward to the remote tip
+          # and RE-RUN the collector: apply_updates upserts this run's entries
+          # per repo-owner onto whatever the other run already committed, so no
+          # entry is lost (unlike a text-level `-X theirs` merge, which favored
+          # our replayed commit and could discard the other run's newer entry).
+          # Re-collection is idempotent; the extra API cost is bounded to the
+          # rare contention case and the 3 attempts below.
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "push rejected (attempt ${attempt}); re-collecting onto the remote tip"
+            # Drop our local commit, fast-forward to the remote, and re-run the
+            # collector against the now-current tree.
+            git reset --hard HEAD~1
+            git pull --ff-only
+            python3 .github/scripts/collect_scores.py
+            if ! commit_scores; then
+              # An idempotent re-collect produced no diff — the remote already
+              # carries equivalent data, so there is nothing left to push.
+              echo "re-collect produced no changes; remote already current"
+              exit 0
+            fi
+          done
+          git push

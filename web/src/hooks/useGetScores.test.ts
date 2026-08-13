@@ -65,3 +65,33 @@ describe("normalizeScores — manual override entries", () => {
     expect(rows[0].overridden).toBe(false)
   })
 })
+
+describe("normalizeScores — per-bucket collected_at", () => {
+  it("surfaces a bucket's collected_at and omits unstamped buckets", () => {
+    const normalized = normalizeScores({
+      schema: "classroom50/scores/v1",
+      assignments: {
+        stamped: {
+          type: "individual",
+          entries: [],
+          collected_at: "2026-06-01T15:00:00Z",
+        },
+        legacy: { type: "individual", entries: [] },
+      },
+    } as never)
+    expect(normalized?.collectedAt).toEqual({
+      stamped: "2026-06-01T15:00:00Z",
+    })
+  })
+
+  it("ignores a non-string or empty collected_at", () => {
+    const normalized = normalizeScores({
+      schema: "classroom50/scores/v1",
+      assignments: {
+        bad: { type: "individual", entries: [], collected_at: 12345 },
+        blank: { type: "individual", entries: [], collected_at: "" },
+      },
+    } as never)
+    expect(normalized?.collectedAt).toEqual({})
+  })
+})

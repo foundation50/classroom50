@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest"
-
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
@@ -21,6 +20,7 @@ import {
   displayItemOwner,
   displayPageOwners,
   distinctSections,
+  effectiveCollectedAt,
   existingGroupRepos,
   filterAndSortRows,
   filterNonSubmitters,
@@ -857,6 +857,37 @@ describe("buildScoresCsvRows", () => {
       release: "",
     })
   })
+
+  it("exports a blank submitted_at (not a crash) for a dateless pending row", () => {
+    // A detection-only row can still be dateless; toISOString on an
+    // Invalid Date would throw and break the whole export.
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["bob"], datetime: "", pending: true })],
+      [],
+    )
+    expect(out[0].submitted_at).toBe("")
+    expect(out[0].score).toBe("")
+  })
+
+  it("neutralizes CSV formula injection in free-text columns", () => {
+    // A commit/release/review URL (or a group's joined logins) can carry a
+    // leading formula trigger; guard it so a spreadsheet renders it as text.
+    const out = buildScoresCsvRows(
+      [
+        row({
+          usernames: ["=cmd()"],
+          commit: "=HYPERLINK(1)",
+          review: "+evil",
+          release: "@x",
+        }),
+      ],
+      [],
+    )
+    expect(out[0].usernames).toBe("'=cmd()")
+    expect(out[0].commit).toBe("'=HYPERLINK(1)")
+    expect(out[0].review).toBe("'+evil")
+    expect(out[0].release).toBe("'@x")
+  })
 })
 
 describe("selectActiveWorkflowAction", () => {
@@ -1115,6 +1146,71 @@ describe("latestCollectedAt", () => {
   })
 })
 
+describe("effectiveCollectedAt", () => {
+  const stamp = "2026-06-24T10:00:00Z"
+  const lastRun = "2026-06-25T10:00:00Z"
+  const tracked = "2026-06-26T10:00:00Z"
+
+  it("prefers the bucket stamp over the org-wide run timestamp", () => {
+    // The newer lastRun may have been a scoped sync of another assignment, so
+    // the older bucket stamp must win.
+    expect(
+      effectiveCollectedAt({
+        bucketCollectedAt: stamp,
+        collectorStampsBuckets: true,
+        lastRunCompletedAt: lastRun,
+        trackedCompletedAt: null,
+      }),
+    ).toBe(stamp)
+  })
+
+  it("lets our own tracked run beat an older bucket stamp", () => {
+    expect(
+      effectiveCollectedAt({
+        bucketCollectedAt: stamp,
+        collectorStampsBuckets: true,
+        lastRunCompletedAt: null,
+        trackedCompletedAt: tracked,
+      }),
+    ).toBe(tracked)
+  })
+
+  it("ignores the run fallback for an unstamped bucket under a stamp-aware collector", () => {
+    // A successful scoped run of ANOTHER assignment must not make this
+    // never-collected bucket read as fresh.
+    expect(
+      effectiveCollectedAt({
+        bucketCollectedAt: null,
+        collectorStampsBuckets: true,
+        lastRunCompletedAt: lastRun,
+        trackedCompletedAt: null,
+      }),
+    ).toBeNull()
+  })
+
+  it("still counts our own tracked run for an unstamped bucket", () => {
+    expect(
+      effectiveCollectedAt({
+        bucketCollectedAt: null,
+        collectorStampsBuckets: true,
+        lastRunCompletedAt: lastRun,
+        trackedCompletedAt: tracked,
+      }),
+    ).toBe(tracked)
+  })
+
+  it("falls back to run timestamps for a wholly unstamped (pre-stamp) file", () => {
+    expect(
+      effectiveCollectedAt({
+        bucketCollectedAt: null,
+        collectorStampsBuckets: false,
+        lastRunCompletedAt: lastRun,
+        trackedCompletedAt: null,
+      }),
+    ).toBe(lastRun)
+  })
+})
+
 // The freshness button's color is snapshotIsStale(latestPush, effective) where
 // effective = latestCollectedAt(lastRun, trackedRun). These cases prove the two
 // helpers compose to clear the button after a completed sync (R1) without going
@@ -1173,6 +1269,49 @@ describe("mergeLiveRows", () => {
   it("floors a live-only row's count at 1 even if the live count is 0", () => {
     const merged = mergeLiveRows([], [live("bob", "2026-06-21T10:00:00Z", 0)])
     expect(merged[0].submissionCount).toBe(1)
+  })
+
+  it("marks a pending live row late when it landed after the due date", () => {
+    const merged = mergeLiveRows(
+      [],
+      [live("bob", "2026-06-21T10:00:00Z")],
+      "2026-06-20T23:59:00Z",
+    )
+    expect(merged[0].pending).toBe(true)
+    expect(merged[0].late).toBe(true)
+  })
+
+  it("marks a pending live row on-time when it landed before the due date", () => {
+    const merged = mergeLiveRows(
+      [],
+      [live("bob", "2026-06-19T10:00:00Z")],
+      "2026-06-20T23:59:00Z",
+    )
+    expect(merged[0].late).toBe(false)
+  })
+
+  it("leaves lateness undefined without a due date or with unparseable inputs", () => {
+    expect(
+      mergeLiveRows([], [live("bob", "2026-06-19T10:00:00Z")])[0].late,
+    ).toBeUndefined()
+    expect(
+      mergeLiveRows([], [live("bob", "2026-06-19T10:00:00Z")], null)[0].late,
+    ).toBeUndefined()
+    expect(
+      mergeLiveRows([], [live("bob", "not-a-date")], "2026-06-20T23:59:00Z")[0]
+        .late,
+    ).toBeUndefined()
+  })
+
+  it("never rewrites a snapshot row's collected lateness", () => {
+    const merged = mergeLiveRows(
+      [row({ owner: "alice", late: false, submissionCount: 1 })],
+      [live("alice", "2026-06-25T10:00:00Z", 3)],
+      "2026-06-20T23:59:00Z",
+    )
+    // The collected `late` is the source of record for graded submissions —
+    // the live overlay only bumps count/staleness.
+    expect(merged[0].late).toBe(false)
   })
 
   it("raises a snapshot row's count to the live count and flags it stale", () => {
@@ -1314,6 +1453,148 @@ describe("mergeDetectedSubmissions", () => {
     const bob = merged.find((r) => r.owner === "bob")
     expect(bob?.pending).toBe(true)
     expect(bob?.detectedEntries).toEqual(entries)
+  })
+
+  it("gives a detection-only row the newest detected push time and lateness", () => {
+    // Branch-mode detection carries commit times; the pending row's "last
+    // submitted" must show WHEN the push landed, not "not yet collected".
+    const entries = [
+      {
+        kind: "commit" as const,
+        label: "bbb2222",
+        count: 1,
+        sha: "bbb2222",
+        datetime: "2026-06-22T10:00:00Z",
+      },
+      {
+        kind: "commit" as const,
+        label: "aaa1111",
+        count: 1,
+        sha: "aaa1111",
+        datetime: "2026-06-20T10:00:00Z",
+      },
+    ]
+    const merged = mergeDetectedSubmissions(
+      [],
+      [{ owner: "bob", count: 2, entries }],
+      "2026-06-21T00:00:00Z",
+    )
+    expect(merged[0].datetime).toBe("2026-06-22T10:00:00Z")
+    expect(merged[0].late).toBe(true)
+  })
+
+  it("leaves a dateless detection-only row's time empty and lateness unknown", () => {
+    // A tag entry can stay dateless (milestone tag whose commit lookup
+    // failed); never guess lateness.
+    const entries = [
+      { kind: "tag" as const, label: "phase1", count: 1, sha: "aaa1111" },
+    ]
+    const merged = mergeDetectedSubmissions(
+      [],
+      [{ owner: "bob", count: 1, entries }],
+      "2026-06-21T00:00:00Z",
+    )
+    expect(merged[0].datetime).toBe("")
+    expect(merged[0].late).toBeUndefined()
+  })
+
+  it("never derives lateness from a tag entry's decoded time (student-controllable)", () => {
+    // A submit/* tag's time is decoded from the tag NAME, which a student can
+    // backdate — so even a dated tag entry must NOT set `late`. The row still
+    // SHOWS the tag time on the last-submitted cell; only the late flag is
+    // withheld (the collector marks it later from the release datetime).
+    const entries = [
+      {
+        kind: "tag" as const,
+        label: "submit/2026-06-01T09-00-00Z-abc1234",
+        count: 1,
+        sha: "abc1234",
+        datetime: "2026-06-01T09:00:00Z",
+      },
+    ]
+    const merged = mergeDetectedSubmissions(
+      [],
+      [{ owner: "bob", count: 1, entries }],
+      "2026-06-21T00:00:00Z",
+    )
+    // Time is shown (a pre-due tag), but late is withheld rather than false.
+    expect(merged[0].datetime).toBe("2026-06-01T09:00:00Z")
+    expect(merged[0].late).toBeUndefined()
+  })
+
+  it("derives lateness from a commit entry even when a dated tag entry is also present", () => {
+    // A mixed detection set (a commit plus a tag) still trusts only the
+    // commit's committer date for `late`.
+    const entries = [
+      {
+        kind: "commit" as const,
+        label: "ddd4444",
+        count: 1,
+        sha: "ddd4444",
+        datetime: "2026-06-25T10:00:00Z",
+      },
+      {
+        kind: "tag" as const,
+        label: "submit/2026-06-01T09-00-00Z-ddd4444",
+        count: 1,
+        sha: "ddd4444",
+        datetime: "2026-06-01T09:00:00Z",
+      },
+    ]
+    const merged = mergeDetectedSubmissions(
+      [],
+      [{ owner: "bob", count: 2, entries }],
+      "2026-06-21T00:00:00Z",
+    )
+    expect(merged[0].late).toBe(true)
+  })
+
+  it("surfaces a newer detected push time on a count-raising row", () => {
+    const rows = [
+      row({
+        owner: "alice",
+        submissionCount: 1,
+        datetime: "2026-06-20T10:00:00Z",
+      }),
+    ]
+    const entries = [
+      {
+        kind: "commit" as const,
+        label: "bbb2222",
+        count: 1,
+        sha: "bbb2222",
+        datetime: "2026-06-25T10:00:00Z",
+      },
+    ]
+    const merged = mergeDetectedSubmissions(rows, [
+      { owner: "alice", count: 2, entries },
+    ])
+    expect(merged[0].liveLatestAt).toBe("2026-06-25T10:00:00Z")
+  })
+
+  it("never lets an older detection displace the row time or a newer live latest", () => {
+    const rows = [
+      row({
+        owner: "alice",
+        submissionCount: 1,
+        datetime: "2026-06-20T10:00:00Z",
+        liveLatestAt: "2026-06-26T10:00:00Z",
+      }),
+    ]
+    const entries = [
+      {
+        kind: "commit" as const,
+        label: "bbb2222",
+        count: 1,
+        sha: "bbb2222",
+        datetime: "2026-06-25T10:00:00Z",
+      },
+    ]
+    const merged = mergeDetectedSubmissions(rows, [
+      { owner: "alice", count: 2, entries },
+    ])
+    expect(merged[0].liveLatestAt).toBe("2026-06-26T10:00:00Z")
+    expect(merged[0].datetime).toBe("2026-06-20T10:00:00Z")
   })
 })
 

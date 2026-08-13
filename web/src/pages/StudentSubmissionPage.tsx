@@ -20,7 +20,10 @@ import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { safeHttpUrl } from "@/util/url"
 import type { GitHubCommit, GitHubRelease } from "@/github-core/types"
 import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
-import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
+import {
+  submissionModeCountKey,
+  latestDetectedAt,
+} from "@/domain/assignments/submissionDetection"
 import { deriveAutogradingState } from "@/domain/assignments/autogradingState"
 import type { Assignment, SubmissionMode } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
@@ -79,7 +82,7 @@ const toPushSubmissions = (
   return (commits ?? []).map((commit, i) => ({
     key: `${commit.sha}-${i}`,
     commitHref: commit.html_url,
-    datetime: commit.commit.author?.date,
+    datetime: commit.commit.committer?.date ?? commit.commit.author?.date,
     releaseHref: releaseHrefBySha.get(commit.sha.slice(0, 7)),
   }))
 }
@@ -191,12 +194,17 @@ const SubmissionBody = ({
   const submissionCount = detailItemsCount(detailItems)
 
   // The newest submission's time for the "last submitted" cell: the newest
-  // push's commit date in every-push mode, else the newest graded release's
-  // publish time (a tag submission's time isn't carried by detection). Absent
-  // until the first submission lands.
+  // push's commit date in every-push mode; in tag mode the newest detected
+  // tag's time (a canonical submit/* name encodes it) — the actual submission
+  // instant — falling back to the newest graded release's publish time for a
+  // dateless milestone tag. Absent until the first submission lands.
   const latestSubmittedAt = isTagMode
-    ? (releases?.[0]?.published_at ?? releases?.[0]?.created_at ?? undefined)
-    : pushSubmissions?.[0]?.commit.author?.date
+    ? (latestDetectedAt(taggedSubmissions) ??
+      releases?.[0]?.published_at ??
+      releases?.[0]?.created_at ??
+      undefined)
+    : (pushSubmissions?.[0]?.commit.committer?.date ??
+      pushSubmissions?.[0]?.commit.author?.date)
 
   if (releasesLoading || repoLoading) {
     return (
@@ -300,6 +308,15 @@ const SubmissionBody = ({
               <td>
                 {latestSubmittedAt ? (
                   <LastSubmittedCell datetime={latestSubmittedAt} />
+                ) : submissionCount > 0 ? (
+                  // Submissions exist (e.g. a pushed milestone tag) but none
+                  // has a graded release yet, so there's no timestamp to show.
+                  // "Not submitted yet" beside a positive count would
+                  // contradict itself — say the work is in and awaiting
+                  // grading instead.
+                  <span className="text-base-content/50">
+                    {t("submissions.student.submittedAwaitingGrading")}
+                  </span>
                 ) : (
                   <span className="text-base-content/50">
                     {t("submissions.student.notSubmittedYet")}

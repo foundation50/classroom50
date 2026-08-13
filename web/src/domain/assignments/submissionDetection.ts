@@ -13,12 +13,16 @@ import type { SubmissionMode } from "@/types/classroom"
 // One detected submission (or grouped set, for a glob). `count` is the number of
 // underlying commits/tags it represents (1 for a single commit or exact tag; N
 // for a glob group). `label` names it for the UI (a tag name, a glob pattern, or
-// a commit sha); `sha` points at the underlying commit when known.
+// a commit sha); `sha` points at the underlying commit when known. `datetime`
+// is the submission's ISO time when the source carries one: branch-mode
+// commits always do, canonical submit/* tags encode it in the name, and
+// milestone tags get it filled by a per-commit lookup in the fan-out.
 export type DetectedSubmission = {
   kind: "commit" | "tag" | "tag-group"
   label: string
   count: number
   sha?: string
+  datetime?: string
 }
 
 // A glob pattern uses any Actions tag-filter metacharacter; an exact pattern is
@@ -42,7 +46,22 @@ export function detectBranchSubmissions(
       label: c.sha.slice(0, 7),
       count: 1,
       sha: c.sha,
+      datetime: c.commit.committer?.date ?? c.commit.author?.date,
     }))
+}
+
+// The submission time encoded in a canonical submit/<UTC-ts>-<short-sha> tag
+// name (buildSubmitTag replaces the timestamp's colons with dashes to keep the
+// ref valid). The one tag-mode time that costs no extra API call — the
+// lightweight tags list carries no dates. Undefined for milestone/malformed
+// names; those fall back to a per-commit date lookup in the fan-out.
+export function submitTagDatetime(tagName: string): string | undefined {
+  const m = /^submit\/(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})Z-/.exec(
+    tagName,
+  )
+  if (!m) return undefined
+  const iso = `${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`
+  return Number.isFinite(new Date(iso).getTime()) ? iso : undefined
 }
 
 // Tag mode: for each configured pattern, an EXACT pattern yields one submission
@@ -64,11 +83,17 @@ export function detectTagSubmissions(
     for (const t of matches) claimed.add(t.name)
 
     if (isGlobPattern(pattern)) {
+      // A group's time and representative sha come from its newest member by
+      // encoded submit/* timestamp; without any parseable name (a milestone
+      // glob) keep the list's first match and leave the time for the
+      // per-commit lookup.
+      const newest = newestByEncodedTime(matches)
       detected.push({
         kind: "tag-group",
         label: pattern,
         count: matches.length,
-        sha: matches[0].commit.sha,
+        sha: (newest ?? matches[0]).commit.sha,
+        datetime: newest ? submitTagDatetime(newest.name) : undefined,
       })
     } else {
       for (const t of matches) {
@@ -77,12 +102,30 @@ export function detectTagSubmissions(
           label: t.name,
           count: 1,
           sha: t.commit.sha,
+          datetime: submitTagDatetime(t.name),
         })
       }
     }
   }
 
   return detected
+}
+
+// The tag with the newest submit/*-encoded timestamp, or null when none of the
+// names encode one.
+function newestByEncodedTime(tags: GitHubTag[]): GitHubTag | null {
+  let best: GitHubTag | null = null
+  let bestMs = -Infinity
+  for (const t of tags) {
+    const iso = submitTagDatetime(t.name)
+    if (!iso) continue
+    const ms = new Date(iso).getTime()
+    if (ms > bestMs) {
+      best = t
+      bestMs = ms
+    }
+  }
+  return best
 }
 
 // The total number of submissions a detected set represents — the sum of each
@@ -92,6 +135,25 @@ export function detectedSubmissionCount(
   detected: DetectedSubmission[],
 ): number {
   return detected.reduce((sum, d) => sum + d.count, 0)
+}
+
+// The newest detected submission time, or null when no entry carries one.
+// Robust against callers that don't preserve newest-first order; unparseable
+// datetimes are ignored.
+export function latestDetectedAt(
+  detected: DetectedSubmission[] | undefined,
+): string | null {
+  let best: string | null = null
+  let bestMs = -Infinity
+  for (const d of detected ?? []) {
+    if (!d.datetime) continue
+    const ms = new Date(d.datetime).getTime()
+    if (Number.isFinite(ms) && ms > bestMs) {
+      best = d.datetime
+      bestMs = ms
+    }
+  }
+  return best
 }
 
 // The entries that can be "jumped to" as a tag: branch-mode `commit` entries

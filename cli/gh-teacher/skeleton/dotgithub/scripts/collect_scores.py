@@ -126,6 +126,7 @@ FULL_ROSTER_HEADER = ",".join(ROSTER_REQUIRED_COLUMNS)
 def main() -> int:
     base_dir = pathlib.Path(os.environ.get("GITHUB_WORKSPACE") or ".").resolve()
     classroom_filter = (os.environ.get("CLASSROOM_FILTER") or "").strip()
+    assignment_filter = (os.environ.get("ASSIGNMENT_FILTER") or "").strip()
 
     org = (os.environ.get("GITHUB_REPOSITORY_OWNER") or "").strip()
     if not org:
@@ -145,15 +146,31 @@ def main() -> int:
 
     classroom_dirs = list(iter_classrooms(base_dir, classroom_filter))
     if not classroom_dirs:
-        msg = f"no classrooms found in {base_dir}"
         if classroom_filter:
-            msg += f" matching CLASSROOM_FILTER={classroom_filter!r}"
-        print(msg)
+            # An explicit filter matching nothing is a FAILED run (typo, or a
+            # stale checkout) — a green run that collected nothing would read
+            # as "collected" to the web app's freshness tracking.
+            emit_error(
+                f"no classroom in {base_dir} matches "
+                f"CLASSROOM_FILTER={classroom_filter!r}"
+            )
+            return 1
+        print(f"no classrooms found in {base_dir}")
         return 0
 
     total_changes = 0
     failed_classrooms: list[str] = []
+    # Whether ASSIGNMENT_FILTER named a slug that exists in at least one
+    # collected classroom's manifest — a no-match scoped run fails like a
+    # no-match classroom filter.
+    assignment_filter_matched = not assignment_filter
     for classroom_short, classroom_meta, assignments in classroom_dirs:
+        if assignment_filter and any(
+            entry.get("slug") == assignment_filter
+            for entry in assignments.get("assignments") or []
+            if isinstance(entry, dict)
+        ):
+            assignment_filter_matched = True
         scores_path = base_dir / classroom_short / "scores.json"
         try:
             scores = load_scores(scores_path)
@@ -196,7 +213,7 @@ def main() -> int:
             failed_classrooms.append(classroom_short)
 
         try:
-            updates, mode_flip_assignments = collect_classroom(
+            updates, mode_flip_assignments, collected = collect_classroom(
                 api_url=api_url,
                 org=org,
                 classroom_short=classroom_short,
@@ -204,6 +221,7 @@ def main() -> int:
                 assignments=assignments,
                 service_token=service_token,
                 roster_meta=load_roster_metadata(base_dir / classroom_short),
+                assignment_filter=assignment_filter,
             )
         except urllib.error.HTTPError as exc:
             # Auth (401/403) and synthetic-network (599) failures on COLLECTION
@@ -239,7 +257,14 @@ def main() -> int:
         # Suppress this when collect_classroom already attributed the empty
         # result to a mode flip (releases present but all rejected): that has
         # its own loud warning, and blaming the token here would misdirect.
-        assignment_count = len(valid_assignment_slugs(assignments))
+        # An assignment-scoped run only polls the filtered slug, so only that
+        # slug counts toward the heuristic's denominator.
+        collectable_slugs = [
+            s
+            for s in valid_assignment_slugs(assignments)
+            if not assignment_filter or s == assignment_filter
+        ]
+        assignment_count = len(collectable_slugs)
         if assignment_count and not updates and not mode_flip_assignments:
             emit_warning(
                 f"{classroom_short}: collected 0 submissions across "
@@ -252,6 +277,16 @@ def main() -> int:
             )
 
         n_changes = apply_updates(scores, updates)
+        # Stamp the buckets this run actually walked (even when nothing changed)
+        # so per-assignment freshness is knowable — an org-wide run timestamp
+        # can't say whether a scoped run touched a given assignment. A bucket
+        # with no submissions yet is created empty so the stamp has a home.
+        collected_at = utc_now_iso()
+        for slug, atype in collected.items():
+            bucket = scores["assignments"].setdefault(
+                slug, {"type": atype, "entries": []}
+            )
+            bucket["collected_at"] = collected_at
         try:
             save_scores(scores_path, scores)
         except ScoresFileError as exc:
@@ -267,6 +302,15 @@ def main() -> int:
         f"collect: {total_changes} total submission(s) updated across "
         f"{len(classroom_dirs)} classroom(s)"
     )
+    if not assignment_filter_matched:
+        # Same contract as the classroom-filter no-match above: a scoped run
+        # naming an assignment no collected classroom has must fail loudly.
+        emit_error(
+            f"no assignment matches ASSIGNMENT_FILTER={assignment_filter!r} in "
+            f"the collected classroom(s) — check the slug, or pull the latest "
+            f"config repo"
+        )
+        return 1
     if failed_classrooms:
         # Dedup (preserve order): a classroom can be recorded once for a
         # non-fatal staff-grant failure and again for a scores write failure.
@@ -486,22 +530,34 @@ def collect_classroom(
     assignments: dict[str, Any],
     service_token: str,
     roster_meta: dict[str, dict[str, str]] | None = None,
-) -> tuple[list[dict[str, Any]], int]:
+    assignment_filter: str = "",
+) -> tuple[list[dict[str, Any]], int, dict[str, str]]:
     """Return (validated result payloads for every (student, assignment) pair,
-    count of assignments whose only submissions were rejected by validation).
+    count of assignments whose only submissions were rejected by validation,
+    slug -> mode map of the assignments actually walked).
     Per-repo failures warn and skip; hard failures (auth 401/403; network 599)
     propagate and main() converts them to exit 1. The second tuple element lets
     main() distinguish a mode-flip-induced empty result (which has its own loud
-    warning) from a token-access problem.
+    warning) from a token-access problem. The third records which buckets this
+    run refreshed — main() stamps their `collected_at` — and stays empty when
+    collection was skipped wholesale (team unreadable/empty), so a skipped
+    classroom never reads as freshly collected.
 
     `roster_meta` is the best-effort roster join (username -> display metadata,
     see load_roster_metadata); when a collected owner has a matching row its
     name/section/email are attached to the entry. Absent/blank is fine — the
     join never gates collection.
+
+    `assignment_filter` (an assignment slug, empty for all) narrows the walk to
+    one assignment — the web app's per-assignment "Sync now" scope. Sibling
+    assignments' buckets in scores.json are untouched (apply_updates upserts).
     """
     roster_meta = roster_meta or {}
     results: list[dict[str, Any]] = []
     group_attribution_degraded = 0
+    # Assignments this run actually walked (slug -> mode), for `collected_at`
+    # stamping. Populated only past the team-read gate below.
+    collected: dict[str, str] = {}
     # (assignment) buckets where every present submission was rejected by
     # validation (the mode-flip symptom). Returned so main() can suppress its
     # "rotate token" heuristic, which would otherwise misread this as a
@@ -533,20 +589,20 @@ def collect_classroom(
             f"Members: Read (a fine-grained PAT permission) — rotate it with "
             f"`gh teacher rotate-service-token {org}`."
         )
-        return results, mode_flip_assignments
+        return results, mode_flip_assignments, collected
     except (json.JSONDecodeError, ValueError) as exc:
         emit_warning(
             f"{classroom_short}: team {team_slug!r} member listing malformed "
             f"({exc}); skipping collection for this classroom."
         )
-        return results, mode_flip_assignments
+        return results, mode_flip_assignments, collected
 
     if not team_usernames:
         emit_warning(
             f"{classroom_short}: teams {team_slug!r} (and staff teams) have no "
             f"members — no (username, assignment) pairs to poll; skipping."
         )
-        return results, mode_flip_assignments
+        return results, mode_flip_assignments, collected
 
     # Group attribution credits a collaborator only if on a classroom team
     # (owner always credited) — same trust model, team-sourced set. Staff are in
@@ -555,6 +611,8 @@ def collect_classroom(
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
         if not isinstance(slug, str) or not slug:
+            continue
+        if assignment_filter and slug != assignment_filter:
             continue
         # Assignments that never autograde (empty_repo or no_autograder) —
         # same predicate as valid_assignment_slugs, kept in lockstep.
@@ -574,8 +632,21 @@ def collect_classroom(
                 f"timestamp with timezone; skipping late-marking for this assignment"
             )
 
-        is_group = (entry.get("mode") or "").lower() == "group"
+        raw_mode = entry.get("mode")
+        is_group = (raw_mode or "").lower() == "group"
+        if isinstance(raw_mode, str) and raw_mode and raw_mode.lower() not in (
+            "individual",
+            "group",
+        ):
+            # A typo'd mode would silently collect as individual and reject
+            # every group submission via the owner-identity check (reading as
+            # a mode flip) — name the real cause up front.
+            emit_warning(
+                f"{classroom_short}/{slug}: unknown mode {raw_mode!r} — "
+                f"expected 'individual' or 'group'; collecting as individual"
+            )
         assignment_type = "group" if is_group else "individual"
+        collected[slug] = assignment_type
 
         submitted = 0
         # Staff (non-student-team) members who actually submitted this
@@ -770,7 +841,7 @@ def collect_classroom(
             f"lacks the collaborator-read permission — rotate it with `gh teacher rotate-service-token`."
         )
 
-    return results, mode_flip_assignments
+    return results, mode_flip_assignments, collected
 
 
 def assignment_repo_name(classroom: str, assignment: str, username: str) -> str:
@@ -977,6 +1048,13 @@ def _dedupe_logins(logins: list[str]) -> list[str]:
 # Due-date / lateness ---------------------------------------------------------
 
 
+def utc_now_iso() -> str:
+    """Now in the schema's timestamp shape (UTC, seconds, trailing Z)."""
+    return datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
 def parse_rfc3339(value: Any) -> datetime.datetime | None:
     """Parse an RFC 3339 timestamp into an aware datetime, or None when it
     isn't one (non-string, unparseable, or missing a timezone offset). Naive
@@ -1017,7 +1095,7 @@ class ScoresFileError(Exception):
 
 
 class AssetMissingError(Exception):
-    """Raised when the latest submit release has no result.json asset."""
+    """Raised when a submit release has no result.json asset."""
 
 
 def strict_json_loads(raw: str) -> Any:
@@ -1102,7 +1180,10 @@ def normalize_assignments(assignments: Any) -> dict[str, dict[str, Any]]:
             raise ValueError(
                 f"assignments[{slug!r}].entries must be a list, got {type(entries).__name__}"
             )
-        normalized[slug] = {"type": atype, "entries": entries}
+        # Spread the whole bucket so unknown fields (e.g. `collected_at`, or
+        # anything a newer writer added) survive this read-modify-write instead
+        # of being silently dropped on the next save.
+        normalized[slug] = {**bucket, "type": atype, "entries": entries}
     return normalized
 
 
@@ -1453,6 +1534,11 @@ def all_submit_releases(
                     f"GET {url}: expected release object at index {i}, got {type(release).__name__}"
                 )
             if (release.get("tag_name") or "").startswith(SUBMIT_TAG_PREFIX):
+                # A read-write token also lists draft releases. The runner
+                # never publishes drafts, so a draft submit/* tag is hand-made
+                # noise whose assets aren't downloadable anyway — skip it.
+                if release.get("draft") is True:
+                    continue
                 releases.append(release)
         link_header = headers.get("Link") if headers else None
         next_url = _next_page_link(link_header)
@@ -1712,10 +1798,16 @@ def download_result_asset(
         c for c in (release.get("assets") or [])
         if (c.get("name") or "").lower() == RESULT_ASSET_NAME
     ]
+    # Runs once per release in the history walk, so errors name THIS release.
+    release_label = release.get("tag_name") or release.get("url") or "release"
     if not matches:
-        raise AssetMissingError(f"{RESULT_ASSET_NAME} asset missing from latest submit release")
+        raise AssetMissingError(
+            f"{RESULT_ASSET_NAME} asset missing from {release_label}"
+        )
     if len(matches) > 1:
-        raise ValueError(f"latest submit release has {len(matches)} {RESULT_ASSET_NAME} assets")
+        raise ValueError(
+            f"{release_label} has {len(matches)} {RESULT_ASSET_NAME} assets"
+        )
 
     asset_url = matches[0].get("url")
     if not asset_url:

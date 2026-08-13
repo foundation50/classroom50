@@ -223,6 +223,60 @@ describe("editScoreOverride", () => {
     expect(written.assignments[ASSIGNMENT]).toBeUndefined()
   })
 
+  it("clearing the last entry keeps a collector-stamped bucket (collected_at)", async () => {
+    // An empty {type, entries: [], collected_at} bucket is the collector's
+    // "checked at T, nothing found" freshness marker — clearing a manual grade
+    // must not delete it and regress the page to the run-based fallback.
+    const scores = {
+      schema: "classroom50/scores/v1",
+      assignments: {
+        [ASSIGNMENT]: {
+          type: "individual",
+          collected_at: "2026-06-01T15:00:00Z",
+          entries: [
+            {
+              owner: "alice",
+              override: true,
+              submissions: [
+                {
+                  schema: "classroom50/result/v1",
+                  classroom: CLASSROOM,
+                  assignment_type: "individual",
+                  owner: "alice",
+                  submission: "submit/manual-2026-01-01T00-00-00Z",
+                  commit: "submit/manual-2026-01-01T00-00-00Z",
+                  release: "submit/manual-2026-01-01T00-00-00Z",
+                  review: "submit/manual-2026-01-01T00-00-00Z",
+                  datetime: "2026-01-01T00:00:00Z",
+                  score: 5,
+                  "max-score": 10,
+                  tests: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    }
+    const { client, committed } = makeClient(scores)
+    await editScoreOverride(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      assignment: ASSIGNMENT,
+      owner: "alice",
+      assignmentType: "individual",
+      clear: true,
+    })
+    const written = JSON.parse(committed()) as WrittenScores
+    const bucket = written.assignments[ASSIGNMENT] as unknown as {
+      entries: unknown[]
+      collected_at?: string
+    }
+    expect(bucket).toBeDefined()
+    expect(bucket.entries).toEqual([])
+    expect(bucket.collected_at).toBe("2026-06-01T15:00:00Z")
+  })
+
   it("clearing an override over a real submission strips override and restores it", async () => {
     const real = {
       schema: "classroom50/result/v1",

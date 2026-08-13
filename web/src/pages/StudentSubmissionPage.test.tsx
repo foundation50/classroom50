@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import type { GitHubCommit, GitHubRelease } from "@/github-core/types"
 import type { Assignment } from "@/types/classroom"
+import { formatSubmissionDateTime } from "@/util/formatDate"
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
@@ -99,11 +100,19 @@ const assignment = (over: Partial<Assignment> = {}): Assignment =>
     ...over,
   }) as Assignment
 
-const commit = (sha: string, date: string): GitHubCommit =>
+const commit = (
+  sha: string,
+  date: string,
+  committerDate?: string,
+): GitHubCommit =>
   ({
     sha,
     html_url: `https://github.com/acme/cs101-hw1-alice/commit/${sha}`,
-    commit: { message: sha, author: { date } },
+    commit: {
+      message: sha,
+      author: { date },
+      ...(committerDate ? { committer: { date: committerDate } } : {}),
+    },
     author: null,
   }) as GitHubCommit
 
@@ -187,6 +196,49 @@ describe("StudentSubmissionPage submission type", () => {
     expect(view.getAttribute("href")).toBe(
       "https://github.com/acme/cs101-hw1-alice/tree/phase1",
     )
+  })
+
+  it("shows awaiting-grading (not 'not submitted') for an ungraded pushed tag", () => {
+    // Tag mode: a pushed milestone tag counts in the chip, but no submit/*
+    // release exists yet (grading pending or teacher-supplied CI). "Not
+    // submitted yet" beside a positive count contradicts itself — the cell
+    // must say the submission exists and is awaiting grading.
+    assignmentData = assignment({
+      submission_mode: "tag",
+      submission_tags: ["phase1"],
+    })
+    taggedData = [{ kind: "tag", label: "phase1", count: 1, sha: "aaa1111" }]
+    releasesData = []
+    render(<StudentSubmissionPage />)
+    expect(
+      screen.getByText("submissions.student.submittedAwaitingGrading"),
+    ).toBeTruthy()
+    expect(screen.queryByText("submissions.student.notSubmittedYet")).toBeNull()
+  })
+
+  it("still shows 'not submitted yet' in tag mode with no tags and no releases", () => {
+    assignmentData = assignment({
+      submission_mode: "tag",
+      submission_tags: ["phase1"],
+    })
+    render(<StudentSubmissionPage />)
+    expect(screen.getByText("submissions.student.notSubmittedYet")).toBeTruthy()
+  })
+
+  it("prefers the committer date over the author date for the last-submitted time", () => {
+    // Every-push mode: the newest push's time drives the "last submitted"
+    // cell. Author date survives a rebase, so committer date is the truer
+    // "when was this pushed" — assert the cell shows the committer date, not
+    // the (older) author date, when the two differ.
+    assignmentData = assignment({ submission_mode: "every-push" })
+    const authorDate = "2026-06-20T10:00:00Z"
+    const committerDate = "2027-01-15T12:00:00Z"
+    pushData = [commit("abc1234", authorDate, committerDate)]
+    render(<StudentSubmissionPage />)
+    expect(
+      screen.getByText(formatSubmissionDateTime(committerDate)),
+    ).toBeTruthy()
+    expect(screen.queryByText(formatSubmissionDateTime(authorDate))).toBeNull()
   })
 
   it("renders as a one-row table with the student column set", () => {
