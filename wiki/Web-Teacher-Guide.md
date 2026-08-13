@@ -385,8 +385,10 @@ assignment:
   preserved). This is the enforcement mechanism for deadlines — the due date
   itself only marks submissions late. **Reopen submission** restores write
   access.
-- **Lock assignment** / **Unlock assignment** — prevent further accepts of the
-  assignment.
+- **Lock assignment** / **Unlock assignment** — lock the assignment so
+  students can't access or accept it (and, for a private template, remove the
+  student team's read on it); unlock reopens it and restores template access.
+  Useful for staging an assignment before release.
 - **Download scores (CSV)** — export all submissions as a CSV.
 - **Download all submissions** — download each repository's latest submission
   bundled into a single zip (built in the browser, one repository at a time;
