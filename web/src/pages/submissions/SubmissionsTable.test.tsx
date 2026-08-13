@@ -32,6 +32,14 @@ vi.mock("@/hooks/useGetFeedbackPr", () => ({
 vi.mock("@/hooks/mutations/useRepairFeedbackPr", () => ({
   default: () => ({ mutate: vi.fn(), isPending: false }),
 }))
+vi.mock("@/hooks/mutations/useSetScoreOverride", () => ({
+  useSetScoreOverride: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    reset: vi.fn(),
+  }),
+}))
 vi.mock("@/context/notifications/NotificationProvider", () => ({
   useToast: () => ({ notify: vi.fn() }),
 }))
@@ -206,6 +214,67 @@ describe("SubmissionsTable empty_repo score cell", () => {
       />,
     )
     expect(screen.queryByTitle("submissions.table.noGradingTitle")).toBeNull()
+  })
+})
+
+describe("SubmissionsTable manual grading on a no-autograder assignment", () => {
+  // A templated manual-graded assignment is written as no_autograder (the
+  // emptyRepo prop here), so manual grading must win over the no-grading
+  // em-dash — otherwise a grade entered via the non-submitter row becomes
+  // invisible once the student turns into a submitter row.
+  const manualGrade = {
+    org: "acme",
+    classroom: "cs101",
+    assignment: "hw1",
+    assignmentType: "individual" as const,
+    maxPoints: 10,
+  }
+
+  it("offers the inline manual editor on a submitter row despite emptyRepo", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+        emptyRepo
+        manualGrade={manualGrade}
+      />,
+    )
+    expect(
+      screen.getByRole("button", {
+        name: "submissions.manualGrade.editLabel",
+      }),
+    ).toBeTruthy()
+    expect(screen.queryByTitle("submissions.table.noGradingTitle")).toBeNull()
+  })
+
+  it("still shows the no-grading em-dash without manualGrade", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+        emptyRepo
+      />,
+    )
+    expect(screen.getByTitle("submissions.table.noGradingTitle")).toBeTruthy()
+  })
+
+  it("matches the non-submitter row's Add-grade affordance under emptyRepo", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        nonSubmitters={[student()]}
+        acceptedUsernames={new Set(["alice"])}
+        emptyRepo
+        manualGrade={manualGrade}
+      />,
+    )
+    expect(
+      screen.getByRole("button", {
+        name: "submissions.manualGrade.addLabel",
+      }),
+    ).toBeTruthy()
   })
 })
 

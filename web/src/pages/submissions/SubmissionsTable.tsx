@@ -403,22 +403,20 @@ const SubmissionsTable = ({
           />
         </td>
         <td>
-          {emptyRepo ? (
-            <span
-              className="text-base-content/50"
-              title={t("submissions.table.noGradingTitle")}
-            >
-              —
-            </span>
-          ) : manualGrade && !(isGroup && rest.pending) ? (
-            // A pending GROUP row comes from the live/detection overlay before
-            // collection, so its `usernames` is just the founder ([owner]) —
-            // the real members aren't known yet. Grading it here would write
+          {manualGrade && !(isGroup && rest.pending) ? (
+            // Manual grading wins over the no-grading em-dash: a manual-graded
+            // assignment is typically written as no_autograder (emptyRepo
+            // here), and the non-submitter row offers "Add grade" under the
+            // same flags — hiding the editor here would make an entered grade
+            // invisible. A pending GROUP row still falls through: it comes
+            // from the live/detection overlay before collection, so its
+            // `usernames` is just the founder ([owner]) — the real members
+            // aren't known yet. Grading it here would write
             // member_usernames:[founder] and mis-credit the group (the other
             // members would read as non-submitters and never see the grade),
-            // so fall through to the pending badge until collection resolves
-            // the member list. Individual pending rows and any collected group
-            // row are safe to grade inline.
+            // so show the pending badge until collection resolves the member
+            // list. Individual pending rows and any collected group row are
+            // safe to grade inline.
             <ManualGradeCell
               owner={rest.owner}
               score={score}
@@ -427,6 +425,13 @@ const SubmissionsTable = ({
               thresholdFraction={passBar}
               ctx={{ ...manualGrade, memberUsernames: usernames }}
             />
+          ) : emptyRepo ? (
+            <span
+              className="text-base-content/50"
+              title={t("submissions.table.noGradingTitle")}
+            >
+              —
+            </span>
           ) : rest.pending ? (
             <Badge ghost title={t("submissions.table.pendingGradeTitle")}>
               {t("submissions.table.pendingGrade")}
@@ -676,6 +681,7 @@ const SubmissionsTable = ({
                     onProfile={setProfileUsername}
                     actions={actions}
                     manualGrade={manualGrade}
+                    thresholdFraction={passBar}
                   />
                 )
               }

@@ -236,6 +236,7 @@ export const NonSubmitterRow = ({
   onProfile,
   actions,
   manualGrade,
+  thresholdFraction = null,
 }: {
   student: Student
   students: Student[]
@@ -247,6 +248,9 @@ export const NonSubmitterRow = ({
   // cell offers inline grade entry for this not-yet-graded student instead of
   // an em-dash.
   manualGrade?: ManualGradeContext
+  // The assignment's pass threshold, so the first saved grade renders with the
+  // same tone the submitter row would give it.
+  thresholdFraction?: number | null
 }) => {
   return (
     <tr>
@@ -279,7 +283,7 @@ export const NonSubmitterRow = ({
             score={0}
             max={manualGrade.maxPoints}
             hasGrade={false}
-            thresholdFraction={null}
+            thresholdFraction={thresholdFraction}
             ctx={manualGrade}
           />
         ) : (
