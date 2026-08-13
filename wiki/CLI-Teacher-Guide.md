@@ -432,11 +432,19 @@ Run it from the Actions tab on `<org>/classroom50`, or from your shell:
 ```sh
 gh workflow run collect-scores.yaml --repo <org>/classroom50
 gh workflow run collect-scores.yaml --repo <org>/classroom50 -f classroom=cs-principles   # one classroom
+gh workflow run collect-scores.yaml --repo <org>/classroom50 -f classroom=cs-principles -f assignment=hello   # one assignment
 ```
 
-The workflow also runs nightly (`17 4 * * *` UTC), so scores land daily even if
-you never trigger it. To disable that, comment out the `schedule:` block in
-`.github/workflows/collect-scores.yaml`.
+An `assignment=` run walks only that assignment's repos — much faster and
+lighter on API rate limits for a large classroom — and is exactly what the web
+app's per-assignment **Sync now** button dispatches. Each collected
+assignment's bucket in `scores.json` gets a `collected_at` UTC timestamp, so
+you (and the web app's freshness strip) can tell when each assignment was last
+walked; a scoped run leaves sibling assignments' buckets untouched.
+
+The workflow also runs nightly (`17 4 * * *` UTC) across **every** classroom,
+so scores land daily even if you never trigger it. To disable that, comment out
+the `schedule:` block in `.github/workflows/collect-scores.yaml`.
 
 <details>
 <summary>What each collection run does</summary>
