@@ -65,7 +65,8 @@ const autogradingBadgeContent: Record<
 
 // The "how is it graded" badge, paired with SubmissionModeBadge on the teacher
 // heading and the student page. Keyed off the autograding tri-state so the
-// 2-mode x 3-grading combinations stay two independent badges.
+// 2-mode x 3-grading combinations stay two independent badges. The detail is
+// hover text for sighted users and sr-only text for screen readers.
 export const AutogradingBadge = ({
   state,
   size,
@@ -85,6 +86,7 @@ export const AutogradingBadge = ({
     >
       <Icon aria-hidden="true" className="size-3.5" />
       {t(label)}
+      {title && <span className="sr-only">{t(title)}</span>}
     </Badge>
   )
 }

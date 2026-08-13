@@ -172,9 +172,9 @@ const SubmissionsPageContent = () => {
   // Assignments that never autograde (empty_repo bare repos, or no_autograder
   // teacher-supplied CI) produce no submit/* releases. Grading UI (Regrade all,
   // per-row regrade, scores, live polling, the trigger retrofit) is hidden and
-  // a notice explains why. Collect stays enabled — it's org-wide and
-  // collect_scores.py skips these assignments itself. Mirrors the Python
-  // skips_grading() predicate family.
+  // the header's grading badge explains why. Collect stays enabled — it's
+  // org-wide and collect_scores.py skips these assignments itself. Mirrors the
+  // Python skips_grading() predicate family.
   const skipsGrading = assignmentInfo
     ? assignmentSkipsGrading(assignmentInfo)
     : false
