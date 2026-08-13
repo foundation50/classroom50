@@ -98,6 +98,7 @@ import {
   REGRADE_WORKFLOW,
 } from "@/github-core/workflows"
 import { githubKeys } from "@/github-core/queries"
+import { CollectInputsUnsupportedError } from "@/github-core/mutations"
 import {
   formatDueDateTime,
   formatRelativeToNow,
@@ -735,7 +736,13 @@ const SubmissionsPageContent = () => {
     })
   }, [effectiveFilters, query, unsubmittedGroupRepos, students])
 
-  const collectScores = useTriggerScoreCollection(org)
+  // Scope the manual collect to this assignment: the workflow serializes runs
+  // per scope and the Python side collects only the matching slug, so "Sync
+  // now" here doesn't rebuild every classroom's gradebook.
+  const collectScores = useTriggerScoreCollection(
+    org,
+    classroom && assignment ? { classroom, assignment } : undefined,
+  )
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
   const { notify } = useToast()
   // Lock/unlock this assignment. The page owns the mutation (like Regrade all)
@@ -1008,12 +1015,18 @@ const SubmissionsPageContent = () => {
           )}
           {collectScores.phase === "failed" && (
             <Alert tone="error" role="status">
-              {collectScores.error instanceof Error
-                ? t("submissions.collect.statusFailedWithReason", {
-                    reason: collectScores.error.message,
-                  })
-                : t("submissions.collect.statusFailed")}{" "}
-              {t("submissions.collect.statusFailedHint")}
+              {collectScores.error instanceof CollectInputsUnsupportedError ? (
+                t("submissions.collect.workflowOutdated")
+              ) : (
+                <>
+                  {collectScores.error instanceof Error
+                    ? t("submissions.collect.statusFailedWithReason", {
+                        reason: collectScores.error.message,
+                      })
+                    : t("submissions.collect.statusFailed")}{" "}
+                  {t("submissions.collect.statusFailedHint")}
+                </>
+              )}
             </Alert>
           )}
           {collectScores.phase === "timeout" && (

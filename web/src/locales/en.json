@@ -2383,6 +2383,7 @@
       "statusFailed": "The collection run did not complete successfully.",
       "statusFailedWithReason": "Could not start collection: {{reason}}",
       "statusFailedHint": "You can check or trigger it manually on GitHub.",
+      "workflowOutdated": "Could not collect this assignment: the Collect Scores workflow in this organization's classroom50 config repo is out of date. Update the org's workflows (an update banner appears when a newer version is available), then try again.",
       "statusTimeout": "Still running after a while. Check its progress on GitHub, or refresh this page once it finishes."
     },
     "regradeAll": {

@@ -285,6 +285,13 @@ export function is422NoCommitsBetween(err: unknown): boolean {
   return is422Mentioning(err, "no commits between")
 }
 
+// The workflow_dispatch 422 for inputs the workflow file doesn't declare
+// ("Unexpected inputs provided") — the signal that the org's config repo
+// carries an older workflow than this app expects.
+export function is422UnexpectedInputs(err: unknown): boolean {
+  return is422Mentioning(err, "unexpected inputs")
+}
+
 function is422Mentioning(err: unknown, needle: string): boolean {
   if (!(err instanceof GitHubAPIError) || err.status !== 422) return false
   if (err.message.toLowerCase().includes(needle)) return true

@@ -1,10 +1,25 @@
 import type { GitHubClient } from "../client"
+import { is422UnexpectedInputs } from "../errors"
 import { getRepo } from "../repoReads"
 import { COLLECT_SCORES_WORKFLOW, REGRADE_WORKFLOW } from "../workflows"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { logger } from "@/lib/logger"
 
 const logWorkflows = logger.scope("github:workflows")
+
+// The org's collect-scores.yaml predates the `assignment` dispatch input, so
+// GitHub rejected the scoped dispatch with a 422 ("Unexpected inputs"). The
+// message is developer-facing (logs); the view layer maps this class to a
+// translated "update your config repo" explanation.
+export class CollectInputsUnsupportedError extends Error {
+  constructor(cause: unknown) {
+    super(
+      "collect-scores.yaml does not declare the `assignment` input; the config repo's workflows are out of date",
+    )
+    this.name = "CollectInputsUnsupportedError"
+    this.cause = cause
+  }
+}
 
 /**
  * Dispatches the classroom50 repo's `collect-scores.yaml` workflow (the same
@@ -16,13 +31,15 @@ const logWorkflows = logger.scope("github:workflows")
  * triggered run as the oldest dispatch run with a larger id — monotonic, so no
  * clock comparison and unambiguous when dispatches race.
  *
- * @param classroom optional dispatch input to scope collection to one classroom;
- *   callers currently omit it to collect org-wide.
+ * @param scope optional dispatch inputs narrowing the collection to one
+ *   classroom, or one assignment within it; omitted collects org-wide.
+ *   Sending `assignment` against a config repo whose workflow predates the
+ *   input throws CollectInputsUnsupportedError.
  */
 export async function triggerScoreCollection(
   client: GitHubClient,
   org: string | undefined,
-  classroom?: string,
+  scope?: { classroom: string; assignment?: string },
 ): Promise<{ sinceRunId: number | null }> {
   if (!org) throw new Error("org must be specified to collect scores")
 
@@ -41,18 +58,36 @@ export async function triggerScoreCollection(
   )
   const sinceRunId = baseline.workflow_runs?.[0]?.id ?? null
 
-  await client.request(
-    `/repos/${org}/${CONFIG_REPO}/actions/workflows/${COLLECT_SCORES_WORKFLOW}/dispatches`,
-    {
-      method: "POST",
-      body: {
-        ref,
-        inputs: classroom ? { classroom } : {},
-      },
-    },
-  )
+  const inputs: Record<string, string> = {}
+  if (scope) {
+    inputs.classroom = scope.classroom
+    if (scope.assignment) inputs.assignment = scope.assignment
+  }
 
-  logWorkflows.info("dispatched collect-scores", { org, classroom, sinceRunId })
+  try {
+    await client.request(
+      `/repos/${org}/${CONFIG_REPO}/actions/workflows/${COLLECT_SCORES_WORKFLOW}/dispatches`,
+      {
+        method: "POST",
+        body: { ref, inputs },
+      },
+    )
+  } catch (err) {
+    // Only the `assignment` input is newer than the long-standing `classroom`
+    // one, so a 422 "unexpected inputs" on a scoped dispatch means the config
+    // repo's workflow predates per-assignment collection.
+    if (scope?.assignment && is422UnexpectedInputs(err)) {
+      throw new CollectInputsUnsupportedError(err)
+    }
+    throw err
+  }
+
+  logWorkflows.info("dispatched collect-scores", {
+    org,
+    classroom: scope?.classroom ?? "(all)",
+    assignment: scope?.assignment ?? "(all)",
+    sinceRunId,
+  })
   return { sinceRunId }
 }
 

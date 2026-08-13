@@ -8,23 +8,32 @@ import { useGitHubOperation, type OperationPhase } from "./useGitHubOperation"
 
 export type CollectScoresPhase = OperationPhase
 
+// Narrows a dispatched collection to one assignment (the assignment
+// submissions page); omitted collects org-wide.
+export type CollectScoresScope = { classroom: string; assignment: string }
+
 /**
  * Triggers collect-scores and tracks the run via useGitHubOperation; also
- * registers the dispatch with the activity banner.
+ * registers the dispatch with the activity banner. Pass `scope` to collect a
+ * single assignment instead of the whole org.
  */
-const useTriggerScoreCollection = (org: string | undefined) => {
+const useTriggerScoreCollection = (
+  org: string | undefined,
+  scope?: CollectScoresScope,
+) => {
   const client = useGitHubClient()
   const { register } = useActionActivityRegistry()
   const { t } = useTranslation()
 
+  // Scope-suffixed keys so an assignment page's tracked run never bleeds into
+  // another page's (or the org-wide) collect tracker across remounts.
+  const scopeSuffix = scope ? `:${scope.classroom}:${scope.assignment}` : ""
   const { trigger, phase, run, error } = useGitHubOperation({
-    storageKey: org ? `cl50:collect-scores:${org}` : null,
+    storageKey: org ? `cl50:collect-scores:${org}${scopeSuffix}` : null,
     queryKey: (sinceRunId) =>
       githubKeys.collectScoresRun(org ?? "", sinceRunId),
-    resetKey: org ?? "",
-    // Org-wide collection, matching the "Last collected" timestamp. Pass a
-    // classroom slug to triggerScoreCollection to scope it.
-    dispatch: () => triggerScoreCollection(client, org ?? ""),
+    resetKey: `${org ?? ""}${scopeSuffix}`,
+    dispatch: () => triggerScoreCollection(client, org ?? "", scope),
     findRun: (sinceRunId, signal) =>
       getCollectScoresRunAfterId(client, org ?? "", sinceRunId, signal),
     onDispatched: (result) => {

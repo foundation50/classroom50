@@ -105,6 +105,7 @@ export {
   triggerScoreCollection,
   triggerRegrade,
   rerunFailedRun,
+  CollectInputsUnsupportedError,
 } from "./mutations/workflowDispatch"
 export {
   addRepoCollaborator,
