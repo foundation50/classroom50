@@ -165,7 +165,7 @@ How each student's repository is created:
 - **Copy About from template** / **Copy topics from template** (templated, both
   on by default) — carry the template's About description and topics over to
   each student repository (GitHub's template-generate doesn't copy them on its
-  own).
+  own). Applies when students accept in the web app.
 - **Repository features** — per-feature settings for **Issues**, **Wiki**,
   **Projects**, and **Pull requests** on student repositories. The default,
   **Inherit from template**, re-applies the template's current setting at
@@ -350,11 +350,16 @@ and links to the repository, the commit, the feedback pull request
 
 ### Manual grades
 
-On a **Manual** grading-mode assignment (and as an override elsewhere), each
-row has an **Add grade** / **Edit grade** button for entering a score by hand.
-A hand-entered score is stored as an override in the classroom's `scores.json`
-and shows a **Manual** badge — autograding won't change it until the override
-is cleared.
+On an assignment created with **Grading → Manual (enter scores by hand)**, each
+row gets an **Add grade** / **Edit grade** button for entering a score out of
+the assignment's **Max points**. A hand-entered score is stored as an override
+in the classroom's `scores.json` and shows a **Manual** badge — autograding
+won't change it until the override is cleared.
+
+The inline editor appears only on manual-mode assignments, and only for
+organization owners (entering a score writes the config repo). To adjust a
+score on an **autograded** assignment, edit `scores.json` directly — see the
+[FAQ](FAQ#can-i-manually-override-or-adjust-a-grade).
 
 ### Bulk actions
 
@@ -380,6 +385,8 @@ assignment:
   workflow-disable API. No files are changed, and you can resume anytime;
   other workflows in student repositories keep running. Use it to stop
   autograding for one assignment without touching the rest of the org.
+  (Available on individual assignments that use the built-in autograder, once
+  students have accepted; a single repository can also be paused from its row.)
 - **Close submission** / **Reopen submission** — close the submission window:
   block new accepts and set every student's repository to read-only (work is
   preserved). This is the enforcement mechanism for deadlines — the due date

@@ -49,10 +49,11 @@ large cohorts. Submissions become an explicit act:
   required.
 
 **Milestone submission tags** — with either mode, the assignment can also
-name **milestone tags** (`submission_tags` in assignments.json, e.g.
-`["phase1", "phase2", "complete"]`, settable at creation or from the
-assignment settings / `gh teacher assignment add --submission-tag`). Pushing
-a matching tag grades that commit — plain git, no CLI required:
+name **milestone tags** (`submission_tags` in assignments.json, the web form's
+**Submission tags** field, e.g. `["phase1", "phase2", "complete"]`, settable at
+creation or from the assignment settings / `gh teacher assignment add
+--submission-tag`). Pushing a matching tag grades that commit — plain git, no
+CLI required:
 
 ```sh
 git tag phase1
@@ -151,9 +152,10 @@ Beyond choosing *when* commits grade, you can turn the pipeline off entirely:
 - **Per assignment, temporarily** — **Pause autograding** in the submissions
   page's **Actions** menu disables the `autograde.yaml` workflow in every
   student repo via GitHub's workflow-disable API. No files change, students'
-  other workflows keep running, and **Resume autograding** re-enables it. (A
-  student with admin on their repo can technically re-enable the workflow — a
-  known limitation.)
+  other workflows keep running, and **Resume autograding** re-enables it.
+  Available on individual assignments using the built-in autograder (a single
+  repo can also be paused from its row). A student with admin on their own
+  repo can technically re-enable the workflow — a known limitation.
 - **Org-wide** — the organization settings' **Pause autograding for all
   student repositories** toggle narrows the org's Actions policy to the config
   repo. **This stops all workflows in student repositories**, including any

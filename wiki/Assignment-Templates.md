@@ -95,12 +95,15 @@ template.
   compensates at accept time:
   - The **About description and topics** are copied when the assignment's
     **Copy About from template** / **Copy topics from template** toggles are on
-    (the default).
+    (the default for new assignments). This runs on the web accept path; a
+    student who accepts with `gh student accept` gets the repository without
+    them.
   - **Repository features** (Issues, Wiki, Projects, Pull requests) follow the
     assignment's Repository features settings — by default each **inherits the
     template's current setting**; you can force any of them on or off per
-    assignment. Repos accepted before a change can be reconciled with the
-    submissions page's **Update repository features** action.
+    assignment. This applies on both the web and CLI accept paths. Repos
+    accepted before a change can be reconciled with the submissions page's
+    **Update repository features** action.
 
 ## Reusing one template across assignments
 

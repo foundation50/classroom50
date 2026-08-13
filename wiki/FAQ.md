@@ -196,8 +196,8 @@ Yes, several levers, from least to most drastic:
 - **Pause autograding org-wide** from the organization's Actions settings in
   the web app. **Caution:** this stops **all** workflows in student
   repositories, not just autograding — any CI your students run stops too.
-  Setup also applies a **$0 Actions spending cap** by default so a runaway
-  workflow can't run up a bill.
+  Setup also creates a **$0 Actions spending cap** (only when the organization
+  has none) so a runaway workflow can't run up a bill.
 
 ### Can I use my own (self-hosted) runners?
 
@@ -253,15 +253,17 @@ results.
 
 Yes, two ways:
 
-- **In the web app** — on the submissions page, each row has an **Add grade**
-  / **Edit grade** button. A hand-entered score shows a **Manual** badge and
-  is stored as an override; autograding won't change it until the override is
-  cleared. (An assignment can also be created in **Manual** grading mode, with
-  a **Max points** field, when it's graded exclusively by hand.)
-- **In the config repo** — edit the classroom's `scores.json`: change the
-  submission's `score` and add `"override": true` to that entry, then commit.
-  Collection leaves overridden entries untouched on future runs. See
-  [Collect scores](CLI-Teacher-Guide#9-collect-scores).
+- **In the web app, on a manual assignment.** Create the assignment with
+  **Grading → Manual (enter scores by hand)** and a **Max points** value; each
+  row on the submissions page then gets an **Add grade** / **Edit grade**
+  button. Hand-entered scores show a **Manual** badge and are stored as
+  overrides. (This editor appears only for manual-mode assignments, and only
+  for organization owners — writing scores means writing the config repo. The
+  grading mode can't be changed after an assignment is created.)
+- **In the config repo, for any assignment.** Edit the classroom's
+  `scores.json`: change the submission's `score` and add `"override": true` to
+  that entry, then commit. Collection leaves overridden entries untouched on
+  future runs. See [Collect scores](CLI-Teacher-Guide#9-collect-scores).
 
 ### How do I export grades, or download student work in bulk?
 

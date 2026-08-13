@@ -39,12 +39,17 @@ Workarounds:
 
 ## "Couldn't verify the Actions spending cap"
 
-Setup applies a **$0 Actions spending cap** so a runaway workflow can't run up
-a bill, then verifies it. On **GitHub Enterprise** (and some other setups)
-billing is managed above the organization, so your OAuth token can't read it
-and the verification fails with an advisory warning (e.g. `read failed
-(400)`). This is expected and **doesn't block anything** — confirm your
-Actions spending limits with your Enterprise administrator instead.
+Setup creates a **$0 GitHub Actions spending cap** so a runaway workflow can't
+run up a bill — but only when your organization has no Actions cap yet; a cap
+you set yourself is never modified. It then verifies the cap, and that
+verification can fail with an advisory warning (e.g. `read failed (400)`) when
+billing isn't readable by your token — typically **enterprise-managed
+billing**, a plan that doesn't expose organization budgets, or a token without
+Organization Administration read.
+
+This is expected and **doesn't block anything** — Classroom 50 keeps working.
+Confirm your Actions spending limits in the organization's billing settings, or
+with your Enterprise/billing administrator.
 
 ## My organization doesn't appear
 
