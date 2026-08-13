@@ -156,10 +156,11 @@ How each student's repository is created:
   [Assignment Templates](Assignment-Templates) for requirements.
 - **Add a README** (no-template assignments) — whether the repository starts
   with an initial commit. With it **off**, what students get depends on the
-  built-in autograder choice below:
-  - autograder **off** → a **truly bare repository**: no commit, no
-    autograding, and no feedback pull request (permanently — not just until the
-    student's first commit). Use it when students build everything from
+  built-in autograder choice under [Grading and
+  submissions](#grading-and-submissions):
+  - autograder **off** (the default) → a **truly bare repository**: no commit,
+    no autograding, and no feedback pull request (permanently — not just until
+    the student's first commit). Use it when students build everything from
     scratch, including their own GitHub Actions.
   - autograder **on** → an initialized repository carrying only the control
     files (no README, no starter content) that grades normally.
@@ -182,21 +183,24 @@ How each student's repository is created:
 - **Student repo access** — the role students get on their own repository.
 
 > [!WARNING]
-> **The empty-repository choice is permanent** — you can't change it after
-> creating the assignment, because repositories students already accepted
-> can't be retrofitted.
+> **These repository-shape choices are permanent** — the template/README/bare
+> and built-in-autograder choices can't be changed after you create the
+> assignment, because repositories students already accepted can't be
+> retrofitted.
 
 ### Grading and submissions
 
-- **Built-in autograder** — **Use the built-in autograder** (the default) or
-  **Do not use the built-in autograder**. Opting out means accept installs no
-  autograding workflow at all: on a templated assignment your template's own
-  CI workflows run instead, and Classroom 50's score collection skips the
-  assignment. Immutable after creation.
-- **Grading** — **Not graded**, **Autograded**, or **Manual (enter scores by
-  hand)**. Manual assignments get a **Max points** field, and you enter each
-  student's score directly on the submissions page (see below). Immutable
+- **Grading** — **Not graded** (the default), **Autograded**, or **Manual
+  (enter scores by hand)**. The autograding options below are offered only
+  under **Autograded**; **Manual** assignments get a **Max points** field and
+  you enter each student's score on the submissions page (see below). Immutable
   after creation.
+- **Built-in autograder** — under **Autograded**, choose **Use the built-in
+  autograder** or **Do not use the built-in autograder** (the default on a new
+  assignment). Opting out means accept installs no autograding workflow at all:
+  on a templated assignment your template's own CI workflows run instead, and
+  Classroom 50's score collection skips the assignment. Immutable after
+  creation.
 - **Submission type** — when the autograder runs. **Every push to the default
   branch** (the default) grades each push. **A tagged commit** grades only
   when a student submits (`gh student submit`) or pushes a `submit/*` tag —
