@@ -482,6 +482,7 @@ const SubmissionsPageContent = () => {
         release: s.releaseUrl,
         submissionCount: s.submissionCount,
       })),
+      assignmentInfo?.due,
     )
     const merged = mergeDetectedSubmissions(
       withLive,
@@ -499,6 +500,7 @@ const SubmissionsPageContent = () => {
     detectedSubmissions,
     rosterReady,
     students,
+    assignmentInfo?.due,
   ])
 
   // Repos whose latest submission landed after the deadline. `late` is computed

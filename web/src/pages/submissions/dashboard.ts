@@ -108,6 +108,9 @@ export type LiveSubmissionPresence = {
 export function mergeLiveRows(
   snapshotRows: SubmissionRow[],
   liveRows: LiveSubmissionPresence[],
+  // The assignment's due date (ISO), used only to derive `late` for PENDING
+  // live-only rows — collected rows keep the collector-computed `late`.
+  dueDate?: string | null,
 ): SubmissionRow[] {
   const liveByOwner = new Map<string, LiveSubmissionPresence>()
   for (const live of liveRows) {
@@ -153,10 +156,28 @@ export function mergeLiveRows(
       // At least 1 (the release we just saw); use the live count when higher.
       submissionCount: Math.max(1, live.submissionCount),
       pending: true,
+      // The collector isn't here to compute `late` for this not-yet-collected
+      // row, so derive it from the live submission time vs the due date —
+      // otherwise a pending late submission reads as on-time until the next
+      // collect. Left undefined (never guessed) without a parseable pair.
+      late: liveLateness(live.datetime, dueDate),
       submissions: [],
     }))
 
   return [...merged, ...liveOnly]
+}
+
+// `late` for a pending live row: submission time strictly after the due date.
+// Undefined (unknown, not "on time") when either side is missing/unparseable.
+function liveLateness(
+  submittedAt: string,
+  dueDate: string | null | undefined,
+): boolean | undefined {
+  if (!dueDate) return undefined
+  const submittedMs = new Date(submittedAt).getTime()
+  const dueMs = new Date(dueDate).getTime()
+  if (!Number.isFinite(submittedMs) || !Number.isFinite(dueMs)) return undefined
+  return submittedMs > dueMs
 }
 
 // Detected-submission presence for one repo, from the detection subsystem

@@ -1175,6 +1175,49 @@ describe("mergeLiveRows", () => {
     expect(merged[0].submissionCount).toBe(1)
   })
 
+  it("marks a pending live row late when it landed after the due date", () => {
+    const merged = mergeLiveRows(
+      [],
+      [live("bob", "2026-06-21T10:00:00Z")],
+      "2026-06-20T23:59:00Z",
+    )
+    expect(merged[0].pending).toBe(true)
+    expect(merged[0].late).toBe(true)
+  })
+
+  it("marks a pending live row on-time when it landed before the due date", () => {
+    const merged = mergeLiveRows(
+      [],
+      [live("bob", "2026-06-19T10:00:00Z")],
+      "2026-06-20T23:59:00Z",
+    )
+    expect(merged[0].late).toBe(false)
+  })
+
+  it("leaves lateness undefined without a due date or with unparseable inputs", () => {
+    expect(
+      mergeLiveRows([], [live("bob", "2026-06-19T10:00:00Z")])[0].late,
+    ).toBeUndefined()
+    expect(
+      mergeLiveRows([], [live("bob", "2026-06-19T10:00:00Z")], null)[0].late,
+    ).toBeUndefined()
+    expect(
+      mergeLiveRows([], [live("bob", "not-a-date")], "2026-06-20T23:59:00Z")[0]
+        .late,
+    ).toBeUndefined()
+  })
+
+  it("never rewrites a snapshot row's collected lateness", () => {
+    const merged = mergeLiveRows(
+      [row({ owner: "alice", late: false, submissionCount: 1 })],
+      [live("alice", "2026-06-25T10:00:00Z", 3)],
+      "2026-06-20T23:59:00Z",
+    )
+    // The collected `late` is the source of record for graded submissions —
+    // the live overlay only bumps count/staleness.
+    expect(merged[0].late).toBe(false)
+  })
+
   it("raises a snapshot row's count to the live count and flags it stale", () => {
     const merged = mergeLiveRows(
       [row({ owner: "alice", score: 9, submissionCount: 1 })],
