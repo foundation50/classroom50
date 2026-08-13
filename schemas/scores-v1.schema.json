@@ -34,6 +34,11 @@
           "type": "array",
           "items": { "$ref": "#/$defs/entry" },
           "description": "One entry per student repo (keyed by owner). `[]` when nothing collected yet."
+        },
+        "collected_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\dZ$",
+          "description": "Optional. The wall-clock UTC instant collection last walked THIS assignment (stamped even when nothing changed, so per-assignment freshness is knowable — an org-wide run timestamp can't say whether a scoped run touched this bucket). Absent on files written before this field existed and on buckets a scoped run skipped."
         }
       }
     },

@@ -48,6 +48,10 @@ type ScoreEntry = {
 type AssignmentBucket = {
   type: "individual" | "group"
   entries: ScoreEntry[]
+  // Per-bucket freshness stamp written by collect_scores.py: the UTC instant
+  // collection last walked THIS assignment (absent on files written before the
+  // field existed).
+  collected_at?: string
 }
 
 type ScoresSchema = {
@@ -111,6 +115,10 @@ export type SubmissionAttempt = {
 export type NormalizedScores = {
   schema: string
   submissions: Record<string, SubmissionRow[]>
+  // Slug -> per-bucket `collected_at` stamp, where present. More precise than
+  // the org-wide workflow-run timestamp: a scoped collect refreshes only its
+  // own bucket, so only that bucket's stamp moves.
+  collectedAt: Record<string, string>
 }
 
 // Collapse a bucket's entries to one row each (latest submission first).
@@ -192,11 +200,15 @@ export function normalizeScores(
   if (!data) return undefined
 
   const submissions: Record<string, SubmissionRow[]> = {}
+  const collectedAt: Record<string, string> = {}
   for (const [slug, bucket] of Object.entries(data.assignments ?? {})) {
     submissions[slug] = bucketToRows(bucket)
+    if (typeof bucket?.collected_at === "string" && bucket.collected_at) {
+      collectedAt[slug] = bucket.collected_at
+    }
   }
 
-  return { schema: data.schema, submissions }
+  return { schema: data.schema, submissions, collectedAt }
 }
 
 const useGetScores = (

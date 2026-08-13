@@ -29,7 +29,7 @@ const unexpectedInputs422 = () =>
 // the baseline runs read, and the dispatch POST (whose behavior varies per
 // test via `onDispatch`).
 const makeClient = (onDispatch: () => unknown) => {
-  const request = vi.fn((url: string) => {
+  const request = vi.fn((url: string, _options?: unknown) => {
     if (url.endsWith("/repos/acme/classroom50")) {
       return Promise.resolve({ default_branch: "main" })
     }

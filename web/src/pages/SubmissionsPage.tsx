@@ -823,10 +823,17 @@ const SubmissionsPageContent = () => {
     collectScores.phase === "completed"
       ? (collectScores.run?.created_at ?? null)
       : null
-  const effectiveLastCollectedAt = latestCollectedAt(
-    lastRunCompletedAt,
-    trackedCompletedAt,
-  )
+  // When the bucket carries its own `collected_at` stamp, it is authoritative
+  // for THIS assignment: an org-wide run timestamp can't tell whether a scoped
+  // run (another assignment's "Sync now") touched this bucket, so trusting it
+  // would overstate freshness. The tracked run still participates — it's a
+  // collect we dispatched for this very assignment and completes before the
+  // scores.json refetch lands. Buckets from an older collector (no stamp) fall
+  // back to the run-based derivation.
+  const bucketCollectedAt = scoresData?.collectedAt?.[assignment ?? ""] ?? null
+  const effectiveLastCollectedAt = bucketCollectedAt
+    ? latestCollectedAt(bucketCollectedAt, trackedCompletedAt)
+    : latestCollectedAt(lastRunCompletedAt, trackedCompletedAt)
 
   const lastCollectedLabel = effectiveLastCollectedAt
     ? formatRelativeToNow(new Date(effectiveLastCollectedAt))

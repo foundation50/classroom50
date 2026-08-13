@@ -213,7 +213,7 @@ def main() -> int:
             failed_classrooms.append(classroom_short)
 
         try:
-            updates, mode_flip_assignments = collect_classroom(
+            updates, mode_flip_assignments, collected = collect_classroom(
                 api_url=api_url,
                 org=org,
                 classroom_short=classroom_short,
@@ -277,6 +277,16 @@ def main() -> int:
             )
 
         n_changes = apply_updates(scores, updates)
+        # Stamp the buckets this run actually walked (even when nothing changed)
+        # so per-assignment freshness is knowable — an org-wide run timestamp
+        # can't say whether a scoped run touched a given assignment. A bucket
+        # with no submissions yet is created empty so the stamp has a home.
+        collected_at = utc_now_iso()
+        for slug, atype in collected.items():
+            bucket = scores["assignments"].setdefault(
+                slug, {"type": atype, "entries": []}
+            )
+            bucket["collected_at"] = collected_at
         try:
             save_scores(scores_path, scores)
         except ScoresFileError as exc:
@@ -521,13 +531,17 @@ def collect_classroom(
     service_token: str,
     roster_meta: dict[str, dict[str, str]] | None = None,
     assignment_filter: str = "",
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, dict[str, str]]:
     """Return (validated result payloads for every (student, assignment) pair,
-    count of assignments whose only submissions were rejected by validation).
+    count of assignments whose only submissions were rejected by validation,
+    slug -> mode map of the assignments actually walked).
     Per-repo failures warn and skip; hard failures (auth 401/403; network 599)
     propagate and main() converts them to exit 1. The second tuple element lets
     main() distinguish a mode-flip-induced empty result (which has its own loud
-    warning) from a token-access problem.
+    warning) from a token-access problem. The third records which buckets this
+    run refreshed — main() stamps their `collected_at` — and stays empty when
+    collection was skipped wholesale (team unreadable/empty), so a skipped
+    classroom never reads as freshly collected.
 
     `roster_meta` is the best-effort roster join (username -> display metadata,
     see load_roster_metadata); when a collected owner has a matching row its
@@ -541,6 +555,9 @@ def collect_classroom(
     roster_meta = roster_meta or {}
     results: list[dict[str, Any]] = []
     group_attribution_degraded = 0
+    # Assignments this run actually walked (slug -> mode), for `collected_at`
+    # stamping. Populated only past the team-read gate below.
+    collected: dict[str, str] = {}
     # (assignment) buckets where every present submission was rejected by
     # validation (the mode-flip symptom). Returned so main() can suppress its
     # "rotate token" heuristic, which would otherwise misread this as a
@@ -572,20 +589,20 @@ def collect_classroom(
             f"Members: Read (a fine-grained PAT permission) — rotate it with "
             f"`gh teacher rotate-service-token {org}`."
         )
-        return results, mode_flip_assignments
+        return results, mode_flip_assignments, collected
     except (json.JSONDecodeError, ValueError) as exc:
         emit_warning(
             f"{classroom_short}: team {team_slug!r} member listing malformed "
             f"({exc}); skipping collection for this classroom."
         )
-        return results, mode_flip_assignments
+        return results, mode_flip_assignments, collected
 
     if not team_usernames:
         emit_warning(
             f"{classroom_short}: teams {team_slug!r} (and staff teams) have no "
             f"members — no (username, assignment) pairs to poll; skipping."
         )
-        return results, mode_flip_assignments
+        return results, mode_flip_assignments, collected
 
     # Group attribution credits a collaborator only if on a classroom team
     # (owner always credited) — same trust model, team-sourced set. Staff are in
@@ -629,6 +646,7 @@ def collect_classroom(
                 f"expected 'individual' or 'group'; collecting as individual"
             )
         assignment_type = "group" if is_group else "individual"
+        collected[slug] = assignment_type
 
         submitted = 0
         # Staff (non-student-team) members who actually submitted this
@@ -823,7 +841,7 @@ def collect_classroom(
             f"lacks the collaborator-read permission — rotate it with `gh teacher rotate-service-token`."
         )
 
-    return results, mode_flip_assignments
+    return results, mode_flip_assignments, collected
 
 
 def assignment_repo_name(classroom: str, assignment: str, username: str) -> str:
@@ -1030,6 +1048,13 @@ def _dedupe_logins(logins: list[str]) -> list[str]:
 # Due-date / lateness ---------------------------------------------------------
 
 
+def utc_now_iso() -> str:
+    """Now in the schema's timestamp shape (UTC, seconds, trailing Z)."""
+    return datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
 def parse_rfc3339(value: Any) -> datetime.datetime | None:
     """Parse an RFC 3339 timestamp into an aware datetime, or None when it
     isn't one (non-string, unparseable, or missing a timezone offset). Naive
@@ -1155,7 +1180,10 @@ def normalize_assignments(assignments: Any) -> dict[str, dict[str, Any]]:
             raise ValueError(
                 f"assignments[{slug!r}].entries must be a list, got {type(entries).__name__}"
             )
-        normalized[slug] = {"type": atype, "entries": entries}
+        # Spread the whole bucket so unknown fields (e.g. `collected_at`, or
+        # anything a newer writer added) survive this read-modify-write instead
+        # of being silently dropped on the next save.
+        normalized[slug] = {**bucket, "type": atype, "entries": entries}
     return normalized
 
 

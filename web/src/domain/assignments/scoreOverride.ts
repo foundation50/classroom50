@@ -45,6 +45,8 @@ type ScoreEntry = {
 type AssignmentBucket = {
   type: "individual" | "group"
   entries: ScoreEntry[]
+  // e.g. the collector's `collected_at` — preserved verbatim on RMW.
+  [key: string]: unknown
 }
 
 type ScoresFile = {

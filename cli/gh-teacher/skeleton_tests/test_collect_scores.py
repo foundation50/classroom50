@@ -853,7 +853,7 @@ class TestGroupCollectClassroom:
         )
         stub_team_members(monkeypatch, ["alice", "bob", "carol"])
 
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -881,7 +881,7 @@ class TestGroupCollectClassroom:
         )
         stub_team_members(monkeypatch, ["alice", "bob"])
 
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -911,7 +911,7 @@ class TestGroupCollectClassroom:
         monkeypatch.setattr(cs, "list_repo_collaborator_logins", boom)
         stub_team_members(monkeypatch, ["alice"])
 
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -942,7 +942,7 @@ class TestGroupCollectClassroom:
         monkeypatch.setattr(cs, "list_repo_collaborator_logins", malformed)
         stub_team_members(monkeypatch, ["alice"])
 
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -968,7 +968,7 @@ class TestGroupCollectClassroom:
         )
         stub_team_members(monkeypatch, ["alice", "bob"])
 
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -1004,7 +1004,7 @@ class TestGroupCollectClassroom:
         monkeypatch.setattr(cs, "list_repo_collaborator_logins", lambda *a, **k: ["alice"])
         stub_team_members(monkeypatch, ["alice"])
 
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -1193,7 +1193,7 @@ class TestCollectClassroomTeamDriven:
             cs, "download_result_asset",
             lambda *a, **k: make_result(username="alice"),
         )
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta={}, assignments=self._assignments(), service_token="token",
         )
@@ -1202,7 +1202,7 @@ class TestCollectClassroomTeamDriven:
 
     def test_empty_team_warns_and_collects_nothing(self, monkeypatch, capsys):
         stub_team_members(monkeypatch, [])
-        results, mode_flip = cs.collect_classroom(
+        results, mode_flip, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta={}, assignments=self._assignments(), service_token="token",
         )
@@ -1238,7 +1238,7 @@ class TestCollectClassroomTeamDriven:
             raise urllib.error.HTTPError("u", 404, "Not Found", None, None)
 
         monkeypatch.setattr(cs, "list_team_member_logins", boom)
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta={}, assignments=self._assignments(), service_token="token",
         )
@@ -1308,7 +1308,7 @@ class TestCollectClassroomTeamDriven:
             raise ValueError("expected JSON array, got dict")
 
         monkeypatch.setattr(cs, "list_team_member_logins", boom)
-        results, mode_flip = cs.collect_classroom(
+        results, mode_flip, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta={}, assignments=self._assignments(), service_token="token",
         )
@@ -1397,7 +1397,7 @@ class TestCollectClassroomTeamDriven:
         monkeypatch.setattr(
             cs, "download_result_asset", lambda *a, **k: make_result(username="ta1"),
         )
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta=meta, assignments=self._assignments(), service_token="token",
         )
@@ -1425,7 +1425,7 @@ class TestCollectClassroomTeamDriven:
         monkeypatch.setattr(
             cs, "download_result_asset", lambda *a, **k: make_result(username="alice"),
         )
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta=meta, assignments=self._assignments(), service_token="token",
         )
@@ -1453,7 +1453,7 @@ class TestCollectClassroomTeamDriven:
         monkeypatch.setattr(
             cs, "download_result_asset", lambda *a, **k: make_result(username="alice"),
         )
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta=meta, assignments=self._assignments(), service_token="token",
         )
@@ -1512,7 +1512,7 @@ class TestCollectClassroomTeamDriven:
             cs, "download_result_asset",
             lambda *a, **k: make_result(username=seen["owner"]),
         )
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta=meta, assignments=self._assignments(), service_token="token",
         )
@@ -1577,7 +1577,7 @@ class TestLateness:
         monkeypatch.setattr(cs, "download_result_asset", fake_download)
         stub_team_members(monkeypatch, ["alice"])
 
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -1631,7 +1631,7 @@ class TestRosterMetadataJoin:
             cs, "download_result_asset",
             lambda *a, **k: make_result(username="alice"),
         )
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta={}, assignments=self._assignments(), service_token="token",
             roster_meta=cs.load_roster_metadata(tmp_path),
@@ -1965,7 +1965,7 @@ class TestReleaseLookup:
 
         monkeypatch.setattr(cs, "all_submit_releases", malformed_listing)
         stub_team_members(monkeypatch, ["alice"])
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -2050,7 +2050,7 @@ class TestCollectAllSubmissions:
 
         monkeypatch.setattr(cs, "download_result_asset", fake_download)
 
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -2088,7 +2088,7 @@ class TestCollectAllSubmissions:
 
         monkeypatch.setattr(cs, "download_result_asset", fake_download)
 
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -2107,7 +2107,7 @@ class TestCollectAllSubmissions:
         monkeypatch.setattr(
             cs, "download_result_asset", lambda *a, **k: (_ for _ in ()).throw(ValueError("bad"))
         )
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -2127,7 +2127,7 @@ class TestCollectAllSubmissions:
             cs, "download_result_asset",
             lambda *a, **k: make_result(username="alice", score=7, max_score=10),
         )
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -2149,7 +2149,7 @@ class TestCollectAllSubmissions:
             cs, "download_result_asset",
             lambda *a, **k: make_result(username="alice", score=7, max_score=10),
         )
-        results, _ = cs.collect_classroom(
+        results, _, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
@@ -2248,7 +2248,7 @@ class TestMain:
 
         def fake_collect(**kwargs):
             seen.append(kwargs["api_url"])
-            return [], 0
+            return [], 0, {}
 
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
@@ -2298,7 +2298,7 @@ class TestMain:
 
         def fake_collect(**kwargs):
             seen.append(kwargs.get("assignment_filter"))
-            return [], 0
+            return [], 0, {}
 
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
@@ -2320,7 +2320,7 @@ class TestMain:
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
         monkeypatch.setenv("ASSIGNMENT_FILTER", "no-such-assignment")
-        monkeypatch.setattr(cs, "collect_classroom", lambda **k: ([], 0))
+        monkeypatch.setattr(cs, "collect_classroom", lambda **k: ([], 0, {}))
 
         assert cs.main() == 1
         assert "no-such-assignment" in capsys.readouterr().err
@@ -2382,7 +2382,7 @@ class TestMain:
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
-        monkeypatch.setattr(cs, "collect_classroom", lambda **kwargs: ([], 0))
+        monkeypatch.setattr(cs, "collect_classroom", lambda **kwargs: ([], 0, {}))
 
         assert cs.main() == 0
         err = capsys.readouterr().err
@@ -2401,7 +2401,7 @@ class TestMain:
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
         monkeypatch.setattr(
-            cs, "collect_classroom", lambda **kwargs: ([make_update(username="alice")], 0)
+            cs, "collect_classroom", lambda **kwargs: ([make_update(username="alice")], 0, {"hello": "individual"})
         )
 
         assert cs.main() == 0
@@ -2419,7 +2419,7 @@ class TestMain:
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
-        monkeypatch.setattr(cs, "collect_classroom", lambda **kwargs: ([], 0))
+        monkeypatch.setattr(cs, "collect_classroom", lambda **kwargs: ([], 0, {}))
 
         assert cs.main() == 0
         assert "collected 0 submissions" in capsys.readouterr().err
@@ -2435,7 +2435,7 @@ class TestMain:
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
-        monkeypatch.setattr(cs, "collect_classroom", lambda **kwargs: ([], 0))
+        monkeypatch.setattr(cs, "collect_classroom", lambda **kwargs: ([], 0, {}))
 
         assert cs.main() == 0
         assert "collected 0 submissions" not in capsys.readouterr().err
@@ -2473,7 +2473,7 @@ class TestMain:
 
         def fake_collect(**kwargs):
             collected["called"] = True
-            return [make_update(username="alice")], 0
+            return [make_update(username="alice")], 0, {"hello": "individual"}
 
         monkeypatch.setattr(cs, "grant_classroom_team_access", grant_403)
         monkeypatch.setattr(cs, "collect_classroom", fake_collect)
@@ -2533,7 +2533,7 @@ class TestMain:
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
         monkeypatch.setattr(
             cs, "collect_classroom",
-            lambda **kwargs: ([make_update(username="alice")], 0) if kwargs["classroom_short"] == "z-good" else ([], 0),
+            lambda **kwargs: ([make_update(username="alice")], 0, {"hello": "individual"}) if kwargs["classroom_short"] == "z-good" else ([], 0, {}),
         )
 
         # Run fails (a classroom was bad) but the good classroom is collected.
@@ -2544,6 +2544,109 @@ class TestMain:
         assert "hello" in good_scores["assignments"], (
             "z-good must still be collected even though a-bad failed first"
         )
+
+
+class TestCollectedAtStamp:
+    """Per-bucket `collected_at`: main() stamps every bucket the run actually
+    walked (even unchanged/empty), a skipped bucket keeps its old stamp, and
+    the load path preserves the field across read-modify-write."""
+
+    def _env(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+
+    def test_walked_bucket_is_stamped(self, tmp_path, monkeypatch):
+        write_minimal_classroom(tmp_path)
+        self._env(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            cs, "collect_classroom",
+            lambda **kwargs: ([make_update(username="alice")], 0, {"hello": "individual"}),
+        )
+
+        assert cs.main() == 0
+        scores = json.loads((tmp_path / "cs-principles" / "scores.json").read_text())
+        stamp = scores["assignments"]["hello"]["collected_at"]
+        assert cs.RFC3339_RE.fullmatch(stamp), stamp
+
+    def test_walked_bucket_with_no_submissions_is_created_empty_and_stamped(
+        self, tmp_path, monkeypatch
+    ):
+        # Zero submissions is still a completed walk — "checked at T, nothing
+        # found" must be distinguishable from "never collected".
+        write_minimal_classroom(tmp_path)
+        self._env(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            cs, "collect_classroom", lambda **kwargs: ([], 0, {"hello": "individual"})
+        )
+
+        assert cs.main() == 0
+        scores = json.loads((tmp_path / "cs-principles" / "scores.json").read_text())
+        bucket = scores["assignments"]["hello"]
+        assert bucket["type"] == "individual"
+        assert bucket["entries"] == []
+        assert cs.RFC3339_RE.fullmatch(bucket["collected_at"])
+
+    def test_unwalked_bucket_keeps_its_old_stamp(self, tmp_path, monkeypatch):
+        # A scoped run must not refresh (or drop) a sibling bucket's stamp —
+        # this also exercises load_scores preserving unknown bucket fields.
+        classroom = write_minimal_classroom(tmp_path)
+        (classroom / "scores.json").write_text(
+            json.dumps(
+                {
+                    "schema": cs.SCORES_SCHEMA_V1,
+                    "assignments": {
+                        "sibling": {
+                            "type": "individual",
+                            "entries": [],
+                            "collected_at": "2026-01-01T00:00:00Z",
+                        }
+                    },
+                }
+            )
+        )
+        self._env(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            cs, "collect_classroom", lambda **kwargs: ([], 0, {"hello": "individual"})
+        )
+
+        assert cs.main() == 0
+        scores = json.loads((classroom / "scores.json").read_text())
+        assert scores["assignments"]["sibling"]["collected_at"] == "2026-01-01T00:00:00Z"
+        assert "collected_at" in scores["assignments"]["hello"]
+
+    def test_skipped_classroom_returns_no_walked_slugs(self, monkeypatch):
+        # Team unreadable -> collection skipped wholesale; nothing may be
+        # stamped, or a skipped classroom would read as freshly collected.
+        stub_team_members(monkeypatch, [])
+        _, _, collected = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={},
+            assignments={"assignments": [{"slug": "hello", "name": "H", "mode": "individual", "tests": []}]},
+            service_token="token",
+        )
+        assert collected == {}
+
+    def test_collect_classroom_reports_only_walked_slugs(self, monkeypatch):
+        # The filtered-out sibling and the never-grading assignment are not
+        # walked, so neither may be stamped; the group assignment reports its
+        # mode so an absent bucket can be scaffolded with the right type.
+        stub_team_members(monkeypatch, ["alice"])
+        monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
+        _, _, collected = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={},
+            assignments={
+                "assignments": [
+                    {"slug": "hello", "name": "H", "mode": "group", "tests": []},
+                    {"slug": "other", "name": "O", "mode": "individual", "tests": []},
+                    {"slug": "reading", "name": "R", "mode": "individual", "empty_repo": True, "tests": []},
+                ]
+            },
+            service_token="token",
+            assignment_filter="hello",
+        )
+        assert collected == {"hello": "group"}
 
 
 class TestCollectClassroomModeFlip:
@@ -2569,7 +2672,7 @@ class TestCollectClassroomModeFlip:
         )
         # Manifest now says group.
         stub_team_members(monkeypatch, ["alice"])
-        results, mode_flip = cs.collect_classroom(
+        results, mode_flip, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta={},
             assignments=self._assignments("group"),
@@ -2598,7 +2701,7 @@ class TestCollectClassroomModeFlip:
 
         monkeypatch.setattr(cs, "download_result_asset", _no_asset)
         stub_team_members(monkeypatch, ["alice"])
-        results, mode_flip = cs.collect_classroom(
+        results, mode_flip, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta={},
             assignments=self._assignments("individual"),
@@ -2739,7 +2842,7 @@ def test_collect_classroom_skips_no_autograder_assignment(monkeypatch, capsys):
     monkeypatch.setattr(cs, "all_submit_releases", fail_releases)
     stub_team_members(monkeypatch, ["alice"])
 
-    results, _ = cs.collect_classroom(
+    results, _, _ = cs.collect_classroom(
         api_url="https://api.github.com",
         org="cs50",
         classroom_short="cs-principles",
@@ -2761,7 +2864,7 @@ def test_collect_classroom_skips_empty_repo_assignment(monkeypatch, capsys):
     monkeypatch.setattr(cs, "all_submit_releases", fail_releases)
     stub_team_members(monkeypatch, ["alice"])
 
-    results, _ = cs.collect_classroom(
+    results, _, _ = cs.collect_classroom(
         api_url="https://api.github.com",
         org="cs50",
         classroom_short="cs-principles",

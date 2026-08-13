@@ -418,6 +418,24 @@ class TestScoresSchema:
         doc = _scores({"hello": _individual_bucket([_entry(submissions=[bad_record])])})
         assert _errs(SCORES_V, doc) != []
 
+    def test_bucket_collected_at_accepted(self):
+        # The per-bucket freshness stamp, on a populated bucket and on an
+        # empty just-scaffolded one.
+        doc = _scores({
+            "hello": {**_individual_bucket([_entry()]), "collected_at": "2026-06-01T15:00:00Z"},
+            "empty": {"type": "individual", "entries": [], "collected_at": "2026-06-01T15:00:00Z"},
+        })
+        assert _errs(SCORES_V, doc) == []
+
+    def test_bucket_collected_at_malformed_rejected(self):
+        # Must be the schema's UTC-Z timestamp shape, not a bare date or an
+        # offset form.
+        for bad in ("2026-06-01", "2026-06-01T15:00:00+02:00", ""):
+            doc = _scores({
+                "hello": {**_individual_bucket([_entry()]), "collected_at": bad},
+            })
+            assert _errs(SCORES_V, doc) != []
+
     @pytest.mark.parametrize("doc", [
         {"schema": "classroom50/scores/v2", "assignments": {}},        # bad sentinel
         {"schema": "classroom50/scores/v1", "assignments": []},        # array, not an object map
