@@ -50,8 +50,28 @@ hosted service can. As a result:
   [service token](#the-service-token) that lets them act while you are offline.
 
 For teachers, this means administering Classroom 50 is closer to administering
-your own GitHub organization than to using a hosted service. If a view looks out
-of date, signing in and reopening the page often updates it.
+your own GitHub organization than to using a hosted service.
+
+### When state refreshes
+
+Because state lives on GitHub, "what you see" depends on when something last
+read it:
+
+- **Web app** — loading a page reads the current GitHub state (so opening
+  classroom50.org effectively refreshes the roster, teams, and config), and
+  signing in as an owner can additionally run reconciliation upkeep. One
+  exception: the **organization list** is cached for ten minutes — use
+  **Refresh list** to force it. If a view looks out of date, reopening the page
+  usually updates it.
+- **CLI reads** (`roster list`, `classroom list`, `member list`, …) report
+  what's committed and on GitHub **at that moment**; they never write or
+  reconcile. If the web app shows a newer roster than `roster list` did a
+  minute earlier, someone (or a sign-in reconciliation) committed in between.
+- **CLI writes** (`roster add`, `staff add`, `assignment add`, …) update the
+  config repo and GitHub teams immediately, but only for the thing they
+  change — they don't run the web app's broader reconciliation.
+- **Grades** refresh only when collection runs: nightly, or on demand via
+  **Sync now** / `collect-scores.yaml`.
 
 ## Interactive vs. background work
 
@@ -203,7 +223,7 @@ organization. See [the service-token setup](CLI-Teacher-Guide#create-the-service
 | Backend | Hosted service | None (GitHub repos + Actions) |
 | Classroom ↔ org | One classroom per org | Many classrooms per org |
 | Grading | Hosted autograder | GitHub Actions in each repo |
-| Feedback PR | Opened at accept | Opened at accept |
+| Joining | Students self-select their roster entry from an invite link | The owner invites students; accept links work once they've joined the org |
 | Group naming | Team names | Founder's username |
 | Data | In the service | In your `classroom50` config repo (yours to keep) |
 

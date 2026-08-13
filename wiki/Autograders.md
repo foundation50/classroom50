@@ -49,10 +49,11 @@ large cohorts. Submissions become an explicit act:
   required.
 
 **Milestone submission tags** — with either mode, the assignment can also
-name **milestone tags** (`submission_tags` in assignments.json, e.g.
-`["phase1", "phase2", "complete"]`, settable at creation or from the
-assignment settings / `gh teacher assignment add --submission-tag`). Pushing
-a matching tag grades that commit — plain git, no CLI required:
+name **milestone tags** (`submission_tags` in assignments.json, the web form's
+**Submission tags** field, e.g. `["phase1", "phase2", "complete"]`, settable at
+creation or from the assignment settings / `gh teacher assignment add
+--submission-tag`). Pushing a matching tag grades that commit — plain git, no
+CLI required:
 
 ```sh
 git tag phase1
@@ -139,6 +140,29 @@ yourself and use `--update-shims=false` to flip only the field.
 After a retrofit, students must `git pull` — clones made before the change
 will conflict on their next push.
 
+## Turning autograding off or pausing it
+
+Beyond choosing *when* commits grade, you can turn the pipeline off entirely:
+
+- **Per assignment, at creation** — pick **Do not use the built-in
+  autograder** (`no_autograder` in assignments.json). Accept installs no shim
+  at all; a templated assignment's own CI workflows run instead, and score
+  collection skips the assignment. Immutable after creation. See
+  [`gh teacher` reference](gh-teacher#assignment-add).
+- **Per assignment, temporarily** — **Pause autograding** in the submissions
+  page's **Actions** menu disables the `autograde.yaml` workflow in every
+  student repo via GitHub's workflow-disable API. No files change, students'
+  other workflows keep running, and **Resume autograding** re-enables it.
+  Available on individual assignments using the built-in autograder (a single
+  repo can also be paused from its row). A student with admin on their own
+  repo can technically re-enable the workflow — a known limitation.
+- **Org-wide** — the organization settings' **Pause autograding for all
+  student repositories** toggle narrows the org's Actions policy to the config
+  repo. **This stops all workflows in student repositories**, including any
+  course CI — prefer the per-assignment pause unless that's what you want.
+
+See also the [FAQ on reducing Actions usage](FAQ#can-i-turn-autograding-off-or-reduce-actions-usage).
+
 ## The `result.json` contract
 
 This is the **only** contract every autograder must satisfy — whatever produces
@@ -190,7 +214,10 @@ payload can't land in another student's gradebook.
 The gradebook is keyed by assignment slug under a root `assignments` object;
 each value is `{ "type": "individual"|"group", "entries": [...] }`. An `entry` is
 one repo's record: `owner` (the stable key), `submissions` (full history, newest
-first), and — for a group — `member_usernames` (credited members).
+first), and — for a group — `member_usernames` (credited members). Each bucket
+also carries a `collected_at` UTC timestamp stamped whenever a collection run
+walks that assignment (even if nothing changed), so per-assignment freshness is
+knowable — the web app's "Submission data synced" strip reads it.
 
 </details>
 

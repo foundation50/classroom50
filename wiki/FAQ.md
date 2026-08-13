@@ -50,10 +50,14 @@ course, section, or term. Add each with **Create classroom** in the web app or
 
 ### Should I create one organization per course, like GitHub Classroom?
 
-You don't have to. Because one organization holds many classrooms, most teachers
-use a single organization and add a classroom per course or term. You can still
-use separate organizations if you prefer — each just needs its own one-time
-setup.
+You don't have to. Because one organization holds many classrooms, a single,
+stable teaching team running one course (across terms or sections) works well
+with **one organization** and a classroom per term or section. Prefer
+**separate organizations** when many teachers run very different classes (e.g.
+school-wide adoption) — each teacher then manages their own org — or when a
+large course would otherwise accumulate hundreds of assignment repositories
+per year; in that case, one org per academic year keeps things tidy. Each
+organization needs its own one-time setup.
 
 ### Can a classroom have multiple teachers or TAs?
 
@@ -119,16 +123,33 @@ Yes. Deadlines support a date **and** time (down to the second, in your
 timezone). Submissions after the deadline are **marked late**; nothing is
 blocked automatically.
 
+### Does the deadline cut off student access?
+
+No — the due date only marks later submissions late. To actually end an
+assignment, use **Close submission** in the submissions page's **Actions**
+menu: it blocks new accepts and sets every student's repository to read-only
+(work is preserved). **Reopen submission** restores write access — useful when
+a project continues in a follow-up course. **Update student repo access** in
+the same menu gives finer control over the role students hold on their repos.
+
 ### What's the difference between "template-less" and "empty repository"?
 
-- **Template-less** (no template chosen): students get a repo containing only
-  the autograder setup — good for write-from-scratch or short-answer work.
-- **Empty repository**: a completely bare repo — no starter files **and** no
-  autograding or feedback pull request. Use it when students build everything
-  themselves, including their own GitHub Actions.
+Both start from no template; the difference is what (if anything) is committed:
 
-**Empty repository is permanent** for an assignment — you can't switch it on or
-off after creating the assignment.
+- **Template-less with a README** (**Add a README** on): students get a repo
+  with an initial commit and the autograder setup — good for write-from-scratch
+  or short-answer work.
+- **Empty repository** (**Add a README** off, built-in autograder off): a
+  completely bare repo with no commit at all — no starter files **and** no
+  autograding or feedback pull request, ever. Use it when students build
+  everything themselves, including their own GitHub Actions.
+- (**Add a README** off with the built-in autograder **on** is a third,
+  in-between shape: an initialized repo carrying only the control files, no
+  README, which grades normally.)
+
+**These repository-shape choices are permanent** for an assignment — you can't
+switch them after creating it, because repositories students already accepted
+can't be retrofitted.
 
 ### How do group assignments work?
 
@@ -157,20 +178,34 @@ write an `autograder.py`. See [Autograders](Autograders).
 
 Yes, several levers:
 
-- **Grade on submit only** — set the assignment's autograding trigger to
-  **On submit only** (`--submission-mode tag` in the CLI). Students' regular
+- **Grade on submit only** — set the assignment's **Submission type** to **A
+  tagged commit** (`--submission-mode tag` in the CLI). Students' regular
   pushes then run nothing at all; grading happens only when they submit
   (`gh student submit` or a hand-pushed `submit/*` tag). This is the biggest
   saver for large classes, where every work-in-progress push would otherwise
   grade. You can also name **milestone tags** (`--submission-tag phase1`) so
   students grade specific checkpoints with plain git. See
   [Autograders → Which commits grade](Autograders#which-commits-grade).
+- **Pause autograding for one assignment** (reversible) — **Pause autograding**
+  in the submissions page's **Actions** menu disables the built-in
+  `autograde.yaml` workflow in every student repository (via GitHub's
+  workflow-disable API — no files change). Students' other workflows keep
+  running, and **Resume autograding** re-enables it. Offered on individual
+  assignments that use the built-in autograder, once students have accepted.
 - Create an assignment with **no autograding tests**, and no grading runs
   (Classroom 50 still uses a lightweight workflow to tag submissions and
   support written feedback, which uses far fewer Actions minutes).
-- **Pause autograding org-wide** from the organization's Actions settings in
-  the web app; setup also applies a **$0 Actions spending cap** by default so
-  a runaway workflow can't run up a bill.
+- **Don't use the built-in autograder at all** (permanent) — when creating an
+  assignment, pick **Do not use the built-in autograder**. Accept then installs
+  no autograding workflow: a templated assignment runs only your template's own
+  CI (if any), and score collection skips the assignment. The right choice for
+  project-shaped assignments graded by hand or by your own CI. Can't be changed
+  after the assignment is created.
+- **Pause autograding org-wide** — the organization's Actions settings in the
+  web app. **Caution:** this stops **all** workflows in student repositories,
+  not just autograding — any CI your students run stops too. Setup also creates
+  a **$0 Actions spending cap** (only when the organization has none) so a
+  runaway workflow can't run up a bill.
 
 ### Can I use my own (self-hosted) runners?
 
@@ -200,7 +235,9 @@ GitHub's side.
 A few common reasons:
 
 - **Scores haven't been collected yet.** Collection runs nightly; click
-  **Collect now** on the submissions page to pull the latest immediately.
+  **Sync now** on the submissions page to pull this assignment's latest
+  results immediately (the sync is scoped to the assignment you're viewing, so
+  it's fast even in a big classroom).
 - **GitHub Pages is still deploying.** Right after a config change, published
   files can take a few minutes to go live.
 - **The student's repo predates a workflow update.** If you updated Classroom 50
@@ -209,20 +246,43 @@ A few common reasons:
 
 See [Troubleshooting](Troubleshooting) for specific error messages.
 
+### Can students see their grades in the web app?
+
+Not yet. Grades live in each student's repository: every graded submission
+publishes a **Release** with the score and a per-test breakdown, which is what
+the student-facing **View grade** link opens. Showing grades inside the app is
+blocked by a technical limitation — Classroom 50 has no server, and the
+browser can't read Release assets cross-origin — but it's on the wish list
+(see [#567](https://github.com/foundation50/classroom50/issues/567)). Point
+students at their repository's Releases page (or the Feedback PR) for
+results.
+
 ### Can I manually override or adjust a grade?
 
-Yes. Edit the classroom's `scores.json` in the config repo: change the
-submission's `score` and add `"override": true` to that entry, then commit.
-Collection leaves overridden entries untouched on future runs. See
-[Collect scores](CLI-Teacher-Guide#9-collect-scores).
+Yes, two ways:
 
-### How do I export grades?
+- **In the web app, on a manual assignment.** Create the assignment with
+  **Grading → Manual (enter scores by hand)** and a **Max points** value; each
+  row on the submissions page then gets an **Add grade** / **Edit grade**
+  button. Hand-entered scores show a **Manual** badge and are stored as
+  overrides. (This editor appears only for manual-mode assignments, and only
+  for organization owners — writing scores means writing the config repo. The
+  grading mode can't be changed after an assignment is created.)
+- **In the config repo, for any assignment.** Edit the classroom's
+  `scores.json`: change the submission's `score` and add `"override": true` to
+  that entry, then commit. Collection leaves overridden entries untouched on
+  future runs. See [Collect scores](CLI-Teacher-Guide#9-collect-scores).
+
+### How do I export grades, or download student work in bulk?
 
 Download scores as a CSV from the submissions page
-(**Download scores (CSV)**). The `gh teacher download` command clones every
-submission repo and also writes a `scores.csv` summary at the destination root.
-The raw score data also lives in `scores.json` in your config repo, so you can
-build your own automations against it.
+(**Download scores (CSV)**). For the work itself, **Download all submissions**
+in the same **Actions** menu bundles every repository's latest submission into
+a single zip (built in your browser). For real clones — e.g. to run your own
+tooling locally — `gh teacher download` clones every submission repo and also
+writes a `scores.csv` summary at the destination root. The raw score data also
+lives in `scores.json` in your config repo, so you can build your own
+automations against it.
 
 ### As a teacher, can I test an assignment as a student?
 
@@ -265,6 +325,26 @@ Classroom 50 authenticates the same way the GitHub CLI does, using GitHub's
 to a single organization's repositories — so the grant covers your repos even
 though Classroom 50 only acts on classroom ones. This matches the CLI's behavior.
 
+### Why does signing in ask for permission to "Delete repositories"?
+
+One feature uses it: **Tear down organization** (org settings → Danger zone),
+which resets an organization by deleting the repositories Classroom 50 manages
+— and only after you type an explicit confirmation. Nothing else ever deletes a
+repository, and because there's no Classroom 50 server, the token stays in your
+browser. The CLIs don't request it at all unless you opt in
+(`gh teacher login -s delete_repo`). Details:
+[GitHub Integration](GitHub-Integration#2-teacher-authentication).
+
+### Can I edit the config files in the `classroom50` repo by hand?
+
+It's not recommended. Some state is derived from both the config files and the
+live state on GitHub.com, and the app's reconciliation process updates the
+files automatically to keep them in sync — a hand-edit can create a state the
+tools don't know how to handle (and makes problems much harder to
+troubleshoot). Manage the classroom through the web app or the `gh teacher`
+CLI instead; the one documented exception is a `scores.json` grade override
+(see above).
+
 ### What is the service token, and is it the same one the web app set up?
 
 The **service token** is a fine-grained personal access token stored as a secret
@@ -276,6 +356,8 @@ need one per organization. See
 ## Roadmap
 
 Some capabilities from GitHub Classroom aren't available today, including
-**LTI / LMS grade passback** and a built-in **manual-grading UI**. Classroom 50
-is open source and actively developed — share ideas or track direction in
+**LTI / LMS grade passback**, in-app **grade visibility for students**, and
+**roster self-selection** (students picking their own roster entry when
+accepting). Classroom 50 is open source and actively developed — share ideas
+or track direction in
 [Discussions](https://github.com/foundation50/classroom50/discussions).

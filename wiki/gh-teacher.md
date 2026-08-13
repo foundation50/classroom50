@@ -147,13 +147,18 @@ Classrooms are root-level directories in `<org>/classroom50`, each with a
 ### `classroom add`
 
 ```sh
-gh teacher classroom add <org> <short-name> [--name "<full name>"] [--term <term>]
-gh teacher classroom add cs50-fall-2026 cs-principles --name "CS Principles" --term Spring-2026
+gh teacher classroom add <org> <short-name> [--name "<full name>"] [--term <term>] [--unlisted] [--key <key>]
+gh teacher classroom add cs50-fall-2026 cs-principles --name "CS Principles" --term Fall-2026
 ```
 
 **Short-name rules:** `^[a-z0-9][a-z0-9-]{1,38}$` — 2–39 characters, lowercase
 letters/digits/hyphens, starting with a letter or digit. It becomes part of
 student repo names (`<short-name>-<assignment>-<username>`).
+
+`--unlisted` publishes the classroom's resources at an unguessable URL path
+segment (the web app's "Use an unlisted link" option — obscurity, not access
+control; it prompts to accept a generated key). `--key <key>` supplies a
+specific access key instead of the generated one (implies `--unlisted`).
 
 Scaffolds four files in one commit — `classroom.json`, `assignments.json`,
 `roster.csv`, `scores.json` — and creates the `classroom50-<short-name>` GitHub
@@ -232,7 +237,7 @@ Import an existing GitHub Classroom into `<target>/classroom50`.
 
 ```sh
 gh teacher classroom migrate --source <id-or-org> --target <org> [--dry-run]
-gh teacher classroom migrate --source 95884 --target cs50-fall-2026 --short-name cs-principles --term Spring-2026
+gh teacher classroom migrate --source 95884 --target cs50-fall-2026 --short-name cs-principles --term Fall-2026
 ```
 
 For each assignment, it copies the source starter repo into the target
@@ -429,10 +434,10 @@ templated repo has a baseline commit); it is mutually exclusive with
 `empty_repo`, a non-default `--autograder`, and the grading-adjacent fields
 (tests/allowed-files/release-assets/pass-threshold/submission-mode/
 submission-tag), and it is immutable after creation. Score collection and
-regrade skip it (no `submit/*` releases are produced). It is currently set by
-writing `no_autograder: true` into `assignments.json` (via the gradebook's
-edit path); there is no `assignment add` flag and no dedicated form control for
-it yet.
+regrade skip it (no `submit/*` releases are produced). Set it in the web app's
+assignment form — choose **"Do not use the built-in autograder"** under
+**Built-in autograder** — or by writing `no_autograder: true` into
+`assignments.json`; there is no `assignment add` flag.
 
 **Built-in autograder on an otherwise-empty repo (`init_shim`).** A
 **template-less** assignment can carry `init_shim: true` in `assignments.json`
@@ -446,10 +451,10 @@ assignment (the grading pipeline does **not** skip it). It **requires** the
 default autograder and **no** template (a template provides its own starter
 content); it is mutually exclusive with `empty_repo`, `template`,
 `no_autograder`, and a non-default `--autograder`, and it **permits** the
-grading-adjacent fields (it autogrades). It is immutable after creation. Like
-`no_autograder`, it is currently set by writing `init_shim: true` into
-`assignments.json` (via the gradebook's edit path); there is no `assignment add`
-flag.
+grading-adjacent fields (it autogrades). It is immutable after creation. Set it
+in the web app's assignment form — pick **"No template"**, leave **"Add a
+README"** off, and keep **"Use the built-in autograder"** — or by writing
+`init_shim: true` into `assignments.json`; there is no `assignment add` flag.
 
 **Include all branches (`include_all_branches`).** A **templated** assignment can
 carry `include_all_branches: true` in `assignments.json` to copy **all** of the
@@ -461,8 +466,8 @@ generated); it is **compatible** with everything else, including `no_autograder`
 and the grading-adjacent fields (branches don't affect grading). Unlike the
 immutable no-shim states it is **accept-time only and mutable**: changing it
 affects only repos generated from now on (already-accepted repos are never
-re-generated). Like `no_autograder`/`init_shim` it is currently set via the
-gradebook edit path; there is no `assignment add` flag.
+re-generated). Set it with the web assignment form's **"Include all branches"**
+toggle or via `assignments.json`; there is no `assignment add` flag.
 
 <details>
 <summary>Errors</summary>
@@ -678,8 +683,13 @@ interrupted run stays safe to re-run).
 ## `whoami` / `login` / `logout`
 
 - `whoami` — prints the authenticated GitHub user.
-- `login` — runs `gh auth login -s admin:org -s read:org -s repo -s workflow`;
-  add scopes with `-s`.
+- `login` — wraps `gh auth login` with the required scopes (`admin:org`,
+  `read:org`, `repo`, `workflow`); add more with `-s`. It always mints a new
+  token and **replaces** your stored github.com auth, so when one already
+  exists it warns and asks for confirmation first. Other commands don't: they
+  reuse a sufficiently-scoped token untouched, and widen an under-scoped
+  gh-managed one in place with `gh auth refresh`. See
+  [Will `gh teacher login` disturb my existing `gh` setup?](Troubleshooting#will-gh-teacher-login-disturb-my-existing-gh-setup).
 - `logout` — runs `gh auth logout`.
 
 ## Contributing

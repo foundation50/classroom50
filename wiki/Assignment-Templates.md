@@ -73,6 +73,54 @@ template.
 > access, so accept would 404). Enterprise Cloud's "internal" visibility also
 > works.
 
+## Template requirements and gotchas
+
+- **The template must have at least one commit.** A freshly created, commitless
+  repository is rejected when you register the assignment — GitHub can't
+  generate a copy of nothing. (A brand-new template with real commits can
+  briefly be misreported by GitHub right after a push; if a just-pushed
+  template is rejected, wait a minute and retry.)
+- **Forked templates can trip other orgs' OAuth restrictions.** With a
+  template that is a **fork of a repository in a different organization**,
+  GitHub evaluates OAuth-app access restrictions against the fork's *parent*
+  organization too — accept can fail with an HTTP 403 naming OAuth App access
+  restrictions even though your own org has approved Classroom 50. Either have
+  the upstream organization approve Classroom 50 as well, or (simpler) copy
+  the content into a fresh, fork-free repository in your organization and flag
+  that as the template.
+- **Only the default branch is copied** unless the assignment enables
+  **Include all branches** (`include_all_branches`), which passes every branch
+  through to each generated student repo.
+- **GitHub's template-generate copies files, not settings.** Classroom 50
+  compensates at accept time:
+  - The **About description and topics** are copied when the assignment's
+    **Copy About from template** / **Copy topics from template** toggles are on
+    (the default for new assignments). This runs on the web accept path; a
+    student who accepts with `gh student accept` gets the repository without
+    them.
+  - **Repository features** (Issues, Wiki, Projects, Pull requests) follow the
+    assignment's Repository features settings — by default each **inherits the
+    template's current setting**; you can force any of them on or off per
+    assignment. This applies on both the web and CLI accept paths. Repos
+    accepted before a change can be reconciled with the submissions page's
+    **Update repository features** action.
+
+## Reusing one template across assignments
+
+The same repository can be the template for any number of assignments — each
+accept generates an independent copy of the template **as it exists at that
+moment**. That makes an evolving course repository workable: register
+assignment A, keep committing, register assignment B later from the same repo.
+Two things to keep in mind:
+
+- Students who accept the *same* assignment at different times can start from
+  different template states — late accepters get the newer content. Freeze the
+  template (or cut a dedicated template repo per assignment) if identical
+  starting points matter.
+- `.gitignore` and `.github/` are re-fetched from the template on every
+  submit (see below), so changes to those files propagate to **every**
+  assignment that shares the template.
+
 ## Why `.gitignore` and `.github/` re-sync
 
 On every submission, `gh student submit` re-fetches `.gitignore` and `.github/`

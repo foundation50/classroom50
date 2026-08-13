@@ -75,10 +75,15 @@ When step 1 is complete, continue to step 2 to add your service token.
 
 ### Add a service token
 
-The **service token** is a fine-grained personal access token (PAT) with read
-access to your organization's repositories. Classroom 50 stores it as the
-`CLASSROOM50_SERVICE_TOKEN` secret in your config repo, where the daily
-score-collection workflow uses it.
+The **service token** is a fine-grained personal access token (PAT) scoped to
+your organization, used by the score-collection and regrade workflows to read
+student repositories (and push regrade tags) across the org. It needs
+**Contents**, **Actions**, and **Administration** read/write plus
+**Organization → Members** read — the form and the pre-filled GitHub page set
+these up for you; the full permission table is in
+[GitHub Integration](GitHub-Integration#4-fine-grained-pat-for-score-collection).
+Classroom 50 stores it as the `CLASSROOM50_SERVICE_TOKEN` secret in your config
+repo, where the daily score-collection workflow uses it.
 
 ![Service token setup](images/web_pat.png)
 
@@ -133,33 +138,79 @@ On the classroom page, click **+ Assignment**. Fill in:
 
 - **Name** — the assignment's name.
 - **Description** (optional) — details for students.
-- **Template repository** (optional) — a [template repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-template-repository)
-  used as each student's starting point. Enter `<owner>/<repo>`, or just
-  `<repo>` if it's in this organization. Leave blank for an empty starter repo.
-- **Due date** (optional) — a date and time in your local timezone.
+- **Due date** (optional) — a date and time in your local timezone. A deadline
+  marks later submissions **late** in the gradebook; it does not block pushes
+  or revoke access. To actually close an assignment, use the **Close
+  submission** action (see below).
 - **Assignment type** — **Individual** (one repository per student) or **Group
   project** (students share a repository and submit together).
+
+### Repository setup
+
+How each student's repository is created:
+
+- **Start with a template** — **No template** or **Template repository**: a
+  [template repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-template-repository)
+  used as each student's starting point. Enter `<owner>/<repo>`, or just
+  `<repo>` if it's in this organization. See
+  [Assignment Templates](Assignment-Templates) for requirements.
+- **Add a README** (no-template assignments) — whether the repository starts
+  with an initial commit. With it **off**, what students get depends on the
+  built-in autograder choice under [Grading and
+  submissions](#grading-and-submissions):
+  - autograder **off** (the default) → a **truly bare repository**: no commit,
+    no autograding, and no feedback pull request (permanently — not just until
+    the student's first commit). Use it when students build everything from
+    scratch, including their own GitHub Actions.
+  - autograder **on** → an initialized repository carrying only the control
+    files (no README, no starter content) that grades normally.
+- **Include all branches** (templated) — copy **all** of the template's
+  branches into each student repository, not just the default branch. Useful
+  for multi-branch starter repos.
+- **Copy About from template** / **Copy topics from template** (templated, both
+  on by default) — carry the template's About description and topics over to
+  each student repository (GitHub's template-generate doesn't copy them on its
+  own). Applies when students accept in the web app.
+- **Repository features** — per-feature settings for **Issues**, **Wiki**,
+  **Projects**, and **Pull requests** on student repositories. The default,
+  **Inherit from template**, re-applies the template's current setting at
+  accept time (again, GitHub's generate doesn't copy these); you can force any
+  feature **On** or **Off** instead. Template-less assignments default to
+  GitHub's own defaults. To reconcile repositories that already exist, use the
+  **Update repository features** action on the submissions page.
 - **Feedback pull request** — automatically opens a pull request per student so
   you can review changes and leave inline feedback.
-- **Autograding trigger** — when the autograder runs. **Every push** (the
-  default) grades each push to the default branch. **On submit only** grades
-  only when a student submits (`gh student submit`) or pushes a `submit/*`
-  tag — regular pushes cost no Actions minutes, which matters at scale.
-- **Milestone submission tags** (optional) — tag names (e.g. `phase1`,
-  `phase2`, `complete`) that also trigger grading. A student pushes the tag
-  with plain git (`git tag phase1 && git push origin phase1`) and that commit
-  grades; the result appears as a normal `submit/*` release titled "via
-  phase1". Prefer exact names — a broad glob like `v*` grades every matching
-  tag. Changing them later requires the same trigger update as the mode (see
-  below).
-- **Empty repository** — creates each student's repository completely empty: no
-  starter files, no autograding, no feedback pull request. Use it when students
-  build everything from scratch, including their own GitHub Actions.
+- **Student repo access** — the role students get on their own repository.
 
 > [!WARNING]
-> **Empty repository is permanent** — you can't change it after creating the
+> **These repository-shape choices are permanent** — the template/README/bare
+> and built-in-autograder choices can't be changed after you create the
 > assignment, because repositories students already accepted can't be
-> retrofitted. Enabling it hides the template and grading fields.
+> retrofitted.
+
+### Grading and submissions
+
+- **Grading** — **Not graded** (the default), **Autograded**, or **Manual
+  (enter scores by hand)**. The autograding options below are offered only
+  under **Autograded**; **Manual** assignments get a **Max points** field and
+  you enter each student's score on the submissions page (see below). Immutable
+  after creation.
+- **Built-in autograder** — under **Autograded**, choose **Use the built-in
+  autograder** or **Do not use the built-in autograder** (the default on a new
+  assignment). Opting out means accept installs no autograding workflow at all:
+  on a templated assignment your template's own CI workflows run instead, and
+  Classroom 50's score collection skips the assignment. Immutable after
+  creation.
+- **Submission type** — when the autograder runs. **Every push to the default
+  branch** (the default) grades each push. **A tagged commit** grades only
+  when a student submits (`gh student submit`) or pushes a `submit/*` tag —
+  regular pushes cost no Actions minutes, which matters at scale.
+- **Submission tags** (optional) — tag names (e.g. `phase1`, `phase2`,
+  `complete`) that also trigger grading. A student pushes the tag with plain
+  git (`git tag phase1 && git push origin phase1`) and that commit grades; the
+  result appears as a normal `submit/*` release titled "via phase1". Prefer
+  exact names — a broad glob like `v*` grades every matching tag. Changing
+  them later requires the same trigger update as the mode (see below).
 
 ### Advanced settings
 
@@ -193,8 +244,8 @@ for dependency installation and environment-variable guidance.
 
 ### Autograding tests
 
-Autograding tests run every time a student pushes. Click **Add test** to add
-one.
+Autograding tests run whenever a submission grades (per the assignment's
+submission type). Click **Add test** to add one.
 
 ![Autograding tests](images/web_create_assignment_tests.png)
 
@@ -280,8 +331,14 @@ demand) aggregates those results into the classroom's gradebook.
 
 ![Assignment with submissions](images/web_viewing_assignment_submissions.png)
 
-Collect scores by letting the nightly workflow run, or click **Collect now** at
-the top of the submissions page. Click **View workflow** to see the Actions run.
+Scores flow into the gradebook when collection runs: the nightly workflow
+covers every classroom, or click **Sync now** in the freshness strip at the top
+of the submissions page (also **Collect now** in the **Actions** menu). Both
+are **scoped to the current assignment** — they walk only this assignment's
+repositories, so a sync is fast even in a large classroom and doesn't rebuild
+other assignments' gradebooks. The strip shows when this assignment's data was
+last synced (a per-assignment `collected_at` stamp in `scores.json`). Click
+**View workflow** to see the Actions run.
 
 The top of the page shows:
 
@@ -299,10 +356,65 @@ Each row shows a student's (or group's) latest submission plus its full history
 and links to the repository, the commit, the feedback pull request
 (**Review**), and the Release (**Details**).
 
+### Manual grades
+
+On an assignment created with **Grading → Manual (enter scores by hand)**, each
+row gets an **Add grade** / **Edit grade** button for entering a score out of
+the assignment's **Max points**. A hand-entered score is stored as an override
+in the classroom's `scores.json` and shows a **Manual** badge — autograding
+won't change it until the override is cleared.
+
+The inline editor appears only on manual-mode assignments, and only for
+organization owners (entering a score writes the config repo). To adjust a
+score on an **autograded** assignment, edit `scores.json` directly — see the
+[FAQ](FAQ#can-i-manually-override-or-adjust-a-grade).
+
+### Bulk actions
+
+The **Actions** menu at the top of the submissions page operates on the whole
+assignment:
+
+- **Metrics** — summary statistics for the assignment.
+- **Open all Feedback PRs** — review each student's feedback pull request in
+  turn.
+- **Collect now** — trigger a score collection scoped to this assignment.
+- **Regrade all** — re-run the autograder on every collected submission.
+- **Update student repo access** — bulk-set every student's role on their
+  repository (e.g. drop everyone to read-only for grading, restore write
+  afterwards).
+- **Update repository features** — re-apply the assignment's Issues / Wiki /
+  Projects / Pull-requests settings to every existing student repository
+  (repositories created before a settings change, or before features were
+  inherited from the template).
+- **Update autograding triggers** — retrofit existing repositories after a
+  submission-type change (see below).
+- **Pause autograding** / **Resume autograding** — disable or re-enable the
+  built-in `autograde.yaml` workflow in every student repository via GitHub's
+  workflow-disable API. No files are changed, and you can resume anytime;
+  other workflows in student repositories keep running. Use it to stop
+  autograding for one assignment without touching the rest of the org.
+  (Available on individual assignments that use the built-in autograder, once
+  students have accepted; a single repository can also be paused from its row.)
+- **Close submission** / **Reopen submission** — close the submission window:
+  block new accepts and set every student's repository to read-only (work is
+  preserved). This is the enforcement mechanism for deadlines — the due date
+  itself only marks submissions late. **Reopen submission** restores write
+  access.
+- **Lock assignment** / **Unlock assignment** — lock the assignment so
+  students can't access or accept it (and, for a private template, remove the
+  student team's read on it); unlock reopens it and restores template access.
+  Useful for staging an assignment before release.
+- **Download scores (CSV)** — export all submissions as a CSV.
+- **Download all submissions** — download each repository's latest submission
+  bundled into a single zip (built in the browser, one repository at a time;
+  for very large classes prefer `gh teacher download`, which clones every repo
+  and writes a `scores.csv` — see the
+  [CLI Teacher Guide](CLI-Teacher-Guide#10-download-submissions)).
+
 ### Download scores
 
-Click **Download Scores (CSV)** at the top right to export all submissions as a
-CSV for a spreadsheet or external tool.
+Click **Download scores (CSV)** to export all submissions as a CSV for a
+spreadsheet or external tool.
 
 ## Edit assignments and classrooms
 
@@ -311,12 +423,12 @@ CSV for a spreadsheet or external tool.
 - **Edit a classroom** — open the classroom, then **Settings**. Same form as
   creating one, pre-filled.
 
-### Changing the autograding trigger later
+### Changing the submission type later
 
 The trigger is baked into each student repository's autograding workflow when
-the student accepts, so changing it in **Assignment settings** only affects
-repositories created from then on. To update repositories students already
-accepted:
+the student accepts, so changing the submission type in **Assignment settings**
+only affects repositories created from then on. To update repositories students
+already accepted:
 
 1. Change the trigger in **Assignment settings** and save.
 2. On the submissions page, open the actions menu and click **Update

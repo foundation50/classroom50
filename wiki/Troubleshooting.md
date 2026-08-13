@@ -19,6 +19,38 @@ GH_DEBUG=api gh teacher invite <org> <username>
 
 Commands with informational output also accept `--quiet` / `-q`.
 
+## classroom50.org won't load, or is flagged as unsafe
+
+A few ISPs and school web filters have blocked `classroom50.org` (a relatively
+new domain) as a suspected phishing site — the symptom is a timeout, a
+DNS failure, or an ISP warning page (Safari may just time out without showing
+the warning). Classroom 50 is not compromised; we file unblock requests with
+ISPs and security vendors as reports come in.
+
+Workarounds:
+
+- **Add an exception.** On a home connection, add `classroom50.org` to the
+  ISP's security-feature exception list (e.g. AT&T ActiveArmor) or switch the
+  device's DNS resolver (e.g. `1.1.1.1` or `8.8.8.8`).
+- **School/district filters:** ask IT to allow the domains in
+  [Network and allowed domains](GitHub-Integration#network-and-allowed-domains).
+- Please still [report it](https://github.com/foundation50/classroom50/issues)
+  with the ISP's name so we can request an unblock.
+
+## "Couldn't verify the Actions spending cap"
+
+Setup creates a **$0 GitHub Actions spending cap** so a runaway workflow can't
+run up a bill — but only when your organization has no Actions cap yet; a cap
+you set yourself is never modified. It then verifies the cap, and that
+verification can fail with an advisory warning (e.g. `read failed (400)`) when
+billing isn't readable by your token — typically **enterprise-managed
+billing**, a plan that doesn't expose organization budgets, or a token without
+Organization Administration read.
+
+This is expected and **doesn't block anything** — Classroom 50 keeps working.
+Confirm your Actions spending limits in the organization's billing settings, or
+with your Enterprise/billing administrator.
+
 ## My organization doesn't appear
 
 GitHub only reports organizations you've granted Classroom 50 access to. A
@@ -81,6 +113,43 @@ gh auth refresh -s admin:org,workflow
 
 Whether a plain `gh auth login` already granted `workflow` depends on unrelated
 prompt choices, which is why this appears on some machines and not others.
+
+## Will `gh teacher login` disturb my existing `gh` setup?
+
+The Classroom 50 CLIs share the GitHub CLI's credential store, so this is worth
+knowing if you already use `gh` for other work.
+
+**Running any teacher/student command** (not `login`) never disturbs a working
+setup unnecessarily:
+
+- A stored token that already carries the required scopes (`admin:org`,
+  `read:org`, `repo`, `workflow`) is **reused untouched**.
+- An under-scoped token that `gh` manages (its config file or OS keyring) is
+  widened in place with `gh auth refresh` — your existing token is kept, not
+  replaced, and no other `gh` settings change.
+- An under-scoped token from **`GH_TOKEN` / `GITHUB_TOKEN`** can't be widened by
+  `gh`, so you get an error naming the missing scopes: re-issue that token with
+  them, or unset the variable and sign in.
+- With no stored token at all, the command starts a sign-in for you.
+
+**Running `login` explicitly is the one clobbering path.** `gh teacher login`
+wraps `gh auth login`, which mints a **new** token and replaces your stored
+github.com auth. When a token already exists, the CLI warns and asks
+`Proceed and let gh auth login replace it? [y/N]` — the default is **No**, and
+declining leaves your auth untouched and prints the alternatives:
+
+```sh
+gh auth refresh -h github.com -s admin:org,read:org,repo,workflow   # widen in place
+export GH_TOKEN=<a PAT with those scopes>                           # or bring your own
+```
+
+So if `gh` is already set up, you usually don't need `login` at all — just run
+the command you want and let it add any missing scope in place.
+
+With **multiple `gh` accounts**, the CLIs use whichever account is active for
+github.com (`gh auth status`); switch with `gh auth switch` first. Not sure
+whether anything needs fixing? `gh teacher audit <org>` is read-only and a good
+first probe.
 
 ## "Not an admin" on `gh teacher invite`
 
