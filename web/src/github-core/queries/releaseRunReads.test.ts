@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 import {
   classifyServiceTokenExpiry,
+  getCollectScoresRunAfterId,
+  getLastCollectScoresRun,
   getServiceTokenStatus,
   latestSubmitReleaseAndCount,
   latestSubmitReleaseWithAssets,
@@ -276,5 +278,54 @@ describe("latestSubmitReleaseAndCount", () => {
     await expect(
       latestSubmitReleaseAndCount(clientThrowing(apiError(403)), "o", "r"),
     ).rejects.toThrow()
+  })
+})
+
+// A paging-aware client mock for the workflow-runs endpoint: serves per_page
+// slices of `allRuns` (newest-first) keyed by the request's `page` param.
+const runsClient = (allRuns: { id: number }[]) => {
+  const request = vi.fn().mockImplementation((url: string) => {
+    const params = new URL(`https://api.github.com${url}`).searchParams
+    const perPage = Number(params.get("per_page") ?? "1")
+    const page = Number(params.get("page") ?? "1")
+    const start = (page - 1) * perPage
+    return Promise.resolve({
+      workflow_runs: allRuns.slice(start, start + perPage),
+    })
+  })
+  return { client: { request } as unknown as GitHubClient, request }
+}
+
+describe("getCollectScoresRunAfterId", () => {
+  it("binds to the oldest run newer than the baseline", async () => {
+    const { client } = runsClient([{ id: 30 }, { id: 20 }, { id: 10 }])
+    const run = await getCollectScoresRunAfterId(client, "acme", 10)
+    expect(run?.id).toBe(20)
+  })
+
+  it("returns null while our run has not registered yet", async () => {
+    const { client } = runsClient([{ id: 10 }])
+    expect(await getCollectScoresRunAfterId(client, "acme", 10)).toBeNull()
+  })
+
+  it("pages past the first page when many dispatches piled up", async () => {
+    // 35 runs newer than the baseline (ids 45..11 newest-first) push our own
+    // run (id 11) off a single 30-run page; the reader must keep paging until
+    // it sees the baseline, not bind to a later dispatch on page 1.
+    const newer = Array.from({ length: 35 }, (_, i) => ({ id: 45 - i }))
+    const { client, request } = runsClient([...newer, { id: 10 }])
+    const run = await getCollectScoresRunAfterId(client, "acme", 10)
+    expect(run?.id).toBe(11)
+    expect(request.mock.calls.length).toBeGreaterThan(1)
+  })
+})
+
+describe("getLastCollectScoresRun", () => {
+  it("asks for the last SUCCESSFUL run, so a failed collection never reads as fresh", async () => {
+    const { client, request } = runsClient([{ id: 5 }])
+    const run = await getLastCollectScoresRun(client, "acme")
+    expect(run?.id).toBe(5)
+    const url = String(request.mock.calls[0][0])
+    expect(url).toContain("status=success")
   })
 })
