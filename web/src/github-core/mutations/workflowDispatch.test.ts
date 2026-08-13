@@ -29,19 +29,21 @@ const unexpectedInputs422 = () =>
 // the baseline runs read, and the dispatch POST (whose behavior varies per
 // test via `onDispatch`).
 const makeClient = (onDispatch: () => unknown) => {
-  const request = vi.fn((url: string, _options?: unknown) => {
-    if (url.endsWith("/repos/acme/classroom50")) {
-      return Promise.resolve({ default_branch: "main" })
-    }
-    if (url.includes("/runs?")) {
-      return Promise.resolve({ workflow_runs: [{ id: 41 }] })
-    }
-    try {
-      return Promise.resolve(onDispatch())
-    } catch (err) {
-      return Promise.reject(err as Error)
-    }
-  })
+  const request = vi.fn<(url: string, options?: unknown) => Promise<unknown>>(
+    (url) => {
+      if (url.endsWith("/repos/acme/classroom50")) {
+        return Promise.resolve({ default_branch: "main" })
+      }
+      if (url.includes("/runs?")) {
+        return Promise.resolve({ workflow_runs: [{ id: 41 }] })
+      }
+      try {
+        return Promise.resolve(onDispatch())
+      } catch (err) {
+        return Promise.reject(err as Error)
+      }
+    },
+  )
   return { client: { request } as unknown as GitHubClient, request }
 }
 
@@ -95,9 +97,9 @@ describe("triggerScoreCollection", () => {
       throw unexpectedInputs422()
     })
 
-    await expect(
-      triggerScoreCollection(client, "acme"),
-    ).rejects.toBeInstanceOf(GitHubAPIError)
+    await expect(triggerScoreCollection(client, "acme")).rejects.toBeInstanceOf(
+      GitHubAPIError,
+    )
   })
 
   it("rethrows other scoped dispatch errors unchanged", async () => {

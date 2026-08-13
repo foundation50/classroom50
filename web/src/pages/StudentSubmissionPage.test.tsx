@@ -204,9 +204,7 @@ describe("StudentSubmissionPage submission type", () => {
     expect(
       screen.getByText("submissions.student.submittedAwaitingGrading"),
     ).toBeTruthy()
-    expect(
-      screen.queryByText("submissions.student.notSubmittedYet"),
-    ).toBeNull()
+    expect(screen.queryByText("submissions.student.notSubmittedYet")).toBeNull()
   })
 
   it("still shows 'not submitted yet' in tag mode with no tags and no releases", () => {
@@ -215,9 +213,7 @@ describe("StudentSubmissionPage submission type", () => {
       submission_tags: ["phase1"],
     })
     render(<StudentSubmissionPage />)
-    expect(
-      screen.getByText("submissions.student.notSubmittedYet"),
-    ).toBeTruthy()
+    expect(screen.getByText("submissions.student.notSubmittedYet")).toBeTruthy()
   })
 
   it("renders as a one-row table with the student column set", () => {
