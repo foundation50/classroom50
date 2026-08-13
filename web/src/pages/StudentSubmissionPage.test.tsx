@@ -189,6 +189,37 @@ describe("StudentSubmissionPage submission type", () => {
     )
   })
 
+  it("shows awaiting-grading (not 'not submitted') for an ungraded pushed tag", () => {
+    // Tag mode: a pushed milestone tag counts in the chip, but no submit/*
+    // release exists yet (grading pending or teacher-supplied CI). "Not
+    // submitted yet" beside a positive count contradicts itself — the cell
+    // must say the submission exists and is awaiting grading.
+    assignmentData = assignment({
+      submission_mode: "tag",
+      submission_tags: ["phase1"],
+    })
+    taggedData = [{ kind: "tag", label: "phase1", count: 1, sha: "aaa1111" }]
+    releasesData = []
+    render(<StudentSubmissionPage />)
+    expect(
+      screen.getByText("submissions.student.submittedAwaitingGrading"),
+    ).toBeTruthy()
+    expect(
+      screen.queryByText("submissions.student.notSubmittedYet"),
+    ).toBeNull()
+  })
+
+  it("still shows 'not submitted yet' in tag mode with no tags and no releases", () => {
+    assignmentData = assignment({
+      submission_mode: "tag",
+      submission_tags: ["phase1"],
+    })
+    render(<StudentSubmissionPage />)
+    expect(
+      screen.getByText("submissions.student.notSubmittedYet"),
+    ).toBeTruthy()
+  })
+
   it("renders as a one-row table with the student column set", () => {
     assignmentData = assignment({ submission_mode: "every-push" })
     pushData = [commit("aaa", "2026-06-20T10:00:00Z")]

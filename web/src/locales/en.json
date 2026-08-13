@@ -2820,6 +2820,7 @@
       "detailsTitle": "Your submissions",
       "tableCaption": "Your submission for this assignment",
       "notSubmittedYet": "Not submitted yet",
+      "submittedAwaitingGrading": "Submitted — awaiting grading",
       "loadError": "Could not load your submissions.",
       "notAccepted": "You haven't accepted this assignment yet. <acceptLink>Accept it</acceptLink> to get your repository, then push your work to be graded.",
       "locked": "This assignment is locked by your teacher and isn't available right now. Check back later or ask your teacher to unlock it.",

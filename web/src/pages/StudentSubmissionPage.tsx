@@ -300,6 +300,15 @@ const SubmissionBody = ({
               <td>
                 {latestSubmittedAt ? (
                   <LastSubmittedCell datetime={latestSubmittedAt} />
+                ) : submissionCount > 0 ? (
+                  // Submissions exist (e.g. a pushed milestone tag) but none
+                  // has a graded release yet, so there's no timestamp to show.
+                  // "Not submitted yet" beside a positive count would
+                  // contradict itself — say the work is in and awaiting
+                  // grading instead.
+                  <span className="text-base-content/50">
+                    {t("submissions.student.submittedAwaitingGrading")}
+                  </span>
                 ) : (
                   <span className="text-base-content/50">
                     {t("submissions.student.notSubmittedYet")}
