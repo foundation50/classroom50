@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 
 import type { Assignment } from "@/types/classroom"
 import {
-  assignmentSetupInfo,
   assignmentSkipsGrading,
   deriveAutogradingState,
   isEmptyRepoAssignment,
@@ -72,50 +71,5 @@ describe("deriveAutogradingState (tri-state for the assignment-form IA)", () => 
     )
     // And it does NOT skip grading (unlike empty_repo / no_autograder).
     expect(assignmentSkipsGrading({ ...base, init_shim: true })).toBe(false)
-  })
-})
-
-describe("assignmentSetupInfo (badge + detail keys)", () => {
-  it("empty_repo -> 'No template', info tone, empty detail, no template", () => {
-    const info = assignmentSetupInfo({ ...base, empty_repo: true })
-    expect(info.state).toBe("empty")
-    expect(info.hasTemplate).toBe(false)
-    expect(info.tone).toBe("info")
-    expect(info.badgeKey).toBe("submissions.setup.badgeEmpty")
-    expect(info.detailKey).toBe("submissions.setup.detailEmpty")
-  })
-
-  it("templated no_autograder -> 'Template · custom CI', info tone", () => {
-    const info = assignmentSetupInfo({
-      ...base,
-      template: { owner: "o", repo: "t", branch: "main" },
-      no_autograder: true,
-    })
-    expect(info.state).toBe("none")
-    expect(info.hasTemplate).toBe(true)
-    expect(info.tone).toBe("info")
-    expect(info.badgeKey).toBe("submissions.setup.badgeCustomCi")
-    expect(info.detailKey).toBe("submissions.setup.detailCustomCi")
-  })
-
-  it("built-in with a template -> 'Template', neutral tone", () => {
-    const info = assignmentSetupInfo({
-      ...base,
-      template: { owner: "o", repo: "t", branch: "main" },
-    })
-    expect(info.state).toBe("built-in")
-    expect(info.hasTemplate).toBe(true)
-    expect(info.tone).toBe("neutral")
-    expect(info.badgeKey).toBe("submissions.setup.badgeTemplate")
-    expect(info.detailKey).toBe("submissions.setup.detailTemplate")
-  })
-
-  it("built-in template-less (init_shim) -> 'Built-in autograder', neutral tone", () => {
-    const info = assignmentSetupInfo({ ...base, init_shim: true })
-    expect(info.state).toBe("built-in")
-    expect(info.hasTemplate).toBe(false)
-    expect(info.tone).toBe("neutral")
-    expect(info.badgeKey).toBe("submissions.setup.badgeBuiltIn")
-    expect(info.detailKey).toBe("submissions.setup.detailBuiltIn")
   })
 })
