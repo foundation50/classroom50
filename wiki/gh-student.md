@@ -39,7 +39,13 @@ a `git clone` command.
    *before* creating the repo, so a fetch failure leaves no half-baked repo).
 4. Creates the repo — from the template, an empty `auto_init` repo, or (for an
    `empty_repo` assignment) a truly bare repo with steps 3 and 7 skipped.
-5. Disables issues, projects, and wiki.
+5. Applies the assignment's repository features (Issues, Wiki, Projects, Pull
+   requests). By default each feature **inherits the template's setting**
+   (GitHub's template-generate doesn't copy them, so accept reads the template
+   and re-applies them); the teacher can force any feature on or off per
+   assignment. A template-less assignment keeps GitHub's own defaults unless
+   the teacher forced a feature. Best-effort — a rejected feature update never
+   fails accept.
 6. Sets your repo role: `push` for an individual assignment, or `admin` for a
    group assignment (so a group founder can invite teammates).
 7. Commits `.classroom50.yaml` and `.github/workflows/autograde.yaml` in one
@@ -124,8 +130,13 @@ commit** is skipped (nothing to grade); your first real submit always grades.
 ## `whoami` / `login` / `logout`
 
 - `whoami` — prints the authenticated GitHub user.
-- `login` — runs `gh auth login -s admin:org -s read:org -s repo -s workflow`
-  (the unified scope set, shared with `gh teacher login`); add scopes with `-s`.
+- `login` — checks your existing `gh` credentials first and **reuses them if
+  they already carry the required scopes** (`admin:org`, `read:org`, `repo`,
+  `workflow` — the unified set shared with `gh teacher login`). Only an absent
+  or under-scoped gh-managed token triggers `gh auth login`, with a warning
+  before your stored gh auth is rewritten; an under-scoped token supplied via
+  `GH_TOKEN` or your keyring errors with remediation instead. Add scopes with
+  `-s`.
 - `logout` — runs `gh auth logout`.
 
 ## Contributing

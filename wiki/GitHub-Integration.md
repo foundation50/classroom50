@@ -59,11 +59,16 @@ Run once per machine, or after a token rotation:
 gh teacher login
 ```
 
-This runs `gh auth login -s admin:org -s read:org -s repo -s workflow` and opens
-a browser. It's the unified Classroom 50 scope set — `gh teacher login` and
-`gh student login` request the same scopes, so authenticating one CLI covers the
-other. (`delete_repo` is not included — opt in with `gh teacher login -s
-delete_repo` for teardown.)
+This checks your existing `gh` credentials first: a token that already carries
+the required scopes is **reused untouched** (no re-auth, no rewrite of your `gh`
+configuration). Only an absent or under-scoped gh-managed token triggers
+`gh auth login -s admin:org -s read:org -s repo -s workflow` — with a warning
+first, since that rewrites your stored `gh` auth. An under-scoped token supplied
+via `GH_TOKEN` or your keyring can't be refreshed by `gh`, so the CLI errors
+with remediation instead. It's the unified Classroom 50 scope set —
+`gh teacher login` and `gh student login` request the same scopes, so
+authenticating one CLI covers the other. (`delete_repo` is not included — opt
+in with `gh teacher login -s delete_repo` for teardown.)
 
 | Scope | Required for |
 |---|---|
@@ -71,6 +76,17 @@ delete_repo` for teardown.)
 | `read:org` | Checking org membership. |
 | `repo` | Repo creation, contents writes, collaborators. |
 | `workflow` | Committing the config repo's workflow files during `init` (GitHub 404s the write without it). |
+
+> [!NOTE]
+> **Why the web app's sign-in asks for "Delete repositories".** Signing in at
+> classroom50.org requests `delete_repo` in addition to the set above. It is
+> used by exactly one feature: **Tear down organization** (org settings →
+> Danger zone), which resets an org by deleting the repositories Classroom 50
+> manages — and it only runs when you type an explicit confirmation. Nothing
+> else deletes repositories. Classroom 50 has no server: the token stays in
+> your browser, so nobody but you can act on your org with it. If you prefer,
+> the CLIs never request `delete_repo` unless you opt in with
+> `gh teacher login -s delete_repo`.
 
 ### 3. Student authentication
 
@@ -142,13 +158,20 @@ gh api -X PUT /repos/<org>/classroom50/actions/permissions/access \
 
 ### 6. Score collection
 
-The `collect-scores.yaml` workflow runs nightly (`17 4 * * *` UTC). Trigger it
-manually:
+The `collect-scores.yaml` workflow runs nightly (`17 4 * * *` UTC) across every
+classroom. Trigger it manually, optionally scoped to one classroom or a single
+assignment (the same scoped run the web app's per-assignment **Sync now**
+button dispatches):
 
 ```sh
 gh workflow run collect-scores.yaml --repo <org>/classroom50
 gh workflow run collect-scores.yaml --repo <org>/classroom50 -f classroom=<short-name>
+gh workflow run collect-scores.yaml --repo <org>/classroom50 -f classroom=<short-name> -f assignment=<slug>
 ```
+
+A scoped run walks only the matching assignment's repos (faster and cheaper on
+API rate limits for a large classroom) and stamps that assignment's
+`collected_at` in `scores.json`; sibling assignments' buckets are untouched.
 
 ### 7. Verify the service token
 
@@ -207,13 +230,16 @@ Some networks can't allow `workers.dev`. When the proxy is unreachable:
   and assignments is unaffected.
 - **What breaks:** the normal "Sign in with GitHub" button (its token exchange
   goes through the proxy) and in-app repo downloads.
-- **Signing in anyway:** paste a **classic** personal access token instead. On
-  the sign-in card, open **Other sign-in methods → Use a personal access token**.
-  This validates the token directly against `api.github.com`, so it never touches
-  the proxy. The prompt links to a token page with the required scopes
-  pre-checked. Fine-grained tokens aren't accepted here — use a classic token.
-  (This sign-in token is a **classic** token you paste into the web app; it is
-  separate from the fine-grained `CLASSROOM50_SERVICE_TOKEN` used for
+- **Signing in anyway:** paste a personal access token instead. On the sign-in
+  card, open **Other sign-in methods** and pick **Use a personal access token
+  (classic)** or **Use a personal access token (fine-grained)**. Both validate
+  the token directly against `api.github.com`, so they never touch the proxy,
+  and both link to a token-creation page with the required scopes/permissions
+  pre-filled. A fine-grained token works with **one organization only** — you
+  name the org (it becomes the token's resource owner) and must set Repository
+  access to **All repositories**.
+  (This sign-in token is one you paste into the web app; it is separate from
+  the fine-grained `CLASSROOM50_SERVICE_TOKEN` used for
   [score collection](#4-fine-grained-pat-for-score-collection).)
 - **A fuller fix:** host the proxy yourself on a domain your network already
   allows and point `VITE_GITHUB_PROXY_BASE` at it. This restores both the normal
@@ -261,7 +287,7 @@ The CLIs call GitHub through [`go-gh`](https://github.com/cli/go-gh);
 | GET / PATCH | `/user/memberships/orgs/{org}` | Check / accept a pending org invite. |
 | POST | `/repos/{template_owner}/{template_repo}/generate` | Generate the repo from a template. |
 | POST | `/orgs/{org}/repos` | Create an empty repo (template-less). |
-| GET / PATCH | `/repos/{owner}/{repo}` | Recover from "already exists"; disable issues/projects/wiki. |
+| GET / PATCH | `/repos/{owner}/{repo}` | Recover from "already exists"; read the template's features and apply the assignment's repository-feature settings (inherit/on/off). |
 | PUT | `/repos/{owner}/{repo}/collaborators/{username}` | Set the founder role: `push` (individual) or `admin` (group); also backs `gh student invite`. |
 | GET / POST / PATCH | `/repos/{owner}/{repo}/git/{refs,commits,blobs,trees}` + `/branches/{branch}` | Commit the setup files. |
 | GET | `/repos/{owner}/{repo}/contents/{path}` | Fetch `.gitignore`/`.github/` from the template (`submit`). |
