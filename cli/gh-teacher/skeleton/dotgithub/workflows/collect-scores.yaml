@@ -19,6 +19,9 @@ on:
       classroom:
         description: "Classroom short-name (leave blank to collect all)"
         required: false
+      assignment:
+        description: "Assignment slug (leave blank to collect the whole classroom; requires classroom to be meaningful)"
+        required: false
   schedule:
     # Nightly autopilot. Comment out the next line if you only want
     # manual triggers.
@@ -27,8 +30,10 @@ on:
 permissions:
   contents: write       # write scores.json + commit
 
+# Serialize same-scope runs; different scopes may overlap (each writes only its
+# own classroom's scores.json, and the push step rebases on a mid-run advance).
 concurrency:
-  group: collect-${{ github.event.inputs.classroom || 'all' }}
+  group: collect-${{ github.event.inputs.classroom || 'all' }}-${{ github.event.inputs.assignment || 'all' }}
   cancel-in-progress: false
 
 jobs:
@@ -58,6 +63,9 @@ jobs:
           # Optional restriction to a single classroom; empty
           # means "collect all classrooms in this config repo".
           CLASSROOM_FILTER: ${{ github.event.inputs.classroom || '' }}
+          # Optional further restriction to one assignment slug (the web app's
+          # per-assignment "Sync now"); empty means every assignment.
+          ASSIGNMENT_FILTER: ${{ github.event.inputs.assignment || '' }}
         run: python3 .github/scripts/collect_scores.py
 
       - name: Commit and push

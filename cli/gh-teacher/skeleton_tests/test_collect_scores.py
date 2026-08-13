@@ -1258,6 +1258,30 @@ class TestCollectClassroomTeamDriven:
                 classroom_meta={}, assignments=self._assignments(), service_token="token",
             )
 
+    def test_assignment_filter_polls_only_that_assignment(self, monkeypatch):
+        # The per-assignment scoped collect must not touch sibling assignments'
+        # repos (that's the whole point — a classroom-wide walk is slow and
+        # rate-limit hungry).
+        stub_team_members(monkeypatch, ["alice"])
+        seen_repos = []
+
+        def fake_all(api_url, org, repo, token):
+            seen_repos.append(repo)
+            return []
+
+        monkeypatch.setattr(cs, "all_submit_releases", fake_all)
+        cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={},
+            assignments={"assignments": [
+                {"slug": "hello", "name": "H", "mode": "individual", "tests": []},
+                {"slug": "world", "name": "W", "mode": "individual", "tests": []},
+            ]},
+            service_token="token",
+            assignment_filter="world",
+        )
+        assert seen_repos == ["cs-principles-world-alice"]
+
     def test_dedupes_team_members_case_insensitively(self, monkeypatch):
         stub_team_members(monkeypatch, ["Alice", "alice", "BOB"])
         seen_repos = []
@@ -2265,6 +2289,41 @@ class TestMain:
         monkeypatch.delenv("CLASSROOM_FILTER", raising=False)
 
         assert cs.main() == 0
+
+    def test_assignment_filter_threads_into_collect_classroom(self, tmp_path, monkeypatch):
+        # ASSIGNMENT_FILTER narrows collection to one assignment (the web app's
+        # per-assignment "Sync now"); main() must hand it to collect_classroom.
+        write_minimal_classroom(tmp_path)
+        seen = []
+
+        def fake_collect(**kwargs):
+            seen.append(kwargs.get("assignment_filter"))
+            return [], 0
+
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        monkeypatch.setenv("ASSIGNMENT_FILTER", "hello")
+        monkeypatch.setattr(cs, "collect_classroom", fake_collect)
+
+        assert cs.main() == 0
+        assert seen == ["hello"]
+
+    def test_assignment_filter_matching_nothing_exits_nonzero(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # Same contract as the classroom filter: a scoped dispatch naming an
+        # assignment that exists in NO collected classroom is a failed run, not
+        # a green no-op the web app would read as "collected".
+        write_minimal_classroom(tmp_path)
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        monkeypatch.setenv("ASSIGNMENT_FILTER", "no-such-assignment")
+        monkeypatch.setattr(cs, "collect_classroom", lambda **k: ([], 0))
+
+        assert cs.main() == 1
+        assert "no-such-assignment" in capsys.readouterr().err
 
     def test_hard_http_error_prints_actionable_message(self, tmp_path, monkeypatch, capsys):
         # Hard HTTP failures must surface a clean workflow error,

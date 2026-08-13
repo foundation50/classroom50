@@ -126,6 +126,7 @@ FULL_ROSTER_HEADER = ",".join(ROSTER_REQUIRED_COLUMNS)
 def main() -> int:
     base_dir = pathlib.Path(os.environ.get("GITHUB_WORKSPACE") or ".").resolve()
     classroom_filter = (os.environ.get("CLASSROOM_FILTER") or "").strip()
+    assignment_filter = (os.environ.get("ASSIGNMENT_FILTER") or "").strip()
 
     org = (os.environ.get("GITHUB_REPOSITORY_OWNER") or "").strip()
     if not org:
@@ -159,7 +160,17 @@ def main() -> int:
 
     total_changes = 0
     failed_classrooms: list[str] = []
+    # Whether ASSIGNMENT_FILTER named a slug that exists in at least one
+    # collected classroom's manifest — a no-match scoped run fails like a
+    # no-match classroom filter.
+    assignment_filter_matched = not assignment_filter
     for classroom_short, classroom_meta, assignments in classroom_dirs:
+        if assignment_filter and any(
+            entry.get("slug") == assignment_filter
+            for entry in assignments.get("assignments") or []
+            if isinstance(entry, dict)
+        ):
+            assignment_filter_matched = True
         scores_path = base_dir / classroom_short / "scores.json"
         try:
             scores = load_scores(scores_path)
@@ -210,6 +221,7 @@ def main() -> int:
                 assignments=assignments,
                 service_token=service_token,
                 roster_meta=load_roster_metadata(base_dir / classroom_short),
+                assignment_filter=assignment_filter,
             )
         except urllib.error.HTTPError as exc:
             # Auth (401/403) and synthetic-network (599) failures on COLLECTION
@@ -245,7 +257,14 @@ def main() -> int:
         # Suppress this when collect_classroom already attributed the empty
         # result to a mode flip (releases present but all rejected): that has
         # its own loud warning, and blaming the token here would misdirect.
-        assignment_count = len(valid_assignment_slugs(assignments))
+        # An assignment-scoped run only polls the filtered slug, so only that
+        # slug counts toward the heuristic's denominator.
+        collectable_slugs = [
+            s
+            for s in valid_assignment_slugs(assignments)
+            if not assignment_filter or s == assignment_filter
+        ]
+        assignment_count = len(collectable_slugs)
         if assignment_count and not updates and not mode_flip_assignments:
             emit_warning(
                 f"{classroom_short}: collected 0 submissions across "
@@ -273,6 +292,15 @@ def main() -> int:
         f"collect: {total_changes} total submission(s) updated across "
         f"{len(classroom_dirs)} classroom(s)"
     )
+    if not assignment_filter_matched:
+        # Same contract as the classroom-filter no-match above: a scoped run
+        # naming an assignment no collected classroom has must fail loudly.
+        emit_error(
+            f"no assignment matches ASSIGNMENT_FILTER={assignment_filter!r} in "
+            f"the collected classroom(s) — check the slug, or pull the latest "
+            f"config repo"
+        )
+        return 1
     if failed_classrooms:
         # Dedup (preserve order): a classroom can be recorded once for a
         # non-fatal staff-grant failure and again for a scores write failure.
@@ -492,6 +520,7 @@ def collect_classroom(
     assignments: dict[str, Any],
     service_token: str,
     roster_meta: dict[str, dict[str, str]] | None = None,
+    assignment_filter: str = "",
 ) -> tuple[list[dict[str, Any]], int]:
     """Return (validated result payloads for every (student, assignment) pair,
     count of assignments whose only submissions were rejected by validation).
@@ -504,6 +533,10 @@ def collect_classroom(
     see load_roster_metadata); when a collected owner has a matching row its
     name/section/email are attached to the entry. Absent/blank is fine — the
     join never gates collection.
+
+    `assignment_filter` (an assignment slug, empty for all) narrows the walk to
+    one assignment — the web app's per-assignment "Sync now" scope. Sibling
+    assignments' buckets in scores.json are untouched (apply_updates upserts).
     """
     roster_meta = roster_meta or {}
     results: list[dict[str, Any]] = []
@@ -561,6 +594,8 @@ def collect_classroom(
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
         if not isinstance(slug, str) or not slug:
+            continue
+        if assignment_filter and slug != assignment_filter:
             continue
         # Assignments that never autograde (empty_repo or no_autograder) —
         # same predicate as valid_assignment_slugs, kept in lockstep.
