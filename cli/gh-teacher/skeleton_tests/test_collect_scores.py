@@ -12,10 +12,20 @@ import csv
 import json
 import os
 import pathlib
+import re
 
 import pytest
 
 from conftest import collect_scores as cs
+
+
+# The exact `collected_at` shape the scores-v1 schema (and every reader —
+# Go/TS) enforces: UTC only, seconds precision, trailing `Z`. Stricter than
+# cs.RFC3339_RE, which also accepts offsets and fractional seconds — so a drift
+# of utc_now_iso() to an isoformat()-style output would satisfy RFC3339_RE yet
+# write a document the schema and the other tools reject. Assert the writer's
+# output against THIS pattern, matching the schema's collected_at pattern.
+SCHEMA_UTC_Z_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\dZ$")
 
 
 # Helpers ---------------------------------------------------------------------
@@ -2556,6 +2566,12 @@ class TestCollectedAtStamp:
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
 
+    def test_utc_now_iso_matches_schema_shape(self):
+        # The writer's stamp source must emit the schema's UTC-Z shape directly
+        # (no offset, no fractional seconds) — the direct guard on the helper so
+        # a drift is caught even if the end-to-end stamping tests change.
+        assert SCHEMA_UTC_Z_RE.fullmatch(cs.utc_now_iso())
+
     def test_walked_bucket_is_stamped(self, tmp_path, monkeypatch):
         write_minimal_classroom(tmp_path)
         self._env(tmp_path, monkeypatch)
@@ -2567,7 +2583,10 @@ class TestCollectedAtStamp:
         assert cs.main() == 0
         scores = json.loads((tmp_path / "cs-principles" / "scores.json").read_text())
         stamp = scores["assignments"]["hello"]["collected_at"]
-        assert cs.RFC3339_RE.fullmatch(stamp), stamp
+        # Strict UTC-Z shape, not just cs.RFC3339_RE (which also accepts offsets
+        # / fractional seconds): the schema and the Go/TS readers require this
+        # exact form, so a drift of utc_now_iso() must fail here.
+        assert SCHEMA_UTC_Z_RE.fullmatch(stamp), stamp
 
     def test_walked_bucket_with_no_submissions_is_created_empty_and_stamped(
         self, tmp_path, monkeypatch
@@ -2585,7 +2604,7 @@ class TestCollectedAtStamp:
         bucket = scores["assignments"]["hello"]
         assert bucket["type"] == "individual"
         assert bucket["entries"] == []
-        assert cs.RFC3339_RE.fullmatch(bucket["collected_at"])
+        assert SCHEMA_UTC_Z_RE.fullmatch(bucket["collected_at"])
 
     def test_unwalked_bucket_keeps_its_old_stamp(self, tmp_path, monkeypatch):
         # A scoped run must not refresh (or drop) a sibling bucket's stamp —
