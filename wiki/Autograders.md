@@ -147,7 +147,8 @@ Beyond choosing *when* commits grade, you can turn the pipeline off entirely:
 - **Per assignment, at creation** — pick **Do not use the built-in
   autograder** (`no_autograder` in assignments.json). Accept installs no shim
   at all; a templated assignment's own CI workflows run instead, and score
-  collection skips the assignment. Immutable after creation. See
+  collection skips the assignment. Changeable later, but only affects
+  repositories accepted from then on (existing ones keep their setup). See
   [`gh teacher` reference](gh-teacher#assignment-add).
 - **Per assignment, temporarily** — **Pause autograding** in the submissions
   page's **Actions** menu disables the `autograde.yaml` workflow in every

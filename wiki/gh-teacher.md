@@ -414,7 +414,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--tests <path>` | JSON array of declarative tests. Mutually exclusive with a per-assignment `autograder.py`. |
 | `--autograder <name>` | Swap the reusable workflow (rare). Default `default`. |
 | `--feedback-pr` | One review PR per student repo. **On by default**; `--feedback-pr=false` disables. |
-| `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; immutable; mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode/submission-tag/no-autograder/init-shim. |
+| `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; changeable on a same-slug re-add (warns; only affects future accepts); mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode/submission-tag/no-autograder/init-shim. |
 | `--pass-threshold <0–100>` | Advisory passing bar shown by gradebook clients. Off when omitted (distinct from `0`). |
 | `--submission-mode every-push\|tag` | When the autograder fires: `every-push` (default) grades every push; `tag` grades only `submit/*` tag pushes (the submit clients push the tag — plain `git push` costs no Actions minutes). Change it later with `assignment submission-mode`. |
 | `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading: `git tag phase1 && git push origin phase1` grades that commit. Simple globs (`v*`) work; exact names are safer. The record still lives at the canonical `submit/*` tag. Mutually exclusive with `--empty-repo`. |
@@ -433,7 +433,8 @@ CI). Unlike `--empty-repo` it keeps the template and the Feedback PR (a
 templated repo has a baseline commit); it is mutually exclusive with
 `empty_repo`, a non-default `--autograder`, and the grading-adjacent fields
 (tests/allowed-files/release-assets/pass-threshold/submission-mode/
-submission-tag), and it is immutable after creation. Score collection and
+submission-tag). It can be changed later, but only affects repositories accepted
+from then on (already-accepted repos aren't retrofitted). Score collection and
 regrade skip it (no `submit/*` releases are produced). Set it in the web app's
 assignment form — choose **"Do not use the built-in autograder"** under
 **Built-in autograder** — or by writing `no_autograder: true` into
@@ -451,10 +452,12 @@ assignment (the grading pipeline does **not** skip it). It **requires** the
 default autograder and **no** template (a template provides its own starter
 content); it is mutually exclusive with `empty_repo`, `template`,
 `no_autograder`, and a non-default `--autograder`, and it **permits** the
-grading-adjacent fields (it autogrades). It is immutable after creation. Set it
-in the web app's assignment form — pick **"No template"**, leave **"Add a
-README"** off, and keep **"Use the built-in autograder"** — or by writing
-`init_shim: true` into `assignments.json`; there is no `assignment add` flag.
+grading-adjacent fields (it autogrades). It can be changed later, but only
+affects repositories accepted from then on (already-accepted repos aren't
+retrofitted). Set it in the web app's assignment form — pick **"No template"**,
+leave **"Add a README"** off, and keep **"Use the built-in autograder"** — or by
+writing `init_shim: true` into `assignments.json`; there is no `assignment add`
+flag.
 
 **Include all branches (`include_all_branches`).** A **templated** assignment can
 carry `include_all_branches: true` in `assignments.json` to copy **all** of the
@@ -463,8 +466,8 @@ accept passes `include_all_branches` to GitHub's `POST /repos/{template}/generat
 It **requires** a template (it only affects the generate call) and is mutually
 exclusive with `empty_repo` and `init_shim` (both template-less, never
 generated); it is **compatible** with everything else, including `no_autograder`
-and the grading-adjacent fields (branches don't affect grading). Unlike the
-immutable no-shim states it is **accept-time only and mutable**: changing it
+and the grading-adjacent fields (branches don't affect grading). Like the other
+provisioning settings it is **mutable**, and being **accept-time only** it
 affects only repos generated from now on (already-accepted repos are never
 re-generated). Set it with the web assignment form's **"Include all branches"**
 toggle or via `assignments.json`; there is no `assignment add` flag.

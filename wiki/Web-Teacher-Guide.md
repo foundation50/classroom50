@@ -182,25 +182,30 @@ How each student's repository is created:
   you can review changes and leave inline feedback.
 - **Student repo access** — the role students get on their own repository.
 
-> [!WARNING]
-> **These repository-shape choices are permanent** — the template/README/bare
-> and built-in-autograder choices can't be changed after you create the
-> assignment, because repositories students already accepted can't be
-> retrofitted.
+> [!NOTE]
+> **These settings can be changed after creation, but only affect repositories
+> accepted from now on** — repositories students already accepted aren't
+> retrofitted, so they keep their original starter code and setup. When at least
+> one student has already accepted, the edit form asks you to confirm and warns
+> that you'll need to reconcile the existing repositories yourself. (**Assignment
+> type** — Individual vs. Group — is the exception: it stays locked on edit,
+> because switching it would invalidate every existing submission.)
 
 ### Grading and submissions
 
 - **Grading** — **Not graded** (the default), **Autograded**, or **Manual
   (enter scores by hand)**. The autograding options below are offered only
   under **Autograded**; **Manual** assignments get a **Max points** field and
-  you enter each student's score on the submissions page (see below). Immutable
-  after creation.
+  you enter each student's score on the submissions page (see below). Can be
+  changed after creation (edits only affect repositories accepted from now on).
 - **Built-in autograder** — under **Autograded**, choose **Use the built-in
   autograder** or **Do not use the built-in autograder** (the default on a new
   assignment). Opting out means accept installs no autograding workflow at all:
   on a templated assignment your template's own CI workflows run instead, and
-  Classroom 50's score collection skips the assignment. Immutable after
-  creation.
+  Classroom 50's score collection skips the assignment. Can be changed after
+  creation (edits only affect repositories accepted from now on; turning
+  autograding off later makes already-accepted repositories' autograde runs
+  fail and drop out of the gradebook).
 - **Submission type** — when the autograder runs. **Every push to the default
   branch** (the default) grades each push. **A tagged commit** grades only
   when a student submits (`gh student submit`) or pushes a `submit/*` tag —
@@ -419,7 +424,11 @@ spreadsheet or external tool.
 ## Edit assignments and classrooms
 
 - **Edit an assignment** — open the assignment, then **Assignment settings**.
-  Same form as creating one, pre-filled.
+  Same form as creating one, pre-filled. Provisioning settings (repository
+  source, built-in autograder, grading mode) are editable; a change only affects
+  repositories accepted from then on, so the form asks you to confirm when
+  students have already accepted. **Assignment type** (Individual vs. Group)
+  stays locked, since switching it would invalidate existing submissions.
 - **Edit a classroom** — open the classroom, then **Settings**. Same form as
   creating one, pre-filled.
 
