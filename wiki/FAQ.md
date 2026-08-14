@@ -263,20 +263,24 @@ results.
 
 ### Can I manually override or adjust a grade?
 
-Yes, two ways:
+Yes, right in the web app — for both **manual** and **autograded** assignments.
+On the submissions page, each row's score cell has an edit button that opens a
+score-override dialog:
 
-- **In the web app, on a manual assignment.** Create the assignment with
-  **Grading → Manual (enter scores by hand)** and a **Max points** value; each
-  row on the submissions page then gets an **Add grade** / **Edit grade**
-  button. Hand-entered scores show a **Manual** badge and are stored as
-  overrides. (This editor appears only for manual-mode assignments, and only
-  for organization owners — writing scores means writing the config repo. The
-  grading mode can be changed later from the edit form, though a change only
-  affects how repositories accepted from then on are read.)
-- **In the config repo, for any assignment.** Edit the classroom's
-  `scores.json`: change the submission's `score` and add `"override": true` to
-  that entry, then commit. Collection leaves overridden entries untouched on
-  future runs. See [Collect scores](CLI-Teacher-Guide#9-collect-scores).
+- **Manual assignments** — enter a score out of the assignment's **Max points**.
+- **Autograded assignments** — enter a score to override the autograded result.
+  The original autograded score is preserved; clearing the override restores it.
+  If the submission hasn't been autograded yet, the dialog also asks for the max
+  points to grade out of.
+
+Overridden scores show a **Manual** badge and aren't changed by autograding
+until you clear the override. Use **Clear override** in the dialog to revert.
+
+This editor appears only for organization owners (writing a score writes the
+config repo). Under the hood, an override is just an entry in the classroom's
+`scores.json` with `"override": true`, which collection leaves untouched on
+future runs — so you can still edit it by hand if you prefer (see
+[Collect scores](CLI-Teacher-Guide#9-collect-scores)).
 
 ### How do I export grades, or download student work in bulk?
 
