@@ -70,6 +70,11 @@ repository for inline review of a student's work.
 **Score / gradebook** — Collected results. The gradebook (`scores.json`) is
 built by the score-collection workflow; teachers can download it as CSV.
 
+**Score override** — A teacher-set score entered on the submissions page,
+stored in the gradebook and left untouched by autograding until cleared. Used
+for manual grading and for overriding an autograded result (which is preserved
+and restored when the override is cleared).
+
 ## Access and setup
 
 **Service token** — A fine-grained personal access token (PAT) stored as a

@@ -361,18 +361,21 @@ Each row shows a student's (or group's) latest submission plus its full history
 and links to the repository, the commit, the feedback pull request
 (**Review**), and the Release (**Details**).
 
-### Manual grades
+### Grades and score overrides
 
-On an assignment created with **Grading → Manual (enter scores by hand)**, each
-row gets an **Add grade** / **Edit grade** button for entering a score out of
-the assignment's **Max points**. A hand-entered score is stored as an override
-in the classroom's `scores.json` and shows a **Manual** badge — autograding
-won't change it until the override is cleared.
+Each row's score cell has an edit button (pencil) that opens a score dialog.
+It works for both grading modes:
 
-The inline editor appears only on manual-mode assignments, and only for
-organization owners (entering a score writes the config repo). To adjust a
-score on an **autograded** assignment, edit `scores.json` directly — see the
-[FAQ](FAQ#can-i-manually-override-or-adjust-a-grade).
+- **Manual assignments** — enter a score out of the assignment's **Max
+  points**.
+- **Autograded assignments** — enter a score to override the autograded
+  result. The autograded score is preserved and shown in the dialog; **Clear
+  override** restores it. If the submission hasn't been autograded yet, the
+  dialog also asks for the max points to grade out of.
+
+An overridden score shows a **Manual** badge and won't be changed by
+autograding until you clear the override. Entering a score writes the config
+repo's `scores.json`, so the editor appears only for organization owners.
 
 ### Bulk actions
 

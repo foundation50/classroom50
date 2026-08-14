@@ -80,6 +80,14 @@ export type SubmissionRow = {
   // table marks it so a hand-entered grade is distinguishable from an
   // autograded one. Mirrors the collector's per-entry override flag.
   overridden?: boolean
+  // For an overridden entry, the score/max of the newest REAL (non-synthesized)
+  // submission beneath the override — the autograded value the score reverts to
+  // when the override is cleared. Absent when the override has no real history
+  // (a grade entered on a repo with no collected submission), or when the entry
+  // isn't overridden. Read-only; the effective displayed grade is still
+  // `score`/`max-score` above.
+  autogradedScore?: number
+  autogradedMax?: number
   // A row with a submission the collector recorded as present but not graded
   // (no score yet) — rendered as "submitted, not yet collected" rather than a
   // 0/0 score. Excluded from graded stats/average and the CSV score column.
@@ -159,6 +167,14 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
           : undefined
       const latest = overrideRecord ?? sorted[0]
 
+      // The autograded value beneath an override: the newest real (non-manual)
+      // submission. Used by the override editor to show what clearing reverts
+      // to. Undefined when the entry isn't overridden or has no real history.
+      const autograded =
+        entry.override === true
+          ? sorted.find((s) => !s.submission.startsWith("submit/manual-"))
+          : undefined
+
       const usernames =
         entry.member_usernames && entry.member_usernames.length > 0
           ? entry.member_usernames
@@ -177,6 +193,8 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
         late: latest.late,
         gradedAt: latest.graded_at,
         overridden: entry.override === true,
+        autogradedScore: autograded?.score,
+        autogradedMax: autograded?.["max-score"],
         submissions: sorted.map((s) => ({
           datetime: s.datetime,
           commit: s.commit,

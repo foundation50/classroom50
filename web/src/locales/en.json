@@ -2519,16 +2519,32 @@
       "review": "Review",
       "reviewAria": "Open feedback pull request"
     },
-    "manualGrade": {
+    "scoreOverride": {
       "notGraded": "Not graded",
       "add": "Add grade",
       "edit": "Edit grade",
+      "override": "Override score",
       "addLabel": "Add grade for {{name}}",
       "editLabel": "Edit grade for {{name}}",
-      "inputLabel": "Score for {{name}}",
+      "overrideLabel": "Override score for {{name}}",
+      "titleAdd": "Add grade",
+      "titleEdit": "Edit grade",
+      "titleOverride": "Override score",
+      "descriptionManual": "Enter a score for {{name}}. It's saved to the gradebook and won't be changed by autograding.",
+      "descriptionAuto": "Enter a score for {{name}} to override the autograded result. The autograded score is preserved and restored if you clear the override.",
+      "inputLabel": "Score",
+      "maxLabel": "Out of (max points)",
+      "maxHint": "This submission hasn't been autograded yet, so enter the total points it's out of.",
+      "maxRequired": "Enter the max points to save.",
+      "maxRange": "Max points must be a whole number of at least 1.",
+      "currentAutograded": "Autograded score",
       "required": "Enter a score to save.",
       "range": "Score must be a whole number from 0 to {{max}}.",
-      "saveError": "Couldn't save the grade. Check your connection and try again."
+      "save": "Save",
+      "clear": "Clear override",
+      "clearLabel": "Clear the score override for {{name}}",
+      "saveError": "Couldn't save the grade. Check your connection and try again.",
+      "clearError": "Couldn't clear the override. Check your connection and try again."
     },
     "reviewModal": {
       "errorTitle": "Couldn't check for a feedback PR",

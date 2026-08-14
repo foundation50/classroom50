@@ -38,8 +38,11 @@ import {
 } from "@/pages/submissions/SubmissionsRowActions"
 import { ManageSubmissionModal } from "@/pages/submissions/ManageSubmissionModal"
 import { ScoreBadge as SharedScoreBadge } from "@/pages/submissions/ScoreBadge"
-import { ManualGradeCell } from "@/pages/submissions/ManualGradeCell"
-import type { ManualGradeContext } from "@/pages/submissions/ManualGradeCell"
+import { ScoreCell } from "@/pages/submissions/ScoreCell"
+import {
+  ScoreOverrideModal,
+  type ScoreOverrideCapability,
+} from "@/pages/submissions/ScoreOverrideModal"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
@@ -93,6 +96,23 @@ type SubmissionDetailsContext = {
   repo: string
   repoHref: string
   items: SubmissionDetailItem[]
+}
+
+// The value snapshot the score-override modal renders from, captured when a
+// row's grade cell trigger is clicked. `maxPoints` is already resolved
+// (configured for manual, the row's max-score for autograded).
+type OverrideModalRow = {
+  owner: string
+  displayName?: string
+  hasGrade: boolean
+  score: number
+  overridden: boolean
+  autogradedScore?: number
+  autogradedMax?: number
+  // Absent when the row is a pending autograded submission — the modal then
+  // asks the teacher to enter the max.
+  maxPoints?: number
+  memberUsernames?: string[]
 }
 
 // Build the type-aware detail items for a row via the shared builder: tag
@@ -161,6 +181,41 @@ function buildDetailItems(
   )
 }
 
+// Resolve whether a row's score cell offers override editing, and with what
+// max. Returns null when the row isn't editable (no capability, or a pending
+// group whose members aren't resolved yet). Manual mode is always editable (an
+// ungraded row offers "Add grade") with the configured max. Autograded mode is
+// editable for any non-empty repo: a graded row uses its own max-score, while a
+// pending row (not yet collected, no max-score) returns an undefined max so the
+// modal prompts the teacher to enter it.
+//
+// The pending-group guard matters: a pending group row comes from the
+// live/detection overlay before collection, so its usernames is just the
+// founder — grading it would write member_usernames:[founder] and mis-credit
+// the group, so we defer until collection resolves the member list.
+function resolveOverrideCell(
+  row: Pick<SubmissionRow, "pending" | "max-score">,
+  capability: ScoreOverrideCapability | undefined,
+  isGroup: boolean,
+  emptyRepo: boolean,
+): { hasGrade: boolean; maxPoints?: number } | null {
+  if (!capability) return null
+  if (isGroup && row.pending) return null
+
+  if (capability.mode === "manual") {
+    if (typeof capability.maxPoints !== "number") return null
+    return { hasGrade: !row.pending, maxPoints: capability.maxPoints }
+  }
+
+  // Autograded override. A never-graded empty repo can't produce a score.
+  if (emptyRepo) return null
+  // A pending row has no collected max yet: the teacher enters it in the modal.
+  if (row.pending) return { hasGrade: false, maxPoints: undefined }
+  // A collected row uses its own max-score as the bound.
+  if (!(row["max-score"] > 0)) return null
+  return { hasGrade: true, maxPoints: row["max-score"] }
+}
+
 const SubmissionsTable = ({
   scores,
   students,
@@ -180,7 +235,7 @@ const SubmissionsTable = ({
   submissionMode,
   submissionTags,
   assignmentMode = "every-push",
-  manualGrade,
+  overrideGrade,
   canPauseAutograding = false,
   initialLoading = false,
   nonSubmittersLoading = false,
@@ -231,10 +286,11 @@ const SubmissionsTable = ({
   // that shapes `submissionMode` above). Drives the type-aware count wording
   // and the submission-details modal. Absent reads as every-push.
   assignmentMode?: SubmissionMode
-  // When set, the assignment is graded MANUALLY and the viewer may enter/edit
-  // scores inline. Carries the write context (org/classroom/assignment/type/
-  // max points). Omitted for autograded assignments or a viewer who can't write.
-  manualGrade?: ManualGradeContext
+  // When set, the viewer may override scores (manual-mode grading, or
+  // overriding an autograded result). Carries the write context and how to
+  // compute the max (configured for manual, per-row for autograded). Omitted
+  // for a non-gradable assignment or a viewer who can't write.
+  overrideGrade?: ScoreOverrideCapability
   // Whether the per-row Pause/Resume-autograding action applies. Gated by the
   // page (owner + individual + resolved default-autograder), matching the bulk
   // pause/resume gate so the row and menu entry points stay in lockstep — the
@@ -285,6 +341,10 @@ const SubmissionsTable = ({
   // The student whose profile modal is open (resolved from a row's username), or
   // null. Resolves to a roster Student for the richer detail view.
   const [profileUsername, setProfileUsername] = useState<string | null>(null)
+
+  // The row whose score-override modal is open, or null. Captures the value
+  // snapshot so the modal renders without re-deriving from the row list.
+  const [overrideRow, setOverrideRow] = useState<OverrideModalRow | null>(null)
   const profileStudent = profileUsername
     ? resolveStudent(profileUsername, students)
     : null
@@ -401,57 +461,71 @@ const SubmissionsTable = ({
           />
         </td>
         <td>
-          {manualGrade && !(isGroup && rest.pending) ? (
-            // Manual grading wins over the no-grading em-dash: a manual-graded
-            // assignment is typically written as no_autograder (emptyRepo
-            // here), and the non-submitter row offers "Add grade" under the
-            // same flags — hiding the editor here would make an entered grade
-            // invisible. A pending GROUP row still falls through: it comes
-            // from the live/detection overlay before collection, so its
-            // `usernames` is just the founder ([owner]) — the real members
-            // aren't known yet. Grading it here would write
-            // member_usernames:[founder] and mis-credit the group (the other
-            // members would read as non-submitters and never see the grade),
-            // so show the pending badge until collection resolves the member
-            // list. Individual pending rows and any collected group row are
-            // safe to grade inline.
-            <ManualGradeCell
-              owner={rest.owner}
-              score={score}
-              max={rest["max-score"]}
-              hasGrade={!rest.pending}
-              thresholdFraction={passBar}
-              ctx={{ ...manualGrade, memberUsernames: usernames }}
-            />
-          ) : emptyRepo ? (
-            <span
-              className="text-base-content/50"
-              title={t("submissions.table.noGradingTitle")}
-            >
-              —
-            </span>
-          ) : rest.pending ? (
-            <Badge ghost title={t("submissions.table.pendingGradeTitle")}>
-              {t("submissions.table.pendingGrade")}
-            </Badge>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <ScoreBadge
-                score={score}
-                max={rest["max-score"]}
-                thresholdFraction={passBar}
-              />
-              {rest.overridden ? (
-                <Badge
-                  ghost
-                  size="sm"
-                  title={t("submissions.table.overriddenTitle")}
-                >
-                  {t("submissions.table.overridden")}
-                </Badge>
-              ) : null}
-            </div>
-          )}
+          {(() => {
+            const cell = resolveOverrideCell(
+              { usernames, score, ...rest } as SubmissionRow,
+              overrideGrade,
+              isGroup,
+              emptyRepo,
+            )
+            if (cell) {
+              return (
+                <ScoreCell
+                  owner={rest.owner}
+                  hasGrade={cell.hasGrade}
+                  pending={Boolean(rest.pending)}
+                  score={score}
+                  max={rest["max-score"]}
+                  overridden={Boolean(rest.overridden)}
+                  thresholdFraction={passBar}
+                  onEdit={() =>
+                    setOverrideRow({
+                      owner: rest.owner,
+                      displayName: isGroup
+                        ? repo
+                        : getName(rest.owner, students) || undefined,
+                      hasGrade: cell.hasGrade,
+                      score,
+                      overridden: Boolean(rest.overridden),
+                      autogradedScore: rest.autogradedScore,
+                      autogradedMax: rest.autogradedMax,
+                      maxPoints: cell.maxPoints,
+                      memberUsernames: usernames,
+                    })
+                  }
+                />
+              )
+            }
+            return emptyRepo ? (
+              <span
+                className="text-base-content/50"
+                title={t("submissions.table.noGradingTitle")}
+              >
+                —
+              </span>
+            ) : rest.pending ? (
+              <Badge ghost title={t("submissions.table.pendingGradeTitle")}>
+                {t("submissions.table.pendingGrade")}
+              </Badge>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <ScoreBadge
+                  score={score}
+                  max={rest["max-score"]}
+                  thresholdFraction={passBar}
+                />
+                {rest.overridden ? (
+                  <Badge
+                    ghost
+                    size="sm"
+                    title={t("submissions.table.overriddenTitle")}
+                  >
+                    {t("submissions.table.overridden")}
+                  </Badge>
+                ) : null}
+              </div>
+            )
+          })()}
         </td>
         <td>
           <LastSubmittedCell
@@ -678,7 +752,21 @@ const SubmissionsTable = ({
                     acceptedUsernames={acceptedUsernames}
                     onProfile={setProfileUsername}
                     actions={actions}
-                    manualGrade={manualGrade}
+                    overrideGrade={overrideGrade}
+                    onEditGrade={(username) =>
+                      overrideGrade?.mode === "manual" &&
+                      typeof overrideGrade.maxPoints === "number"
+                        ? setOverrideRow({
+                            owner: username,
+                            displayName:
+                              getName(username, students) || undefined,
+                            hasGrade: false,
+                            score: 0,
+                            overridden: false,
+                            maxPoints: overrideGrade.maxPoints,
+                          })
+                        : undefined
+                    }
                     thresholdFraction={passBar}
                   />
                 )
@@ -852,6 +940,31 @@ const SubmissionsTable = ({
           ownerLogin={accessOwner}
           assignmentName={assignmentName}
           students={students}
+        />
+      )}
+
+      {overrideRow && overrideGrade && (
+        <ScoreOverrideModal
+          key={`override-${overrideRow.owner}`}
+          open
+          onClose={() => setOverrideRow(null)}
+          owner={overrideRow.owner}
+          displayName={overrideRow.displayName}
+          hasGrade={overrideRow.hasGrade}
+          score={overrideRow.score}
+          overridden={overrideRow.overridden}
+          autogradedScore={overrideRow.autogradedScore}
+          autogradedMax={overrideRow.autogradedMax}
+          thresholdFraction={passBar}
+          ctx={{
+            org: overrideGrade.org,
+            classroom: overrideGrade.classroom,
+            assignment: overrideGrade.assignment,
+            assignmentType: overrideGrade.assignmentType,
+            mode: overrideGrade.mode,
+            maxPoints: overrideRow.maxPoints,
+            memberUsernames: overrideRow.memberUsernames,
+          }}
         />
       )}
 
