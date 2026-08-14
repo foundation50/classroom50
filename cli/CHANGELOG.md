@@ -17,6 +17,19 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.28.2](https://github.com/foundation50/classroom50/compare/cli-v1.28.1...cli-v1.28.2) (2026-08-14)
+
+
+### Features
+
+* allow editing provisioning settings after assignment creation ([#597](https://github.com/foundation50/classroom50/issues/597)) ([f77c8f7](https://github.com/foundation50/classroom50/commit/f77c8f7b5c37908f41791c7aff311b15ccbee798))
+* assignment-scoped score collection and accurate submission status ([#593](https://github.com/foundation50/classroom50/issues/593)) ([08e32f7](https://github.com/foundation50/classroom50/commit/08e32f7cce807e82e72861231c1738bc05d6e418))
+
+
+### Miscellaneous Chores
+
+* pin next release to 1.28.2 ([fb74e64](https://github.com/foundation50/classroom50/commit/fb74e6495d6005df1adc17b76497c5beb9b066f7))
+
 ## [1.28.1](https://github.com/foundation50/classroom50/compare/cli-v1.28.0...cli-v1.28.1) (2026-08-12)
 
 

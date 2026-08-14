@@ -17,6 +17,22 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.28.2](https://github.com/foundation50/classroom50/compare/web-v1.28.1...web-v1.28.2) (2026-08-14)
+
+
+### Features
+
+* allow editing provisioning settings after assignment creation ([#597](https://github.com/foundation50/classroom50/issues/597)) ([f77c8f7](https://github.com/foundation50/classroom50/commit/f77c8f7b5c37908f41791c7aff311b15ccbee798))
+* assignment-scoped score collection and accurate submission status ([#593](https://github.com/foundation50/classroom50/issues/593)) ([08e32f7](https://github.com/foundation50/classroom50/commit/08e32f7cce807e82e72861231c1738bc05d6e418))
+* **web:** reset controls, inline field errors, and auto-unique slug in assignment form ([#588](https://github.com/foundation50/classroom50/issues/588)) ([fe96aaa](https://github.com/foundation50/classroom50/commit/fe96aaa91a5932c3a780c99b826accb1221bb2eb))
+* **web:** show tagged submissions with jump-to-tag links ([#585](https://github.com/foundation50/classroom50/issues/585)) ([e2f800f](https://github.com/foundation50/classroom50/commit/e2f800fd0972b5b90cb3736a84684eb3e92e1860))
+* **web:** split submission badge into type and grading badges ([#591](https://github.com/foundation50/classroom50/issues/591)) ([7d42d4e](https://github.com/foundation50/classroom50/commit/7d42d4e1510aae590fcdd86997a3de9a5bad41c3))
+
+
+### Miscellaneous Chores
+
+* pin next release to 1.28.2 ([fb74e64](https://github.com/foundation50/classroom50/commit/fb74e6495d6005df1adc17b76497c5beb9b066f7))
+
 ## [1.28.1](https://github.com/foundation50/classroom50/compare/web-v1.28.0...web-v1.28.1) (2026-08-12)
 
 
