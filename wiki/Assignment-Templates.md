@@ -23,6 +23,7 @@ A worked example lives at
 ├── .gitignore             # optional, re-fetched on every gh student submit
 ├── .github/               # optional, re-fetched on every gh student submit
 │   └── workflows/         # CI for student copies (NOT autograde — see below)
+├── pull_request_template.md  # optional, can drive the Feedback PR body
 └── <starter code>         # whatever files the assignment needs
 ```
 
@@ -32,6 +33,12 @@ A worked example lives at
   updating it once propagates to every student's next submission.
 - **`.github/`** (optional) — same re-fetch behavior. Put non-autograde
   workflows here (linters, formatters, dependabot).
+- **`pull_request_template.md`** (optional) — GitHub's native pull request
+  template (`.github/pull_request_template.md`, root, or `docs/`). If the
+  assignment enables **Use the template's pull request template as the Feedback
+  PR body**, Classroom 50 uses this file's contents as each student's Feedback
+  PR body instead of the built-in text. See
+  [Autograders](Autograders#feedback-pull-requests).
 - **Starter code** — any files the student starts from, from a single file to a
   full project.
 

@@ -180,6 +180,14 @@ How each student's repository is created:
   **Update repository features** action on the submissions page.
 - **Feedback pull request** — automatically opens a pull request per student so
   you can review changes and leave inline feedback.
+- **Use the template's pull request template as the Feedback PR body**
+  (templated, with the Feedback pull request on) — use the template repository's
+  own pull request template (`.github/pull_request_template.md`,
+  `pull_request_template.md`, or `docs/pull_request_template.md`) as the body of
+  each student's Feedback PR instead of the built-in text. The form auto-checks
+  this when it finds such a file in the template; you can still toggle it. If the
+  file is missing or can't be read, the built-in body is used, so nothing breaks.
+  It is your responsibility to keep the template's contents correct.
 - **Student repo access** — the role students get on their own repository.
 
 > [!NOTE]
