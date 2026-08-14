@@ -17,6 +17,21 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.29.0](https://github.com/foundation50/classroom50/compare/web-v1.28.2...web-v1.29.0) (2026-08-14)
+
+
+### Features
+
+* add opt-in teacher pull_request_template.md as the Feedback PR body ([#602](https://github.com/foundation50/classroom50/issues/602)) ([fdb910d](https://github.com/foundation50/classroom50/commit/fdb910d9681cd8e7fbc5ec3f6d4d8ca1e277bda4))
+* **web:** sort rosters by last name and add student names to grade CSV ([#603](https://github.com/foundation50/classroom50/issues/603)) ([91f3e19](https://github.com/foundation50/classroom50/commit/91f3e192762d743ffc3adf38a6c0259f32a60705))
+* **web:** teacher score override for autograded and manual grading ([#599](https://github.com/foundation50/classroom50/issues/599)) ([44f659c](https://github.com/foundation50/classroom50/commit/44f659c5a89b37fef9a5b7700ecf0ccab6992355))
+
+
+### Bug Fixes
+
+* **web:** distinguish student view-submissions icon from autograder details ([#604](https://github.com/foundation50/classroom50/issues/604)) ([ff37c37](https://github.com/foundation50/classroom50/commit/ff37c3784c17467a72b675e69e267a1898e34390))
+* **web:** stop long help text overflowing in the assignment form ([#605](https://github.com/foundation50/classroom50/issues/605)) ([a5e3f6f](https://github.com/foundation50/classroom50/commit/a5e3f6f2c356b4dccc853b2eae938b5499fb8b24))
+
 ## [1.28.2](https://github.com/foundation50/classroom50/compare/web-v1.28.1...web-v1.28.2) (2026-08-14)
 
 

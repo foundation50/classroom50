@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.29.0](https://github.com/foundation50/classroom50/compare/cli-v1.28.2...cli-v1.29.0) (2026-08-14)
+
+
+### Features
+
+* add opt-in teacher pull_request_template.md as the Feedback PR body ([#602](https://github.com/foundation50/classroom50/issues/602)) ([fdb910d](https://github.com/foundation50/classroom50/commit/fdb910d9681cd8e7fbc5ec3f6d4d8ca1e277bda4))
+
 ## [1.28.2](https://github.com/foundation50/classroom50/compare/cli-v1.28.1...cli-v1.28.2) (2026-08-14)
 
 
