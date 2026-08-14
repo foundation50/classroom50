@@ -1,11 +1,18 @@
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { AnimatePresence, motion } from "motion/react"
+import { collapseVariants } from "@/lib/motion"
+import { cx } from "@/components/ui"
 
 // The collapsible "Advanced settings" disclosure shared by the Repository Setup
 // and autograder panes. One recipe, one source — both render through this so the
 // chevron/heading treatment can't drift. Deliberately compact and info-colored
 // rather than heading-sized: it's a secondary affordance the common path skips.
+//
+// A button + AnimatePresence rather than native <details>/<summary>: the browser
+// display-toggles a <details> body, so its height can't be animated. This shares
+// the app's collapseVariants with every other expanding surface.
 export function CollapsibleAdvanced({
   help,
   children,
@@ -14,21 +21,42 @@ export function CollapsibleAdvanced({
   children: ReactNode
 }) {
   const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(false)
   return (
-    <details className="group">
-      <summary className="flex w-fit cursor-pointer items-center gap-1.5 text-sm font-semibold text-info marker:content-none hover:underline">
+    <div>
+      <button
+        type="button"
+        onClick={() => setExpanded((open) => !open)}
+        aria-expanded={expanded}
+        className="flex w-fit cursor-pointer items-center gap-1.5 text-sm font-semibold text-info hover:underline"
+      >
         <ChevronRight
           aria-hidden="true"
-          className="size-4 transition-transform group-open:rotate-90"
+          className={cx(
+            "size-4 transition-transform duration-200",
+            expanded && "rotate-90",
+          )}
         />
         {t("assignments.form.advanced")}
-      </summary>
-      {help ? (
-        <p className="pt-2 pb-4 text-sm text-base-content/70">{help}</p>
-      ) : (
-        <div className="pt-2" />
-      )}
-      {children}
-    </details>
+      </button>
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            variants={collapseVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="overflow-hidden"
+          >
+            {help ? (
+              <p className="pt-2 pb-4 text-sm text-base-content/70">{help}</p>
+            ) : (
+              <div className="pt-2" />
+            )}
+            {children}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
   )
 }
