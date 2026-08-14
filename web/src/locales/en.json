@@ -1193,8 +1193,7 @@
       },
       "grading": {
         "label": "Grading",
-        "help": "How this assignment is graded. \"Autograded\" runs the autograder you configure below. \"Manual\" lets you enter each student's score by hand on the submissions page. \"Not graded\" records no score. Can't be changed after the assignment is created.",
-        "editWarning": "The grading mode can't be changed after creation: scores already recorded under the old mode would be misread. Create a new assignment under a different slug instead.",
+        "help": "How this assignment is graded. \"Autograded\" runs the autograder you configure below. \"Manual\" lets you enter each student's score by hand on the submissions page. \"Not graded\" records no score.",
         "autoNote": "This assignment is autograded. Configure the autograder in the Autograding section below. Whether you use the built-in autograder or supply your own workflow, it must publish a result.json asset on the submission release — that file is what the app reads to show scores.",
         "choices": {
           "off": "Not graded",

@@ -56,7 +56,7 @@ export function SubmissionGradingSection({
           </form.Subscribe>
         </div>
         <div className="divider my-0" />
-        <GradingChoiceField form={form} edit={edit} />
+        <GradingChoiceField form={form} />
       </div>
     </SectionCard>
   )
@@ -64,16 +64,10 @@ export function SubmissionGradingSection({
 
 // Grading choice (off / auto / manual). manual reveals a max-points input; auto
 // shows a pointer to the Autograding section + the result.json requirement.
-// Editable after creation; on edit a change shows an inline warning, and the
-// edit form also confirms before saving when students have already accepted
-// (scores recorded under the old mode may be read differently).
-function GradingChoiceField({
-  form,
-  edit,
-}: {
-  form: AssignmentForm
-  edit: boolean
-}) {
+// Editable after creation; the edit form confirms before saving when students
+// have already accepted (scores recorded under the old mode may be read
+// differently), so no inline edit warning is needed here.
+function GradingChoiceField({ form }: { form: AssignmentForm }) {
   const { t } = useTranslation()
   return (
     <div className="flex flex-col gap-3">
@@ -111,22 +105,6 @@ function GradingChoiceField({
                 </Select>
               )}
             </FormField>
-            {edit ? (
-              <form.Subscribe selector={(state) => state.values.grading_choice}>
-                {(choice) =>
-                  choice !==
-                  (form.options.defaultValues?.grading_choice ?? "auto") ? (
-                    <Alert
-                      tone="warning"
-                      role="status"
-                      className="mt-2 text-sm"
-                    >
-                      <span>{t("assignments.form.grading.editWarning")}</span>
-                    </Alert>
-                  ) : null
-                }
-              </form.Subscribe>
-            ) : null}
           </div>
         )}
       </form.Field>
