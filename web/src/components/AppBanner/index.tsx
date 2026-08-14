@@ -46,6 +46,11 @@ export const AppBanner = ({
   const tokens = TONE_CLASS[tone]
   const { t } = useTranslation()
   return (
+    // Audited exemption to the collapse-overflow guard: this element is the
+    // AnimatePresence child (it must keep its own key + exit), so it can't wrap
+    // in <Collapse>. The clip is safe because the banner holds text plus a
+    // dismiss button, neither of which paints outside the bar.
+    // eslint-disable-next-line no-restricted-syntax
     <motion.div
       role="alert"
       variants={collapseVariants}

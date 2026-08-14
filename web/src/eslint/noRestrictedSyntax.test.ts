@@ -10,7 +10,8 @@ import {
   directionalClassMessage,
 } from "./directionalClassRule"
 import {
-  collapseOverflowSelector,
+  collapseOverflowLiteralSelector,
+  collapseOverflowTemplateSelector,
   collapseOverflowMessage,
 } from "./collapseOverflowRule"
 
@@ -323,10 +324,19 @@ describe("no-restricted-syntax collapse overflow guard", () => {
     ).length
   }
 
-  it("keeps the selector wired to a height-animating motion element", () => {
-    expect(collapseOverflowSelector).toContain("motion")
-    expect(collapseOverflowSelector).toContain("variants")
-    expect(collapseOverflowSelector).toContain("overflow-hidden")
+  it("keeps both selectors wired to a height-animating motion element", () => {
+    for (const selector of [
+      collapseOverflowLiteralSelector,
+      collapseOverflowTemplateSelector,
+    ]) {
+      expect(selector).toContain("motion")
+      expect(selector).toContain("variants")
+      expect(selector).toContain("overflow-hidden")
+    }
+    // The template selector must read TemplateElement, not Literal: a
+    // template-literal className has no Literal child, which is exactly the
+    // shape a single-selector rule silently misses.
+    expect(collapseOverflowTemplateSelector).toContain("TemplateElement")
   })
 
   it("warns for a hand-rolled clipped motion.div with variants", async () => {
@@ -338,6 +348,39 @@ describe("no-restricted-syntax collapse overflow guard", () => {
           <motion.div variants={collapseVariants} className="overflow-hidden">
             x
           </motion.div>
+        )
+      }
+    `
+    expect(await collapseWarningCount(source)).toBe(1)
+  })
+
+  it("warns when the clip arrives via a template-literal className", async () => {
+    const source = `
+      import { motion } from "motion/react"
+      import { collapseVariants } from "@/lib/motion"
+      export function App({ extra }: { extra: string }) {
+        return (
+          <motion.div
+            variants={collapseVariants}
+            className={\`overflow-hidden \${extra}\`}
+          >
+            x
+          </motion.div>
+        )
+      }
+    `
+    expect(await collapseWarningCount(source)).toBe(1)
+  })
+
+  it("warns for a clipped motion element other than a div", async () => {
+    const source = `
+      import { motion } from "motion/react"
+      import { collapseVariants } from "@/lib/motion"
+      export function App() {
+        return (
+          <motion.ul variants={collapseVariants} className="overflow-hidden">
+            <li>x</li>
+          </motion.ul>
         )
       }
     `

@@ -19,7 +19,8 @@ import {
   directionalClassMessage,
 } from "./src/eslint/directionalClassRule.ts"
 import {
-  collapseOverflowSelector,
+  collapseOverflowLiteralSelector,
+  collapseOverflowTemplateSelector,
   collapseOverflowMessage,
 } from "./src/eslint/collapseOverflowRule.ts"
 
@@ -143,8 +144,13 @@ export default defineConfig([
         // Height-animated panels must not keep `overflow-hidden` once open, or
         // they clip descendant tooltips/dropdowns. <Collapse> owns that
         // lifecycle; this catches a hand-rolled motion.div reintroducing it.
+        // Two selectors: a template-literal className has no Literal child.
         {
-          selector: collapseOverflowSelector,
+          selector: collapseOverflowLiteralSelector,
+          message: collapseOverflowMessage,
+        },
+        {
+          selector: collapseOverflowTemplateSelector,
           message: collapseOverflowMessage,
         },
       ],
