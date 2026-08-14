@@ -119,7 +119,13 @@ export const studentSortKeyByLastName = (student: Student): string => {
   return (name || student.username || student.email || "").toLowerCase()
 }
 
-const studentSortKeyFor = (student: Student, mode: StudentSortMode): string =>
+// Name sort key for a student in the given mode — first-name ("First Last") or
+// last-name ("Last First") order. Single dispatch so callers that sort loose
+// rows (not full Student arrays) use the same keys as compareStudentsByName.
+export const studentSortKeyFor = (
+  student: Student,
+  mode: StudentSortMode,
+): string =>
   mode === "last" ? studentSortKeyByLastName(student) : studentSortKey(student)
 
 // Shared comparator for a roster ordered by name in the given mode, with the

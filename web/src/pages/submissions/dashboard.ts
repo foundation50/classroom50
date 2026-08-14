@@ -16,9 +16,9 @@ import {
   getName,
   nameFromParts,
   NAME_COLLATION,
+  placeholderStudent,
   resolveStudent,
-  studentSortKey,
-  studentSortKeyByLastName,
+  studentSortKeyFor,
   type StudentSortMode,
 } from "@/util/students"
 import { studentRepoName } from "@/util/studentRepo"
@@ -877,11 +877,10 @@ export function filterAndSortRows(
   // rows order by the same key the roster spine does. Falls back to the login.
   const nameKey = (row: SubmissionRow) => {
     const login = row.usernames[0] ?? ""
-    const student = resolveStudent(login, students)
-    const key =
-      sort === "name-last"
-        ? studentSortKeyByLastName(student)
-        : studentSortKey(student)
+    const key = studentSortKeyFor(
+      resolveStudent(login, students),
+      sortNameMode(sort),
+    )
     return key || login.toLowerCase()
   }
 
@@ -999,12 +998,23 @@ export function buildScoresCsvRows(
     last_name: escapeCsvFormulaInjection(student.last_name.trim()),
   })
 
+  // Resolve each row's names from the roster in one pass: a login→Student map
+  // keyed like findByUsername (trimmed + lowercased), so building the export
+  // doesn't rescan the whole roster once per submitted row.
+  const byLogin = new Map<string, Student>()
+  for (const student of students) {
+    const login = student.username.trim().toLowerCase()
+    if (login && !byLogin.has(login)) byLogin.set(login, student)
+  }
+  const studentFor = (login: string): Student =>
+    byLogin.get(login.trim().toLowerCase()) ?? placeholderStudent(login)
+
   const submittedRows: Keyed[] = scoresInfo.map(
     ({ usernames, score, datetime, submissionCount, late, ...rest }) => {
       // Names come from the roster, keyed on the primary credited login (group
       // rows are credited to all members; the first is the owner/founder, which
       // is how the dashboard already derives a group's display name).
-      const student = resolveStudent(usernames[0] ?? "", students)
+      const student = studentFor(usernames[0] ?? "")
       return {
         row: {
           ...nameColumns(student),

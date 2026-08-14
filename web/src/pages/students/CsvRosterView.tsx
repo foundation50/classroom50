@@ -4,6 +4,7 @@ import { Info } from "lucide-react"
 
 import { Alert, Toolbar } from "@/components/ui"
 import { RoleBadges } from "./RoleBadges"
+import { StudentSortSelect } from "./StudentSortSelect"
 import { coerceImportRole } from "./rosterImportParse"
 import type { Student } from "@/types/classroom"
 import {
@@ -41,16 +42,7 @@ const CsvRosterView = ({ students }: { students: Student[] }) => {
 
       {students.length > 0 ? (
         <Toolbar>
-          <Toolbar.FilterSelect
-            selectSize="md"
-            className="w-full sm:w-auto"
-            aria-label={t("students.sortBy.label")}
-            value={sortMode}
-            onChange={(e) => setSortMode(e.target.value as StudentSortMode)}
-          >
-            <option value="first">{t("students.sortBy.firstName")}</option>
-            <option value="last">{t("students.sortBy.lastName")}</option>
-          </Toolbar.FilterSelect>
+          <StudentSortSelect value={sortMode} onChange={setSortMode} />
         </Toolbar>
       ) : null}
 

@@ -363,7 +363,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     }
   }
 
-  return sortRows(rows)
+  return sortTeamRosterRows(rows)
 }
 
 // Add a role to a row's set (idempotent), keeping ROLE_RANK order.
@@ -410,10 +410,6 @@ export function sortTeamRosterRows(
       NAME_COLLATION,
     )
   })
-}
-
-function sortRows(rows: TeamRosterRow[]): TeamRosterRow[] {
-  return sortTeamRosterRows(rows)
 }
 
 // Project a roster row back to the display-metadata Student shape the grade
