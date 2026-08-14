@@ -107,9 +107,9 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   autograder: "classroom50-owned",
   max_group_size: "classroom50-owned",
   feedback_pr: "classroom50-owned",
-  // Rebuilt from input but IMMUTABLE: editAssignment rejects an edit whose
-  // empty_repo differs from the stored entry, so the rebuild can only ever
-  // re-write the same value. The edit form shows it read-only.
+  // Rebuilt from input and MUTABLE: an edit may flip empty_repo now (the UI
+  // warns when students already accepted, since existing repos aren't
+  // retrofitted). A clearing edit must win over the stale stored value.
   empty_repo: "classroom50-owned",
   no_autograder: "classroom50-owned",
   init_shim: "classroom50-owned",
@@ -127,10 +127,9 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   student_permission: "classroom50-owned",
   submission_mode: "classroom50-owned",
   submission_tags: "classroom50-owned",
-  // Rebuilt from input but IMMUTABLE: editAssignment rejects an edit whose
-  // grading.mode differs from the stored entry (a manual<->auto flip would
-  // change how already-graded repos are read), so the rebuild only ever
-  // re-writes the same mode. The edit form shows the choice read-only.
+  // Rebuilt from input and MUTABLE: an edit may change grading.mode now (the UI
+  // warns when students already accepted — scores recorded under the old mode
+  // may be misread, so the teacher reconciles them).
   grading: "classroom50-owned",
   repo_features: "classroom50-owned",
   tests: "classroom50-owned",
@@ -212,50 +211,14 @@ export async function editAssignment(
     throw new Error(`Existing assignment matching ${slug} was not found.`)
   }
 
-  // empty_repo is immutable: student repos were provisioned (or left bare) at
-  // accept time and are never retrofitted, so flipping the flag would strand
-  // every already-accepted repo on the old behavior. Mirrors the CLI's
-  // ValidateEmptyRepoUnchanged. Checked before the build so the error names
-  // the real constraint rather than a mutual-exclusion side effect.
-  if (Boolean(input.empty_repo) !== Boolean(targetAssignment.empty_repo)) {
-    throw new Error(
-      `empty_repo cannot be changed after creation (assignment "${slug}"): repositories students already accepted are not retrofitted. Create a new assignment under a different slug instead — reusing this slug (even after removing it) would leave already-accepted repos on the old setting.`,
-    )
-  }
-
-  // no_autograder is immutable for the same reason: the shim (or its absence)
-  // is baked into each student repo at accept time and never retrofitted, so
-  // flipping it strands every already-accepted repo. Mirrors the CLI's
-  // ValidateNoAutograderUnchanged.
-  if (
-    Boolean(input.no_autograder) !== Boolean(targetAssignment.no_autograder)
-  ) {
-    throw new Error(
-      `no_autograder cannot be changed after creation (assignment "${slug}"): repositories students already accepted are not retrofitted. Create a new assignment under a different slug instead — reusing this slug (even after removing it) would leave already-accepted repos on the old setting.`,
-    )
-  }
-
-  // init_shim is immutable for the same reason: the shim is committed at accept
-  // time and never retrofitted. Mirrors the CLI's ValidateInitShimUnchanged.
-  if (Boolean(input.init_shim) !== Boolean(targetAssignment.init_shim)) {
-    throw new Error(
-      `init_shim cannot be changed after creation (assignment "${slug}"): repositories students already accepted are not retrofitted. Create a new assignment under a different slug instead — reusing this slug (even after removing it) would leave already-accepted repos on the old setting.`,
-    )
-  }
-
-  // grading.mode is immutable: flipping manual<->auto (or off) changes how
-  // already-graded repos are read and scored (an override-backed manual grade
-  // vs a collected autograded one), so a mid-course flip would misrepresent
-  // existing scores. Absent reads as "auto", so compare the resolved modes.
-  // max_points is NOT immutable — it's only a display max, safe to adjust.
-  if (
-    (input.grading?.mode ?? "auto") !==
-    (targetAssignment.grading?.mode ?? "auto")
-  ) {
-    throw new Error(
-      `grading mode cannot be changed after creation (assignment "${slug}"): scores already recorded under the old grading mode would be misread. Create a new assignment under a different slug instead.`,
-    )
-  }
+  // Provisioning-class settings (empty_repo, no_autograder, init_shim) and the
+  // grading.mode are no longer blocked on edit: student repos are provisioned
+  // at accept time and never retrofitted, so a change only takes effect for
+  // repos accepted from now on. The UI computes whether any student has already
+  // accepted and, if so, confirms with a warning that existing repos keep the
+  // old starter code / grading and that the teacher reconciles the difference
+  // themselves (mirrors the CLI's non-blocking warning). The write path stays
+  // permissive because it can't cheaply know the acceptance count.
 
   // Normalize the edit like create so it never leaves stray non-schema keys
   // the CLI rejects. Pass the stored template so an unchanged ref is reused

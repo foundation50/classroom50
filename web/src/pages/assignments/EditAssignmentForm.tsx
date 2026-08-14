@@ -1,13 +1,22 @@
+import { useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import CreateAssignmentForm, {
   assignmentToFormValues,
   formValuesToRepoFeatures,
 } from "./CreateAssignmentForm"
 import { deriveFormShape } from "./formShape"
-import { type CreateAssignmentResult } from "@/domain/assignments"
+import {
+  provisioningSettingsChanged,
+  type CreateAssignmentResult,
+} from "@/domain/assignments"
+import type { Assignment } from "@/types/classroom"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useTrackPublishDeploy } from "@/hooks/useTrackPublishDeploy"
 import { useEditAssignment } from "@/hooks/mutations/useEditAssignment"
+import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
+import useGetStudents from "@/hooks/useGetStudents"
+import { assignmentRepoNames } from "@/pages/submissions/dashboard"
+import { ProvisioningChangeConfirmModal } from "@/components/modals/ProvisioningChangeConfirmModal"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import { Spinner } from "@/components/Spinner"
 import { parseSubmissionTags } from "@/util/submissionTags"
@@ -26,7 +35,7 @@ const EditAssignmentForm = ({
   org: string
   classroom: string
   assignment: string
-  defaultData: Parameters<typeof assignmentToFormValues>[0] | undefined
+  defaultData: Assignment | undefined
   onSuccess: (result: CreateAssignmentResult) => void
   onError?: (error: GitHubAPIError) => void
   onMutate?: () => void
@@ -48,6 +57,61 @@ const EditAssignmentForm = ({
     onMutate,
   })
 
+  // Deterministic acceptance count for this assignment, derived from the org
+  // repo list + roster the same way the submissions page does (no per-student
+  // fetch). Gates the provisioning-change confirmation: zero accepted → the
+  // edit saves silently; one or more → confirm with a warning first. Both reads
+  // are cached and shared with other views, so this adds no dedicated request
+  // beyond what a staff member already loads.
+  const { data: orgRepos } = useGetOrgRepos(org)
+  const { students } = useGetStudents(org, classroom)
+  const isGroup = defaultData?.mode === "group"
+  const acceptedCount = useMemo(
+    () =>
+      assignmentRepoNames({
+        isGroup,
+        repos: orgRepos,
+        classroom,
+        assignment,
+        students,
+      }).length,
+    [isGroup, orgRepos, classroom, assignment, students],
+  )
+
+  // A change to a provisioning-class setting is confirmed before it writes when
+  // students have already accepted. The submit is deferred through a promise the
+  // modal resolves (confirm) or rejects-as-cancel (so the form stays dirty and
+  // re-submittable, matching a failed write).
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const pendingSubmit = useRef<{
+    run: () => Promise<void>
+    resolve: () => void
+    reject: (reason?: unknown) => void
+  } | null>(null)
+
+  const closeConfirm = () => {
+    setConfirmOpen(false)
+    // Treat a dismissal as a cancel: reject the deferred submit so the form's
+    // onSubmit rejects and the form is left dirty (no reset), never written.
+    const pending = pendingSubmit.current
+    pendingSubmit.current = null
+    pending?.reject(new Error("provisioning-change-cancelled"))
+  }
+
+  const confirmSubmit = async () => {
+    const pending = pendingSubmit.current
+    if (!pending) return
+    try {
+      await pending.run()
+      pending.resolve()
+    } catch (err) {
+      pending.reject(err)
+    } finally {
+      pendingSubmit.current = null
+      setConfirmOpen(false)
+    }
+  }
+
   return (
     <LoadingSwap
       loading={!defaultData}
@@ -58,18 +122,19 @@ const EditAssignmentForm = ({
       }
     >
       {defaultData ? (
-        <CreateAssignmentForm
-          edit
-          readOnly={readOnly}
-          loading={editAssignmentMutation.isPending}
-          org={org}
-          classroom={classroom}
-          slug={assignment}
-          onCancel={onCancel}
-          defaultValues={assignmentToFormValues(defaultData)}
-          onSubmit={async (values) => {
-            await editAssignmentMutation.mutateAsync(
-              {
+        <>
+          <CreateAssignmentForm
+            edit
+            readOnly={readOnly}
+            loading={editAssignmentMutation.isPending}
+            org={org}
+            classroom={classroom}
+            slug={assignment}
+            onCancel={onCancel}
+            defaultValues={assignmentToFormValues(defaultData)}
+            onSubmit={async (values) => {
+              const shape = deriveFormShape(values)
+              const input = {
                 name: values.name,
                 mode: values.mode,
                 org,
@@ -80,8 +145,8 @@ const EditAssignmentForm = ({
                 max_group_size: values.max_group_size,
                 feedback_pr: values.feedback_pr,
                 empty_repo: values.empty_repo,
-                no_autograder: deriveFormShape(values).noAutograder,
-                init_shim: deriveFormShape(values).initShim,
+                no_autograder: shape.noAutograder,
+                init_shim: shape.initShim,
                 include_all_branches: values.include_all_branches,
                 copy_about: values.copy_about,
                 copy_topics: values.copy_topics,
@@ -107,7 +172,7 @@ const EditAssignmentForm = ({
                 grading:
                   values.grading_choice === "manual"
                     ? {
-                        mode: "manual",
+                        mode: "manual" as const,
                         max_points: values.grading_max_points,
                       }
                     : { mode: values.grading_choice },
@@ -115,14 +180,47 @@ const EditAssignmentForm = ({
                 classroom,
                 tests: values.tests,
                 slug: assignment,
-              },
-              {
-                onSuccess: (result) => onSuccess(result),
-                onError,
-              },
-            )
-          }}
-        />
+              }
+
+              const run = () =>
+                editAssignmentMutation.mutateAsync(input, {
+                  onSuccess: (result) => onSuccess(result),
+                  onError,
+                })
+
+              // Confirm only when a provisioning-class setting changed AND
+              // students already accepted (their repos keep the old setup).
+              const changed = provisioningSettingsChanged(defaultData, {
+                empty_repo: values.empty_repo,
+                no_autograder: shape.noAutograder,
+                init_shim: shape.initShim,
+                gradingMode: values.grading_choice,
+              })
+              if (changed && acceptedCount > 0) {
+                await new Promise<void>((resolve, reject) => {
+                  pendingSubmit.current = {
+                    run: async () => {
+                      await run()
+                    },
+                    resolve,
+                    reject,
+                  }
+                  setConfirmOpen(true)
+                })
+                return
+              }
+
+              await run()
+            }}
+          />
+          <ProvisioningChangeConfirmModal
+            open={confirmOpen}
+            onClose={closeConfirm}
+            onConfirm={() => void confirmSubmit()}
+            acceptedCount={acceptedCount}
+            saving={editAssignmentMutation.isPending}
+          />
+        </>
       ) : null}
     </LoadingSwap>
   )

@@ -550,7 +550,8 @@ describe("self-hosted disables built-in runtime options", () => {
 
 // The autograding selector: "No built-in autograder" first + default; built-in
 // requires an initialized repo (README or template) and is disabled while the
-// repo is uninitialized; the none<->built-in choice is immutable on edit.
+// repo is uninitialized; the none<->built-in choice is editable on edit
+// (with a caveat), so the built-in autograder radios stay enabled.
 describe("grading drives the autograding config", () => {
   const renderForm = (
     props: {
@@ -637,10 +638,10 @@ describe("grading drives the autograding config", () => {
     ).toBeNull()
   })
 
-  it("locks the built-in autograder radios on edit (the choice is immutable)", () => {
-    // On edit the built-in choice maps to no_autograder/init_shim, which the
-    // domain layer refuses to change after creation, so the radios render
-    // disabled with the locked-help note.
+  it("keeps the built-in autograder radios editable on edit (with a caveat)", () => {
+    // On edit the built-in choice maps to no_autograder/init_shim. It's now
+    // mutable — the radios render enabled with an edit caveat, and the edit form
+    // confirms before saving when students have already accepted.
     const { container } = renderForm({
       edit: true,
       defaultValues: {
@@ -654,9 +655,9 @@ describe("grading drives the autograding config", () => {
       'input[name="autograding_state"]',
     )
     expect(radios.length).toBe(2)
-    radios.forEach((radio) => expect(radio.disabled).toBe(true))
+    radios.forEach((radio) => expect(radio.disabled).toBe(false))
     expect(
-      screen.getByText("assignments.form.autograding.lockedHelp"),
+      screen.getByText("assignments.form.autograding.editHelp"),
     ).not.toBeNull()
   })
 })

@@ -1131,7 +1131,7 @@
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
       "repoSource": {
         "label": "Start with a template",
-        "lockedHelp": "The repository source can't be changed after creation: repositories students already accepted are not re-provisioned.",
+        "editHelp": "Changing the repository source only affects repositories students accept from now on. Repositories already accepted keep their original starter content — you'll need to reconcile any difference yourself.",
         "none": {
           "label": "No template",
           "help": "Create a fresh repository for each student."
@@ -1179,7 +1179,7 @@
         "label": "Autograding",
         "notAutogradedNote": "Autograding options apply only when this assignment is set to \"Autograded\" in the Submission and grading section above. Change the grading choice to Autograded to configure the autograder.",
         "modeLabel": "Built-in autograder",
-        "lockedHelp": "Whether the built-in autograder is used can't be changed after creation: repositories students already accepted are not re-provisioned.",
+        "editHelp": "Changing the built-in autograder only affects repositories students accept from now on. Repositories already accepted keep their original setup — you'll need to reconcile any difference yourself.",
         "choices": {
           "none": {
             "label": "Do not use the built-in autograder",
@@ -1660,7 +1660,14 @@
     "viewRepository": "View repository",
     "collaboratorsHint_one": "Add or remove collaborators for this assignment repository. This assignment allows up to <count>{{count}}</count> student in addition to the group owner.",
     "collaboratorsHint_other": "Add or remove collaborators for this assignment repository. This assignment allows up to <count>{{count}}</count> students in addition to the group owner.",
-    "manageCollaborators": "Manage collaborators"
+    "manageCollaborators": "Manage collaborators",
+    "provisioningConfirm": {
+      "title": "Change provisioning settings after students accepted?",
+      "body_one": "{{count}} student has already accepted this assignment. Changing the repository source, built-in autograder, or grading mode only affects repositories accepted from now on. The {{count}} existing repository keeps its original starter code and setup, and scores recorded under the old grading mode may be read differently — you'll need to reconcile any inconsistency yourself.",
+      "body_other": "{{count}} students have already accepted this assignment. Changing the repository source, built-in autograder, or grading mode only affects repositories accepted from now on. The {{count}} existing repositories keep their original starter code and setup, and scores recorded under the old grading mode may be read differently — you'll need to reconcile any inconsistency yourself.",
+      "confirm": "Save changes anyway",
+      "cancel": "Cancel"
+    }
   },
   "serviceTokenHealth": {
     "summary_one": "{{count}} organization needs a service-token check.",

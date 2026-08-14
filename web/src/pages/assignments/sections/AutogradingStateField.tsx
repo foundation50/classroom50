@@ -19,10 +19,10 @@ import type { AutogradingState } from "@/domain/assignments/autogradingState"
 // wire mapping (deriveFormShape + toSubmitValues) folds it to init_shim /
 // no_autograder accordingly.
 //
-// Immutable after creation: the none<->built-in choice maps to no_autograder /
-// init_shim, which the domain layer rejects changing on edit (already-accepted
-// repos aren't retrofitted). So on edit the radios render locked, mirroring the
-// repository-source field.
+// Editable after creation: the none<->built-in choice maps to no_autograder /
+// init_shim. The domain layer allows changing it; the edit form warns before
+// saving when students have already accepted (already-accepted repos aren't
+// retrofitted). The radios stay interactive in edit mode with an inline caveat.
 const SELECTABLE: readonly AutogradingState[] = ["none", "built-in"]
 
 export function AutogradingStateField({
@@ -37,7 +37,6 @@ export function AutogradingStateField({
   return (
     <form.Field name="autograding_state">
       {(field) => {
-        const locked = edit
         // A stored bare repo has autograding_state "empty"; show it as "none"
         // (no built-in autograder) since the two radios are none/built-in.
         const selected: AutogradingState =
@@ -49,15 +48,7 @@ export function AutogradingStateField({
           >
             {({ describedById }) => (
               <div aria-describedby={describedById}>
-                <fieldset
-                  className={
-                    locked
-                      ? "flex flex-col gap-2 pointer-events-none opacity-50"
-                      : "flex flex-col gap-2"
-                  }
-                  disabled={locked}
-                  aria-disabled={locked}
-                >
+                <fieldset className="flex flex-col gap-2">
                   <legend className="sr-only">
                     {t("assignments.form.autograding.modeLabel")}
                   </legend>
@@ -74,7 +65,6 @@ export function AutogradingStateField({
                         name={field.name}
                         value={option}
                         checked={selected === option}
-                        disabled={locked}
                         onBlur={field.handleBlur}
                         onChange={() => field.handleChange(option)}
                       />
@@ -91,9 +81,9 @@ export function AutogradingStateField({
                     </label>
                   ))}
                 </fieldset>
-                {locked ? (
+                {edit ? (
                   <p className="mt-1.5 text-sm text-base-content/70">
-                    {t("assignments.form.autograding.lockedHelp")}
+                    {t("assignments.form.autograding.editHelp")}
                   </p>
                 ) : null}
               </div>

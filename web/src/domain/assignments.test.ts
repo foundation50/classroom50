@@ -887,24 +887,20 @@ describe("editAssignment (preserved-entry integration)", () => {
     ).rejects.toThrow(/runtime\.runs-on/i)
   })
 
-  it("rejects flipping empty_repo on after creation (immutable)", async () => {
-    // existingEntry has no empty_repo (false); the edit tries to enable it.
-    const { client } = makeClient()
-    await expect(
-      editAssignment(client, editInput({ empty_repo: true })),
-    ).rejects.toThrow(/empty_repo cannot be changed after creation/)
+  it("allows flipping empty_repo on after creation (mutable, UI warns)", async () => {
+    // existingEntry has no empty_repo (false); the edit enables it. The domain
+    // layer no longer blocks this — the UI warns when students already
+    // accepted, since existing repos aren't retrofitted.
+    const { client, committedContent } = makeClient()
+    await editAssignment(client, editInput({ empty_repo: true }))
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.empty_repo).toBe(true)
   })
 
-  it("rejects flipping no_autograder on after creation (immutable)", async () => {
-    // existingEntry has no no_autograder (false); the edit tries to enable it.
-    // The shim (or its absence) is baked at accept time and never retrofitted.
-    const { client } = makeClient()
-    await expect(
-      editAssignment(client, editInput({ no_autograder: true })),
-    ).rejects.toThrow(/no_autograder cannot be changed after creation/)
-  })
-
-  it("rejects flipping no_autograder off after creation (immutable)", async () => {
+  it("allows flipping no_autograder off after creation (mutable, UI warns)", async () => {
     const ciEntry: Assignment = {
       slug: SLUG,
       name: "CI Lab",
@@ -914,22 +910,28 @@ describe("editAssignment (preserved-entry integration)", () => {
       feedback_pr: true,
       no_autograder: true,
     }
-    const { client } = makeBareClient(ciEntry)
-    await expect(
-      editAssignment(client, editInput({ no_autograder: false })),
-    ).rejects.toThrow(/no_autograder cannot be changed after creation/)
+    const { client, committedContent } = makeBareClient(ciEntry)
+    await editAssignment(client, editInput({ no_autograder: false }))
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    // Collapsed to the wire's absent-is-false shape.
+    expect(edited.no_autograder).toBeUndefined()
   })
 
-  it("rejects flipping init_shim on after creation (immutable)", async () => {
-    // existingEntry has no init_shim (false); the edit tries to enable it. The
-    // shim is committed at accept time and never retrofitted.
-    const { client } = makeClient()
-    await expect(
-      editAssignment(client, editInput({ init_shim: true })),
-    ).rejects.toThrow(/init_shim cannot be changed after creation/)
+  it("allows flipping init_shim on after creation (mutable, UI warns)", async () => {
+    // existingEntry has no init_shim; the edit enables it. No longer blocked.
+    const { client, committedContent } = makeClient()
+    await editAssignment(client, editInput({ init_shim: true }))
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.init_shim).toBe(true)
   })
 
-  it("rejects flipping init_shim off after creation (immutable)", async () => {
+  it("allows flipping init_shim off after creation (mutable, UI warns)", async () => {
     const shimEntry: Assignment = {
       slug: SLUG,
       name: "Scratch",
@@ -938,25 +940,31 @@ describe("editAssignment (preserved-entry integration)", () => {
       feedback_pr: true,
       init_shim: true,
     }
-    const { client } = makeBareClient(shimEntry)
-    await expect(
-      editAssignment(client, editInput({ init_shim: false })),
-    ).rejects.toThrow(/init_shim cannot be changed after creation/)
+    const { client, committedContent } = makeBareClient(shimEntry)
+    await editAssignment(client, editInput({ init_shim: false }))
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.init_shim).toBeUndefined()
   })
 
-  it("rejects changing grading.mode after creation (auto -> manual, immutable)", async () => {
-    // existingEntry has no grading (resolves to auto); the edit sets manual.
-    // Scores already recorded under the old mode would be misread.
-    const { client } = makeClient()
-    await expect(
-      editAssignment(
-        client,
-        editInput({ grading: { mode: "manual", max_points: 50 } }),
-      ),
-    ).rejects.toThrow(/grading mode cannot be changed after creation/)
+  it("allows changing grading.mode after creation (auto -> manual, UI warns)", async () => {
+    // existingEntry has no grading (resolves to auto); the edit sets manual. No
+    // longer blocked — the UI warns that scores under the old mode may misread.
+    const { client, committedContent } = makeClient()
+    await editAssignment(
+      client,
+      editInput({ grading: { mode: "manual", max_points: 50 } }),
+    )
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.grading).toEqual({ mode: "manual", max_points: 50 })
   })
 
-  it("rejects changing grading.mode after creation (manual -> auto, immutable)", async () => {
+  it("allows changing grading.mode after creation (manual -> auto, UI warns)", async () => {
     const manualEntry: Assignment = {
       slug: SLUG,
       name: "Homework 1",
@@ -966,16 +974,19 @@ describe("editAssignment (preserved-entry integration)", () => {
       feedback_pr: true,
       grading: { mode: "manual", max_points: 50 },
     }
-    const { client } = makeBareClient(manualEntry)
-    await expect(
-      editAssignment(client, editInput({ grading: { mode: "auto" } })),
-    ).rejects.toThrow(/grading mode cannot be changed after creation/)
+    const { client, committedContent } = makeBareClient(manualEntry)
+    await editAssignment(client, editInput({ grading: { mode: "auto" } }))
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    // auto collapses to omitted (today's wire default).
+    expect(edited.grading).toBeUndefined()
   })
 
   it("writes grading:{mode,max_points} on a same-mode manual edit", async () => {
-    // A manual assignment edited without changing the mode: the immutability
-    // guard passes and buildAssignmentEntry emits the grading block. max_points
-    // is mutable, so a bumped value lands.
+    // A manual assignment edited without changing the mode: buildAssignmentEntry
+    // emits the grading block. max_points is mutable, so a bumped value lands.
     const manualEntry: Assignment = {
       slug: SLUG,
       name: "Homework 1",
@@ -998,8 +1009,8 @@ describe("editAssignment (preserved-entry integration)", () => {
   })
 
   it("rejects a manual grading edit with an out-of-range max_points", async () => {
-    // Same-mode manual edit (immutability guard passes) with max_points 0 must
-    // hit buildAssignmentEntry's grading validation throw (min 1).
+    // Manual edit with max_points 0 must hit buildAssignmentEntry's grading
+    // validation throw (min 1).
     const manualEntry: Assignment = {
       slug: SLUG,
       name: "Homework 1",
@@ -1020,8 +1031,7 @@ describe("editAssignment (preserved-entry integration)", () => {
 
   it("rejects a grading edit carrying max_points on a non-manual mode", async () => {
     // An auto assignment edited with grading:{mode:auto, max_points} must hit
-    // the defensive "max_points only valid for manual" throw. Mode stays auto,
-    // so the immutability guard passes first.
+    // the defensive "max_points only valid for manual" throw.
     const { client } = makeClient()
     await expect(
       editAssignment(
@@ -1031,7 +1041,7 @@ describe("editAssignment (preserved-entry integration)", () => {
     ).rejects.toThrow(/grading\.max_points/)
   })
 
-  it("rejects flipping empty_repo off after creation (immutable)", async () => {
+  it("allows flipping empty_repo off after creation (mutable, UI warns)", async () => {
     const bareEntry: Assignment = {
       slug: SLUG,
       name: "Homework 1",
@@ -1040,11 +1050,14 @@ describe("editAssignment (preserved-entry integration)", () => {
       feedback_pr: false,
       empty_repo: true,
     }
-    const { client } = makeBareClient(bareEntry)
-    // Form sends empty_repo: false (or omits it) — either way it's a flip.
-    await expect(
-      editAssignment(client, editInput({ empty_repo: false })),
-    ).rejects.toThrow(/empty_repo cannot be changed after creation/)
+    const { client, committedContent } = makeBareClient(bareEntry)
+    // Form sends empty_repo: false — a flip that now lands.
+    await editAssignment(client, editInput({ empty_repo: false }))
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.empty_repo).toBeUndefined()
   })
 
   it("preserves empty_repo and forces feedback_pr off on a same-value edit", async () => {

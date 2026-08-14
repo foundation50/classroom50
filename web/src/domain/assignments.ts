@@ -67,6 +67,11 @@ export {
 } from "./assignments/permissions"
 export { acceptAssignment } from "./assignments/accept"
 export {
+  provisioningSettingsChanged,
+  provisioningFieldsFromAssignment,
+  type ProvisioningFields,
+} from "./assignments/provisioningChange"
+export {
   repairFeedbackPullRequest,
   openAllFeedbackPullRequests,
   type RepairFeedbackPrResult,

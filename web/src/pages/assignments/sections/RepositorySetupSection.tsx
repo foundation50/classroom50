@@ -54,16 +54,13 @@ export function RepositorySetupSection({
     >
       <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2 sm:items-start">
         <div className="flex flex-col gap-4">
-          {/* Repository source: template vs no template (default No). Immutable
-              after creation (locked on edit): already-accepted repos can't be
-              retrofitted from one source to the other. */}
+          {/* Repository source: template vs no template (default No). Editable
+              after creation, but changing it only re-provisions repositories
+              accepted from now on — the edit form warns before saving when
+              students have already accepted (see AssignmentSettingsPage). */}
           <form.Field name="repo_source">
             {(field) => (
-              <fieldset
-                className={edit ? "pointer-events-none opacity-50" : ""}
-                disabled={edit}
-                aria-disabled={edit}
-              >
+              <fieldset>
                 <legend className="label font-bold mb-2">
                   {t("assignments.form.repoSource.label")}
                 </legend>
@@ -81,7 +78,6 @@ export function RepositorySetupSection({
                         name={field.name}
                         value={option}
                         checked={field.state.value === option}
-                        disabled={edit}
                         onBlur={field.handleBlur}
                         onChange={() =>
                           field.handleChange(option as RepoSource)
@@ -98,7 +94,7 @@ export function RepositorySetupSection({
                 </div>
                 {edit ? (
                   <p className="mt-1.5 text-sm text-base-content/70">
-                    {t("assignments.form.repoSource.lockedHelp")}
+                    {t("assignments.form.repoSource.editHelp")}
                   </p>
                 ) : null}
               </fieldset>

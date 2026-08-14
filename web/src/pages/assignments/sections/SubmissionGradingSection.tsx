@@ -64,7 +64,9 @@ export function SubmissionGradingSection({
 
 // Grading choice (off / auto / manual). manual reveals a max-points input; auto
 // shows a pointer to the Autograding section + the result.json requirement.
-// The mode is immutable after creation, so on edit a change warns.
+// Editable after creation; on edit a change shows an inline warning, and the
+// edit form also confirms before saving when students have already accepted
+// (scores recorded under the old mode may be read differently).
 function GradingChoiceField({
   form,
   edit,
