@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { nextAvailableSlug, slugify } from "@/util/slug"
-import { FormField, Input, Textarea } from "@/components/ui"
+import { Alert, FormField, Input, Textarea } from "@/components/ui"
 import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
 import { FieldLabel } from "../AdvancedRuntimeFields"
 import type { AssignmentForm } from "../assignmentFormModel"
@@ -203,9 +203,9 @@ export function DetailsSection({
               ))}
             </div>
             {edit ? (
-              <p className="mt-1.5 text-sm text-base-content/70">
-                {t("assignments.form.typeLockedHelp")}
-              </p>
+              <Alert tone="warning" role="status" className="mt-2 text-sm">
+                <span>{t("assignments.form.typeLockedHelp")}</span>
+              </Alert>
             ) : null}
           </fieldset>
         )}
