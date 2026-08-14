@@ -61,6 +61,11 @@ type CreateAssignmentFormProps = {
   slug?: string
   // Existing assignment slugs, for the create-mode uniqueness check.
   takenSlugs?: string[]
+  // Edit mode: whether any student has already accepted this assignment. Gates
+  // the provisioning-change caveats (repo source, built-in autograder) so they
+  // only show when a change would actually strand existing repos. Absent/false
+  // on create and when nobody has accepted.
+  hasAcceptedStudents?: boolean
 }
 
 const CreateAssignmentForm = ({
@@ -74,6 +79,7 @@ const CreateAssignmentForm = ({
   classroom,
   slug,
   takenSlugs,
+  hasAcceptedStudents = false,
 }: CreateAssignmentFormProps) => {
   const { t } = useTranslation()
   const form = useAssignmentForm(defaultValues, onSubmit, t, {
@@ -192,6 +198,7 @@ const CreateAssignmentForm = ({
                   org={org}
                   classroom={classroom}
                   slug={slug}
+                  hasAcceptedStudents={hasAcceptedStudents}
                 />
                 <SubmissionGradingSection
                   form={form}
@@ -203,6 +210,7 @@ const CreateAssignmentForm = ({
                   edit={edit}
                   onReset={onReset("autograding")}
                   org={org}
+                  hasAcceptedStudents={hasAcceptedStudents}
                 />
                 <ScheduleSection
                   form={form}

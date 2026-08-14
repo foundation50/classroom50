@@ -101,9 +101,9 @@ func assignmentAddCmd() *cobra.Command {
 			".classroom50.yaml marker, no autograde workflow — for assignments\n" +
 			"where students build everything (including their own GitHub\n" +
 			"Actions) from scratch. Autograding and the Feedback PR are\n" +
-			"disabled, and the setting is immutable after creation: enabling\n" +
-			"autograding later would require retrofitting control files into\n" +
-			"every already-accepted repo, which classroom50 does not do.\n" +
+			"disabled. The setting can be changed on a same-slug re-add, but\n" +
+			"repositories students already accepted are not retrofitted, so the\n" +
+			"change applies only to accepts from now on (a warning is printed).\n" +
 			"Mutually exclusive with --template, --tests, --feedback-pr,\n" +
 			"--allowed-files, --pass-threshold, --submission-mode, and\n" +
 			"--submission-tag.\n\n" +
@@ -303,7 +303,7 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&runtimeFile, "runtime", "", "Path to a JSON file describing the runtime environment (runs-on as a single label or an array of labels for self-hosted runners, python/node/java/go/rust versions, apt packages, or container image), or `-` to read from stdin. Omit for ubuntu-latest + Python 3.14.")
 	cmd.Flags().StringVar(&testsFile, "tests", "", "Path to a JSON file with a bare array of declarative test specs (io/run/python), or `-` to read from stdin. Sets the assignment's `tests` block; mutually exclusive with a per-assignment autograder.py. See `gh teacher assignment test --help`.")
 	cmd.Flags().BoolVar(&feedbackPR, "feedback-pr", true, "Open one long-lived Feedback pull request per student repo so you can leave inline review comments on the full starter→submission diff. Accept freezes a base branch at the baseline commit and opens the PR right away, so it exists even with GitHub Actions disabled; the autograde runner then adopts and maintains it (and opens it on the first submission if accept could not). Default on; pass --feedback-pr=false to disable. Requires `gh teacher init` to have set up the org prerequisites.")
-	cmd.Flags().BoolVar(&emptyRepo, "empty-repo", false, "Create truly bare student repos: no README/initial commit, no .classroom50.yaml marker, no autograde workflow — for assignments where students build the repo (including their own GitHub Actions) from scratch. Autograding and the Feedback PR are disabled and cannot be enabled later (the setting is immutable after creation). Mutually exclusive with --template, --tests, --feedback-pr, --allowed-files, --pass-threshold, --submission-mode, and --submission-tag.")
+	cmd.Flags().BoolVar(&emptyRepo, "empty-repo", false, "Create truly bare student repos: no README/initial commit, no .classroom50.yaml marker, no autograde workflow — for assignments where students build the repo (including their own GitHub Actions) from scratch. Autograding and the Feedback PR are disabled. Changing this on a same-slug re-add applies only to accepts from now on (repositories students already accepted are not retrofitted; a warning is printed). Mutually exclusive with --template, --tests, --feedback-pr, --allowed-files, --pass-threshold, --submission-mode, and --submission-tag.")
 	cmd.Flags().StringArrayVar(&allowedFiles, "allowed-files", nil, "Ordered .gitignore-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. Pass `--allowed-files '*' --allowed-files '!hello.py'` to allow only hello.py. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file.")
 	cmd.Flags().IntVar(&passThreshold, "pass-threshold", 0, "Opt-in passing bar as a percentage of max score (0–100): at/above it a gradebook client shows a submission as passing. Advisory/display-only — it does not change a student's score. Omit to leave it off (no passing concept); pass --pass-threshold 0 for an explicit 0%.")
 	cmd.Flags().StringVar(&studentPerm, "student-permission", "", "Optional collaborator role each student gets on their OWN assignment repo at accept time: one of pull, triage, push, maintain, admin. Omit for the default (push for individual, admin for group). Choose admin to let students manage repo settings and enable GitHub Pages. Applies to students who accept from now on; existing repos are unchanged. Caution: admin on a private repo also lets the student change its visibility.")
@@ -328,9 +328,9 @@ func assignmentRemoveCmd() *cobra.Command {
 			"stop finding the slug.\n\n" +
 			"Because the repos survive, re-adding the SAME slug is not a\n" +
 			"clean reset: an --empty-repo flag that differs from the removed\n" +
-			"entry would leave already-accepted repos on the old behavior\n" +
-			"(the immutability guard only fires on an in-place edit, which a\n" +
-			"remove+add bypasses). To change empty_repo, add under a NEW slug.",
+			"entry leaves already-accepted repos on the old behavior — the\n" +
+			"change applies only to accepts from now on (a warning is printed;\n" +
+			"reconcile existing repositories yourself).",
 		Example: "  gh teacher assignment remove cs50-fall-2026 cs-principles hello",
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -692,6 +692,13 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		droppedAllowedCnt    int
 		droppedPassThreshold *int
 		droppedStudentPerm   string
+		// empty_repo changed on a same-slug re-add. No longer blocked — the
+		// change only affects repos accepted from now on (already-accepted repos
+		// aren't retrofitted), so warn instead of erroring. Mirrors the web app's
+		// edit-time confirmation. (no_autograder / init_shim have no `add` flag
+		// and are carried forward from the prior entry below, so `add` can never
+		// change them — only empty_repo is detectable here.)
+		changedEmptyRepo bool
 		// The locked state that actually landed (carried forward from a prior
 		// same-slug entry). Read after the commit to decide the template grant,
 		// since `entry` (rebuilt from flags) never carries Locked.
@@ -703,6 +710,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		droppedAllowedCnt = 0
 		droppedPassThreshold = nil
 		droppedStudentPerm = ""
+		changedEmptyRepo = false
 		attemptEntry := entry
 		// Refuse on an archived classroom (active:false), mirroring the web.
 		// Checked at parentSHA so a concurrent unarchive is observed on retry.
@@ -749,47 +757,44 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// no_autograder is owned by the gradebook GUI, not `assignment add`
 		// (there is no --no-autograder flag), so `entry`/`attemptEntry` rebuilt
 		// from flags never carry it. Carry it forward from the prior entry
-		// BEFORE the immutability check below — otherwise a same-slug re-add
+		// BEFORE the change detection below — otherwise a same-slug re-add
 		// (e.g. editing the due date) would compare the flag-default false
-		// against a stored true and wrongly trip ValidateNoAutograderUnchanged,
-		// making a GUI-created no_autograder assignment impossible to update.
-		// Mirrors the Locked carry-forward (also GUI/other-command-owned).
+		// against a stored true and spuriously warn that no_autograder changed,
+		// even though the CLI can't change it. Mirrors the Locked carry-forward
+		// (also GUI/other-command-owned).
 		if hasPrev {
 			entry.NoAutograder = file.Assignments[prevIdx].NoAutograder
 			attemptEntry.NoAutograder = entry.NoAutograder
 		}
 		// init_shim is likewise GUI/manifest-owned (no --init-shim flag), so
-		// carry it forward before the immutability check for the same reason as
+		// carry it forward before the change detection for the same reason as
 		// no_autograder above.
 		if hasPrev {
 			entry.InitShim = file.Assignments[prevIdx].InitShim
 			attemptEntry.InitShim = entry.InitShim
 		}
 		// include_all_branches is likewise GUI/manifest-owned (no flag), so carry
-		// it forward so a same-slug CLI re-add doesn't silently reset it. Unlike
-		// the above it is MUTABLE (no immutability check) — a teacher may change
-		// it; it only affects repos generated from now on. Gate on the current
-		// template: a re-add that drops --template turns the entry template-less,
-		// and include_all_branches only affects the generate call — carrying it
-		// onto a template-less entry would write a combination
-		// ValidateExistingEntry rejects, wedging every future read of the file.
+		// it forward so a same-slug CLI re-add doesn't silently reset it. Like
+		// the above it is MUTABLE — a teacher may change it; it only affects
+		// repos generated from now on. Gate on the current template: a re-add
+		// that drops --template turns the entry template-less, and
+		// include_all_branches only affects the generate call — carrying it onto
+		// a template-less entry would write a combination ValidateExistingEntry
+		// rejects, wedging every future read of the file.
 		if hasPrev && attemptEntry.Template != nil {
 			entry.IncludeAllBranches = file.Assignments[prevIdx].IncludeAllBranches
 			attemptEntry.IncludeAllBranches = entry.IncludeAllBranches
 		}
-		// empty_repo is immutable: student repos were provisioned (or left
-		// bare) at accept time and are never retrofitted. Checked at parentSHA
+		// empty_repo is MUTABLE on a same-slug re-add: student repos are
+		// provisioned at accept time and never retrofitted, so a change only
+		// affects repos accepted from now on. Detect a change and warn after the
+		// commit rather than blocking it (mirrors the web app, which confirms the
+		// same change when students have already accepted). Checked at parentSHA
 		// inside the build so a concurrent add/remove is observed on retry.
+		// no_autograder / init_shim are carried forward above (no `add` flag), so
+		// they can't change here — only empty_repo is detectable.
 		if hasPrev {
-			if err := assignment.ValidateEmptyRepoUnchanged(file.Assignments[prevIdx], entry); err != nil {
-				return nil, err
-			}
-			if err := assignment.ValidateNoAutograderUnchanged(file.Assignments[prevIdx], entry); err != nil {
-				return nil, err
-			}
-			if err := assignment.ValidateInitShimUnchanged(file.Assignments[prevIdx], entry); err != nil {
-				return nil, err
-			}
+			changedEmptyRepo = assignment.EmptyRepoChanged(file.Assignments[prevIdx], entry)
 		}
 		// Upsert replaces the whole entry, so re-running add without --tests
 		// drops tests authored via `assignment test add`. Count them for the
@@ -843,8 +848,9 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			// grading is a GUI/manifest-owned field with no `assignment add`
 			// flag; since it was promoted to a known key it no longer rides
 			// through Extra, so a same-slug re-add would silently drop a
-			// GUI-authored grading block (its mode is immutable, and the manual
-			// max_points feeds the gradebook). Deep-copy the *Grading + *int so
+			// GUI-authored grading block (its max_points feeds the gradebook).
+			// The mode is mutable via the GUI; `add` carries it forward only
+			// because it has no --grading flag. Deep-copy the *Grading + *int so
 			// the carried value doesn't alias the previous entry.
 			if attemptEntry.Grading == nil && previous.Grading != nil {
 				carried := *previous.Grading
@@ -959,6 +965,15 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		_, _ = fmt.Fprintf(errOut,
 			"Warning: replacing %q dropped its student_permission (%s) — `assignment add` rewrites the whole entry, and you re-ran it without --student-permission. New accepters revert to the mode default. Pass --student-permission %s to keep it.\n",
 			slug, droppedStudentPerm, droppedStudentPerm)
+	}
+	// Provisioning-class changes only affect repos accepted from now on;
+	// already-accepted repos keep their original starter content/shim, which
+	// this CLI does not retrofit. Warn (not block) so the teacher knows they own
+	// reconciling any resulting inconsistency (mirrors the web app's confirm).
+	if changedEmptyRepo {
+		_, _ = fmt.Fprintf(errOut,
+			"Warning: replacing %q changed its empty_repo setting. Repositories students already accepted are not retrofitted — they keep their original setup, and if autograding is now off their autograde runs start failing and drop out of the gradebook. The new setting applies only to accepts from now on; reconcile existing repositories yourself.\n",
+			slug)
 	}
 	// Heads-up if the encoded file nears GitHub's ~1 MiB contents-API limit
 	// (past which encoding flips to "none", wedging future reads/writes).

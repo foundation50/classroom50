@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { FormField } from "@/components/ui"
+import { Alert, FormField } from "@/components/ui"
 import type { AssignmentForm } from "../assignmentFormModel"
 import type { AutogradingState } from "@/domain/assignments/autogradingState"
 
@@ -19,29 +19,41 @@ import type { AutogradingState } from "@/domain/assignments/autogradingState"
 // wire mapping (deriveFormShape + toSubmitValues) folds it to init_shim /
 // no_autograder accordingly.
 //
-// Immutable after creation: the none<->built-in choice maps to no_autograder /
-// init_shim, which the domain layer rejects changing on edit (already-accepted
-// repos aren't retrofitted). So on edit the radios render locked, mirroring the
-// repository-source field.
+// Editable after creation: the none<->built-in choice maps to no_autograder /
+// init_shim. The domain layer allows changing it; the edit form warns before
+// saving when students have already accepted (already-accepted repos aren't
+// retrofitted). The radios stay interactive in edit mode with an inline caveat.
 const SELECTABLE: readonly AutogradingState[] = ["none", "built-in"]
 
 export function AutogradingStateField({
   form,
   edit,
+  hasAcceptedStudents = false,
 }: {
   form: AssignmentForm
   edit: boolean
+  // Edit mode: whether any student has already accepted. Gates the
+  // built-in-autograder change caveat so it shows only when a change would
+  // strand existing repos.
+  hasAcceptedStudents?: boolean
 }) {
   const { t } = useTranslation()
 
   return (
     <form.Field name="autograding_state">
       {(field) => {
-        const locked = edit
         // A stored bare repo has autograding_state "empty"; show it as "none"
         // (no built-in autograder) since the two radios are none/built-in.
         const selected: AutogradingState =
           field.state.value === "built-in" ? "built-in" : "none"
+        // The stored choice mapped the same way, so a change is only real when
+        // the none/built-in selection actually flips (a stored "empty" that
+        // stays "none" is not a change).
+        const defaultSelected: AutogradingState =
+          form.options.defaultValues?.autograding_state === "built-in"
+            ? "built-in"
+            : "none"
+        const changed = selected !== defaultSelected
         return (
           <FormField
             htmlFor={field.name}
@@ -49,15 +61,7 @@ export function AutogradingStateField({
           >
             {({ describedById }) => (
               <div aria-describedby={describedById}>
-                <fieldset
-                  className={
-                    locked
-                      ? "flex flex-col gap-2 pointer-events-none opacity-50"
-                      : "flex flex-col gap-2"
-                  }
-                  disabled={locked}
-                  aria-disabled={locked}
-                >
+                <fieldset className="flex flex-col gap-2">
                   <legend className="sr-only">
                     {t("assignments.form.autograding.modeLabel")}
                   </legend>
@@ -74,7 +78,6 @@ export function AutogradingStateField({
                         name={field.name}
                         value={option}
                         checked={selected === option}
-                        disabled={locked}
                         onBlur={field.handleBlur}
                         onChange={() => field.handleChange(option)}
                       />
@@ -91,10 +94,10 @@ export function AutogradingStateField({
                     </label>
                   ))}
                 </fieldset>
-                {locked ? (
-                  <p className="mt-1.5 text-sm text-base-content/70">
-                    {t("assignments.form.autograding.lockedHelp")}
-                  </p>
+                {edit && hasAcceptedStudents && changed ? (
+                  <Alert tone="warning" role="status" className="mt-2 text-sm">
+                    <span>{t("assignments.form.autograding.editHelp")}</span>
+                  </Alert>
                 ) : null}
               </div>
             )}

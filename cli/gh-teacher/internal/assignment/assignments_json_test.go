@@ -2125,23 +2125,23 @@ func TestValidateAssignmentEntry_EmptyRepoExclusions(t *testing.T) {
 	}
 }
 
-// TestValidateEmptyRepoUnchanged: empty_repo is immutable on upsert — a flip
-// in either direction errors; same-value replacement is fine.
-func TestValidateEmptyRepoUnchanged(t *testing.T) {
+// TestEmptyRepoChanged: empty_repo is mutable — a flip in either direction is
+// detected (so callers can warn); same-value replacement is not a change.
+func TestEmptyRepoChanged(t *testing.T) {
 	bare := AssignmentEntry{Slug: "hw", EmptyRepo: true}
 	normal := AssignmentEntry{Slug: "hw", EmptyRepo: false}
 
-	if err := ValidateEmptyRepoUnchanged(bare, bare); err != nil {
-		t.Errorf("same value (true): %v", err)
+	if EmptyRepoChanged(bare, bare) {
+		t.Error("same value (true): reported changed")
 	}
-	if err := ValidateEmptyRepoUnchanged(normal, normal); err != nil {
-		t.Errorf("same value (false): %v", err)
+	if EmptyRepoChanged(normal, normal) {
+		t.Error("same value (false): reported changed")
 	}
-	if err := ValidateEmptyRepoUnchanged(bare, normal); err == nil || !strings.Contains(err.Error(), "empty_repo cannot be changed") {
-		t.Errorf("flip true->false: got %v, want the immutability error", err)
+	if !EmptyRepoChanged(bare, normal) {
+		t.Error("flip true->false: not detected")
 	}
-	if err := ValidateEmptyRepoUnchanged(normal, bare); err == nil || !strings.Contains(err.Error(), "empty_repo cannot be changed") {
-		t.Errorf("flip false->true: got %v, want the immutability error", err)
+	if !EmptyRepoChanged(normal, bare) {
+		t.Error("flip false->true: not detected")
 	}
 }
 
@@ -2198,25 +2198,11 @@ func TestValidateNoAutograderExclusions(t *testing.T) {
 	}
 }
 
-// TestValidateNoAutograderUnchanged: no_autograder is immutable on upsert, like
-// empty_repo — the shim (or its absence) is baked at accept time.
-func TestValidateNoAutograderUnchanged(t *testing.T) {
-	on := AssignmentEntry{Slug: "hw", NoAutograder: true}
-	off := AssignmentEntry{Slug: "hw", NoAutograder: false}
-
-	if err := ValidateNoAutograderUnchanged(on, on); err != nil {
-		t.Errorf("same value (true): %v", err)
-	}
-	if err := ValidateNoAutograderUnchanged(off, off); err != nil {
-		t.Errorf("same value (false): %v", err)
-	}
-	if err := ValidateNoAutograderUnchanged(on, off); err == nil || !strings.Contains(err.Error(), "no_autograder cannot be changed") {
-		t.Errorf("flip true->false: got %v, want the immutability error", err)
-	}
-	if err := ValidateNoAutograderUnchanged(off, on); err == nil || !strings.Contains(err.Error(), "no_autograder cannot be changed") {
-		t.Errorf("flip false->true: got %v, want the immutability error", err)
-	}
-}
+// TestNoAutograderChanged / TestInitShimChanged were removed with their
+// helpers: no_autograder / init_shim have no `assignment add` flag and are
+// carried forward before any comparison, so `add` can never change them and a
+// detector would be dead code. Only empty_repo is detectable on the CLI path
+// (see TestEmptyRepoChanged).
 
 func TestValidateInitShimExclusions(t *testing.T) {
 	// init_shim is the built-in-autograder-on-an-empty-repo state: template-less,
@@ -2266,25 +2252,9 @@ func TestValidateInitShimExclusions(t *testing.T) {
 	}
 }
 
-// TestValidateInitShimUnchanged: init_shim is immutable on upsert, like
-// empty_repo/no_autograder — the shim is committed at accept time.
-func TestValidateInitShimUnchanged(t *testing.T) {
-	on := AssignmentEntry{Slug: "hw", InitShim: true}
-	off := AssignmentEntry{Slug: "hw", InitShim: false}
-
-	if err := ValidateInitShimUnchanged(on, on); err != nil {
-		t.Errorf("same value (true): %v", err)
-	}
-	if err := ValidateInitShimUnchanged(off, off); err != nil {
-		t.Errorf("same value (false): %v", err)
-	}
-	if err := ValidateInitShimUnchanged(on, off); err == nil || !strings.Contains(err.Error(), "init_shim cannot be changed") {
-		t.Errorf("flip true->false: got %v, want the immutability error", err)
-	}
-	if err := ValidateInitShimUnchanged(off, on); err == nil || !strings.Contains(err.Error(), "init_shim cannot be changed") {
-		t.Errorf("flip false->true: got %v, want the immutability error", err)
-	}
-}
+// TestInitShimChanged was removed with its helper (see the note above
+// TestEmptyRepoChanged's siblings): init_shim has no `assignment add` flag and
+// is carried forward before any comparison, so `add` can never change it.
 
 func TestValidateIncludeAllBranchesExclusions(t *testing.T) {
 	// include_all_branches only affects the templated generate call, so it

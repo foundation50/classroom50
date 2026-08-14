@@ -116,9 +116,11 @@ type AssignmentsJSON struct {
 // no initial commit and lands NO control files (no README, no
 // .classroom50.yaml marker, no autograde shim), so autograding and the
 // Feedback PR never run. Mutually exclusive with Template, Tests, FeedbackPR,
-// AllowedFiles, ReleaseAssets, and PassThreshold, and IMMUTABLE once the entry
-// exists — flipping it later would mean retrofitting every already-accepted repo.
-// Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
+// AllowedFiles, ReleaseAssets, and PassThreshold. MUTABLE after creation, but
+// student repos are provisioned at accept time and never retrofitted, so a
+// change only affects repos accepted from now on — `assignment add` warns
+// (EmptyRepoChanged) rather than blocking. Mirrors FeedbackPR's wire shape:
+// omitempty, absent reads as false.
 //
 // Locked hard-blocks student access: every accept surface (web + `gh student
 // accept`) refuses a locked assignment for all students, including ones who
@@ -1063,38 +1065,19 @@ func validateIncludeAllBranchesExclusions(entry AssignmentEntry) error {
 	return nil
 }
 
-// ValidateEmptyRepoUnchanged enforces empty_repo's immutability on upsert:
-// student repos are provisioned (or not) at accept time, so flipping the flag
-// after creation would strand every already-accepted repo on the old
-// behavior. Callers run it before UpsertAssignment when replacing an entry.
-func ValidateEmptyRepoUnchanged(existing, updated AssignmentEntry) error {
-	if existing.EmptyRepo != updated.EmptyRepo {
-		return fmt.Errorf("empty_repo cannot be changed after creation (assignment %q): student repos already accepted under the old setting are not retrofitted — remove the assignment and add it under a new slug instead", existing.Slug)
-	}
-	return nil
-}
-
-// ValidateNoAutograderUnchanged enforces no_autograder's immutability on
-// upsert, mirroring ValidateEmptyRepoUnchanged: the shim (or its absence) is
-// baked into each student repo at accept time and never retrofitted, so
-// flipping the flag would strand every already-accepted repo. Callers run it
-// alongside ValidateEmptyRepoUnchanged before UpsertAssignment.
-func ValidateNoAutograderUnchanged(existing, updated AssignmentEntry) error {
-	if existing.NoAutograder != updated.NoAutograder {
-		return fmt.Errorf("no_autograder cannot be changed after creation (assignment %q): student repos already accepted under the old setting are not retrofitted — remove the assignment and add it under a new slug instead", existing.Slug)
-	}
-	return nil
-}
-
-// ValidateInitShimUnchanged enforces init_shim's immutability on upsert,
-// mirroring ValidateEmptyRepoUnchanged/ValidateNoAutograderUnchanged: the shim
-// (or its absence) is baked into each student repo at accept time and never
-// retrofitted, so flipping the flag would strand every already-accepted repo.
-func ValidateInitShimUnchanged(existing, updated AssignmentEntry) error {
-	if existing.InitShim != updated.InitShim {
-		return fmt.Errorf("init_shim cannot be changed after creation (assignment %q): student repos already accepted under the old setting are not retrofitted — remove the assignment and add it under a new slug instead", existing.Slug)
-	}
-	return nil
+// EmptyRepoChanged reports whether an upsert flips empty_repo relative to the
+// existing entry. empty_repo is MUTABLE, but student repos are provisioned (or
+// left bare) at accept time and never retrofitted, so a change only affects
+// repos accepted from now on — callers warn (they do not block) when this is
+// true. Kept as a single-sourced helper so the command and its tests agree.
+//
+// There is deliberately no NoAutograderChanged/InitShimChanged sibling: those
+// flags have no `assignment add` flag and are carried forward from the prior
+// entry before any comparison, so `add` can never change them — a detector
+// would be dead code. They stay mutable via the web GUI, which owns its own
+// edit-time confirmation.
+func EmptyRepoChanged(existing, updated AssignmentEntry) bool {
+	return existing.EmptyRepo != updated.EmptyRepo
 }
 
 // ValidateExistingEntry is the parse-path twin of ValidateAssignmentEntry.

@@ -29,7 +29,9 @@ const REPO_ROLES_DOCS_URL =
 //     the tri-state controls folded in from the former standalone section so
 //     all repo config lives in one card.
 // The source choice folds into empty_repo + template on submit via
-// deriveFormShape; the choice is immutable after creation (locked on edit).
+// deriveFormShape; it stays editable on edit, but changing it only re-provisions
+// repos accepted from now on (already-accepted repos aren't retrofitted), so the
+// edit form warns when students have already accepted.
 export function RepositorySetupSection({
   form,
   edit,
@@ -37,6 +39,7 @@ export function RepositorySetupSection({
   org,
   classroom,
   slug,
+  hasAcceptedStudents = false,
 }: {
   form: AssignmentForm
   edit: boolean
@@ -44,6 +47,10 @@ export function RepositorySetupSection({
   org?: string
   classroom?: string
   slug?: string
+  // Edit mode: whether any student has already accepted. Gates the
+  // repo-source change caveat so it shows only when a change would strand
+  // existing repos.
+  hasAcceptedStudents?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -54,16 +61,13 @@ export function RepositorySetupSection({
     >
       <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2 sm:items-start">
         <div className="flex flex-col gap-4">
-          {/* Repository source: template vs no template (default No). Immutable
-              after creation (locked on edit): already-accepted repos can't be
-              retrofitted from one source to the other. */}
+          {/* Repository source: template vs no template (default No). Editable
+              after creation, but changing it only re-provisions repositories
+              accepted from now on — the edit form warns before saving when
+              students have already accepted (see AssignmentSettingsPage). */}
           <form.Field name="repo_source">
             {(field) => (
-              <fieldset
-                className={edit ? "pointer-events-none opacity-50" : ""}
-                disabled={edit}
-                aria-disabled={edit}
-              >
+              <fieldset>
                 <legend className="label font-bold mb-2">
                   {t("assignments.form.repoSource.label")}
                 </legend>
@@ -81,7 +85,6 @@ export function RepositorySetupSection({
                         name={field.name}
                         value={option}
                         checked={field.state.value === option}
-                        disabled={edit}
                         onBlur={field.handleBlur}
                         onChange={() =>
                           field.handleChange(option as RepoSource)
@@ -96,10 +99,13 @@ export function RepositorySetupSection({
                     </label>
                   ))}
                 </div>
-                {edit ? (
-                  <p className="mt-1.5 text-sm text-base-content/70">
-                    {t("assignments.form.repoSource.lockedHelp")}
-                  </p>
+                {edit &&
+                hasAcceptedStudents &&
+                field.state.value !==
+                  (form.options.defaultValues?.repo_source ?? "none") ? (
+                  <Alert tone="warning" role="status" className="mt-2 text-sm">
+                    <span>{t("assignments.form.repoSource.editHelp")}</span>
+                  </Alert>
                 ) : null}
               </fieldset>
             )}

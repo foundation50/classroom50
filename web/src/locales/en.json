@@ -1127,11 +1127,12 @@
       "type": "Assignment type",
       "typeIndividual": "Individual",
       "typeGroup": "Group project",
+      "typeLockedHelp": "Can't be changed after creation — switching it would invalidate existing submissions.",
       "maxGroupSize": "Max group size",
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
       "repoSource": {
         "label": "Start with a template",
-        "lockedHelp": "The repository source can't be changed after creation: repositories students already accepted are not re-provisioned.",
+        "editHelp": "Changing the repository source only affects repositories students accept from now on. Repositories already accepted keep their original starter content — you'll need to reconcile any difference yourself.",
         "none": {
           "label": "No template",
           "help": "Create a fresh repository for each student."
@@ -1179,7 +1180,7 @@
         "label": "Autograding",
         "notAutogradedNote": "Autograding options apply only when this assignment is set to \"Autograded\" in the Submission and grading section above. Change the grading choice to Autograded to configure the autograder.",
         "modeLabel": "Built-in autograder",
-        "lockedHelp": "Whether the built-in autograder is used can't be changed after creation: repositories students already accepted are not re-provisioned.",
+        "editHelp": "Changing the built-in autograder only affects repositories students accept from now on. Repositories already accepted keep their original setup — you'll need to reconcile any difference yourself.",
         "choices": {
           "none": {
             "label": "Do not use the built-in autograder",
@@ -1193,8 +1194,7 @@
       },
       "grading": {
         "label": "Grading",
-        "help": "How this assignment is graded. \"Autograded\" runs the autograder you configure below. \"Manual\" lets you enter each student's score by hand on the submissions page. \"Not graded\" records no score. Can't be changed after the assignment is created.",
-        "editWarning": "The grading mode can't be changed after creation: scores already recorded under the old mode would be misread. Create a new assignment under a different slug instead.",
+        "help": "How this assignment is graded. \"Autograded\" runs the autograder you configure below. \"Manual\" lets you enter each student's score by hand on the submissions page. \"Not graded\" records no score.",
         "autoNote": "This assignment is autograded. Configure the autograder in the Autograding section below. Whether you use the built-in autograder or supply your own workflow, it must publish a result.json asset on the submission release — that file is what the app reads to show scores.",
         "choices": {
           "off": "Not graded",
@@ -1660,7 +1660,14 @@
     "viewRepository": "View repository",
     "collaboratorsHint_one": "Add or remove collaborators for this assignment repository. This assignment allows up to <count>{{count}}</count> student in addition to the group owner.",
     "collaboratorsHint_other": "Add or remove collaborators for this assignment repository. This assignment allows up to <count>{{count}}</count> students in addition to the group owner.",
-    "manageCollaborators": "Manage collaborators"
+    "manageCollaborators": "Manage collaborators",
+    "provisioningConfirm": {
+      "title": "Change provisioning settings after students accepted?",
+      "body_one": "{{count}} student has already accepted this assignment. This change only affects repositories accepted from now on — the {{count}} existing repository keeps its original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the gradebook; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to reconcile any inconsistency yourself.",
+      "body_other": "{{count}} students have already accepted this assignment. This change only affects repositories accepted from now on — the {{count}} existing repositories keep their original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the gradebook; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to reconcile any inconsistency yourself.",
+      "confirm": "Save changes anyway",
+      "cancel": "Cancel"
+    }
   },
   "serviceTokenHealth": {
     "summary_one": "{{count}} organization needs a service-token check.",
