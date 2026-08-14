@@ -983,12 +983,12 @@ func TestCollectScoresCommitPrefix(t *testing.T) {
 
 // TestFeedbackPRParity_GoVsPython pins the Go<->Python halves of the
 // accept-time Feedback PR contract (issue #228). Both `gh student accept` /
-// the web GUI (creating the PR) and ensure_feedback_pr.py (adopting and
-// maintaining it) must produce the same title, mode labels, and body — the
-// runner discovers the PR by base+head only, then backfill_release_link
-// REWRITES any open PR body lacking the releases/latest link, so a drifted
-// body would be silently clobbered and drifted labels would show teachers two
-// label sets. No compile-time link exists; this test is the enforcement.
+// the web GUI (creating the PR) and ensure_feedback_pr.py (adopting it and, on
+// the fallback create path, authoring it) must produce the same title, mode
+// labels, and body — the runner discovers the PR by base+head only and adopts
+// it without editing, so a drifted body would show teachers two different
+// bodies and drifted labels two label sets. No compile-time link exists; this
+// test is the enforcement.
 func TestFeedbackPRParity_GoVsPython(t *testing.T) {
 	files, err := skeletonFiles("main")
 	if err != nil {
@@ -1030,10 +1030,11 @@ func TestFeedbackPRParity_GoVsPython(t *testing.T) {
 	if !strings.Contains(script, opening) {
 		t.Errorf("ensure_feedback_pr.py pr_body is missing the opening sentence mirrored in contract.FeedbackPRBody — the PR body has drifted between Go and Python")
 	}
-	// The runner's backfill trigger: the Go body must embed the release URL
-	// placeholder wherever python interpolates release_url.
+	// The built-in body must embed the release-URL placeholder wherever Python
+	// interpolates release_url, so the latest-submission link stays part of the
+	// canonical body both accept clients render.
 	if !strings.Contains(body, "RELEASE_URL") {
-		t.Error("contract.FeedbackPRBody does not embed the release URL; the runner's backfill_release_link would clobber accept-time PR bodies")
+		t.Error("contract.FeedbackPRBody does not embed the release URL placeholder; the built-in Feedback PR body must carry the latest-submission link")
 	}
 }
 

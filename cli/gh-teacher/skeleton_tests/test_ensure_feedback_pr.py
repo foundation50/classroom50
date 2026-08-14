@@ -56,6 +56,8 @@ class FakeGh:
                 return "create_base"
             if "/statuses/" in path:
                 return "status"
+            if "/contents/" in path:
+                return "template_body"  # read_template_pr_body probe
         if args[0] == "repo" and args[1] == "view":
             return "head_branch"
         if args[0] == "pr":
@@ -65,8 +67,7 @@ class FakeGh:
                 # be driven through the stub, not monkeypatched out.
                 return "pr_list_url" if "url" in args else "pr_list"
             if args[1] == "view":
-                # Disambiguate the reopen state read (--json state) from the
-                # backfill body read (--json body).
+                # The reopen path reads --json state.
                 return "pr_view_body" if "body" in args else "pr_view"
             return f"pr_{args[1]}"
         if args[0] == "label":
@@ -88,10 +89,16 @@ class FakeGh:
         return any(c[:len(prefix.split())] == tuple(prefix.split()) for c in self.calls)
 
 
-def _run(monkeypatch, responses):
+def _run(monkeypatch, responses, *, use_template=False,
+         template_repo="", template_branch=""):
     fake = FakeGh(responses)
     monkeypatch.setattr(efp, "gh", fake)
-    state, desc, url = efp.ensure_feedback_pr(REPO, BASE_SHA, "individual", SERVER, RUN_ID)
+    state, desc, url = efp.ensure_feedback_pr(
+        REPO, BASE_SHA, "individual", SERVER, RUN_ID,
+        use_template=use_template,
+        template_repo=template_repo,
+        template_branch=template_branch,
+    )
     return fake, state, desc, url
 
 
@@ -230,61 +237,67 @@ def test_merged_pr_left_alone(monkeypatch):
     assert not fake.made("pr edit")
 
 
-def test_open_pr_missing_link_is_backfilled(monkeypatch):
-    # AE2: OPEN PR whose body lacks the link -> edited with a link-bearing body.
+def test_open_pr_adopted_without_edits(monkeypatch):
+    # Adopt-only: an OPEN PR is left exactly as-is — no body read, no edit — so a
+    # teacher full-replace body survives. (backfill_release_link was removed.)
     fake, state, desc, url = _run(monkeypatch, {
         "head_branch": "main",
         "base_sha": BASE_SHA,
         "pr_list": _pr_list_json("7", "OPEN", ""),
-        "pr_view_body": "old body without the link",
-        "pr_edit": "",
-    })
-    assert state == "success"
-    assert desc == "Feedback PR in place"
-    assert fake.made("pr edit 7")
-    edit = [c for c in fake.calls if c[0] == "pr" and c[1] == "edit"]
-    assert any("/releases/latest" in arg for arg in edit[0])
-
-
-def test_open_pr_already_linked_not_edited(monkeypatch):
-    # AE3: body already contains the link -> no edit.
-    linked = f"body with {SERVER}/{REPO}/releases/latest already"
-    fake, state, desc, url = _run(monkeypatch, {
-        "head_branch": "main",
-        "base_sha": BASE_SHA,
-        "pr_list": _pr_list_json("7", "OPEN", ""),
-        "pr_view_body": linked,
     })
     assert state == "success"
     assert desc == "Feedback PR in place"
     assert not fake.made("pr edit")
+    assert not fake.made("pr view")
 
 
-def test_open_pr_empty_body_read_skips_edit(monkeypatch):
-    # Skip-on-empty: a transient/empty body read must not trigger a clobbering
-    # edit; the run still succeeds.
+def test_fallback_create_uses_template_body_when_flag_set(monkeypatch):
+    # feedback_pr_template on + a readable template file -> the runner's fallback
+    # create authors the teacher body verbatim (honoring the assignment settings).
+    teacher_body = "Custom teacher PR body :sparkles:"
     fake, state, desc, url = _run(monkeypatch, {
         "head_branch": "main",
         "base_sha": BASE_SHA,
-        "pr_list": _pr_list_json("7", "OPEN", ""),
-        "pr_view_body": "",
-    })
+        "pr_list": "[]",                      # no existing PR -> fallback create
+        "template_body": teacher_body,
+        "pr_create": "https://github.com/cs50/x/pull/1",
+    }, use_template=True, template_repo="cs50/tmpl", template_branch="main")
     assert state == "success"
-    assert desc == "Feedback PR in place"
-    assert not fake.made("pr edit")
+    assert desc == "Feedback PR opened"
+    create = [c for c in fake.calls if c[0] == "pr" and c[1] == "create"][0]
+    body_idx = create.index("--body") + 1
+    assert create[body_idx] == teacher_body
 
 
-def test_open_pr_backfill_edit_failure_still_success(monkeypatch):
-    # AE5: a failed backfill edit is best-effort -> run still succeeds.
+def test_fallback_create_falls_back_to_builtin_when_template_unreadable(monkeypatch):
+    # Flag set but the template file is absent/unreadable (runner token can't
+    # read a private external template) -> built-in body, PR still created.
     fake, state, desc, url = _run(monkeypatch, {
         "head_branch": "main",
         "base_sha": BASE_SHA,
-        "pr_list": _pr_list_json("7", "OPEN", ""),
-        "pr_view_body": "old body without the link",
-        "pr_edit": efp.GhError(["pr", "edit"], 1, "not allowed"),
-    })
+        "pr_list": "[]",
+        "template_body": "",                  # all three path probes miss
+        "pr_create": "https://github.com/cs50/x/pull/1",
+    }, use_template=True, template_repo="cs50/tmpl", template_branch="main")
     assert state == "success"
-    assert desc == "Feedback PR in place"
+    create = [c for c in fake.calls if c[0] == "pr" and c[1] == "create"][0]
+    body_idx = create.index("--body") + 1
+    assert "**Don't close or merge this pull request**" in create[body_idx]
+
+
+def test_fallback_create_uses_builtin_when_flag_unset(monkeypatch):
+    # Flag off -> built-in body, and the template repo is never probed.
+    fake, state, desc, url = _run(monkeypatch, {
+        "head_branch": "main",
+        "base_sha": BASE_SHA,
+        "pr_list": "[]",
+        "pr_create": "https://github.com/cs50/x/pull/1",
+    }, use_template=False, template_repo="cs50/tmpl", template_branch="main")
+    assert state == "success"
+    assert not fake.made("api repos/cs50/tmpl/contents")
+    create = [c for c in fake.calls if c[0] == "pr" and c[1] == "create"][0]
+    body_idx = create.index("--body") + 1
+    assert "**Don't close or merge this pull request**" in create[body_idx]
 
 
 def test_create_race_lost_recovers_to_success(monkeypatch):
@@ -374,11 +387,10 @@ def test_label_for_mode(mode, want_label):
 
 def test_accept_time_pr_adopted_without_edits(monkeypatch):
     """Issue #228: `gh student accept` / the web GUI may have already created
-    the Feedback PR (student-authored, base frozen at the accept commit,
-    body carrying the releases/latest link). The runner must ADOPT it —
-    find_pr matches by base+head only — with zero writes: no create, no
-    reopen, and no backfill edit (the accept-time body already has the link,
-    byte-mirrored from pr_body via the contract package)."""
+    the Feedback PR (student-authored, base frozen at the accept commit). The
+    runner must ADOPT it — find_pr matches by base+head only — with zero writes:
+    no create, no reopen, and no body edit. Adopt-only means the accept-time
+    body (built-in or teacher-supplied full-replace) is left exactly as-is."""
     accept_time_body = efp.pr_body("main", f"{SERVER}/{REPO}/releases/latest")
     fake, state, desc, url = _run(monkeypatch, {
         "head_branch": "main",
@@ -394,18 +406,18 @@ def test_accept_time_pr_adopted_without_edits(monkeypatch):
     assert not fake.made("api -X POST")       # base not re-created
     assert not fake.made("pr create")
     assert not fake.made("pr reopen")
-    assert not fake.made("pr edit")           # backfill no-ops on the link
+    assert not fake.made("pr edit")           # adopt-only: never edits a body
 
 
 def test_pr_body_matches_the_cross_language_golden():
-    """pr_body is the de-facto source of truth for the Feedback PR body, and both
-    accept clients hand-mirror it (cli/shared/contract FeedbackPRBody, web's
-    feedbackPrBody). The runner adopts an accept-time PR by base+head, so a
-    one-sided wording edit would leave teachers looking at two different bodies —
-    and backfill_release_link rewriting whichever it finds. All three languages
-    render with the same placeholders and compare in FULL against this golden
-    (fragment matching would let a reworded sentence through); regenerate it only
-    when every language changes together.
+    """pr_body is the built-in Feedback PR body, and both accept clients render
+    the same canonical source (cli/shared/contract FeedbackPRBody embeds
+    feedbackPrBody.md; web's feedbackPrBody imports it via ?raw). The runner
+    adopts an accept-time PR by base+head, so a one-sided wording edit would
+    leave teachers looking at two different bodies. All three languages render
+    with the same placeholders and compare in FULL against this golden (fragment
+    matching would let a reworded sentence through); regenerate it via
+    `go test ./contract -run TestFeedbackPRBody -update` when the .md changes.
     """
     golden = (
         pathlib.Path(__file__).resolve().parents[2]
@@ -432,14 +444,15 @@ def test_pr_body_links_latest_submission():
     assert release_url in teacher_notes
 
 
-def test_create_pr_threads_latest_release_url(monkeypatch):
+def test_create_pr_threads_body_through(monkeypatch):
     fake = FakeGh({"pr_create": "https://github.com/cs50/x/pull/1", "label": ""})
     monkeypatch.setattr(efp, "gh", fake)
-    efp.create_pr(REPO, "main", "individual",
-                  f"{SERVER}/{REPO}/releases/latest")
+    body = efp.pr_body("main", f"{SERVER}/{REPO}/releases/latest")
+    efp.create_pr(REPO, "main", "individual", body)
     create = [c for c in fake.calls if c[0] == "pr" and c[1] == "create"]
     assert create, "expected a pr create call"
-    assert any("/releases/latest" in arg for arg in create[0])
+    body_idx = create[0].index("--body") + 1
+    assert create[0][body_idx] == body
 
 
 @pytest.mark.parametrize("out, want", [

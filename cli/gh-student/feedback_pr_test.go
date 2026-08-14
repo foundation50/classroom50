@@ -257,10 +257,10 @@ func TestEnsureFeedbackPullRequest_FreshAccept(t *testing.T) {
 	if s.lastPRBody["title"] != contract.FeedbackPRTitle {
 		t.Errorf("PR title = %q, want %q", s.lastPRBody["title"], contract.FeedbackPRTitle)
 	}
-	// The release URL is load-bearing: the runner's backfill_release_link
-	// rewrites any open Feedback PR whose body lacks it.
+	// The release URL is part of the built-in body: it links the latest
+	// autograding result and self-updates via .../releases/latest.
 	if !strings.Contains(s.lastPRBody["body"], "https://github.com/o/r/releases/latest") {
-		t.Error("PR body lacks the releases/latest URL; the runner would clobber it on first submission")
+		t.Error("PR body lacks the releases/latest URL; the built-in body must carry the latest-submission link")
 	}
 	if s.lastLabelName != "Individual Assignment" || len(s.lastAddedLabels) != 1 || s.lastAddedLabels[0] != "Individual Assignment" {
 		t.Errorf("label = %q added %v, want Individual Assignment", s.lastLabelName, s.lastAddedLabels)

@@ -66,10 +66,9 @@ describe("feedback PR contract parity vs ensure_feedback_pr.py", () => {
     expect(feedbackPrBody("HEAD_BRANCH", "RELEASE_URL")).toBe(golden)
   })
 
-  it("embeds the release URL (the runner's backfill trigger)", () => {
-    // backfill_release_link() rewrites any OPEN PR body lacking the
-    // releases/latest link — an accept-time body without it would be
-    // clobbered on the first submission.
+  it("embeds the release URL (the latest-submission link)", () => {
+    // The built-in body links the latest autograding result via
+    // .../releases/latest, which self-updates as submissions publish.
     const body = feedbackPrBody(
       "main",
       "https://github.com/o/r/releases/latest",

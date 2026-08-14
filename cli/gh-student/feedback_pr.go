@@ -127,8 +127,8 @@ func tryEnsureFeedbackPullRequest(client githubapi.Client, u *ui.UI, verbose boo
 	// Label best-effort (mirrors the runner's check=False label step): the PR
 	// is in place, so a label failure never fails the step. Reported
 	// unconditionally, not just under --verbose — the runner's adoption path
-	// only reopens and backfills the body, so it never repairs a missing
-	// label, leaving an unlabeled PR nobody knows about.
+	// never edits an existing PR, so it never repairs a missing label,
+	// leaving an unlabeled PR nobody knows about.
 	if err := labelFeedbackPR(client, org, repoName, prNumber, mode); err != nil {
 		u.Detail("could not label feedback PR #%d on %s/%s: %v", prNumber, org, repoName, err)
 	}
@@ -277,7 +277,7 @@ func branchTipSHA(client githubapi.Client, org, repoName, branch string) (string
 
 // createFeedbackPR opens the Feedback PR and returns its number. Title and
 // body are byte-identical with the runner's (contract package), so whichever
-// side creates the PR, teachers and backfill_release_link see the same thing.
+// side creates the PR, teachers see one coherent body.
 func createFeedbackPR(client githubapi.Client, org, repoName, branch string) (int, error) {
 	releaseURL := fmt.Sprintf("https://github.com/%s/%s/releases/latest", org, repoName)
 	body, err := json.Marshal(map[string]string{

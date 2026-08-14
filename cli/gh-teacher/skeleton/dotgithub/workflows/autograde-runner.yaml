@@ -69,6 +69,12 @@ jobs:
       assignment:     ${{ steps.read.outputs.assignment }}
       secret:         ${{ steps.read.outputs.secret }}
       feedback-pr:    ${{ steps.read.outputs.feedback-pr }}
+      # Feedback-PR-body template opt-in (feedback_pr_template) + the template
+      # ref, so the Ensure-Feedback-PR fallback creator can honor the assignment
+      # setting (best-effort — the Actions token may not read a private template).
+      feedback-pr-template: ${{ steps.read.outputs.feedback-pr-template }}
+      template-repo:  ${{ steps.read.outputs.template-repo }}
+      template-branch: ${{ steps.read.outputs.template-branch }}
       mode:           ${{ steps.read.outputs.mode }}
       allowed-files:  ${{ steps.read.outputs.allowed-files }}
       release-assets: ${{ steps.read.outputs.release-assets }}
@@ -478,6 +484,26 @@ jobs:
           if not isinstance(feedback_pr, bool):
               fail(f"entry {assignment!r}: feedback_pr {feedback_pr!r} must be a boolean")
 
+          # Feedback-PR-body template opt-in (feedback_pr_template): use the
+          # template repo's native pull_request_template.md as the PR body. Only
+          # meaningful with feedback_pr + a template; the fallback creator reads
+          # it best-effort (see ensure_feedback_pr.py). Resolve the template ref
+          # so the fallback creator can find the file; empty when template-less.
+          feedback_pr_template = entry.get("feedback_pr_template", False)
+          if not isinstance(feedback_pr_template, bool):
+              fail(f"entry {assignment!r}: feedback_pr_template {feedback_pr_template!r} must be a boolean")
+          template = entry.get("template") or {}
+          template_repo = ""
+          template_branch = ""
+          if isinstance(template, dict):
+              t_owner = str(template.get("owner") or "").strip()
+              t_repo = str(template.get("repo") or "").strip()
+              if t_owner and t_repo:
+                  template_repo = f"{t_owner}/{t_repo}"
+              template_branch = str(template.get("branch") or "").strip()
+          # Only honor the flag when we actually have a template to read from.
+          feedback_pr_template = feedback_pr_template and feedback_pr and bool(template_repo)
+
           # Assignment mode (individual | group), normalized; drives the
           # Feedback PR label so a teacher can tell them apart at a glance.
           mode = (entry.get("mode") or "individual").strip().lower()
@@ -705,6 +731,9 @@ jobs:
           emit("assignment", assignment)
           emit("secret", secret)
           emit("feedback-pr", "true" if feedback_pr else "false")
+          emit("feedback-pr-template", "true" if feedback_pr_template else "false")
+          emit("template-repo", template_repo)
+          emit("template-branch", template_branch)
           emit("mode", mode)
           emit("allowed-files", allowed_files_json)
           emit("release-assets", release_assets_json)
@@ -1110,6 +1139,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ steps.autograde.outputs.baseline-sha }}
           MODE: ${{ needs.setup.outputs.mode }}
+          # Honor the assignment's Feedback-PR-body template setting on the
+          # fallback create path (best-effort: the Actions token may not read a
+          # private/external template — ensure_feedback_pr.py falls back then).
+          FEEDBACK_PR_TEMPLATE: ${{ needs.setup.outputs.feedback-pr-template }}
+          TEMPLATE_REPO: ${{ needs.setup.outputs.template-repo }}
+          TEMPLATE_BRANCH: ${{ needs.setup.outputs.template-branch }}
         # The control flow lives in ensure_feedback_pr.py (fetched from Pages,
         # like runner.py) so it's unit-testable with a stubbed gh; this step
         # is a thin fetch+exec shim. The script freezes the `feedback` base,

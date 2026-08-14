@@ -236,7 +236,7 @@ func TestEnsure_FreshOpen(t *testing.T) {
 		t.Errorf("PR title = %q, want %q", s.lastPRBody["title"], contract.FeedbackPRTitle)
 	}
 	if !strings.Contains(s.lastPRBody["body"], "https://github.com/o/r/releases/latest") {
-		t.Error("PR body lacks the releases/latest URL; the runner would clobber it")
+		t.Error("PR body lacks the releases/latest URL; the built-in body must carry the latest-submission link")
 	}
 	if len(s.lastAddedLabels) != 1 || s.lastAddedLabels[0] != "Individual Assignment" {
 		t.Errorf("added labels = %v, want [Individual Assignment]", s.lastAddedLabels)

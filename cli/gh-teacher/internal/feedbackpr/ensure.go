@@ -264,8 +264,8 @@ func branchTipSHA(client githubapi.Client, org, repoName, branch string) (string
 }
 
 // createFeedbackPR opens the Feedback PR and returns its number. Title and body
-// come from the shared contract, so whichever side creates the PR, teachers and
-// the runner's backfill_release_link see the same thing.
+// come from the shared contract, so whichever side creates the PR (accept
+// clients or the runner's fallback), teachers see one coherent body.
 func createFeedbackPR(client githubapi.Client, org, repoName, branch string) (int, error) {
 	releaseURL := fmt.Sprintf("https://github.com/%s/%s/releases/latest", org, repoName)
 	body, err := json.Marshal(map[string]string{
