@@ -43,6 +43,7 @@ const base: CreateAssignmentFormValues = {
   available_from_date: "",
   max_group_size: 2,
   feedback_pr: true,
+  feedback_pr_template: false,
   empty_repo: false,
   repo_source: "none",
   add_readme: true,

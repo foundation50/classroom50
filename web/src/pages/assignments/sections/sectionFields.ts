@@ -25,6 +25,7 @@ export const SECTION_FIELDS: Record<
     "template_repo",
     "student_permission",
     "feedback_pr",
+    "feedback_pr_template",
     "repo_feature_issues",
     "repo_feature_wiki",
     "repo_feature_projects",

@@ -116,6 +116,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   include_all_branches: "classroom50-owned",
   copy_about: "classroom50-owned",
   copy_topics: "classroom50-owned",
+  feedback_pr_template: "classroom50-owned",
   // Rebuilt AND a closed object: the CLI decodes runtime strictly (RuntimeRef
   // has no Extra, DisallowUnknownFields; schema additionalProperties false), so
   // the rebuilt runtime must win and any unknown sub-key drops rather than
@@ -495,6 +496,22 @@ async function buildAssignmentEntry(
     )
   }
 
+  // feedback_pr_template reads the template repo's pull_request_template.md for
+  // the Feedback PR body, so it needs a template AND the Feedback PR itself.
+  // Mirrors the schema's feedback_pr_template conditional.
+  if (input.feedback_pr_template) {
+    if (!input.template_repo.trim()) {
+      throw new Error(
+        "feedback_pr_template: requires a template — it reads the template repo's pull request template for the Feedback PR body.",
+      )
+    }
+    if (input.empty_repo || input.feedback_pr === false) {
+      throw new Error(
+        "feedback_pr_template: requires the Feedback PR to be enabled.",
+      )
+    }
+  }
+
   if (tests.length > 0) {
     await ensureDeclarativeTestsWritable(
       client,
@@ -568,6 +585,12 @@ async function buildAssignmentEntry(
   }
   if (input.copy_topics) {
     entry.copy_topics = true
+  }
+  // Written only when true (omitempty). Use the template's pull_request_template.md
+  // as the Feedback PR body. The guard above already rejected it without a
+  // template or with the Feedback PR off, so no extra check here.
+  if (input.feedback_pr_template) {
+    entry.feedback_pr_template = true
   }
   // Omit the template block entirely for a template-less assignment, matching
   // the CLI's nil TemplateRef.

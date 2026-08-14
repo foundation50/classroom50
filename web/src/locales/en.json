@@ -1162,6 +1162,12 @@
       "feedbackPr": "Feedback pull request",
       "feedbackPrHelp": "Open a pull request per repo for inline review of each submission.",
       "feedbackPrEmptyRepoHelp": "Unavailable for empty repositories. There is no starter commit to diff against.",
+      "feedbackPrTemplate": {
+        "label": "Use the template's pull request template as the Feedback PR body",
+        "help": "Use the template repository's pull request template (.github/pull_request_template.md) as the body of each student's Feedback PR instead of the built-in one. You are responsible for the template's contents. If the file is missing or unreadable, the built-in body is used.",
+        "checking": "Checking the template for a pull request template…",
+        "autoEnabled": "Auto-enabled: a pull request template was found in the template repository."
+      },
       "studentPermission": {
         "label": "Student repo access",
         "learnMore": "Learn more",

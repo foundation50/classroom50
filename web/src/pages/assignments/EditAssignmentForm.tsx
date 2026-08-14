@@ -145,6 +145,7 @@ const EditAssignmentForm = ({
                 available_from_date: values.available_from_date,
                 max_group_size: values.max_group_size,
                 feedback_pr: values.feedback_pr,
+                feedback_pr_template: values.feedback_pr_template,
                 empty_repo: values.empty_repo,
                 no_autograder: shape.noAutograder,
                 init_shim: shape.initShim,
