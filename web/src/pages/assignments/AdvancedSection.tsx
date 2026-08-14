@@ -19,6 +19,7 @@ import {
 } from "./AdvancedRuntimeFields"
 import { normalizeOnBlur } from "./formFieldHelpers"
 import { deriveFormShape } from "./formShape"
+import { CollapsibleAdvanced } from "./sections/CollapsibleAdvanced"
 import { PASS_THRESHOLD_MAX, PASS_THRESHOLD_MIN } from "@/types/classroom"
 import type { AssignmentForm } from "./assignmentFormModel"
 
@@ -34,16 +35,7 @@ export const AdvancedSection = ({
 }) => {
   const { t } = useTranslation()
   return (
-    <details className="group">
-      <summary className="cursor-pointer text-lg font-bold marker:content-none flex items-center gap-2">
-        <span className="transition-transform group-open:rotate-90">▶</span>
-        {t("assignments.form.advanced")}
-      </summary>
-
-      <p className="pt-2 pb-4 text-sm text-base-content/70">
-        {t("assignments.form.advancedHelp")}
-      </p>
-
+    <CollapsibleAdvanced help={t("assignments.form.advancedHelp")}>
       <form.Field name="runtime_env">
         {(field) => (
           <fieldset className="mb-4">
@@ -420,6 +412,6 @@ export const AdvancedSection = ({
           )
         }
       </form.Subscribe>
-    </details>
+    </CollapsibleAdvanced>
   )
 }

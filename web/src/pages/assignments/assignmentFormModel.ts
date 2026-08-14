@@ -477,6 +477,32 @@ export function validateAssignmentForm(
   return errors
 }
 
+// Whether switching the grading choice should seed the built-in autograder.
+// "Autograded" almost always means the built-in autograder, so entering that
+// mode preselects it — but only as a first-entry default: a teacher who has
+// deliberately touched the autograder pick (choosing teacher-supplied CI, or
+// re-confirming built-in) keeps their choice across a grading round-trip. Pure
+// so the rule is unit-testable apart from the form instance.
+export function shouldSeedBuiltInAutograder({
+  next,
+  previous,
+  autogradingState,
+  autogradingTouched,
+}: {
+  // The grading choice being switched to, and the one being left.
+  next: GradingMode
+  previous: GradingMode
+  autogradingState: AutogradingState
+  // Whether the teacher has interacted with the autograder pick (its field is
+  // dirty). A stored assignment's value counts as deliberate too, so edit-mode
+  // round-trips never re-seed over it.
+  autogradingTouched: boolean
+}): boolean {
+  if (next !== "auto" || previous === "auto") return false
+  if (autogradingTouched) return false
+  return autogradingState !== "built-in"
+}
+
 // Normalize the raw form state into the trimmed wire shape, clearing the fields
 // that don't belong to the selected runtime environment so a hidden, stale
 // value from the other mode can't reach the wire. apt is hosted-only (a

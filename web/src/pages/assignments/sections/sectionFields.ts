@@ -3,10 +3,10 @@ import type { CreateAssignmentFormValues } from "../assignmentFormModel"
 // The form's sections, in render order. Each owns a disjoint slice of the form
 // fields; the reset control keys off these lists so a field belongs to exactly
 // one section. "submission" (the Submission and Grading section) owns the
-// submission definition + milestone tags and the grading choice, right after
-// Repository Setup.
-export type SectionId =
-  "details" | "repository" | "submission" | "autograding" | "schedule"
+// submission definition + milestone tags, the grading choice, AND the
+// autograder configuration (built-in toggle, runtime, tests) folded in from the
+// former standalone Autograding section.
+export type SectionId = "details" | "repository" | "submission" | "schedule"
 
 // The fields each section owns. Used to decide whether a section differs from
 // its create defaults (so a Reset control appears) and to restore just that
@@ -31,7 +31,11 @@ export const SECTION_FIELDS: Record<
     "repo_feature_projects",
     "repo_feature_pull_requests",
   ],
-  autograding: [
+  submission: [
+    "submission_mode",
+    "submission_tags",
+    "grading_choice",
+    "grading_max_points",
     "autograding_state",
     "runtime_env",
     "runs_on",
@@ -50,12 +54,6 @@ export const SECTION_FIELDS: Record<
     "pass_threshold_enabled",
     "pass_threshold",
     "tests",
-  ],
-  submission: [
-    "submission_mode",
-    "submission_tags",
-    "grading_choice",
-    "grading_max_points",
   ],
   schedule: ["available_from_date", "due_date"],
 }

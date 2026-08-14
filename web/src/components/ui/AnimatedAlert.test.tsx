@@ -17,8 +17,10 @@ describe("AnimatedAlert", () => {
     expect(el.className).toContain("alert-error")
     expect(el.className).toContain("alert-soft")
     expect(el.textContent).toBe("boom")
-    // The collapse wrapper clips the margin/height animation.
-    expect(el.parentElement?.className).toContain("overflow-hidden")
+    // The collapse wrapper clips only while the height animates, then releases
+    // it — a permanent clip would truncate any overlay the alert's content
+    // paints outside its box (see Collapse).
+    expect(el.parentElement?.className).not.toContain("overflow-hidden")
   })
 
   it("renders nothing when not shown", () => {

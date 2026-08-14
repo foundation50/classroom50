@@ -1001,6 +1001,11 @@ const AcceptAssignmentPage = () => {
               {(acceptMutation.data || repoExistsAlready) &&
                 !acceptMutation.isPending &&
                 !repairOpen && (
+                  // Audited exemption to the collapse-overflow guard: the surrounding
+                  // conditional needs this AnimatePresence for the exit animation, and
+                  // the permanent clip is safe because a stack of buttons/links paints
+                  // no overlay outside its box.
+                  // eslint-disable-next-line no-restricted-syntax
                   <motion.div
                     key="post-accept-actions"
                     variants={collapseVariants}

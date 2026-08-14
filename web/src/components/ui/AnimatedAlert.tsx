@@ -1,6 +1,4 @@
-import { AnimatePresence, motion } from "motion/react"
-
-import { collapseVariants } from "@/lib/motion"
+import { Collapse } from "./Collapse"
 import { Alert, type AlertProps } from "./Alert"
 
 // <Alert> that height-collapses on mount/unmount so a toggled alert doesn't jerk
@@ -19,19 +17,9 @@ export function AnimatedAlert({
   ...alertProps
 }: AnimatedAlertProps) {
   return (
-    <AnimatePresence>
-      {show && (
-        <motion.div
-          variants={collapseVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          className="overflow-hidden"
-        >
-          <Alert {...alertProps}>{children}</Alert>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <Collapse open={show}>
+      <Alert {...alertProps}>{children}</Alert>
+    </Collapse>
   )
 }
 

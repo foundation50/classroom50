@@ -18,6 +18,11 @@ import {
   directionalClassTemplateSelector,
   directionalClassMessage,
 } from "./src/eslint/directionalClassRule.ts"
+import {
+  collapseOverflowLiteralSelector,
+  collapseOverflowTemplateSelector,
+  collapseOverflowMessage,
+} from "./src/eslint/collapseOverflowRule.ts"
 
 export default defineConfig([
   globalIgnores(["dist"]),
@@ -136,7 +141,27 @@ export default defineConfig([
           selector: directionalClassTemplateSelector,
           message: directionalClassMessage,
         },
+        // Height-animated panels must not keep `overflow-hidden` once open, or
+        // they clip descendant tooltips/dropdowns. <Collapse> owns that
+        // lifecycle; this catches a hand-rolled motion.div reintroducing it.
+        // Two selectors: a template-literal className has no Literal child.
+        {
+          selector: collapseOverflowLiteralSelector,
+          message: collapseOverflowMessage,
+        },
+        {
+          selector: collapseOverflowTemplateSelector,
+          message: collapseOverflowMessage,
+        },
       ],
+    },
+  },
+  // <Collapse> is the sanctioned owner of the animate-then-unclip lifecycle the
+  // rule above protects, so it necessarily applies `overflow-hidden` itself.
+  {
+    files: ["src/components/ui/Collapse.tsx"],
+    rules: {
+      "no-restricted-syntax": "off",
     },
   },
   // Guard the data-layer boundary: no runtime import cycle. The old api/ <-> data

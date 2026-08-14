@@ -18,6 +18,12 @@ export const RosterWarnings = ({
     <div className="flex w-full flex-col gap-2">
       <AnimatePresence initial={false}>
         {Object.entries(warnings).map(([key, warning]) => (
+          // Audited exemption to the collapse-overflow guard: the list's
+          // per-item exit animation needs AnimatePresence here, so <Collapse>
+          // (with its own AnimatePresence) wouldn't see the removal. The
+          // permanent clip is safe because the alert paints no overlay outside
+          // its box.
+          // eslint-disable-next-line no-restricted-syntax
           <motion.div
             key={key}
             layout
@@ -25,13 +31,14 @@ export const RosterWarnings = ({
             initial="initial"
             animate="animate"
             exit="exit"
-            role="alert"
-            className="alert alert-warning alert-soft overflow-hidden"
+            className="overflow-hidden"
           >
-            <span className="text-sm">{warning}</span>
-            <Button variant="ghost" size="xs" onClick={() => onDismiss(key)}>
-              {t("students.dismiss")}
-            </Button>
+            <div role="alert" className="alert alert-warning alert-soft">
+              <span className="text-sm">{warning}</span>
+              <Button variant="ghost" size="xs" onClick={() => onDismiss(key)}>
+                {t("students.dismiss")}
+              </Button>
+            </div>
           </motion.div>
         ))}
       </AnimatePresence>

@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui"
 import { DetailsSection } from "./sections/DetailsSection"
 import { RepositorySetupSection } from "./sections/RepositorySetupSection"
-import { AutogradingSection } from "./sections/AutogradingSection"
 import { SubmissionGradingSection } from "./sections/SubmissionGradingSection"
 import { ScheduleSection } from "./sections/ScheduleSection"
 import {
@@ -204,11 +203,6 @@ const CreateAssignmentForm = ({
                   form={form}
                   edit={edit}
                   onReset={onReset("submission")}
-                />
-                <AutogradingSection
-                  form={form}
-                  edit={edit}
-                  onReset={onReset("autograding")}
                   org={org}
                   hasAcceptedStudents={hasAcceptedStudents}
                 />

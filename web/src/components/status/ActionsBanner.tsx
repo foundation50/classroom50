@@ -245,6 +245,11 @@ const BannerBody = ({
 
       <AnimatePresence initial={false}>
         {showList && (
+          // Audited exemption to the collapse-overflow guard: a <ul> may only
+          // contain <li>, so <Collapse>'s wrapper div can't be used, and the
+          // permanent clip is safe because the rows paint no overlay outside
+          // the list.
+          // eslint-disable-next-line no-restricted-syntax
           <motion.ul
             key="list"
             variants={collapseVariants}

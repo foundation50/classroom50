@@ -1,13 +1,15 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { Pencil, Trash } from "lucide-react"
+import { Pencil, Trash, ChevronRight } from "lucide-react"
+import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
 import type { AssignmentForm } from "./assignmentFormModel"
 
 import {
   Badge,
   Button,
-  Card,
+  Collapse,
+  cx,
   Input,
   Modal,
   Select,
@@ -401,6 +403,13 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
   const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const [editor, setEditor] = useState<EditorState | null>(null)
+  // The test list collapses so a long table doesn't bury the Advanced settings
+  // below it. Seeded open when tests already exist (an edited assignment shows
+  // its tests up front); a fresh assignment starts collapsed.
+  const [expanded, setExpanded] = useState(
+    () => form.getFieldValue("tests").length > 0,
+  )
+  const { bodyRef, reveal } = useRevealOnExpand()
 
   useEffect(() => {
     if (!editor) return
@@ -440,6 +449,10 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
     } else {
       form.setFieldValue(`tests[${editor.index}]`, draft)
     }
+    // Reveal the list so the just-saved test is visible rather than landing
+    // inside a collapsed section.
+    setExpanded(true)
+    reveal()
     closeEditor()
   }
 
@@ -448,124 +461,154 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
       .filter((_, i) => active.mode === "new" || i !== active.index)
       .map((d) => d.name.trim())
   return (
-    <Card bordered={false}>
+    <div>
       <form.Field name="tests" mode="array">
         {(field) => (
-          <Card.Body>
-            <div className="flex justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold">
-                  {t("assignments.autograder.heading")}
-                </h3>
-                <h3 className="text-md opacity-70">
-                  <form.Subscribe selector={(state) => state.values.tests}>
-                    {(tests) => (
-                      <>
-                        {t("assignments.autograder.summary", {
-                          count: tests.length,
-                          points: tests.reduce(
-                            (sum: number, test: AssignmentTestDraft) =>
-                              sum + test.points,
-                            0,
-                          ),
-                        })}
-                      </>
-                    )}
-                  </form.Subscribe>
-                </h3>
-              </div>
+          <>
+            <div className="flex items-start justify-between gap-3">
+              {/* The heading doubles as the collapse toggle; the count/points
+                  summary stays visible while collapsed so a teacher can see
+                  what's configured without expanding. */}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !expanded
+                  setExpanded(next)
+                  if (next) reveal()
+                }}
+                aria-expanded={expanded}
+                className="group flex cursor-pointer items-start gap-1.5 text-start"
+              >
+                <ChevronRight
+                  aria-hidden="true"
+                  className={cx(
+                    "mt-1 size-4 shrink-0 transition-transform duration-200",
+                    expanded
+                      ? "rotate-90 group-hover:translate-y-0.5"
+                      : "ltr:group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5",
+                  )}
+                />
+                <span>
+                  <span className="block text-base font-bold">
+                    {t("assignments.autograder.heading")}
+                  </span>
+                  <span className="block text-sm opacity-70">
+                    <form.Subscribe selector={(state) => state.values.tests}>
+                      {(tests) => (
+                        <>
+                          {t("assignments.autograder.summary", {
+                            count: tests.length,
+                            points: tests.reduce(
+                              (sum: number, test: AssignmentTestDraft) =>
+                                sum + test.points,
+                              0,
+                            ),
+                          })}
+                        </>
+                      )}
+                    </form.Subscribe>
+                  </span>
+                </span>
+              </button>
               <div>
                 <Button variant="outline" onClick={openNewEditor}>
                   {t("assignments.autograder.addTest")}
                 </Button>
               </div>
             </div>
-            <table className="table">
-              <caption className="sr-only">
-                {t("assignments.autograder.heading")}
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t("assignments.autograder.testName")}</th>
-                  <th scope="col">{t("assignments.autograder.colType")}</th>
-                  <th scope="col">{t("assignments.autograder.runCommand")}</th>
-                  <th scope="col">{t("assignments.autograder.points")}</th>
-                  <th scope="col" className="w-28">
-                    <span className="sr-only">
-                      {t("assignments.autograder.colActions")}
-                    </span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {field.state.value.length === 0 ? (
+            <Collapse open={expanded} bodyRef={bodyRef}>
+              <table className="table">
+                <caption className="sr-only">
+                  {t("assignments.autograder.heading")}
+                </caption>
+                <thead>
                   <tr>
-                    <td colSpan={5}>
-                      <div className="rounded-box border border-dashed p-4 text-sm opacity-70">
-                        {t("assignments.autograder.empty")}
-                      </div>
-                    </td>
+                    <th scope="col">{t("assignments.autograder.testName")}</th>
+                    <th scope="col">{t("assignments.autograder.colType")}</th>
+                    <th scope="col">
+                      {t("assignments.autograder.runCommand")}
+                    </th>
+                    <th scope="col">{t("assignments.autograder.points")}</th>
+                    <th scope="col" className="w-28">
+                      <span className="sr-only">
+                        {t("assignments.autograder.colActions")}
+                      </span>
+                    </th>
                   </tr>
-                ) : (
-                  field.state.value.map(
-                    (test: AssignmentTestDraft, index: number) => (
-                      <tr key={index}>
-                        <td>
-                          <div className="font-bold max-w-[12rem] truncate">
-                            {test.name ||
-                              t("assignments.autograder.testFallback", {
-                                number: index + 1,
-                              })}
-                          </div>
-                        </td>
+                </thead>
+                <tbody>
+                  {field.state.value.length === 0 ? (
+                    <tr>
+                      <td colSpan={5}>
+                        <div className="rounded-box border border-dashed p-4 text-sm opacity-70">
+                          {t("assignments.autograder.empty")}
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    field.state.value.map(
+                      (test: AssignmentTestDraft, index: number) => (
+                        <tr key={index}>
+                          <td>
+                            <div className="font-bold max-w-[12rem] truncate">
+                              {test.name ||
+                                t("assignments.autograder.testFallback", {
+                                  number: index + 1,
+                                })}
+                            </div>
+                          </td>
 
-                        <td>
-                          <Badge ghost>{typeBadge(test.type, t)}</Badge>
-                        </td>
+                          <td>
+                            <Badge ghost>{typeBadge(test.type, t)}</Badge>
+                          </td>
 
-                        <td>
-                          <pre className="max-w-[12rem] truncate rounded bg-base-200 p-2 text-xs">
-                            {test.run || "-"}
-                          </pre>
-                        </td>
+                          <td>
+                            <pre className="max-w-[12rem] truncate rounded bg-base-200 p-2 text-xs">
+                              {test.run || "-"}
+                            </pre>
+                          </td>
 
-                        <td>
-                          <Badge tone="primary">{test.points}</Badge>
-                        </td>
+                          <td>
+                            <Badge tone="primary">{test.points}</Badge>
+                          </td>
 
-                        <td>
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEditEditor(index)}
-                              aria-label={t("assignments.autograder.editTest", {
-                                number: index + 1,
-                              })}
-                            >
-                              <Pencil aria-hidden="true" size={16} />
-                            </Button>
+                          <td>
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEditEditor(index)}
+                                aria-label={t(
+                                  "assignments.autograder.editTest",
+                                  {
+                                    number: index + 1,
+                                  },
+                                )}
+                              >
+                                <Pencil aria-hidden="true" size={16} />
+                              </Button>
 
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-error"
-                              onClick={() => field.removeValue(index)}
-                              aria-label={t(
-                                "assignments.autograder.removeTest",
-                                { number: index + 1 },
-                              )}
-                            >
-                              <Trash aria-hidden="true" size={16} />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ),
-                  )
-                )}
-              </tbody>
-            </table>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-error"
+                                onClick={() => field.removeValue(index)}
+                                aria-label={t(
+                                  "assignments.autograder.removeTest",
+                                  { number: index + 1 },
+                                )}
+                              >
+                                <Trash aria-hidden="true" size={16} />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ),
+                    )
+                  )}
+                </tbody>
+              </table>
+            </Collapse>
 
             {editor && (
               <AutogradingTestModal
@@ -579,10 +622,10 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                 onCommit={commitEditor}
               />
             )}
-          </Card.Body>
+          </>
         )}
       </form.Field>
-    </Card>
+    </div>
   )
 }
 

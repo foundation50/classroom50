@@ -11,7 +11,9 @@ import { TemplateField } from "../TemplateField"
 import { ToggleRow } from "../AdvancedRuntimeFields"
 import type { AssignmentForm, RepoSource } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
+import type { FormShape } from "../formShape"
 import { SectionCard } from "./SectionCard"
+import { CollapsibleAdvanced } from "./CollapsibleAdvanced"
 
 // GitHub's own reference for the repo role ladder (read/triage/write/maintain/
 // admin), linked next to the Student repo access help so teachers can see what
@@ -19,16 +21,13 @@ import { SectionCard } from "./SectionCard"
 const REPO_ROLES_DOCS_URL =
   "https://docs.github.com/en/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/repository-roles-for-an-organization#repository-roles-for-organizations"
 
-// Repository Setup (IA overhaul U5/U6 + repo-source remodel; features
-// consolidated in): mirrors GitHub's own repo-creation flow. Two columns:
-//   - Left — repo-shape config: the "Start with a template" source (default No;
-//     no template -> an "Add a README" toggle picks initialized vs. bare;
-//     a template shows the picker + an "Include all branches" toggle), then the
-//     Feedback PR toggle (decoupled from autograding — available for any
-//     non-empty repo), then Student repo access.
-//   - Right — Repository features (Wiki / Issues / Projects / Pull requests),
-//     the tri-state controls folded in from the former standalone section so
-//     all repo config lives in one card.
+// Repository Setup: the common path stays visible — the "Start with a template"
+// source (default No; no template -> an "Add a README" toggle picks initialized
+// vs. bare; a template shows the picker + an "Include all branches" toggle),
+// then the Feedback PR toggle (decoupled from autograding — available for any
+// non-empty repo). The rarer controls (copy About/Topics, feedback-PR template
+// body, student repo access override, and Repository features) move into an
+// "Advanced settings" collapsible so they don't overwhelm the common case.
 // The source choice folds into empty_repo + template on submit via
 // deriveFormShape; it stays editable on edit, but changing it only re-provisions
 // repos accepted from now on (already-accepted repos aren't retrofitted), so the
@@ -60,7 +59,7 @@ export function RepositorySetupSection({
       title={t("assignments.form.repositorySetupSection")}
       onReset={onReset}
     >
-      <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2 sm:items-start">
+      <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-4">
           {/* Repository source: template vs no template (default No). Editable
               after creation, but changing it only re-provisions repositories
@@ -149,39 +148,6 @@ export function RepositorySetupSection({
                         />
                       )}
                     </form.Field>
-
-                    {/* Copy the template's About + Topics onto each student
-                        repo at accept time (issue #569). Template-only; default
-                        off. GitHub's generate drops both, so accept re-applies. */}
-                    <form.Field name="copy_about">
-                      {(aboutField) => (
-                        <ToggleRow
-                          id={aboutField.name}
-                          checked={aboutField.state.value}
-                          onChange={(checked) =>
-                            aboutField.handleChange(checked)
-                          }
-                          onBlur={aboutField.handleBlur}
-                          label={t("assignments.form.copyAbout.label")}
-                          help={t("assignments.form.copyAbout.help")}
-                        />
-                      )}
-                    </form.Field>
-
-                    <form.Field name="copy_topics">
-                      {(topicsField) => (
-                        <ToggleRow
-                          id={topicsField.name}
-                          checked={topicsField.state.value}
-                          onChange={(checked) =>
-                            topicsField.handleChange(checked)
-                          }
-                          onBlur={topicsField.handleBlur}
-                          label={t("assignments.form.copyTopics.label")}
-                          help={t("assignments.form.copyTopics.help")}
-                        />
-                      )}
-                    </form.Field>
                   </>
                 ) : shape.showAddReadme ? (
                   <form.Field name="add_readme">
@@ -236,122 +202,189 @@ export function RepositorySetupSection({
                   )}
                 </form.Field>
 
-                {/* Use the template repo's pull_request_template.md as the
-                    Feedback PR body (feedback_pr_template). Template-only, and
-                    only when the Feedback PR is available; auto-checks when a
-                    template PR file is detected. */}
-                {shape.feedbackPrTemplateVisible ? (
-                  <form.Subscribe
-                    selector={(state) => state.values.template_repo}
-                  >
-                    {(templateRepoValue) => (
-                      <FeedbackPrTemplateToggle
-                        form={form}
-                        edit={edit}
-                        org={org}
-                        templateRepo={templateRepoValue}
-                        feedbackPrEnabled={shape.feedbackPrEnabled}
-                      />
-                    )}
-                  </form.Subscribe>
-                ) : null}
+                {/* The rarer repo config a teacher usually leaves at its
+                    default, grouped into a collapsible so the common path
+                    (source, template, Feedback PR) stays scannable. */}
+                <CollapsibleAdvanced>
+                  <RepositoryAdvancedFields
+                    form={form}
+                    edit={edit}
+                    org={org}
+                    shape={shape}
+                  />
+                </CollapsibleAdvanced>
               </>
-            )}
-          </form.Subscribe>
-
-          <form.Field name="student_permission">
-            {(field) => (
-              <form.Subscribe selector={(state) => state.values.mode}>
-                {(modeValue) => {
-                  const mode = modeValue === "group" ? "group" : "individual"
-                  const defaultLevel = defaultStudentPermission(mode)
-                  return (
-                    <FormField
-                      htmlFor={field.name}
-                      label={t("assignments.form.studentPermission.label")}
-                      help={
-                        mode === "group"
-                          ? t("assignments.form.studentPermission.groupHelp")
-                          : t("assignments.form.studentPermission.help")
-                      }
-                      labelExtra={
-                        <a
-                          className="link inline-flex items-center gap-1 text-sm font-normal text-base-content/60 hover:text-base-content"
-                          href={REPO_ROLES_DOCS_URL}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {t("assignments.form.studentPermission.learnMore")}
-                          <ExternalLink
-                            aria-hidden="true"
-                            className="size-3.5"
-                          />
-                        </a>
-                      }
-                    >
-                      {({ id, describedById }) => (
-                        <Select
-                          id={id}
-                          name={field.name}
-                          className="w-full sm:max-w-xs"
-                          aria-describedby={describedById}
-                          value={field.state.value}
-                          onBlur={field.handleBlur}
-                          onChange={(e) =>
-                            field.handleChange(
-                              e.target.value as typeof field.state.value,
-                            )
-                          }
-                        >
-                          <option value="">
-                            {t("assignments.form.studentPermission.default", {
-                              level: t(
-                                `assignments.form.studentPermission.levels.${defaultLevel}`,
-                              ),
-                            })}
-                          </option>
-                          {REPO_PERMISSIONS.map((level) => (
-                            <option key={level} value={level}>
-                              {t(
-                                `assignments.form.studentPermission.levels.${level}`,
-                              )}
-                            </option>
-                          ))}
-                        </Select>
-                      )}
-                    </FormField>
-                  )
-                }}
-              </form.Subscribe>
-            )}
-          </form.Field>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          {/* Repository features (Wiki / Issues / Projects / Pull requests):
-              the right column. RepoFeatureControls renders its own heading,
-              refresh, help, and override warning; stacked here so each select
-              gets the full column width. Wrap it in the subscription that feeds
-              it the template ref + bare-repo flag. */}
-          <form.Subscribe
-            selector={(state) => ({
-              templateRepo: state.values.template_repo.trim(),
-              emptyRepo: state.values.empty_repo,
-            })}
-          >
-            {({ templateRepo, emptyRepo }) => (
-              <RepoFeatureControls
-                form={form}
-                edit={edit}
-                org={org}
-                templateRepo={templateRepo}
-                emptyRepo={emptyRepo}
-              />
             )}
           </form.Subscribe>
         </div>
       </div>
     </SectionCard>
+  )
+}
+
+// The Advanced settings body for Repository Setup: copy About/Topics from the
+// template, the template's PR template as the Feedback PR body, the student
+// repo-access override, and the repository features. Split out so the
+// disclosure's contents don't nest under the section's render-prop chain.
+function RepositoryAdvancedFields({
+  form,
+  edit,
+  org,
+  shape,
+}: {
+  form: AssignmentForm
+  edit: boolean
+  org?: string
+  shape: FormShape
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col gap-4 pt-2">
+      {/* Copy the template's About + Topics onto each student repo at accept
+          time (issue #569). Template-only; GitHub's generate drops both, so
+          accept re-applies. */}
+      {shape.showTemplateFields ? (
+        <>
+          <form.Field name="copy_about">
+            {(field) => (
+              <ToggleRow
+                id={field.name}
+                checked={field.state.value}
+                onChange={(checked) => field.handleChange(checked)}
+                onBlur={field.handleBlur}
+                label={t("assignments.form.copyAbout.label")}
+                help={t("assignments.form.copyAbout.help")}
+              />
+            )}
+          </form.Field>
+
+          <form.Field name="copy_topics">
+            {(field) => (
+              <ToggleRow
+                id={field.name}
+                checked={field.state.value}
+                onChange={(checked) => field.handleChange(checked)}
+                onBlur={field.handleBlur}
+                label={t("assignments.form.copyTopics.label")}
+                help={t("assignments.form.copyTopics.help")}
+              />
+            )}
+          </form.Field>
+        </>
+      ) : null}
+
+      {/* Template-only, and only when the Feedback PR is available; auto-checks
+          when a template PR file is detected. */}
+      {shape.feedbackPrTemplateVisible ? (
+        <form.Subscribe selector={(state) => state.values.template_repo}>
+          {(templateRepoValue) => (
+            <FeedbackPrTemplateToggle
+              form={form}
+              edit={edit}
+              org={org}
+              templateRepo={templateRepoValue}
+              feedbackPrEnabled={shape.feedbackPrEnabled}
+            />
+          )}
+        </form.Subscribe>
+      ) : null}
+
+      <StudentPermissionField form={form} />
+
+      {/* RepoFeatureControls renders its own heading, refresh, help, and
+          override warning; the subscription feeds it the template ref +
+          bare-repo flag. */}
+      <div className="pt-1">
+        <form.Subscribe
+          selector={(state) => ({
+            templateRepo: state.values.template_repo.trim(),
+            emptyRepo: state.values.empty_repo,
+          })}
+        >
+          {({ templateRepo, emptyRepo }) => (
+            <RepoFeatureControls
+              form={form}
+              edit={edit}
+              org={org}
+              templateRepo={templateRepo}
+              emptyRepo={emptyRepo}
+            />
+          )}
+        </form.Subscribe>
+      </div>
+    </div>
+  )
+}
+
+// The student repo-access override. The empty choice means "no override": its
+// label names the level the assignment type would grant anyway (admin for
+// group, so the owner can add teammates; write otherwise).
+function StudentPermissionField({ form }: { form: AssignmentForm }) {
+  const { t } = useTranslation()
+  return (
+    <form.Field name="student_permission">
+      {(field) => (
+        <form.Subscribe selector={(state) => state.values.mode}>
+          {(modeValue) => {
+            const mode = modeValue === "group" ? "group" : "individual"
+            const defaultLevel = defaultStudentPermission(mode)
+            return (
+              <FormField
+                htmlFor={field.name}
+                label={t("assignments.form.studentPermission.label")}
+                help={t(
+                  mode === "group"
+                    ? "assignments.form.studentPermission.groupHelp"
+                    : "assignments.form.studentPermission.help",
+                )}
+                labelExtra={
+                  <a
+                    className="link inline-flex items-center gap-1 text-sm font-normal text-base-content/60 hover:text-base-content"
+                    href={REPO_ROLES_DOCS_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t("assignments.form.studentPermission.learnMore")}
+                    <ExternalLink aria-hidden="true" className="size-3.5" />
+                  </a>
+                }
+              >
+                {({ id, describedById }) => (
+                  <Select
+                    id={id}
+                    name={field.name}
+                    className="w-full sm:max-w-xs"
+                    aria-describedby={describedById}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) =>
+                      field.handleChange(
+                        e.target.value as typeof field.state.value,
+                      )
+                    }
+                  >
+                    <option value="">
+                      {t("assignments.form.studentPermission.default", {
+                        level: t(
+                          `assignments.form.studentPermission.levels.${defaultLevel}`,
+                        ),
+                      })}
+                    </option>
+                    {REPO_PERMISSIONS.map((level) => (
+                      <option key={level} value={level}>
+                        {t(
+                          `assignments.form.studentPermission.levels.${level}`,
+                        )}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </FormField>
+            )
+          }}
+        </form.Subscribe>
+      )}
+    </form.Field>
   )
 }
 

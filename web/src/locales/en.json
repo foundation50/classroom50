@@ -1107,7 +1107,7 @@
       "detailsSection": "Details",
       "repositorySetupSection": "Repository setup",
       "submissionSection": "Submission and grading",
-      "submissionSectionHelp": "Define what counts as a submission for this assignment — when the autograder runs and which tags a student can push to submit.",
+      "submissionSectionHelp": "Define what counts as a submission for this assignment: when the autograder runs and which tags a student can push to submit.",
       "scheduleSection": "Schedule",
       "reset": "Reset",
       "resetSection": "Reset this section to its default settings",
@@ -1127,17 +1127,17 @@
       "dueDateTz": "Times are in your local timezone ({{tz}}).",
       "availableFrom": "Release date ({{tz}})",
       "setAvailableFrom": "Set a release date",
-      "setAvailableFromTip": "Assignments are hidden from the student assignments page by default — students can only accept via the invite link. Set a release date to list it for everyone once the date passes. Students who already accepted always see it. This controls listing only, not access.",
+      "setAvailableFromTip": "Assignments are hidden from the student assignments page by default, so students can only accept via the invite link. Set a release date to list it for everyone once the date passes. Students who already accepted always see it. This controls listing only, not access.",
       "availableFromTz": "Times are in your local timezone ({{tz}}).",
       "type": "Assignment type",
       "typeIndividual": "Individual",
       "typeGroup": "Group project",
-      "typeLockedHelp": "Can't be changed after creation — switching it would invalidate existing submissions.",
+      "typeLockedHelp": "Can't be changed after creation. Switching it would invalidate existing submissions.",
       "maxGroupSize": "Max group size",
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
       "repoSource": {
         "label": "Start with a template",
-        "editHelp": "Changing the repository source only affects repositories students accept from now on. Repositories already accepted keep their original starter content — you'll need to reconcile any difference yourself.",
+        "editHelp": "Changing the repository source only affects repositories students accept from now on. Repositories already accepted keep their original starter content, so you'll need to reconcile any difference yourself.",
         "none": {
           "label": "No template",
           "help": "Create a fresh repository for each student."
@@ -1149,8 +1149,8 @@
       },
       "addReadme": {
         "label": "Add a README",
-        "helpOn": "Initialize each repository with a README.md, creating an initial commit so branches, pull requests, and the Feedback PR work.",
-        "helpOff": "Create an empty repository with no initial commit. Autograding and the Feedback PR are unavailable until the student's first commit."
+        "helpOn": "Start each repository with a README.md. This first commit is what lets branches, pull requests, and the Feedback PR work.",
+        "helpOff": "Start with an empty repository. Autograding and the Feedback PR stay unavailable until the student's first commit."
       },
       "includeAllBranches": {
         "label": "Include all branches",
@@ -1165,8 +1165,8 @@
         "help": "Copy the template's topics onto each student repository. GitHub does not copy them automatically. This applies to students who accept from now on; repositories already created are not changed."
       },
       "feedbackPr": "Feedback pull request",
-      "feedbackPrHelp": "Open a pull request per repo for inline review of each submission.",
-      "feedbackPrEmptyRepoHelp": "Unavailable for empty repositories. There is no starter commit to diff against.",
+      "feedbackPrHelp": "Open a pull request in each student's repository for inline review and comments on their work.",
+      "feedbackPrEmptyRepoHelp": "Unavailable for empty repositories: there's no starter commit to compare a student's work against.",
       "feedbackPrTemplate": {
         "label": "Use the template's pull request template as the Feedback PR body",
         "help": "Use the template repository's pull request template (.github/pull_request_template.md) as the body of each student's Feedback PR instead of the built-in one. You are responsible for the template's contents. If the file is missing or unreadable, the built-in body is used.",
@@ -1178,7 +1178,7 @@
         "learnMore": "Learn more",
         "help": "The role each student is granted on their own assignment repository at accept time. Push (write) is the default. Choose Admin to let students manage repository settings and enable GitHub Pages. This applies to students who accept from now on; use the gradebook to change repositories already created.",
         "groupHelp": "Group members join with at least admin so the group owner can add teammates. This applies to repositories created from now on; use the gradebook to change existing ones.",
-        "default": "Default ({{level}})",
+        "default": "Default: {{level}}",
         "levels": {
           "pull": "Read (pull)",
           "triage": "Triage",
@@ -1188,25 +1188,22 @@
         }
       },
       "autograding": {
-        "label": "Autograding",
-        "notAutogradedNote": "Autograding options apply only when this assignment is set to \"Autograded\" in the Submission and grading section above. Change the grading choice to Autograded to configure the autograder.",
         "modeLabel": "Built-in autograder",
-        "editHelp": "Changing the built-in autograder only affects repositories students accept from now on. Repositories already accepted keep their original setup — you'll need to reconcile any difference yourself.",
+        "editHelp": "Changing the built-in autograder only affects repositories students accept from now on. Repositories already accepted keep their original setup, so you'll need to reconcile any difference yourself.",
         "choices": {
           "none": {
             "label": "Do not use the built-in autograder",
-            "help": "No autograder shim is committed. With a template, supply your own workflow in the template (it must publish a result.json asset on the submission release). Without a template, the repository simply has no autograder."
+            "help": "Grade with your own GitHub Actions workflow instead. With a template, add the workflow to it; without one, the assignment has no autograder."
           },
           "built-in": {
             "label": "Use the built-in autograder",
-            "help": "Commit the built-in autograder shim, then configure the runtime and declarative tests below."
+            "help": "Set up the built-in autograder, then add the tests and runtime below."
           }
         }
       },
       "grading": {
         "label": "Grading",
         "help": "How this assignment is graded. \"Autograded\" runs the autograder you configure below. \"Manual\" lets you enter each student's score by hand on the submissions page. \"Not graded\" records no score.",
-        "autoNote": "This assignment is autograded. Configure the autograder in the Autograding section below. Whether you use the built-in autograder or supply your own workflow, it must publish a result.json asset on the submission release — that file is what the app reads to show scores.",
         "choices": {
           "off": "Not graded",
           "auto": "Autograded",
@@ -1217,14 +1214,10 @@
           "help": "Total points available for this manual assignment. Used to show each student's score out of the maximum."
         }
       },
-      "submissions": {
-        "heading": "Submissions",
-        "help": "How the submissions page detects and counts each student's work. The autograder uses the same definition."
-      },
       "submissionMode": {
         "label": "Submission type",
-        "help": "\"Every push to the default branch\" counts each push (other than the starting commit). \"A tagged commit\" counts only tagged commits — a student submits with gh student submit or by pushing a tag, so ordinary pushes cost no Actions minutes.",
-        "editWarning": "Changing this only affects repositories created from now on. Repositories students already accepted keep the old setting until you update them — use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
+        "help": "\"Every push to the default branch\" counts each push after the starter commit. \"A tagged commit\" counts only tagged commits, so ordinary pushes use no Actions minutes; a student submits by pushing a tag or running gh student submit.",
+        "editWarning": "Changing this only affects repositories created from now on. Repositories students already accepted keep the old setting until you update them. Use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
         "choices": {
           "everyPush": "Every push to the default branch",
           "tag": "A tagged commit"
@@ -1232,9 +1225,9 @@
       },
       "submissionTags": {
         "label": "Submission tags",
-        "help": "Optional tag names (one per line) whose commits also count — e.g. phase1, phase2. Patterns like v* match a family of tags. Leave empty for none.",
+        "help": "Optional tag names (one per line) whose commits also count, e.g. phase1, phase2. Patterns like v* match a family of tags. Leave empty for none.",
         "wildcardCaution": "A broad pattern like v* matches every tag a student pushes, including unrelated release tags. Prefer exact names like phase1.",
-        "commaHint": "Put one tag per line, not a comma-separated list — a comma becomes part of the tag name and will be rejected."
+        "commaHint": "Put one tag per line, not a comma-separated list. A comma becomes part of the tag name and will be rejected."
       },
       "repoFeatures": {
         "heading": "Repository features",
@@ -1246,7 +1239,7 @@
         "overrideNoTemplate": "The default keeps GitHub's own repository defaults.",
         "overrideExisting": "To update repositories students already accepted, use the bulk repository-features action on the submissions page.",
         "choices": {
-          "default": "Default (GitHub default)",
+          "default": "GitHub default",
           "inherit": "Inherit from template",
           "inheritLoading": "Inherit from template (checking…)",
           "inheritOn": "Inherit from template (currently on)",
@@ -1305,10 +1298,10 @@
         "selfHostedMatch_one": "Self-hosted runner match ({{names}})",
         "selfHostedMatch_other": "Self-hosted runners match ({{names}})",
         "selfHostedLabels": "Self-hosted runner labels",
-        "invalidLabel": "Invalid label {{labels}} — letters, numbers, . - _ only.",
-        "noRunnerMatch": "No runner matches {{labels}} — check the spelling.",
-        "tooMany": "Too many labels ({{count}}) — 10 max.",
-        "cannotVerify": "Can't verify — used as entered."
+        "invalidLabel": "Invalid label {{labels}}: letters, numbers, . - _ only.",
+        "noRunnerMatch": "No runner matches {{labels}}. Check the spelling.",
+        "tooMany": "Too many labels ({{count}}); 10 max.",
+        "cannotVerify": "Can't verify; used as entered."
       },
       "runtime": {
         "envLegend": "Runtime environment",
@@ -1318,7 +1311,7 @@
         "envContainerHelp": "Grades inside a public Docker image (it owns the OS packages).",
         "languagesHeading": "Language versions",
         "languagesTip": "Pick a version to install that toolchain (for example Node 26, Java 25), or type a custom one. A blank field skips it. Python defaults to 3.14 when blank on the hosted runner. You can enable as many toolchains as you need.",
-        "selfHostedDisabled": "Ignored on a self-hosted runner — it uses its own prebuilt toolchains and packages. Provision these in the runner image instead.",
+        "selfHostedDisabled": "Ignored on a self-hosted runner, which uses its own prebuilt toolchains and packages. Provision these in the runner image instead.",
         "versionPlaceholder": "e.g., {{version}}",
         "versionTip": "The {{language}} version to install (via the setup-{{language}} action). Leave blank to skip it. You can type any version the setup action accepts.",
         "versionMenu": "Choose a {{language}} version",
@@ -1327,7 +1320,7 @@
         "aptTip": "Extra Ubuntu packages installed (apt-get) before grading, comma- or space-separated. Lowercase Debian package names.",
         "aptCount_one": "{{count}} package",
         "aptCount_other": "{{count}} packages",
-        "runnerContainerError": "\"{{label}}\" is a macOS/Windows runner — a Docker image needs an Ubuntu (or custom/self-hosted) runner."
+        "runnerContainerError": "\"{{label}}\" is a macOS/Windows runner; a Docker image needs an Ubuntu (or custom/self-hosted) runner."
       },
       "validation": {
         "nameRequired": "Assignment name is required.",
@@ -1362,17 +1355,17 @@
       "testNamePlaceholder": "e.g., Prints hello",
       "testType": "Test type",
       "setupCommand": "Setup command",
-      "setupCommandPlaceholder": "optional — e.g., gcc -o hello hello.c",
+      "setupCommandPlaceholder": "optional, e.g., gcc -o hello hello.c",
       "runCommand": "Run command",
       "runCommandPlaceholder": "e.g., ./hello or python3 main.py",
       "input": "Input (stdin)",
-      "inputPlaceholder": "optional — text fed to the command on stdin",
+      "inputPlaceholder": "optional: text fed to the command on stdin",
       "expectedOutput": "Expected output",
       "expectedOutputPlaceholder": "Expected stdout",
       "comparison": "Comparison",
-      "comparisonIncluded": "Included — expected appears anywhere in the output",
-      "comparisonExact": "Exact — output equals expected (surrounding whitespace ignored)",
-      "comparisonRegex": "Regex — Python re.search, multiline",
+      "comparisonIncluded": "Included: expected appears anywhere in the output",
+      "comparisonExact": "Exact: output equals expected (surrounding whitespace ignored)",
+      "comparisonRegex": "Regex: Python re.search, multiline",
       "exitCode": "Required exit code",
       "exitCodeHint": "Leave empty to require a successful exit (0).",
       "pythonNote": "The run command should invoke pytest (e.g., <code>python3 -m pytest -q</code>) against test files in the assignment template. pytest and pytest-json-report are installed automatically. Points are split across the cases pytest discovers.",
@@ -1674,8 +1667,8 @@
     "manageCollaborators": "Manage collaborators",
     "provisioningConfirm": {
       "title": "Change provisioning settings after students accepted?",
-      "body_one": "{{count}} student has already accepted this assignment. This change only affects repositories accepted from now on — the {{count}} existing repository keeps its original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the gradebook; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to reconcile any inconsistency yourself.",
-      "body_other": "{{count}} students have already accepted this assignment. This change only affects repositories accepted from now on — the {{count}} existing repositories keep their original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the gradebook; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to reconcile any inconsistency yourself.",
+      "body_one": "{{count}} student has already accepted this assignment. This change only affects repositories accepted from now on; the {{count}} existing repository keeps its original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the gradebook; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to reconcile any inconsistency yourself.",
+      "body_other": "{{count}} students have already accepted this assignment. This change only affects repositories accepted from now on; the {{count}} existing repositories keep their original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the gradebook; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to reconcile any inconsistency yourself.",
       "confirm": "Save changes anyway",
       "cancel": "Cancel"
     }

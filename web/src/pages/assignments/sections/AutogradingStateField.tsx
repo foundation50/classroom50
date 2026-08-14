@@ -3,15 +3,15 @@ import { Alert, FormField } from "@/components/ui"
 import type { AssignmentForm } from "../assignmentFormModel"
 import type { AutogradingState } from "@/domain/assignments/autogradingState"
 
-// The built-in-autograder selector inside the Autograding section. Only shown
-// once grading is "Autograded" (the section swaps to a note otherwise), it
-// offers two radios in this order — "none" first and DEFAULT:
+// The built-in-autograder selector inside the Submission and grading section.
+// Only shown once grading is "Autograded", it offers two radios in this order —
+// "built-in" first and the default when a teacher first switches to Autograded:
+//   - built-in  : the default-shim path; reveals the declarative tests and the
+//                 advanced settings (the caller gates those on
+//                 deriveFormShape().showBuiltInConfig).
 //   - none      : do NOT use the built-in autograder. Templated -> teacher-
 //                 supplied CI (no_autograder on the wire); template-less ->
 //                 there's simply no autograder (empty_repo / a plain repo).
-//   - built-in  : the default-shim path; reveals the advanced settings and
-//                 declarative tests (the caller gates those on
-//                 deriveFormShape().showBuiltInConfig).
 //
 // Built-in is selectable on ANY repository source, including a no-template
 // no-README repo: on that source, picking built-in commits the shim onto an
@@ -19,11 +19,11 @@ import type { AutogradingState } from "@/domain/assignments/autogradingState"
 // wire mapping (deriveFormShape + toSubmitValues) folds it to init_shim /
 // no_autograder accordingly.
 //
-// Editable after creation: the none<->built-in choice maps to no_autograder /
+// Editable after creation: the built-in<->none choice maps to no_autograder /
 // init_shim. The domain layer allows changing it; the edit form warns before
 // saving when students have already accepted (already-accepted repos aren't
 // retrofitted). The radios stay interactive in edit mode with an inline caveat.
-const SELECTABLE: readonly AutogradingState[] = ["none", "built-in"]
+const SELECTABLE: readonly AutogradingState[] = ["built-in", "none"]
 
 export function AutogradingStateField({
   form,

@@ -31,6 +31,20 @@ import type { Assignment } from "@/types/classroom"
 
 afterEach(cleanup)
 
+// Open an "Advanced settings" disclosure. The disclosures are controlled
+// buttons whose bodies unmount when collapsed (so height can animate), so a
+// test that asserts on an advanced field has to open it first. `which` picks by
+// document order: Repository Setup's renders before the autograder's.
+const openAdvanced = async (
+  user: ReturnType<typeof userEvent.setup>,
+  which: "repository" | "autograder",
+) => {
+  const toggles = screen.getAllByText("assignments.form.advanced")
+  const toggle = which === "repository" ? toggles[0] : toggles.at(-1)
+  if (!toggle) throw new Error(`${which} advanced disclosure not found`)
+  await user.click(toggle)
+}
+
 const baseAssignment: Assignment = {
   slug: "hw1",
   name: "Homework 1",
@@ -300,8 +314,10 @@ describe("submission release files visibility", () => {
       </QueryClientProvider>,
     )
 
-  it("renders the textarea for an ordinary assignment", () => {
+  it("renders the textarea for an ordinary assignment", async () => {
+    const user = userEvent.setup()
     const { container } = renderForm()
+    await openAdvanced(user, "autograder")
     expect(container.querySelector("#release_assets")).not.toBeNull()
   })
 
@@ -310,6 +326,8 @@ describe("submission release files visibility", () => {
       empty_repo: true,
       release_assets: "../bad.pdf",
     })
+    // A bare repo has no built-in autograder, so there's no advanced pane to
+    // open and the field can't be reached at all.
     expect(container.querySelector("#release_assets")).toBeNull()
   })
 })
@@ -339,10 +357,9 @@ describe("assignment setup timeout", () => {
       </QueryClientProvider>,
     )
 
-    const advancedSummary = screen
-      .getByText("assignments.form.advanced")
-      .closest("summary")
-    await user.click(advancedSummary!)
+    // Open the disclosure that owns the setup timeout (two "Advanced settings"
+    // disclosures exist: Repository Setup's and the autograder's).
+    await openAdvanced(user, "autograder")
 
     const timeout = screen.getByLabelText(
       "assignments.form.setupTimeout",
@@ -381,11 +398,7 @@ describe("assignment setup timeout", () => {
       </QueryClientProvider>,
     )
 
-    const advancedSummary = screen
-      .getByText("assignments.form.advanced")
-      .closest("summary")
-    expect(advancedSummary).not.toBeNull()
-    await user.click(advancedSummary!)
+    await openAdvanced(user, "autograder")
 
     const command = screen.getByLabelText(
       "assignments.form.setupCommand",
@@ -555,8 +568,10 @@ describe("self-hosted disables built-in runtime options", () => {
   const aptInput = (container: HTMLElement) =>
     container.querySelector<HTMLInputElement>("#runtime_apt")!
 
-  it("hosted runner keeps language + apt fields enabled", () => {
+  it("hosted runner keeps language + apt fields enabled", async () => {
+    const user = userEvent.setup()
     const { container } = renderForm({ runs_on: "ubuntu-latest" })
+    await openAdvanced(user, "autograder")
     expect(pythonInput(container).disabled).toBe(false)
     expect(aptInput(container).disabled).toBe(false)
     expect(
@@ -564,8 +579,10 @@ describe("self-hosted disables built-in runtime options", () => {
     ).toBeNull()
   })
 
-  it("self-hosted runner disables language + apt fields and shows the note", () => {
+  it("self-hosted runner disables language + apt fields and shows the note", async () => {
+    const user = userEvent.setup()
     const { container } = renderForm({ runs_on: "self-hosted, linux, x64" })
+    await openAdvanced(user, "autograder")
     expect(pythonInput(container).disabled).toBe(true)
     expect(aptInput(container).disabled).toBe(true)
     expect(
@@ -597,18 +614,18 @@ describe("grading drives the autograding config", () => {
       </QueryClientProvider>,
     )
 
-  it("create default is 'off' (not graded): no autograding config, shows the note", () => {
+  it("create default is 'off' (not graded): no autograding config at all", () => {
     const { container } = renderForm()
     // The grading select defaults to "off".
     const grading =
       container.querySelector<HTMLSelectElement>("#grading_choice")
     expect(grading?.value).toBe("off")
-    // Autograding config (Advanced release_assets, tests) is hidden; the
-    // not-autograded note is shown instead.
+    // The autograder config is folded into this section and only rendered when
+    // Autograded: no built-in radios, no advanced fields, and no note.
     expect(container.querySelector("#release_assets")).toBeNull()
     expect(
-      screen.getByText("assignments.form.autograding.notAutogradedNote"),
-    ).not.toBeNull()
+      container.querySelector('input[name="autograding_state"]'),
+    ).toBeNull()
   })
 
   it("Manual grading also hides the autograding config", () => {
@@ -617,30 +634,28 @@ describe("grading drives the autograding config", () => {
     })
     expect(container.querySelector("#release_assets")).toBeNull()
     expect(
-      screen.getByText("assignments.form.autograding.notAutogradedNote"),
-    ).not.toBeNull()
+      container.querySelector('input[name="autograding_state"]'),
+    ).toBeNull()
   })
 
   it("Autograded shows the built-in toggle; config stays hidden until built-in is selected", async () => {
     const user = userEvent.setup()
-    const { container } = renderForm({
+    renderForm({
       defaultValues: {
         repo_source: "none",
         add_readme: true,
         grading_choice: "auto",
       },
     })
-    // Autograded offers the built-in-autograder toggle instead of the note.
-    expect(
-      screen.queryByText("assignments.form.autograding.notAutogradedNote"),
-    ).toBeNull()
+    // Autograded reveals the built-in-autograder radios.
     expect(
       screen.getByRole("radio", {
         name: /assignments\.form\.autograding\.choices\.none\.label/,
       }),
     ).not.toBeNull()
-    // Built-in is off by default, so the config (release_assets) is hidden.
-    expect(container.querySelector("#release_assets")).toBeNull()
+    // With autograding_state seeded to "none" (not built-in), the built-in
+    // config (the tests list + advanced pane) is hidden.
+    expect(screen.queryByText("assignments.autograder.heading")).toBeNull()
 
     // Selecting "Use the built-in autograder" reveals the config.
     await user.click(
@@ -648,11 +663,11 @@ describe("grading drives the autograding config", () => {
         name: /assignments\.form\.autograding\.choices\.built-in\.label/,
       }),
     )
-    expect(container.querySelector("#release_assets")).not.toBeNull()
+    expect(screen.getByText("assignments.autograder.heading")).not.toBeNull()
   })
 
   it("Autograded + built-in preselected reveals the autograding config", () => {
-    const { container } = renderForm({
+    renderForm({
       defaultValues: {
         repo_source: "none",
         add_readme: true,
@@ -660,10 +675,78 @@ describe("grading drives the autograding config", () => {
         autograding_state: "built-in",
       },
     })
-    expect(container.querySelector("#release_assets")).not.toBeNull()
+    expect(screen.getByText("assignments.autograder.heading")).not.toBeNull()
+  })
+
+  it("seeds the built-in autograder when grading switches into Autograded", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm({
+      defaultValues: { repo_source: "none", add_readme: true },
+    })
+    // Starts Not graded: no autograder config.
     expect(
-      screen.queryByText("assignments.form.autograding.notAutogradedNote"),
+      container.querySelector('input[name="autograding_state"]'),
     ).toBeNull()
+    // Switch grading to Autograded — built-in is seeded as the default, so the
+    // config (the tests list) appears without an extra click.
+    const grading =
+      container.querySelector<HTMLSelectElement>("#grading_choice")!
+    await user.selectOptions(grading, "auto")
+    const builtIn = screen.getByRole<HTMLInputElement>("radio", {
+      name: /assignments\.form\.autograding\.choices\.built-in\.label/,
+    })
+    expect(builtIn.checked).toBe(true)
+    expect(screen.getByText("assignments.autograder.heading")).not.toBeNull()
+  })
+
+  it("keeps a deliberate 'none' across a grading round-trip", async () => {
+    // Seeding is a first-entry default, not an override: once the teacher picks
+    // teacher-supplied CI, leaving Autograded and coming back must not silently
+    // re-seed the built-in autograder.
+    const user = userEvent.setup()
+    const { container } = renderForm({
+      defaultValues: { repo_source: "none", add_readme: true },
+    })
+    const grading =
+      container.querySelector<HTMLSelectElement>("#grading_choice")!
+    await user.selectOptions(grading, "auto")
+    // Deliberately switch off the built-in autograder.
+    await user.click(
+      screen.getByRole("radio", {
+        name: /assignments\.form\.autograding\.choices\.none\.label/,
+      }),
+    )
+    expect(screen.queryByText("assignments.autograder.heading")).toBeNull()
+    // Round-trip the grading choice.
+    await user.selectOptions(grading, "manual")
+    await user.selectOptions(grading, "auto")
+    expect(
+      screen.getByRole<HTMLInputElement>("radio", {
+        name: /assignments\.form\.autograding\.choices\.none\.label/,
+      }).checked,
+    ).toBe(true)
+    expect(screen.queryByText("assignments.autograder.heading")).toBeNull()
+  })
+
+  it("leaves a stored built-in choice untouched when re-entering Autograded", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm({
+      edit: true,
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "manual",
+        autograding_state: "built-in",
+      },
+    })
+    const grading =
+      container.querySelector<HTMLSelectElement>("#grading_choice")!
+    await user.selectOptions(grading, "auto")
+    expect(
+      screen.getByRole<HTMLInputElement>("radio", {
+        name: /assignments\.form\.autograding\.choices\.built-in\.label/,
+      }).checked,
+    ).toBe(true)
   })
 
   it("keeps the built-in autograder radios editable on edit", () => {
@@ -801,12 +884,12 @@ describe("assignment form section IA", () => {
     )
 
   // The Submission and Grading section now always renders (grading applies to
-  // any assignment), between Repository Setup and Autograding.
+  // any assignment) and, when Autograded, folds in the autograder config. The
+  // former standalone Autograding section is gone, so there are four cards.
   const baseSectionTitleKeys = [
     "assignments.form.detailsSection",
     "assignments.form.repositorySetupSection",
     "assignments.form.submissionSection",
-    "assignments.form.autograding.label",
     "assignments.form.scheduleSection",
   ]
 
@@ -903,6 +986,22 @@ describe("assignment form section IA", () => {
     expect(
       screen.getByText("assignments.form.submissionTags.label"),
     ).not.toBeNull()
+  })
+
+  it("keeps the advanced repository fields reachable in the disclosure", async () => {
+    // The rarer repo controls moved inside the Advanced settings disclosure;
+    // opening it must reveal them, so a regression that dropped them from the
+    // collapsible is caught here.
+    const user = userEvent.setup()
+    const { container } = renderForm({
+      defaultValues: { repo_source: "template", template_repo: "org/tmpl" },
+    })
+    expect(container.querySelector("#copy_about")).toBeNull()
+    await openAdvanced(user, "repository")
+    expect(container.querySelector("#copy_about")).not.toBeNull()
+    expect(container.querySelector("#copy_topics")).not.toBeNull()
+    expect(container.querySelector("#student_permission")).not.toBeNull()
+    expect(container.querySelector("#repo_feature_issues")).not.toBeNull()
   })
 
   it("shows no per-section Reset control on a fresh create form", () => {
