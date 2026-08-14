@@ -37,6 +37,7 @@ export function RepositorySetupSection({
   org,
   classroom,
   slug,
+  hasAcceptedStudents = false,
 }: {
   form: AssignmentForm
   edit: boolean
@@ -44,6 +45,10 @@ export function RepositorySetupSection({
   org?: string
   classroom?: string
   slug?: string
+  // Edit mode: whether any student has already accepted. Gates the
+  // repo-source change caveat so it shows only when a change would strand
+  // existing repos.
+  hasAcceptedStudents?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -92,10 +97,13 @@ export function RepositorySetupSection({
                     </label>
                   ))}
                 </div>
-                {edit ? (
-                  <p className="mt-1.5 text-sm text-base-content/70">
-                    {t("assignments.form.repoSource.editHelp")}
-                  </p>
+                {edit &&
+                hasAcceptedStudents &&
+                field.state.value !==
+                  (form.options.defaultValues?.repo_source ?? "none") ? (
+                  <Alert tone="warning" role="status" className="mt-2 text-sm">
+                    <span>{t("assignments.form.repoSource.editHelp")}</span>
+                  </Alert>
                 ) : null}
               </fieldset>
             )}

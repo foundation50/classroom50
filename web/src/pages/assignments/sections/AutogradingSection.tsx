@@ -20,13 +20,16 @@ export function AutogradingSection({
   onReset,
   org,
   edit = false,
+  hasAcceptedStudents = false,
 }: {
   form: AssignmentForm
   onReset?: () => void
   org?: string
-  // On edit the built-in choice is locked (it maps to no_autograder/init_shim,
-  // which the domain layer refuses to change after creation).
+  // On edit the built-in choice maps to no_autograder/init_shim. It's editable,
+  // but changing it only affects future accepts, so the caveat shows when
+  // students have already accepted.
   edit?: boolean
+  hasAcceptedStudents?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -43,7 +46,11 @@ export function AutogradingSection({
             </Alert>
           ) : (
             <div className="flex flex-col gap-6">
-              <AutogradingStateField form={form} edit={edit} />
+              <AutogradingStateField
+                form={form}
+                edit={edit}
+                hasAcceptedStudents={hasAcceptedStudents}
+              />
               {shape.showBuiltInConfig ? (
                 <>
                   <div className="divider my-0" />

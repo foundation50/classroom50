@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { FormField } from "@/components/ui"
+import { Alert, FormField } from "@/components/ui"
 import type { AssignmentForm } from "../assignmentFormModel"
 import type { AutogradingState } from "@/domain/assignments/autogradingState"
 
@@ -28,9 +28,14 @@ const SELECTABLE: readonly AutogradingState[] = ["none", "built-in"]
 export function AutogradingStateField({
   form,
   edit,
+  hasAcceptedStudents = false,
 }: {
   form: AssignmentForm
   edit: boolean
+  // Edit mode: whether any student has already accepted. Gates the
+  // built-in-autograder change caveat so it shows only when a change would
+  // strand existing repos.
+  hasAcceptedStudents?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -41,6 +46,14 @@ export function AutogradingStateField({
         // (no built-in autograder) since the two radios are none/built-in.
         const selected: AutogradingState =
           field.state.value === "built-in" ? "built-in" : "none"
+        // The stored choice mapped the same way, so a change is only real when
+        // the none/built-in selection actually flips (a stored "empty" that
+        // stays "none" is not a change).
+        const defaultSelected: AutogradingState =
+          form.options.defaultValues?.autograding_state === "built-in"
+            ? "built-in"
+            : "none"
+        const changed = selected !== defaultSelected
         return (
           <FormField
             htmlFor={field.name}
@@ -81,10 +94,10 @@ export function AutogradingStateField({
                     </label>
                   ))}
                 </fieldset>
-                {edit ? (
-                  <p className="mt-1.5 text-sm text-base-content/70">
-                    {t("assignments.form.autograding.editHelp")}
-                  </p>
+                {edit && hasAcceptedStudents && changed ? (
+                  <Alert tone="warning" role="status" className="mt-2 text-sm">
+                    <span>{t("assignments.form.autograding.editHelp")}</span>
+                  </Alert>
                 ) : null}
               </div>
             )}

@@ -130,6 +130,7 @@ const EditAssignmentForm = ({
             org={org}
             classroom={classroom}
             slug={assignment}
+            hasAcceptedStudents={acceptedCount > 0}
             onCancel={onCancel}
             defaultValues={assignmentToFormValues(defaultData)}
             onSubmit={async (values) => {

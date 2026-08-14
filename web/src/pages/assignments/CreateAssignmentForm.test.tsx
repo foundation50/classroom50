@@ -557,6 +557,7 @@ describe("grading drives the autograding config", () => {
     props: {
       edit?: boolean
       defaultValues?: Partial<CreateAssignmentFormValues>
+      hasAcceptedStudents?: boolean
     } = {},
   ) =>
     render(
@@ -564,6 +565,7 @@ describe("grading drives the autograding config", () => {
         <CreateAssignmentForm
           edit={props.edit}
           defaultValues={props.defaultValues}
+          hasAcceptedStudents={props.hasAcceptedStudents}
           onSubmit={() => {}}
         />
       </QueryClientProvider>,
@@ -638,10 +640,10 @@ describe("grading drives the autograding config", () => {
     ).toBeNull()
   })
 
-  it("keeps the built-in autograder radios editable on edit (with a caveat)", () => {
+  it("keeps the built-in autograder radios editable on edit", () => {
     // On edit the built-in choice maps to no_autograder/init_shim. It's now
-    // mutable — the radios render enabled with an edit caveat, and the edit form
-    // confirms before saving when students have already accepted.
+    // mutable — the radios render enabled (the caveat is conditional; see the
+    // dedicated caveat tests below).
     const { container } = renderForm({
       edit: true,
       defaultValues: {
@@ -656,9 +658,102 @@ describe("grading drives the autograding config", () => {
     )
     expect(radios.length).toBe(2)
     radios.forEach((radio) => expect(radio.disabled).toBe(false))
+  })
+
+  it("hides the built-in-autograder caveat until the choice changes, even with accepters", async () => {
+    const user = userEvent.setup()
+    renderForm({
+      edit: true,
+      hasAcceptedStudents: true,
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "auto",
+        autograding_state: "none",
+      },
+    })
+    // Unchanged: no caveat, even though students have accepted.
+    expect(
+      screen.queryByText("assignments.form.autograding.editHelp"),
+    ).toBeNull()
+    // Flipping the choice surfaces the caveat.
+    await user.click(
+      screen.getByRole("radio", {
+        name: /assignments\.form\.autograding\.choices\.built-in\.label/,
+      }),
+    )
     expect(
       screen.getByText("assignments.form.autograding.editHelp"),
     ).not.toBeNull()
+  })
+
+  it("hides the built-in-autograder caveat on a change when no students have accepted", async () => {
+    const user = userEvent.setup()
+    renderForm({
+      edit: true,
+      hasAcceptedStudents: false,
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "auto",
+        autograding_state: "none",
+      },
+    })
+    await user.click(
+      screen.getByRole("radio", {
+        name: /assignments\.form\.autograding\.choices\.built-in\.label/,
+      }),
+    )
+    expect(
+      screen.queryByText("assignments.form.autograding.editHelp"),
+    ).toBeNull()
+  })
+
+  it("shows the repo-source caveat only after a change when students have accepted", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm({
+      edit: true,
+      hasAcceptedStudents: true,
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "auto",
+        autograding_state: "none",
+      },
+    })
+    // Unchanged: no caveat despite accepters.
+    expect(
+      screen.queryByText("assignments.form.repoSource.editHelp"),
+    ).toBeNull()
+    // Flipping the source to template surfaces the caveat.
+    const templateRadio = container.querySelector<HTMLInputElement>(
+      "#repo_source-template",
+    )!
+    await user.click(templateRadio)
+    expect(
+      screen.getByText("assignments.form.repoSource.editHelp"),
+    ).not.toBeNull()
+  })
+
+  it("hides the repo-source caveat on a change when no students have accepted", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm({
+      edit: true,
+      hasAcceptedStudents: false,
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "auto",
+        autograding_state: "none",
+      },
+    })
+    const templateRadio = container.querySelector<HTMLInputElement>(
+      "#repo_source-template",
+    )!
+    await user.click(templateRadio)
+    expect(
+      screen.queryByText("assignments.form.repoSource.editHelp"),
+    ).toBeNull()
   })
 })
 
