@@ -60,6 +60,7 @@ import {
   selectActiveWorkflowAction,
   showsNonSubmitters,
   snapshotIsStale,
+  sortNameMode,
   studentInSection,
   submissionRosterStudents,
   type SubmissionFilters,
@@ -246,6 +247,11 @@ const SubmissionsPageContent = () => {
     }
     return set
   }, [teamRows, orgRepos, isGroupAssignment, classroom, assignment])
+  const [sort, setSort] = useState<SubmissionSort>("name-first")
+  // The roster spine's name order. When live, the view is pinned to the plain
+  // name-ordered fan-out (see effectiveSort below), so the spine follows the
+  // user's first/last choice only off-live; live always uses first-name order.
+  const rosterSortMode = isOwner && !skipsGrading ? "first" : sortNameMode(sort)
   const students: Student[] = useMemo(
     () =>
       sortStudentsByName(
@@ -253,8 +259,9 @@ const SubmissionsPageContent = () => {
           acceptedStaffLogins,
           groupRepoMembers: groupRepoFounders,
         }),
+        rosterSortMode,
       ),
-    [teamRows, acceptedStaffLogins, groupRepoFounders],
+    [teamRows, acceptedStaffLogins, groupRepoFounders, rosterSortMode],
   )
   // Gate Regrade all / Collect now on an empty roster: dispatching with no
   // students is wasted effort. `show` is loading-aware (won't flash before the
@@ -306,7 +313,6 @@ const SubmissionsPageContent = () => {
   // the page/size/filters must be known before it runs.
   const [query, setQuery] = useState("")
   const [filters, setFilters] = useState<SubmissionFilters>(DEFAULT_FILTERS)
-  const [sort, setSort] = useState<SubmissionSort>("name-asc")
   // Client-side table pagination over the display list. `page` is 0-based;
   // clamped at render (pageBounds) so a filter that shrinks the list can't
   // strand the view on an empty page.
@@ -355,7 +361,7 @@ const SubmissionsPageContent = () => {
   // plain name-ordered, unfiltered view the fan-out aligns to — even if a prior
   // session left non-default state. Search + section still apply (they don't
   // reorder the spine). Non-live viewers keep full sort/status.
-  const effectiveSort: SubmissionSort = liveCapable ? "name-asc" : sort
+  const effectiveSort: SubmissionSort = liveCapable ? "name-first" : sort
   const effectiveStatusFilters: SubmissionFilters = useMemo(
     () =>
       liveCapable
@@ -870,7 +876,7 @@ const SubmissionsPageContent = () => {
     // make the file's counts depend on the last-viewed page. `snapshotScoped`
     // (the roster-scoped snapshot, already memoized for the fan-out spine) always
     // matches scores.json regardless of paging.
-    const rows = buildScoresCsvRows(snapshotScoped, csvNonSubmitters)
+    const rows = buildScoresCsvRows(snapshotScoped, csvNonSubmitters, students)
 
     const csv = Papa.unparse(rows, {
       header: true,

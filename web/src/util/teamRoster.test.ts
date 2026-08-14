@@ -5,8 +5,10 @@ import {
   githubOrgRoleForRole,
   roleForGitHubOrgRole,
   rowToStudent,
+  sortTeamRosterRows,
   teamMembersMissingFromCsv,
   rowsNeedingBackfill,
+  type TeamRosterRow,
 } from "./teamRoster"
 import { isOwnerGitHubOrgRole } from "@/authz"
 import { enrolledCountsByRole } from "./classroomRoleUI"
@@ -687,5 +689,74 @@ describe("isOwnerGitHubOrgRole — wire org-role owner test", () => {
     expect(isOwnerGitHubOrgRole("member")).toBe(false)
     expect(isOwnerGitHubOrgRole("")).toBe(false)
     expect(isOwnerGitHubOrgRole("direct_member")).toBe(false)
+  })
+})
+
+describe("sortTeamRosterRows — first- vs last-name ordering", () => {
+  const enrolledRow = (over: Partial<TeamRosterRow>): TeamRosterRow => ({
+    key: over.username ?? "u",
+    state: "enrolled",
+    roles: ["student"],
+    username: "u",
+    github_id: "",
+    first_name: "",
+    last_name: "",
+    section: "",
+    email: "",
+    avatar_url: "",
+    ...over,
+  })
+
+  it("defaults to first-name order within a bucket", () => {
+    const sorted = sortTeamRosterRows([
+      enrolledRow({ username: "z", first_name: "Zed", last_name: "Adams" }),
+      enrolledRow({ username: "a", first_name: "Amy", last_name: "Zephyr" }),
+    ])
+    expect(sorted.map((r) => r.username)).toEqual(["a", "z"])
+  })
+
+  it("orders by last name within a bucket when mode is 'last'", () => {
+    const sorted = sortTeamRosterRows(
+      [
+        enrolledRow({ username: "z", first_name: "Zed", last_name: "Adams" }),
+        enrolledRow({ username: "a", first_name: "Amy", last_name: "Zephyr" }),
+      ],
+      "last",
+    )
+    expect(sorted.map((r) => r.username)).toEqual(["z", "a"])
+  })
+
+  it("keeps the enrolled -> pending -> needs-attention bucket order regardless of mode", () => {
+    const sorted = sortTeamRosterRows(
+      [
+        {
+          ...enrolledRow({ username: "z", last_name: "Zzz" }),
+          state: "pending",
+        },
+        enrolledRow({ username: "a", last_name: "Aaa" }),
+      ],
+      "last",
+    )
+    // Enrolled (Aaa) still precedes pending (Zzz) — the bucket wins over name.
+    expect(sorted.map((r) => r.state)).toEqual(["enrolled", "pending"])
+  })
+
+  it("uses natural (numeric) collation within a bucket", () => {
+    const sorted = sortTeamRosterRows([
+      enrolledRow({ username: "s10", first_name: "Team", last_name: "10" }),
+      enrolledRow({ username: "s2", first_name: "Team", last_name: "2" }),
+    ])
+    // Team 2 before Team 10 (numeric), not lexicographic ("10" < "2").
+    expect(sorted.map((r) => r.username)).toEqual(["s2", "s10"])
+  })
+
+  it("does not mutate the input array", () => {
+    const input = [
+      enrolledRow({ username: "b", first_name: "Bob" }),
+      enrolledRow({ username: "a", first_name: "Amy" }),
+    ]
+    const copy = [...input]
+    sortTeamRosterRows(input)
+    expect(input).toEqual(copy)
   })
 })

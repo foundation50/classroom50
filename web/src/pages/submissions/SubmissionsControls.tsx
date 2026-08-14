@@ -207,11 +207,11 @@ const SubmissionsControls = ({
             <option value="oldest">
               {t("submissions.filters.sortOldest")}
             </option>
-            <option value="name-asc">
-              {t("submissions.filters.sortNameAsc")}
+            <option value="name-first">
+              {t("submissions.filters.sortNameFirst")}
             </option>
-            <option value="name-desc">
-              {t("submissions.filters.sortNameDesc")}
+            <option value="name-last">
+              {t("submissions.filters.sortNameLast")}
             </option>
           </Toolbar.FilterSelect>
         )}

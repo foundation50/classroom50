@@ -26,6 +26,7 @@ import { useSyncRoster } from "@/hooks/mutations/useSyncRoster"
 import { useReinviteFailedInvite } from "@/hooks/mutations/useReinviteFailedInvite"
 import type { SuppressedLogins } from "@/hooks/useSuppressedLogins"
 import type { TeamRosterRow, ClassroomRole } from "@/util/teamRoster"
+import { sortTeamRosterRows } from "@/util/teamRoster"
 import { STAFF_ROLES } from "@/types/classroom"
 import { ROLE_LABEL_KEY, hasStudentEnrollment } from "@/util/classroomRoleUI"
 import {
@@ -35,7 +36,11 @@ import {
   type StatusFilter,
 } from "@/pages/students/rosterFilter"
 import { studentKey, toStudent } from "@/util/roster"
-import { isSameGitHubUser } from "@/util/students"
+import {
+  DEFAULT_STUDENT_SORT,
+  isSameGitHubUser,
+  type StudentSortMode,
+} from "@/util/students"
 import {
   resolveSelectedRows,
   selectableRows,
@@ -110,6 +115,8 @@ const EnrolledStudents = ({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all")
   const [sectionFilter, setSectionFilter] = useState<string>("all")
+  const [sortMode, setSortMode] =
+    useState<StudentSortMode>(DEFAULT_STUDENT_SORT)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   // Session-only banner dismissal — a page refresh re-derives roster state and
@@ -234,15 +241,20 @@ const EnrolledStudents = ({
 
   // Text search over username/name/email + the status, role, and section
   // filters (see filterRosterRows — extracted so the facets are unit-tested).
+  // Re-sorted by the chosen name direction (first vs last name); the underlying
+  // rows already arrive first-name sorted, so `first` is a no-op reorder.
   const filtered = useMemo(
     () =>
-      filterRosterRows(rows, {
-        query,
-        statusFilter,
-        roleFilter: effectiveRole,
-        sectionFilter: effectiveSection,
-      }),
-    [rows, query, statusFilter, effectiveRole, effectiveSection],
+      sortTeamRosterRows(
+        filterRosterRows(rows, {
+          query,
+          statusFilter,
+          roleFilter: effectiveRole,
+          sectionFilter: effectiveSection,
+        }),
+        sortMode,
+      ),
+    [rows, query, statusFilter, effectiveRole, effectiveSection, sortMode],
   )
 
   const hasSectionsInFiltered = useMemo(
@@ -576,6 +588,16 @@ const EnrolledStudents = ({
               ))}
             </Toolbar.FilterSelect>
           ) : null}
+          <Toolbar.FilterSelect
+            selectSize="md"
+            className="w-full sm:w-auto"
+            aria-label={t("students.sortBy.label")}
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as StudentSortMode)}
+          >
+            <option value="first">{t("students.sortBy.firstName")}</option>
+            <option value="last">{t("students.sortBy.lastName")}</option>
+          </Toolbar.FilterSelect>
           {syncMutation.isPending || csvMissingCount > 0 ? (
             <Button
               variant="ghost"

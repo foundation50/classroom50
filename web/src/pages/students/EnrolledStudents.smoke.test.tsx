@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import { render, screen, cleanup, fireEvent } from "@testing-library/react"
 import type { ReactElement } from "react"
 
 // A rendered smoke test locking the component's phase views (loading / empty /
@@ -234,5 +234,57 @@ describe("EnrolledStudents — rendered phase views", () => {
     useTeamRoster.mockReturnValue(populatedRoster)
     render(renderView())
     expect(capturedCanManage).toBe(false)
+  })
+
+  // The sort toggle re-orders the rendered roster by first vs last name. Two
+  // enrolled rows whose first/last order disagree pin the wiring.
+  it("re-sorts the roster by first vs last name via the sort toggle", () => {
+    useTeamRoster.mockReturnValue({
+      ...emptyRoster,
+      isEmpty: false,
+      counts: { enrolled: 2, pending: 0 },
+      rows: [
+        {
+          key: "amy",
+          username: "amy",
+          first_name: "Amy",
+          last_name: "Brown",
+          email: "",
+          section: "",
+          github_id: "1",
+          roles: ["student"],
+          state: "enrolled",
+        },
+        {
+          key: "zed",
+          username: "zed",
+          first_name: "Zed",
+          last_name: "Adams",
+          email: "",
+          section: "",
+          github_id: "2",
+          roles: ["student"],
+          state: "enrolled",
+        },
+      ],
+    })
+    render(renderView())
+
+    const order = () => {
+      const text = document.body.textContent ?? ""
+      return text.indexOf("amy") < text.indexOf("zed")
+        ? "amy-first"
+        : "zed-first"
+    }
+
+    // Defaults to first-name order: Amy before Zed.
+    expect(order()).toBe("amy-first")
+
+    fireEvent.change(screen.getByLabelText("students.sortBy.label"), {
+      target: { value: "last" },
+    })
+
+    // Last-name order: Adams (Zed) before Brown (Amy).
+    expect(order()).toBe("zed-first")
   })
 })

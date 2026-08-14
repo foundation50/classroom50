@@ -1,11 +1,16 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Info } from "lucide-react"
 
-import { Alert } from "@/components/ui"
+import { Alert, Toolbar } from "@/components/ui"
 import { RoleBadges } from "./RoleBadges"
 import { coerceImportRole } from "./rosterImportParse"
 import type { Student } from "@/types/classroom"
+import {
+  DEFAULT_STUDENT_SORT,
+  sortStudentsByName,
+  type StudentSortMode,
+} from "@/util/students"
 
 function displayName(student: Student): string {
   const full = `${student.first_name} ${student.last_name}`.trim()
@@ -19,11 +24,12 @@ function displayName(student: Student): string {
 // teacher-maintained, not live, no invites or management actions.
 const CsvRosterView = ({ students }: { students: Student[] }) => {
   const { t } = useTranslation()
+  const [sortMode, setSortMode] =
+    useState<StudentSortMode>(DEFAULT_STUDENT_SORT)
 
   const rows = useMemo(
-    () =>
-      students.toSorted((a, b) => displayName(a).localeCompare(displayName(b))),
-    [students],
+    () => sortStudentsByName(students, sortMode),
+    [students, sortMode],
   )
 
   return (
@@ -32,6 +38,21 @@ const CsvRosterView = ({ students }: { students: Student[] }) => {
         <Info aria-hidden="true" className="size-5" />
         <span>{t("students.csvRoster.notice")}</span>
       </Alert>
+
+      {students.length > 0 ? (
+        <Toolbar>
+          <Toolbar.FilterSelect
+            selectSize="md"
+            className="w-full sm:w-auto"
+            aria-label={t("students.sortBy.label")}
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as StudentSortMode)}
+          >
+            <option value="first">{t("students.sortBy.firstName")}</option>
+            <option value="last">{t("students.sortBy.lastName")}</option>
+          </Toolbar.FilterSelect>
+        </Toolbar>
+      ) : null}
 
       <div className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
         <table className="table">
