@@ -2,6 +2,7 @@ package feedbackpr
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,71 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/ghutil"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
+
+// feedbackTemplateRef points the Feedback PR body at a template repo's native
+// pull_request_template.md (the assignment's feedback_pr_template opt-in). Nil
+// means the built-in body.
+type feedbackTemplateRef struct {
+	owner, repo, branch string
+}
+
+// Native GitHub pull request template paths, probed in this order — mirrors the
+// runner, the student CLI, and the web GUI.
+var feedbackTemplatePaths = []string{
+	".github/pull_request_template.md",
+	"pull_request_template.md",
+	"docs/pull_request_template.md",
+}
+
+// feedbackTemplateMaxBytes caps the read so an oversized file can't overflow
+// GitHub's PR-body ceiling (~65_536 chars); over-limit falls back to built-in.
+const feedbackTemplateMaxBytes = 60_000
+
+// readTemplatePRBody returns the teacher-supplied Feedback PR body from the
+// template repo, or "" (ok=false) to fall back to the built-in body. Reads the
+// first existing native pull_request_template.md path VERBATIM. Best-effort: a
+// missing/empty-after-trim/oversized file or any read error yields ok=false.
+// The teacher token can usually read the template (it created the assignment),
+// but this never fails the open.
+func readTemplatePRBody(client githubapi.Client, tmpl *feedbackTemplateRef) (string, bool) {
+	if tmpl == nil || tmpl.owner == "" || tmpl.repo == "" || tmpl.branch == "" {
+		return "", false
+	}
+	for _, p := range feedbackTemplatePaths {
+		var resp struct {
+			Content  string `json:"content"`
+			Encoding string `json:"encoding"`
+		}
+		path := fmt.Sprintf("repos/%s/%s/contents/%s?ref=%s",
+			url.PathEscape(tmpl.owner), url.PathEscape(tmpl.repo),
+			contentsPath(p), url.QueryEscape(tmpl.branch))
+		if err := client.Get(path, &resp); err != nil {
+			continue
+		}
+		if resp.Encoding != "base64" {
+			continue
+		}
+		decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(resp.Content, "\n", ""))
+		if err != nil || len(decoded) == 0 || len(decoded) > feedbackTemplateMaxBytes {
+			continue
+		}
+		if len(bytes.TrimSpace(decoded)) == 0 {
+			continue
+		}
+		return string(decoded), true
+	}
+	return "", false
+}
+
+// contentsPath escapes each slash-separated segment of a repo content path so
+// the slashes survive into the request path.
+func contentsPath(p string) string {
+	segs := strings.Split(p, "/")
+	for i, s := range segs {
+		segs[i] = url.PathEscape(s)
+	}
+	return strings.Join(segs, "/")
+}
 
 // metadataPath is the in-repo accept marker whose introducing commit anchors
 // the frozen `feedback` base. Aliased to the shared contract constant so this
@@ -73,12 +139,12 @@ func isFeedbackPRRetryable(err error) bool {
 // branch is the repo's settled default branch (the head the PR opens against),
 // resolved once by the caller from the same repo-object read that gates
 // not-accepted-yet, so this never re-fetches it.
-func ensureFeedbackPullRequest(client githubapi.Client, org, repoName, branch, mode string) error {
+func ensureFeedbackPullRequest(client githubapi.Client, org, repoName, branch, mode string, tmpl *feedbackTemplateRef) error {
 	acceptSHA := memoizeSHA(func() (string, error) { return acceptCommitSHA(client, org, repoName) })
 
 	var lastErr error
 	for attempt := range feedbackPRAttempts {
-		err := tryEnsureFeedbackPullRequest(client, org, repoName, branch, mode, acceptSHA)
+		err := tryEnsureFeedbackPullRequest(client, org, repoName, branch, mode, tmpl, acceptSHA)
 		if err == nil || isAlreadyExists(err) {
 			return err
 		}
@@ -110,7 +176,7 @@ func memoizeSHA(resolve func() (string, error)) func() (string, error) {
 	}
 }
 
-func tryEnsureFeedbackPullRequest(client githubapi.Client, org, repoName, branch, mode string, resolveAcceptSHA func() (string, error)) error {
+func tryEnsureFeedbackPullRequest(client githubapi.Client, org, repoName, branch, mode string, tmpl *feedbackTemplateRef, resolveAcceptSHA func() (string, error)) error {
 	if exists, err := feedbackPRExists(client, org, repoName, branch); err != nil {
 		return err
 	} else if exists {
@@ -125,7 +191,7 @@ func tryEnsureFeedbackPullRequest(client githubapi.Client, org, repoName, branch
 		return err
 	}
 
-	prNumber, err := createFeedbackPR(client, org, repoName, branch)
+	prNumber, err := createFeedbackPR(client, org, repoName, branch, tmpl)
 	if err != nil {
 		if !isNoCommitsBetween(err) {
 			return feedbackPRRaceOr(client, org, repoName, branch, err)
@@ -136,7 +202,7 @@ func tryEnsureFeedbackPullRequest(client githubapi.Client, org, repoName, branch
 		if err := pushFeedbackEmptyCommit(client, org, repoName, branch); err != nil {
 			return err
 		}
-		prNumber, err = createFeedbackPR(client, org, repoName, branch)
+		prNumber, err = createFeedbackPR(client, org, repoName, branch, tmpl)
 		if err != nil {
 			return feedbackPRRaceOr(client, org, repoName, branch, err)
 		}
@@ -263,16 +329,21 @@ func branchTipSHA(client githubapi.Client, org, repoName, branch string) (string
 	return ref.Object.SHA, nil
 }
 
-// createFeedbackPR opens the Feedback PR and returns its number. Title and body
-// come from the shared contract, so whichever side creates the PR (accept
-// clients or the runner's fallback), teachers see one coherent body.
-func createFeedbackPR(client githubapi.Client, org, repoName, branch string) (int, error) {
+// createFeedbackPR opens the Feedback PR and returns its number. The body is
+// the teacher template (read verbatim from the template repo, best-effort) when
+// tmpl is set and the file is readable, else the built-in body — byte-identical
+// with the runner's (contract package), so teachers see one coherent body.
+func createFeedbackPR(client githubapi.Client, org, repoName, branch string, tmpl *feedbackTemplateRef) (int, error) {
 	releaseURL := fmt.Sprintf("https://github.com/%s/%s/releases/latest", org, repoName)
+	prBody := contract.FeedbackPRBody(branch, releaseURL)
+	if teacherBody, ok := readTemplatePRBody(client, tmpl); ok {
+		prBody = teacherBody
+	}
 	body, err := json.Marshal(map[string]string{
 		"base":  contract.FeedbackBaseBranch,
 		"head":  branch,
 		"title": contract.FeedbackPRTitle,
-		"body":  contract.FeedbackPRBody(branch, releaseURL),
+		"body":  prBody,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("encoding feedback PR body: %w", err)

@@ -216,7 +216,7 @@ func runEnsureFeedbackPR(t *testing.T, s *feedbackPRServer, mode string) error {
 	t.Cleanup(server.Close)
 	client := newTestRESTClient(t, server)
 	var out bytes.Buffer
-	return ensureFeedbackPullRequest(client, ui.NewForced(&out, false), false, "o", "r", "main", mode,
+	return ensureFeedbackPullRequest(client, ui.NewForced(&out, false), false, "o", "r", "main", mode, nil,
 		func() (string, error) {
 			s.acceptSHAResolves++
 			return "accept-sha", nil
@@ -440,7 +440,7 @@ func TestIsNoCommitsBetween(t *testing.T) {
 	client := newTestRESTClient(t, server)
 
 	// A 403 must NOT be read as the zero-diff signal.
-	_, err := createFeedbackPR(client, "o", "r", "main")
+	_, err := createFeedbackPR(client, "o", "r", "main", nil)
 	if err == nil {
 		t.Fatal("want error from 403 pulls POST")
 	}
@@ -452,7 +452,7 @@ func TestIsNoCommitsBetween(t *testing.T) {
 	server2 := httptest.NewServer(s2.mux(t))
 	t.Cleanup(server2.Close)
 	client2 := newTestRESTClient(t, server2)
-	_, err = createFeedbackPR(client2, "o", "r", "main")
+	_, err = createFeedbackPR(client2, "o", "r", "main", nil)
 	if err == nil {
 		t.Fatal("want zero-diff 422 from first pulls POST")
 	}

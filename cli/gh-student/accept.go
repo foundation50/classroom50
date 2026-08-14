@@ -558,6 +558,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		autograderName:    autograderName,
 		emptyRepo:         entry.EmptyRepo,
 		feedbackPR:        entry.FeedbackPR,
+		feedbackPRTemplate: resolveFeedbackTemplateRef(entry),
 		fullName:          fullName,
 		htmlURL:           htmlURL,
 		alreadyExisted:    alreadyExisted,
@@ -590,11 +591,15 @@ type acceptRepoParams struct {
 	// feedbackPR opts into opening the Feedback PR at accept time (issue
 	// #228) — best-effort, after provisioning succeeds. Never set together
 	// with emptyRepo (the entry validation fails closed on that combination).
-	feedbackPR        bool
-	fullName, htmlURL string
-	alreadyExisted    bool
-	createSp          *ghui.Spinner
-	createMsg         string
+	feedbackPR bool
+	// feedbackPRTemplate, when set, points the accept-time Feedback PR body at
+	// the template repo's pull_request_template.md (feedback_pr_template opt-in).
+	// Nil means the built-in body. The read is best-effort (fail-open).
+	feedbackPRTemplate *feedbackTemplateRef
+	fullName, htmlURL  string
+	alreadyExisted     bool
+	createSp           *ghui.Spinner
+	createMsg          string
 }
 
 // acceptIntoRepo decides whether a just-created-or-existing repo needs

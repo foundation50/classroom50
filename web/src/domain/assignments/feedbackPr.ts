@@ -106,6 +106,66 @@ const FEEDBACK_PR_RETRY = {
     !(err instanceof FeedbackBaseMismatchError) && isFreshRepoLagError(err),
 }
 
+// Native GitHub pull request template paths, probed in this order — mirrors
+// the runner (ensure_feedback_pr.py) and the student CLI.
+const TEMPLATE_PR_BODY_PATHS = [
+  ".github/pull_request_template.md",
+  "pull_request_template.md",
+  "docs/pull_request_template.md",
+] as const
+
+// Cap the read so an oversized file can't overflow GitHub's PR-body ceiling
+// (~65_536 chars); over-limit falls back to the built-in body, like a miss.
+const TEMPLATE_PR_BODY_MAX_CHARS = 60_000
+
+// The teacher-supplied Feedback PR body from the template repo, or null.
+// Reads the first existing native pull_request_template.md path VERBATIM (no
+// placeholder substitution). Best-effort: a missing/empty-after-trim/oversized
+// file or any read error (403 on a private template, 404, transient) returns
+// null so the caller falls back to the built-in body. Used at accept time when
+// the assignment set feedback_pr_template.
+export async function readTemplatePrBody(
+  client: GitHubClient,
+  templateOwner: string,
+  templateRepo: string,
+  templateBranch: string,
+): Promise<string | null> {
+  if (!(templateOwner && templateRepo && templateBranch)) return null
+  for (const path of TEMPLATE_PR_BODY_PATHS) {
+    try {
+      const ref = encodeURIComponent(templateBranch)
+      const content = await client.requestRaw(
+        `/repos/${encodeURIComponent(templateOwner)}/${encodeURIComponent(
+          templateRepo,
+        )}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${ref}`,
+      )
+      if (typeof content !== "string" || !content.trim()) continue
+      if (content.length > TEMPLATE_PR_BODY_MAX_CHARS) {
+        log.warn("feedback PR template exceeds size cap; using built-in body", {
+          templateOwner,
+          templateRepo,
+          path,
+        })
+        return null
+      }
+      return content
+    } catch {
+      // 404 (no such path), 403 (private/lost read), or transient — try the
+      // next path, then fall back to the built-in body. Never throws.
+      continue
+    }
+  }
+  return null
+}
+
+// The repo/branch of the assignment's template, passed at accept time when the
+// assignment opts the Feedback PR body into the template's pull_request_template.md.
+export type FeedbackPrTemplateRef = {
+  owner: string
+  repo: string
+  branch: string
+}
+
 type EnsureFeedbackPrParams = {
   client: GitHubClient
   owner: string
@@ -115,6 +175,10 @@ type EnsureFeedbackPrParams = {
   branch: string
   acceptCommitSha: string
   mode: string
+  // When set (feedback_pr_template opt-in + a template), the PR body is read
+  // verbatim from this template repo's pull_request_template.md, best-effort;
+  // absent or a failed read falls back to the built-in body.
+  feedbackPrTemplate?: FeedbackPrTemplateRef
 }
 
 // Open the assignment's Feedback PR at accept time (issue #228): base = the
@@ -163,6 +227,7 @@ async function ensureOnce(
   params: EnsureFeedbackPrParams,
 ): Promise<EnsureFeedbackPrResult> {
   const { client, owner, repo, branch, acceptCommitSha, mode } = params
+  const feedbackPrTemplate = params.feedbackPrTemplate
 
   if (await feedbackPrExists({ client, owner, repo, branch })) {
     log.info("feedback PR already exists; leaving as-is", { owner, repo })
@@ -200,6 +265,18 @@ async function ensureOnce(
   }
 
   const releaseUrl = `https://github.com/${owner}/${repo}/releases/latest`
+  // Honor feedback_pr_template: use the template repo's pull_request_template.md
+  // verbatim when the assignment opted in and the file is readable, else the
+  // built-in body. Best-effort — readTemplatePrBody never throws.
+  const teacherBody = feedbackPrTemplate
+    ? await readTemplatePrBody(
+        client,
+        feedbackPrTemplate.owner,
+        feedbackPrTemplate.repo,
+        feedbackPrTemplate.branch,
+      )
+    : null
+  const body = teacherBody ?? feedbackPrBody(branch, releaseUrl)
   const create = () =>
     createPullRequest({
       client,
@@ -208,7 +285,7 @@ async function ensureOnce(
       base: FEEDBACK_BASE_BRANCH,
       head: branch,
       title: FEEDBACK_PR_TITLE,
-      body: feedbackPrBody(branch, releaseUrl),
+      body,
     })
 
   let pr

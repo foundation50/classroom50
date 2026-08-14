@@ -199,7 +199,7 @@ func runEnsure(t *testing.T, s *ensureServer, mode string) error {
 	server := httptest.NewServer(s.mux(t))
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
-	return ensureFeedbackPullRequest(client, "o", "r", "main", mode)
+	return ensureFeedbackPullRequest(client, "o", "r", "main", mode, nil)
 }
 
 // TestEnsure_FreshOpen pins the full sequence on an un-pushed repo: freeze the
