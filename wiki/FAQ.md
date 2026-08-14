@@ -147,9 +147,12 @@ Both start from no template; the difference is what (if anything) is committed:
   in-between shape: an initialized repo carrying only the control files, no
   README, which grades normally.)
 
-**These repository-shape choices are permanent** for an assignment — you can't
-switch them after creating it, because repositories students already accepted
-can't be retrofitted.
+**These repository-shape choices can be changed after creation, but a change
+only affects repositories accepted from then on** — repositories students
+already accepted aren't retrofitted, so they keep their original shape. The web
+edit form asks you to confirm when students have already accepted. (**Assignment
+type** — Individual vs. Group — is the exception and stays locked, since
+switching it would invalidate existing submissions.)
 
 ### How do group assignments work?
 
@@ -195,12 +198,13 @@ Yes, several levers:
 - Create an assignment with **no autograding tests**, and no grading runs
   (Classroom 50 still uses a lightweight workflow to tag submissions and
   support written feedback, which uses far fewer Actions minutes).
-- **Don't use the built-in autograder at all** (permanent) — when creating an
+- **Don't use the built-in autograder at all** — when creating an
   assignment, pick **Do not use the built-in autograder**. Accept then installs
   no autograding workflow: a templated assignment runs only your template's own
   CI (if any), and score collection skips the assignment. The right choice for
-  project-shaped assignments graded by hand or by your own CI. Can't be changed
-  after the assignment is created.
+  project-shaped assignments graded by hand or by your own CI. Can be changed
+  after creation, but only affects repositories accepted from then on (existing
+  ones keep their original setup).
 - **Pause autograding org-wide** — the organization's Actions settings in the
   web app. **Caution:** this stops **all** workflows in student repositories,
   not just autograding — any CI your students run stops too. Setup also creates
@@ -267,7 +271,8 @@ Yes, two ways:
   button. Hand-entered scores show a **Manual** badge and are stored as
   overrides. (This editor appears only for manual-mode assignments, and only
   for organization owners — writing scores means writing the config repo. The
-  grading mode can't be changed after an assignment is created.)
+  grading mode can be changed later from the edit form, though a change only
+  affects how repositories accepted from then on are read.)
 - **In the config repo, for any assignment.** Edit the classroom's
   `scores.json`: change the submission's `score` and add `"override": true` to
   that entry, then commit. Collection leaves overridden entries untouched on
