@@ -5,12 +5,14 @@ import { Badge, Button } from "@/components/ui"
 import { ScoreBadge } from "@/pages/submissions/ScoreBadge"
 
 // The idle score cell with an override trigger. Shows the current grade (or an
-// ungraded affordance), a "Manual" badge when overridden, and an edit button
-// that opens the score-override modal. The modal itself (and its state) lives
-// in the parent table; this cell is presentational plus one onEdit callback.
+// ungraded/pending affordance), a "Manual" badge when overridden, and an edit
+// button that opens the score-override modal. The modal itself (and its state)
+// lives in the parent table; this cell is presentational plus one onEdit
+// callback.
 export function ScoreCell({
   owner,
   hasGrade,
+  pending = false,
   score,
   max,
   overridden,
@@ -19,6 +21,10 @@ export function ScoreCell({
 }: {
   owner: string
   hasGrade: boolean
+  // The row is submitted-but-not-yet-collected: show a "Pending" badge next to
+  // the trigger instead of the "Not graded" text (an autograded row a teacher
+  // can override before collection).
+  pending?: boolean
   score: number
   max: number
   overridden: boolean
@@ -34,6 +40,10 @@ export function ScoreCell({
           max={max}
           thresholdFraction={thresholdFraction}
         />
+      ) : pending ? (
+        <Badge ghost size="sm" title={t("submissions.table.pendingGradeTitle")}>
+          {t("submissions.table.pendingGrade")}
+        </Badge>
       ) : (
         <span className="text-sm text-base-content/50">
           {t("submissions.scoreOverride.notGraded")}

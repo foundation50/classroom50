@@ -20,8 +20,10 @@ export type ScoreOverrideContext = {
   assignment: string
   assignmentType: "individual" | "group"
   // The max points for the score input. Manual assignments pass the configured
-  // grading.max_points; autograded rows pass the row's own max-score.
-  maxPoints: number
+  // grading.max_points; a graded autograded row passes its own max-score. Absent
+  // when the max isn't known yet (a pending autograded row with no collected
+  // score) — the teacher then enters both the score and the max in the modal.
+  maxPoints?: number
   // Group crediting for a NEW entry (the credited members of the group repo).
   // Individual entries omit it and are credited to `owner`.
   memberUsernames?: string[]
@@ -88,6 +90,11 @@ export function ScoreOverrideModal({
   // while a row is selected), so the initial draft is seeded here rather than
   // in an effect — no stale value carries across opens.
   const [draft, setDraft] = useState(hasGrade ? String(score) : "")
+  // When the max isn't known (a pending autograded row), the teacher enters it
+  // alongside the score. Otherwise ctx.maxPoints is authoritative and this
+  // input isn't shown.
+  const maxEditable = typeof ctx.maxPoints !== "number"
+  const [maxDraft, setMaxDraft] = useState("")
   const mutation = useSetScoreOverride()
   // A synchronous latch so two submits in the SAME tick (before mutation
   // .isPending flips on the next render) can't both fire mutate.
@@ -95,16 +102,40 @@ export function ScoreOverrideModal({
 
   const saving = mutation.isPending
 
+  // The effective max the score validates against: the entered one when the
+  // teacher supplies it, else the context max. `null` = no usable max yet.
+  const parsedMax = maxEditable ? Number(maxDraft) : ctx.maxPoints
+  const maxError =
+    maxEditable && maxDraft.trim() === ""
+      ? t("submissions.scoreOverride.maxRequired")
+      : maxEditable && (!Number.isInteger(parsedMax) || (parsedMax ?? 0) < 1)
+        ? t("submissions.scoreOverride.maxRange")
+        : null
+  const effectiveMax =
+    typeof parsedMax === "number" &&
+    Number.isInteger(parsedMax) &&
+    parsedMax > 0
+      ? parsedMax
+      : null
+
   const parsed = Number(draft)
   const validationError =
     draft.trim() === ""
       ? t("submissions.scoreOverride.required")
-      : !Number.isInteger(parsed) || parsed < 0 || parsed > ctx.maxPoints
-        ? t("submissions.scoreOverride.range", { max: ctx.maxPoints })
-        : null
+      : effectiveMax === null
+        ? // Score can't be validated until a valid max exists; the max input
+          // carries its own error, so don't double-report here.
+          null
+        : !Number.isInteger(parsed) || parsed < 0 || parsed > effectiveMax
+          ? t("submissions.scoreOverride.range", { max: effectiveMax })
+          : null
+
+  // A save is blocked while either input is invalid (or the max is missing).
+  const saveBlocked =
+    Boolean(validationError) || Boolean(maxError) || effectiveMax === null
 
   const save = () => {
-    if (validationError) return
+    if (saveBlocked || effectiveMax === null) return
     if (inFlightRef.current || mutation.isPending) return
     inFlightRef.current = true
     mutation.mutate(
@@ -116,7 +147,7 @@ export function ScoreOverrideModal({
         assignmentType: ctx.assignmentType,
         memberUsernames: ctx.memberUsernames,
         score: parsed,
-        maxPoints: ctx.maxPoints,
+        maxPoints: effectiveMax,
       },
       {
         onSuccess: () => onClose(),
@@ -212,7 +243,7 @@ export function ScoreOverrideModal({
                 type="number"
                 inputMode="numeric"
                 min={0}
-                max={ctx.maxPoints}
+                max={effectiveMax ?? undefined}
                 step={1}
                 className="w-24"
                 autoFocus
@@ -229,11 +260,41 @@ export function ScoreOverrideModal({
                 }}
               />
               <span className="text-sm text-base-content/60 whitespace-nowrap">
-                / {ctx.maxPoints}
+                / {maxEditable ? (effectiveMax ?? "—") : ctx.maxPoints}
               </span>
             </div>
           )}
         </FormField>
+
+        {maxEditable ? (
+          <FormField
+            label={t("submissions.scoreOverride.maxLabel", { name })}
+            error={maxError && maxDraft.trim() !== "" ? maxError : undefined}
+            hint={t("submissions.scoreOverride.maxHint")}
+          >
+            {({ id, describedById, invalid }) => (
+              <Input
+                id={id}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                className="w-24"
+                disabled={saving}
+                aria-describedby={describedById}
+                aria-invalid={invalid || undefined}
+                value={maxDraft}
+                onChange={(e) => setMaxDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    save()
+                  }
+                }}
+              />
+            )}
+          </FormField>
+        ) : null}
 
         {mutation.isError ? (
           <Alert tone="error" className="text-sm">
@@ -273,7 +334,7 @@ export function ScoreOverrideModal({
               type="button"
               variant="primary"
               size="sm"
-              disabled={saving || Boolean(validationError)}
+              disabled={saving || saveBlocked}
               onClick={save}
             >
               {t("submissions.scoreOverride.save")}

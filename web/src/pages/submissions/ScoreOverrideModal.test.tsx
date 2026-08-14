@@ -184,4 +184,62 @@ describe("ScoreOverrideModal", () => {
     await user.type(input, "30{Enter}{Enter}")
     expect(mutate).toHaveBeenCalledTimes(1)
   })
+
+  it("prompts for the max on a pending autograded row and blocks save until both are valid", async () => {
+    const user = userEvent.setup()
+    render(
+      <ScoreOverrideModal
+        open
+        onClose={vi.fn()}
+        owner="alice"
+        hasGrade={false}
+        score={0}
+        overridden={false}
+        thresholdFraction={null}
+        ctx={{ ...autoCtx, maxPoints: undefined }}
+      />,
+    )
+    // Two number inputs: the score and the teacher-entered max.
+    const inputs = screen.getAllByRole("spinbutton")
+    expect(inputs).toHaveLength(2)
+    const save = screen.getByRole("button", {
+      name: "submissions.scoreOverride.save",
+    })
+    // With only a score entered (no max yet), save stays disabled.
+    await user.type(inputs[0], "7")
+    expect(save.hasAttribute("disabled")).toBe(true)
+    // Entering a valid max unblocks and submits with that max.
+    await user.type(inputs[1], "10")
+    expect(save.hasAttribute("disabled")).toBe(false)
+    await user.click(save)
+    expect(mutate).toHaveBeenCalledTimes(1)
+    expect(mutate.mock.calls[0][0]).toMatchObject({
+      owner: "alice",
+      score: 7,
+      maxPoints: 10,
+    })
+  })
+
+  it("rejects a score above the teacher-entered max", async () => {
+    const user = userEvent.setup()
+    render(
+      <ScoreOverrideModal
+        open
+        onClose={vi.fn()}
+        owner="alice"
+        hasGrade={false}
+        score={0}
+        overridden={false}
+        thresholdFraction={null}
+        ctx={{ ...autoCtx, maxPoints: undefined }}
+      />,
+    )
+    const inputs = screen.getAllByRole("spinbutton")
+    await user.type(inputs[1], "10")
+    await user.type(inputs[0], "12")
+    await user.click(
+      screen.getByRole("button", { name: "submissions.scoreOverride.save" }),
+    )
+    expect(mutate).not.toHaveBeenCalled()
+  })
 })

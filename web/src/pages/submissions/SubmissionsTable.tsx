@@ -109,7 +109,9 @@ type OverrideModalRow = {
   overridden: boolean
   autogradedScore?: number
   autogradedMax?: number
-  maxPoints: number
+  // Absent when the row is a pending autograded submission — the modal then
+  // asks the teacher to enter the max.
+  maxPoints?: number
   memberUsernames?: string[]
 }
 
@@ -180,10 +182,12 @@ function buildDetailItems(
 }
 
 // Resolve whether a row's score cell offers override editing, and with what
-// max. Returns null when the row isn't editable (no capability, a pending group
-// whose members aren't resolved yet, or an autograded row with no graded value
-// to bound the max). Manual mode is always editable (an ungraded row offers
-// "Add grade"); autograded override requires a real graded value.
+// max. Returns null when the row isn't editable (no capability, or a pending
+// group whose members aren't resolved yet). Manual mode is always editable (an
+// ungraded row offers "Add grade") with the configured max. Autograded mode is
+// editable for any non-empty repo: a graded row uses its own max-score, while a
+// pending row (not yet collected, no max-score) returns an undefined max so the
+// modal prompts the teacher to enter it.
 //
 // The pending-group guard matters: a pending group row comes from the
 // live/detection overlay before collection, so its usernames is just the
@@ -194,7 +198,7 @@ function resolveOverrideCell(
   capability: ScoreOverrideCapability | undefined,
   isGroup: boolean,
   emptyRepo: boolean,
-): { hasGrade: boolean; maxPoints: number } | null {
+): { hasGrade: boolean; maxPoints?: number } | null {
   if (!capability) return null
   if (isGroup && row.pending) return null
 
@@ -203,8 +207,11 @@ function resolveOverrideCell(
     return { hasGrade: !row.pending, maxPoints: capability.maxPoints }
   }
 
-  // Autograded override: needs a real graded value to bound the per-row max.
-  if (emptyRepo || row.pending) return null
+  // Autograded override. A never-graded empty repo can't produce a score.
+  if (emptyRepo) return null
+  // A pending row has no collected max yet: the teacher enters it in the modal.
+  if (row.pending) return { hasGrade: false, maxPoints: undefined }
+  // A collected row uses its own max-score as the bound.
   if (!(row["max-score"] > 0)) return null
   return { hasGrade: true, maxPoints: row["max-score"] }
 }
@@ -466,6 +473,7 @@ const SubmissionsTable = ({
                 <ScoreCell
                   owner={rest.owner}
                   hasGrade={cell.hasGrade}
+                  pending={Boolean(rest.pending)}
                   score={score}
                   max={rest["max-score"]}
                   overridden={Boolean(rest.overridden)}

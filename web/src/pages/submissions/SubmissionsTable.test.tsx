@@ -322,7 +322,7 @@ describe("SubmissionsTable autograded score override", () => {
     expect(screen.getByTitle("submissions.table.noGradingTitle")).toBeTruthy()
   })
 
-  it("does not offer the trigger on a pending autograded row (no graded max yet)", () => {
+  it("offers the trigger on a pending autograded row (teacher enters the max)", () => {
     render(
       <SubmissionsTable
         {...baseProps}
@@ -331,12 +331,14 @@ describe("SubmissionsTable autograded score override", () => {
         overrideGrade={overrideGrade}
       />,
     )
-    expect(
-      screen.queryByRole("button", {
-        name: "submissions.scoreOverride.editLabel",
-      }),
-    ).toBeNull()
+    // The row still reads as pending, but the override trigger is available so
+    // a teacher can grade a submission before it's collected.
     expect(screen.getByText("submissions.table.pendingGrade")).toBeTruthy()
+    expect(
+      screen.getByRole("button", {
+        name: "submissions.scoreOverride.addLabel",
+      }),
+    ).toBeTruthy()
   })
 })
 
