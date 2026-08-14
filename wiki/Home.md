@@ -8,9 +8,9 @@ Use it as a web app at [classroom50.org](https://classroom50.org/) or as the
 `gh teacher` and `gh student` command-line tools.
 
 > [!NOTE]
-> The Fifty Foundation will host two online training sessions to teach you how
-> to use Classroom 50 and to answer your questions live. The sessions will take
-> place at the following times:
+> The Fifty Foundation hosted two online training sessions to teach you how to
+> use Classroom 50 and to answer questions live. Recordings and slides from both
+> sessions are available below:
 >
 > - [Friday, July 24, 1pm-2pm EDT](https://time.cs50.io/20260724T1300-0400/PT1H?title=Classroom+50+Training+Session)
 >   - [Slides](slides/classroom_50_training_session_20260724.pdf)
