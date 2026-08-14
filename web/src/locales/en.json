@@ -1188,8 +1188,6 @@
         }
       },
       "autograding": {
-        "label": "Autograding",
-        "notAutogradedNote": "Autograding options apply only when this assignment is set to \"Autograded\" in the Submission and grading section above. Change the grading choice to Autograded to configure the autograder.",
         "modeLabel": "Built-in autograder",
         "editHelp": "Changing the built-in autograder only affects repositories students accept from now on. Repositories already accepted keep their original setup — you'll need to reconcile any difference yourself.",
         "choices": {
@@ -1206,7 +1204,6 @@
       "grading": {
         "label": "Grading",
         "help": "How this assignment is graded. \"Autograded\" runs the autograder you configure below. \"Manual\" lets you enter each student's score by hand on the submissions page. \"Not graded\" records no score.",
-        "autoNote": "This assignment is autograded. Configure the autograder in the Autograding section below. Whether you use the built-in autograder or supply your own workflow, it must publish a result.json asset on the submission release — that file is what the app reads to show scores.",
         "choices": {
           "off": "Not graded",
           "auto": "Autograded",

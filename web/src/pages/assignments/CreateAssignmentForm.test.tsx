@@ -339,8 +339,11 @@ describe("assignment setup timeout", () => {
       </QueryClientProvider>,
     )
 
+    // Two "Advanced settings" disclosures exist (Repository Setup and the
+    // autograder). The autograder one renders last and owns the setup timeout.
     const advancedSummary = screen
-      .getByText("assignments.form.advanced")
+      .getAllByText("assignments.form.advanced")
+      .at(-1)!
       .closest("summary")
     await user.click(advancedSummary!)
 
@@ -382,7 +385,8 @@ describe("assignment setup timeout", () => {
     )
 
     const advancedSummary = screen
-      .getByText("assignments.form.advanced")
+      .getAllByText("assignments.form.advanced")
+      .at(-1)!
       .closest("summary")
     expect(advancedSummary).not.toBeNull()
     await user.click(advancedSummary!)
@@ -597,18 +601,18 @@ describe("grading drives the autograding config", () => {
       </QueryClientProvider>,
     )
 
-  it("create default is 'off' (not graded): no autograding config, shows the note", () => {
+  it("create default is 'off' (not graded): no autograding config at all", () => {
     const { container } = renderForm()
     // The grading select defaults to "off".
     const grading =
       container.querySelector<HTMLSelectElement>("#grading_choice")
     expect(grading?.value).toBe("off")
-    // Autograding config (Advanced release_assets, tests) is hidden; the
-    // not-autograded note is shown instead.
+    // The autograder config is folded into this section and only rendered when
+    // Autograded: no built-in radios, no advanced fields, and no note.
     expect(container.querySelector("#release_assets")).toBeNull()
     expect(
-      screen.getByText("assignments.form.autograding.notAutogradedNote"),
-    ).not.toBeNull()
+      container.querySelector('input[name="autograding_state"]'),
+    ).toBeNull()
   })
 
   it("Manual grading also hides the autograding config", () => {
@@ -617,8 +621,8 @@ describe("grading drives the autograding config", () => {
     })
     expect(container.querySelector("#release_assets")).toBeNull()
     expect(
-      screen.getByText("assignments.form.autograding.notAutogradedNote"),
-    ).not.toBeNull()
+      container.querySelector('input[name="autograding_state"]'),
+    ).toBeNull()
   })
 
   it("Autograded shows the built-in toggle; config stays hidden until built-in is selected", async () => {
@@ -630,16 +634,14 @@ describe("grading drives the autograding config", () => {
         grading_choice: "auto",
       },
     })
-    // Autograded offers the built-in-autograder toggle instead of the note.
-    expect(
-      screen.queryByText("assignments.form.autograding.notAutogradedNote"),
-    ).toBeNull()
+    // Autograded reveals the built-in-autograder radios.
     expect(
       screen.getByRole("radio", {
         name: /assignments\.form\.autograding\.choices\.none\.label/,
       }),
     ).not.toBeNull()
-    // Built-in is off by default, so the config (release_assets) is hidden.
+    // With autograding_state seeded to "none" (not built-in), the config
+    // (release_assets) is hidden.
     expect(container.querySelector("#release_assets")).toBeNull()
 
     // Selecting "Use the built-in autograder" reveals the config.
@@ -661,9 +663,27 @@ describe("grading drives the autograding config", () => {
       },
     })
     expect(container.querySelector("#release_assets")).not.toBeNull()
+  })
+
+  it("seeds the built-in autograder when grading switches into Autograded", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm({
+      defaultValues: { repo_source: "none", add_readme: true },
+    })
+    // Starts Not graded: no autograder config.
     expect(
-      screen.queryByText("assignments.form.autograding.notAutogradedNote"),
+      container.querySelector('input[name="autograding_state"]'),
     ).toBeNull()
+    // Switch grading to Autograded — built-in is seeded as the default, so the
+    // config (release_assets) appears without an extra click.
+    const grading =
+      container.querySelector<HTMLSelectElement>("#grading_choice")!
+    await user.selectOptions(grading, "auto")
+    const builtIn = screen.getByRole<HTMLInputElement>("radio", {
+      name: /assignments\.form\.autograding\.choices\.built-in\.label/,
+    })
+    expect(builtIn.checked).toBe(true)
+    expect(container.querySelector("#release_assets")).not.toBeNull()
   })
 
   it("keeps the built-in autograder radios editable on edit", () => {
@@ -801,12 +821,12 @@ describe("assignment form section IA", () => {
     )
 
   // The Submission and Grading section now always renders (grading applies to
-  // any assignment), between Repository Setup and Autograding.
+  // any assignment) and, when Autograded, folds in the autograder config. The
+  // former standalone Autograding section is gone, so there are four cards.
   const baseSectionTitleKeys = [
     "assignments.form.detailsSection",
     "assignments.form.repositorySetupSection",
     "assignments.form.submissionSection",
-    "assignments.form.autograding.label",
     "assignments.form.scheduleSection",
   ]
 

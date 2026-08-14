@@ -76,21 +76,29 @@ describe("sectionIsConfigured", () => {
     expect(sectionIsConfigured("repository", defaults, defaults)).toBe(false)
   })
 
-  it("treats any declarative test as configured autograding", () => {
+  it("treats any declarative test as configured submission", () => {
+    // The autograder config folds into the submission section, so a declarative
+    // test flips that section's Reset.
     const values = {
       ...defaults,
       tests: [{ name: "t", run: "pytest", points: 1 } as never],
     }
-    expect(sectionIsConfigured("autograding", values, defaults)).toBe(true)
+    expect(sectionIsConfigured("submission", values, defaults)).toBe(true)
   })
 
   it("attributes the submission trigger + tags to the submission section", () => {
     const tagMode = { ...defaults, submission_mode: "tag" as const }
     expect(sectionIsConfigured("submission", tagMode, defaults)).toBe(true)
-    // Those fields belong to submission, not autograding.
-    expect(sectionIsConfigured("autograding", tagMode, defaults)).toBe(false)
     const withTags = { ...defaults, submission_tags: "phase1" }
     expect(sectionIsConfigured("submission", withTags, defaults)).toBe(true)
+  })
+
+  it("attributes the folded autograder config to the submission section", () => {
+    const builtIn = { ...defaults, autograding_state: "built-in" as const }
+    expect(sectionIsConfigured("submission", builtIn, defaults)).toBe(true)
+    // A repo field doesn't flip submission.
+    const wikiOff = { ...defaults, repo_feature_wiki: "off" as const }
+    expect(sectionIsConfigured("submission", wikiOff, defaults)).toBe(false)
   })
 
   it("attributes the grading choice + max points to the submission section", () => {
