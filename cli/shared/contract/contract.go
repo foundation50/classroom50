@@ -174,7 +174,25 @@ const (
 	// schemas/repo-config-v1.schema.json — keep byte-identical; contract_test.go
 	// pins the Go half.
 	MetadataPath = ".classroom50.yaml"
+
+	// FeedbackTemplateMaxBytes caps the teacher-supplied pull_request_template.md
+	// read so an oversized/binary file can't overflow GitHub's PR-body ceiling
+	// (~65_536 chars); an over-limit file falls back to the built-in body, like
+	// a missing one. Byte-based; the web copy (TEMPLATE_PR_BODY_MAX_BYTES) and
+	// the runner (_TEMPLATE_PR_BODY_MAX_BYTES) must use the same byte semantics.
+	FeedbackTemplateMaxBytes = 60_000
 )
+
+// FeedbackTemplatePaths are GitHub's native pull request template locations,
+// probed in this order to source the Feedback PR body when an assignment sets
+// feedback_pr_template. Hand-mirrored with NO compile-time link in the web GUI
+// (TEMPLATE_PR_BODY_PATHS) and the runner (_TEMPLATE_PR_BODY_PATHS) — keep the
+// list and order byte-identical; contract_test.go pins the Go half.
+var FeedbackTemplatePaths = []string{
+	".github/pull_request_template.md",
+	"pull_request_template.md",
+	"docs/pull_request_template.md",
+}
 
 // requiredOAuthScopes is the unified OAuth scope set both CLIs request on top
 // of gh's defaults. Identical across the two binaries (issue #246) so a user

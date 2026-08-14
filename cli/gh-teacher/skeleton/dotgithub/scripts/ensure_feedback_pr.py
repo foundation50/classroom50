@@ -319,6 +319,14 @@ def resolve_pr_body(head: str, release_url: str, use_template: bool,
         body = read_template_pr_body(template_repo, template_branch)
         if body is not None:
             return body
+        # The assignment opted into the template but the runner token couldn't
+        # read it (a private/external template the Actions GITHUB_TOKEN can't
+        # reach, or the file is absent). Surface it so a teacher can see this
+        # repo's Feedback PR diverges from the teacher-authored body the accept
+        # clients use, and reconcile via `gh teacher assignment feedback-pr`.
+        print(f"::warning::feedback_pr_template is set but the runner could not "
+              f"read a pull request template from {template_repo or '(no template)'}; "
+              f"using the built-in Feedback PR body for this repo")
     return pr_body(head, release_url)
 
 

@@ -2,7 +2,6 @@ package feedbackpr
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,18 +22,6 @@ type feedbackTemplateRef struct {
 	owner, repo, branch string
 }
 
-// Native GitHub pull request template paths, probed in this order — mirrors the
-// runner, the student CLI, and the web GUI.
-var feedbackTemplatePaths = []string{
-	".github/pull_request_template.md",
-	"pull_request_template.md",
-	"docs/pull_request_template.md",
-}
-
-// feedbackTemplateMaxBytes caps the read so an oversized file can't overflow
-// GitHub's PR-body ceiling (~65_536 chars); over-limit falls back to built-in.
-const feedbackTemplateMaxBytes = 60_000
-
 // readTemplatePRBody returns the teacher-supplied Feedback PR body from the
 // template repo, or "" (ok=false) to fall back to the built-in body. Reads the
 // first existing native pull_request_template.md path VERBATIM. Best-effort: a
@@ -45,22 +32,22 @@ func readTemplatePRBody(client githubapi.Client, tmpl *feedbackTemplateRef) (str
 	if tmpl == nil || tmpl.owner == "" || tmpl.repo == "" || tmpl.branch == "" {
 		return "", false
 	}
-	for _, p := range feedbackTemplatePaths {
+	for _, p := range contract.FeedbackTemplatePaths {
 		var resp struct {
 			Content  string `json:"content"`
 			Encoding string `json:"encoding"`
 		}
 		path := fmt.Sprintf("repos/%s/%s/contents/%s?ref=%s",
 			url.PathEscape(tmpl.owner), url.PathEscape(tmpl.repo),
-			contentsPath(p), url.QueryEscape(tmpl.branch))
+			ghutil.ContentsPath(p), url.QueryEscape(tmpl.branch))
 		if err := client.Get(path, &resp); err != nil {
 			continue
 		}
 		if resp.Encoding != "base64" {
 			continue
 		}
-		decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(resp.Content, "\n", ""))
-		if err != nil || len(decoded) == 0 || len(decoded) > feedbackTemplateMaxBytes {
+		decoded, err := ghutil.DecodeContentsBase64(resp.Content)
+		if err != nil || len(decoded) == 0 || len(decoded) > contract.FeedbackTemplateMaxBytes {
 			continue
 		}
 		if len(bytes.TrimSpace(decoded)) == 0 {
@@ -69,16 +56,6 @@ func readTemplatePRBody(client githubapi.Client, tmpl *feedbackTemplateRef) (str
 		return string(decoded), true
 	}
 	return "", false
-}
-
-// contentsPath escapes each slash-separated segment of a repo content path so
-// the slashes survive into the request path.
-func contentsPath(p string) string {
-	segs := strings.Split(p, "/")
-	for i, s := range segs {
-		segs[i] = url.PathEscape(s)
-	}
-	return strings.Join(segs, "/")
 }
 
 // metadataPath is the in-repo accept marker whose introducing commit anchors

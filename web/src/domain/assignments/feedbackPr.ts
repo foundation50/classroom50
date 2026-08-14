@@ -116,7 +116,9 @@ const TEMPLATE_PR_BODY_PATHS = [
 
 // Cap the read so an oversized file can't overflow GitHub's PR-body ceiling
 // (~65_536 chars); over-limit falls back to the built-in body, like a miss.
-const TEMPLATE_PR_BODY_MAX_CHARS = 60_000
+// Byte-based (UTF-8), matching the Go/Python readers so every creator accepts
+// or rejects the same file — a char-based cap would diverge on multibyte text.
+const TEMPLATE_PR_BODY_MAX_BYTES = 60_000
 
 // The teacher-supplied Feedback PR body from the template repo, or null.
 // Reads the first existing native pull_request_template.md path VERBATIM (no
@@ -140,7 +142,9 @@ export async function readTemplatePrBody(
         )}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${ref}`,
       )
       if (typeof content !== "string" || !content.trim()) continue
-      if (content.length > TEMPLATE_PR_BODY_MAX_CHARS) {
+      if (
+        new TextEncoder().encode(content).length > TEMPLATE_PR_BODY_MAX_BYTES
+      ) {
         log.warn("feedback PR template exceeds size cap; using built-in body", {
           templateOwner,
           templateRepo,

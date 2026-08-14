@@ -112,6 +112,24 @@ func TestDecodeContentsBase64(t *testing.T) {
 	})
 }
 
+func TestContentsPath(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"pull_request_template.md", "pull_request_template.md"},
+		// Slashes between segments survive; only the segments are escaped.
+		{".github/pull_request_template.md", ".github/pull_request_template.md"},
+		{"docs/pull_request_template.md", "docs/pull_request_template.md"},
+		// A space in a segment is percent-escaped, the slash is not.
+		{"a dir/file name.md", "a%20dir/file%20name.md"},
+	}
+	for _, c := range cases {
+		if got := ContentsPath(c.in); got != c.want {
+			t.Errorf("ContentsPath(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 type hostRewriteTransport struct{ target *url.URL }
 
 func (h *hostRewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {

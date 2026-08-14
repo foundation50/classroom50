@@ -67,8 +67,9 @@ class FakeGh:
                 # be driven through the stub, not monkeypatched out.
                 return "pr_list_url" if "url" in args else "pr_list"
             if args[1] == "view":
-                # The reopen path reads --json state.
-                return "pr_view_body" if "body" in args else "pr_view"
+                # Only the reopen path reads a PR (`--json state`); adopt-only
+                # means no code reads `--json body` anymore.
+                return "pr_view"
             return f"pr_{args[1]}"
         if args[0] == "label":
             return "label"
@@ -166,12 +167,10 @@ def test_base_check_transient_error_does_not_open_pr(monkeypatch):
 
 
 def test_existing_open_pr_left_in_place(monkeypatch):
-    linked = f"body with {SERVER}/{REPO}/releases/latest"
     fake, state, desc, url = _run(monkeypatch, {
         "head_branch": "main",
         "base_sha": BASE_SHA,                 # base already correct
         "pr_list": _pr_list_json("7", "OPEN", ""),
-        "pr_view_body": linked,               # already has the link -> no edit
     })
     assert state == "success"
     assert desc == "Feedback PR in place"
@@ -179,6 +178,7 @@ def test_existing_open_pr_left_in_place(monkeypatch):
     assert not fake.made("pr create")
     assert not fake.made("pr reopen")
     assert not fake.made("pr edit")
+    assert not fake.made("pr view")          # adopt-only: never reads the body
 
 
 def test_closed_unmerged_pr_reopened(monkeypatch):
@@ -269,9 +269,10 @@ def test_fallback_create_uses_template_body_when_flag_set(monkeypatch):
     assert create[body_idx] == teacher_body
 
 
-def test_fallback_create_falls_back_to_builtin_when_template_unreadable(monkeypatch):
+def test_fallback_create_falls_back_to_builtin_when_template_unreadable(monkeypatch, capsys):
     # Flag set but the template file is absent/unreadable (runner token can't
-    # read a private external template) -> built-in body, PR still created.
+    # read a private external template) -> built-in body, PR still created, and
+    # a ::warning:: is emitted so a teacher can spot the diverged repo.
     fake, state, desc, url = _run(monkeypatch, {
         "head_branch": "main",
         "base_sha": BASE_SHA,
@@ -283,6 +284,8 @@ def test_fallback_create_falls_back_to_builtin_when_template_unreadable(monkeypa
     create = [c for c in fake.calls if c[0] == "pr" and c[1] == "create"][0]
     body_idx = create.index("--body") + 1
     assert "**Don't close or merge this pull request**" in create[body_idx]
+    out = capsys.readouterr().out
+    assert "::warning::" in out and "could not read a pull request template" in out
 
 
 def test_fallback_create_uses_builtin_when_flag_unset(monkeypatch):
@@ -389,16 +392,14 @@ def test_accept_time_pr_adopted_without_edits(monkeypatch):
     """Issue #228: `gh student accept` / the web GUI may have already created
     the Feedback PR (student-authored, base frozen at the accept commit). The
     runner must ADOPT it — find_pr matches by base+head only — with zero writes:
-    no create, no reopen, and no body edit. Adopt-only means the accept-time
+    no create, no reopen, and no body read/edit. Adopt-only means the accept-time
     body (built-in or teacher-supplied full-replace) is left exactly as-is."""
-    accept_time_body = efp.pr_body("main", f"{SERVER}/{REPO}/releases/latest")
     fake, state, desc, url = _run(monkeypatch, {
         "head_branch": "main",
         # The accept flow froze the base at the same baseline the runner
         # resolves from the .classroom50.yaml marker -> SHA check passes.
         "base_sha": BASE_SHA,
         "pr_list": _pr_list_json("1", "OPEN", ""),
-        "pr_view_body": accept_time_body,
     })
     assert state == "success"
     assert desc == "Feedback PR in place"
@@ -407,6 +408,7 @@ def test_accept_time_pr_adopted_without_edits(monkeypatch):
     assert not fake.made("pr create")
     assert not fake.made("pr reopen")
     assert not fake.made("pr edit")           # adopt-only: never edits a body
+    assert not fake.made("pr view")           # adopt-only: never reads a body
 
 
 def test_pr_body_matches_the_cross_language_golden():

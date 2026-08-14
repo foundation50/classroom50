@@ -241,3 +241,14 @@ func SetCollaborator(client *api.RESTClient, owner, repo, username, permission s
 func DecodeContentsBase64(content string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(strings.ReplaceAll(content, "\n", ""))
 }
+
+// ContentsPath escapes each slash-separated segment of a repo content path so
+// the slashes survive into a `/repos/{owner}/{repo}/contents/{path}` request
+// path (url.PathEscape on the whole string would escape the slashes too).
+func ContentsPath(p string) string {
+	segs := strings.Split(p, "/")
+	for i, s := range segs {
+		segs[i] = url.PathEscape(s)
+	}
+	return strings.Join(segs, "/")
+}

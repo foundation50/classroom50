@@ -307,14 +307,16 @@ func TestFeedbackLabelForMode(t *testing.T) {
 	}
 }
 
-// TestFeedbackPRBody pins the body BYTE-for-byte against the cross-language
-// golden that gh-teacher's skeleton test (Python) and the web suite (TypeScript)
-// assert against too, so a one-sided prose edit fails on every side. The body is
-// rendered from the canonical cli/shared/contract/feedbackPrBody.md; the golden
-// is that .md with HEAD_BRANCH/RELEASE_URL left literal and BASE_BRANCH resolved.
-// It also re-states the load-bearing properties, since the golden alone would not
-// say WHY they matter: the release URL is embedded (self-updating latest link),
-// and the head branch and frozen base are named.
+// TestFeedbackPRBody pins the built-in body against the cross-language golden.
+// Note what this actually guards: Go (//go:embed) and TS (Vite ?raw) both RENDER
+// from feedbackPrBody.md, so they cannot drift from it in prose — this test's
+// render==golden check is an identity check for the Go side and, together with
+// the web ?raw test, guards that both toolchains yield byte-identical bytes for
+// the same .md (catching a trailing-newline / line-ending regression). The one
+// copy that CAN drift in wording is the runner's hand-mirrored pr_body (Python),
+// which its own skeleton test pins to this same golden. The .md is the single
+// source of truth; regenerate the golden via
+// `go test ./contract -run TestFeedbackPRBody -update` after editing it.
 func TestFeedbackPRBody(t *testing.T) {
 	rendered := FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL")
 	if *updateGolden {
@@ -350,6 +352,32 @@ func TestFeedbackPRBody(t *testing.T) {
 // feedbackPRBodyGoldenPath locates the rendered-body golden, also consumed by
 // the Python (skeleton_tests) and TypeScript (web) mirror tests.
 const feedbackPRBodyGoldenPath = "testdata/feedback_pr_body.golden"
+
+// TestFeedbackTemplateContract pins the feedback_pr_template read contract that
+// the two Go readers (gh-student, gh-teacher) share from here and that the web
+// GUI (TEMPLATE_PR_BODY_PATHS / TEMPLATE_PR_BODY_MAX_BYTES) and the runner
+// (_TEMPLATE_PR_BODY_PATHS / _TEMPLATE_PR_BODY_MAX_BYTES) hand-mirror. A change
+// here must move those copies too — the paths and their order decide which
+// pull_request_template.md wins, and the byte cap decides which file every
+// creator accepts/rejects, so drift would make creators disagree on the body.
+func TestFeedbackTemplateContract(t *testing.T) {
+	wantPaths := []string{
+		".github/pull_request_template.md",
+		"pull_request_template.md",
+		"docs/pull_request_template.md",
+	}
+	if len(FeedbackTemplatePaths) != len(wantPaths) {
+		t.Fatalf("FeedbackTemplatePaths = %v, want %v", FeedbackTemplatePaths, wantPaths)
+	}
+	for i, want := range wantPaths {
+		if FeedbackTemplatePaths[i] != want {
+			t.Errorf("FeedbackTemplatePaths[%d] = %q, want %q (mirror web + runner if changed)", i, FeedbackTemplatePaths[i], want)
+		}
+	}
+	if FeedbackTemplateMaxBytes != 60_000 {
+		t.Errorf("FeedbackTemplateMaxBytes = %d, want 60000 (byte-based; mirror web TEMPLATE_PR_BODY_MAX_BYTES + runner)", FeedbackTemplateMaxBytes)
+	}
+}
 
 // TestScopesSatisfy pins the single OAuth scope-hierarchy source both CLIs
 // share (the shared auto-login probe and gh-teacher's init preflight): a
