@@ -253,6 +253,32 @@ describe("assignment slug field", () => {
     expect(slug.value).toBe("hw1")
     expect(slug.disabled).toBe(true)
   })
+
+  it("edit: locks the assignment-type radios (switching invalidates submissions)", () => {
+    const { container } = renderForm(
+      <CreateAssignmentForm
+        edit
+        defaultValues={assignmentToFormValues(baseAssignment)}
+        onSubmit={() => {}}
+      />,
+    )
+    const modeRadios =
+      container.querySelectorAll<HTMLInputElement>('input[name="mode"]')
+    expect(modeRadios.length).toBe(2)
+    modeRadios.forEach((radio) => expect(radio.disabled).toBe(true))
+    expect(screen.getByText("assignments.form.typeLockedHelp")).not.toBeNull()
+  })
+
+  it("create: leaves the assignment-type radios editable", () => {
+    const { container } = renderForm(
+      <CreateAssignmentForm onSubmit={() => {}} />,
+    )
+    const modeRadios =
+      container.querySelectorAll<HTMLInputElement>('input[name="mode"]')
+    expect(modeRadios.length).toBe(2)
+    modeRadios.forEach((radio) => expect(radio.disabled).toBe(false))
+    expect(screen.queryByText("assignments.form.typeLockedHelp")).toBeNull()
+  })
 })
 
 describe("submission release files visibility", () => {

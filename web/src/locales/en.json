@@ -1127,6 +1127,7 @@
       "type": "Assignment type",
       "typeIndividual": "Individual",
       "typeGroup": "Group project",
+      "typeLockedHelp": "Can't be changed after creation — switching it would invalidate existing submissions.",
       "maxGroupSize": "Max group size",
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
       "repoSource": {
@@ -1662,8 +1663,8 @@
     "manageCollaborators": "Manage collaborators",
     "provisioningConfirm": {
       "title": "Change provisioning settings after students accepted?",
-      "body_one": "{{count}} student has already accepted this assignment. Changing the repository source, built-in autograder, or grading mode only affects repositories accepted from now on. The {{count}} existing repository keeps its original starter code and setup, and scores recorded under the old grading mode may be read differently — you'll need to reconcile any inconsistency yourself.",
-      "body_other": "{{count}} students have already accepted this assignment. Changing the repository source, built-in autograder, or grading mode only affects repositories accepted from now on. The {{count}} existing repositories keep their original starter code and setup, and scores recorded under the old grading mode may be read differently — you'll need to reconcile any inconsistency yourself.",
+      "body_one": "{{count}} student has already accepted this assignment. This change only affects repositories accepted from now on — the {{count}} existing repository keeps its original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the gradebook; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to reconcile any inconsistency yourself.",
+      "body_other": "{{count}} students have already accepted this assignment. This change only affects repositories accepted from now on — the {{count}} existing repositories keep their original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the gradebook; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to reconcile any inconsistency yourself.",
       "confirm": "Save changes anyway",
       "cancel": "Cancel"
     }

@@ -165,6 +165,11 @@ export function DetailsSection({
         )}
       </form.Field>
 
+      {/* Assignment type is the repo-shape identity (individual = one repo per
+          student; group = a shared repo). Immutable on edit: switching it after
+          students accept invalidates every existing submission at collection
+          (the assignment_type check rejects them), so the radios lock like the
+          slug and a caveat says so up-front. */}
       <form.Field name="mode">
         {(field) => (
           <fieldset className="mt-4">
@@ -185,6 +190,7 @@ export function DetailsSection({
                     name={field.name}
                     value={value}
                     checked={field.state.value === value}
+                    disabled={edit}
                     onBlur={field.handleBlur}
                     onChange={() => field.handleChange(value)}
                   />
@@ -196,6 +202,11 @@ export function DetailsSection({
                 </label>
               ))}
             </div>
+            {edit ? (
+              <p className="mt-1.5 text-sm text-base-content/70">
+                {t("assignments.form.typeLockedHelp")}
+              </p>
+            ) : null}
           </fieldset>
         )}
       </form.Field>
