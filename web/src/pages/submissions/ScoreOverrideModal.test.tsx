@@ -71,7 +71,6 @@ function renderModal(
       owner="alice"
       hasGrade
       score={30}
-      max={50}
       overridden={false}
       thresholdFraction={null}
       ctx={autoCtx}
@@ -134,7 +133,6 @@ describe("ScoreOverrideModal", () => {
         owner="alice"
         hasGrade
         score={42}
-        max={50}
         overridden
         autogradedScore={30}
         autogradedMax={50}
@@ -158,7 +156,6 @@ describe("ScoreOverrideModal", () => {
     renderModal({
       overridden: true,
       score: 42,
-      max: 50,
       autogradedScore: 30,
       autogradedMax: 50,
     })

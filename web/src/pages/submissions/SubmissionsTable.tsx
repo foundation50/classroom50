@@ -106,7 +106,6 @@ type OverrideModalRow = {
   displayName?: string
   hasGrade: boolean
   score: number
-  max: number
   overridden: boolean
   autogradedScore?: number
   autogradedMax?: number
@@ -479,7 +478,6 @@ const SubmissionsTable = ({
                         : getName(rest.owner, students) || undefined,
                       hasGrade: cell.hasGrade,
                       score,
-                      max: rest["max-score"],
                       overridden: Boolean(rest.overridden),
                       autogradedScore: rest.autogradedScore,
                       autogradedMax: rest.autogradedMax,
@@ -756,7 +754,6 @@ const SubmissionsTable = ({
                               getName(username, students) || undefined,
                             hasGrade: false,
                             score: 0,
-                            max: overrideGrade.maxPoints,
                             overridden: false,
                             maxPoints: overrideGrade.maxPoints,
                           })
@@ -947,7 +944,6 @@ const SubmissionsTable = ({
           displayName={overrideRow.displayName}
           hasGrade={overrideRow.hasGrade}
           score={overrideRow.score}
-          max={overrideRow.max}
           overridden={overrideRow.overridden}
           autogradedScore={overrideRow.autogradedScore}
           autogradedMax={overrideRow.autogradedMax}

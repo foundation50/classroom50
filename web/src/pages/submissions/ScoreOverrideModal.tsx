@@ -58,7 +58,6 @@ export function ScoreOverrideModal({
   displayName,
   hasGrade,
   score,
-  max,
   overridden,
   autogradedScore,
   autogradedMax,
@@ -72,9 +71,9 @@ export function ScoreOverrideModal({
   displayName?: string
   // Whether a grade has actually been recorded (false = ungraded empty state).
   hasGrade: boolean
-  // The current effective score / max (ignored for display when !hasGrade).
+  // The current effective score, used to seed the input (ignored when
+  // !hasGrade). The max shown/validated against is ctx.maxPoints.
   score: number
-  max: number
   // The row carries a teacher override — enables the Clear override action.
   overridden: boolean
   // The autograded score/max preserved beneath an override (revert target).
@@ -161,15 +160,14 @@ export function ScoreOverrideModal({
       ? t("submissions.scoreOverride.descriptionAuto", { name })
       : t("submissions.scoreOverride.descriptionManual", { name })
 
-  // The autograded value to surface as the revert target: the preserved
-  // history beneath the override, else (a fresh autograded row not yet
-  // overridden) the current score.
-  const revertScore = autogradedScore ?? (overridden ? undefined : score)
-  const revertMax = autogradedMax ?? (overridden ? undefined : max)
+  // The preserved autograded value shown as the revert target — only when an
+  // override is in place (a fresh, not-yet-overridden autograded row shows its
+  // score in the input already, so a separate block would just duplicate it).
   const showAutograded =
     ctx.mode === "auto" &&
-    typeof revertScore === "number" &&
-    typeof revertMax === "number"
+    overridden &&
+    typeof autogradedScore === "number" &&
+    typeof autogradedMax === "number"
 
   return (
     <Modal
@@ -193,8 +191,8 @@ export function ScoreOverrideModal({
               {t("submissions.scoreOverride.currentAutograded")}
             </span>
             <ScoreBadge
-              score={revertScore as number}
-              max={revertMax as number}
+              score={autogradedScore}
+              max={autogradedMax}
               thresholdFraction={thresholdFraction}
               size="sm"
             />
@@ -236,15 +234,6 @@ export function ScoreOverrideModal({
             </div>
           )}
         </FormField>
-
-        {overridden && showAutograded ? (
-          <p className="text-xs text-base-content/60">
-            {t("submissions.scoreOverride.revertHint", {
-              score: revertScore as number,
-              max: revertMax as number,
-            })}
-          </p>
-        ) : null}
 
         {mutation.isError ? (
           <Alert tone="error" className="text-sm">

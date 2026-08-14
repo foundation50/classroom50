@@ -2534,7 +2534,6 @@
       "descriptionAuto": "Enter a score for {{name}} to override the autograded result. The autograded score is preserved and restored if you clear the override.",
       "inputLabel": "Score for {{name}}",
       "currentAutograded": "Autograded score",
-      "revertHint": "Clearing the override restores the autograded score of {{score}}/{{max}}.",
       "required": "Enter a score to save.",
       "range": "Score must be a whole number from 0 to {{max}}.",
       "save": "Save",
