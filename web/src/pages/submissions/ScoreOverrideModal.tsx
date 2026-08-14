@@ -205,7 +205,7 @@ export function ScoreOverrideModal({
       open={open}
       onClose={onClose}
       closeDisabled={saving}
-      size="sm"
+      size="md"
       aria-labelledby={titleId}
     >
       <div className="flex flex-col gap-4">
@@ -231,7 +231,7 @@ export function ScoreOverrideModal({
         ) : null}
 
         <FormField
-          label={t("submissions.scoreOverride.inputLabel", { name })}
+          label={t("submissions.scoreOverride.inputLabel")}
           error={
             validationError && draft.trim() !== "" ? validationError : undefined
           }
@@ -268,7 +268,7 @@ export function ScoreOverrideModal({
 
         {maxEditable ? (
           <FormField
-            label={t("submissions.scoreOverride.maxLabel", { name })}
+            label={t("submissions.scoreOverride.maxLabel")}
             error={maxError && maxDraft.trim() !== "" ? maxError : undefined}
             hint={t("submissions.scoreOverride.maxHint")}
           >
