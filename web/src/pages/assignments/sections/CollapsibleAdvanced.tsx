@@ -1,9 +1,7 @@
 import { useState, type ReactNode } from "react"
 import { ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { AnimatePresence, motion } from "motion/react"
-import { collapseVariants } from "@/lib/motion"
-import { cx } from "@/components/ui"
+import { Collapse, cx } from "@/components/ui"
 import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
 
 // The collapsible "Advanced settings" disclosure shared by the Repository Setup
@@ -36,38 +34,28 @@ export function CollapsibleAdvanced({
         aria-expanded={expanded}
         className="group flex w-fit cursor-pointer items-center gap-1.5 text-sm font-semibold text-info hover:underline"
       >
-        {/* Nudges right while closed and down once open, so the hover hints at
-            the direction the panel will move. */}
+        {/* Nudges toward the reading direction while closed and down once open,
+            so the hover hints at where the panel will go. RTL-paired: a bare
+            translate-x wouldn't mirror. */}
         <ChevronRight
           aria-hidden="true"
           className={cx(
             "size-4 transition-transform duration-200",
             expanded
               ? "rotate-90 group-hover:translate-y-0.5"
-              : "group-hover:translate-x-0.5",
+              : "ltr:group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5",
           )}
         />
         {t("assignments.form.advanced")}
       </button>
-      <AnimatePresence initial={false}>
-        {expanded ? (
-          <motion.div
-            ref={bodyRef}
-            variants={collapseVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="overflow-hidden"
-          >
-            {help ? (
-              <p className="pt-2 pb-4 text-sm text-base-content/70">{help}</p>
-            ) : (
-              <div className="pt-2" />
-            )}
-            {children}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      <Collapse open={expanded} bodyRef={bodyRef}>
+        {help ? (
+          <p className="pt-2 pb-4 text-sm text-base-content/70">{help}</p>
+        ) : (
+          <div className="pt-2" />
+        )}
+        {children}
+      </Collapse>
     </div>
   )
 }

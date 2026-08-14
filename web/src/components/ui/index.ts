@@ -41,6 +41,8 @@ export type { AlertProps, AlertTone } from "./Alert"
 export { AnimatedAlert } from "./AnimatedAlert"
 export type { AnimatedAlertProps } from "./AnimatedAlert"
 
+export { Collapse } from "./Collapse"
+
 export { CopyableCode } from "./CopyableCode"
 export type { CopyableCodeProps } from "./CopyableCode"
 
