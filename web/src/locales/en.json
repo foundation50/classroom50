@@ -1178,7 +1178,7 @@
         "learnMore": "Learn more",
         "help": "The role each student is granted on their own assignment repository at accept time. Push (write) is the default. Choose Admin to let students manage repository settings and enable GitHub Pages. This applies to students who accept from now on; use the gradebook to change repositories already created.",
         "groupHelp": "Group members join with at least admin so the group owner can add teammates. This applies to repositories created from now on; use the gradebook to change existing ones.",
-        "default": "Default ({{level}})",
+        "default": "Default: {{level}}",
         "levels": {
           "pull": "Read (pull)",
           "triage": "Triage",
@@ -1239,7 +1239,7 @@
         "overrideNoTemplate": "The default keeps GitHub's own repository defaults.",
         "overrideExisting": "To update repositories students already accepted, use the bulk repository-features action on the submissions page.",
         "choices": {
-          "default": "Default (GitHub default)",
+          "default": "GitHub default",
           "inherit": "Inherit from template",
           "inheritLoading": "Inherit from template (checking…)",
           "inheritOn": "Inherit from template (currently on)",
