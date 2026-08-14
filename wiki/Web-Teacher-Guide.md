@@ -156,9 +156,9 @@ How each student's repository is created:
   [Assignment Templates](Assignment-Templates) for requirements.
 - **Add a README** (no-template assignments) — whether the repository starts
   with an initial commit. With it **off**, what students get depends on the
-  built-in autograder choice under [Grading and
-  submissions](#grading-and-submissions):
-  - autograder **off** (the default) → a **truly bare repository**: no commit,
+  built-in autograder choice under [Submission and
+  grading](#submission-and-grading):
+  - autograder **off** → a **truly bare repository**: no commit,
     no autograding, and no feedback pull request (permanently — not just until
     the student's first commit). Use it when students build everything from
     scratch, including their own GitHub Actions.
@@ -167,19 +167,16 @@ How each student's repository is created:
 - **Include all branches** (templated) — copy **all** of the template's
   branches into each student repository, not just the default branch. Useful
   for multi-branch starter repos.
+- **Feedback pull request** — automatically opens a pull request per student so
+  you can review changes and leave inline feedback.
+
+The rest of the repository settings sit under **Advanced settings** in this
+section — most assignments never need them:
+
 - **Copy About from template** / **Copy topics from template** (templated, both
   on by default) — carry the template's About description and topics over to
   each student repository (GitHub's template-generate doesn't copy them on its
   own). Applies when students accept in the web app.
-- **Repository features** — per-feature settings for **Issues**, **Wiki**,
-  **Projects**, and **Pull requests** on student repositories. The default,
-  **Inherit from template**, re-applies the template's current setting at
-  accept time (again, GitHub's generate doesn't copy these); you can force any
-  feature **On** or **Off** instead. Template-less assignments default to
-  GitHub's own defaults. To reconcile repositories that already exist, use the
-  **Update repository features** action on the submissions page.
-- **Feedback pull request** — automatically opens a pull request per student so
-  you can review changes and leave inline feedback.
 - **Use the template's pull request template as the Feedback PR body**
   (templated, with the Feedback pull request on) — use the template repository's
   own pull request template (`.github/pull_request_template.md`,
@@ -189,6 +186,13 @@ How each student's repository is created:
   file is missing or can't be read, the built-in body is used, so nothing breaks.
   It is your responsibility to keep the template's contents correct.
 - **Student repo access** — the role students get on their own repository.
+- **Repository features** — per-feature settings for **Issues**, **Wiki**,
+  **Projects**, and **Pull requests** on student repositories. The default,
+  **Inherit from template**, re-applies the template's current setting at
+  accept time (again, GitHub's generate doesn't copy these); you can force any
+  feature **On** or **Off** instead. Template-less assignments default to
+  GitHub's own defaults. To reconcile repositories that already exist, use the
+  **Update repository features** action on the submissions page.
 
 > [!NOTE]
 > **These settings can be changed after creation, but only affect repositories
@@ -199,21 +203,22 @@ How each student's repository is created:
 > type** — Individual vs. Group — is the exception: it stays locked on edit,
 > because switching it would invalidate every existing submission.)
 
-### Grading and submissions
+### Submission and grading
 
 - **Grading** — **Not graded** (the default), **Autograded**, or **Manual
-  (enter scores by hand)**. The autograding options below are offered only
-  under **Autograded**; **Manual** assignments get a **Max points** field and
+  (enter scores by hand)**. The autograding options below appear only under
+  **Autograded**; **Manual** assignments get a **Max points** field and
   you enter each student's score on the submissions page (see below). Can be
   changed after creation (edits only affect repositories accepted from now on).
 - **Built-in autograder** — under **Autograded**, choose **Use the built-in
-  autograder** or **Do not use the built-in autograder** (the default on a new
-  assignment). Opting out means accept installs no autograding workflow at all:
-  on a templated assignment your template's own CI workflows run instead, and
-  Classroom 50's score collection skips the assignment. Can be changed after
-  creation (edits only affect repositories accepted from now on; turning
-  autograding off later makes already-accepted repositories' autograde runs
-  fail and drop out of the gradebook).
+  autograder** (preselected when you switch to Autograded) or **Do not use the
+  built-in autograder**. Opting out means accept installs no autograding
+  workflow at all: on a templated assignment your template's own CI workflows
+  run instead, and Classroom 50's score collection skips the assignment. Your
+  choice sticks — leaving Autograded and coming back won't reset it. Can be
+  changed after creation (edits only affect repositories accepted from now on;
+  turning autograding off later makes already-accepted repositories' autograde
+  runs fail and drop out of the gradebook).
 - **Submission type** — when the autograder runs. **Every push to the default
   branch** (the default) grades each push. **A tagged commit** grades only
   when a student submits (`gh student submit`) or pushes a `submit/*` tag —
@@ -227,7 +232,8 @@ How each student's repository is created:
 
 ### Advanced settings
 
-Optional settings for customizing the autograding environment:
+A collapsed **Advanced settings** section, below the autograding tests in the
+form, holds optional settings for customizing the autograding environment:
 
 - **GitHub runner** — the [runner](https://docs.github.com/en/actions/concepts/runners/github-hosted-runners)
   autograding runs on. `ubuntu-latest` is a good default.
@@ -258,7 +264,9 @@ for dependency installation and environment-variable guidance.
 ### Autograding tests
 
 Autograding tests run whenever a submission grades (per the assignment's
-submission type). Click **Add test** to add one.
+submission type). The list collapses to keep the form scannable; click its
+heading to expand it, or **Add test** to add one (saving a test expands the
+list automatically).
 
 ![Autograding tests](images/web_create_assignment_tests.png)
 
