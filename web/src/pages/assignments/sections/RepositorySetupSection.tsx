@@ -29,7 +29,9 @@ const REPO_ROLES_DOCS_URL =
 //     the tri-state controls folded in from the former standalone section so
 //     all repo config lives in one card.
 // The source choice folds into empty_repo + template on submit via
-// deriveFormShape; the choice is immutable after creation (locked on edit).
+// deriveFormShape; it stays editable on edit, but changing it only re-provisions
+// repos accepted from now on (already-accepted repos aren't retrofitted), so the
+// edit form warns when students have already accepted.
 export function RepositorySetupSection({
   form,
   edit,

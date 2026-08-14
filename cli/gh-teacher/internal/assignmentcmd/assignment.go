@@ -692,13 +692,13 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		droppedAllowedCnt    int
 		droppedPassThreshold *int
 		droppedStudentPerm   string
-		// Provisioning-class settings changed on a same-slug re-add. These are
-		// no longer blocked — the change only affects repos accepted from now
-		// on (already-accepted repos aren't retrofitted), so warn instead of
-		// erroring. Mirrors the web app's edit-time confirmation.
-		changedEmptyRepo    bool
-		changedNoAutograder bool
-		changedInitShim     bool
+		// empty_repo changed on a same-slug re-add. No longer blocked — the
+		// change only affects repos accepted from now on (already-accepted repos
+		// aren't retrofitted), so warn instead of erroring. Mirrors the web app's
+		// edit-time confirmation. (no_autograder / init_shim have no `add` flag
+		// and are carried forward from the prior entry below, so `add` can never
+		// change them — only empty_repo is detectable here.)
+		changedEmptyRepo bool
 		// The locked state that actually landed (carried forward from a prior
 		// same-slug entry). Read after the commit to decide the template grant,
 		// since `entry` (rebuilt from flags) never carries Locked.
@@ -711,8 +711,6 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		droppedPassThreshold = nil
 		droppedStudentPerm = ""
 		changedEmptyRepo = false
-		changedNoAutograder = false
-		changedInitShim = false
 		attemptEntry := entry
 		// Refuse on an archived classroom (active:false), mirroring the web.
 		// Checked at parentSHA so a concurrent unarchive is observed on retry.
@@ -787,17 +785,16 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			entry.IncludeAllBranches = file.Assignments[prevIdx].IncludeAllBranches
 			attemptEntry.IncludeAllBranches = entry.IncludeAllBranches
 		}
-		// Provisioning-class settings (empty_repo, no_autograder, init_shim) are
-		// now MUTABLE on a same-slug re-add: student repos are provisioned at
-		// accept time and never retrofitted, so a change only affects repos
-		// accepted from now on. Detect a change and warn after the commit rather
-		// than blocking it (mirrors the web app, which confirms the same change
-		// when students have already accepted). Checked at parentSHA inside the
-		// build so a concurrent add/remove is observed on retry.
+		// empty_repo is MUTABLE on a same-slug re-add: student repos are
+		// provisioned at accept time and never retrofitted, so a change only
+		// affects repos accepted from now on. Detect a change and warn after the
+		// commit rather than blocking it (mirrors the web app, which confirms the
+		// same change when students have already accepted). Checked at parentSHA
+		// inside the build so a concurrent add/remove is observed on retry.
+		// no_autograder / init_shim are carried forward above (no `add` flag), so
+		// they can't change here — only empty_repo is detectable.
 		if hasPrev {
 			changedEmptyRepo = assignment.EmptyRepoChanged(file.Assignments[prevIdx], entry)
-			changedNoAutograder = assignment.NoAutograderChanged(file.Assignments[prevIdx], entry)
-			changedInitShim = assignment.InitShimChanged(file.Assignments[prevIdx], entry)
 		}
 		// Upsert replaces the whole entry, so re-running add without --tests
 		// drops tests authored via `assignment test add`. Count them for the
@@ -851,8 +848,9 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			// grading is a GUI/manifest-owned field with no `assignment add`
 			// flag; since it was promoted to a known key it no longer rides
 			// through Extra, so a same-slug re-add would silently drop a
-			// GUI-authored grading block (its mode is immutable, and the manual
-			// max_points feeds the gradebook). Deep-copy the *Grading + *int so
+			// GUI-authored grading block (its max_points feeds the gradebook).
+			// The mode is mutable via the GUI; `add` carries it forward only
+			// because it has no --grading flag. Deep-copy the *Grading + *int so
 			// the carried value doesn't alias the previous entry.
 			if attemptEntry.Grading == nil && previous.Grading != nil {
 				carried := *previous.Grading
@@ -974,17 +972,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	// reconciling any resulting inconsistency (mirrors the web app's confirm).
 	if changedEmptyRepo {
 		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q changed its empty_repo setting. Repositories students already accepted are not retrofitted — they keep their original setup. The new setting applies only to accepts from now on; reconcile existing repositories yourself.\n",
-			slug)
-	}
-	if changedNoAutograder {
-		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q changed its no_autograder setting. Repositories students already accepted are not retrofitted — they keep their original setup. The new setting applies only to accepts from now on; reconcile existing repositories yourself.\n",
-			slug)
-	}
-	if changedInitShim {
-		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q changed its init_shim setting. Repositories students already accepted are not retrofitted — they keep their original setup. The new setting applies only to accepts from now on; reconcile existing repositories yourself.\n",
+			"Warning: replacing %q changed its empty_repo setting. Repositories students already accepted are not retrofitted — they keep their original setup, and if autograding is now off their autograde runs start failing and drop out of the gradebook. The new setting applies only to accepts from now on; reconcile existing repositories yourself.\n",
 			slug)
 	}
 	// Heads-up if the encoded file nears GitHub's ~1 MiB contents-API limit
