@@ -86,6 +86,12 @@ describe("AutogradingTestsPane editor commit gating", () => {
     await user.click(screen.getByText("assignments.autograder.addTest"))
   }
 
+  // The list collapses by default when there are no tests, so a test asserting
+  // on the table's contents has to open it first.
+  const expandList = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByText("assignments.autograder.heading"))
+  }
+
   // The commit button lives in the modal's `.modal-action` footer; the pane's
   // own "Add test" button shares its label, so scope the lookup to the footer.
   const commitButton = () => {
@@ -105,12 +111,42 @@ describe("AutogradingTestsPane editor commit gating", () => {
     const user = userEvent.setup()
     const tests = renderPane()
 
+    await expandList(user)
     expect(screen.getByText("assignments.autograder.empty")).toBeTruthy()
     await openEditor(user)
 
     // Editor is open, but nothing committed yet.
     expect(tests()).toHaveLength(0)
     expect(screen.getByText("assignments.autograder.empty")).toBeTruthy()
+  })
+
+  it("starts collapsed with no tests and auto-expands on a committed test", async () => {
+    const user = userEvent.setup()
+    const tests = renderPane()
+
+    // Collapsed: the table (and its empty state) isn't rendered, but the
+    // summary line still reports what's configured.
+    expect(screen.queryByText("assignments.autograder.empty")).toBeNull()
+    expect(screen.getByText("assignments.autograder.summary")).toBeTruthy()
+
+    await openEditor(user)
+    await user.type(
+      screen.getByLabelText("assignments.autograder.testName"),
+      "Prints hello",
+    )
+    await user.type(
+      screen.getByLabelText("assignments.autograder.runCommand"),
+      "./hello",
+    )
+    await user.type(
+      screen.getByLabelText("assignments.autograder.expectedOutput"),
+      "hello",
+    )
+    await user.click(commitButton())
+
+    // The committed test is visible without a manual expand.
+    await waitFor(() => expect(tests()).toHaveLength(1))
+    expect(screen.getByText("Prints hello")).toBeTruthy()
   })
 
   it("Cancel discards the draft, leaving the list empty", async () => {
