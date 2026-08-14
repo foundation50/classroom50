@@ -4,15 +4,7 @@ import type { TFunction } from "i18next"
 import { Pencil, Trash } from "lucide-react"
 import type { AssignmentForm } from "./assignmentFormModel"
 
-import {
-  Badge,
-  Button,
-  Card,
-  Input,
-  Modal,
-  Select,
-  Textarea,
-} from "@/components/ui"
+import { Badge, Button, Input, Modal, Select, Textarea } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
   emptyTestDraft,
@@ -448,16 +440,16 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
       .filter((_, i) => active.mode === "new" || i !== active.index)
       .map((d) => d.name.trim())
   return (
-    <Card bordered={false}>
+    <div>
       <form.Field name="tests" mode="array">
         {(field) => (
-          <Card.Body>
-            <div className="flex justify-between mb-6">
+          <>
+            <div className="flex justify-between mb-4">
               <div>
-                <h3 className="text-lg font-bold">
+                <h4 className="text-base font-bold">
                   {t("assignments.autograder.heading")}
-                </h3>
-                <h3 className="text-md opacity-70">
+                </h4>
+                <p className="text-sm opacity-70">
                   <form.Subscribe selector={(state) => state.values.tests}>
                     {(tests) => (
                       <>
@@ -472,7 +464,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                       </>
                     )}
                   </form.Subscribe>
-                </h3>
+                </p>
               </div>
               <div>
                 <Button variant="outline" onClick={openNewEditor}>
@@ -579,10 +571,10 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                 onCommit={commitEditor}
               />
             )}
-          </Card.Body>
+          </>
         )}
       </form.Field>
-    </Card>
+    </div>
   )
 }
 
