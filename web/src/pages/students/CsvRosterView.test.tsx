@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  within,
+} from "@testing-library/react"
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
@@ -98,5 +104,35 @@ describe("CsvRosterView", () => {
   it("renders no mutating controls (read-only)", () => {
     const { container } = render(<CsvRosterView students={[student()]} />)
     expect(container.querySelectorAll("button")).toHaveLength(0)
+  })
+
+  it("re-sorts by first name vs last name when the toggle changes", () => {
+    // Zed Adams vs Amy Brown: first-name order is Amy, Zed; last-name order is
+    // Adams (Zed), Brown (Amy) — so flipping the toggle must reorder the rows.
+    render(
+      <CsvRosterView
+        students={[
+          student({ username: "zed", first_name: "Zed", last_name: "Adams" }),
+          student({ username: "amy", first_name: "Amy", last_name: "Brown" }),
+        ]}
+      />,
+    )
+
+    const names = () =>
+      screen
+        .getAllByRole("row")
+        // Skip the header row (no data cell); read the bold display-name cell.
+        .map((r) => within(r).queryByText(/Zed Adams|Amy Brown/)?.textContent)
+        .filter(Boolean)
+
+    // Defaults to first-name order.
+    expect(names()).toEqual(["Amy Brown", "Zed Adams"])
+
+    fireEvent.change(screen.getByLabelText("students.sortBy.label"), {
+      target: { value: "last" },
+    })
+
+    // Last-name order: Adams (Zed) before Brown (Amy).
+    expect(names()).toEqual(["Zed Adams", "Amy Brown"])
   })
 })

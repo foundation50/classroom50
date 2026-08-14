@@ -11,7 +11,16 @@ import type { BadgeTone } from "@/components/ui"
 import type { TeamRosterRow } from "@/util/teamRoster"
 import { rowToStudent } from "@/util/teamRoster"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
-import { getName, nameFromParts } from "@/util/students"
+import {
+  compareStudentsByName,
+  getName,
+  nameFromParts,
+  NAME_COLLATION,
+  placeholderStudent,
+  resolveStudent,
+  studentSortKeyFor,
+  type StudentSortMode,
+} from "@/util/students"
 import { studentRepoName } from "@/util/studentRepo"
 import { escapeCsvFormulaInjection } from "@/util/csv"
 
@@ -578,7 +587,20 @@ export function studentInSection(student: Student, section: string): boolean {
   return (student.section?.trim() ?? "") === section
 }
 
-export type SubmissionSort = "recent" | "oldest" | "name-asc" | "name-desc"
+export type SubmissionSort = "recent" | "oldest" | "name-first" | "name-last"
+
+// Whether a sort orders by student name (either direction) — the roster-spine
+// view that interleaves non-submitters — vs a time sort. Centralized so the
+// table, pagination, and page-owner fan-out all agree on what "a name sort" is.
+export function isNameSort(sort: SubmissionSort): boolean {
+  return sort === "name-first" || sort === "name-last"
+}
+
+// The roster sort mode a name sort maps to; time sorts default to first-name
+// (used only when a caller needs a mode regardless of the sort).
+export function sortNameMode(sort: SubmissionSort): StudentSortMode {
+  return sort === "name-last" ? "last" : "first"
+}
 
 // Who has accepted an INDIVIDUAL assignment, derived from the org repo list: a
 // student accepted iff `<classroom>-<assignment>-<username>` exists. Independent
@@ -850,18 +872,23 @@ export function filterAndSortRows(
     return true
   })
 
-  const byName = (row: SubmissionRow) =>
-    (
-      getName(row.usernames[0], students) ||
-      row.usernames[0] ||
-      ""
-    ).toLowerCase()
+  // Name sort key for a row, in the active mode: resolve the primary credited
+  // login to its roster student and reuse the shared first/last sort keys, so
+  // rows order by the same key the roster spine does. Falls back to the login.
+  const nameKey = (row: SubmissionRow) => {
+    const login = row.usernames[0] ?? ""
+    const key = studentSortKeyFor(
+      resolveStudent(login, students),
+      sortNameMode(sort),
+    )
+    return key || login.toLowerCase()
+  }
 
-  // Key each row's name + time once before sorting: byName scans the roster
+  // Key each row's name + time once before sorting: nameKey scans the roster
   // linearly, so calling it in the comparator would repeat it O(rows·log rows).
   const keyed = filtered.map((row) => ({
     row,
-    name: byName(row),
+    name: nameKey(row),
     time: new Date(row.datetime).getTime(),
   }))
 
@@ -869,10 +896,9 @@ export function filterAndSortRows(
     switch (sort) {
       case "oldest":
         return a.time - b.time
-      case "name-asc":
-        return a.name.localeCompare(b.name)
-      case "name-desc":
-        return b.name.localeCompare(a.name)
+      case "name-first":
+      case "name-last":
+        return a.name.localeCompare(b.name, undefined, NAME_COLLATION)
       case "recent":
       default:
         return b.time - a.time
@@ -931,12 +957,15 @@ export function filterNonSubmitters(
   })
 }
 
-// Rows for the exported gradebook CSV, in the order the file writes them.
-// Submitters come first (newest submission first), then non-submitters pinned
-// after with a 0 score and blank submission fields, so the export covers the
-// whole roster. Column order and the empty-string-vs-literal typing are the
-// contract downstream sheets rely on — keep them stable.
+// Rows for the exported gradebook CSV. Every row carries the student's names
+// (resolved from the roster) alongside their login(s), and the whole set is
+// ordered by last name — matching a gradebook so a teacher can transcribe
+// grades top-to-bottom. Column order and the empty-string-vs-literal typing are
+// the contract downstream sheets rely on — keep them stable.
 export type ScoresCsvRow = {
+  name: string
+  first_name: string
+  last_name: string
   usernames: string
   score: number | string
   max_score: number | string
@@ -951,47 +980,90 @@ export type ScoresCsvRow = {
 export function buildScoresCsvRows(
   scoresInfo: SubmissionRow[],
   nonSubmitters: Student[],
+  students: Student[],
 ): ScoresCsvRow[] {
-  const submittedRows: ScoresCsvRow[] = scoresInfo
-    .toSorted(
-      (a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime(),
-    )
-    .map(({ usernames, score, datetime, submissionCount, late, ...rest }) => ({
-      // Free-text columns can carry student-influenceable content (a repo/
-      // commit/release/review URL, a group's joined logins), so neutralize
-      // spreadsheet formula injection on them. The numeric/enum/timestamp
-      // columns below are our own generated values and must round-trip
-      // byte-exact, so they are NOT escaped.
-      usernames: escapeCsvFormulaInjection(usernames.join(", ")),
-      // A pending live row (submitted, not yet collected) has no real grade —
-      // export a blank score, not a 0, so importing the CSV can't record a
-      // graded zero for a student who actually submitted.
-      score: rest.pending ? "" : score,
-      max_score: rest.pending ? "" : rest["max-score"],
-      submissions: submissionCount,
-      // A detection-only row can still be dateless (e.g. a milestone tag
-      // whose commit lookup failed) — export a blank rather than crashing on
-      // Invalid Date.
-      submitted_at: isoOrBlank(datetime),
-      late: late ? "yes" : "no",
-      commit: escapeCsvFormulaInjection(rest.commit),
-      review: escapeCsvFormulaInjection(rest.review),
-      release: escapeCsvFormulaInjection(rest.release),
-    }))
+  // Carry the resolved student alongside each row so the final ordering can use
+  // the shared name comparator (last name, then first, then username) — the
+  // same collation and identity tie-break every other roster view uses, so two
+  // same-named students order deterministically rather than by input order.
+  type Keyed = { row: ScoresCsvRow; student: Student }
 
-  const nonSubmittedRows: ScoresCsvRow[] = nonSubmitters.map((student) => ({
-    usernames: escapeCsvFormulaInjection(student.username),
-    score: 0,
-    max_score: "",
-    submissions: 0,
-    submitted_at: "",
-    late: "",
-    commit: "",
-    review: "",
-    release: "",
+  // The name columns, escaped against spreadsheet formula injection: self-
+  // reported names are as untrusted as the login/URL columns.
+  const nameColumns = (student: Student) => ({
+    name: escapeCsvFormulaInjection(
+      nameFromParts(student.first_name, student.last_name),
+    ),
+    first_name: escapeCsvFormulaInjection(student.first_name.trim()),
+    last_name: escapeCsvFormulaInjection(student.last_name.trim()),
+  })
+
+  // Resolve each row's names from the roster in one pass: a login→Student map
+  // keyed like findByUsername (trimmed + lowercased), so building the export
+  // doesn't rescan the whole roster once per submitted row.
+  const byLogin = new Map<string, Student>()
+  for (const student of students) {
+    const login = student.username.trim().toLowerCase()
+    if (login && !byLogin.has(login)) byLogin.set(login, student)
+  }
+  const studentFor = (login: string): Student =>
+    byLogin.get(login.trim().toLowerCase()) ?? placeholderStudent(login)
+
+  const submittedRows: Keyed[] = scoresInfo.map(
+    ({ usernames, score, datetime, submissionCount, late, ...rest }) => {
+      // Names come from the roster, keyed on the primary credited login (group
+      // rows are credited to all members; the first is the owner/founder, which
+      // is how the dashboard already derives a group's display name).
+      const student = studentFor(usernames[0] ?? "")
+      return {
+        row: {
+          ...nameColumns(student),
+          // Free-text columns can carry student-influenceable content (a repo/
+          // commit/release/review URL, a group's joined logins), so neutralize
+          // spreadsheet formula injection on them. The numeric/enum/timestamp
+          // columns below are our own generated values and must round-trip
+          // byte-exact, so they are NOT escaped.
+          usernames: escapeCsvFormulaInjection(usernames.join(", ")),
+          // A pending live row (submitted, not yet collected) has no real grade
+          // — export a blank score, not a 0, so importing the CSV can't record
+          // a graded zero for a student who actually submitted.
+          score: rest.pending ? "" : score,
+          max_score: rest.pending ? "" : rest["max-score"],
+          submissions: submissionCount,
+          // A detection-only row can still be dateless (e.g. a milestone tag
+          // whose commit lookup failed) — export a blank rather than crashing
+          // on Invalid Date.
+          submitted_at: isoOrBlank(datetime),
+          late: late ? "yes" : "no",
+          commit: escapeCsvFormulaInjection(rest.commit),
+          review: escapeCsvFormulaInjection(rest.review),
+          release: escapeCsvFormulaInjection(rest.release),
+        },
+        student,
+      }
+    },
+  )
+
+  const nonSubmittedRows: Keyed[] = nonSubmitters.map((student) => ({
+    row: {
+      ...nameColumns(student),
+      usernames: escapeCsvFormulaInjection(student.username),
+      score: 0,
+      max_score: "",
+      submissions: 0,
+      submitted_at: "",
+      late: "",
+      commit: "",
+      review: "",
+      release: "",
+    },
+    student,
   }))
 
+  const byLastName = compareStudentsByName("last")
   return [...submittedRows, ...nonSubmittedRows]
+    .sort((a, b) => byLastName(a.student, b.student))
+    .map((keyed) => keyed.row)
 }
 
 // The ISO form of a row's submission time, or "" for an absent/unparseable one.
@@ -1077,15 +1149,17 @@ export function buildRosterDisplayItems(
   return items
 }
 
-// Build the display list for a GROUP assignment in the default name order: one
-// item per group founder, name-sorted, resolved to the founder's submitted row
-// when one exists (owner match) else an unsubmitted group-repo row. The group
-// analog of buildRosterDisplayItems. `rows` are the (filtered) submitted group
-// rows; `groupRepos` the unsubmitted group repos.
+// Build the display list for a GROUP assignment in name order: one item per
+// group founder, name-sorted in the given mode (first- or last-name), resolved
+// to the founder's submitted row when one exists (owner match) else an
+// unsubmitted group-repo row. The group analog of buildRosterDisplayItems.
+// `rows` are the (filtered) submitted group rows; `groupRepos` the unsubmitted
+// group repos.
 export function buildGroupRosterDisplayItems(
   rows: SubmissionRow[],
   groupRepos: GroupRepo[],
   students: Student[],
+  mode: StudentSortMode = "first",
 ): DisplayItem[] {
   const submitted = rows.map<DisplayItem>((row) => ({ kind: "row", row }))
   const unsubmitted = groupRepos.map<DisplayItem>((repo) => ({
@@ -1094,10 +1168,12 @@ export function buildGroupRosterDisplayItems(
   }))
   // Precompute the name map once so the comparator is O(1) per compare (getName
   // would re-scan the roster each call).
-  const names = buildNameKeyLookup(students)
+  const names = buildNameKeyLookup(students, mode)
   return [...submitted, ...unsubmitted].sort((a, b) =>
     ownerSortKey(displayItemOwner(a), names).localeCompare(
       ownerSortKey(displayItemOwner(b), names),
+      undefined,
+      NAME_COLLATION,
     ),
   )
 }
@@ -1191,15 +1267,19 @@ export function displayItemOwner(item: DisplayItem): string {
 // inside a comparator — which turns an O(n log n) sort into O(n^2). The value
 // mirrors getName exactly: the display name, or "" when the login isn't on the
 // roster or the row has no name.
-export function buildNameKeyLookup(students: Student[]): Map<string, string> {
+export function buildNameKeyLookup(
+  students: Student[],
+  mode: StudentSortMode = "first",
+): Map<string, string> {
   const map = new Map<string, string>()
   for (const student of students) {
     const login = student.username.trim().toLowerCase()
     if (!login) continue
-    map.set(
-      login,
-      nameFromParts(student.first_name, student.last_name).toLowerCase(),
-    )
+    const name =
+      mode === "last"
+        ? nameFromParts(student.last_name, student.first_name)
+        : nameFromParts(student.first_name, student.last_name)
+    map.set(login, name.toLowerCase())
   }
   return map
 }
@@ -1237,10 +1317,15 @@ export function displayPageOwners({
   pageSize: number
 }): string[] {
   const items = isGroup
-    ? sort === "name-asc"
-      ? buildGroupRosterDisplayItems(rows, groupRepos, students)
+    ? isNameSort(sort)
+      ? buildGroupRosterDisplayItems(
+          rows,
+          groupRepos,
+          students,
+          sortNameMode(sort),
+        )
       : buildGroupDisplayItems(rows, groupRepos)
-    : sort === "name-asc"
+    : isNameSort(sort)
       ? buildRosterDisplayItems(students, rows, nonSubmitters)
       : buildSortedDisplayItems(rows, nonSubmitters)
   const seen = new Set<string>()

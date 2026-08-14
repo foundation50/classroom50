@@ -618,6 +618,11 @@
     "filterAllSections": "All sections",
     "filterByRoleLabel": "Filter by role",
     "filterAllRoles": "All roles",
+    "sortBy": {
+      "label": "Sort by name",
+      "firstName": "First name",
+      "lastName": "Last name"
+    },
     "roleTeacher": "Teacher",
     "roleTa": "TA",
     "roleHeadTa": "Head TA",
@@ -2472,8 +2477,8 @@
       "sortAria": "Sort submissions",
       "sortRecent": "Newest first",
       "sortOldest": "Oldest first",
-      "sortNameAsc": "Name A–Z",
-      "sortNameDesc": "Name Z–A"
+      "sortNameFirst": "By first name",
+      "sortNameLast": "By last name"
     },
     "table": {
       "captionGroup": "Group submissions",

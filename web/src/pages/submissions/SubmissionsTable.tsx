@@ -20,9 +20,11 @@ import {
   buildGroupRosterDisplayItems,
   buildSortedDisplayItems,
   hasAccepted,
+  isNameSort,
   pageBounds,
   paginateDisplayItems,
   paginationRange,
+  sortNameMode,
   PAGE_SIZE_OPTIONS,
 } from "@/pages/submissions/dashboard"
 import {
@@ -243,7 +245,7 @@ const SubmissionsTable = ({
   pageSize = Number.MAX_SAFE_INTEGER,
   onPageChange = () => {},
   onPageSizeChange = () => {},
-  sort = "name-asc",
+  sort = "name-first",
 }: {
   scores: SubmissionRow[]
   students: Student[]
@@ -314,7 +316,7 @@ const SubmissionsTable = ({
   onPageChange?: (page: number) => void
   onPageSizeChange?: (pageSize: number) => void
   // The active sort. Individual assignments render one row per roster student in
-  // name order under "name-asc" (the live-eligible view); any other sort renders
+  // name order under a name sort (the live-eligible view); a time sort renders
   // the sorted submitted rows then non-submitters (a static snapshot view).
   sort?: SubmissionSort
 }) => {
@@ -363,18 +365,23 @@ const SubmissionsTable = ({
 
   // The display list rendered as one paginated sequence. For a group assignment
   // it's submitted group rows then unsubmitted group repos. For an individual
-  // assignment in the default name order it's one row per roster student
-  // (submitters and non-submitters interleaved by roster name) — the same
-  // ordering the live fan-out pages over. Under any other sort (a static
+  // assignment in a name order it's one row per roster student (submitters and
+  // non-submitters interleaved by roster name, in the active first/last mode) —
+  // the same ordering the live fan-out pages over. Under a time sort (a static
   // snapshot view; live is off then) fall back to sorted submitters first, then
   // non-submitters, preserving the chosen order.
   const displayItems = useMemo(() => {
     if (isGroup) {
-      return sort === "name-asc"
-        ? buildGroupRosterDisplayItems(scores, unsubmittedGroupRepos, students)
+      return isNameSort(sort)
+        ? buildGroupRosterDisplayItems(
+            scores,
+            unsubmittedGroupRepos,
+            students,
+            sortNameMode(sort),
+          )
         : buildGroupDisplayItems(scores, unsubmittedGroupRepos)
     }
-    if (sort === "name-asc") {
+    if (isNameSort(sort)) {
       return buildRosterDisplayItems(students, scores, nonSubmitters)
     }
     return buildSortedDisplayItems(scores, nonSubmitters)

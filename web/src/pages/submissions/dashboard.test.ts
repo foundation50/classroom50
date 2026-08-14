@@ -356,17 +356,31 @@ describe("filterAndSortRows", () => {
     expect(out.map((r) => r.owner)).toEqual(["bob", "alice"])
   })
 
-  it("sorts by name A-Z and Z-A using the roster display name", () => {
+  it("sorts by first name and by last name using the roster display name", () => {
+    // Zed Adams vs Amy Brown: first-name order is Amy, Zed; last-name order is
+    // Adams (Zed), Brown (Amy) — so the two modes disagree, proving the key.
+    const nameStudents = [
+      student({ username: "zed", first_name: "Zed", last_name: "Adams" }),
+      student({ username: "amy", first_name: "Amy", last_name: "Brown" }),
+    ]
+    const nameRows = [
+      row({ owner: "zed", usernames: ["zed"] }),
+      row({ owner: "amy", usernames: ["amy"] }),
+    ]
     expect(
-      filterAndSortRows(rows, { ...base, sort: "name-asc" }).map(
-        (r) => r.owner,
-      ),
-    ).toEqual(["alice", "bob"])
+      filterAndSortRows(nameRows, {
+        ...base,
+        students: nameStudents,
+        sort: "name-first",
+      }).map((r) => r.owner),
+    ).toEqual(["amy", "zed"])
     expect(
-      filterAndSortRows(rows, { ...base, sort: "name-desc" }).map(
-        (r) => r.owner,
-      ),
-    ).toEqual(["bob", "alice"])
+      filterAndSortRows(nameRows, {
+        ...base,
+        students: nameStudents,
+        sort: "name-last",
+      }).map((r) => r.owner),
+    ).toEqual(["zed", "amy"])
   })
 
   it("filters to late only", () => {
@@ -801,8 +815,8 @@ describe("scoreTone", () => {
 })
 
 describe("buildScoresCsvRows", () => {
-  it("orders submitters newest-first, then non-submitters, preserving the column contract", () => {
-    const older = row({
+  it("resolves names from the roster and orders the whole file by last name", () => {
+    const alice = row({
       usernames: ["alice"],
       datetime: "2026-06-20T10:00:00Z",
       score: 8,
@@ -813,7 +827,9 @@ describe("buildScoresCsvRows", () => {
       review: "r1",
       release: "rel1",
     })
-    const newer = row({
+    // A group row is credited to all members; names come from the first
+    // (owner/founder) login.
+    const group = row({
       usernames: ["bob", "carol"],
       datetime: "2026-06-21T10:00:00Z",
       score: 9,
@@ -824,28 +840,45 @@ describe("buildScoresCsvRows", () => {
       review: "r2",
       release: "rel2",
     })
+    const roster = [
+      student({ username: "alice", first_name: "Alice", last_name: "Adams" }),
+      student({ username: "bob", first_name: "Bob", last_name: "Brown" }),
+      student({ username: "dave", first_name: "Dave", last_name: "Clark" }),
+    ]
     const out = buildScoresCsvRows(
-      [older, newer],
-      [student({ username: "dave" })],
+      [alice, group],
+      [student({ username: "dave", first_name: "Dave", last_name: "Clark" })],
+      roster,
     )
 
     expect(out).toHaveLength(3)
-    // Newest submission first.
+    // Ordered by last name across submitters + non-submitters: Adams, Brown,
+    // Clark — not by submission time.
+    expect(out.map((r) => r.last_name)).toEqual(["Adams", "Brown", "Clark"])
+
+    // The Adams submitter row carries names + the full column contract.
     expect(out[0]).toEqual({
-      usernames: "bob, carol",
-      score: 9,
+      name: "Alice Adams",
+      first_name: "Alice",
+      last_name: "Adams",
+      usernames: "alice",
+      score: 8,
       max_score: 10,
-      submissions: 1,
-      submitted_at: new Date("2026-06-21T10:00:00Z").toISOString(),
-      late: "no",
-      commit: "c2",
-      review: "r2",
-      release: "rel2",
+      submissions: 2,
+      submitted_at: new Date("2026-06-20T10:00:00Z").toISOString(),
+      late: "yes",
+      commit: "c1",
+      review: "r1",
+      release: "rel1",
     })
-    expect(out[1].usernames).toBe("alice")
-    expect(out[1].late).toBe("yes")
-    // Non-submitter pinned last with a 0 score and blank fields.
+    // The group row keeps all credited logins but takes the owner's name.
+    expect(out[1].usernames).toBe("bob, carol")
+    expect(out[1].name).toBe("Bob Brown")
+    // Non-submitter carries a name too, with a 0 score and blank fields.
     expect(out[2]).toEqual({
+      name: "Dave Clark",
+      first_name: "Dave",
+      last_name: "Clark",
       usernames: "dave",
       score: 0,
       max_score: "",
@@ -858,20 +891,36 @@ describe("buildScoresCsvRows", () => {
     })
   })
 
+  it("leaves name columns blank (falling back to login order) for an off-roster login", () => {
+    // A submitter whose login isn't on the roster still exports, just without
+    // names — resolveStudent returns a placeholder.
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["ghost"], datetime: "2026-06-20T10:00:00Z" })],
+      [],
+      [],
+    )
+    expect(out[0].name).toBe("")
+    expect(out[0].first_name).toBe("")
+    expect(out[0].last_name).toBe("")
+    expect(out[0].usernames).toBe("ghost")
+  })
+
   it("exports a blank submitted_at (not a crash) for a dateless pending row", () => {
     // A detection-only row can still be dateless; toISOString on an
     // Invalid Date would throw and break the whole export.
     const out = buildScoresCsvRows(
       [row({ usernames: ["bob"], datetime: "", pending: true })],
       [],
+      [],
     )
     expect(out[0].submitted_at).toBe("")
     expect(out[0].score).toBe("")
   })
 
-  it("neutralizes CSV formula injection in free-text columns", () => {
+  it("neutralizes CSV formula injection in free-text columns, including names", () => {
     // A commit/release/review URL (or a group's joined logins) can carry a
     // leading formula trigger; guard it so a spreadsheet renders it as text.
+    // Self-reported names are equally untrusted, so they're escaped too.
     const out = buildScoresCsvRows(
       [
         row({
@@ -882,11 +931,96 @@ describe("buildScoresCsvRows", () => {
         }),
       ],
       [],
+      [
+        student({
+          username: "=cmd()",
+          first_name: "=evilFirst",
+          last_name: "=evilLast",
+        }),
+      ],
     )
     expect(out[0].usernames).toBe("'=cmd()")
     expect(out[0].commit).toBe("'=HYPERLINK(1)")
     expect(out[0].review).toBe("'+evil")
     expect(out[0].release).toBe("'@x")
+    expect(out[0].first_name).toBe("'=evilFirst")
+    expect(out[0].last_name).toBe("'=evilLast")
+    expect(out[0].name).toBe("'=evilFirst =evilLast")
+  })
+
+  it("orders partial-name and login-fallback rows by their last-name key", () => {
+    // Realistic partial roster: one last-only, one first-only, one login-only.
+    // Keys: "brown" (last-only), "amy" (first-only sorts on the first name),
+    // "zzz-login" (no name -> username). Expected asc: amy, brown, zzz-login.
+    const roster = [
+      student({ username: "lastonly", first_name: "", last_name: "Brown" }),
+      student({ username: "firstonly", first_name: "Amy", last_name: "" }),
+      student({ username: "zzz-login", first_name: "", last_name: "" }),
+    ]
+    const out = buildScoresCsvRows(
+      [
+        row({ usernames: ["zzz-login"] }),
+        row({ usernames: ["lastonly"] }),
+        row({ usernames: ["firstonly"] }),
+      ],
+      [],
+      roster,
+    )
+    expect(out.map((r) => r.usernames)).toEqual([
+      "firstonly",
+      "lastonly",
+      "zzz-login",
+    ])
+  })
+
+  it("uses natural (numeric) collation for digit-bearing names", () => {
+    // student2 must sort before student10, not lexicographically after it.
+    const roster = [
+      student({ username: "s10", first_name: "", last_name: "Team10" }),
+      student({ username: "s2", first_name: "", last_name: "Team2" }),
+    ]
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["s10"] }), row({ usernames: ["s2"] })],
+      [],
+      roster,
+    )
+    expect(out.map((r) => r.last_name)).toEqual(["Team2", "Team10"])
+  })
+
+  it("breaks last+first name ties on username so the order is deterministic", () => {
+    // Two distinct "Sam Smith"s (a submitter and a non-submitter) share a name
+    // key; the username tie-break pins their order regardless of input side.
+    const smithA = student({
+      username: "smith-a",
+      first_name: "Sam",
+      last_name: "Smith",
+    })
+    const smithB = student({
+      username: "smith-b",
+      first_name: "Sam",
+      last_name: "Smith",
+    })
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["smith-b"] })],
+      [smithA],
+      [smithA, smithB],
+    )
+    // smith-a (non-submitter) precedes smith-b (submitter) by username, even
+    // though the submitter was passed first.
+    expect(out.map((r) => r.usernames)).toEqual(["smith-a", "smith-b"])
+  })
+
+  it("resolves a group's name from the first credited (owner) login even when off-roster", () => {
+    // Group credited to [ghost, carol]; the owner (ghost) is off-roster while a
+    // teammate (carol) is on it. Names follow the owner convention -> blank, and
+    // the row sorts by the owner login fallback.
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["ghost", "carol"] })],
+      [],
+      [student({ username: "carol", first_name: "Carol", last_name: "Ng" })],
+    )
+    expect(out[0].name).toBe("")
+    expect(out[0].usernames).toBe("ghost, carol")
   })
 })
 
@@ -1035,7 +1169,7 @@ describe("pending rows (collector-emitted, not graded)", () => {
         pending: true,
       }),
     ]
-    const [csv] = buildScoresCsvRows(rows, [])
+    const [csv] = buildScoresCsvRows(rows, [], [])
     expect(csv.score).toBe("")
     expect(csv.max_score).toBe("")
     expect(csv.usernames).toBe("bob")
@@ -1605,11 +1739,11 @@ describe("displayPageOwners", () => {
     student({ username: "cara", first_name: "Cara", last_name: "Cole" }),
   ]
 
-  it("returns the current page's owners in name order (name-asc)", () => {
+  it("returns the current page's owners in name order (name-first)", () => {
     const rows = [row({ owner: "bob", usernames: ["bob"] })]
     const owners = displayPageOwners({
       isGroup: false,
-      sort: "name-asc",
+      sort: "name-first",
       students,
       rows,
       nonSubmitters: students, // alice + cara have no row
@@ -1628,7 +1762,7 @@ describe("displayPageOwners", () => {
     const rows = [row({ owner: "bob", usernames: ["bob"] })]
     const owners = displayPageOwners({
       isGroup: false,
-      sort: "name-asc",
+      sort: "name-first",
       students,
       rows,
       // Search narrowed non-submitters to just "cara" (alice filtered out).
@@ -1761,6 +1895,22 @@ describe("pagination helpers", () => {
         "row",
         "groupRepo",
       ])
+    })
+
+    it("orders founders by last name when mode is 'last'", () => {
+      // Founders: team-a (Zed Adams), team-b (Amy Brown). First-name order is
+      // Amy, Zed; last-name order is Adams (team-a), Brown (team-b).
+      const roster = [
+        student({ username: "team-a", first_name: "Zed", last_name: "Adams" }),
+        student({ username: "team-b", first_name: "Amy", last_name: "Brown" }),
+      ]
+      const items = buildGroupRosterDisplayItems(
+        [row({ owner: "team-b" })],
+        [groupRepo("team-a")],
+        roster,
+        "last",
+      )
+      expect(items.map(displayItemOwner)).toEqual(["team-a", "team-b"])
     })
   })
 

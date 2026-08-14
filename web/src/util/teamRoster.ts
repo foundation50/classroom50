@@ -3,6 +3,11 @@ import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import { parseGitHubId, rosterClaimSet } from "@/util/identity"
 import {
+  DEFAULT_STUDENT_SORT,
+  NAME_COLLATION,
+  type StudentSortMode,
+} from "@/util/students"
+import {
   type ClassroomRole,
   ROLE_RANK,
   sortRolesByRank,
@@ -358,7 +363,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     }
   }
 
-  return sortRows(rows)
+  return sortTeamRosterRows(rows)
 }
 
 // Add a role to a row's set (idempotent), keeping ROLE_RANK order.
@@ -367,25 +372,43 @@ function addRole(row: TeamRosterRow, role: ClassroomRole): void {
   row.roles = sortRolesByRank([...row.roles, role])
 }
 
-// Display name for sorting: "Last, First" folded to a comparable string, else
-// username, else email.
-function sortName(row: TeamRosterRow): string {
-  const name = [row.first_name, row.last_name].filter(Boolean).join(" ")
+// Display name for sorting: full name folded to a comparable string, else
+// username, else email. `mode` selects first-name ("First Last") vs last-name
+// ("Last First") ordering; the fallback chain is identical so a nameless row
+// still sorts deterministically in either mode.
+function sortName(
+  row: TeamRosterRow,
+  mode: StudentSortMode = DEFAULT_STUDENT_SORT,
+): string {
+  const parts =
+    mode === "last"
+      ? [row.last_name, row.first_name]
+      : [row.first_name, row.last_name]
+  const name = parts.filter(Boolean).join(" ")
   return (name || row.username || row.email).toLowerCase()
 }
 
 // Enrolled first, then pending, then needs-attention; alphabetical within each.
-function sortRows(rows: TeamRosterRow[]): TeamRosterRow[] {
+// The bucket order is independent of `mode` — only the within-bucket name
+// direction changes. Returns a new array (never mutates the input).
+export function sortTeamRosterRows(
+  rows: TeamRosterRow[],
+  mode: StudentSortMode = DEFAULT_STUDENT_SORT,
+): TeamRosterRow[] {
   const order: Record<TeamRosterRowState, number> = {
     enrolled: 0,
     pending: 1,
     needs_attention_in_org: 2,
     needs_attention_not_in_org: 3,
   }
-  return rows.sort((a, b) => {
+  return rows.toSorted((a, b) => {
     const byState = order[a.state] - order[b.state]
     if (byState !== 0) return byState
-    return sortName(a).localeCompare(sortName(b), undefined, { numeric: true })
+    return sortName(a, mode).localeCompare(
+      sortName(b, mode),
+      undefined,
+      NAME_COLLATION,
+    )
   })
 }
 
