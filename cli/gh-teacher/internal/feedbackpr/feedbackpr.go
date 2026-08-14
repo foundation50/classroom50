@@ -12,6 +12,7 @@
 package feedbackpr
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -151,6 +152,12 @@ func run(client githubapi.Client, out, errOut io.Writer, p runParams) error {
 		return fmt.Errorf("assignment %q has feedback_pr disabled: no Feedback PR is opened for its repos", p.assignment)
 	}
 
+	// feedback_pr_template opts the PR body into the template's
+	// pull_request_template.md; resolved once and used for every repo. The Go
+	// teacher struct does not type the flag (it rides in Extra, like
+	// copy_about/copy_topics), so read it from Extra here.
+	tmpl := resolveFeedbackTemplateRef(entry)
+
 	repos, err := targetRepos(client, p, branch)
 	if err != nil {
 		return err
@@ -187,7 +194,7 @@ func run(client githubapi.Client, out, errOut io.Writer, p runParams) error {
 			continue
 		}
 
-		res := ensureOne(client, p.org, repo, branch, entry.Mode)
+		res := ensureOne(client, p.org, repo, branch, entry.Mode, tmpl)
 		results = append(results, res)
 		reportRepo(out, res, p.quiet, p.verbose)
 	}
@@ -195,10 +202,36 @@ func run(client githubapi.Client, out, errOut io.Writer, p runParams) error {
 	return summarize(out, errOut, p, results)
 }
 
+// resolveFeedbackTemplateRef returns the template ref to read the Feedback PR
+// body from, or nil when the assignment did not opt in (feedback_pr_template,
+// read from Extra since the Go struct doesn't type it) or has no template.
+func resolveFeedbackTemplateRef(entry assignment.AssignmentEntry) *feedbackTemplateRef {
+	if entry.Template == nil {
+		return nil
+	}
+	raw, ok := entry.Extra["feedback_pr_template"]
+	if !ok {
+		return nil
+	}
+	var enabled bool
+	if err := json.Unmarshal(raw, &enabled); err != nil || !enabled {
+		return nil
+	}
+	branch := entry.Template.Branch
+	if branch == "" {
+		branch = "main"
+	}
+	return &feedbackTemplateRef{
+		owner:  entry.Template.Owner,
+		repo:   entry.Template.Repo,
+		branch: branch,
+	}
+}
+
 // ensureOne runs the idempotent ensure flow for one repo and classifies the
 // result into a summary bucket.
-func ensureOne(client githubapi.Client, org, repo, branch, mode string) repoResult {
-	err := ensureFeedbackPullRequest(client, org, repo, branch, mode)
+func ensureOne(client githubapi.Client, org, repo, branch, mode string, tmpl *feedbackTemplateRef) repoResult {
+	err := ensureFeedbackPullRequest(client, org, repo, branch, mode, tmpl)
 	switch {
 	case err == nil:
 		return repoResult{repo: repo, outcome: outcomeCreated}

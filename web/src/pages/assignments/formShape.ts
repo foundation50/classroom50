@@ -59,6 +59,10 @@ export type FormShape = {
   // gets an initial commit — decoupled from autograding (KTD5). Only a truly
   // bare empty_repo disables it; an init_shim repo has a baseline commit.
   feedbackPrEnabled: boolean
+  // The "use the template's pull_request_template.md as the PR body" toggle is
+  // shown only for a template source with the Feedback PR available (it reads a
+  // file FROM the template, so a template-less repo has nothing to read).
+  feedbackPrTemplateVisible: boolean
   // The autograding config controls (built-in toggle, advanced, tests) are
   // OFFERED only when grading is "Autograded" — for Manual / Not graded the
   // section shows a note instead (showAutogradingConfig). showBuiltInConfig is
@@ -138,6 +142,7 @@ export function deriveFormShape(value: CreateAssignmentFormValues): FormShape {
     showTemplateFields: repositorySource === "template",
     showAddReadme: value.repo_source === "none",
     feedbackPrEnabled: !emptyRepo,
+    feedbackPrTemplateVisible: repositorySource === "template" && !emptyRepo,
     showAutogradingConfig: gradingIsAuto,
     showBuiltInConfig: autogradingState === "built-in",
     showContainerFields: value.runtime_env === "container",

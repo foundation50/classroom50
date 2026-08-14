@@ -32,6 +32,13 @@ func CurrentUser(c Client) (login string, id int64, err error) {
 	return ghutil.CurrentUser(rest(c))
 }
 
+// ReadTemplatePRBody reads the first existing native pull_request_template.md
+// from owner/repo at ref as the Feedback PR body, or ("", false) to fall back
+// to the built-in body. Best-effort/fail-open (see ghutil.ReadTemplatePRBody).
+func ReadTemplatePRBody(c Client, owner, repo, ref string) (string, bool) {
+	return ghutil.ReadTemplatePRBody(rest(c), owner, repo, ref)
+}
+
 // OrgPlan reads GET /orgs/{org} and returns the billing plan name
 // ("free"/"team"/"enterprise"), empty when the token lacks billing visibility.
 // Lives here (with the other org reads) so the pure internal/orgpolicy seam

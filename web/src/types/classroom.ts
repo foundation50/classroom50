@@ -161,6 +161,15 @@ export type Assignment = {
   autograder: string
   max_group_size?: number
   feedback_pr?: boolean
+  // Use the TEMPLATE repo's native pull request template
+  // (.github/pull_request_template.md -> pull_request_template.md ->
+  // docs/pull_request_template.md) as the Feedback PR body instead of the
+  // built-in body. Requires feedback_pr and a template; read verbatim from the
+  // template repo at accept time, best-effort (missing/empty/oversized/error
+  // falls back to the built-in body). Omitted when false; absent reads as
+  // false. In lockstep with the CLI's assignments-v1 schema
+  // (`feedback_pr_template`).
+  feedback_pr_template?: boolean
   // Truly bare student repos: accept creates the repo with no initial commit
   // and NO control files (no .classroom50.yaml, no autograde workflow), so the
   // assignment never autogrades and the Feedback PR is off. Mutually exclusive

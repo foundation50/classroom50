@@ -129,6 +129,7 @@ const CreateAssignmentPage = () => {
                 available_from_date: values.available_from_date,
                 max_group_size: values.max_group_size,
                 feedback_pr: values.feedback_pr,
+                feedback_pr_template: values.feedback_pr_template,
                 empty_repo: values.empty_repo,
                 no_autograder: deriveFormShape(values).noAutograder,
                 init_shim: deriveFormShape(values).initShim,

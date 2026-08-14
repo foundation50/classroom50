@@ -633,10 +633,22 @@ cumulative work with inline comments alongside the scored Release.
 - **One PR, reused** across submissions, labeled **Individual Assignment** or
   **Group Assignment**. A student closing it reopens it; a teacher merge is left
   alone.
+- **The body** is Classroom 50's built-in "here is where your teacher leaves
+  feedback" text by default. Set `feedback_pr_template: true` (or check the box
+  on the web form) to use the template repository's own pull request template as
+  the body instead. Accept reads the first existing of
+  `.github/pull_request_template.md`, `pull_request_template.md`, or
+  `docs/pull_request_template.md` from the template and uses it verbatim. It
+  requires a template and the Feedback PR itself. The read is best-effort: a
+  missing, empty, oversized, or unreadable file falls back to the built-in body
+  and never blocks the PR. Keeping the template's contents correct is up to you.
 - **The runner adopts it** by base+head and maintains it from then on. If accept
   could not open it (a permissions oddity, or a repo accepted before this
-  feature), the runner opens it on the first submission instead — and
-  re-accepting also retries, which is the only route with Actions off.
+  feature), the runner opens it on the first submission instead, and
+  re-accepting also retries, which is the only route with Actions off. On that
+  fallback open the runner honors the template too, best-effort: its Actions
+  token cannot always read a private or external template, so it uses the
+  built-in body and logs a warning when it has to.
 
 <details>
 <summary>Baseline resolution and prerequisites</summary>

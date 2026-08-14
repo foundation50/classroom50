@@ -1191,6 +1191,28 @@ describe("editAssignment (preserved-entry integration)", () => {
     expect(edited.copy_topics).toBeUndefined()
   })
 
+  // feedback_pr_template: requires a template AND the Feedback PR on; omitempty.
+  it("rejects feedback_pr_template without a template", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(client, editInput({ feedback_pr_template: true })),
+    ).rejects.toThrow(/feedback_pr_template: requires a template/)
+  })
+
+  it("rejects feedback_pr_template when the Feedback PR is off", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(
+        client,
+        editInput({
+          template_repo: "acme/starter",
+          feedback_pr: false,
+          feedback_pr_template: true,
+        }),
+      ),
+    ).rejects.toThrow(/feedback_pr_template: requires the Feedback PR/)
+  })
+
   // Route-table client like makeClient(), but seeded with a caller-supplied
   // existing entry (the empty_repo tests need a bare one).
   function makeBareClient(entry: Assignment): {

@@ -1,0 +1,6 @@
+# The canonical Feedback PR body and its cross-language golden are compared
+# byte-for-byte across Go (//go:embed), TypeScript (Vite ?raw), and Python.
+# Pin them to LF so a CRLF/autocrlf checkout can't inject line-ending drift
+# that would fail the parity tests on some machines only.
+cli/shared/contract/feedbackPrBody.md              text eol=lf
+cli/shared/contract/testdata/feedback_pr_body.golden text eol=lf

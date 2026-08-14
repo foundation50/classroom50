@@ -338,6 +338,9 @@ export type CreateAssignmentInput = {
   org: string
   max_group_size: number
   feedback_pr?: boolean
+  // Use the template repo's pull_request_template.md as the Feedback PR body.
+  // Requires a template and feedback_pr; mirrors the wire feedback_pr_template.
+  feedback_pr_template?: boolean
   // Truly bare student repos (no auto-init, no control files, autograding and
   // Feedback PR off). Mutually exclusive with template/tests/feedback_pr/
   // allowed_files/release_assets/pass_threshold; immutable after creation

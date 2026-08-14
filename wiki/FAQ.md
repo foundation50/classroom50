@@ -117,6 +117,22 @@ into your organization or make it public. See
 > assignment first and add a private template later by editing it, the team
 > read grant isn't re-applied and students may get a 404 on accept.
 
+### Can I customize the Feedback PR's first comment?
+
+Yes, for a templated assignment. Turn on **Use the template's pull request
+template as the Feedback PR body** and Classroom 50 uses your template
+repository's own pull request template (`.github/pull_request_template.md`,
+`pull_request_template.md`, or `docs/pull_request_template.md`) as each
+student's Feedback PR body instead of the built-in text. The assignment form
+auto-checks this when it detects such a file, and you can toggle it off.
+
+Note this is not GitHub's native behavior. GitHub only fills a
+`pull_request_template.md` into pull requests opened through the web "compare
+and pull request" flow, never for the API-created Feedback PR, so dropping the
+file in alone does nothing until you enable this option. If the file is missing
+or can't be read, the built-in body is used. It's set in the web app; there is
+no `gh teacher` flag for it.
+
 ### Can I set a deadline with a specific time, not just a date?
 
 Yes. Deadlines support a date **and** time (down to the second, in your

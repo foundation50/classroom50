@@ -17,6 +17,7 @@ import {
 import {
   ensureFeedbackPullRequest,
   resolveFeedbackBaselineSha,
+  type FeedbackPrTemplateRef,
 } from "./feedbackPr"
 import { fetchAssignmentFromPages } from "../queries/assignments"
 import { getAuthenticatedUser } from "../queries/users"
@@ -237,6 +238,9 @@ async function provisionAcceptedRepo(params: {
   autogradeYaml: string
   // Open the accept-time Feedback PR after setup succeeds (issue #228).
   feedbackPr?: boolean
+  // When set, the Feedback PR body is read from this template's
+  // pull_request_template.md (feedback_pr_template opt-in), best-effort.
+  feedbackPrTemplate?: FeedbackPrTemplateRef
   rerenderShimForBranch?: (branch: string) => string
   onStepUpdate?: OnAcceptStepUpdate
 }) {
@@ -253,6 +257,7 @@ async function provisionAcceptedRepo(params: {
     metadataYaml,
     autogradeYaml,
     feedbackPr = false,
+    feedbackPrTemplate,
     rerenderShimForBranch,
     onStepUpdate,
   } = params
@@ -299,6 +304,7 @@ async function provisionAcceptedRepo(params: {
       }),
     mode,
     feedbackPr,
+    feedbackPrTemplate,
     onStepUpdate,
   })
 
@@ -365,6 +371,7 @@ async function openFeedbackPrStep(params: {
   resolveAcceptCommitSha: () => Promise<string | null>
   mode: AssignmentMode
   feedbackPr: boolean
+  feedbackPrTemplate?: FeedbackPrTemplateRef
   onStepUpdate?: OnAcceptStepUpdate
 }) {
   const {
@@ -375,6 +382,7 @@ async function openFeedbackPrStep(params: {
     resolveAcceptCommitSha,
     mode,
     feedbackPr,
+    feedbackPrTemplate,
     onStepUpdate,
   } = params
 
@@ -408,6 +416,7 @@ async function openFeedbackPrStep(params: {
     branch,
     acceptCommitSha,
     mode,
+    feedbackPrTemplate,
   })
   onStepUpdate?.({
     id: "feedback",
@@ -647,6 +656,19 @@ export async function acceptAssignment(params: {
   // Feedback PR (a templated repo has a baseline commit), so it is not gated
   // out here — only empty_repo is.
   const wantsFeedbackPr = assignment.feedback_pr === true && !isEmptyRepo
+
+  // feedback_pr_template opts the Feedback PR body into the template repo's
+  // native pull_request_template.md. Only meaningful with the Feedback PR on
+  // and a template present; resolved once here and passed to every accept path
+  // that opens the PR. The read itself (best-effort, fail-open to the built-in
+  // body) happens inside ensureFeedbackPullRequest.
+  const feedbackPrTemplate: FeedbackPrTemplateRef | undefined =
+    wantsFeedbackPr &&
+    assignment.feedback_pr_template === true &&
+    sourceOwner &&
+    sourceRepo
+      ? { owner: sourceOwner, repo: sourceRepo, branch: sourceBranch || "main" }
+      : undefined
 
   // empty_repo and template are mutually exclusive at write time, but the
   // published manifest is not re-validated, so a hand-edited entry can carry
@@ -959,6 +981,7 @@ export async function acceptAssignment(params: {
           }),
         mode: assignment.mode,
         feedbackPr: wantsFeedbackPr,
+        feedbackPrTemplate,
         onStepUpdate,
       })
       // Reconcile the founder role LAST (best-effort): a transient failure must
@@ -1029,6 +1052,7 @@ export async function acceptAssignment(params: {
       metadataYaml,
       autogradeYaml,
       feedbackPr: wantsFeedbackPr,
+      feedbackPrTemplate,
       rerenderShimForBranch: rerenderShim,
       onStepUpdate,
     })
@@ -1068,6 +1092,7 @@ export async function acceptAssignment(params: {
     metadataYaml,
     autogradeYaml,
     feedbackPr: wantsFeedbackPr,
+    feedbackPrTemplate,
     rerenderShimForBranch: rerenderShim,
     onStepUpdate,
   })

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/ui"
 )
 
@@ -216,7 +218,7 @@ func runEnsureFeedbackPR(t *testing.T, s *feedbackPRServer, mode string) error {
 	t.Cleanup(server.Close)
 	client := newTestRESTClient(t, server)
 	var out bytes.Buffer
-	return ensureFeedbackPullRequest(client, ui.NewForced(&out, false), false, "o", "r", "main", mode,
+	return ensureFeedbackPullRequest(client, ui.NewForced(&out, false), false, "o", "r", "main", mode, nil,
 		func() (string, error) {
 			s.acceptSHAResolves++
 			return "accept-sha", nil
@@ -257,10 +259,10 @@ func TestEnsureFeedbackPullRequest_FreshAccept(t *testing.T) {
 	if s.lastPRBody["title"] != contract.FeedbackPRTitle {
 		t.Errorf("PR title = %q, want %q", s.lastPRBody["title"], contract.FeedbackPRTitle)
 	}
-	// The release URL is load-bearing: the runner's backfill_release_link
-	// rewrites any open Feedback PR whose body lacks it.
+	// The release URL is part of the built-in body: it links the latest
+	// autograding result and self-updates via .../releases/latest.
 	if !strings.Contains(s.lastPRBody["body"], "https://github.com/o/r/releases/latest") {
-		t.Error("PR body lacks the releases/latest URL; the runner would clobber it on first submission")
+		t.Error("PR body lacks the releases/latest URL; the built-in body must carry the latest-submission link")
 	}
 	if s.lastLabelName != "Individual Assignment" || len(s.lastAddedLabels) != 1 || s.lastAddedLabels[0] != "Individual Assignment" {
 		t.Errorf("label = %q added %v, want Individual Assignment", s.lastLabelName, s.lastAddedLabels)
@@ -440,7 +442,7 @@ func TestIsNoCommitsBetween(t *testing.T) {
 	client := newTestRESTClient(t, server)
 
 	// A 403 must NOT be read as the zero-diff signal.
-	_, err := createFeedbackPR(client, "o", "r", "main")
+	_, err := createFeedbackPR(client, "o", "r", "main", nil)
 	if err == nil {
 		t.Fatal("want error from 403 pulls POST")
 	}
@@ -452,7 +454,7 @@ func TestIsNoCommitsBetween(t *testing.T) {
 	server2 := httptest.NewServer(s2.mux(t))
 	t.Cleanup(server2.Close)
 	client2 := newTestRESTClient(t, server2)
-	_, err = createFeedbackPR(client2, "o", "r", "main")
+	_, err = createFeedbackPR(client2, "o", "r", "main", nil)
 	if err == nil {
 		t.Fatal("want zero-diff 422 from first pulls POST")
 	}
@@ -542,5 +544,179 @@ func TestAcceptCommitSHA_NoMarkerCommits(t *testing.T) {
 
 	if _, err := acceptCommitSHA(client, "o", "r"); err == nil {
 		t.Fatal("want error when no commits touch the marker, got nil")
+	}
+}
+
+// templatePRBodyMux serves the pulls POST for o/r (head already has a diff, so
+// it 201s without the empty-commit dance) plus a scriptable contents endpoint
+// for the template repo t/tmpl. contentsByPath maps a repo-relative path to a
+// decoded body; status maps a path to a non-200 (403/404) to exercise per-path
+// fall-through and fail-open. A path absent from both maps 404s.
+func templatePRBodyMux(t *testing.T, contentsByPath map[string]string, status map[string]int) (*http.ServeMux, *map[string]string) {
+	t.Helper()
+	mux := http.NewServeMux()
+	captured := map[string]string{}
+	mux.HandleFunc("/repos/o/r/pulls", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &captured)
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"number": 1})
+	})
+	mux.HandleFunc("/repos/t/tmpl/contents/", func(w http.ResponseWriter, r *http.Request) {
+		// Path after ".../contents/", ignoring the ?ref= query.
+		rel := strings.TrimPrefix(r.URL.EscapedPath(), "/repos/t/tmpl/contents/")
+		if code, ok := status[rel]; ok {
+			w.WriteHeader(code)
+			_, _ = io.WriteString(w, `{"message":"nope"}`)
+			return
+		}
+		content, ok := contentsByPath[rel]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"message":"Not Found"}`)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"content":  base64.StdEncoding.EncodeToString([]byte(content)),
+			"encoding": "base64",
+		})
+	})
+	return mux, &captured
+}
+
+func tmplRef() *feedbackTemplateRef {
+	return &feedbackTemplateRef{owner: "t", repo: "tmpl", branch: "main"}
+}
+
+// TestCreateFeedbackPR_TemplateBodyVerbatim: flag set + a readable template PR
+// file -> the PR body is the file's contents byte-for-byte (no substitution),
+// not the built-in body.
+func TestCreateFeedbackPR_TemplateBodyVerbatim(t *testing.T) {
+	teacher := "Custom teacher body :sparkles: with `HEAD_BRANCH` left literal"
+	mux, captured := templatePRBodyMux(t,
+		map[string]string{".github/pull_request_template.md": teacher}, nil)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := newTestRESTClient(t, server)
+
+	if _, err := createFeedbackPR(client, "o", "r", "main", tmplRef()); err != nil {
+		t.Fatalf("createFeedbackPR: %v", err)
+	}
+	if (*captured)["body"] != teacher {
+		t.Errorf("PR body = %q, want the teacher template verbatim %q", (*captured)["body"], teacher)
+	}
+}
+
+// TestCreateFeedbackPR_TemplateProbeOrder: the first native path missing (404)
+// falls through to the second, which is used.
+func TestCreateFeedbackPR_TemplateProbeOrder(t *testing.T) {
+	teacher := "root template"
+	mux, captured := templatePRBodyMux(t,
+		map[string]string{"pull_request_template.md": teacher}, nil)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := newTestRESTClient(t, server)
+
+	if _, err := createFeedbackPR(client, "o", "r", "main", tmplRef()); err != nil {
+		t.Fatalf("createFeedbackPR: %v", err)
+	}
+	if (*captured)["body"] != teacher {
+		t.Errorf("PR body = %q, want the second-path template %q", (*captured)["body"], teacher)
+	}
+}
+
+// TestCreateFeedbackPR_FailsOpenToBuiltin exercises every fall-open branch:
+// all paths 404, a 403 (private/lost read), an empty-after-trim file, and an
+// oversize file. Each yields the built-in body, and the PR is still created.
+func TestCreateFeedbackPR_FailsOpenToBuiltin(t *testing.T) {
+	builtinMarker := "**Don't close or merge this pull request**"
+	oversize := strings.Repeat("x", contract.FeedbackTemplateMaxBytes+1)
+	cases := []struct {
+		name     string
+		contents map[string]string
+		status   map[string]int
+	}{
+		{"all paths 404", nil, nil},
+		{"private/lost read 403", nil, map[string]int{
+			".github/pull_request_template.md": http.StatusForbidden,
+			"pull_request_template.md":         http.StatusForbidden,
+			"docs/pull_request_template.md":    http.StatusForbidden,
+		}},
+		{"empty after trim", map[string]string{".github/pull_request_template.md": "   \n\t "}, nil},
+		{"oversize", map[string]string{".github/pull_request_template.md": oversize}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mux, captured := templatePRBodyMux(t, c.contents, c.status)
+			server := httptest.NewServer(mux)
+			t.Cleanup(server.Close)
+			client := newTestRESTClient(t, server)
+
+			if _, err := createFeedbackPR(client, "o", "r", "main", tmplRef()); err != nil {
+				t.Fatalf("createFeedbackPR: %v", err)
+			}
+			if !strings.Contains((*captured)["body"], builtinMarker) {
+				t.Errorf("expected the built-in body, got %q", (*captured)["body"])
+			}
+		})
+	}
+}
+
+// TestCreateFeedbackPR_NilRefNoProbe: no template ref -> built-in body and the
+// template contents endpoint is never called.
+func TestCreateFeedbackPR_NilRefNoProbe(t *testing.T) {
+	probed := false
+	mux, captured := templatePRBodyMux(t, nil, nil)
+	mux.HandleFunc("/repos/t/tmpl/", func(w http.ResponseWriter, _ *http.Request) {
+		probed = true
+		w.WriteHeader(http.StatusNotFound)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := newTestRESTClient(t, server)
+
+	if _, err := createFeedbackPR(client, "o", "r", "main", nil); err != nil {
+		t.Fatalf("createFeedbackPR: %v", err)
+	}
+	if probed {
+		t.Error("template repo was probed even though no template ref was passed")
+	}
+	if !strings.Contains((*captured)["body"], "**Don't close or merge this pull request**") {
+		t.Errorf("expected built-in body, got %q", (*captured)["body"])
+	}
+}
+
+// TestResolveFeedbackTemplateRef pins the accept-side gate: only feedback_pr
+// AND feedback_pr_template AND a template yield a ref; an empty branch -> main.
+func TestResolveFeedbackTemplateRef(t *testing.T) {
+	tmpl := &assignments.TemplateRef{Owner: "t", Repo: "tmpl", Branch: "dev"}
+	cases := []struct {
+		name  string
+		entry assignments.Entry
+		want  *feedbackTemplateRef
+	}{
+		{"opted in", assignments.Entry{FeedbackPR: true, FeedbackPRTemplate: true, Template: tmpl},
+			&feedbackTemplateRef{owner: "t", repo: "tmpl", branch: "dev"}},
+		{"flag off", assignments.Entry{FeedbackPR: true, FeedbackPRTemplate: false, Template: tmpl}, nil},
+		{"feedback_pr off", assignments.Entry{FeedbackPR: false, FeedbackPRTemplate: true, Template: tmpl}, nil},
+		{"no template", assignments.Entry{FeedbackPR: true, FeedbackPRTemplate: true, Template: nil}, nil},
+		{"empty branch defaults to main",
+			assignments.Entry{FeedbackPR: true, FeedbackPRTemplate: true,
+				Template: &assignments.TemplateRef{Owner: "t", Repo: "tmpl", Branch: ""}},
+			&feedbackTemplateRef{owner: "t", repo: "tmpl", branch: "main"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := resolveFeedbackTemplateRef(c.entry)
+			if c.want == nil {
+				if got != nil {
+					t.Errorf("got %+v, want nil", got)
+				}
+				return
+			}
+			if got == nil || *got != *c.want {
+				t.Errorf("got %+v, want %+v", got, c.want)
+			}
+		})
 	}
 }

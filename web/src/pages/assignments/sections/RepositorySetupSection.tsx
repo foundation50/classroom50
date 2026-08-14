@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query"
+import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink, RefreshCw } from "lucide-react"
+import { ExternalLink, Loader2, RefreshCw } from "lucide-react"
 import { Alert, Button, cx, FormField, Select } from "@/components/ui"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { getRepo } from "@/github-core/repoReads"
-import { parseTemplateRef } from "@/domain/assignments"
+import { parseTemplateRef, repoContentsPathExists } from "@/domain/assignments"
 import { REPO_PERMISSIONS, defaultStudentPermission } from "@/types/classroom"
 import { TemplateField } from "../TemplateField"
 import { ToggleRow } from "../AdvancedRuntimeFields"
@@ -234,6 +235,26 @@ export function RepositorySetupSection({
                     </div>
                   )}
                 </form.Field>
+
+                {/* Use the template repo's pull_request_template.md as the
+                    Feedback PR body (feedback_pr_template). Template-only, and
+                    only when the Feedback PR is available; auto-checks when a
+                    template PR file is detected. */}
+                {shape.feedbackPrTemplateVisible ? (
+                  <form.Subscribe
+                    selector={(state) => state.values.template_repo}
+                  >
+                    {(templateRepoValue) => (
+                      <FeedbackPrTemplateToggle
+                        form={form}
+                        edit={edit}
+                        org={org}
+                        templateRepo={templateRepoValue}
+                        feedbackPrEnabled={shape.feedbackPrEnabled}
+                      />
+                    )}
+                  </form.Subscribe>
+                ) : null}
               </>
             )}
           </form.Subscribe>
@@ -366,6 +387,118 @@ function parseTemplateRefSafe(
   } catch {
     return null
   }
+}
+
+// Native GitHub pull request template paths, probed in this order — mirrors the
+// accept clients and the runner. Detection auto-checks the toggle.
+const TEMPLATE_PR_BODY_PATHS = [
+  ".github/pull_request_template.md",
+  "pull_request_template.md",
+  "docs/pull_request_template.md",
+] as const
+
+// The "Use the template's pull request template as the Feedback PR body" toggle
+// (feedback_pr_template). Probes the picked template repo for a native
+// pull_request_template.md; on the CREATE form it auto-checks once when one is
+// found, respecting any later manual change. On EDIT it never overrides the
+// saved value. Rendered only for a template source with the Feedback PR on;
+// locked-off (not hidden) when the Feedback PR is off, mirroring feedback_pr.
+export const FeedbackPrTemplateToggle = ({
+  form,
+  edit,
+  org,
+  templateRepo,
+  feedbackPrEnabled,
+}: {
+  form: AssignmentForm
+  edit: boolean
+  org?: string
+  templateRepo: string
+  feedbackPrEnabled: boolean
+}) => {
+  const { t } = useTranslation()
+  const client = useOptionalGitHubClient()
+  const parsed = parseTemplateRefSafe(templateRepo, org)
+
+  // Whether the teacher has taken ownership of the toggle (so a re-probe never
+  // overrides their choice). On edit, seed it true — a saved assignment already
+  // reflects a deliberate value — so auto-check is a create-form-only nicety.
+  const userTouched = useRef(edit)
+
+  const enabled = Boolean(client && parsed && feedbackPrEnabled)
+  const probe = useQuery({
+    queryKey: ["feedback-pr-template", parsed?.owner, parsed?.repo],
+    queryFn: async () => {
+      for (const path of TEMPLATE_PR_BODY_PATHS) {
+        if (
+          await repoContentsPathExists(
+            client!,
+            parsed!.owner,
+            parsed!.repo,
+            path,
+          )
+        ) {
+          return true
+        }
+      }
+      return false
+    },
+    enabled,
+    staleTime: 30_000,
+    retry: false,
+  })
+
+  const detected = enabled && probe.data === true
+  const checking = enabled && probe.isFetching
+
+  // Auto-check once on first detection (create form only). A later manual change
+  // flips userTouched, after which re-probes never override.
+  useEffect(() => {
+    if (
+      !userTouched.current &&
+      detected &&
+      !form.state.values.feedback_pr_template
+    ) {
+      form.setFieldValue("feedback_pr_template", true)
+    }
+  }, [detected, form])
+
+  return (
+    <form.Field name="feedback_pr_template">
+      {(field) => (
+        <div
+          className={feedbackPrEnabled ? "" : "pointer-events-none opacity-50"}
+          aria-disabled={!feedbackPrEnabled}
+        >
+          <ToggleRow
+            id={field.name}
+            checked={feedbackPrEnabled ? field.state.value : false}
+            onChange={(checked) => {
+              userTouched.current = true
+              field.handleChange(checked)
+            }}
+            onBlur={field.handleBlur}
+            label={t("assignments.form.feedbackPrTemplate.label")}
+            help={
+              feedbackPrEnabled
+                ? t("assignments.form.feedbackPrTemplate.help")
+                : t("assignments.form.feedbackPrEmptyRepoHelp")
+            }
+          />
+          {checking ? (
+            <p className="mt-1 flex items-center gap-1 text-xs opacity-70">
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              {t("assignments.form.feedbackPrTemplate.checking")}
+            </p>
+          ) : detected && field.state.value ? (
+            <p className="mt-1 text-xs opacity-70">
+              {t("assignments.form.feedbackPrTemplate.autoEnabled")}
+            </p>
+          ) : null}
+        </div>
+      )}
+    </form.Field>
+  )
 }
 
 // Exported for focused unit tests of the resolved-inherit label, loading state,

@@ -15,6 +15,7 @@
 package contract
 
 import (
+	_ "embed"
 	"fmt"
 	"strings"
 	"time"
@@ -173,7 +174,25 @@ const (
 	// schemas/repo-config-v1.schema.json — keep byte-identical; contract_test.go
 	// pins the Go half.
 	MetadataPath = ".classroom50.yaml"
+
+	// FeedbackTemplateMaxBytes caps the teacher-supplied pull_request_template.md
+	// read so an oversized/binary file can't overflow GitHub's PR-body ceiling
+	// (~65_536 chars); an over-limit file falls back to the built-in body, like
+	// a missing one. Byte-based; the web copy (TEMPLATE_PR_BODY_MAX_BYTES) and
+	// the runner (_TEMPLATE_PR_BODY_MAX_BYTES) must use the same byte semantics.
+	FeedbackTemplateMaxBytes = 60_000
 )
+
+// FeedbackTemplatePaths are GitHub's native pull request template locations,
+// probed in this order to source the Feedback PR body when an assignment sets
+// feedback_pr_template. Hand-mirrored with NO compile-time link in the web GUI
+// (TEMPLATE_PR_BODY_PATHS) and the runner (_TEMPLATE_PR_BODY_PATHS) — keep the
+// list and order byte-identical; contract_test.go pins the Go half.
+var FeedbackTemplatePaths = []string{
+	".github/pull_request_template.md",
+	"pull_request_template.md",
+	"docs/pull_request_template.md",
+}
 
 // requiredOAuthScopes is the unified OAuth scope set both CLIs request on top
 // of gh's defaults. Identical across the two binaries (issue #246) so a user
@@ -392,53 +411,32 @@ func DefaultStudentPermission(mode string) string {
 	return PermissionPush
 }
 
-// FeedbackPRBody is the Feedback PR body, byte-identical with the output of
-// ensure_feedback_pr.py's pr_body(head, release_url) (the de-facto source of
-// truth) and the web GUI copy. It MUST contain releaseURL: the runner's
-// backfill_release_link() rewrites any open Feedback PR whose body lacks the
-// `.../releases/latest` link, so an accept-time body without it would be
-// clobbered on the first submission.
+// feedbackPRBodyTemplate is the single canonical source for the built-in
+// Feedback PR body, shared as a build-time source across Go, TypeScript
+// (web imports it via `?raw`), and Python (mirrored, pinned by the golden).
+// It carries three placeholder tokens — HEAD_BRANCH, RELEASE_URL, BASE_BRANCH —
+// substituted at render time. Edit this .md to change the body everywhere;
+// then regenerate the golden (`go test ./contract -run TestFeedbackPRBody -update`)
+// and the per-language verify tests will confirm every copy still matches.
+//
+//go:embed feedbackPrBody.md
+var feedbackPRBodyTemplate string
+
+// FeedbackPRBody is the built-in Feedback PR body, rendered from the canonical
+// feedbackPrBody.md by substituting the head branch, the static release URL,
+// and the frozen base branch. It stays byte-identical with the output of
+// ensure_feedback_pr.py's pr_body(head, release_url) and the web GUI copy
+// (feedbackPr.ts), pinned by the cross-language golden.
 //
 // releaseURL is the static `https://github.com/{org}/{repo}/releases/latest`
-// pointer (not a pinned tag) so the link self-updates as submissions publish.
+// pointer (not a pinned tag) so the link self-updates as submissions publish;
+// once written at PR creation it never needs rewriting.
 func FeedbackPRBody(head, releaseURL string) string {
-	return strings.Join([]string{
-		":wave:! Classroom 50 opened this pull request as a place for your " +
-			"teacher to leave feedback on your work. It stays up to date " +
-			"automatically as you push. " +
-			"**Don't close or merge this pull request** unless your teacher tells you to.",
-		"",
-		"Each commit is automatically graded — the latest autograding result " +
-			"is [here](" + releaseURL + ").",
-		"",
-		"Your teacher can leave comments and feedback on your code here. Click " +
-			"the **Subscribe** button to be notified when that happens.",
-		"",
-		"Open the **Files changed** or **Commits** tab to see everything " +
-			"you've pushed to `" + head + "` since you accepted the assignment — your " +
-			"teacher sees the same view.",
-		"",
-		"<details>",
-		"<summary><strong>Notes for teachers</strong></summary>",
-		"",
-		"Use this PR to leave feedback:",
-		"",
-		"- **Files changed** shows the full diff on `" + head + "` since the student " +
-			"accepted. Hover a line and click the blue **+** to leave a line comment.",
-		"- **Commits** lists each pushed commit; open one to see its changes.",
-		"- Autograde results appear as the `classroom50/autograde` commit " +
-			"status / check on each submission.",
-		"- The [latest autograding result](" + releaseURL + ") has the per-test " +
-			"detail behind that status.",
-		"- This page is an overview — commits, line comments, and a general " +
-			"comment box below.",
-		"",
-		"The base branch (`" + FeedbackBaseBranch + "`) is frozen at the starter so the diff " +
-			"always reflects the full body of work. The PR is kept up to date " +
-			"automatically; merging it is the teacher-side " +
-			"\"grading done\" signal.",
-		"</details>",
-	}, "\n")
+	return strings.NewReplacer(
+		"HEAD_BRANCH", head,
+		"RELEASE_URL", releaseURL,
+		"BASE_BRANCH", FeedbackBaseBranch,
+	).Replace(feedbackPRBodyTemplate)
 }
 
 // StaffRole is a per-classroom staff role backing the web GUI's in-app roles.

@@ -61,6 +61,15 @@ type Entry struct {
 	// submission on. Mutually exclusive with EmptyRepo (teacher CLI enforces).
 	FeedbackPR bool `json:"feedback_pr,omitempty"`
 
+	// FeedbackPRTemplate opts the Feedback PR into using the template repo's
+	// native pull request template (.github/pull_request_template.md ->
+	// pull_request_template.md -> docs/pull_request_template.md) as the PR body
+	// instead of the built-in body. Accept reads that file verbatim from the
+	// template repo at accept time, best-effort: a missing/empty/oversized file
+	// or a read error falls back to the built-in body. Requires FeedbackPR and a
+	// Template. Absent reads as false (writers omit it when false).
+	FeedbackPRTemplate bool `json:"feedback_pr_template,omitempty"`
+
 	// Locked hard-blocks student access: a locked assignment refuses accept for
 	// every student (see the gate in accept.go). Advisory here since
 	// assignments.json is public — the enforceable boundary is the teacher

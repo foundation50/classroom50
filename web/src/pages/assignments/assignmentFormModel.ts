@@ -90,6 +90,11 @@ export type CreateAssignmentFormValues = {
   available_from_date: string
   max_group_size: number
   feedback_pr: boolean
+  // Use the template repo's native pull_request_template.md as the Feedback PR
+  // body instead of the built-in body. Only meaningful with feedback_pr on and
+  // a template source; cleared on submit otherwise. Maps to the wire
+  // feedback_pr_template. Auto-checked when the form detects a template PR file.
+  feedback_pr_template: boolean
   // Truly bare student repos: no starter content, no control files, autograding
   // and the Feedback PR off. Immutable after creation (the edit form renders it
   // locked). While checked, the template/autograding/advanced grading sections
@@ -505,6 +510,13 @@ export function toSubmitValues(
     available_from_date: value.available_from_date.trim(),
     max_group_size: value.max_group_size,
     feedback_pr: isEmptyRepo ? false : value.feedback_pr,
+    // Only meaningful with a template source and the Feedback PR on; clear it
+    // otherwise so a stale toggle can't reach the wire (buildAssignmentEntry
+    // also rejects the combo).
+    feedback_pr_template:
+      isTemplate && !isEmptyRepo && value.feedback_pr
+        ? value.feedback_pr_template
+        : false,
     empty_repo: isEmptyRepo,
     repo_source: value.repo_source,
     add_readme: value.add_readme,
@@ -582,6 +594,10 @@ export const useAssignmentForm = (
       ),
       max_group_size: defaultValues?.max_group_size || 2,
       feedback_pr: defaultValues?.feedback_pr ?? true,
+      // Default off; on the create form the template probe auto-checks it when
+      // a pull_request_template.md is detected. On edit it reflects the saved
+      // value (assignmentToFormValues), and the probe respects a saved choice.
+      feedback_pr_template: defaultValues?.feedback_pr_template ?? false,
       empty_repo: defaultValues?.empty_repo ?? false,
       // Default to an uninitialized (empty) repository with no template and no
       // README, mirroring GitHub's "create a repository" defaults. Seeded from
@@ -684,6 +700,7 @@ export const assignmentToFormValues = (
     available_from_date: utcIsoToDatetimeLocalValue(assignment.available_from),
     max_group_size: assignment.max_group_size ?? 2,
     feedback_pr: assignment.feedback_pr ?? true,
+    feedback_pr_template: assignment.feedback_pr_template ?? false,
     empty_repo: assignment.empty_repo ?? false,
     // Fold the stored wire fields back into the UI source discriminator: a
     // template means "template"; otherwise "none". add_readme is true only for
