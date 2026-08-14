@@ -27,6 +27,13 @@ func CurrentUser(c Client) (login string, id int64, err error) {
 	return ghutil.CurrentUser(rest(c))
 }
 
+// ReadTemplatePRBody reads the first existing native pull_request_template.md
+// from owner/repo at ref as the Feedback PR body, or ("", false) to fall back
+// to the built-in body. Best-effort/fail-open (see ghutil.ReadTemplatePRBody).
+func ReadTemplatePRBody(c Client, owner, repo, ref string) (string, bool) {
+	return ghutil.ReadTemplatePRBody(rest(c), owner, repo, ref)
+}
+
 // SetCollaborator adds username to owner/repo at the given permission,
 // returning the resulting HTTP status.
 func SetCollaborator(c Client, owner, repo, username, permission string) (int, error) {

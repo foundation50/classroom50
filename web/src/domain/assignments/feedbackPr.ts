@@ -230,8 +230,15 @@ export async function ensureFeedbackPullRequest(
 async function ensureOnce(
   params: EnsureFeedbackPrParams,
 ): Promise<EnsureFeedbackPrResult> {
-  const { client, owner, repo, branch, acceptCommitSha, mode } = params
-  const feedbackPrTemplate = params.feedbackPrTemplate
+  const {
+    client,
+    owner,
+    repo,
+    branch,
+    acceptCommitSha,
+    mode,
+    feedbackPrTemplate,
+  } = params
 
   if (await feedbackPrExists({ client, owner, repo, branch })) {
     log.info("feedback PR already exists; leaving as-is", { owner, repo })

@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
+
+	"github.com/foundation50/classroom50-cli-shared/contract"
 )
 
 // linkNextRe extracts the `rel="next"` target from a GitHub `Link` header, e.g.
@@ -251,4 +253,40 @@ func ContentsPath(p string) string {
 		segs[i] = url.PathEscape(s)
 	}
 	return strings.Join(segs, "/")
+}
+
+// ReadTemplatePRBody returns the teacher-supplied Feedback PR body from a
+// template repo, or "" (ok=false) to fall back to the built-in body. It reads
+// the first existing of contract.FeedbackTemplatePaths at ref VERBATIM.
+// Best-effort: a missing/empty-after-trim/oversized file or any read error
+// (403 on a private template, 404, transient) yields ok=false. Shared by both
+// accept clients (gh-student, gh-teacher) so their read logic can't drift.
+func ReadTemplatePRBody(client *api.RESTClient, owner, repo, ref string) (string, bool) {
+	if owner == "" || repo == "" || ref == "" {
+		return "", false
+	}
+	for _, p := range contract.FeedbackTemplatePaths {
+		var resp struct {
+			Content  string `json:"content"`
+			Encoding string `json:"encoding"`
+		}
+		path := fmt.Sprintf("repos/%s/%s/contents/%s?ref=%s",
+			url.PathEscape(owner), url.PathEscape(repo),
+			ContentsPath(p), url.QueryEscape(ref))
+		if err := client.Get(path, &resp); err != nil {
+			continue // 404/403/transient — try the next path, then built-in
+		}
+		if resp.Encoding != "base64" {
+			continue // a directory or a large file uses a different shape
+		}
+		decoded, err := DecodeContentsBase64(resp.Content)
+		if err != nil || len(decoded) == 0 || len(decoded) > contract.FeedbackTemplateMaxBytes {
+			continue
+		}
+		if len(bytes.TrimSpace(decoded)) == 0 {
+			continue // empty/whitespace-only — not a usable body
+		}
+		return string(decoded), true
+	}
+	return "", false
 }

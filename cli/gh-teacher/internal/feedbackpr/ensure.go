@@ -22,40 +22,16 @@ type feedbackTemplateRef struct {
 	owner, repo, branch string
 }
 
-// readTemplatePRBody returns the teacher-supplied Feedback PR body from the
-// template repo, or "" (ok=false) to fall back to the built-in body. Reads the
-// first existing native pull_request_template.md path VERBATIM. Best-effort: a
-// missing/empty-after-trim/oversized file or any read error yields ok=false.
-// The teacher token can usually read the template (it created the assignment),
-// but this never fails the open.
+// readTemplatePRBody returns the teacher-supplied Feedback PR body for tmpl, or
+// "" (ok=false) to fall back to the built-in body. Delegates the fail-open read
+// to the shared ghutil helper; a nil ref means "built-in". The teacher token
+// can usually read the template (it created the assignment), but this never
+// fails the open.
 func readTemplatePRBody(client githubapi.Client, tmpl *feedbackTemplateRef) (string, bool) {
-	if tmpl == nil || tmpl.owner == "" || tmpl.repo == "" || tmpl.branch == "" {
+	if tmpl == nil {
 		return "", false
 	}
-	for _, p := range contract.FeedbackTemplatePaths {
-		var resp struct {
-			Content  string `json:"content"`
-			Encoding string `json:"encoding"`
-		}
-		path := fmt.Sprintf("repos/%s/%s/contents/%s?ref=%s",
-			url.PathEscape(tmpl.owner), url.PathEscape(tmpl.repo),
-			ghutil.ContentsPath(p), url.QueryEscape(tmpl.branch))
-		if err := client.Get(path, &resp); err != nil {
-			continue
-		}
-		if resp.Encoding != "base64" {
-			continue
-		}
-		decoded, err := ghutil.DecodeContentsBase64(resp.Content)
-		if err != nil || len(decoded) == 0 || len(decoded) > contract.FeedbackTemplateMaxBytes {
-			continue
-		}
-		if len(bytes.TrimSpace(decoded)) == 0 {
-			continue
-		}
-		return string(decoded), true
-	}
-	return "", false
+	return githubapi.ReadTemplatePRBody(client, tmpl.owner, tmpl.repo, tmpl.branch)
 }
 
 // metadataPath is the in-repo accept marker whose introducing commit anchors

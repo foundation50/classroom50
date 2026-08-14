@@ -41,42 +41,14 @@ func resolveFeedbackTemplateRef(entry assignments.Entry) *feedbackTemplateRef {
 	}
 }
 
-// readTemplatePRBody returns the teacher-supplied Feedback PR body from the
-// template repo, or "" (with ok=false) to fall back to the built-in body. Reads
-// the first existing native pull_request_template.md path VERBATIM. Best-effort:
-// a missing/empty-after-trim/oversized file or any read error (403 on a private
-// template, 404, transient) yields ok=false. Never fails the accept.
+// readTemplatePRBody returns the teacher-supplied Feedback PR body for tmpl, or
+// "" (ok=false) to fall back to the built-in body. Delegates the fail-open read
+// to the shared ghutil helper; a nil ref means "built-in".
 func readTemplatePRBody(client githubapi.Client, tmpl *feedbackTemplateRef) (string, bool) {
-	if tmpl == nil || tmpl.owner == "" || tmpl.repo == "" || tmpl.branch == "" {
+	if tmpl == nil {
 		return "", false
 	}
-	for _, p := range contract.FeedbackTemplatePaths {
-		var resp struct {
-			Content  string `json:"content"`
-			Encoding string `json:"encoding"`
-		}
-		path := fmt.Sprintf("repos/%s/%s/contents/%s?ref=%s",
-			url.PathEscape(tmpl.owner), url.PathEscape(tmpl.repo),
-			ghutil.ContentsPath(p), url.QueryEscape(tmpl.branch))
-		if err := client.Get(path, &resp); err != nil {
-			continue // 404/403/transient — try the next path, then built-in
-		}
-		if resp.Encoding != "base64" {
-			continue // a directory or a large file uses a different shape
-		}
-		decoded, err := ghutil.DecodeContentsBase64(resp.Content)
-		if err != nil || len(decoded) == 0 {
-			continue
-		}
-		if len(decoded) > contract.FeedbackTemplateMaxBytes {
-			continue // oversized — fall back to built-in
-		}
-		if len(bytes.TrimSpace(decoded)) == 0 {
-			continue // empty/whitespace-only — not a usable body
-		}
-		return string(decoded), true
-	}
-	return "", false
+	return githubapi.ReadTemplatePRBody(client, tmpl.owner, tmpl.repo, tmpl.branch)
 }
 
 // ensureFeedbackPullRequest opens the assignment's Feedback PR at accept time
