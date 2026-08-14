@@ -45,27 +45,17 @@ export function SubmissionGradingSection({
       description={t("assignments.form.submissionSectionHelp")}
     >
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <h3 className="text-sm font-semibold">
-            {t("assignments.form.submissions.heading")}
-          </h3>
-          <p className="text-sm text-base-content/70">
-            {t("assignments.form.submissions.help")}
-          </p>
-          <form.Subscribe
-            selector={(state) =>
-              deriveFormShape(state.values).showBuiltInConfig
-            }
-          >
-            {(showBuiltInConfig) => (
-              <SubmissionsSubsection
-                form={form}
-                edit={edit}
-                showBuiltInConfig={showBuiltInConfig}
-              />
-            )}
-          </form.Subscribe>
-        </div>
+        <form.Subscribe
+          selector={(state) => deriveFormShape(state.values).showBuiltInConfig}
+        >
+          {(showBuiltInConfig) => (
+            <SubmissionsSubsection
+              form={form}
+              edit={edit}
+              showBuiltInConfig={showBuiltInConfig}
+            />
+          )}
+        </form.Subscribe>
         <div className="divider my-0" />
         <GradingChoiceField form={form} />
         {/* Autograder config folded in: shown only when grading is

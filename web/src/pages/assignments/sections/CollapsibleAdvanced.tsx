@@ -1,12 +1,15 @@
 import type { ReactNode } from "react"
+import { ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 // The collapsible "Advanced settings" disclosure shared by the Repository Setup
-// and Autograding sections: a native <details>/<summary> with a rotating caret.
-// One recipe, one source — both advanced panes render through this so the
-// caret/heading treatment can't drift between them. `title` defaults to the
-// shared "Advanced settings" label; `help` is an optional one-line description
-// shown when open.
+// and Autograding sections: a native <details>/<summary> with a rotating
+// chevron. One recipe, one source — both advanced panes render through this so
+// the caret/heading treatment can't drift between them. Styled as a compact,
+// info-colored toggle (not a section-sized heading) so it reads as a secondary
+// affordance the common path can ignore. `title` defaults to the shared
+// "Advanced settings" label; `help` is an optional one-line description shown
+// when open.
 export function CollapsibleAdvanced({
   title,
   help,
@@ -19,8 +22,11 @@ export function CollapsibleAdvanced({
   const { t } = useTranslation()
   return (
     <details className="group">
-      <summary className="cursor-pointer text-lg font-bold marker:content-none flex items-center gap-2">
-        <span className="transition-transform group-open:rotate-90">▶</span>
+      <summary className="flex w-fit cursor-pointer items-center gap-1.5 text-sm font-semibold text-info marker:content-none hover:underline">
+        <ChevronRight
+          aria-hidden="true"
+          className="size-4 transition-transform group-open:rotate-90"
+        />
         {title ?? t("assignments.form.advanced")}
       </summary>
       {help ? (
