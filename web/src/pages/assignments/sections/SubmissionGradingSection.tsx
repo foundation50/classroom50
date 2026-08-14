@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import { FormField, Input, Select } from "@/components/ui"
 import { GRADING_MAX_POINTS_MIN } from "@/types/classroom"
 import type { AssignmentForm } from "../assignmentFormModel"
+import { shouldSeedBuiltInAutograder } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
 import { SectionCard } from "./SectionCard"
 import { SubmissionsSubsection } from "./SubmissionsSubsection"
@@ -86,11 +87,12 @@ export function SubmissionGradingSection({
 }
 
 // Grading choice (off / auto / manual). manual reveals a max-points input;
-// switching INTO auto seeds the built-in autograder as the default (see
-// onChange). The autograder config itself renders in this same section, below,
-// when auto is selected. Editable after creation; the edit form confirms before
-// saving when students have already accepted (scores recorded under the old
-// mode may be read differently), so no inline edit warning is needed here.
+// entering auto seeds the built-in autograder as a first-entry default (see
+// shouldSeedBuiltInAutograder — a deliberate pick survives a round-trip). The
+// autograder config itself renders in this same section, below, when auto is
+// selected. Editable after creation; the edit form confirms before saving when
+// students have already accepted (scores recorded under the old mode may be
+// read differently), so no inline edit warning is needed here.
 function GradingChoiceField({ form }: { form: AssignmentForm }) {
   const { t } = useTranslation()
   return (
@@ -112,20 +114,25 @@ function GradingChoiceField({ form }: { form: AssignmentForm }) {
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => {
+                    const previous = field.state.value
                     const next = e.target.value as typeof field.state.value
                     field.handleChange(next)
-                    // When a teacher first switches to Autograded, default the
-                    // autograder to the built-in one (the common case). Only
-                    // seed when moving INTO auto from another mode and the
-                    // current pick is still the no-autograder default ("none"
-                    // or a bare "empty") — never override a deliberate "none"
-                    // (teacher-supplied CI) or a stored built-in choice.
                     if (
-                      next === "auto" &&
-                      field.state.value !== "auto" &&
-                      form.state.values.autograding_state !== "built-in"
+                      shouldSeedBuiltInAutograder({
+                        next,
+                        previous,
+                        autogradingState: form.state.values.autograding_state,
+                        autogradingTouched: Boolean(
+                          form.getFieldMeta("autograding_state")?.isDirty,
+                        ),
+                      })
                     ) {
-                      form.setFieldValue("autograding_state", "built-in")
+                      // Seed as a default, not an edit: leaving the field
+                      // pristine keeps a later grading round-trip from reading
+                      // this as the teacher's deliberate pick.
+                      form.setFieldValue("autograding_state", "built-in", {
+                        dontUpdateMeta: true,
+                      })
                     }
                   }}
                 >

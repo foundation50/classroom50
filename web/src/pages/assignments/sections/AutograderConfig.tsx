@@ -19,9 +19,7 @@ export function AutograderConfig({
 }: {
   form: AssignmentForm
   org?: string
-  // On edit the built-in choice maps to no_autograder/init_shim. It's editable,
-  // but changing it only affects future accepts, so the caveat shows when
-  // students have already accepted.
+  // Threaded to AutogradingStateField's edit caveat.
   edit?: boolean
   hasAcceptedStudents?: boolean
 }) {

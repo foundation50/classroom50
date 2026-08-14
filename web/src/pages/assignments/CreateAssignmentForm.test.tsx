@@ -315,10 +315,23 @@ describe("submission release files visibility", () => {
 })
 
 describe("assignment setup timeout", () => {
+  // The autograder's "Advanced settings" disclosure, found by the field it owns
+  // rather than by document order, so the query states its intent and won't
+  // silently target Repository Setup's disclosure if the layout shifts.
+  const openAutograderAdvanced = (container: HTMLElement): HTMLElement => {
+    const details = container
+      .querySelector("#setup_timeout, #release_assets")
+      ?.closest("details")
+    if (!details) throw new Error("autograder advanced disclosure not found")
+    const summary = details.querySelector("summary")
+    if (!summary) throw new Error("advanced disclosure has no summary")
+    return summary as HTMLElement
+  }
+
   it("submits a stored zero timeout unchanged from the edit form", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
-    render(
+    const { container } = render(
       <QueryClientProvider client={new QueryClient()}>
         <CreateAssignmentForm
           edit
@@ -339,13 +352,9 @@ describe("assignment setup timeout", () => {
       </QueryClientProvider>,
     )
 
-    // Two "Advanced settings" disclosures exist (Repository Setup and the
-    // autograder). The autograder one renders last and owns the setup timeout.
-    const advancedSummary = screen
-      .getAllByText("assignments.form.advanced")
-      .at(-1)!
-      .closest("summary")
-    await user.click(advancedSummary!)
+    // Open the disclosure that owns the setup timeout (two "Advanced settings"
+    // disclosures exist: Repository Setup's and the autograder's).
+    await user.click(openAutograderAdvanced(container))
 
     const timeout = screen.getByLabelText(
       "assignments.form.setupTimeout",
@@ -369,7 +378,7 @@ describe("assignment setup timeout", () => {
   it("starts at 120 seconds and submits a changed timeout on create", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
-    render(
+    const { container } = render(
       <QueryClientProvider client={new QueryClient()}>
         <CreateAssignmentForm
           defaultValues={{
@@ -384,12 +393,7 @@ describe("assignment setup timeout", () => {
       </QueryClientProvider>,
     )
 
-    const advancedSummary = screen
-      .getAllByText("assignments.form.advanced")
-      .at(-1)!
-      .closest("summary")
-    expect(advancedSummary).not.toBeNull()
-    await user.click(advancedSummary!)
+    await user.click(openAutograderAdvanced(container))
 
     const command = screen.getByLabelText(
       "assignments.form.setupCommand",
@@ -686,6 +690,56 @@ describe("grading drives the autograding config", () => {
     expect(container.querySelector("#release_assets")).not.toBeNull()
   })
 
+  it("keeps a deliberate 'none' across a grading round-trip", async () => {
+    // Seeding is a first-entry default, not an override: once the teacher picks
+    // teacher-supplied CI, leaving Autograded and coming back must not silently
+    // re-seed the built-in autograder.
+    const user = userEvent.setup()
+    const { container } = renderForm({
+      defaultValues: { repo_source: "none", add_readme: true },
+    })
+    const grading =
+      container.querySelector<HTMLSelectElement>("#grading_choice")!
+    await user.selectOptions(grading, "auto")
+    // Deliberately switch off the built-in autograder.
+    await user.click(
+      screen.getByRole("radio", {
+        name: /assignments\.form\.autograding\.choices\.none\.label/,
+      }),
+    )
+    expect(container.querySelector("#release_assets")).toBeNull()
+    // Round-trip the grading choice.
+    await user.selectOptions(grading, "manual")
+    await user.selectOptions(grading, "auto")
+    expect(
+      screen.getByRole<HTMLInputElement>("radio", {
+        name: /assignments\.form\.autograding\.choices\.none\.label/,
+      }).checked,
+    ).toBe(true)
+    expect(container.querySelector("#release_assets")).toBeNull()
+  })
+
+  it("leaves a stored built-in choice untouched when re-entering Autograded", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm({
+      edit: true,
+      defaultValues: {
+        repo_source: "none",
+        add_readme: true,
+        grading_choice: "manual",
+        autograding_state: "built-in",
+      },
+    })
+    const grading =
+      container.querySelector<HTMLSelectElement>("#grading_choice")!
+    await user.selectOptions(grading, "auto")
+    expect(
+      screen.getByRole<HTMLInputElement>("radio", {
+        name: /assignments\.form\.autograding\.choices\.built-in\.label/,
+      }).checked,
+    ).toBe(true)
+  })
+
   it("keeps the built-in autograder radios editable on edit", () => {
     // On edit the built-in choice maps to no_autograder/init_shim. It's now
     // mutable — the radios render enabled (the caveat is conditional; see the
@@ -923,6 +977,19 @@ describe("assignment form section IA", () => {
     expect(
       screen.getByText("assignments.form.submissionTags.label"),
     ).not.toBeNull()
+  })
+
+  it("keeps the advanced repository fields reachable in the disclosure", () => {
+    // The rarer repo controls moved inside a collapsed <details>; they must
+    // still render (a <details> keeps its content in the DOM) so a regression
+    // that dropped them from the collapsible is caught here.
+    const { container } = renderForm({
+      defaultValues: { repo_source: "template", template_repo: "org/tmpl" },
+    })
+    expect(container.querySelector("#copy_about")).not.toBeNull()
+    expect(container.querySelector("#copy_topics")).not.toBeNull()
+    expect(container.querySelector("#student_permission")).not.toBeNull()
+    expect(container.querySelector("#repo_feature_issues")).not.toBeNull()
   })
 
   it("shows no per-section Reset control on a fresh create form", () => {

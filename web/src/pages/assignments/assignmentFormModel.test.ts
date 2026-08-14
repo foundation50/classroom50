@@ -6,6 +6,7 @@ import {
   validateAssignmentForm,
   toSubmitValues,
   formValuesToRepoFeatures,
+  shouldSeedBuiltInAutograder,
   type CreateAssignmentFormValues,
 } from "./assignmentFormModel"
 import { deriveFormShape } from "./formShape"
@@ -1061,5 +1062,43 @@ describe("repo_features tri-state round-trip", () => {
           values.repo_feature_pull_requests ?? "inherit",
       }),
     ).toEqual({ issues: false })
+  })
+})
+
+describe("shouldSeedBuiltInAutograder", () => {
+  const base = {
+    next: "auto",
+    previous: "off",
+    autogradingState: "none",
+    autogradingTouched: false,
+  } as const
+
+  it("seeds on first entry into Autograded", () => {
+    expect(shouldSeedBuiltInAutograder(base)).toBe(true)
+    // A bare repo's "empty" state is equally un-chosen.
+    expect(
+      shouldSeedBuiltInAutograder({ ...base, autogradingState: "empty" }),
+    ).toBe(true)
+  })
+
+  it("does not seed unless entering Autograded from another mode", () => {
+    expect(shouldSeedBuiltInAutograder({ ...base, next: "manual" })).toBe(false)
+    expect(shouldSeedBuiltInAutograder({ ...base, next: "off" })).toBe(false)
+    // Already in auto: not an entry.
+    expect(shouldSeedBuiltInAutograder({ ...base, previous: "auto" })).toBe(
+      false,
+    )
+  })
+
+  it("never overrides a pick the teacher already made", () => {
+    expect(
+      shouldSeedBuiltInAutograder({ ...base, autogradingTouched: true }),
+    ).toBe(false)
+    expect(
+      shouldSeedBuiltInAutograder({
+        ...base,
+        autogradingState: "built-in",
+      }),
+    ).toBe(false)
   })
 })
