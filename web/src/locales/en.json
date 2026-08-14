@@ -1149,8 +1149,8 @@
       },
       "addReadme": {
         "label": "Add a README",
-        "helpOn": "Initialize each repository with a README.md, creating an initial commit so branches, pull requests, and the Feedback PR work.",
-        "helpOff": "Create an empty repository with no initial commit. Autograding and the Feedback PR are unavailable until the student's first commit."
+        "helpOn": "Start each repository with a README.md. This first commit is what lets branches, pull requests, and the Feedback PR work.",
+        "helpOff": "Start with an empty repository. Autograding and the Feedback PR stay unavailable until the student's first commit."
       },
       "includeAllBranches": {
         "label": "Include all branches",
@@ -1165,8 +1165,8 @@
         "help": "Copy the template's topics onto each student repository. GitHub does not copy them automatically. This applies to students who accept from now on; repositories already created are not changed."
       },
       "feedbackPr": "Feedback pull request",
-      "feedbackPrHelp": "Open a pull request per repo for inline review of each submission.",
-      "feedbackPrEmptyRepoHelp": "Unavailable for empty repositories. There is no starter commit to diff against.",
+      "feedbackPrHelp": "Open a pull request in each student's repository for inline review and comments on their work.",
+      "feedbackPrEmptyRepoHelp": "Unavailable for empty repositories: there's no starter commit to compare a student's work against.",
       "feedbackPrTemplate": {
         "label": "Use the template's pull request template as the Feedback PR body",
         "help": "Use the template repository's pull request template (.github/pull_request_template.md) as the body of each student's Feedback PR instead of the built-in one. You are responsible for the template's contents. If the file is missing or unreadable, the built-in body is used.",
@@ -1193,11 +1193,11 @@
         "choices": {
           "none": {
             "label": "Do not use the built-in autograder",
-            "help": "No autograder shim is committed. With a template, supply your own workflow in the template (it must publish a result.json asset on the submission release). Without a template, the repository simply has no autograder."
+            "help": "Grade with your own GitHub Actions workflow instead. With a template, add the workflow to it; without one, the assignment has no autograder."
           },
           "built-in": {
             "label": "Use the built-in autograder",
-            "help": "Commit the built-in autograder shim, then configure the runtime and declarative tests below."
+            "help": "Set up the built-in autograder, then add the tests and runtime below."
           }
         }
       },
@@ -1216,7 +1216,7 @@
       },
       "submissionMode": {
         "label": "Submission type",
-        "help": "\"Every push to the default branch\" counts each push (other than the starting commit). \"A tagged commit\" counts only tagged commits: a student submits with gh student submit or by pushing a tag, so ordinary pushes cost no Actions minutes.",
+        "help": "\"Every push to the default branch\" counts each push after the starter commit. \"A tagged commit\" counts only tagged commits, so ordinary pushes use no Actions minutes; a student submits by pushing a tag or running gh student submit.",
         "editWarning": "Changing this only affects repositories created from now on. Repositories students already accepted keep the old setting until you update them. Use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
         "choices": {
           "everyPush": "Every push to the default branch",
