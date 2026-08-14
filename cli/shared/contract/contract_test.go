@@ -2,12 +2,20 @@ package contract
 
 import (
 	"encoding/json"
+	"flag"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+// updateGolden regenerates testdata/feedback_pr_body.golden from the canonical
+// feedbackPrBody.md when set (`go test ./contract -run TestFeedbackPRBody
+// -update`). The golden is the .md rendered with the HEAD_BRANCH/RELEASE_URL
+// tokens left literal and only BASE_BRANCH resolved, so the Go/TS/Python verify
+// tests can each assert their render equals it.
+var updateGolden = flag.Bool("update", false, "regenerate the feedback PR body golden from feedbackPrBody.md")
 
 // TestContractLiterals is a change-detector pinning each cross-binary constant
 // to its exact wire value. These must stay byte-identical to the Python scripts
@@ -301,13 +309,22 @@ func TestFeedbackLabelForMode(t *testing.T) {
 
 // TestFeedbackPRBody pins the body BYTE-for-byte against the cross-language
 // golden that gh-teacher's skeleton test (Python) and the web suite (TypeScript)
-// assert against too, so a one-sided prose edit fails on every side. It also
-// re-states the load-bearing properties, since the golden alone would not say
-// WHY they matter: the release URL MUST be embedded — the runner's
-// backfill_release_link() rewrites any open Feedback PR whose body lacks it,
-// clobbering an accept-time body without it — and the head branch and frozen
-// base are named.
+// assert against too, so a one-sided prose edit fails on every side. The body is
+// rendered from the canonical cli/shared/contract/feedbackPrBody.md; the golden
+// is that .md with HEAD_BRANCH/RELEASE_URL left literal and BASE_BRANCH resolved.
+// It also re-states the load-bearing properties, since the golden alone would not
+// say WHY they matter: the release URL is embedded (self-updating latest link),
+// and the head branch and frozen base are named.
 func TestFeedbackPRBody(t *testing.T) {
+	rendered := FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL")
+	if *updateGolden {
+		if err := os.WriteFile(filepath.Clean(feedbackPRBodyGoldenPath), []byte(rendered), 0o644); err != nil {
+			t.Fatalf("update golden: %v", err)
+		}
+		t.Logf("regenerated %s from feedbackPrBody.md", feedbackPRBodyGoldenPath)
+		return
+	}
+
 	body := FeedbackPRBody("main", "https://github.com/o/r/releases/latest")
 	for _, want := range []string{
 		"https://github.com/o/r/releases/latest",
@@ -324,8 +341,8 @@ func TestFeedbackPRBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read golden: %v", err)
 	}
-	if got := FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL"); got != string(golden) {
-		t.Errorf("FeedbackPRBody no longer matches %s; if intentional, update pr_body in ensure_feedback_pr.py and feedbackPrBody in web/src/domain/assignments/feedbackPr.ts too, then regenerate the golden",
+	if rendered != string(golden) {
+		t.Errorf("FeedbackPRBody no longer matches %s; edit the canonical feedbackPrBody.md, then regenerate with `go test ./contract -run TestFeedbackPRBody -update` (the web and Python verify tests assert against the same golden)",
 			feedbackPRBodyGoldenPath)
 	}
 }

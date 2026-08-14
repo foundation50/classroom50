@@ -23,6 +23,11 @@ import { mapWithConcurrency } from "@/util/concurrency"
 import { prefixCommit } from "@/util/commit"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import { logger } from "@/lib/logger"
+// The single canonical Feedback PR body source, shared with the Go contract
+// (cli/shared/contract/feedbackPrBody.md, embedded there) and the Python runner
+// (mirrored). Imported as raw text; feedbackPrBody substitutes the placeholder
+// tokens. The cross-language golden pins all three copies (feedbackPr.test.ts).
+import feedbackPrBodyTemplate from "../../../../cli/shared/contract/feedbackPrBody.md?raw"
 
 const log = logger.scope("assignments:feedbackPr")
 
@@ -57,47 +62,16 @@ export function feedbackLabelForMode(mode: string): {
   return { name: "Individual Assignment", color: "0E8A16" }
 }
 
-// MUST contain releaseUrl: the runner's backfill_release_link() rewrites any
-// open Feedback PR whose body lacks the `.../releases/latest` link, so omitting
-// it here would get this body clobbered on the first submission.
+// Renders the built-in Feedback PR body from the canonical feedbackPrBody.md by
+// substituting the head branch, the static release URL, and the frozen base.
+// Byte-identical with the Go (FeedbackPRBody) and Python (pr_body) copies,
+// pinned by the cross-language golden. releaseUrl is the static
+// `.../releases/latest` pointer; once written at creation it self-updates.
 export function feedbackPrBody(head: string, releaseUrl: string): string {
-  return [
-    ":wave:! Classroom 50 opened this pull request as a place for your " +
-      "teacher to leave feedback on your work. It stays up to date " +
-      "automatically as you push. " +
-      "**Don't close or merge this pull request** unless your teacher tells you to.",
-    "",
-    "Each commit is automatically graded — the latest autograding result " +
-      `is [here](${releaseUrl}).`,
-    "",
-    "Your teacher can leave comments and feedback on your code here. Click " +
-      "the **Subscribe** button to be notified when that happens.",
-    "",
-    "Open the **Files changed** or **Commits** tab to see everything " +
-      `you've pushed to \`${head}\` since you accepted the assignment — your ` +
-      "teacher sees the same view.",
-    "",
-    "<details>",
-    "<summary><strong>Notes for teachers</strong></summary>",
-    "",
-    "Use this PR to leave feedback:",
-    "",
-    `- **Files changed** shows the full diff on \`${head}\` since the student ` +
-      "accepted. Hover a line and click the blue **+** to leave a line comment.",
-    "- **Commits** lists each pushed commit; open one to see its changes.",
-    "- Autograde results appear as the `classroom50/autograde` commit " +
-      "status / check on each submission.",
-    `- The [latest autograding result](${releaseUrl}) has the per-test ` +
-      "detail behind that status.",
-    "- This page is an overview — commits, line comments, and a general " +
-      "comment box below.",
-    "",
-    `The base branch (\`${FEEDBACK_BASE_BRANCH}\`) is frozen at the starter so the diff ` +
-      "always reflects the full body of work. The PR is kept up to date " +
-      "automatically; merging it is the teacher-side " +
-      '"grading done" signal.',
-    "</details>",
-  ].join("\n")
+  return feedbackPrBodyTemplate
+    .replaceAll("HEAD_BRANCH", head)
+    .replaceAll("RELEASE_URL", releaseUrl)
+    .replaceAll("BASE_BRANCH", FEEDBACK_BASE_BRANCH)
 }
 
 // A stable, non-message reason for an ensure/repair failure, so callers can
