@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { AnimatePresence, motion } from "motion/react"
 import { collapseVariants } from "@/lib/motion"
 import { cx } from "@/components/ui"
+import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
 
 // The collapsible "Advanced settings" disclosure shared by the Repository Setup
 // and autograder panes. One recipe, one source — both render through this so the
@@ -22,19 +23,28 @@ export function CollapsibleAdvanced({
 }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
+  const { bodyRef, reveal } = useRevealOnExpand()
   return (
     <div>
       <button
         type="button"
-        onClick={() => setExpanded((open) => !open)}
+        onClick={() => {
+          const next = !expanded
+          setExpanded(next)
+          if (next) reveal()
+        }}
         aria-expanded={expanded}
-        className="flex w-fit cursor-pointer items-center gap-1.5 text-sm font-semibold text-info hover:underline"
+        className="group flex w-fit cursor-pointer items-center gap-1.5 text-sm font-semibold text-info hover:underline"
       >
+        {/* Nudges right while closed and down once open, so the hover hints at
+            the direction the panel will move. */}
         <ChevronRight
           aria-hidden="true"
           className={cx(
             "size-4 transition-transform duration-200",
-            expanded && "rotate-90",
+            expanded
+              ? "rotate-90 group-hover:translate-y-0.5"
+              : "group-hover:translate-x-0.5",
           )}
         />
         {t("assignments.form.advanced")}
@@ -42,6 +52,7 @@ export function CollapsibleAdvanced({
       <AnimatePresence initial={false}>
         {expanded ? (
           <motion.div
+            ref={bodyRef}
             variants={collapseVariants}
             initial="initial"
             animate="animate"

@@ -4,6 +4,7 @@ import type { TFunction } from "i18next"
 import { Pencil, Trash, ChevronRight } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import { collapseVariants } from "@/lib/motion"
+import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
 import type { AssignmentForm } from "./assignmentFormModel"
 
 import {
@@ -409,6 +410,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
   const [expanded, setExpanded] = useState(
     () => form.getFieldValue("tests").length > 0,
   )
+  const { bodyRef, reveal } = useRevealOnExpand()
 
   useEffect(() => {
     if (!editor) return
@@ -451,6 +453,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
     // Reveal the list so the just-saved test is visible rather than landing
     // inside a collapsed section.
     setExpanded(true)
+    reveal()
     closeEditor()
   }
 
@@ -469,15 +472,21 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                   what's configured without expanding. */}
               <button
                 type="button"
-                onClick={() => setExpanded((open) => !open)}
+                onClick={() => {
+                  const next = !expanded
+                  setExpanded(next)
+                  if (next) reveal()
+                }}
                 aria-expanded={expanded}
-                className="flex cursor-pointer items-start gap-1.5 text-start"
+                className="group flex cursor-pointer items-start gap-1.5 text-start"
               >
                 <ChevronRight
                   aria-hidden="true"
                   className={cx(
                     "mt-1 size-4 shrink-0 transition-transform duration-200",
-                    expanded && "rotate-90",
+                    expanded
+                      ? "rotate-90 group-hover:translate-y-0.5"
+                      : "group-hover:translate-x-0.5",
                   )}
                 />
                 <span>
@@ -511,6 +520,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
             <AnimatePresence initial={false}>
               {expanded ? (
                 <motion.div
+                  ref={bodyRef}
                   variants={collapseVariants}
                   initial="initial"
                   animate="animate"
