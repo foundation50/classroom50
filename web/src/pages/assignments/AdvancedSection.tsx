@@ -40,7 +40,9 @@ export const AdvancedSection = ({
         {t("assignments.form.advanced")}
       </summary>
 
-      <p className="label pt-2 pb-4">{t("assignments.form.advancedHelp")}</p>
+      <p className="pt-2 pb-4 text-sm text-base-content/70">
+        {t("assignments.form.advancedHelp")}
+      </p>
 
       <form.Field name="runtime_env">
         {(field) => (

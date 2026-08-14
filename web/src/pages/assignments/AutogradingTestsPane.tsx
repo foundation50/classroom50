@@ -159,7 +159,7 @@ const AutogradingTestModal = ({
               />
             ))}
           </div>
-          <p className="label text-sm pt-1">
+          <p className="text-sm pt-1 text-base-content/70">
             {(() => {
               const hintKey = TYPE_OPTIONS.find(
                 (o) => o.value === draft.type,
@@ -288,7 +288,7 @@ const AutogradingTestModal = ({
                 errors.exitCode ? `${field("exitCode")}-error` : undefined
               }
             />
-            <p className="label text-sm pt-1">
+            <p className="text-sm pt-1 text-base-content/70">
               {t("assignments.autograder.exitCodeHint")}
             </p>
             <FieldError
@@ -331,7 +331,7 @@ const AutogradingTestModal = ({
                 errors.timeout ? `${field("timeout")}-error` : undefined
               }
             />
-            <p className="label text-sm pt-1">
+            <p className="text-sm pt-1 text-base-content/70">
               {t("assignments.autograder.timeoutHint")}
             </p>
             <FieldError

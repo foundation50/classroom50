@@ -77,7 +77,7 @@ export function RepositorySetupSection({
                     <label
                       key={option}
                       htmlFor={`${field.name}-${option}`}
-                      className="label cursor-pointer items-start justify-start gap-3 p-0"
+                      className="flex cursor-pointer items-start justify-start gap-3"
                     >
                       <input
                         id={`${field.name}-${option}`}
