@@ -1070,24 +1070,14 @@ func validateIncludeAllBranchesExclusions(entry AssignmentEntry) error {
 // left bare) at accept time and never retrofitted, so a change only affects
 // repos accepted from now on — callers warn (they do not block) when this is
 // true. Kept as a single-sourced helper so the command and its tests agree.
+//
+// There is deliberately no NoAutograderChanged/InitShimChanged sibling: those
+// flags have no `assignment add` flag and are carried forward from the prior
+// entry before any comparison, so `add` can never change them — a detector
+// would be dead code. They stay mutable via the web GUI, which owns its own
+// edit-time confirmation.
 func EmptyRepoChanged(existing, updated AssignmentEntry) bool {
 	return existing.EmptyRepo != updated.EmptyRepo
-}
-
-// NoAutograderChanged reports whether an upsert flips no_autograder relative to
-// the existing entry, mirroring EmptyRepoChanged: the shim (or its absence) is
-// baked into each student repo at accept time and never retrofitted, so a
-// change only affects future accepts — callers warn, not block.
-func NoAutograderChanged(existing, updated AssignmentEntry) bool {
-	return existing.NoAutograder != updated.NoAutograder
-}
-
-// InitShimChanged reports whether an upsert flips init_shim relative to the
-// existing entry, mirroring EmptyRepoChanged/NoAutograderChanged: the shim (or
-// its absence) is baked in at accept time and never retrofitted, so a change
-// only affects future accepts — callers warn, not block.
-func InitShimChanged(existing, updated AssignmentEntry) bool {
-	return existing.InitShim != updated.InitShim
 }
 
 // ValidateExistingEntry is the parse-path twin of ValidateAssignmentEntry.

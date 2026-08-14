@@ -2198,25 +2198,11 @@ func TestValidateNoAutograderExclusions(t *testing.T) {
 	}
 }
 
-// TestNoAutograderChanged: no_autograder is mutable, like empty_repo — a flip
-// is detected so callers can warn.
-func TestNoAutograderChanged(t *testing.T) {
-	on := AssignmentEntry{Slug: "hw", NoAutograder: true}
-	off := AssignmentEntry{Slug: "hw", NoAutograder: false}
-
-	if NoAutograderChanged(on, on) {
-		t.Error("same value (true): reported changed")
-	}
-	if NoAutograderChanged(off, off) {
-		t.Error("same value (false): reported changed")
-	}
-	if !NoAutograderChanged(on, off) {
-		t.Error("flip true->false: not detected")
-	}
-	if !NoAutograderChanged(off, on) {
-		t.Error("flip false->true: not detected")
-	}
-}
+// TestNoAutograderChanged / TestInitShimChanged were removed with their
+// helpers: no_autograder / init_shim have no `assignment add` flag and are
+// carried forward before any comparison, so `add` can never change them and a
+// detector would be dead code. Only empty_repo is detectable on the CLI path
+// (see TestEmptyRepoChanged).
 
 func TestValidateInitShimExclusions(t *testing.T) {
 	// init_shim is the built-in-autograder-on-an-empty-repo state: template-less,
@@ -2266,25 +2252,9 @@ func TestValidateInitShimExclusions(t *testing.T) {
 	}
 }
 
-// TestInitShimChanged: init_shim is mutable, like empty_repo/no_autograder — a
-// flip is detected so callers can warn.
-func TestInitShimChanged(t *testing.T) {
-	on := AssignmentEntry{Slug: "hw", InitShim: true}
-	off := AssignmentEntry{Slug: "hw", InitShim: false}
-
-	if InitShimChanged(on, on) {
-		t.Error("same value (true): reported changed")
-	}
-	if InitShimChanged(off, off) {
-		t.Error("same value (false): reported changed")
-	}
-	if !InitShimChanged(on, off) {
-		t.Error("flip true->false: not detected")
-	}
-	if !InitShimChanged(off, on) {
-		t.Error("flip false->true: not detected")
-	}
-}
+// TestInitShimChanged was removed with its helper (see the note above
+// TestEmptyRepoChanged's siblings): init_shim has no `assignment add` flag and
+// is carried forward before any comparison, so `add` can never change it.
 
 func TestValidateIncludeAllBranchesExclusions(t *testing.T) {
 	// include_all_branches only affects the templated generate call, so it
