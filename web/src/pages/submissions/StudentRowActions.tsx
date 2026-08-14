@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { ScrollText } from "lucide-react"
+import { History, ScrollText } from "lucide-react"
 
 import { Button } from "@/components/ui"
 import { ActionIconLink } from "@/pages/submissions/SubmissionsRows"
@@ -47,7 +47,7 @@ export const StudentRowActions = ({
         aria-label={t("submissions.details.viewSubmissions")}
         title={t("submissions.details.viewSubmissions")}
       >
-        <ScrollText aria-hidden="true" className="size-4" />
+        <History aria-hidden="true" className="size-4" />
       </Button>
     </div>
   )
