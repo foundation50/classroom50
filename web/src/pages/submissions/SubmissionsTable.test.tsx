@@ -217,38 +217,39 @@ describe("SubmissionsTable empty_repo score cell", () => {
   })
 })
 
-describe("SubmissionsTable manual grading on a no-autograder assignment", () => {
+describe("SubmissionsTable score override on a no-autograder manual assignment", () => {
   // A templated manual-graded assignment is written as no_autograder (the
   // emptyRepo prop here), so manual grading must win over the no-grading
   // em-dash — otherwise a grade entered via the non-submitter row becomes
   // invisible once the student turns into a submitter row.
-  const manualGrade = {
+  const overrideGrade = {
     org: "acme",
     classroom: "cs101",
     assignment: "hw1",
     assignmentType: "individual" as const,
+    mode: "manual" as const,
     maxPoints: 10,
   }
 
-  it("offers the inline manual editor on a submitter row despite emptyRepo", () => {
+  it("offers the score-override trigger on a submitter row despite emptyRepo", () => {
     render(
       <SubmissionsTable
         {...baseProps}
         scores={[scoreRow()]}
         acceptedUsernames={new Set(["alice"])}
         emptyRepo
-        manualGrade={manualGrade}
+        overrideGrade={overrideGrade}
       />,
     )
     expect(
       screen.getByRole("button", {
-        name: "submissions.manualGrade.editLabel",
+        name: "submissions.scoreOverride.editLabel",
       }),
     ).toBeTruthy()
     expect(screen.queryByTitle("submissions.table.noGradingTitle")).toBeNull()
   })
 
-  it("still shows the no-grading em-dash without manualGrade", () => {
+  it("still shows the no-grading em-dash without overrideGrade", () => {
     render(
       <SubmissionsTable
         {...baseProps}
@@ -267,14 +268,75 @@ describe("SubmissionsTable manual grading on a no-autograder assignment", () => 
         nonSubmitters={[student()]}
         acceptedUsernames={new Set(["alice"])}
         emptyRepo
-        manualGrade={manualGrade}
+        overrideGrade={overrideGrade}
       />,
     )
     expect(
       screen.getByRole("button", {
-        name: "submissions.manualGrade.addLabel",
+        name: "submissions.scoreOverride.addLabel",
       }),
     ).toBeTruthy()
+  })
+})
+
+describe("SubmissionsTable autograded score override", () => {
+  const overrideGrade = {
+    org: "acme",
+    classroom: "cs101",
+    assignment: "hw1",
+    assignmentType: "individual" as const,
+    mode: "auto" as const,
+  }
+
+  it("offers the override trigger on a graded autograded row", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow({ score: 8, "max-score": 10 })]}
+        acceptedUsernames={new Set(["alice"])}
+        overrideGrade={overrideGrade}
+      />,
+    )
+    expect(
+      screen.getByRole("button", {
+        name: "submissions.scoreOverride.editLabel",
+      }),
+    ).toBeTruthy()
+  })
+
+  it("does not offer the trigger on an empty_repo autograded row", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+        emptyRepo
+        overrideGrade={overrideGrade}
+      />,
+    )
+    expect(
+      screen.queryByRole("button", {
+        name: "submissions.scoreOverride.editLabel",
+      }),
+    ).toBeNull()
+    expect(screen.getByTitle("submissions.table.noGradingTitle")).toBeTruthy()
+  })
+
+  it("does not offer the trigger on a pending autograded row (no graded max yet)", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow({ pending: true, score: 0, "max-score": 0 })]}
+        acceptedUsernames={new Set(["alice"])}
+        overrideGrade={overrideGrade}
+      />,
+    )
+    expect(
+      screen.queryByRole("button", {
+        name: "submissions.scoreOverride.editLabel",
+      }),
+    ).toBeNull()
+    expect(screen.getByText("submissions.table.pendingGrade")).toBeTruthy()
   })
 })
 

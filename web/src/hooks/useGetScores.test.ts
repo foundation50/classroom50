@@ -46,6 +46,47 @@ describe("normalizeScores — manual override entries", () => {
     expect(rows[0].overridden).toBe(true)
   })
 
+  it("exposes the preserved autograded score beneath an override", () => {
+    // The override record leads; the real autograder submission is retained
+    // beneath it. bucketToRows surfaces that real score/max as the value the
+    // override reverts to when cleared.
+    const normalized = normalizeScores(
+      scoresWith([
+        {
+          owner: "alice",
+          override: true,
+          submissions: [
+            overrideRecord,
+            {
+              ...overrideRecord,
+              submission: "submit/2026-01-01T00-00-00Z-abc1234",
+              datetime: "2026-01-01T00:00:00Z",
+              score: 30,
+              "max-score": 50,
+            },
+          ],
+        },
+      ]) as never,
+    )
+    const rows = normalized?.submissions.hw1 ?? []
+    // Effective (displayed) grade is the override.
+    expect(rows[0].score).toBe(42)
+    // Preserved autograded value the clear reverts to.
+    expect(rows[0].autogradedScore).toBe(30)
+    expect(rows[0].autogradedMax).toBe(50)
+  })
+
+  it("omits the autograded score when an override has no real history", () => {
+    const normalized = normalizeScores(
+      scoresWith([
+        { owner: "alice", override: true, submissions: [overrideRecord] },
+      ]) as never,
+    )
+    const rows = normalized?.submissions.hw1 ?? []
+    expect(rows[0].autogradedScore).toBeUndefined()
+    expect(rows[0].autogradedMax).toBeUndefined()
+  })
+
   it("leaves overridden false for a plain autograded entry", () => {
     const normalized = normalizeScores(
       scoresWith([
@@ -63,6 +104,8 @@ describe("normalizeScores — manual override entries", () => {
     )
     const rows = normalized?.submissions.hw1 ?? []
     expect(rows[0].overridden).toBe(false)
+    // A non-overridden entry never exposes the autograded-revert fields.
+    expect(rows[0].autogradedScore).toBeUndefined()
   })
 })
 

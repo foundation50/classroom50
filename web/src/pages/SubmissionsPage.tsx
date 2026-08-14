@@ -1277,24 +1277,40 @@ const SubmissionsPageContent = () => {
         // gate above) — drives the type-aware submission-details modal and the
         // count wording, which apply regardless of who authored the shim.
         assignmentMode={assignmentInfo?.submission_mode ?? "every-push"}
-        // Manual grading: staff may enter/edit scores inline. Gated on an org
-        // OWNER (the same write-capability gate every other mutating control on
-        // this page uses — a non-owner can't write the config repo's
-        // scores.json, so the editor must not appear for them) plus a resolved
-        // manual-mode assignment with a valid max_points. Group manual entry
-        // keys on the founder (row owner).
-        manualGrade={
-          isOwner &&
-          assignmentInfo?.grading?.mode === "manual" &&
-          typeof assignmentInfo.grading.max_points === "number"
-            ? {
-                org,
-                classroom,
-                assignment,
-                assignmentType: isGroupAssignment ? "group" : "individual",
-                maxPoints: assignmentInfo.grading.max_points,
-              }
-            : undefined
+        // Score override: staff may enter/edit scores. Gated on an org OWNER
+        // (the same write-capability gate every other mutating control on this
+        // page uses — a non-owner can't write the config repo's scores.json, so
+        // the editor must not appear for them). Two modes:
+        //   - manual: a resolved manual-mode assignment with a valid
+        //     max_points; the modal uses that configured max.
+        //   - auto: a gradable autograded assignment (not off, not skipping
+        //     grading); the modal overrides the autograded result using each
+        //     row's own max-score. `mode` absent reads as auto.
+        // Group entry keys on the founder (row owner).
+        overrideGrade={
+          isOwner && assignmentInfo?.grading?.mode === "manual"
+            ? typeof assignmentInfo.grading.max_points === "number"
+              ? {
+                  org,
+                  classroom,
+                  assignment,
+                  assignmentType: isGroupAssignment ? "group" : "individual",
+                  mode: "manual" as const,
+                  maxPoints: assignmentInfo.grading.max_points,
+                }
+              : undefined
+            : isOwner &&
+                !skipsGrading &&
+                assignmentInfo != null &&
+                assignmentInfo.grading?.mode !== "off"
+              ? {
+                  org,
+                  classroom,
+                  assignment,
+                  assignmentType: isGroupAssignment ? "group" : "individual",
+                  mode: "auto" as const,
+                }
+              : undefined
         }
         // Per-row Pause/Resume autograding: same gate as the bulk pause/resume
         // (owner + individual + resolved default-autograder). Kept separate from

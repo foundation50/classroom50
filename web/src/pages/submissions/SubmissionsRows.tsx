@@ -6,8 +6,8 @@ import { studentRepoUrl } from "@/util/studentRepo"
 import Avatar from "@/components/avatar"
 import { Badge, Button } from "@/components/ui"
 import { nonSubmitterStatus } from "@/pages/submissions/dashboard"
-import { ManualGradeCell } from "@/pages/submissions/ManualGradeCell"
-import type { ManualGradeContext } from "@/pages/submissions/ManualGradeCell"
+import { ScoreCell } from "@/pages/submissions/ScoreCell"
+import type { ScoreOverrideCapability } from "@/pages/submissions/ScoreOverrideModal"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import type { Student } from "@/types/classroom"
 
@@ -235,7 +235,8 @@ export const NonSubmitterRow = ({
   acceptedUsernames,
   onProfile,
   actions,
-  manualGrade,
+  overrideGrade,
+  onEditGrade,
   thresholdFraction = null,
 }: {
   student: Student
@@ -245,13 +246,21 @@ export const NonSubmitterRow = ({
   onProfile: (username: string) => void
   actions?: React.ReactNode
   // When set (individual manual-grade assignment, writable viewer), the score
-  // cell offers inline grade entry for this not-yet-graded student instead of
-  // an em-dash.
-  manualGrade?: ManualGradeContext
+  // cell offers grade entry for this not-yet-graded student. Autograded
+  // assignments have no per-row value to override here, so this is manual-only.
+  overrideGrade?: ScoreOverrideCapability
+  // Opens the override modal for this not-yet-graded student. Called with the
+  // student's username (the entry owner).
+  onEditGrade?: (username: string) => void
   // The assignment's pass threshold, so the first saved grade renders with the
   // same tone the submitter row would give it.
   thresholdFraction?: number | null
 }) => {
+  const canGrade =
+    overrideGrade?.mode === "manual" &&
+    typeof overrideGrade.maxPoints === "number" &&
+    !isGroup &&
+    Boolean(student.username)
   return (
     <tr>
       <td>
@@ -277,14 +286,15 @@ export const NonSubmitterRow = ({
         />
       </td>
       <td>
-        {manualGrade && !isGroup && student.username ? (
-          <ManualGradeCell
+        {canGrade ? (
+          <ScoreCell
             owner={student.username}
-            score={0}
-            max={manualGrade.maxPoints}
             hasGrade={false}
+            score={0}
+            max={overrideGrade?.maxPoints ?? 0}
+            overridden={false}
             thresholdFraction={thresholdFraction}
-            ctx={manualGrade}
+            onEdit={() => onEditGrade?.(student.username)}
           />
         ) : (
           "—"
