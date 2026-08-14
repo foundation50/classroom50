@@ -1,6 +1,7 @@
 package feedbackpr
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -423,5 +424,112 @@ func TestEnsure_UnverifiableBaseIsNotAdopted(t *testing.T) {
 	}
 	if s.prCreates != 0 {
 		t.Errorf("PR created (%d times) over an unverified base", s.prCreates)
+	}
+}
+
+// templatePRBodyMux serves the pulls POST for o/r plus a scriptable template
+// contents endpoint (t/tmpl), mirroring the accept-side test double. Returns
+// the captured PR body map.
+func templatePRBodyMux(t *testing.T, contentsByPath map[string]string, status map[string]int) (*http.ServeMux, *map[string]string) {
+	t.Helper()
+	mux := http.NewServeMux()
+	captured := map[string]string{}
+	mux.HandleFunc("/repos/o/r/pulls", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &captured)
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"number": 1})
+	})
+	mux.HandleFunc("/repos/t/tmpl/contents/", func(w http.ResponseWriter, r *http.Request) {
+		rel := strings.TrimPrefix(r.URL.EscapedPath(), "/repos/t/tmpl/contents/")
+		if code, ok := status[rel]; ok {
+			w.WriteHeader(code)
+			_, _ = io.WriteString(w, `{"message":"nope"}`)
+			return
+		}
+		content, ok := contentsByPath[rel]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"message":"Not Found"}`)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"content":  base64.StdEncoding.EncodeToString([]byte(content)),
+			"encoding": "base64",
+		})
+	})
+	return mux, &captured
+}
+
+func tmplRef() *feedbackTemplateRef {
+	return &feedbackTemplateRef{owner: "t", repo: "tmpl", branch: "main"}
+}
+
+// TestCreateFeedbackPR_TemplateBodyVerbatim: the teacher opener authors the
+// teacher template verbatim when the flag is set and the file is readable.
+func TestCreateFeedbackPR_TemplateBodyVerbatim(t *testing.T) {
+	teacher := "Teacher opener body — `RELEASE_URL` stays literal"
+	mux, captured := templatePRBodyMux(t,
+		map[string]string{".github/pull_request_template.md": teacher}, nil)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	if _, err := createFeedbackPR(client, "o", "r", "main", tmplRef()); err != nil {
+		t.Fatalf("createFeedbackPR: %v", err)
+	}
+	if (*captured)["body"] != teacher {
+		t.Errorf("PR body = %q, want the teacher template verbatim %q", (*captured)["body"], teacher)
+	}
+}
+
+// TestCreateFeedbackPR_FailsOpenToBuiltin: an unreadable/absent/empty/oversize
+// template yields the built-in body, and the PR is still created.
+func TestCreateFeedbackPR_FailsOpenToBuiltin(t *testing.T) {
+	builtinMarker := "**Don't close or merge this pull request**"
+	oversize := strings.Repeat("x", contract.FeedbackTemplateMaxBytes+1)
+	cases := []struct {
+		name     string
+		contents map[string]string
+		status   map[string]int
+	}{
+		{"all paths 404", nil, nil},
+		{"403 on every path", nil, map[string]int{
+			".github/pull_request_template.md": http.StatusForbidden,
+			"pull_request_template.md":         http.StatusForbidden,
+			"docs/pull_request_template.md":    http.StatusForbidden,
+		}},
+		{"empty after trim", map[string]string{".github/pull_request_template.md": "  \n "}, nil},
+		{"oversize", map[string]string{".github/pull_request_template.md": oversize}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mux, captured := templatePRBodyMux(t, c.contents, c.status)
+			server := httptest.NewServer(mux)
+			t.Cleanup(server.Close)
+			client := githubtest.NewTestClient(t, server)
+
+			if _, err := createFeedbackPR(client, "o", "r", "main", tmplRef()); err != nil {
+				t.Fatalf("createFeedbackPR: %v", err)
+			}
+			if !strings.Contains((*captured)["body"], builtinMarker) {
+				t.Errorf("expected the built-in body, got %q", (*captured)["body"])
+			}
+		})
+	}
+}
+
+// TestCreateFeedbackPR_NilRefUsesBuiltin: no template ref -> built-in body.
+func TestCreateFeedbackPR_NilRefUsesBuiltin(t *testing.T) {
+	mux, captured := templatePRBodyMux(t, nil, nil)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	if _, err := createFeedbackPR(client, "o", "r", "main", nil); err != nil {
+		t.Fatalf("createFeedbackPR: %v", err)
+	}
+	if !strings.Contains((*captured)["body"], "**Don't close or merge this pull request**") {
+		t.Errorf("expected built-in body, got %q", (*captured)["body"])
 	}
 }

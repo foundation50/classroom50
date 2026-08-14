@@ -640,6 +640,44 @@ class TestIncludeAllBranches:
         assert _errors(_manifest(entry)) != []
 
 
+class TestFeedbackPrTemplate:
+    # feedback_pr_template sources the Feedback PR body from the template repo's
+    # native pull_request_template.md, so it REQUIRES a template AND feedback_pr
+    # (which empty_repo forces false). A two-part allOf conditional.
+    def _entry(self, **overrides):
+        # Keeps the default template and turns the Feedback PR on (both required).
+        return _entry(**{"feedback_pr_template": True, "feedback_pr": True, **overrides})
+
+    def test_accepted_with_template_and_feedback_pr(self):
+        assert _errors(_manifest(self._entry())) == []
+
+    def test_false_accepted(self):
+        assert _errors(_manifest(_entry(feedback_pr_template=False))) == []
+
+    def test_must_be_boolean(self):
+        assert _errors(_manifest(self._entry(feedback_pr_template="yes"))) != []
+
+    def test_requires_template(self):
+        entry = self._entry()
+        del entry["template"]
+        assert _errors(_manifest(entry)) != []
+
+    def test_requires_feedback_pr_true(self):
+        assert _errors(_manifest(self._entry(feedback_pr=False))) != []
+
+    def test_requires_feedback_pr_present(self):
+        # feedback_pr defaults to false when absent, so the flag needs it set.
+        entry = self._entry()
+        del entry["feedback_pr"]
+        assert _errors(_manifest(entry)) != []
+
+    def test_rejects_empty_repo(self):
+        # empty_repo forces feedback_pr false, so it can never coexist.
+        entry = self._entry(empty_repo=True)
+        del entry["template"]  # empty_repo also forbids a template
+        assert _errors(_manifest(entry)) != []
+
+
 class TestGrading:
     # `grading` records the teacher's grading intent (off / auto / manual) as a
     # first-class GUI choice. ABSENT reads as auto (today's behavior). manual

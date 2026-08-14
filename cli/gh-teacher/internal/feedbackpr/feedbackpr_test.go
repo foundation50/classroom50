@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/foundation50/gh-teacher/internal/assignment"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
 
@@ -359,5 +360,47 @@ func TestNewCmd_Wiring(t *testing.T) {
 	}
 	if err := cmd.Args(cmd, []string{"o", "cs", "hello"}); err != nil {
 		t.Errorf("3 args should be accepted, got %v", err)
+	}
+}
+
+// TestResolveFeedbackTemplateRef pins the teacher-side gate: the flag lives in
+// Extra (the Go teacher struct doesn't type it, like copy_about/copy_topics),
+// so it must be decoded from there, gated on a non-nil Template, with an empty
+// branch defaulting to main.
+func TestResolveFeedbackTemplateRef(t *testing.T) {
+	tmpl := &assignment.TemplateRef{Owner: "t", Repo: "tmpl", Branch: "dev"}
+	extra := func(v string) map[string]json.RawMessage {
+		return map[string]json.RawMessage{"feedback_pr_template": json.RawMessage(v)}
+	}
+	cases := []struct {
+		name  string
+		entry assignment.AssignmentEntry
+		want  *feedbackTemplateRef
+	}{
+		{"opted in", assignment.AssignmentEntry{Template: tmpl, Extra: extra("true")},
+			&feedbackTemplateRef{owner: "t", repo: "tmpl", branch: "dev"}},
+		{"no template", assignment.AssignmentEntry{Template: nil, Extra: extra("true")}, nil},
+		{"key absent", assignment.AssignmentEntry{Template: tmpl, Extra: nil}, nil},
+		{"flag false", assignment.AssignmentEntry{Template: tmpl, Extra: extra("false")}, nil},
+		{"non-bool value", assignment.AssignmentEntry{Template: tmpl, Extra: extra(`"yes"`)}, nil},
+		{"empty branch defaults to main",
+			assignment.AssignmentEntry{
+				Template: &assignment.TemplateRef{Owner: "t", Repo: "tmpl", Branch: ""},
+				Extra:    extra("true")},
+			&feedbackTemplateRef{owner: "t", repo: "tmpl", branch: "main"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := resolveFeedbackTemplateRef(c.entry)
+			if c.want == nil {
+				if got != nil {
+					t.Errorf("got %+v, want nil", got)
+				}
+				return
+			}
+			if got == nil || *got != *c.want {
+				t.Errorf("got %+v, want %+v", got, c.want)
+			}
+		})
 	}
 }

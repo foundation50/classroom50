@@ -759,6 +759,58 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(noTemplate.copy_topics).toBe(false)
   })
 
+  it("feedback_pr_template survives only with a template + Feedback PR on, else clears", () => {
+    // Template source + Feedback PR on -> passes through.
+    const on = toSubmitValues({
+      ...base,
+      repo_source: "template",
+      template_repo: "acme/starter",
+      feedback_pr: true,
+      feedback_pr_template: true,
+    })
+    expect(on.feedback_pr_template).toBe(true)
+    // Feedback PR off -> cleared (the template body has nothing to drive).
+    const feedbackOff = toSubmitValues({
+      ...base,
+      repo_source: "template",
+      template_repo: "acme/starter",
+      feedback_pr: false,
+      feedback_pr_template: true,
+    })
+    expect(feedbackOff.feedback_pr_template).toBe(false)
+    // No template -> cleared (nothing to read from).
+    const noTemplate = toSubmitValues({
+      ...base,
+      repo_source: "none",
+      add_readme: true,
+      feedback_pr: true,
+      feedback_pr_template: true,
+    })
+    expect(noTemplate.feedback_pr_template).toBe(false)
+  })
+
+  it("round-trips a stored feedback_pr_template flag", () => {
+    const values = assignmentToFormValues({
+      slug: "hw",
+      name: "HW",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "acme", repo: "starter", branch: "main" },
+      feedback_pr: true,
+      feedback_pr_template: true,
+    })
+    expect(values.feedback_pr_template).toBe(true)
+    // Absent reads back as false.
+    const bare = assignmentToFormValues({
+      slug: "hw2",
+      name: "HW2",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "acme", repo: "starter", branch: "main" },
+    })
+    expect(bare.feedback_pr_template).toBe(false)
+  })
+
   it("round-trips stored copy_about/copy_topics flags", () => {
     const values = assignmentToFormValues({
       slug: "hw",

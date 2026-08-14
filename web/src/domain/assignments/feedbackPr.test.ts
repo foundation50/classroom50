@@ -9,6 +9,7 @@ import {
   ensureFeedbackPullRequest,
   repairFeedbackPullRequest,
   openAllFeedbackPullRequests,
+  readTemplatePrBody,
 } from "./feedbackPr"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import type { GitHubClient } from "@/github-core/client"
@@ -134,10 +135,26 @@ function fakeClient(opts: {
   existingBaseSha?: string
   prCreateRace?: boolean
   failLabelAdd?: boolean
+  // Template PR-body read (feedback_pr_template). templateContents maps a
+  // repo-relative path under t/tmpl to its raw body; templateThrow maps a path
+  // to an error to throw (404/403/transient). A path in neither throws 404.
+  templateContents?: Record<string, string>
+  templateThrow?: Record<string, GitHubAPIError>
 }) {
   const calls: Call[] = []
   let refPatched = false
   let prCreateAttempts = 0
+
+  const requestRaw = vi.fn(async (url: string) => {
+    calls.push({ url, method: "GET-raw" })
+    // /repos/t/tmpl/contents/<path>?ref=main
+    const m = url.match(/^\/repos\/t\/tmpl\/contents\/(.+)\?ref=/)
+    const path = m ? decodeURIComponent(m[1]) : ""
+    if (opts.templateThrow?.[path]) throw opts.templateThrow[path]
+    const body = opts.templateContents?.[path]
+    if (body === undefined) throw apiError(404, "Not Found")
+    return body
+  })
 
   const request = vi.fn(
     async (url: string, init?: { method?: string; body?: unknown }) => {
@@ -202,7 +219,7 @@ function fakeClient(opts: {
     },
   )
 
-  const client = { request } as unknown as GitHubClient
+  const client = { request, requestRaw } as unknown as GitHubClient
   return { client, calls }
 }
 
@@ -702,5 +719,138 @@ describe("openAllFeedbackPullRequests", () => {
     })
     expect(summary.failed).toEqual([])
     expect(client.request).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Teacher pull_request_template.md body (feedback_pr_template). Mirrors the
+// Go readers' fail-open contract; keep the two in lockstep.
+// ---------------------------------------------------------------------------
+
+// Minimal client exposing only requestRaw, keyed by the repo-relative path
+// under t/tmpl. A path in `contents` returns its raw text; a path in `throws`
+// throws; a path in neither throws 404.
+function rawClient(
+  contents: Record<string, string>,
+  throws: Record<string, unknown> = {},
+) {
+  const requestRaw = vi.fn(async (url: string) => {
+    const m = url.match(/^\/repos\/t\/tmpl\/contents\/(.+)\?ref=/)
+    const path = m ? decodeURIComponent(m[1]) : ""
+    if (path in throws) throw throws[path]
+    if (path in contents) return contents[path]
+    throw apiError(404, "Not Found")
+  })
+  return { requestRaw } as unknown as GitHubClient
+}
+
+describe("readTemplatePrBody", () => {
+  it("returns the first existing native path verbatim (no substitution)", async () => {
+    const teacher = "Teacher body with `HEAD_BRANCH` left literal"
+    const client = rawClient({ ".github/pull_request_template.md": teacher })
+    expect(await readTemplatePrBody(client, "t", "tmpl", "main")).toBe(teacher)
+  })
+
+  it("falls through to the next path when the first is missing", async () => {
+    const teacher = "root template"
+    const client = rawClient({ "pull_request_template.md": teacher })
+    expect(await readTemplatePrBody(client, "t", "tmpl", "main")).toBe(teacher)
+  })
+
+  it("returns null (fail-open) on all-missing, 403, empty, and oversize", async () => {
+    expect(
+      await readTemplatePrBody(rawClient({}), "t", "tmpl", "main"),
+    ).toBeNull()
+
+    const forbidden = rawClient(
+      {},
+      {
+        ".github/pull_request_template.md": apiError(403, "Forbidden"),
+        "pull_request_template.md": apiError(403, "Forbidden"),
+        "docs/pull_request_template.md": apiError(403, "Forbidden"),
+      },
+    )
+    expect(await readTemplatePrBody(forbidden, "t", "tmpl", "main")).toBeNull()
+
+    const empty = rawClient({ ".github/pull_request_template.md": "  \n\t " })
+    expect(await readTemplatePrBody(empty, "t", "tmpl", "main")).toBeNull()
+
+    // Just over the 60_000-byte cap (byte-based, matching Go/Python).
+    const oversize = rawClient({
+      ".github/pull_request_template.md": "x".repeat(60_001),
+    })
+    expect(await readTemplatePrBody(oversize, "t", "tmpl", "main")).toBeNull()
+  })
+
+  it("returns null without a request when the ref is incomplete", async () => {
+    const client = rawClient({})
+    expect(await readTemplatePrBody(client, "", "tmpl", "main")).toBeNull()
+    expect(client.requestRaw).not.toHaveBeenCalled()
+  })
+})
+
+describe("ensureFeedbackPullRequest with feedbackPrTemplate", () => {
+  const tmplRef = { owner: "t", repo: "tmpl", branch: "main" }
+
+  it("uses the teacher template verbatim as the PR body when readable", async () => {
+    const teacher = "Custom feedback intro :wave:"
+    const { client, calls } = fakeClient({
+      headHasDiff: true,
+      templateContents: { ".github/pull_request_template.md": teacher },
+    })
+    const result = await ensureFeedbackPullRequest({
+      client,
+      owner: "o",
+      repo: "r",
+      branch: "main",
+      acceptCommitSha: "accept-sha",
+      mode: "individual",
+      feedbackPrTemplate: tmplRef,
+    })
+    expect(result).toEqual({ ok: true, created: true })
+    const prCreate = calls.find(
+      (c) => c.url === "/repos/o/r/pulls" && c.method === "POST",
+    )
+    expect((prCreate?.body as Record<string, string>).body).toBe(teacher)
+  })
+
+  it("falls back to the built-in body when the template is unreadable", async () => {
+    const { client, calls } = fakeClient({
+      headHasDiff: true,
+      templateThrow: {
+        ".github/pull_request_template.md": apiError(403, "Forbidden"),
+        "pull_request_template.md": apiError(403, "Forbidden"),
+        "docs/pull_request_template.md": apiError(403, "Forbidden"),
+      },
+    })
+    const result = await ensureFeedbackPullRequest({
+      client,
+      owner: "o",
+      repo: "r",
+      branch: "main",
+      acceptCommitSha: "accept-sha",
+      mode: "individual",
+      feedbackPrTemplate: tmplRef,
+    })
+    expect(result).toEqual({ ok: true, created: true })
+    const prCreate = calls.find(
+      (c) => c.url === "/repos/o/r/pulls" && c.method === "POST",
+    )
+    expect((prCreate?.body as Record<string, string>).body).toContain(
+      "**Don't close or merge this pull request**",
+    )
+  })
+
+  it("never probes the template repo when no template ref is given", async () => {
+    const { client, calls } = fakeClient({ headHasDiff: true })
+    await ensureFeedbackPullRequest({
+      client,
+      owner: "o",
+      repo: "r",
+      branch: "main",
+      acceptCommitSha: "accept-sha",
+      mode: "individual",
+    })
+    expect(calls.some((c) => c.url.includes("/repos/t/tmpl/"))).toBe(false)
   })
 })
