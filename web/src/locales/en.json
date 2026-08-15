@@ -194,7 +194,7 @@
   "migration": {
     "documentTitle": "Import from GitHub Classroom",
     "title": "Import from GitHub Classroom",
-    "subtitle": "Bring an existing GitHub Classroom — its assignments and starter repositories — into this organization as a new class. You'll review and confirm everything before anything is created.",
+    "subtitle": "Bring an existing GitHub Classroom — its assignments and starter repositories — into this organization as a new classroom. You'll review and confirm everything before anything is created.",
     "entryButton": "Import from GitHub Classroom",
     "missingOrg": "This page needs an organization in the URL.",
     "steps": {
@@ -224,12 +224,12 @@
       "title": "Review what will be imported",
       "fromLine": "Importing assignments from <b>{{source}}</b> ({{org}}) on GitHub Classroom.",
       "fromLineNoName": "Importing assignments from <b>{{source}}</b> on GitHub Classroom.",
-      "name": "New class name",
-      "nameHelp": "The display name for the class created in your Classroom 50 organization — shown to you and students. It can match the source classroom's name or be anything you like. Defaults to the source name.",
-      "shortName": "New class ID (short name)",
-      "shortNameHelp": "The URL-safe identifier for the class in your target organization (e.g. cs50-fall). It becomes the config folder and GitHub team names and prefixes every student repo, so it can't be changed later. Auto-filled from the source classroom name; edit it if you want a different id.",
+      "name": "New classroom name",
+      "nameHelp": "The display name for the classroom created in your Classroom 50 organization — shown to you and students. It can match the source classroom's name or be anything you like. Defaults to the source name.",
+      "shortName": "New classroom ID (short name)",
+      "shortNameHelp": "The URL-safe identifier for the classroom in your target organization (e.g. cs50-fall). It becomes the config folder and GitHub team names and prefixes every student repo, so it can't be changed later. Auto-filled from the source classroom name; edit it if you want a different id.",
       "term": "Term",
-      "termHelp": "Optional label for when this class runs (e.g. Fall-2026). Shown on the class and stored in its settings; it doesn't affect repo or team names.",
+      "termHelp": "Optional label for when this classroom runs (e.g. Fall-2026). Shown on the classroom and stored in its settings; it doesn't affect repo or team names.",
       "termPlaceholder": "e.g. Fall-2026",
       "suffix": "Template repo suffix",
       "suffixHelp": "Optional text appended to every copied template repo name (e.g. hw1 becomes hw1-f26). Use it only if a repo with the assignment's name already exists in this organization and the import would otherwise collide. Leave blank in most cases.",
@@ -244,8 +244,8 @@
       "importButton": "Import {{count}} assignment(s)",
       "importing": "Starting import…",
       "modalTitle": "This step is hard to undo",
-      "modalSummary_one": "This will create the class \"{{shortName}}\" in {{org}}, add a GitHub team, and copy 1 assignment repository.",
-      "modalSummary_other": "This will create the class \"{{shortName}}\" in {{org}}, add GitHub teams, and copy {{count}} assignment repositories.",
+      "modalSummary_one": "This will create the classroom \"{{shortName}}\" in {{org}}, add a GitHub team, and copy 1 assignment repository.",
+      "modalSummary_other": "This will create the classroom \"{{shortName}}\" in {{org}}, add GitHub teams, and copy {{count}} assignment repositories.",
       "modalReuseNote_one": "1 assignment will reuse an existing template repository.",
       "modalReuseNote_other": "{{count}} assignments will reuse existing template repositories.",
       "modalSkipNote_one": "1 assignment will be skipped and not imported.",
@@ -259,7 +259,7 @@
       "summaryComplete": "Import complete.",
       "summaryPartial": "Import finished with some assignments skipped.",
       "summaryCounts": "{{generated}} generated, {{reused}} reused, {{skipped}} skipped.",
-      "viewClass": "Open the new class"
+      "viewClass": "Open the new classroom"
     },
     "item": {
       "assignmentBadge": "Assignment",
@@ -273,7 +273,7 @@
       "typeGroup": "Group",
       "groupSizeLabel": "Max group size",
       "feedbackLabel": "Feedback PR",
-      "deadlineLabel": "Deadline",
+      "deadlineLabel": "Due date",
       "branchLabel": "Branch",
       "visibilityLabel": "Visibility",
       "noSource": "No source repository",
@@ -296,7 +296,7 @@
     },
     "blocker": {
       "needs_org_setup": "\"{{org}}\" isn't set up for Classroom 50 yet — run organization setup first, then retry.",
-      "dir_exists": "A class named \"{{shortName}}\" already exists in this organization. Pick a different short name to continue.",
+      "dir_exists": "A classroom named \"{{shortName}}\" already exists in this organization. Pick a different short name to continue.",
       "source_org_access": "Classroom 50 can't read the starter repositories in \"{{org}}\" — the app hasn't been granted access to that organization."
     },
     "access": {
@@ -1123,7 +1123,7 @@
       "descriptionPlaceholder": "Describe the assignment objectives...",
       "dueDate": "Due date ({{tz}})",
       "setDueDate": "Set a due date",
-      "setDueDateTip": "Off means the assignment has no deadline. Turn on to pick a date and time; students see it as the due date.",
+      "setDueDateTip": "Off means the assignment has no due date. Turn on to pick a date and time; students see it as the due date.",
       "dueDateTz": "Times are in your local timezone ({{tz}}).",
       "availableFrom": "Release date ({{tz}})",
       "setAvailableFrom": "Set a release date",
@@ -1626,7 +1626,7 @@
     "notAMember": {
       "title": "Not a member yet",
       "body": "You're not yet a member of the <org>{{org}}</org> organization, so you can't accept this assignment. Joining is required first — a GitHub organization invitation gives you access to create your assignment repository.",
-      "instructions": "Ask your teacher to add you to the class roster and send you an invitation (they can do this from the classroom roster page). GitHub will email the invitation to your account — accept it, then check again here. If you just accepted an invitation, give GitHub a moment to catch up.",
+      "instructions": "Ask your teacher to add you to the classroom roster and send you an invitation (they can do this from the classroom roster page). GitHub will email the invitation to your account — accept it, then check again here. If you just accepted an invitation, give GitHub a moment to catch up.",
       "checkAgain": "Check again"
     },
     "generic": {
@@ -1736,7 +1736,7 @@
         "budgetOverThreshold": "Actions budget is ${{amount}} (over ${{threshold}}); recommend a $0 hard-stop cap",
         "budgetMissing": "no $0 hard-stop Actions budget",
         "budgetUnreadable": "couldn't verify the Actions spending cap (read failed ({{reason}})) — likely enterprise-managed billing or a plan without org budgets. Confirm a $0 hard-stop cap manually.",
-        "workflowOrgManaged": "org policy defaults workflows to read; the skeleton workflows declare their own permissions",
+        "workflowOrgManaged": "org policy defaults workflows to read; the Classroom 50 workflows declare their own permissions",
         "rulesetsMissing": "missing: {{names}}"
       },
       "title": "Organization policy",
@@ -1892,7 +1892,7 @@
         "remediation": "This is a required step. Re-run setup; if it keeps failing, confirm you have owner permissions and that an org/enterprise policy isn't blocking private repository creation."
       },
       "skeleton": {
-        "title": "Skeleton files",
+        "title": "Workflow files",
         "what": "Commits or updates the workflow and script files Classroom 50 needs in the classroom50 repository.",
         "why": "These bundled files run autograding, publishing, and scoring; re-running setup also upgrades them to the latest version.",
         "remediation": "This is a required step. Re-run setup; if it keeps failing, check that you can push to the classroom50 repo's default branch."
@@ -2458,9 +2458,9 @@
       "onTime": "On time",
       "late": "Late",
       "notSubmitted": "Not submitted",
-      "passingLabel": "Grade",
+      "passingLabel": "Score",
       "passingAria": "Filter by passing status",
-      "allGrades": "All grades",
+      "allGrades": "All scores",
       "passing": "Passing",
       "failing": "Failing",
       "accepted": "Accepted",
@@ -2492,7 +2492,7 @@
       "staleCount": "New",
       "staleCountTitle": "This student has pushed more submissions than have been graded. Run \"Sync submissions now\" to grade and score the newest.",
       "late": "Late",
-      "lateRowTitle": "The latest submission was pushed after the deadline.",
+      "lateRowTitle": "The latest submission was pushed after the due date.",
       "gradedAt": "Graded {{date}}",
       "gradedAtTitle": "When the autograder last (re-)graded this submission. Regrading updates this without changing the submission time.",
       "liveLatest": "Latest push {{date}} · not yet graded",
@@ -2573,7 +2573,7 @@
       "titleEmptyRoster": "Add students to the roster first",
       "confirmBody_one": "This opens a Feedback PR on the <b>{{count}}</b> assignment repository for <b>{{name}}</b> that doesn't have one yet. Repos that already have a Feedback PR are left untouched.",
       "confirmBody_other": "This opens a Feedback PR on each of the <b>{{count}}</b> assignment repositories for <b>{{name}}</b> that don't have one yet. Repos that already have a Feedback PR are left untouched.",
-      "confirmHint": "It runs from your browser, one repository at a time, so it may take a while for a large class. Keep this tab open until it finishes.",
+      "confirmHint": "It runs from your browser, one repository at a time, so it may take a while for a large classroom. Keep this tab open until it finishes.",
       "confirmLabel_one": "Open PR",
       "confirmLabel_other": "Open PRs",
       "running": "Opening… {{done}} of {{total}}",
@@ -2599,8 +2599,8 @@
       "titleDisabled": "No submissions to download yet",
       "confirmBody_one": "This downloads the latest submission for the <b>{{count}}</b> student who has submitted <b>{{name}}</b>, bundled into a single zip.",
       "confirmBody_other": "This downloads the latest submissions for the <b>{{count}}</b> students who have submitted <b>{{name}}</b>, bundled into a single zip.",
-      "confirmHint": "It runs from your browser, one repository at a time, so it may take a while for a large class. Keep this tab open until it finishes.",
-      "largeClassWarning": "This will download {{count}} submissions and build the combined zip in your browser, which can use a lot of memory and may be slow or fail for a very large class. Consider filtering by section first.",
+      "confirmHint": "It runs from your browser, one repository at a time, so it may take a while for a large classroom. Keep this tab open until it finishes.",
+      "largeClassWarning": "This will download {{count}} submissions and build the combined zip in your browser, which can use a lot of memory and may be slow or fail for a very large classroom. Consider filtering by section first.",
       "confirmLabel_one": "Download submission",
       "confirmLabel_other": "Download submissions",
       "running": "Downloading… {{done}} of {{total}}",
@@ -2684,7 +2684,7 @@
       "bannerAction": "Migrate configuration",
       "title": "Migrate classroom configuration",
       "subtitle": "Update this classroom's assignments to the latest configuration schema.",
-      "warning": "This records each assignment's settings explicitly so every tool reads them the same way and the newest features (such as live submission tracking) are enabled. It does not change any grade, deadline, or student's access, and you can keep working as before.",
+      "warning": "This records each assignment's settings explicitly so every tool reads them the same way and the newest features (such as live submission tracking) are enabled. It does not change any score, due date, or student's access, and you can keep working as before.",
       "apply": "Migrate configuration",
       "working": "Updating assignments",
       "resultHeadline_one": "Migrated {{count}} assignment.",
