@@ -3,10 +3,10 @@
 Terms used throughout Classroom 50, in the web app, the CLI, and this wiki.
 
 One concept, one term: when writing about Classroom 50, use the terms
-defined here and avoid mixing in synonyms (an "instructor" next to a
-"teacher" leaves readers wondering whether those are two roles). Occasional
-slips are understandable, but this page is the reference. If you find copy
-that disagrees with it,
+defined here and avoid mixing in synonyms, so readers never have to wonder
+whether two words mean two different things. Occasional slips are
+understandable, but this page is the reference. If you find copy that
+disagrees with it,
 [file an issue](https://github.com/foundation50/classroom50/issues).
 
 ## Core concepts
