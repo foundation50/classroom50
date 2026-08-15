@@ -202,6 +202,24 @@ workflow at submission setup, and by `runner.py` before executing.
 
 </details>
 
+<details>
+<summary>Writing a valid assignments.json from another client (e.g., a GUI)</summary>
+
+Anything that writes a valid `assignments.json` gets the whole pipeline for
+free. A non-CLI client should:
+
+1. Validate against
+   [`schemas/assignments-v1.schema.json`](https://github.com/foundation50/classroom50/blob/main/schemas/assignments-v1.schema.json)
+   (two rules it can't express: unique test names, and name length ≤ 100 UTF-8
+   *bytes*).
+2. Probe before writing tests: `<classroom>/autograders/<slug>/autograder.py`
+   must NOT exist, and `.github/scripts/materialize_tests.py` MUST exist.
+3. Write via the git-data API and retry on a non-fast-forward rejection.
+
+The CLI parses strictly (unknown fields rejected), so persist only schema fields.
+
+</details>
+
 ### Writing an `autograder.py`
 
 When declarative tests aren't enough, write the grading logic yourself: the
