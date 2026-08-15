@@ -133,7 +133,7 @@ file in alone does nothing until you enable this option. If the file is missing
 or can't be read, the built-in body is used. It's set in the web app; there is
 no `gh teacher` flag for it.
 
-### Can I set a due date with a specific time, not just a date?
+### Can I set a due date with a specific time of day?
 
 Yes. Due dates support a date **and** time (down to the second, in your
 timezone). Submissions after the due date are **marked late**; nothing is
@@ -147,7 +147,7 @@ page's **Actions** menu: it blocks new accepts and sets every student's
 repository to read-only (work is preserved). **Reopen submission** restores
 write access — useful when a project continues in a follow-up course. **Update
 student repo access** in the same menu gives finer control over the role
-students hold on their repos.
+students hold on their repositories.
 
 ### What's the difference between "template-less" and "empty repository"?
 

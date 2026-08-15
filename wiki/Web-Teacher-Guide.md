@@ -501,7 +501,7 @@ assignment:
 - **Download scores (CSV)** — export all submissions as a CSV.
 - **Download all submissions** — download each repository's latest submission
   bundled into a single zip (built in the browser, one repository at a time;
-  for very large classrooms prefer `gh teacher download`, which clones every repo
+  for very large classrooms prefer `gh teacher download`, which clones every repository
   and writes a `scores.csv` — see the
   [CLI Teacher Guide](CLI-Teacher-Guide#10-download-submissions)).
 

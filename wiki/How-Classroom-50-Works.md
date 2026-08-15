@@ -70,7 +70,7 @@ read it:
 - **CLI writes** (`roster add`, `staff add`, `assignment add`, …) update the
   config repo and GitHub teams immediately, but only for the thing they
   change — they don't run the web app's broader reconciliation.
-- **Scores** refresh only when collection runs: nightly, or on demand via
+- **Scores** refresh only when collection runs: nightly, or on demand with
   **Sync now** / `collect-scores.yaml`.
 
 ## Interactive vs. background work
@@ -221,7 +221,7 @@ organization. See [the service-token setup](CLI-Teacher-Guide#create-the-service
 | | GitHub Classroom | Classroom 50 |
 | --- | --- | --- |
 | Backend | Hosted service | None (GitHub repos + Actions) |
-| Classroom ↔ org | Classrooms managed in the hosted dashboard | A folder in your org's config repo, plus GitHub teams |
+| Classroom ↔ org | Classrooms managed in the hosted dashboard | A folder in your organization's config repository, plus GitHub teams |
 | Grading | Hosted autograder | GitHub Actions in each repo |
 | Joining | Students self-select their roster entry from an invite link | The owner invites students; accept links work once they've joined the org |
 | Group naming | Team names | Founder's username |

@@ -73,7 +73,7 @@ gh teacher init <org>
 
 `init` is **idempotent** — re-running picks up where a prior run left off. It
 also offers to refresh the **skeleton files** — the workflow and script files
-Classroom 50 commits to the config repo — when the CLI ships newer versions
+Classroom 50 commits to the config repository — when the CLI ships newer versions
 (this is how an existing organization gains new features); it asks before
 overwriting, so your edits are safe. Use `--yes` to skip the prompt in scripts.
 
@@ -507,7 +507,7 @@ It then writes a `scores.csv` at the destination root, **one line per
 submission** (a student with several pushes contributes several lines), plus a
 blank-score line for each non-submitter, so you can sort by
 score to see who hasn't submitted. The column-by-column reference for
-`scores.csv` (and the per-repo `result.json` / `results.json` files) is in
+`scores.csv` (and the per-repository `result.json` / `results.json` files) is in
 [Autograders → Score exports](Autograders#score-exports).
 
 Each run creates a fresh timestamped folder. Override the destination with `-d`:

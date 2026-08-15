@@ -24,18 +24,18 @@ enrolled.
 **Organization (org)** — The GitHub organization that hosts a Classroom 50
 setup. Requires the Team or Enterprise plan.
 
-**Config repo** — The private `classroom50` repository in your organization.
+**Config repository** — The private `classroom50` repository in your organization.
 It holds every classroom's settings, roster, assignments, autograders, and
 scores. Classroom 50 has no other backend.
 
 ## Roles
 
 **Teacher** — Full control of a classroom. Granted organization owner and write
-access to the config repo.
+access to the config repository.
 
-**Head TA** — Write access to the config repo, but not organization owner.
+**Head TA** — Write access to the config repository, but not organization owner.
 
-**TA** — Read-only access to the config repo.
+**TA** — Read-only access to the config repository.
 
 **Student** — A member of the classroom who accepts and submits assignments.
 
@@ -82,7 +82,7 @@ and restored when the override is cleared).
 ## Access and setup
 
 **Service token** — A fine-grained personal access token (PAT) stored as a
-secret in the config repo. The score-collection and regrade workflows use it to
+secret in the config repository. The score-collection and regrade workflows use it to
 read and update student repositories.
 
 **Accept** — The student action that creates their assignment repository from
@@ -114,11 +114,11 @@ Where the words — or the behavior behind them — differ:
 | GitHub Classroom | Classroom 50 |
 | --- | --- |
 | **Deadline / cutoff date** | **Due date**. It only marks later submissions *late* — nothing is blocked. The enforcement tools are **Close submission** (block new accepts, set repositories read-only) and **Lock assignment**. |
-| **Download grades** (CSV) | **Download scores (CSV)** on an assignment's submissions page. The underlying gradebook is `scores.json` in your config repo. See [Autograders → Reading results](Autograders#reading-results). |
+| **Download grades** (CSV) | **Download scores (CSV)** on an assignment's submissions page. The underlying gradebook is `scores.json` in your config repository. See [Autograders → Reading results](Autograders#reading-results). |
 | **Roster identifier** and student self-linking | Doesn't exist — there's nothing to link. The roster is keyed by **GitHub username** (the numeric `github_id` is resolved automatically); you invite students, and accept links work once they've joined the organization. |
 | **Teams** (group assignments) | **Groups.** The first student to accept (the **founder**) creates the shared repository and invites teammates as collaborators — there is no separate team-creation step. |
-| **Autograding presets** (`.github/classroom/autograding.json`) | **Declarative tests**, stored on the assignment itself (Input/Output, Run command, Python/pytest). An existing `autograding.json` workflow can be kept via a [custom runner workflow](Autograders#custom-runner-workflow-rare). |
-| Hosted service stores your data | Everything lives in **your GitHub organization** (config repo, student repos, Actions). |
+| **Autograding presets** (`.github/classroom/autograding.json`) | **Declarative tests**, stored on the assignment itself (Input/Output, Run command, Python/pytest). An existing `autograding.json` workflow can be kept with a [custom runner workflow](Autograders#custom-runner-workflow-rare). |
+| Hosted service stores your data | Everything lives in **your GitHub organization** (config repository, student repositories, Actions). |
 
 To bring an existing classroom over, see
 [`gh teacher classroom migrate`](gh-teacher#classroom-migrate) and the
