@@ -35,11 +35,13 @@ group, may include starter code, and may have a due date and autograding.
 **Individual assignment** — Each student gets their own repository.
 
 **Group assignment** — Teammates share one repository. The first student to
-accept creates it and invites the others.
+accept creates it and invites the others. Groups replace GitHub Classroom's
+teams: there is no separate team-creation step and no group names.
 
 **Roster** — The list of students in a classroom. Backed by a `roster.csv`
 file, but the classroom's GitHub team is the source of truth for who is
-enrolled.
+enrolled. The roster is keyed by GitHub username; there is no equivalent of
+GitHub Classroom's roster identifier or student self-linking.
 
 **Organization (org)** — The GitHub organization that hosts a Classroom 50
 setup. Requires the Team or Enterprise plan.
@@ -71,14 +73,18 @@ Assignments can also be template-less, in which case a student's repository
 contains only the autograder setup.
 
 **Due date** — An optional date and time for an assignment. Submissions after
-it are marked *late*; nothing is blocked. To actually stop submissions, use
-**Close submission** on the submissions page.
+it are marked *late*; nothing is blocked, unlike GitHub Classroom's cutoff
+date. To actually stop submissions, use **Close submission** on the
+submissions page.
 
 **Autograder** — The grading logic that runs on each submission. Can be
 declarative tests (defined in the assignment) or a Python script you write.
 
 **Declarative tests** — Input/output, run-command, and pytest checks defined
-directly on an assignment, graded with no code to write.
+directly on an assignment, graded with no code to write. They fill the role
+of GitHub Classroom's `autograding.json` presets; an existing
+`autograding.json` workflow can be kept with a
+[custom runner workflow](Autograders#custom-runner-workflow-rare).
 
 **Runner** — The shared grading engine that runs in GitHub Actions on every
 submission.
@@ -130,17 +136,7 @@ repository.
 
 Most vocabulary carries over unchanged: classroom, roster, assignment,
 individual and group assignments, template repository, starter code, accept.
-Where the words — or the behavior behind them — differ:
-
-| GitHub Classroom | Classroom 50 |
-| --- | --- |
-| **Deadline / cutoff date** | **Due date**. It only marks later submissions *late* — nothing is blocked. The enforcement tools are **Close submission** (block new accepts, set repositories read-only) and **Lock assignment**. |
-| **Download grades** (CSV) | **Download scores (CSV)** on an assignment's submissions page. The collected scores live in `scores.json` in your `classroom50` repository. See [Reading results](Autograders#reading-results) in Autograders. |
-| **Roster identifier** and student self-linking | Doesn't exist — there's nothing to link. The roster is keyed by **GitHub username** (the numeric `github_id` is resolved automatically); you invite students, and accept links work once they've joined the organization. |
-| **Teams** (group assignments) | **Groups.** The first student to accept (the **founder**) creates the shared repository and invites teammates as collaborators — there is no separate team-creation step. |
-| **Autograding presets** (`.github/classroom/autograding.json`) | **Declarative tests**, stored on the assignment itself (Input/Output, Run command, Python/pytest). An existing `autograding.json` workflow can be kept with a [custom runner workflow](Autograders#custom-runner-workflow-rare). |
-| Hosted service stores your data | Everything lives in **your GitHub organization** (the `classroom50` repository, student repositories, Actions). |
-
-To bring an existing classroom over, see
+Where a term or the behavior behind it differs, the entry above says so. To
+bring an existing classroom over, see
 [`gh teacher classroom migrate`](gh-teacher#classroom-migrate) and the
 [migration FAQ](FAQ#migrating-from-github-classroom).
