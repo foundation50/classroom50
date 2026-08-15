@@ -106,8 +106,10 @@ func NewCmd() *cobra.Command {
 			"the latest. Team members\n" +
 			"with no repo on the org are reported as `not yet accepted` and don't\n" +
 			"fail the run. A scores.csv summary is written at the destination root\n" +
-			"with one row per team member — submitters carry their score columns,\n" +
-			"non-submitters get blanks. roster.csv (if present) supplies optional\n" +
+			"with one line per submission (newest first) for each team member —\n" +
+			"group members repeat the shared submission's lines under their own\n" +
+			"username, and non-submitters get one line with blank score columns.\n" +
+			"roster.csv (if present) supplies optional\n" +
 			"name/section/email metadata for that summary; it never decides who is\n" +
 			"cloned.\n\n" +
 			"Pass --by-pattern to skip the team lookup and clone every <org> repo\n" +
