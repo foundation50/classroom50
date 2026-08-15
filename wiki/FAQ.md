@@ -333,7 +333,10 @@ Yes. `gh teacher classroom migrate` imports a GitHub Classroom into your
 `classroom50` config repo — it copies each starter repo into your organization
 as a fresh template and recreates the assignments. Rosters, scores, and past
 student repositories are **not** migrated; you re-onboard students for the new
-term. See [`gh teacher classroom migrate`](gh-teacher#classroom-migrate).
+term. See [`gh teacher classroom migrate`](gh-teacher#classroom-migrate), and
+[Coming from GitHub Classroom?](Glossary#coming-from-github-classroom) for how
+GitHub Classroom's vocabulary (cutoff date, Download grades, roster
+identifiers, teams) maps onto Classroom 50's.
 
 ### Will my existing scripts that manipulate student repos still work?
 

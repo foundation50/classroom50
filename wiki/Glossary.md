@@ -49,8 +49,9 @@ supplies an assignment's **starter code**. Each student who accepts gets a copy.
 Assignments can also be template-less, in which case a student's repository
 contains only the autograder setup.
 
-**Deadline (due date)** — An optional date and time for an assignment.
-Submissions after it are marked *late*; nothing is blocked.
+**Due date** — An optional date and time for an assignment. Submissions after
+it are marked *late*; nothing is blocked. To actually stop submissions, use
+**Close submission** on the submissions page.
 
 **Autograder** — The grading logic that runs on each submission. Can be
 declarative tests (defined in the assignment) or a Python script you write.
@@ -67,8 +68,11 @@ is tagged, graded, and published as a GitHub Release.
 **Feedback pull request** — An optional, long-lived pull request per student
 repository for inline review of a student's work.
 
-**Score / gradebook** — Collected results. The gradebook (`scores.json`) is
-built by the score-collection workflow; teachers can download it as CSV.
+**Score / gradebook** — A **score** is the number a submission earned
+(`score` out of `max-score`); the **gradebook** (`scores.json`) is the
+collected record of every submission, built by the score-collection workflow.
+Teachers can download it as CSV. See
+[Autograders → Reading results](Autograders#reading-results).
 
 **Score override** — A teacher-set score entered on the submissions page,
 stored in the gradebook and left untouched by autograding until cleared. Used
@@ -100,3 +104,23 @@ Assignment repositories are named:
 
 For a group assignment, `<username>` is the founder who created the shared
 repository.
+
+## Coming from GitHub Classroom?
+
+Most vocabulary carries over unchanged: classroom, roster, assignment,
+individual and group assignments, template repository, starter code, accept.
+Where the words — or the behavior behind them — differ:
+
+| GitHub Classroom | Classroom 50 |
+| --- | --- |
+| **Deadline / cutoff date** | **Due date**. It only marks later submissions *late* — nothing is blocked. The enforcement tools are **Close submission** (block new accepts, set repositories read-only) and **Lock assignment**. |
+| **Download grades** (CSV) | **Download scores (CSV)** on an assignment's submissions page. The underlying gradebook is `scores.json` in your config repo. See [Autograders → Reading results](Autograders#reading-results). |
+| **Roster identifier** and student self-linking | Doesn't exist — there's nothing to link. The roster is keyed by **GitHub username** (the numeric `github_id` is resolved automatically); you invite students, and accept links work once they've joined the organization. |
+| **Teams** (group assignments) | **Groups.** The first student to accept (the **founder**) creates the shared repository and invites teammates as collaborators — there is no separate team-creation step. |
+| **Autograding presets** (`.github/classroom/autograding.json`) | **Declarative tests**, stored on the assignment itself (Input/Output, Run command, Python/pytest). An existing `autograding.json` workflow can be kept via a [custom runner workflow](Autograders#custom-runner-workflow-rare). |
+| One classroom per organization | **Many classrooms per organization** — for example, one per term or section. |
+| Hosted service stores your data | Everything lives in **your GitHub organization** (config repo, student repos, Actions). |
+
+To bring an existing classroom over, see
+[`gh teacher classroom migrate`](gh-teacher#classroom-migrate) and the
+[migration FAQ](FAQ#migrating-from-github-classroom).

@@ -227,5 +227,10 @@ organization. See [the service-token setup](CLI-Teacher-Guide#create-the-service
 | Group naming | Team names | Founder's username |
 | Data | In the service | In your `classroom50` config repo (yours to keep) |
 
+For a term-by-term mapping of GitHub Classroom vocabulary (cutoff date,
+Download grades, roster identifiers, teams) to Classroom 50's, see
+[Coming from GitHub Classroom?](Glossary#coming-from-github-classroom) in the
+Glossary.
+
 For a term-by-term reference, see the [Glossary](Glossary); for common questions,
 see the [FAQ](FAQ).
