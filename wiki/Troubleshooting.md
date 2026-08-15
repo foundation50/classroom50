@@ -88,6 +88,34 @@ The organization should be listed `active` (and `admin` if you're setting it
 up). The CLI token and the web app's token are separate, so a passing check here
 still leaves the browser grant to do.
 
+## Already an org member, but not on the roster
+
+Adding a student who is **already in your organization** (commonly someone from
+a previous course) doesn't put them on the classroom roster, and re-inviting
+them does nothing. GitHub won't send a fresh invitation to an existing member,
+so the web app reports **"Already a member or already invited — no new
+invitation sent"** (and the CLI prints "Already a member" and exits 0). This is
+expected: **organization membership and classroom enrollment are separate.** An
+invite only covers membership; enrolling an existing member is a different
+action.
+
+To enroll students who are already org members:
+
+1. In Classroom 50, open the organization's **Members** page (the People view,
+   not a classroom's **Students** page).
+2. Find each student. They show as a member with no classroom, or you can filter
+   by "no classroom".
+3. Use **Add to classroom** to place them on a classroom's roster and team. To
+   do several at once, select the rows and use the bulk **Add to {classroom}**
+   action.
+
+Uploading a **username** list or **roster CSV** on the Students page also enrolls
+existing members: the invite is skipped, but they're still added to the roster
+and team. Only an **email** upload can't, because an email invite writes nothing
+to the roster until the student onboards, so an already-member email is simply
+skipped. From the CLI, `gh teacher roster add <org> <classroom> <username>` (or
+`roster import`) enrolls an existing member the same way.
+
 ## "Missing scope" / 403 on `gh teacher invite`
 
 Org invitations need the `admin:org` scope, which a plain `gh auth login`
