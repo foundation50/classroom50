@@ -323,8 +323,74 @@ GitHub organization.
 optional). You can enter an email instead of a username; that student then
 completes a separate onboarding process (see below).
 
-**Upload roster** — bulk-add students from a CSV or text file of GitHub
-usernames.
+**Upload roster** — bulk-add students from a file. The upload accepts three
+formats and auto-detects which one you uploaded (you can override the guess):
+
+- **A username list**: one GitHub username per line, no header. Simplest when
+  you already know everyone's handle.
+- **A roster CSV**: a header row plus one student per line. See the fields and
+  example below.
+- **An email list**: one email address per line. Use this when you don't know
+  students' GitHub usernames. Each becomes an email invitation the student
+  completes by onboarding (see below).
+
+### Roster CSV fields
+
+Only `username` is required. Every other column is optional and can be left out.
+Headers are matched case-insensitively, and any unrecognized column is ignored,
+so a CSV exported from another gradebook usually works unchanged. (A `github_id`
+column, if present, is ignored and re-resolved from GitHub.)
+
+| Column | Required | Description |
+| --- | --- | --- |
+| `username` | **Yes** | The student's GitHub username, e.g. `octocat`. |
+| `first_name` | No | Given name, for display and score exports. |
+| `last_name` | No | Family name, for display and score exports. |
+| `name` | No | Full name in one column, split into first/last. Use instead of `first_name`/`last_name`. |
+| `email` | No | Contact email. This does not send an email invite; the `username` invites them. |
+| `section` | No | A section or group label you can filter by. |
+| `role` | No | `student` (default), `ta`, `hta`, or `teacher`. Leave blank for students. |
+
+A complete roster CSV looks like this:
+
+| username | first_name | last_name | email | section |
+| --- | --- | --- | --- | --- |
+| octocat | Mona | Octocat | octocat@example.edu | A |
+| hubot | Hu | Bot | hubot@example.com | A |
+| octofez | Octo | Fez | | B |
+
+As a plain text file:
+
+```csv
+username,first_name,last_name,email,section
+octocat,Mona,Octocat,octocat@example.edu,A
+hubot,Hu,Bot,hubot@example.com,A
+octofez,Octo,Fez,,B
+```
+
+A single `username` column is also valid:
+
+```csv
+username
+octocat
+hubot
+octofez
+```
+
+> [!NOTE]
+> A username list or roster CSV both invites students **and** adds them to the
+> roster. An email list only sends invitations. An email carries no GitHub
+> identity until the student onboards, so those students appear under **pending
+> invitations**, not on the roster, until they accept.
+
+> [!TIP]
+> Adding students who are **already in your organization** (for example, from a
+> previous course) is a different action. Inviting them again does nothing:
+> GitHub reports "Already a member," and it won't put them on this classroom's
+> roster. To enroll an existing member, open the organization's **Members** page
+> in Classroom 50 and use **Add to classroom** (per member, or select several
+> for the bulk action). See
+> [Already an org member, but not on the roster](Troubleshooting#already-an-org-member-but-not-on-the-roster).
 
 **Enrolled students** — the students already in this classroom. Classroom 50
 gives you two shareable links: one to accept the organization invite, and one to
