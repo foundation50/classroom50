@@ -72,7 +72,7 @@ repository for inline review of a student's work.
 (`score` out of `max-score`); the **gradebook** (`scores.json`) is the
 collected record of every submission, built by the score-collection workflow.
 Teachers can download it as CSV. See
-[Autograders → Reading results](Autograders#reading-results).
+[Reading results](Autograders#reading-results) in Autograders.
 
 **Score override** — A teacher-set score entered on the submissions page,
 stored in the gradebook and left untouched by autograding until cleared. Used
@@ -114,7 +114,7 @@ Where the words — or the behavior behind them — differ:
 | GitHub Classroom | Classroom 50 |
 | --- | --- |
 | **Deadline / cutoff date** | **Due date**. It only marks later submissions *late* — nothing is blocked. The enforcement tools are **Close submission** (block new accepts, set repositories read-only) and **Lock assignment**. |
-| **Download grades** (CSV) | **Download scores (CSV)** on an assignment's submissions page. The underlying gradebook is `scores.json` in your config repository. See [Autograders → Reading results](Autograders#reading-results). |
+| **Download grades** (CSV) | **Download scores (CSV)** on an assignment's submissions page. The underlying gradebook is `scores.json` in your config repository. See [Reading results](Autograders#reading-results) in Autograders. |
 | **Roster identifier** and student self-linking | Doesn't exist — there's nothing to link. The roster is keyed by **GitHub username** (the numeric `github_id` is resolved automatically); you invite students, and accept links work once they've joined the organization. |
 | **Teams** (group assignments) | **Groups.** The first student to accept (the **founder**) creates the shared repository and invites teammates as collaborators — there is no separate team-creation step. |
 | **Autograding presets** (`.github/classroom/autograding.json`) | **Declarative tests**, stored on the assignment itself (Input/Output, Run command, Python/pytest). An existing `autograding.json` workflow can be kept with a [custom runner workflow](Autograders#custom-runner-workflow-rare). |

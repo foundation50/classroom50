@@ -485,7 +485,7 @@ the `schedule:` block in `.github/workflows/collect-scores.yaml`.
 that repo's collaborators, keeps those on the classroom team, and credits each
 with the same score. See [Autograders](Autograders#group-attribution-model) for
 the full attribution model — and
-[Autograders → Reading results](Autograders#reading-results) for where every
+[Reading results](Autograders#reading-results) in Autograders for where every
 result lives, per-test breakdowns, and past attempts.
 
 ## 10. Download submissions
@@ -508,7 +508,7 @@ submission** (a student with several pushes contributes several lines), plus a
 blank-score line for each non-submitter, so you can sort by
 score to see who hasn't submitted. The column-by-column reference for
 `scores.csv` (and the per-repository `result.json` / `results.json` files) is in
-[Autograders → Score exports](Autograders#score-exports).
+[Score exports](Autograders#score-exports) in Autograders.
 
 Each run creates a fresh timestamped folder. Override the destination with `-d`:
 

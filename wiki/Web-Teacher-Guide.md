@@ -445,7 +445,7 @@ and links to the repository, the commit, the feedback pull request
 (**Review**), and the Release (**View autograder details**). For where every
 result lives — per-test breakdowns, past attempts, grading a specific commit,
 and who submitted — see
-[Autograders → Reading results](Autograders#reading-results).
+[Reading results](Autograders#reading-results) in Autograders.
 
 ### Scores and overrides
 
@@ -509,7 +509,7 @@ assignment:
 
 Click **Download scores (CSV)** to export all submissions as a CSV for a
 spreadsheet or external tool. The column-by-column reference is in
-[Autograders → Score exports](Autograders#score-exports).
+[Score exports](Autograders#score-exports) in Autograders.
 
 ## Edit assignments and classrooms
 

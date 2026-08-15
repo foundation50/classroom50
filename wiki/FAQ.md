@@ -205,7 +205,7 @@ Yes, several levers:
   saver for large classrooms, where every work-in-progress push would otherwise
   grade. You can also name **milestone tags** (`--submission-tag phase1`) so
   students grade specific checkpoints with plain git. See
-  [Autograders → Which commits grade](Autograders#which-commits-grade).
+  [Which commits grade](Autograders#which-commits-grade) in Autograders.
 - **Pause autograding for one assignment** (reversible) — **Pause autograding**
   in the submissions page's **Actions** menu disables the built-in
   `autograde.yaml` workflow in every student repository (via GitHub's
@@ -309,7 +309,7 @@ tooling locally — `gh teacher download` clones every submission repo and also
 writes a `scores.csv` summary at the destination root. The raw score data also
 lives in `scores.json` in your config repo, so you can build your own
 automations against it. The column-by-column reference for both CSVs is in
-[Autograders → Score exports](Autograders#score-exports).
+[Score exports](Autograders#score-exports) in Autograders.
 
 ### As a teacher, can I test an assignment as a student?
 

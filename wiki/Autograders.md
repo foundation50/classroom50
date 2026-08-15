@@ -133,8 +133,9 @@ shape `assignment test list --json` emits:
 | `points` | Required, 0–1000. A 0-point test does not affect the numeric score; a failure still sets the autograde status to `failure`. |
 
 At most 100 tests per assignment. Put large fixtures in files
-(`input-file` / `expected-file`) under `<classroom>/autograders/<slug>/`, not
-inline.
+(`input-file` / `expected-file`) under `CLASSROOM/autograders/ASSIGNMENT/`, not
+inline. In paths and commands on this page, replace `CLASSROOM` with the
+classroom's short name and `ASSIGNMENT` with the assignment slug.
 
 ### Setup commands, dependencies, and environment variables
 
@@ -208,13 +209,13 @@ workflow at submission setup, and by `runner.py` before executing.
 <summary>Writing a valid assignments.json from another client (such as a GUI)</summary>
 
 Anything that writes a valid `assignments.json` gets the whole pipeline for
-free. A non-CLI client should:
+free. A non-CLI client must:
 
 1. Validate against
    [`schemas/assignments-v1.schema.json`](https://github.com/foundation50/classroom50/blob/main/schemas/assignments-v1.schema.json)
    (two rules it can't express: unique test names, and name length ≤ 100 UTF-8
    *bytes*).
-2. Probe before writing tests: `<classroom>/autograders/<slug>/autograder.py`
+2. Probe before writing tests: `CLASSROOM/autograders/ASSIGNMENT/autograder.py`
    must NOT exist, and `.github/scripts/materialize_tests.py` MUST exist.
 3. Write with the git-data API and retry on a non-fast-forward rejection.
 
@@ -230,9 +231,9 @@ two scopes:
 
 | Path | Scope | Used when |
 |---|---|---|
-| `<classroom>/autograders/<slug>/autograder.py` | One assignment | Present in the bundle. |
-| `<classroom>/autograders/<slug>/tests.json` | One assignment | [Declarative tests](#declarative-tests); no per-assignment `autograder.py`. |
-| `<classroom>/autograder.py` | One classroom | Neither of the above exists. |
+| `CLASSROOM/autograders/ASSIGNMENT/autograder.py` | One assignment | Present in the bundle. |
+| `CLASSROOM/autograders/ASSIGNMENT/tests.json` | One assignment | [Declarative tests](#declarative-tests); no per-assignment `autograder.py`. |
+| `CLASSROOM/autograder.py` | One classroom | Neither of the above exists. |
 
 If none exist, the runner emits a vacuous pass (score 0/0) and the submission
 still lands as a tagged Release — a valid mid-setup state.
@@ -241,10 +242,10 @@ still lands as a tagged Release — a valid mid-setup state.
 
 `runner.py` resolves the grading entrypoint in this order:
 
-1. Per-assignment `<classroom>/autograders/<slug>/autograder.py` (an override
+1. Per-assignment `CLASSROOM/autograders/ASSIGNMENT/autograder.py` (an override
    always wins).
 2. Per-assignment `tests.json` (declarative tests).
-3. Classroom default `<classroom>/autograder.py`.
+3. Classroom default `CLASSROOM/autograder.py`.
 4. None of the above → vacuous pass.
 
 To keep precedence from silently swallowing tests, the CLI refuses `assignment
@@ -259,7 +260,7 @@ The runner provides:
   `RELEASE_URL`, `REVIEW_URL`, and all standard `GITHUB_*`.
 - **Working directory:** the student's checkout (relative paths resolve to
   student code).
-- **Sibling files:** anything else under `<classroom>/autograders/<slug>/` is
+- **Sibling files:** anything else under `CLASSROOM/autograders/ASSIGNMENT/` is
   bundled and lives at `Path(__file__).parent`.
 
 The autograder must produce **`./result.json`** (required — see
@@ -272,7 +273,7 @@ and the runner synthesizes a `status=error` result.
 <details>
 <summary>Template: pytest</summary>
 
-Drop at `<classroom>/autograders/<slug>/autograder.py` alongside your `test_*.py`
+Drop at `CLASSROOM/autograders/ASSIGNMENT/autograder.py` alongside your `test_*.py`
 files:
 
 ```python
@@ -375,7 +376,7 @@ Path("result.json").write_text(json.dumps(result, indent=2))
 
 #### Classroom default
 
-`gh teacher autograder set-default <org> <classroom> --from <path>` installs a
+`gh teacher autograder set-default ORG CLASSROOM --from PATH` installs a
 default that grades every assignment without its own autograder or tests. With no
 `--from`, it installs a diagnostic stub (echoes the environment, emits a vacuous
 pass) — useful for verifying the pipeline. Inspect it with `autograder show`, and
@@ -414,7 +415,7 @@ the image owns the toolchain unless you set `python` explicitly.
 <details>
 <summary>Custom and self-hosted runners</summary>
 
-`runs-on` works exactly as in any Actions workflow. Multiple labels are AND-ed; a
+`runs-on` works exactly as in any GitHub Actions workflow. Multiple labels are AND-ed; a
 misspelled label won't match a runner. A `container` needs a Linux
 `runs-on`.
 
@@ -458,7 +459,7 @@ assignment add --submission-mode` / `gh teacher assignment submission-mode`):
 - **Push of a `submit/*` tag** — manual tag pushes work too.
 
 **`tag`** — grading triggers **only** on `submit/*` tag pushes. A plain
-`git push` runs nothing and costs no Actions minutes — the cost lever for
+`git push` runs nothing and costs no GitHub Actions minutes — the cost lever for
 large cohorts. Submissions become an explicit act:
 
 - `gh student submit` pushes a `submit/<UTC-timestamp>-<short-sha>` tag after
@@ -543,9 +544,9 @@ The autograding workflow is written into each student repository at accept time 
 otherwise never changes, so flipping `submission_mode` on an assignment with
 accepted repositories needs a retrofit:
 
-- **CLI**: `gh teacher assignment submission-mode <org> <classroom> <slug>
+- **CLI**: `gh teacher assignment submission-mode ORG CLASSROOM ASSIGNMENT
   --tag` (or `--every-push`) flips the field AND rewrites the workflow across
-  every student repository (add `--user <login>` for one repository, `--dry-run` to
+  every student repository (add `--user USERNAME` for one repository, `--dry-run` to
   preview). Requires the `workflow` OAuth scope
   (`gh auth refresh -s workflow`).
 - **Web**: change the trigger on the assignment settings page, then run
@@ -558,7 +559,7 @@ autograders are never rewritten**: you own their `on:` block; edit it
 yourself and use `--update-shims=false` to flip only the field.
 
 After a retrofit, students must `git pull` — clones made before the change
-will conflict on their next push.
+conflict on their next push.
 
 ### Turning autograding off or pausing it
 
@@ -578,11 +579,11 @@ Beyond choosing *when* commits grade, you can turn the pipeline off entirely:
   repository can also be paused from its row). A student with admin on their own
   repository can technically re-enable the workflow — a known limitation.
 - **Org-wide** — the organization settings' **Pause autograding for all
-  student repositories** toggle narrows the org's Actions policy to the config
+  student repositories** toggle narrows the organization's GitHub Actions policy to the config
   repository. **This stops all workflows in student repositories**, including any
   course CI — prefer the per-assignment pause unless that's what you want.
 
-See also the [FAQ on reducing Actions usage](FAQ#can-i-turn-autograding-off-or-reduce-actions-usage).
+See also the [FAQ on reducing GitHub Actions usage](FAQ#can-i-turn-autograding-off-or-reduce-actions-usage).
 
 ## Reading results
 
@@ -640,9 +641,9 @@ Students sometimes ask you to grade a particular commit, not their latest:
   as graded.
 - **To grade an arbitrary commit**, have the student push a `submit/*` tag (or
   a configured milestone tag) pointing at it: `git tag submit/regrade-me
-  <sha> && git push origin submit/regrade-me`. That mints a normal graded
+  SHA && git push origin submit/regrade-me`. That mints a normal graded
   submission at that commit.
-- **Regrade** (per-row, or **Regrade all** in the Actions menu) re-runs each
+- **Regrade** (per-row, or **Regrade all** in the **Actions** menu) re-runs each
   repository's **latest** submission **at its original commit** — useful after
   fixing a broken test. A never-graded repository is first-graded at its current
   HEAD instead (a new submission). On a re-run, `datetime` (the submission
@@ -651,7 +652,7 @@ Students sometimes ask you to grade a particular commit, not their latest:
 
 ### Who submitted
 
-- `owner` — the repository owner (the `<username>` in the repository name); the identity
+- `owner` — the repository owner (the `USERNAME` in the repository name); the identity
   scores are keyed by.
 - `submitted_by` — the GitHub account that actually pushed that submission.
   For group work this is how you see who did the pushing even though the score
@@ -690,7 +691,7 @@ anything custom.
 #### Web: Download scores (CSV)
 
 **Download scores (CSV)** on the submissions page saves
-`<classroom>-<assignment>-scores.csv` — **one row per student (or group)**,
+`CLASSROOM-ASSIGNMENT-scores.csv` — **one row per student (or group)**,
 sorted by last name, with the latest submission's data:
 
 | Column | Description |
@@ -705,7 +706,7 @@ sorted by last name, with the latest submission's data:
 
 #### CLI: `gh teacher download`
 
-`gh teacher download <org> <classroom> <assignment>` clones every student
+`gh teacher download ORG CLASSROOM ASSIGNMENT` clones every student
 repository and writes a `scores.csv` at the destination root — **one line per
 submission** (a student with several attempts contributes several lines,
 newest first), plus one blank-score line per non-submitter:
@@ -728,7 +729,7 @@ refreshes).
 
 #### Raw JSON
 
-- `<classroom>/scores.json` in your config repository is the authoritative gradebook
+- `CLASSROOM/scores.json` in your config repository is the authoritative gradebook
   (see [scores.json shape](#the-resultjson-contract) below) — build any custom
   report from it.
 - `gh teacher download` leaves `result.json` (latest attempt) and
@@ -749,9 +750,9 @@ reads `result.json` from the workspace after the autograder exits.
   "assignment_type": "individual",
   "owner":           "alice",
   "submission":      "submit/2026-06-01T14-32-05Z-a1b2c3d",
-  "commit":          "https://github.com/.../commit/<sha>",
+  "commit":          "https://github.com/.../commit/SHA",
   "release":         "https://github.com/.../releases/tag/submit%2F...",
-  "review":          "https://github.com/.../compare/<baseline-sha>...<sha>",
+  "review":          "https://github.com/.../compare/BASELINE-SHA...SHA",
   "datetime":        "2026-06-01T14:32:01Z",
   "graded_at":       "2026-06-01T14:33:11Z",
   "score":           4,
@@ -824,8 +825,8 @@ cumulative work with inline comments alongside the scored Release.
 - **The runner adopts it** by base+head and maintains it from then on. If accept
   could not open it (a permissions oddity, or a repository accepted before this
   feature), the runner opens it on the first submission instead, and
-  re-accepting also retries, which is the only route with Actions off. On that
-  fallback open the runner honors the template too, best-effort: its Actions
+  re-accepting also retries, which is the only route with GitHub Actions off. On that
+  fallback open the runner honors the template too, best-effort: its GitHub Actions
   token cannot always read a private or external template, so it uses the
   built-in body and logs a warning when it has to.
 
@@ -836,15 +837,15 @@ Both accept and the runner resolve the baseline as **the commit that introduced
 `.classroom50.yaml`** (a structural marker, not a commit subject) so they agree
 on where the base is frozen. The runner refuses to open or update the PR when
 the `feedback` branch sits at any other commit, since a student can create that
-branch themselves; an org admin deleting it lets the next submission re-freeze
+branch themselves; an organization administrator deleting it lets the next submission re-freeze
 it correctly. If no marker commit is found, the runner opens the PR against the
 root commit and **warns** that the baseline is untrusted; if no baseline resolves
 at all, it **skips** with a warning.
 
-**Prerequisites (handled by `gh teacher init`):** the org setting "Allow GitHub
-Actions to create and approve pull requests" must be on, and two org rulesets
+**Prerequisites (handled by `gh teacher init`):** the organization setting "Allow GitHub
+Actions to create and approve pull requests" must be on, and two organization rulesets
 protect submission history and the frozen `feedback` branch. If you enable
-feedback on an org set up before this feature, **re-run `gh teacher init`**.
+feedback on an organization set up before this feature, **re-run `gh teacher init`**.
 
 **Student repositories accepted before this feature** use an older workflow and must
 be re-created (delete + re-accept) to pick up the new one.
@@ -902,7 +903,7 @@ uploads warn without changing the score.
 
 > [!NOTE]
 > Submission publishing doesn't support GitHub Immutable Releases (reruns edit
-> the Release in place). To roll this out to an existing org, run `gh teacher
+> the Release in place). To roll this out to an existing organization, run `gh teacher
 > init`, approve the workflow-files refresh, and wait for `publish-pages` to
 > finish.
 
@@ -911,8 +912,8 @@ uploads warn without changing the score.
 | To change… | Edit… | Propagates on… |
 |---|---|---|
 | Simple checks, no code | `tests` block (`assignment test add` / `--tests`) | Next Pages publish, then next submission |
-| Grading logic for one assignment | `<classroom>/autograders/<slug>/autograder.py` | Next submission |
-| Grading logic for a classroom | `<classroom>/autograder.py` (`autograder set-default`) | Next submission |
+| Grading logic for one assignment | `CLASSROOM/autograders/ASSIGNMENT/autograder.py` | Next submission |
+| Grading logic for a classroom | `CLASSROOM/autograder.py` (`autograder set-default`) | Next submission |
 | Runtime for one assignment | `runtime` block on the entry | Next submission |
 | Files attached to Releases | `release_assets` (usually in the web form) | Next submission or regrade |
 
@@ -942,7 +943,7 @@ A failure that stops the reusable workflow from loading doesn't appear in
 
 Students never configure tokens or secrets. Grading runs on the job-scoped
 `GITHUB_TOKEN`, unauthenticated Pages fetches, and reusable-workflow access
-between the student repository and the config repository (both in the teacher's org,
+between the student repository and the config repository (both in the teacher's organization,
 configured by `init`). The only PAT in the system is the teacher-side
 `CLASSROOM50_SERVICE_TOKEN`, used only by `collect-scores.yaml`.
 
@@ -955,7 +956,7 @@ configured by `init`). The only PAT in the system is the teacher-side
   pushes in ten minutes produce five graded runs and five Releases.
 - **Immutable-release rulesets freeze regrade Releases.** Orgs enforcing
   immutable releases (a GitHub ruleset) cannot refresh a submission's Release
-  on regrade; the regraded score appears in the commit status and the Actions
+  on regrade; the regraded score appears in the commit status and the GitHub Actions
   job summary, but the Release — and thus the collected gradebook score for
   that submission — keeps the pre-regrade result.
 - **Pages CDN lag:** updated content can take ~10 minutes to serve, so a
@@ -967,13 +968,13 @@ configured by `init`). The only PAT in the system is the teacher-side
 Every earlier layer changes *what* grading does while keeping the built-in
 runner. When you need a different grading *pipeline* entirely — a
 [reusable workflow](https://docs.github.com/actions/using-workflows/reusing-workflows)
-you author yourself — `--autograder <name>` swaps the caller workflow instead of
+you author yourself — `--autograder NAME` swaps the caller workflow instead of
 the autograder script. Most teachers never need this.
 
 **How the swap works.** By default `gh student accept` writes a small caller
 workflow to `.github/workflows/autograde.yaml` whose `uses:` points at the
-built-in `autograde-runner.yaml`. With `--autograder <name>`, accept instead
-fetches your caller from `<classroom>/autograders/<name>.yaml` and writes it
+built-in `autograde-runner.yaml`. With `--autograder NAME`, accept instead
+fetches your caller from `CLASSROOM/autograders/NAME.yaml` and writes it
 verbatim. Your caller owns its own `on:` triggers and `uses:` a reusable
 workflow you control, so your grading logic runs in place of the runner.
 
@@ -983,12 +984,12 @@ workflow you control, so your grading logic runs in place of the runner.
    with a name other than the reserved `autograde-runner.yaml`. It must be
    [callable](https://docs.github.com/actions/using-workflows/reusing-workflows#creating-a-reusable-workflow)
    (`on: workflow_call`). Non-reserved names are never touched by Classroom 50.
-2. **Add a caller workflow** at `<classroom>/autograders/<name>.yaml`. Give it
+2. **Add a caller workflow** at `CLASSROOM/autograders/NAME.yaml`. Give it
    your trigger events and a `jobs.<id>.uses:` pointing at the workflow from
-   step 1. Because it's written verbatim, template `<org>`/branch refs to your
+   step 1. Because it's written verbatim, template `ORG`/branch refs to your
    own values rather than relying on the built-in caller's substitution.
-3. **Register the assignment** with `gh teacher assignment add <org> <classroom>
-   <slug> --autograder <name>`.
+3. **Register the assignment** with `gh teacher assignment add ORG CLASSROOM
+   ASSIGNMENT --autograder NAME`.
 
 > [!NOTE]
 > Once an assignment uses a custom autograder, `gh teacher assignment
@@ -1007,7 +1008,7 @@ you keep your existing format:
    (any non-reserved name). Have it read `autograding.json` from the student
    repository as before.
 2. Point a caller workflow at it as above, and register assignments with
-   `--autograder <name>`.
+   `--autograder NAME`.
 3. Ship `autograding.json` (and any fixtures) in the **assignment template**, not
    the config repository — it travels with each student's starter code.
 
