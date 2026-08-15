@@ -2,6 +2,26 @@
 
 Terms used throughout Classroom 50, in the web app, the CLI, and this wiki.
 
+## One term per concept
+
+Classroom 50 uses one canonical term per concept across the web app, the
+CLI, and this wiki. Where GitHub Classroom or GitHub's documentation has a
+term for the same concept, Classroom 50 uses it. If you see copy that uses
+a different word for something defined here, that copy is out of date —
+[file an issue](https://github.com/foundation50/classroom50/issues).
+
+| Use | Not |
+| --- | --- |
+| classroom | class, course |
+| teacher | instructor |
+| due date | deadline, cutoff date |
+| score | grade (as a noun) |
+| the `classroom50` repository | config repo, config repository |
+| workflow files | skeleton |
+| template repository | starter repository |
+| group, founder | team (for group assignments) |
+| repository | repo (except in command output and UI labels) |
+
 ## Core concepts
 
 **Classroom** — The basic unit of Classroom 50: one course's students,
@@ -24,18 +44,19 @@ enrolled.
 **Organization (org)** — The GitHub organization that hosts a Classroom 50
 setup. Requires the Team or Enterprise plan.
 
-**Config repository** — The private `classroom50` repository in your organization.
-It holds every classroom's settings, roster, assignments, autograders, and
-scores. Classroom 50 has no other backend.
+**The `classroom50` repository** — The private repository named `classroom50`
+in your organization. It holds every classroom's settings, roster,
+assignments, autograders, and scores. Classroom 50 has no other backend.
 
 ## Roles
 
 **Teacher** — Full control of a classroom. Granted organization owner and write
-access to the config repository.
+access to the `classroom50` repository.
 
-**Head TA** — Write access to the config repository, but not organization owner.
+**Head TA** — Write access to the `classroom50` repository, but not
+organization owner.
 
-**TA** — Read-only access to the config repository.
+**TA** — Read-only access to the `classroom50` repository.
 
 **Student** — A member of the classroom who accepts and submits assignments.
 
@@ -68,22 +89,22 @@ is tagged, graded, and published as a GitHub Release.
 **Feedback pull request** — An optional, long-lived pull request per student
 repository for inline review of a student's work.
 
-**Score / gradebook** — A **score** is the number a submission earned
-(`score` out of `max-score`); the **gradebook** (`scores.json`) is the
-collected record of every submission, built by the score-collection workflow.
-Teachers can download it as CSV. See
+**Score / collected scores** — A **score** is the number a submission earned
+(`score` out of `max-score`). The **collected scores** (`scores.json` in the
+`classroom50` repository) are the record of every submission, built by the
+score-collection workflow. Teachers can download them as CSV. See
 [Reading results](Autograders#reading-results) in Autograders.
 
 **Score override** — A teacher-set score entered on the submissions page,
-stored in the gradebook and left untouched by autograding until cleared. Used
-for manual grading and for overriding an autograded result (which is preserved
-and restored when the override is cleared).
+stored with the collected scores and left untouched by autograding until
+cleared. Used for manual grading and for overriding an autograded result
+(which is preserved and restored when the override is cleared).
 
 ## Access and setup
 
 **Service token** — A fine-grained personal access token (PAT) stored as a
-secret in the config repository. The score-collection and regrade workflows use it to
-read and update student repositories.
+secret in the `classroom50` repository. The score-collection and regrade
+workflows use it to read and update student repositories.
 
 **Accept** — The student action that creates their assignment repository from
 the template.
@@ -114,11 +135,11 @@ Where the words — or the behavior behind them — differ:
 | GitHub Classroom | Classroom 50 |
 | --- | --- |
 | **Deadline / cutoff date** | **Due date**. It only marks later submissions *late* — nothing is blocked. The enforcement tools are **Close submission** (block new accepts, set repositories read-only) and **Lock assignment**. |
-| **Download grades** (CSV) | **Download scores (CSV)** on an assignment's submissions page. The underlying gradebook is `scores.json` in your config repository. See [Reading results](Autograders#reading-results) in Autograders. |
+| **Download grades** (CSV) | **Download scores (CSV)** on an assignment's submissions page. The collected scores live in `scores.json` in your `classroom50` repository. See [Reading results](Autograders#reading-results) in Autograders. |
 | **Roster identifier** and student self-linking | Doesn't exist — there's nothing to link. The roster is keyed by **GitHub username** (the numeric `github_id` is resolved automatically); you invite students, and accept links work once they've joined the organization. |
 | **Teams** (group assignments) | **Groups.** The first student to accept (the **founder**) creates the shared repository and invites teammates as collaborators — there is no separate team-creation step. |
 | **Autograding presets** (`.github/classroom/autograding.json`) | **Declarative tests**, stored on the assignment itself (Input/Output, Run command, Python/pytest). An existing `autograding.json` workflow can be kept with a [custom runner workflow](Autograders#custom-runner-workflow-rare). |
-| Hosted service stores your data | Everything lives in **your GitHub organization** (config repository, student repositories, Actions). |
+| Hosted service stores your data | Everything lives in **your GitHub organization** (the `classroom50` repository, student repositories, Actions). |
 
 To bring an existing classroom over, see
 [`gh teacher classroom migrate`](gh-teacher#classroom-migrate) and the
