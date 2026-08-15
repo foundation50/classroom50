@@ -2,11 +2,11 @@
 
 Terms used throughout Classroom 50, in the web app, the CLI, and this wiki.
 
-Classroom 50 uses one term for each concept, matching GitHub Classroom and
-GitHub documentation where they have a word for the same thing. Each entry
-below defines the canonical term; where an older or alternative word is
-still in circulation, the entry says so. If you find copy that disagrees
-with this page,
+One concept, one term: when writing about Classroom 50, use the terms
+defined here and avoid mixing in synonyms (an "instructor" next to a
+"teacher" leaves readers wondering whether those are two roles). Occasional
+slips are understandable, but this page is the reference. If you find copy
+that disagrees with it,
 [file an issue](https://github.com/foundation50/classroom50/issues).
 
 ## Core concepts
@@ -14,7 +14,7 @@ with this page,
 **Classroom** — The basic unit of Classroom 50: one course's students,
 assignments, roster, and scores. A classroom belongs to a GitHub organization,
 and an organization can hold several classrooms (for example, one per term or
-section). Always "classroom", not "class" or "course".
+section).
 
 **Assignment** — A piece of coursework in a classroom. May be individual or
 group, may include starter code, and may have a due date and autograding.
@@ -36,12 +36,11 @@ setup. Requires the Team or Enterprise plan.
 **The `classroom50` repository** — The private repository named `classroom50`
 in your organization. It holds every classroom's settings, roster,
 assignments, autograders, and scores. Classroom 50 has no other backend.
-Earlier copy called this the "config repository".
 
 ## Roles
 
 **Teacher** — Full control of a classroom. Granted organization owner and write
-access to the `classroom50` repository. Always "teacher", not "instructor".
+access to the `classroom50` repository.
 
 **Head TA** — Write access to the `classroom50` repository, but not
 organization owner.
@@ -58,13 +57,12 @@ the shared repository and invite the other teammates as collaborators.
 **Template repository** — A GitHub repository, flagged as a template, that
 supplies an assignment's **starter code**. Each student who accepts gets a copy.
 Assignments can also be template-less, in which case a student's repository
-contains only the autograder setup. "Template repository", not "starter
-repository".
+contains only the autograder setup.
 
 **Due date** — An optional date and time for an assignment. Submissions after
 it are marked *late*; nothing is blocked, unlike GitHub Classroom's cutoff
 date. To actually stop submissions, use **Close submission** on the
-submissions page. Always "due date", not "deadline".
+submissions page.
 
 **Autograder** — The grading logic that runs on each submission. Can be
 declarative tests (defined in the assignment) or a Python script you write.
@@ -85,10 +83,9 @@ is tagged, graded, and published as a GitHub Release.
 repository for inline review of a student's work.
 
 **Score / collected scores** — A **score** is the number a submission earned
-(`score` out of `max-score`); Classroom 50 says "score", not "grade". The
-**collected scores** (`scores.json` in the `classroom50` repository) are the
-record of every submission, built by the score-collection workflow. Teachers
-can download them as CSV. See
+(`score` out of `max-score`). The **collected scores** (`scores.json` in the
+`classroom50` repository) are the record of every submission, built by the
+score-collection workflow. Teachers can download them as CSV. See
 [Reading results](Autograders#reading-results) in Autograders.
 
 **Score override** — A teacher-set score entered on the submissions page,
@@ -104,8 +101,7 @@ workflows use it to read and update student repositories.
 
 **Workflow files** — The GitHub Actions files Classroom 50 places in the
 `classroom50` repository and in each assignment repository (such as
-`autograde.yaml`) to run grading, collection, and publishing. Some CLI
-output still calls these the "skeleton".
+`autograde.yaml`) to run grading, collection, and publishing.
 
 **Accept** — The student action that creates their assignment repository from
 the template.
@@ -131,7 +127,7 @@ repository.
 
 Most vocabulary carries over unchanged: classroom, roster, assignment,
 individual and group assignments, template repository, starter code, accept.
-Where a term or the behavior behind it differs, the entry above says so. To
+Where the behavior behind a term differs, the entry above says so. To
 bring an existing classroom over, see
 [`gh teacher classroom migrate`](gh-teacher#classroom-migrate) and the
 [migration FAQ](FAQ#migrating-from-github-classroom).
