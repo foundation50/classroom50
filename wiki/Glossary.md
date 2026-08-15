@@ -10,7 +10,7 @@ and an organization can hold several classrooms (for example, one per term or
 section).
 
 **Assignment** — A piece of coursework in a classroom. May be individual or
-group, may include starter code, and may have a deadline and autograding.
+group, may include starter code, and may have a due date and autograding.
 
 **Individual assignment** — Each student gets their own repository.
 

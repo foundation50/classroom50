@@ -111,7 +111,7 @@ on GitHub:
 ![Submission on GitHub](images/web_assignment_github_release_student.png)
 
 > [!NOTE]
-> Grades live on your repository's GitHub **Releases** — each graded submission
+> Scores live on your repository's GitHub **Releases** — each graded submission
 > publishes a Release with the score and a per-test breakdown. Classroom 50
 > can't yet display the score inside the app itself, so **View grade** takes
 > you to the Release. Your teacher may also leave comments on your feedback

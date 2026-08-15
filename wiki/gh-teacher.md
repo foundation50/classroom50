@@ -370,7 +370,7 @@ The classroom's GitHub teams are the authority for enrollment and role; the
   automatic sync refreshes it, so you may see a commit rewrite an empty/`""`
   role to `teacher` shortly after `roster add`. That's the snapshot updating,
   not a change to enrollment — nothing reads this column to decide access.
-- **Grades & submissions** — an account with a student enrollment is always
+- **Scores & submissions** — an account with a student enrollment is always
   listed as a student. (A pure-staff account only appears in submissions once it
   has actually accepted an assignment repo.)
 - **Unenroll** — drops only the student side (the roster row and student-team

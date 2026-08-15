@@ -138,7 +138,7 @@ On the classroom page, click **+ Assignment**. Fill in:
 
 - **Name** — the assignment's name.
 - **Description** (optional) — details for students.
-- **Due date** (optional) — a date and time in your local timezone. A deadline
+- **Due date** (optional) — a date and time in your local timezone. A due date
   marks later submissions **late** in the gradebook; it does not block pushes
   or revoke access. To actually close an assignment, use the **Close
   submission** action (see below).
@@ -252,9 +252,10 @@ form, holds optional settings for customizing the autograding environment:
   skipped with a warning.
 
 > [!NOTE]
-> Existing organizations must refresh the shared skeleton before using
-> submission release files. Submission publishing doesn't support GitHub
-> Immutable Releases. See [Autograders](Autograders#attaching-files-to-submission-releases)
+> Existing organizations must refresh the shared workflow files (re-run
+> setup) before using submission release files. Submission publishing doesn't
+> support GitHub Immutable Releases. See
+> [Autograders](Autograders#attaching-files-to-submission-releases)
 > for path rules and limits.
 
 Commands run in separate shell processes. See
@@ -441,9 +442,11 @@ The top of the page shows:
 Each row shows a student's (or group's) latest submission plus its full history
 (newest first). For each submission you can view the score, the submission date,
 and links to the repository, the commit, the feedback pull request
-(**Review**), and the Release (**Details**).
+(**Review**), and the Release (**Details**). For where every result lives —
+per-test breakdowns, past attempts, grading a specific commit, and who
+submitted — see [Autograders → Reading results](Autograders#reading-results).
 
-### Grades and score overrides
+### Scores and overrides
 
 Each row's score cell has an edit button (pencil) that opens a score dialog.
 It works for both grading modes:
@@ -487,7 +490,7 @@ assignment:
   students have accepted; a single repository can also be paused from its row.)
 - **Close submission** / **Reopen submission** — close the submission window:
   block new accepts and set every student's repository to read-only (work is
-  preserved). This is the enforcement mechanism for deadlines — the due date
+  preserved). This is the enforcement mechanism for due dates — the due date
   itself only marks submissions late. **Reopen submission** restores write
   access.
 - **Lock assignment** / **Unlock assignment** — lock the assignment so
@@ -504,7 +507,8 @@ assignment:
 ### Download scores
 
 Click **Download scores (CSV)** to export all submissions as a CSV for a
-spreadsheet or external tool.
+spreadsheet or external tool. The column-by-column reference is in
+[Autograders → Score exports](Autograders#score-exports).
 
 ## Edit assignments and classrooms
 

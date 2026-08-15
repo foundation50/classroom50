@@ -72,9 +72,10 @@ gh teacher init <org>
 ```
 
 `init` is **idempotent** — re-running picks up where a prior run left off. It
-also offers to refresh skeleton files when the CLI ships newer versions (this is
-how an existing organization gains new features); it asks before overwriting, so
-your edits are safe. Use `--yes` to skip the prompt in scripts.
+also offers to refresh the **skeleton files** — the workflow and script files
+Classroom 50 commits to the config repo — when the CLI ships newer versions
+(this is how an existing organization gains new features); it asks before
+overwriting, so your edits are safe. Use `--yes` to skip the prompt in scripts.
 
 **Useful flags:**
 
@@ -483,7 +484,9 @@ the `schedule:` block in `.github/workflows/collect-scores.yaml`.
 **Group assignments** are graded once, in the founder's repo. Collection reads
 that repo's collaborators, keeps those on the classroom team, and credits each
 with the same score. See [Autograders](Autograders#group-attribution-model) for
-the full attribution model.
+the full attribution model — and
+[Autograders → Reading results](Autograders#reading-results) for where every
+result lives, per-test breakdowns, and past attempts.
 
 ## 10. Download submissions
 
@@ -503,7 +506,9 @@ for each one probes for the expected repo, clones it (or reports `Missing:
 It then writes a `scores.csv` at the destination root, **one line per
 submission** (a student with several pushes contributes several lines), plus a
 blank-score line for each non-submitter, so you can sort by
-score to see who hasn't submitted.
+score to see who hasn't submitted. The column-by-column reference for
+`scores.csv` (and the per-repo `result.json` / `results.json` files) is in
+[Autograders → Score exports](Autograders#score-exports).
 
 Each run creates a fresh timestamped folder. Override the destination with `-d`:
 

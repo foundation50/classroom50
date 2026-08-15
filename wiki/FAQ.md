@@ -133,20 +133,21 @@ file in alone does nothing until you enable this option. If the file is missing
 or can't be read, the built-in body is used. It's set in the web app; there is
 no `gh teacher` flag for it.
 
-### Can I set a deadline with a specific time, not just a date?
+### Can I set a due date with a specific time, not just a date?
 
-Yes. Deadlines support a date **and** time (down to the second, in your
-timezone). Submissions after the deadline are **marked late**; nothing is
+Yes. Due dates support a date **and** time (down to the second, in your
+timezone). Submissions after the due date are **marked late**; nothing is
 blocked automatically.
 
-### Does the deadline cut off student access?
+### Does the due date cut off student access?
 
-No — the due date only marks later submissions late. To actually end an
-assignment, use **Close submission** in the submissions page's **Actions**
-menu: it blocks new accepts and sets every student's repository to read-only
-(work is preserved). **Reopen submission** restores write access — useful when
-a project continues in a follow-up course. **Update student repo access** in
-the same menu gives finer control over the role students hold on their repos.
+No — there is no cutoff date; the due date only marks later submissions late.
+To actually end an assignment, use **Close submission** in the submissions
+page's **Actions** menu: it blocks new accepts and sets every student's
+repository to read-only (work is preserved). **Reopen submission** restores
+write access — useful when a project continues in a follow-up course. **Update
+student repo access** in the same menu gives finer control over the role
+students hold on their repos.
 
 ### What's the difference between "template-less" and "empty repository"?
 
@@ -248,9 +249,9 @@ assignment repository in Codespaces like any other repo. Classroom 50 doesn't
 manage Codespaces itself — any education Codespaces benefit is handled on
 GitHub's side.
 
-## Grades and submissions
+## Scores and submissions
 
-### A student submitted, but I don't see a grade. Why?
+### A student submitted, but I don't see a score. Why?
 
 A few common reasons:
 
@@ -266,18 +267,18 @@ A few common reasons:
 
 See [Troubleshooting](Troubleshooting) for specific error messages.
 
-### Can students see their grades in the web app?
+### Can students see their scores in the web app?
 
-Not yet. Grades live in each student's repository: every graded submission
+Not yet. Scores live in each student's repository: every graded submission
 publishes a **Release** with the score and a per-test breakdown, which is what
-the student-facing **View grade** link opens. Showing grades inside the app is
+the student-facing **View grade** link opens. Showing scores inside the app is
 blocked by a technical limitation — Classroom 50 has no server, and the
 browser can't read Release assets cross-origin — but it's on the wish list
 (see [#567](https://github.com/foundation50/classroom50/issues/567)). Point
 students at their repository's Releases page (or the Feedback PR) for
 results.
 
-### Can I manually override or adjust a grade?
+### Can I manually override or adjust a score?
 
 Yes, right in the web app — for both **manual** and **autograded** assignments.
 On the submissions page, each row's score cell has an edit button that opens a
@@ -298,7 +299,7 @@ config repo). Under the hood, an override is just an entry in the classroom's
 future runs — so you can still edit it by hand if you prefer (see
 [Collect scores](CLI-Teacher-Guide#9-collect-scores)).
 
-### How do I export grades, or download student work in bulk?
+### How do I export scores, or download student work in bulk?
 
 Download scores as a CSV from the submissions page
 (**Download scores (CSV)**). For the work itself, **Download all submissions**
@@ -307,7 +308,8 @@ a single zip (built in your browser). For real clones — e.g. to run your own
 tooling locally — `gh teacher download` clones every submission repo and also
 writes a `scores.csv` summary at the destination root. The raw score data also
 lives in `scores.json` in your config repo, so you can build your own
-automations against it.
+automations against it. The column-by-column reference for both CSVs is in
+[Autograders → Score exports](Autograders#score-exports).
 
 ### As a teacher, can I test an assignment as a student?
 
@@ -370,7 +372,7 @@ live state on GitHub.com, and the app's reconciliation process updates the
 files automatically to keep them in sync — a hand-edit can create a state the
 tools don't know how to handle (and makes problems much harder to
 troubleshoot). Manage the classroom through the web app or the `gh teacher`
-CLI instead; the one documented exception is a `scores.json` grade override
+CLI instead; the one documented exception is a `scores.json` score override
 (see above).
 
 ### What is the service token, and is it the same one the web app set up?

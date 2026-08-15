@@ -70,7 +70,7 @@ read it:
 - **CLI writes** (`roster add`, `staff add`, `assignment add`, …) update the
   config repo and GitHub teams immediately, but only for the thing they
   change — they don't run the web app's broader reconciliation.
-- **Grades** refresh only when collection runs: nightly, or on demand via
+- **Scores** refresh only when collection runs: nightly, or on demand via
   **Sync now** / `collect-scores.yaml`.
 
 ## Interactive vs. background work
