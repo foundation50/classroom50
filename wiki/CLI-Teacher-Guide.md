@@ -359,7 +359,7 @@ shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--max-group-size <N>` | Max collaborators on a group repo (2–100). Advisory, not hard-enforced. |
 | `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.14. See [Autograders](Autograders). |
 | `--autograder <name>` | Reserved for swapping the whole reusable workflow (rare). Use `--runtime` for language toolchains. |
-| `--submission-mode every-push\|tag` | When the autograder fires. `every-push` (default) grades every push; `tag` grades only on explicit submits (`gh student submit`, or a hand-pushed `submit/*` tag) — regular pushes cost no Actions minutes, the cost lever for large classes. |
+| `--submission-mode every-push\|tag` | When the autograder fires. `every-push` (default) grades every push; `tag` grades only on explicit submits (`gh student submit`, or a hand-pushed `submit/*` tag) — regular pushes cost no Actions minutes, the cost lever for large classrooms. |
 | `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading — e.g. `--submission-tag phase1 --submission-tag phase2`. Students grade a milestone with plain git: `git tag phase1 && git push origin phase1`. Works with either mode; the graded record still appears as a `submit/*` release. |
 
 > [!NOTE]
@@ -423,7 +423,7 @@ gh teacher member list <org>/<repo>  # repo collaborators
 Every submission publishes a GitHub Release carrying a `result.json`. The
 `collect-scores` workflow walks each `(member, assignment)` pair in scope,
 collects each repo's submissions, and aggregates them into
-`<classroom>/scores.json` — the class's authoritative gradebook. By default the
+`<classroom>/scores.json` — the classroom's authoritative gradebook. By default the
 scope is every classroom and every assignment; you can narrow it to one
 classroom, or to a single assignment (see below). Members are the union of the
 student team and the staff teams (teacher/hta/ta), so a staff member who

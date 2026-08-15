@@ -431,20 +431,21 @@ last synced (a per-assignment `collected_at` stamp in `scores.json`). Click
 The top of the page shows:
 
 - **Submitted** — submissions vs. students enrolled.
-- **Classroom average** — average grade among students who submitted.
+- **Classroom average** — average score among students who submitted.
 - **Passing** — how many students are passing vs. failing.
 - **Accepted** — how many students accepted (one per student).
 
 > [!TIP]
-> For larger classes, use the search box, filters ("Submitted", "On time",
+> For larger classrooms, use the search box, filters ("Submitted", "On time",
 > passing/failing, "Accepted"), and sorting (by name or submission date).
 
 Each row shows a student's (or group's) latest submission plus its full history
 (newest first). For each submission you can view the score, the submission date,
 and links to the repository, the commit, the feedback pull request
-(**Review**), and the Release (**Details**). For where every result lives —
-per-test breakdowns, past attempts, grading a specific commit, and who
-submitted — see [Autograders → Reading results](Autograders#reading-results).
+(**Review**), and the Release (**View autograder details**). For where every
+result lives — per-test breakdowns, past attempts, grading a specific commit,
+and who submitted — see
+[Autograders → Reading results](Autograders#reading-results).
 
 ### Scores and overrides
 
@@ -500,7 +501,7 @@ assignment:
 - **Download scores (CSV)** — export all submissions as a CSV.
 - **Download all submissions** — download each repository's latest submission
   bundled into a single zip (built in the browser, one repository at a time;
-  for very large classes prefer `gh teacher download`, which clones every repo
+  for very large classrooms prefer `gh teacher download`, which clones every repo
   and writes a `scores.csv` — see the
   [CLI Teacher Guide](CLI-Teacher-Guide#10-download-submissions)).
 

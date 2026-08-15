@@ -221,7 +221,7 @@ organization. See [the service-token setup](CLI-Teacher-Guide#create-the-service
 | | GitHub Classroom | Classroom 50 |
 | --- | --- | --- |
 | Backend | Hosted service | None (GitHub repos + Actions) |
-| Classroom ↔ org | One classroom per org | Many classrooms per org |
+| Classroom ↔ org | Classrooms managed in the hosted dashboard | A folder in your org's config repo, plus GitHub teams |
 | Grading | Hosted autograder | GitHub Actions in each repo |
 | Joining | Students self-select their roster entry from an invite link | The owner invites students; accept links work once they've joined the org |
 | Group naming | Team names | Founder's username |

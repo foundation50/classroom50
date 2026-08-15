@@ -118,7 +118,6 @@ Where the words — or the behavior behind them — differ:
 | **Roster identifier** and student self-linking | Doesn't exist — there's nothing to link. The roster is keyed by **GitHub username** (the numeric `github_id` is resolved automatically); you invite students, and accept links work once they've joined the organization. |
 | **Teams** (group assignments) | **Groups.** The first student to accept (the **founder**) creates the shared repository and invites teammates as collaborators — there is no separate team-creation step. |
 | **Autograding presets** (`.github/classroom/autograding.json`) | **Declarative tests**, stored on the assignment itself (Input/Output, Run command, Python/pytest). An existing `autograding.json` workflow can be kept via a [custom runner workflow](Autograders#custom-runner-workflow-rare). |
-| One classroom per organization | **Many classrooms per organization** — for example, one per term or section. |
 | Hosted service stores your data | Everything lives in **your GitHub organization** (config repo, student repos, Actions). |
 
 To bring an existing classroom over, see

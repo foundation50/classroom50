@@ -54,7 +54,9 @@ Each assignment has a **Grading** choice (the web form's Grading field; the
   `autograder.py` score each submission automatically. The rest of this page
   is about this mode.
 - **Manual** — you enter each score by hand on the submissions page, out of
-  the assignment's **Max points**. No autograding runs on your behalf.
+  the assignment's **Max points**. No autograder score is used — though the
+  built-in workflow still runs on submissions unless you also turn the
+  built-in autograder off.
 
 Two related, optional settings:
 
@@ -609,8 +611,9 @@ commit), and the Feedback PR (**Review**).
 
 ### Latest score vs. history
 
-The score on a row — and in both CSV exports' summary columns — is the
-**latest submission's** (or a teacher override). "Latest" follows the
+The score on a row — and in the web CSV's summary columns — is the
+**latest submission's** (or a teacher override); in the CLI CSV the latest is
+simply the first line per member. "Latest" follows the
 *submission*, not the commit: if a student deliberately submits an older
 commit (a milestone tag pointing at earlier work, or a regrade), that
 submission's Release becomes the latest. The badge and the gradebook always
@@ -639,10 +642,12 @@ Students sometimes ask you to grade a particular commit, not their latest:
   a configured milestone tag) pointing at it: `git tag submit/regrade-me
   <sha> && git push origin submit/regrade-me`. That mints a normal graded
   submission at that commit.
-- **Regrade** (per-row, or **Regrade all** in the Actions menu) re-runs the
-  autograder on each already-collected submission **at its original commit** —
-  useful after fixing a broken test. `datetime` (the submission instant) stays
-  fixed so late-marking never changes; `graded_at` records the re-run.
+- **Regrade** (per-row, or **Regrade all** in the Actions menu) re-runs each
+  repo's **latest** submission **at its original commit** — useful after
+  fixing a broken test. A never-graded repo is first-graded at its current
+  HEAD instead (a new submission). On a re-run, `datetime` (the submission
+  instant) stays fixed so late-marking never changes; `graded_at` records the
+  re-run.
 
 ### Who submitted
 
@@ -691,7 +696,7 @@ sorted by last name, with the latest submission's data:
 | Column | Description |
 |---|---|
 | `name` / `first_name` / `last_name` | From the roster (blank if the login isn't on it). |
-| `usernames` | The credited GitHub username(s) — one for individual work, all members (founder first) for a group. |
+| `usernames` | The credited GitHub username(s) — one for individual work, every credited member (alphabetical) for a group. |
 | `score` / `max_score` | The latest submission's score. Blank if submitted but not yet collected; `0` with blanks for a non-submitter. |
 | `submissions` | How many attempts were collected. |
 | `submitted_at` | The latest submission instant (ISO 8601 UTC). |
@@ -707,7 +712,7 @@ newest first), plus one blank-score line per non-submitter:
 
 | Column | Description |
 |---|---|
-| `username` | The team member (repo owner for groups). |
+| `username` | The team member. For a group, every credited member repeats the shared submission's lines under their own username. |
 | `first_name` / `last_name` / `email` / `section` | Joined from `roster.csv` when present. |
 | `score` / `max_score` | This attempt's score. Blank for non-submitters. |
 | `datetime` | This attempt's submission instant (ISO 8601 UTC). |
@@ -892,7 +897,7 @@ them) and uploads them under their basenames.
 Release-safe (ASCII letters/digits/`.`/`_`/`-`, no leading/trailing dot, no `..`,
 not `result.json` or `release-body.md`), and relative. A separate 100 MiB
 file-content budget applies at runtime. Missing, unsafe, oversized, or failed
-uploads warn without changing the grade.
+uploads warn without changing the score.
 
 > [!NOTE]
 > Submission publishing doesn't support GitHub Immutable Releases (reruns edit
