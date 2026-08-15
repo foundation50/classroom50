@@ -138,7 +138,7 @@ On the classroom page, click **+ Assignment**. Fill in:
 
 - **Name** — the assignment's name.
 - **Description** (optional) — details for students.
-- **Due date** (optional) — a date and time in your local timezone. A deadline
+- **Due date** (optional) — a date and time in your local timezone. A due date
   marks later submissions **late** in the gradebook; it does not block pushes
   or revoke access. To actually close an assignment, use the **Close
   submission** action (see below).
@@ -252,9 +252,10 @@ form, holds optional settings for customizing the autograding environment:
   skipped with a warning.
 
 > [!NOTE]
-> Existing organizations must refresh the shared skeleton before using
-> submission release files. Submission publishing doesn't support GitHub
-> Immutable Releases. See [Autograders](Autograders#attaching-files-to-submission-releases)
+> Existing organizations must refresh the shared workflow files (re-run
+> setup) before using submission release files. Submission publishing doesn't
+> support GitHub Immutable Releases. See
+> [Autograders](Autograders#attaching-files-to-submission-releases)
 > for path rules and limits.
 
 Commands run in separate shell processes. See
@@ -430,20 +431,23 @@ last synced (a per-assignment `collected_at` stamp in `scores.json`). Click
 The top of the page shows:
 
 - **Submitted** — submissions vs. students enrolled.
-- **Classroom average** — average grade among students who submitted.
+- **Classroom average** — average score among students who submitted.
 - **Passing** — how many students are passing vs. failing.
 - **Accepted** — how many students accepted (one per student).
 
 > [!TIP]
-> For larger classes, use the search box, filters ("Submitted", "On time",
+> For larger classrooms, use the search box, filters ("Submitted", "On time",
 > passing/failing, "Accepted"), and sorting (by name or submission date).
 
 Each row shows a student's (or group's) latest submission plus its full history
 (newest first). For each submission you can view the score, the submission date,
 and links to the repository, the commit, the feedback pull request
-(**Review**), and the Release (**Details**).
+(**Review**), and the Release (**View autograder details**). For where every
+result lives — per-test breakdowns, past attempts, grading a specific commit,
+and who submitted — see
+[Reading results](Autograders#reading-results) in Autograders.
 
-### Grades and score overrides
+### Scores and overrides
 
 Each row's score cell has an edit button (pencil) that opens a score dialog.
 It works for both grading modes:
@@ -487,7 +491,7 @@ assignment:
   students have accepted; a single repository can also be paused from its row.)
 - **Close submission** / **Reopen submission** — close the submission window:
   block new accepts and set every student's repository to read-only (work is
-  preserved). This is the enforcement mechanism for deadlines — the due date
+  preserved). This is the enforcement mechanism for due dates — the due date
   itself only marks submissions late. **Reopen submission** restores write
   access.
 - **Lock assignment** / **Unlock assignment** — lock the assignment so
@@ -497,14 +501,15 @@ assignment:
 - **Download scores (CSV)** — export all submissions as a CSV.
 - **Download all submissions** — download each repository's latest submission
   bundled into a single zip (built in the browser, one repository at a time;
-  for very large classes prefer `gh teacher download`, which clones every repo
+  for very large classrooms prefer `gh teacher download`, which clones every repository
   and writes a `scores.csv` — see the
   [CLI Teacher Guide](CLI-Teacher-Guide#10-download-submissions)).
 
 ### Download scores
 
 Click **Download scores (CSV)** to export all submissions as a CSV for a
-spreadsheet or external tool.
+spreadsheet or external tool. The column-by-column reference is in
+[Score exports](Autograders#score-exports) in Autograders.
 
 ## Edit assignments and classrooms
 

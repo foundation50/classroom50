@@ -24,7 +24,7 @@ Use it as a web app at [classroom50.org](https://classroom50.org/) or as the
 Classroom 50 has no server or database of its own. The web app is a static site
 hosted on GitHub Pages and the CLI runs on your machine; the app keeps only a
 small amount of local state in your browser (your GitHub access token and
-interface preferences). Your classrooms, roster, assignments, and grades are not
+interface preferences). Your classrooms, roster, assignments, and scores are not
 kept in a Classroom 50 account; they are stored in GitHub, as organization and
 team membership, repositories, commit history, permissions, and a few config
 files in your organization.

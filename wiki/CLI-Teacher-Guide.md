@@ -72,9 +72,10 @@ gh teacher init <org>
 ```
 
 `init` is **idempotent** — re-running picks up where a prior run left off. It
-also offers to refresh skeleton files when the CLI ships newer versions (this is
-how an existing organization gains new features); it asks before overwriting, so
-your edits are safe. Use `--yes` to skip the prompt in scripts.
+also offers to refresh the **skeleton files** — the workflow and script files
+Classroom 50 commits to the config repository — when the CLI ships newer versions
+(this is how an existing organization gains new features); it asks before
+overwriting, so your edits are safe. Use `--yes` to skip the prompt in scripts.
 
 **Useful flags:**
 
@@ -358,7 +359,7 @@ shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--max-group-size <N>` | Max collaborators on a group repo (2–100). Advisory, not hard-enforced. |
 | `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.14. See [Autograders](Autograders). |
 | `--autograder <name>` | Reserved for swapping the whole reusable workflow (rare). Use `--runtime` for language toolchains. |
-| `--submission-mode every-push\|tag` | When the autograder fires. `every-push` (default) grades every push; `tag` grades only on explicit submits (`gh student submit`, or a hand-pushed `submit/*` tag) — regular pushes cost no Actions minutes, the cost lever for large classes. |
+| `--submission-mode every-push\|tag` | When the autograder fires. `every-push` (default) grades every push; `tag` grades only on explicit submits (`gh student submit`, or a hand-pushed `submit/*` tag) — regular pushes cost no Actions minutes, the cost lever for large classrooms. |
 | `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading — e.g. `--submission-tag phase1 --submission-tag phase2`. Students grade a milestone with plain git: `git tag phase1 && git push origin phase1`. Works with either mode; the graded record still appears as a `submit/*` release. |
 
 > [!NOTE]
@@ -422,7 +423,7 @@ gh teacher member list <org>/<repo>  # repo collaborators
 Every submission publishes a GitHub Release carrying a `result.json`. The
 `collect-scores` workflow walks each `(member, assignment)` pair in scope,
 collects each repo's submissions, and aggregates them into
-`<classroom>/scores.json` — the class's authoritative gradebook. By default the
+`<classroom>/scores.json` — the classroom's authoritative gradebook. By default the
 scope is every classroom and every assignment; you can narrow it to one
 classroom, or to a single assignment (see below). Members are the union of the
 student team and the staff teams (teacher/hta/ta), so a staff member who
@@ -483,7 +484,9 @@ the `schedule:` block in `.github/workflows/collect-scores.yaml`.
 **Group assignments** are graded once, in the founder's repo. Collection reads
 that repo's collaborators, keeps those on the classroom team, and credits each
 with the same score. See [Autograders](Autograders#group-attribution-model) for
-the full attribution model.
+the full attribution model — and
+[Reading results](Autograders#reading-results) in Autograders for where every
+result lives, per-test breakdowns, and past attempts.
 
 ## 10. Download submissions
 
@@ -503,7 +506,9 @@ for each one probes for the expected repo, clones it (or reports `Missing:
 It then writes a `scores.csv` at the destination root, **one line per
 submission** (a student with several pushes contributes several lines), plus a
 blank-score line for each non-submitter, so you can sort by
-score to see who hasn't submitted.
+score to see who hasn't submitted. The column-by-column reference for
+`scores.csv` (and the per-repository `result.json` / `results.json` files) is in
+[Score exports](Autograders#score-exports) in Autograders.
 
 Each run creates a fresh timestamped folder. Override the destination with `-d`:
 
