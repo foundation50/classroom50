@@ -9,22 +9,22 @@ page and export as CSV.**
 
 The whole pipeline, end to end:
 
-1. **You describe the grading** on the assignment — usually
+1. You define tests on the assignment — usually
    [declarative tests](#declarative-tests) (input/output checks, run commands,
    or pytest), written in the web form or with `gh teacher assignment test add`.
-2. **A student submits** — by pushing to their repository, or explicitly with
+2. A student submits by pushing to their repository, or explicitly with
    `gh student submit`, depending on the assignment's
    [submission type](#which-commits-grade).
-3. **GitHub Actions grades the submission** in the student's own repository:
+3. GitHub Actions grades the submission in the student's own repository:
    a small workflow calls the shared **autograde runner**, which fetches your
    grading config and runs the tests against the submitted commit.
-4. **The result is published on the student's repository** as a GitHub
+4. The runner publishes the result on the student's repository as a GitHub
    **Release** on a `submit/<UTC-timestamp>-<short-sha>` tag — the score, a
    per-test PASS/FAIL table, and a machine-readable `result.json`. The graded
    commit also gets a `classroom50/autograde` commit status, and the student's
    **View grade** link opens the Release.
-5. **Scores are collected into the gradebook** (`scores.json` in your config
-   repository) by the **score-collection** workflow — nightly, or on demand with
+5. The **score-collection** workflow collects scores into the gradebook
+   (`scores.json` in your config repository) — nightly, or on demand with
    **Sync now** on the submissions page. That's what the web app's submissions
    page and both CSV exports read. See [Reading results](#reading-results).
 
@@ -803,17 +803,17 @@ assignment add` (`--feedback-pr=false` to disable). When on, there is
 **one long-lived "Feedback" pull request per student repository** so you review
 cumulative work with inline comments alongside the scored Release.
 
-- **Base = a frozen branch.** Accept creates a `feedback` branch at the
-  student's baseline commit (the accept commit) and never advances it. The PR is
-  `base = feedback`, `head = default branch`, so it always shows the full
-  starter→latest diff.
-- **Opens at accept**, so it is there before the first submission and exists even
+- **Frozen base branch.** Accept creates a `feedback` branch at the
+  student's baseline commit (the accept commit) and never advances it. The PR's
+  base is `feedback` and its head is the default branch, so it always shows the
+  full starter→latest diff.
+- **Opened at accept.** The PR is there before the first submission and exists even
   when GitHub Actions is disabled for student repositories. The diff still starts at the
   baseline, so the setup files never appear in it.
 - **One PR, reused** across submissions, labeled **Individual Assignment** or
   **Group Assignment**. A student closing it reopens it; a teacher merge is left
   alone.
-- **The body** is Classroom 50's built-in "here is where your teacher leaves
+- **Default body.** The PR opens with Classroom 50's built-in "here is where your teacher leaves
   feedback" text by default. Set `feedback_pr_template: true` (or check the box
   on the web form) to use the template repository's own pull request template as
   the body instead. Accept reads the first existing of
@@ -822,7 +822,8 @@ cumulative work with inline comments alongside the scored Release.
   requires a template and the Feedback PR itself. The read is best-effort: a
   missing, empty, oversized, or unreadable file falls back to the built-in body
   and never blocks the PR. Keeping the template's contents correct is up to you.
-- **The runner adopts it** by base+head and maintains it from then on. If accept
+- **Maintained by the runner.** The runner adopts the PR by base and head and
+  maintains it from then on. If accept
   could not open it (a permissions oddity, or a repository accepted before this
   feature), the runner opens it on the first submission instead, and
   re-accepting also retries, which is the only route with GitHub Actions off. On that
