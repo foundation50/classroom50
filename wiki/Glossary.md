@@ -57,7 +57,8 @@ the shared repository and invite the other teammates as collaborators.
 **Template repository** — A GitHub repository, flagged as a template, that
 supplies an assignment's **starter code**. Each student who accepts gets a copy.
 Assignments can also be template-less, in which case a student's repository
-contains only the autograder setup.
+starts with a README and the autograding setup instead of starter code (see
+[Repository shapes](Assignment-Templates#repository-shapes) for variations).
 
 **Due date** — An optional date and time for an assignment. Submissions after
 it are marked *late*; nothing is blocked, unlike GitHub Classroom's cutoff
@@ -96,8 +97,8 @@ cleared. Used for manual grading and for overriding an autograded result
 ## Access and setup
 
 **Service token** — A fine-grained personal access token (PAT) stored as a
-secret in the `classroom50` repository. The score-collection and regrade
-workflows use it to read and update student repositories.
+secret in the `classroom50` repository. The score-collection, regrade, and
+token-probe workflows use it to read and update student repositories.
 
 **Workflow files** — The GitHub Actions files Classroom 50 places in the
 `classroom50` repository and in each assignment repository (such as

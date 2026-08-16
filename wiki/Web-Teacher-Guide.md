@@ -36,8 +36,8 @@ At [classroom50.org](https://classroom50.org), sign in with GitHub using
 [OAuth 2](https://oauth.net/2/). Two options:
 
 - **Sign in with GitHub** — the standard browser flow.
-- **Use a device code** — a manual fallback. Paste a code into a GitHub page,
-  and Classroom 50 detects when you've authorized it.
+- **Use a device code instead** — a manual fallback. Paste a code into a
+  GitHub page, and Classroom 50 detects when you've authorized it.
 
 When authorizing, grant access to any organization you'll use with Classroom 50.
 If you don't own the organization, you may need to request access and have an
@@ -51,13 +51,13 @@ belong to is missing later, see
 
 ![Organizations view](images/web_organizations.png)
 
-After signing in, you'll see the organizations you can use. Each shows a status:
+After signing in, you'll see the organizations you can use:
 
-| Status | Meaning |
-| --- | --- |
-| **Ready** | Set up and ready. Use **Open**. |
-| **Needs service token** | Set up, but a service token is still required before score collection works. |
-| **Uninitialized** | Not set up yet. Appears under "Set up new organization". |
+- An organization that's set up shows an **Open** button. A token chip appears
+  when the service token needs attention (for example **No service token** or
+  **Token expired**) because score collection needs a valid token.
+- Organizations that aren't set up yet appear under **Set up new
+  organization**, each with a **Set up** button.
 
 Don't see your organization? GitHub only reports organizations you've granted
 Classroom 50 access to — see
@@ -76,8 +76,9 @@ When step 1 is complete, continue to step 2 to add your service token.
 ### Add a service token
 
 The **service token** is a fine-grained personal access token (PAT) scoped to
-your organization, used by the score-collection and regrade workflows to read
-student repositories (and push regrade tags) across the org. The form and the
+your organization, used by the score-collection, regrade, and token-probe
+workflows to read student repositories (and push regrade tags) across the org.
+The form and the
 pre-filled GitHub page set up the required permissions for you; the full
 permission table is in
 [GitHub Integration](GitHub-Integration#4-fine-grained-pat-for-score-collection).
@@ -317,9 +318,9 @@ When you're done, click **Create assignment**.
 
 Students must be on the classroom roster before they can accept assignments.
 
-![Students page, empty](images/web_students_none.png)
+![Roster page, empty](images/web_students_none.png)
 
-On a classroom's **Students** page, add students and see who has joined and who
+On a classroom's **Roster** page, add students and see who has joined and who
 has a pending invitation. Adding a student sends them an invitation to join your
 GitHub organization.
 
@@ -331,7 +332,7 @@ GitHub organization.
 optional). You can enter an email instead of a username; that student then
 completes a separate onboarding process (see below).
 
-**Upload roster** — bulk-add students from a file. The upload accepts three
+**Upload** — bulk-add students from a file. The upload accepts three
 formats and auto-detects which one you uploaded (you can override the guess):
 
 - **A username list**: one GitHub username per line, no header. Simplest when
@@ -400,7 +401,7 @@ octofez
 > for the bulk action). See
 > [Already an org member, but not on the roster](Troubleshooting#already-an-org-member-but-not-on-the-roster).
 
-**Enrolled students** — the students already in this classroom. Classroom 50
+**The roster list** — everyone already in this classroom. Classroom 50
 gives you two shareable links: one to accept the organization invite, and one to
 onboard students added by email. Below the links, each student's status shows
 whether they've joined the organization.

@@ -47,8 +47,8 @@ func NewCmd() *cobra.Command {
 			"— and thus which reusable runner — handles submissions for this\n" +
 			"assignment. Per-assignment grading lives separately at\n" +
 			"`<classroom>/autograders/<slug>/autograder.py` (entrypoint),\n" +
-			"with optional sibling fixtures alongside (see the Autograders\n" +
-			"wiki page).",
+			"with optional sibling fixtures alongside (see the\n" +
+			"Advanced-Autograding wiki page).",
 	}
 	cmd.AddCommand(assignmentAddCmd())
 	cmd.AddCommand(assignmentReuseCmd())
@@ -122,7 +122,7 @@ func assignmentAddCmd() *cobra.Command {
 			"Pass `-` to read the JSON from stdin instead of a file\n" +
 			"(one-shot agent flows).\n" +
 			"Omit for the defaults (ubuntu-latest + Python 3.14).\n" +
-			"See the Autograders wiki page for the JSON schema and\n" +
+			"See the Advanced-Autograding wiki page for the JSON schema and\n" +
 			"worked examples.\n\n" +
 			"--autograder is reserved for the rare case where you need to\n" +
 			"call a *different reusable workflow* entirely (not just\n" +
@@ -141,8 +141,8 @@ func assignmentAddCmd() *cobra.Command {
 			"exclusive with --tests). (3) A classroom default: run\n" +
 			"`gh teacher autograder set-default <org> <classroom>` to install\n" +
 			"<classroom>/autograder.py for every assignment. See the\n" +
-			"Autograders wiki page for the result.json contract and\n" +
-			"templates (pytest, check50, custom).",
+			"Advanced-Autograding wiki page for the result.json contract and\n" +
+			"templates (pytest, custom).",
 		Example: "  gh teacher assignment add cs50-fall-2026 cs-principles hello \\\n" +
 			"      --name \"Hello\" --template cs50/hello-template \\\n" +
 			"      --due 2026-09-15T23:59:00-04:00\n" +
@@ -293,7 +293,7 @@ func assignmentAddCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", `Display name written into the assignment entry (e.g., "Hello") (required)`)
-	cmd.Flags().StringVar(&template, "template", "", "Optional template repo as <owner>/<repo> or <owner>/<repo>@<branch>. Omit for a template-less assignment (students get an empty repo with just the autograder shim).")
+	cmd.Flags().StringVar(&template, "template", "", "Optional template repo as <owner>/<repo> or <owner>/<repo>@<branch>. Omit for a template-less assignment (students get an initialized repo: a README plus the autograding setup).")
 	cmd.Flags().StringVar(&description, "description", "", "Optional one-line description")
 	cmd.Flags().StringVar(&due, "due", "", "Optional due date (e.g., 2026-09-15T23:59:00-04:00); stored as UTC. Omit the offset to use the machine's local timezone")
 	cmd.Flags().StringVar(&availableFrom, "available-from", "", "Optional release date (e.g., 2026-09-15T00:00:00-04:00); stored as UTC. Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Students who already accepted always see it (listing-only, not access control). Omit the offset to use the machine's local timezone.")
@@ -306,7 +306,7 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&emptyRepo, "empty-repo", false, "Create truly bare student repos: no README/initial commit, no .classroom50.yaml marker, no autograde workflow — for assignments where students build the repo (including their own GitHub Actions) from scratch. Autograding and the Feedback PR are disabled. Changing this on a same-slug re-add applies only to accepts from now on (repositories students already accepted are not retrofitted; a warning is printed). Mutually exclusive with --template, --tests, --feedback-pr, --allowed-files, --pass-threshold, --submission-mode, and --submission-tag.")
 	cmd.Flags().StringArrayVar(&allowedFiles, "allowed-files", nil, "Ordered .gitignore-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. Pass `--allowed-files '*' --allowed-files '!hello.py'` to allow only hello.py. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file.")
 	cmd.Flags().IntVar(&passThreshold, "pass-threshold", 0, "Opt-in passing bar as a percentage of max score (0–100): at/above it the submissions page shows a submission as passing. Advisory/display-only — it does not change a student's score. Omit to leave it off (no passing concept); pass --pass-threshold 0 for an explicit 0%.")
-	cmd.Flags().StringVar(&studentPerm, "student-permission", "", "Optional collaborator role each student gets on their OWN assignment repo at accept time: one of pull, triage, push, maintain, admin. Omit for the default (push for individual, admin for group). Choose admin to let students manage repo settings and enable GitHub Pages. Applies to students who accept from now on; existing repos are unchanged. Caution: admin on a private repo also lets the student change its visibility.")
+	cmd.Flags().StringVar(&studentPerm, "student-permission", "", "Optional collaborator role each student gets on their OWN assignment repo at accept time: one of pull, triage, push, maintain, admin. Omit for the default (push for individual, admin for group). Choose admin to let students manage repo settings and enable GitHub Pages. Applies to students who accept from now on; existing repos are unchanged. Caution: admin lets the student manage the repo's settings and collaborators; the org lockdown from `gh teacher init` still blocks members from changing repo visibility (verify with `gh teacher audit`).")
 	cmd.Flags().StringVar(&submissionMd, "submission-mode", contract.SubmissionModeEveryPush, "When the autograder fires: `every-push` (default; every push to the default branch grades) or `tag` (only submit/* tag pushes grade — `gh student submit` pushes the tag, or push any submit/* tag by hand; plain `git push` costs no Actions minutes). Baked into each student repo's shim at accept time; change it later with `gh teacher assignment submission-mode`, which also retrofits existing repos. Mutually exclusive with --empty-repo.")
 	cmd.Flags().StringArrayVar(&submissionTags, "submission-tag", nil, "Milestone tag pattern (repeatable) that ALSO triggers grading — e.g. --submission-tag phase1 --submission-tag phase2, or a glob like 'v*'. A student pushing a matching tag (`git tag phase1 && git push origin phase1`) gets that commit graded; the grading record still lives at the canonical submit/* tag the runner mints, so history and collection are unchanged. The canonical submit/* namespace always triggers too. Baked into the shim at accept time like --submission-mode (same retrofit to change later). Caution: a broad glob like 'v*' grades every matching tag a student pushes. Mutually exclusive with --empty-repo.")
 	return cmd

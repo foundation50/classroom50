@@ -7,7 +7,7 @@ autograder.py > per-assignment tests.json > classroom-default autograder.py
 > vacuous pass), execs it in the student checkout, then reads/synthesizes
 result.json + release-body.md + $GITHUB_OUTPUT so downstream steps always
 have a v1-shaped payload. Per-assignment grading lives in autograder.py —
-see the Autograders wiki page.
+see the Advanced-Autograding wiki page.
 
 Exits 0 for EVERY grading outcome, including failures (reported via a
 synthetic error result + status=error) so the release/commit-status steps
@@ -1485,7 +1485,7 @@ class Finalizer:
 # the Pages bundle — never interpolated into workflow YAML — and students can't
 # edit assignments.json. The interpreter re-validates spec shape because the
 # file is hand-editable. Write-time validator: tests.go; trust-boundary
-# rationale: the Autograders wiki page.
+# rationale: the Advanced-Autograding wiki page.
 
 
 class TestsConfigError(Exception):

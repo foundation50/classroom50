@@ -38,6 +38,9 @@ const MetadataPath = contract.MetadataPath
 // written at accept time.
 const AutogradeWorkflowPath = ".github/workflows/autograde.yaml"
 
+// SeededReadmePath is the README GitHub's auto_init seeds at repo creation.
+const SeededReadmePath = "README.md"
+
 // SchemaRepoConfigV1 is the versioned sentinel stamped into `.classroom50.yaml`
 // at accept time. Readers treat it as optional — pre-v1 files predate it — but
 // new accepts always write it so future shape changes are detectable. Mirrors
@@ -98,14 +101,15 @@ func Render(cfg Config) ([]byte, error) {
 }
 
 // DropFiles commits `.classroom50.yaml` + the autograde workflow in one Tree
-// commit so the repo's initial shape lands atomically, returning the accept
+// commit so the repo's initial shape lands atomically (removing the auto_init
+// README in the same commit for an init_shim accept), returning the accept
 // commit's SHA (the Feedback-PR baseline the `feedback` branch freezes at).
 // Creating `.classroom50.yaml` here is what the runner uses to resolve that
 // same baseline (see MetadataPath). The commit message is human-readable only.
 // WaitForStableBranch polls first because GitHub doesn't propagate the
 // post-templated-repo commit ref synchronously (the contents API briefly
 // returns 409 "Git Repository is empty" otherwise).
-func DropFiles(client githubapi.Client, owner, repo, branch string, cfg Config, workflowContent string) (string, error) {
+func DropFiles(client githubapi.Client, owner, repo, branch string, cfg Config, workflowContent string, removeSeededReadme bool) (string, error) {
 	if err := WaitForStableBranch(client, owner, repo, branch); err != nil {
 		return "", err
 	}
@@ -125,9 +129,25 @@ func DropFiles(client githubapi.Client, owner, repo, branch string, cfg Config, 
 	if workflowContent != "" {
 		files[AutogradeWorkflowPath] = workflowContent
 	}
+	// An init_shim accept creates the repo with auto_init (GitHub needs an
+	// initial commit to write against), which seeds a README the assignment
+	// contract says must not exist — remove it in the same accept commit so
+	// the repo's initial shape lands atomically. Probe first: the Trees API
+	// rejects deleting a path absent from base_tree (possible on a heal
+	// re-run), and an absent README just means nothing to remove.
+	var deletePaths []string
+	if removeSeededReadme {
+		exists, err := FileExists(client, owner, repo, SeededReadmePath)
+		if err != nil {
+			return "", err
+		}
+		if exists {
+			deletePaths = append(deletePaths, SeededReadmePath)
+		}
+	}
 	return CommitFiles(client, owner, repo, branch,
 		contract.PrefixCommit("Initialize .classroom50.yaml and autograde workflow (gh student accept)"),
-		files)
+		files, deletePaths...)
 }
 
 // WaitForStableBranch polls until a freshly-created branch's ref
@@ -194,6 +214,21 @@ func quoteStringValues(n *yaml.Node) {
 // wrapper over the shared ghutil helper.
 func IsHTTPNotFound(err error) bool {
 	return ghutil.IsHTTPNotFound(err)
+}
+
+// FileExists reports whether `path` is readable on owner/repo's default branch
+// via the contents API. 404 → false; other errors propagate so a transient
+// failure isn't misread as "missing".
+func FileExists(client githubapi.Client, owner, repo, path string) (bool, error) {
+	apiPath := fmt.Sprintf("repos/%s/%s/contents/%s",
+		url.PathEscape(owner), url.PathEscape(repo), EscapeContentPath(path))
+	if err := client.Get(apiPath, nil); err != nil {
+		if IsHTTPNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("GET %s: %w", apiPath, err)
+	}
+	return true, nil
 }
 
 // ReadConfig reads and validates a `.classroom50.yaml` at path. The

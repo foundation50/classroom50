@@ -60,8 +60,9 @@ for how to choose.
 ### Can a classroom have multiple teachers or TAs?
 
 Yes. Classroom 50 has four roles: **teacher** (organization owner, full
-control), **head TA** (config-repo write, not an owner), **TA** (config-repo
-read-only), and **student**. Manage staff in the web app under a classroom's
+control), **head TA** (write access to the `classroom50` repository, not an
+owner), **TA** (read-only access to the `classroom50` repository), and
+**student**. Manage staff in the web app under a classroom's
 **Settings → Staff and roles**, or with `gh teacher staff add`. See the
 [Glossary](Glossary#roles) for what each role can do.
 
@@ -341,7 +342,8 @@ CLI instead; the one documented exception is a `scores.json` score override
 ### What is the service token, and is it the same one the web app set up?
 
 The **service token** is a fine-grained personal access token stored as a secret
-in your `classroom50` repository; the score-collection and regrade workflows use it. It's the
+in your `classroom50` repository; the score-collection, regrade, and token-probe
+workflows use it. It's the
 **same** token whether you set it up through the web app or the CLI — you only
 need one per organization. See
 [the service-token setup](CLI-Teacher-Guide#create-the-service-token).
@@ -349,7 +351,7 @@ need one per organization. See
 ## Roadmap
 
 Some capabilities from GitHub Classroom aren't available today, including
-**LTI / LMS grade passback**, in-app **grade visibility for students**, and
+**LTI / LMS grade passback**, in-app **score visibility for students**, and
 **roster self-selection**. See
 [Requested, but architecturally hard](Known-Limitations#requested-but-architecturally-hard)
 in Known limitations for why, and share your use case in

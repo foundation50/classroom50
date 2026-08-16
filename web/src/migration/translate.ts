@@ -153,9 +153,9 @@ function normalizeOffset(raw: string): string {
 // Map a source assignment + resolved target template into an on-disk Assignment
 // entry with migrated_from provenance. `targetTemplate` is the post-copy repo,
 // or null for a template-less import (the entry omits `template`, and students
-// get an empty repo with just the autograde shim on accept). The original
-// source starter lives in migrated_from.starter_repo. Throws on an invalid
-// slug/mode (the caller skips those before generating any repo).
+// get a README-initialized repo with the autograding files on accept). The
+// original source starter lives in migrated_from.starter_repo. Throws on an
+// invalid slug/mode (the caller skips those before generating any repo).
 export function assignmentToEntry(
   detail: ClassroomAssignmentDetail,
   classroomId: number,
@@ -202,7 +202,8 @@ export function assignmentToEntry(
   // mirrors the Go CLI migrate, which likewise never enables it. We still write
   // an explicit `false` when the source disabled it, to record the source's
   // intent in the entry; the enabled/absent cases both read OFF, so they're left
-  // unwritten. A template-less/empty assignment can't have a feedback PR either.
+  // unwritten. Migration never enables it for a template-less import either —
+  // the teacher opts in from the assignment editor.
   if (targetTemplate && detail.feedback_pull_requests_enabled === false) {
     entry.feedback_pr = false
   }

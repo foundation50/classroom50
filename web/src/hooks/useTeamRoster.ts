@@ -70,7 +70,7 @@ export type UseTeamRosterResult = {
   // the staff team) rather than assuming everyone is on the student team.
   teamSlugByRole: Record<ClassroomRole, string>
   // Count of team members with no roster.csv row — the exact set "Sync roster"
-  // appends. 0 = in sync (button disabled, "In sync"); >0 = drift the teacher
+  // appends. 0 = in sync (the sync button is hidden); >0 = mismatch the teacher
   // can sync (auto-synced on open).
   csvMissingCount: number
   // Lowercased logins of team members with no roster.csv row — used to skip a

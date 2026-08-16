@@ -5,7 +5,7 @@ This guide walks you through using Classroom 50's web app at
 terminal? See the [CLI Student Guide](CLI-Student-Guide).
 
 **The path:** join your classroom's organization → sign in → accept an
-assignment → do the work and submit → view your grade.
+assignment → do the work and submit → view your score.
 
 > [!TIP]
 > Have feedback, a bug, or an idea? Reach out in our
@@ -31,8 +31,8 @@ At [classroom50.org](https://classroom50.org), sign in with GitHub using
 [OAuth 2](https://oauth.net/2/). Two options:
 
 - **Sign in with GitHub** — the standard browser flow.
-- **Use a device code** — a manual fallback. Paste a code into a GitHub page,
-  and Classroom 50 detects when you've authorized it.
+- **Use a device code instead** — a manual fallback. Paste a code into a
+  GitHub page, and Classroom 50 detects when you've authorized it.
 
 ![Classroom 50 login flow](images/web_login_flow_student.png)
 

@@ -16,7 +16,7 @@ wires up correctly), writes a vacuous-pass `result.json` +
 To replace this stub with real grading logic, run:
   gh teacher autograder set-default <org> <classroom> --from <path>
 
-Contract (see Autograders wiki page for full details):
+Contract (see the Advanced-Autograding wiki page for full details):
   Reads env: CLASSROOM, ASSIGNMENT, ASSIGNMENT_TYPE, USERNAME, OWNER,
              SUBMISSION_TAG, COMMIT_URL, RELEASE_URL, REVIEW_URL,
              PAGES_BASE_URL, GITHUB_*

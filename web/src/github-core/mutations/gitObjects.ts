@@ -168,12 +168,21 @@ type GitHubTree = {
   sha: string
 }
 
-type GitHubTreeEntry = {
+type GitHubTreeUpsertEntry = {
   path: string
   mode: "100644"
   type: "blob"
   content: string
 }
+// `sha: null` is the Trees API's "remove this path from base_tree". Mirrors
+// the CLI's gittree.DeletionEntries.
+type GitHubTreeDeleteEntry = {
+  path: string
+  mode: "100644"
+  type: "blob"
+  sha: null
+}
+type GitHubTreeEntry = GitHubTreeUpsertEntry | GitHubTreeDeleteEntry
 export function createTreeForAssignment(params: {
   client: GitHubClient
   owner: string
@@ -181,9 +190,19 @@ export function createTreeForAssignment(params: {
   baseTreeSha: string
   metadataYaml: string
   autogradeYaml: string
+  // Paths to remove from base_tree in the same commit (the init_shim accept
+  // deletes the auto_init README this way).
+  deletePaths?: string[]
 }) {
-  const { client, owner, repo, baseTreeSha, metadataYaml, autogradeYaml } =
-    params
+  const {
+    client,
+    owner,
+    repo,
+    baseTreeSha,
+    metadataYaml,
+    autogradeYaml,
+    deletePaths = [],
+  } = params
 
   const tree: GitHubTreeEntry[] = [
     {
@@ -204,6 +223,9 @@ export function createTreeForAssignment(params: {
       type: "blob",
       content: autogradeYaml,
     })
+  }
+  for (const path of deletePaths) {
+    tree.push({ path, mode: "100644", type: "blob", sha: null })
   }
 
   return client.request<GitHubTree>(`/repos/${owner}/${repo}/git/trees`, {

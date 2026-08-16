@@ -277,7 +277,7 @@
       "branchLabel": "Branch",
       "visibilityLabel": "Visibility",
       "noSource": "No source repository",
-      "emptyRepo": "Empty repo (autograde shim only)",
+      "emptyRepo": "New repo (README + autograding files)",
       "none": "None",
       "yes": "Enabled",
       "no": "Disabled",
@@ -1150,7 +1150,7 @@
       "addReadme": {
         "label": "Add a README",
         "helpOn": "Start each repository with a README.md. This first commit is what lets branches, pull requests, and the Feedback PR work.",
-        "helpOff": "Start with an empty repository. Autograding and the Feedback PR stay unavailable until the student's first commit."
+        "helpOff": "Start without a README. With the built-in autograder on, repositories still begin with the autograding files and grade normally. With it off, repositories are completely bare, and autograding and the Feedback PR are permanently unavailable."
       },
       "includeAllBranches": {
         "label": "Include all branches",
@@ -1458,7 +1458,7 @@
     "template": {
       "label": "Template repository",
       "placeholder": "<owner>/<repo>",
-      "help": "Optional. Students receive a copy of this repository. Leave blank for an empty repo with just the autograder.",
+      "help": "Optional. Students receive a copy of this repository. Leave blank for a template-less assignment: students get an initialized repository with a README and the autograding files.",
       "checking": "Checking template access…",
       "fallbackOrg": "your org",
       "privateHasAccess": "Private template in {{owner}} (branch <branch>{{branch}}</branch>). The classroom team already has read access — students can copy it.",
@@ -2630,8 +2630,8 @@
       "subtitle_other": "Applies to {{count}} students who have accepted this assignment.",
       "noRepos": "No students have accepted this assignment yet, so there are no repositories to change.",
       "roleLabel": "Repository role",
-      "warning_one": "This sets {{count}} student's role on their own repository to {{level}}. Admin lets them change repository settings and, on a private repo, its visibility. Existing collaborators are not otherwise affected.",
-      "warning_other": "This sets {{count}} students' roles on their own repositories to {{level}}. Admin lets them change repository settings and, on a private repo, its visibility. Existing collaborators are not otherwise affected.",
+      "warning_one": "This sets {{count}} student's role on their own repository to {{level}}. Admin lets them change repository settings and manage collaborators; the organization safety defaults still block members from changing a repository's visibility. Existing collaborators are not otherwise affected.",
+      "warning_other": "This sets {{count}} students' roles on their own repositories to {{level}}. Admin lets them change repository settings and manage collaborators; the organization safety defaults still block members from changing a repository's visibility. Existing collaborators are not otherwise affected.",
       "apply": "Apply to all",
       "working": "Updating repositories",
       "progress": "Updated {{processed}} of {{total}}",
@@ -2989,7 +2989,7 @@
     "inviting": "Inviting...",
     "inviteToOrg": "Invite to organization",
     "confirmInviteBody": "Send an organization invitation to {{label}}? The invite is sent to their GitHub account by id and they'll rejoin {{org}} with their prior classroom access once they accept.",
-    "notMemberNoId": "This student is on a roster but is not an organization member. They have no GitHub id on file yet, so invite them from their classroom's Students page.",
+    "notMemberNoId": "This student is on a roster but is not an organization member. They have no GitHub id on file yet, so invite them from their classroom's Roster page.",
     "confirmUnenroll_one": "{{label}} will first be unenrolled from <count>{{count}} classroom</count> ({{classrooms}}), then removed from the <org>{{org}}</org> organization. Their assignment repositories are not deleted.",
     "confirmUnenroll_other": "{{label}} will first be unenrolled from <count>{{count}} classrooms</count> ({{classrooms}}), then removed from the <org>{{org}}</org> organization. Their assignment repositories are not deleted.",
     "confirmRemove": "{{label}} will be removed from the <org>{{org}}</org> organization.",
@@ -3145,7 +3145,7 @@
         "loading": "Loading collaborators",
         "saved": "Access updated!",
         "needsAdmin": "You need admin access on this repository to change its collaborators.",
-        "adminWarning": "Set each collaborator's role, or add and remove collaborators. <b>Admin</b> lets a collaborator change repository settings and, on a private repo, its visibility.",
+        "adminWarning": "Set each collaborator's role, or add and remove collaborators. <b>Admin</b> lets a collaborator change repository settings and manage collaborators; the organization safety defaults still block members from changing a repository's visibility.",
         "studentBadge": "Student",
         "notApplied": "GitHub kept the existing role ({{effective}}) — a repo creator can't be downgraded below admin. Ask the student to lower their own access, or transfer repo ownership.",
         "roleFor": "Role for {{username}}",

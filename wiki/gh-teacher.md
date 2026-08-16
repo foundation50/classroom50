@@ -34,6 +34,8 @@ output, or `--verbose` / `-v` for per-step detail.
 | `assignment remove <org> <classroom> <slug>` | Remove an assignment entry. |
 | `assignment list <org> <classroom>` | List assignment slugs. Flags: `--json`, `-q`. |
 | `assignment submission-mode <org> <classroom> <slug> --tag\|--every-push` | Change when the autograder fires and retrofit existing repos' shims. |
+| `assignment lock <org> <classroom> <slug>` | Lock (or `--unlock`) an assignment against student access. |
+| `assignment feedback-pr <org> <classroom> <assignment>` | Open or repair the Feedback PR on every student repo. Flags: `--user`, `-q`. |
 | `assignment test add/list/remove` | Manage an assignment's declarative tests. |
 | `autograder set-default <org> <classroom>` | Install/replace the classroom default `autograder.py`. |
 | `autograder show/list/remove <org> <classroom>` | Inspect or delete autograders. |
@@ -69,15 +71,24 @@ stale workflow files (after a confirmation prompt).
    private-repo creation enabled so `gh student accept` works. On a plan-gated
    rejection it retries per policy and warns per field.
 3. **Enable org Actions** — turns Actions on if it's off org-wide.
-4. **Create or fetch the `classroom50` repository** — private, with `auto_init`.
-5. **Commit or refresh workflow files** — commits the embedded workflows and
-   scripts; on re-runs, refreshes stale files after confirmation (`--yes` skips).
-6. **Enable Pages** — public, so students and the runner can fetch published
-   files unauthenticated.
-7. **Branch protection** — no force-push or deletion on the default branch.
-8. **Workflow permissions** — raises `GITHUB_TOKEN` to write.
-9. **Reusable-workflow access** — lets student shims call the runner workflow.
-10. **Service token** — validates and uploads `CLASSROOM50_SERVICE_TOKEN`.
+4. **Set the $0 Actions budget cap** — stops paid overage; applied only when
+   the org has no budget yet. Advisory.
+5. **Allow Actions to create pull requests** — org-wide, so the autograde
+   runner can open Feedback PRs.
+6. **Install branch rulesets** — two org-wide rulesets protecting submission
+   history and the frozen Feedback PR base. See
+   [How student repositories are protected](How-Classroom-50-Works#how-student-repositories-are-protected).
+7. **Create or fetch the `classroom50` repository** — private, with `auto_init`.
+8. **Enable repo-level Actions** — on the `classroom50` repository itself.
+9. **Commit or refresh workflow and script files** — commits the embedded
+   workflows and scripts; on re-runs, refreshes stale files after confirmation
+   (`--yes` skips).
+10. **Enable Pages** — public, so students and the runner can fetch published
+    files unauthenticated.
+11. **Branch protection** — no force-push or deletion on the default branch.
+12. **Workflow permissions** — raises `GITHUB_TOKEN` to write.
+13. **Reusable-workflow access** — lets student shims call the runner workflow.
+14. **Service token** — validates and uploads `CLASSROOM50_SERVICE_TOKEN`.
 
 </details>
 
@@ -97,9 +108,13 @@ in GitHub Integration.
 | `.github/workflows/collect-scores.yaml` | `workflow_dispatch` + nightly cron score collection. |
 | `.github/workflows/probe-token.yaml` | Read-only service-token health check. |
 | `.github/workflows/autograde-runner.yaml` | Reusable workflow called by every student repo. |
+| `.github/workflows/regrade.yaml` | Teacher-triggered regrade: re-runs each targeted repo's latest autograde run against the current autograder, without creating a new submission. |
 | `.github/scripts/runner.py` | Grading bootstrap fetched from Pages each submission. |
 | `.github/scripts/collect_scores.py` | Team-driven score collector. |
 | `.github/scripts/probe_token.py` | Service-token scope probe. |
+| `.github/scripts/ensure_feedback_pr.py` | Feedback PR maintainer run by the autograde runner. |
+| `.github/scripts/materialize_tests.py` | Writes each assignment's declarative `tests` block to a `tests.json` before publishing to Pages. |
+| `.github/scripts/regrade_repos.py` | Fan-out driver behind `regrade.yaml`. |
 | `README.md` | Describes the `classroom50` repository layout. |
 
 Both collection and regrade are **team-driven**: the classroom GitHub teams are
@@ -124,7 +139,7 @@ lockdown), **Action required** (changed outside Classroom 50, with the fix), or 
 (the four settings GitHub exposes no API to read). Exits non-zero when any
 API-readable field is unenforced, so `gh teacher audit <org> && …` is safe in
 scripts. `--json` emits `{org, plan, read_ok, lockdown_complete, enforced,
-unenforced, manual_unreadable, settings_url}`.
+unenforced, manual_unreadable, budget_cap, settings_url}`.
 
 ## `rotate-service-token`
 
@@ -394,9 +409,10 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 
 | Flag | Purpose |
 | --- | --- |
-| `--template <owner>/<repo>[@branch]` | Starter-code repo (must be flagged as a template). Omit for a template-less empty repo. Branch defaults to the template's default. |
+| `--template <owner>/<repo>[@branch]` | Starter-code repo (must be flagged as a template). Omit for a template-less assignment (an initialized repo: README plus the control files). Branch defaults to the template's default. |
 | `--description <text>` | Short description. |
-| `--due <ISO-8601>` | Due date; timezone required. Stored verbatim. |
+| `--due <ISO-8601>` | Due date, e.g. `2026-09-15T23:59:00-04:00`. Stored as UTC; the machine's local timezone is assumed if you omit the offset. |
+| `--available-from <ISO-8601>` | Release date; stored as UTC (local timezone assumed without an offset). Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Listing-only, not access control: students who already accepted always see it. |
 | `--mode individual\|group` | `individual` (default) or `group` (requires `--max-group-size`). |
 | `--max-group-size <N>` | Max group collaborators (2–100). Advisory. |
 | `--runtime <path>` | JSON runtime (`runs-on`, toolchains, `apt`, `container`). See [Advanced Autograding](Advanced-Autograding#the-runtime-block). |
@@ -404,6 +420,8 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--autograder <name>` | Swap the reusable workflow (rare). Default `default`. |
 | `--feedback-pr` | One review PR per student repo. **On by default**; `--feedback-pr=false` disables. |
 | `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; changeable on a same-slug re-add (warns; only affects future accepts); mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode/submission-tag/no-autograder/init-shim. |
+| `--allowed-files <pattern>` | Ordered `.gitignore`-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file. See [Advanced Autograding](Advanced-Autograding#restricting-submission-files-allowed_files). |
+| `--student-permission <role>` | Collaborator role each student gets on their **own** repo at accept: `pull`, `triage`, `push`, `maintain`, or `admin`. Omit for the default (`push` individual, `admin` group). Affects future accepts only. Caution: `admin` lets the student manage the repo's settings and collaborators; the org lockdown from `init` still blocks visibility changes. |
 | `--pass-threshold <0–100>` | Advisory passing bar shown on the submissions page. Off when omitted (distinct from `0`). |
 | `--submission-mode every-push\|tag` | When the autograder fires: `every-push` (default) grades every push; `tag` grades only `submit/*` tag pushes (the submit clients push the tag — plain `git push` costs no Actions minutes). Change it later with `assignment submission-mode`. |
 | `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading: `git tag phase1 && git push origin phase1` grades that commit. Simple globs (`v*`) work; exact names are safer. The record still lives at the canonical `submit/*` tag. Mutually exclusive with `--empty-repo`. |
@@ -533,6 +551,44 @@ Details that matter:
   (`gh auth refresh -s workflow` if you see a scope error).
 - **Tell students to `git pull` afterward** — clones made before the change
   conflict on their next push.
+
+### `assignment lock`
+
+```sh
+gh teacher assignment lock <org> <classroom> <slug>
+gh teacher assignment lock <org> <classroom> <slug> --unlock
+```
+
+Locks an assignment so students can no longer access it: the web accept page,
+the student assignments list, the submission view, and `gh student accept` all
+refuse a locked assignment for every student, including ones who already
+accepted. `--unlock` reverses it.
+
+Because `assignments.json` is published publicly to Pages, those client-side
+gates are best-effort. The enforceable boundary applies only to a **private,
+in-org template**: locking also removes the classroom student team's read on
+the template repo, so no new student can generate a repo from it while locked
+(unlocking re-grants it). Staff teams are never touched, and existing student
+repos are not deleted.
+
+### `assignment feedback-pr`
+
+```sh
+gh teacher assignment feedback-pr <org> <classroom> <assignment>
+gh teacher assignment feedback-pr --user alice <org> <classroom> <assignment>
+```
+
+Opens (or repairs) the [Feedback PR](Autograding-Basics#feedback-pull-requests)
+on every existing student repo for an assignment, retroactively and
+idempotently, for repos that predate the feature or missed the PR because of
+an outage. It re-runs the same ensure flow accept uses, so the runner adopts
+the PR and teachers never see two. Repos that already have a Feedback PR (in
+any state) are left as-is. Pass `--user` to target a single student, `-q` to
+suppress per-repo output. Requires owner/admin access to the org's repos.
+
+A student-precreated `feedback` branch frozen at the wrong commit is reported
+as **BLOCKED**: an org admin must delete that branch before the PR can open;
+re-running never fixes it.
 
 ### `assignment test`
 
