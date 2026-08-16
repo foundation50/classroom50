@@ -271,6 +271,11 @@ gh teacher invite -p maintain <org>/<repo> <username>   # other permissions
 `-p` accepts `pull`, `triage`, `push`, `maintain`, `admin`. Re-running updates
 the collaborator's permission in place.
 
+**Adding staff:** to give a TA or co-teacher a classroom role (not just org
+membership), use `gh teacher staff add <org> <classroom> <username> --role
+teacher|hta|ta`. For the roles and what each can see, see
+[Staff, TAs, and multiple teachers](Staff-TAs-and-Multiple-Teachers).
+
 ## 6. Track students in the roster
 
 Each classroom keeps a `roster.csv`. The CLI manages it — you rarely hand-edit

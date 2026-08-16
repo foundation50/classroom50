@@ -43,8 +43,8 @@ self-hosted Git platforms.
 
 ### Can one organization hold multiple classrooms?
 
-Yes. A **classroom** is a directory in your organization's `classroom50` config
-repo, and an organization can hold as many as you like, for example one per
+Yes. A **classroom** is a directory in your organization's `classroom50`
+repository, and an organization can hold as many as you like, for example one per
 course, section, or term. Add each with **Create classroom** in the web app or
 `gh teacher classroom add`.
 

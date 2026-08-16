@@ -73,6 +73,10 @@ read it:
 - **Scores** refresh only when collection runs: nightly, or on demand with
   **Sync now** / `collect-scores.yaml`.
 
+There is no separate force-sync command. Opening the classroom in the web app
+while signed in as an owner is the closest equivalent, and **Sync now** covers
+scores.
+
 ## Interactive vs. background work
 
 Work happens in one of two ways. Knowing which applies explains most questions
@@ -81,9 +85,10 @@ about why a change did or did not take effect:
 1. **Interactive actions** run as you, with your signed-in GitHub token, at the
    time you take them (create a classroom, add a student, accept an assignment).
    They are limited by your GitHub permissions and require you to be present.
-2. **Asynchronous actions** run in **GitHub Actions workflows** in your config
-   repo (publishing to Pages, collecting scores, regrading). They run in the
-   background, can take a minute or more, and depend on the
+2. **Asynchronous actions** run in **GitHub Actions workflows** in your
+   `classroom50` repository (publishing to Pages, collecting scores,
+   regrading). They run in the background, can take a minute or more, and
+   depend on the
    [service token](#the-service-token) rather than on you being online.
 
 So when a change "hasn't shown up yet," it's usually a background workflow still
@@ -116,6 +121,68 @@ invitations, and why the classroom's **team is the source of truth for who's
 enrolled** (not the `roster.csv`, which only carries display details like name
 and section).
 
+### From invitation to enrollment
+
+Enrollment is team membership, and the chain from invitation to enrollment has
+three steps:
+
+1. Creating a classroom creates its secret GitHub teams, including the student
+   team `classroom50-<classroom>`.
+2. Inviting a student through Classroom 50 sends a GitHub organization
+   invitation that carries the classroom team.
+3. When the student accepts, GitHub adds them to the organization **and** the
+   team in one step. Team membership makes them enrolled.
+
+Because the invitation carries the team, inviting a student directly on
+github.com bypasses enrollment: they become an organization member but never
+join the classroom team. Enroll them from the organization's Members page
+instead. See
+[Already an org member, but not on the roster](Troubleshooting#already-an-org-member-but-not-on-the-roster).
+
+### Who sees what
+
+The org lockdown (next section) means nobody sees anything they weren't
+explicitly granted. What each role can see:
+
+| | Teacher (owner) | Head TA | TA | Student |
+| --- | --- | --- | --- | --- |
+| `classroom50` repository (roster, scores, settings) | Read and write | Read and write | Read | No access |
+| Private assignment templates | All | Read | Read | Read (their classroom's) |
+| Student assignment repositories | All | Read, granted at each collection run | Read, granted at each collection run | Their own only (write) |
+| Other students' work | All | After a collection run | After a collection run | Never |
+| Pending organization invitations | Yes | No | No | No |
+
+```mermaid
+flowchart TB
+    subgraph org["Your GitHub organization (base permission: none)"]
+        c50["classroom50 repository"]
+        tpl["Private template"]
+        aliceRepo["alice's assignment repository"]
+        bobRepo["bob's assignment repository"]
+    end
+    teacher["Teacher (organization owner)"] -- "full access" --> org
+    hta["Head TA team"] -- "write" --> c50
+    ta["TA team"] -- "read" --> c50
+    ta -. "read, granted at collection" .-> aliceRepo
+    ta -. "read, granted at collection" .-> bobRepo
+    students["Classroom team (all students)"] -- "read" --> tpl
+    alice["alice"] -- "write" --> aliceRepo
+    bob["bob"] -- "write" --> bobRepo
+```
+
+Three consequences worth calling out:
+
+- **Students never see each other's work.** The "No permission" base grants
+  nothing by default, and nothing grants one student access to another's
+  repository.
+- **Students can read their classroom's private templates.** The whole
+  classroom team gets read access so accept can copy the template. Never
+  commit solutions to a template. See
+  [Known limitations](Known-Limitations).
+- **Only owners can read pending invitations.** A TA viewing the roster can't
+  see who has been invited but hasn't accepted yet, so an invited-but-pending
+  student may look missing to them.
+
 ## The permission model: why students are admins
 
 The organization is locked down to **least privilege**. During setup, Classroom
@@ -142,6 +209,27 @@ per-repo access and the strict org policy work together.
 > TAs and head TAs get read access to student repositories through the
 > score-collection workflow, not at accept time. A newly accepted repo
 > therefore has no staff team attached to it, which is expected.
+
+## How student repositories are protected
+
+Setup applies two organization-wide rulesets to every repository in the
+organization:
+
+- **`classroom50-protect-submission-history`** targets each repository's
+  default branch and blocks force pushes and branch deletion, so a student
+  can't rewrite or erase their submission history.
+- **`classroom50-feedback-base-lock`** targets the `feedback` branch and blocks
+  updates and deletion, keeping the frozen base of the
+  [Feedback pull request](Autograding-Basics#feedback-pull-requests) in place.
+
+Both rulesets include an organization-admin bypass, so teachers keep full
+control. Separately, the `classroom50` repository's `main` branch has classic
+branch protection with force pushes and deletion disabled.
+
+If the setup checks report branch protection as failing and **Fix it** doesn't
+resolve it, an enterprise-level policy is usually pinning the setting. The
+check is advisory: Classroom 50 works without it. See
+[Branch protection "Fix it" does nothing](Troubleshooting#branch-protection-fix-it-does-nothing).
 
 ## Why organization settings sometimes change back
 

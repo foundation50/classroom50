@@ -68,8 +68,8 @@ Classroom 50 access to — see
 ![Setup steps](images/web_setup.png)
 
 Click **Set up** on an uninitialized organization, then **Run setup**. This
-configures your organization's settings and creates a `classroom50` config
-repository to hold Classroom 50's state.
+configures your organization's settings and creates a `classroom50` repository
+to hold Classroom 50's state.
 
 When step 1 is complete, continue to step 2 to add your service token.
 
@@ -81,8 +81,8 @@ student repositories (and push regrade tags) across the org. The form and the
 pre-filled GitHub page set up the required permissions for you; the full
 permission table is in
 [GitHub Integration](GitHub-Integration#4-fine-grained-pat-for-score-collection).
-Classroom 50 stores it as the `CLASSROOM50_SERVICE_TOKEN` secret in your config
-repo, where the daily score-collection workflow uses it.
+Classroom 50 stores it as the `CLASSROOM50_SERVICE_TOKEN` secret in your
+`classroom50` repository, where the daily score-collection workflow uses it.
 
 ![Service token setup](images/web_pat.png)
 
@@ -128,6 +128,14 @@ After creating, you'll get a URL of the form
 > [!NOTE]
 > Behind the scenes, this adds a subdirectory to your `classroom50` repository
 > holding the classroom's roster and assignment list.
+
+## Add staff
+
+If TAs or co-teachers help run the classroom, add them before students arrive:
+open the classroom, click **Settings**, and use the **Staff and roles**
+section. For the four roles, what each can see, and how to structure
+multi-teacher setups, see
+[Staff, TAs, and multiple teachers](Staff-TAs-and-Multiple-Teachers).
 
 ## Create an assignment
 
@@ -338,7 +346,7 @@ formats and auto-detects which one you uploaded (you can override the guess):
 
 Only `username` is required. Every other column is optional and can be left out.
 Headers are matched case-insensitively, and any unrecognized column is ignored,
-so a CSV exported from another gradebook usually works unchanged. (A `github_id`
+so a CSV exported from your SIS or gradebook usually works unchanged. (A `github_id`
 column, if present, is ignored and re-resolved from GitHub.)
 
 | Column | Required | Description |
@@ -459,8 +467,9 @@ It works for both grading modes:
   dialog also asks for the max points to grade out of.
 
 An overridden score shows a **Manual** badge and won't be changed by
-autograding until you clear the override. Entering a score writes the config
-repo's `scores.json`, so the editor appears only for organization owners.
+autograding until you clear the override. Entering a score writes the
+`classroom50` repository's `scores.json`, so the editor appears only for
+organization owners.
 
 ### Bulk actions
 
