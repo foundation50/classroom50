@@ -1,0 +1,169 @@
+import type { GitHubClient } from "../client"
+import type { GitHubTeam, GitHubUser } from "../types"
+import { GitHubAPIError, tolerateGitHubError } from "../errors"
+import { createTeam } from "../teamWrites"
+import { paginateAll } from "../paginate"
+import {
+  INVITE_TEAM_PREFIX,
+  inviteTeamName,
+  isInviteTeamSlug,
+  marshalInviteDescription,
+  parseInviteDescription,
+  type InviteDescription,
+  type InviteMetadata,
+} from "@/util/inviteTeam"
+import { listTeamMembers } from "../queries/teamReads"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("mutations:inviteTeams")
+
+// Thrown by ensureInviteTeam when a pre-existing same-named team is NOT secret
+// and can't be made secret. The invite team stores a plaintext email in its
+// description; a closed/visible team would expose it to every org member, so we
+// fail closed rather than write PII onto a team students could read.
+export class InviteTeamNotSecretError extends Error {
+  slug: string
+  constructor(slug: string) {
+    super(
+      `Invite team "${slug}" is not secret; refusing to store an invited email on a team other org members could read.`,
+    )
+    this.name = "InviteTeamNotSecretError"
+    this.slug = slug
+  }
+}
+
+export type InviteTeamRef = { id: number; slug: string }
+
+// Create (or adopt) the per-invite SECRET team for (classroom, email) and write
+// the classroom50/invite/v1 record into its description. The team name is the
+// deterministic invite-<hash(classroom,email)> so a later reconcile can find it
+// from the roster row's email. Fail-closed on privacy: after create/adopt, the
+// team's privacy is confirmed to be `secret` (an adopted non-secret team is
+// PATCHed to secret; if that can't be confirmed, throw InviteTeamNotSecretError
+// rather than store the email where students could read it). Returns the ref so
+// the caller can attach its id to the org invitation's team_ids.
+export async function ensureInviteTeam(
+  client: GitHubClient,
+  org: string,
+  metadata: InviteMetadata,
+): Promise<InviteTeamRef> {
+  const name = await inviteTeamName(metadata.classroom, metadata.email)
+  const description = marshalInviteDescription(metadata)
+
+  let team: GitHubTeam
+  try {
+    team = await createTeam(client, {
+      org,
+      name,
+      description,
+      privacy: "secret",
+      notification_setting: "notifications_disabled",
+    })
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.status === 422) {
+      // A same-named team already exists (a resend, a retry, or a prior invite
+      // to the same email+classroom): adopt it, forcing secret + refreshing the
+      // description. Name is slug-safe, so it doubles as the lookup slug.
+      team = await client.request<GitHubTeam>(
+        `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(name)}`,
+      )
+    } else {
+      throw err
+    }
+  }
+
+  // Fail-closed secret invariant. On a fresh create GitHub honors privacy:
+  // "secret", but an adopted team may be closed; PATCH it and re-read. Never
+  // leave the email description on a non-secret team.
+  if (team.privacy !== "secret" || team.description !== description) {
+    team = await client.request<GitHubTeam>(
+      `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(team.slug)}`,
+      {
+        method: "PATCH",
+        body: { privacy: "secret", description },
+      },
+    )
+  }
+  if (team.privacy !== "secret") {
+    throw new InviteTeamNotSecretError(team.slug)
+  }
+
+  return { id: team.id, slug: team.slug }
+}
+
+export type InviteTeamState = {
+  slug: string
+  description: InviteDescription | null
+  // Members of the team, EXCLUDING no one here — the caller filters out org
+  // owners (the auto-added creator/maintainer) to find the accepted invitee.
+  members: GitHubUser[]
+}
+
+// Read one invite team's parsed description + members, for the reconcile pass.
+// 404 (team already deleted) -> null. `description` is null when the team's
+// description isn't a valid v1 record (hand-edited, or a slug collision with a
+// non-invite team); the caller skips such a team rather than acting on garbage.
+export async function readInviteTeam(
+  client: GitHubClient,
+  org: string,
+  slug: string,
+): Promise<InviteTeamState | null> {
+  const team = await tolerateGitHubError(
+    () =>
+      client.request<GitHubTeam>(
+        `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(slug)}`,
+      ),
+    null,
+  )
+  if (!team) return null
+  const members = await listTeamMembers(client, org, slug)
+  return {
+    slug: team.slug,
+    description: parseInviteDescription(team.description),
+    members,
+  }
+}
+
+// Enumerate the org's invite-<hash> teams (secret teams this feature owns),
+// filtering the org team list by the invite- prefix. Owner/member visibility
+// applies; a non-owner who can't list teams degrades to [] (tolerated upstream),
+// so GC/backfill simply do nothing rather than erroring.
+export async function listInviteTeams(
+  client: GitHubClient,
+  org: string,
+): Promise<GitHubTeam[]> {
+  const teams = await tolerateGitHubError(
+    () =>
+      paginateAll<GitHubTeam>(
+        client,
+        (page) =>
+          `/orgs/${encodeURIComponent(org)}/teams?per_page=100&page=${page}`,
+      ),
+    [],
+  )
+  return teams.filter((t) => t.slug && isInviteTeamSlug(t.slug))
+}
+
+// Delete an invite team by slug. Fail-closed: refuses any slug outside the
+// invite- namespace so a caller can't steer a delete into an unrelated team.
+// 404 = already gone (success), so teardown is idempotent.
+export async function deleteInviteTeam(
+  client: GitHubClient,
+  org: string,
+  slug: string,
+): Promise<void> {
+  if (!isInviteTeamSlug(slug)) {
+    log.error("refusing to delete non-invite team", { slug })
+    return
+  }
+  await tolerateGitHubError(
+    () =>
+      client.request(
+        `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(slug)}`,
+        { method: "DELETE" },
+      ),
+    undefined,
+  )
+}
+
+export { INVITE_TEAM_PREFIX }

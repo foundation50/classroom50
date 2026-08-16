@@ -70,15 +70,19 @@ export function useEnrollOrInviteStudent(
         }
       }
 
-      // Email-only -> a pure GitHub org invite (carrying the classroom team) and
-      // NO roster.csv write: the team is the enrollment source of truth and an
+      // Email-only -> a pure GitHub org invite (carrying the classroom team +
+      // a per-invite metadata team that retains the email/name/section) and NO
+      // roster.csv write: the team is the enrollment source of truth and an
       // email carries no reliable identity. The invite surfaces in the roster's
-      // "pending" section via the org pending-invitations list; name/section are
-      // captured later by adding the student by username or uploading a roster.
+      // "pending" section via the org pending-invitations list; on acceptance a
+      // reconcile pass recovers the email<->account mapping and backfills the row.
       const result = await inviteByEmail(githubClient, {
         org,
         classroom,
         email,
+        first_name: first_name || undefined,
+        last_name: last_name || undefined,
+        section: section || undefined,
       })
       return {
         kind: "email" as const,

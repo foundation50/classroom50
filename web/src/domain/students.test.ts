@@ -289,6 +289,7 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
       csvWritten: false,
       inviteAttempted: false,
       inviteBody: null as unknown,
+      inviteTeamCreated: false,
     }
 
     const requestRaw = vi.fn().mockImplementation((path: string) => {
@@ -317,6 +318,19 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
           }
           return Promise.reject(apiError422())
         }
+        // The per-invite metadata team create (POST /orgs/{org}/teams). Return
+        // it as a secret team carrying the exact description the caller wrote,
+        // so ensureInviteTeam's fail-closed read-back is a no-op (no PATCH/GET).
+        if (path.endsWith("/teams")) {
+          const body = options?.body as { name?: string; description?: string }
+          state.inviteTeamCreated = true
+          return Promise.resolve({
+            id: 9001,
+            slug: body?.name,
+            privacy: "secret",
+            description: body?.description,
+          })
+        }
         return Promise.reject(new Error(`unexpected request: ${path}`))
       })
 
@@ -337,10 +351,13 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
 
     expect(result.inviteWarning).toBeUndefined()
     expect(state.csvWritten).toBe(false)
-    // The classroom team id is attached so acceptance activates team membership.
+    // Both the classroom team and the per-invite metadata team are attached, so
+    // acceptance activates classroom membership AND lands the invitee on the
+    // metadata team the reconcile later reads to recover the email.
+    expect(state.inviteTeamCreated).toBe(true)
     expect(state.inviteBody).toMatchObject({
       email: "new@x.edu",
-      team_ids: [4242],
+      team_ids: [4242, 9001],
     })
   })
 

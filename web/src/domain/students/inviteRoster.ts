@@ -1,6 +1,7 @@
 import type { GitHubClient } from "@/github-core/client"
 import {
   createOrgInvitation,
+  ensureInviteTeam,
   ensureOrgMembership,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -10,7 +11,7 @@ import { GitHubAPIError } from "@/github-core/errors"
 import { resolveGitHubId } from "@/util/students"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { githubOrgRoleForRole, type ClassroomRole } from "@/util/teamRoster"
-import { retryDeferred, resolveTeamIdByRole } from "./rosterPrimitives"
+import { retryDeferred, resolveTeamIdByRole, log } from "./rosterPrimitives"
 import i18n from "@/i18n"
 
 export type InviteRosterStudentsInput = {
@@ -295,12 +296,32 @@ export async function bulkInviteByEmail(
 
   type EmailTarget = (typeof targets)[number]
   // Invite one email; throws on error so the caller classifies rate-limit/422.
-  const inviteOne = (target: EmailTarget) => {
+  // Best-effort per-invite metadata team: on create failure the invite still
+  // goes out with the classroom team alone (the invitee stays collectable; only
+  // email retention is lost). A rate-limit error from the team create surfaces
+  // as a thrown GitHubAPIError so the caller defers the whole target — retrying
+  // later recreates the team too, rather than sending a metadata-less invite.
+  const inviteOne = async (target: EmailTarget) => {
     const teamId = teamIdByRole[target.role]
+    const teamIds = teamId ? [teamId] : []
+    try {
+      const inviteTeam = await ensureInviteTeam(client, org, {
+        email: target.email,
+        classroom,
+      })
+      teamIds.push(inviteTeam.id)
+    } catch (err) {
+      if (err instanceof GitHubAPIError && err.isRateLimited) throw err
+      log.error("bulk invite metadata team create failed", {
+        email: target.email,
+        err,
+      })
+      // Non-rate-limit failure: proceed with the classroom team only.
+    }
     return createOrgInvitation(client, {
       org,
       email: target.email,
-      team_ids: teamId ? [teamId] : undefined,
+      team_ids: teamIds.length > 0 ? teamIds : undefined,
       role: githubOrgRoleForRole(target.role),
     })
   }

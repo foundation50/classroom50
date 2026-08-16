@@ -3,6 +3,7 @@ import {
   createGitCommit,
   createGitTree,
   createOrgInvitation,
+  ensureInviteTeam,
   ensureOrgMembership,
   isActiveMember,
   updateRef,
@@ -141,6 +142,12 @@ type AddEmailInviteToClassroomInput = {
   org: string
   classroom: string
   email: string
+  // Optional display metadata the teacher typed in the Add-member dialog. Stored
+  // in the invite team's description and backfilled onto roster.csv on
+  // acceptance; best-effort, never authoritative.
+  first_name?: string
+  last_name?: string
+  section?: string
 }
 
 export type InviteByEmailResult = {
@@ -150,13 +157,18 @@ export type InviteByEmailResult = {
 }
 
 // Send a GitHub org invite for an email, attaching the classroom team so the
-// student lands in it on acceptance. Writes NOTHING to roster.csv: the team
-// is the source of truth for enrollment, and an email carries no reliable
-// GitHub identity (it changes to a login only once accepted). The invite shows
-// up in the roster's `pending` section via the org pending-invitations list; to
-// capture name/section metadata, add the student by GitHub username or upload a
-// roster CSV once they've joined. If the classroom team can't be resolved, the
-// invite is BLOCKED (throws) rather than sent team-less — see below.
+// student lands in it on acceptance, PLUS a per-invite secret metadata team
+// (invite-<hash(classroom,email)>) whose description retains the invited email
+// (and any name/section). Writes NOTHING to roster.csv: the team is the source
+// of truth for enrollment, and an email carries no reliable GitHub identity
+// until accepted. On acceptance the invitee lands on both teams; a later
+// reconcile pass recovers the email <-> account mapping from the metadata team
+// and backfills roster.csv. The invite shows up in the roster's `pending`
+// section via the org pending-invitations list. If the classroom team can't be
+// resolved, the invite is BLOCKED (throws) rather than sent team-less. If the
+// metadata team can't be created, the invite still goes out with the classroom
+// team alone (the invitee stays collectable; only email retention is lost) and
+// a non-fatal warning is returned.
 export async function inviteByEmail(
   client: GitHubClient,
   input: AddEmailInviteToClassroomInput,
@@ -187,11 +199,33 @@ export async function inviteByEmail(
     )
   }
 
+  // Best-effort: create the per-invite metadata team and attach it too. A
+  // failure here must NOT block the invite (the invitee stays collectable via
+  // the classroom team) — only email retention is lost, surfaced as a warning.
+  const teamIds = [teamId]
+  let metadataWarning = ""
+  try {
+    const inviteTeam = await ensureInviteTeam(client, org, {
+      email: normalizedEmail,
+      classroom,
+      first_name: input.first_name,
+      last_name: input.last_name,
+      section: input.section,
+    })
+    teamIds.push(inviteTeam.id)
+  } catch (err) {
+    log.error("invite metadata team create failed", { err })
+    metadataWarning =
+      `${normalizedEmail} was invited, but saving their email for later ` +
+      `matching failed (${getErrorMessage(err)}); their email won't be ` +
+      `retained automatically. You can add it after they accept.`
+  }
+
   try {
     await createOrgInvitation(client, {
       org,
       email: normalizedEmail,
-      team_ids: [teamId],
+      team_ids: teamIds,
     })
   } catch (err) {
     // A 422 means the email already belongs to a member or is already invited.
@@ -213,7 +247,7 @@ export async function inviteByEmail(
     }
   }
 
-  return {}
+  return metadataWarning ? { inviteWarning: metadataWarning } : {}
 }
 
 export type AddStudentToClassroomInput = {
