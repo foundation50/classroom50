@@ -162,7 +162,7 @@ tool (or an org/enterprise policy) is changing it back.
 4. The **score-collection** workflow gathers those results into `scores.json`.
 
 Autograding is optional — an assignment with no tests still tags submissions and
-supports feedback. See [Autograders](Autograders) for the full pipeline.
+supports feedback. See [Autograding Basics](Autograding-Basics) for the full pipeline.
 
 ### The Feedback PR opens at accept, with the diff starting at the baseline
 
@@ -172,7 +172,7 @@ Actions is disabled for student repos. Its base is frozen at the accept commit,
 so the setup files (the accept marker and autograde workflow) stay out of the
 diff you review. Should accept not manage it, the autograde runner opens the same
 PR on the first submission instead. See
-[Autograders](Autograders#feedback-pull-requests).
+[Autograders](Autograding-Basics#feedback-pull-requests).
 
 ## Lifecycle: enroll, unenroll, and remove are separate
 

@@ -141,5 +141,5 @@ development resets and complete decommissioning.
 
 - [Can I turn autograding off, or reduce Actions usage?](FAQ#can-i-turn-autograding-off-or-reduce-actions-usage)
   for pausing grading over a break.
-- [Which commits grade](Autograders#which-commits-grade) for submission modes
+- [Which commits grade](Autograding-Basics#which-commits-grade) for submission modes
   and milestone tags.

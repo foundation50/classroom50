@@ -357,7 +357,7 @@ shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--due <ISO-8601>` | Due date, e.g., `2026-09-15T23:59:00-04:00`. Stored as UTC; local timezone assumed if you omit the offset. A bare date with no time is rejected. |
 | `--mode individual\|group` | `individual` (default) or `group`. Group requires `--max-group-size`. |
 | `--max-group-size <N>` | Max collaborators on a group repo (2–100). Advisory, not hard-enforced. |
-| `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.14. See [Autograders](Autograders). |
+| `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.14. See [Advanced Autograding](Advanced-Autograding#the-runtime-block). |
 | `--autograder <name>` | Reserved for swapping the whole reusable workflow (rare). Use `--runtime` for language toolchains. |
 | `--submission-mode every-push\|tag` | When the autograder fires. `every-push` (default) grades every push; `tag` grades only on explicit submits (`gh student submit`, or a hand-pushed `submit/*` tag) — regular pushes cost no Actions minutes, the cost lever for large classrooms. |
 | `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading — e.g. `--submission-tag phase1 --submission-tag phase2`. Students grade a milestone with plain git: `git tag phase1 && git push origin phase1`. Works with either mode; the graded record still appears as a `submit/*` release. |
@@ -365,7 +365,7 @@ shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 > [!NOTE]
 > **Custom grading isn't registered here.** Drop an `autograder.py` at
 > `<classroom>/autograders/<slug>/` in the config repo, or set a classroom
-> default with `gh teacher autograder set-default`. See [Autograders](Autograders).
+> default with `gh teacher autograder set-default`. See [Advanced Autograding](Advanced-Autograding#classroom-default).
 
 Re-running with the same slug replaces the entry in place; new slugs append.
 
@@ -483,9 +483,9 @@ the `schedule:` block in `.github/workflows/collect-scores.yaml`.
 
 **Group assignments** are graded once, in the founder's repo. Collection reads
 that repo's collaborators, keeps those on the classroom team, and credits each
-with the same score. See [Autograders](Autograders#group-attribution-model) for
+with the same score. See [Autograders](Autograding-Basics#group-attribution-model) for
 the full attribution model — and
-[Reading results](Autograders#reading-results) in Autograders for where every
+[Reading results](Autograding-Basics#reading-results) in Autograding Basics for where every
 result lives, per-test breakdowns, and past attempts.
 
 ## 10. Download submissions
@@ -508,7 +508,7 @@ submission** (a student with several pushes contributes several lines), plus a
 blank-score line for each non-submitter, so you can sort by
 score to see who hasn't submitted. The column-by-column reference for
 `scores.csv` (and the per-repository `result.json` / `results.json` files) is in
-[Score exports](Autograders#score-exports) in Autograders.
+[Score exports](Autograding-Basics#score-exports) in Autograding Basics.
 
 Each run creates a fresh timestamped folder. Override the destination with `-d`:
 

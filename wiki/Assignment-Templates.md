@@ -38,7 +38,7 @@ A worked example lives at
   assignment enables **Use the template's pull request template as the Feedback
   PR body**, Classroom 50 uses this file's contents as each student's Feedback
   PR body instead of the built-in text. See
-  [Autograders](Autograders#feedback-pull-requests).
+  [Autograders](Autograding-Basics#feedback-pull-requests).
 - **Starter code** — any files the student starts from, from a single file to a
   full project.
 
@@ -47,7 +47,7 @@ A worked example lives at
 > shim is written by `gh student accept` (it's embedded in `gh-student`) and
 > never changes after accept. A copy in the template would be clobbered by
 > submit's `.github/` re-fetch and double-grade or break grading. Autograding
-> logic lives in your config repo, not the template — see [Autograders](Autograders).
+> logic lives in your config repo, not the template — see [Autograding Basics](Autograding-Basics).
 
 ## Set it up
 

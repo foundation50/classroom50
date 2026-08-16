@@ -192,7 +192,8 @@ they open their repository. See [Assignment Templates](Assignment-Templates).
 
 Yes. Use **declarative tests** (input/output, run-command, or pytest checks)
 defined right on the assignment. No grading script needed. For more control,
-write an `autograder.py`. See [Autograders](Autograders).
+write an `autograder.py`. See [Autograding Basics](Autograding-Basics#declarative-tests)
+and [Advanced Autograding](Advanced-Autograding).
 
 ### Can I turn autograding off, or reduce Actions usage?
 
@@ -205,7 +206,7 @@ Yes, several levers:
   saver for large classrooms, where every work-in-progress push would otherwise
   grade. You can also name **milestone tags** (`--submission-tag phase1`) so
   students grade specific checkpoints with plain git. See
-  [Which commits grade](Autograders#which-commits-grade) in Autograders.
+  [Which commits grade](Autograding-Basics#which-commits-grade) in Autograding Basics.
 - **Pause autograding for one assignment** (reversible) — **Pause autograding**
   in the submissions page's **Actions** menu disables the built-in
   `autograde.yaml` workflow in every student repository (via GitHub's
@@ -234,7 +235,7 @@ Yes. Set `runs-on` in the assignment's runtime to your self-hosted labels (for
 example `["self-hosted", "gpu"]`). Self-hosted runners keep their own
 toolchains, so Classroom 50 skips managed toolchain setup on them — provision
 what your assignments need in the runner image. See
-[Autograders](Autograders#the-runtime-block).
+[Autograders](Advanced-Autograding#the-runtime-block).
 
 ### Can the autograder show students *why* a test failed?
 
@@ -309,7 +310,7 @@ tooling locally — `gh teacher download` clones every submission repo and also
 writes a `scores.csv` summary at the destination root. The raw score data also
 lives in `scores.json` in your config repo, so you can build your own
 automations against it. The column-by-column reference for both CSVs is in
-[Score exports](Autograders#score-exports) in Autograders.
+[Score exports](Autograding-Basics#score-exports) in Autograding Basics.
 
 ### As a teacher, can I test an assignment as a student?
 
