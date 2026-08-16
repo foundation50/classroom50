@@ -18,10 +18,9 @@ no separate role database, so staff you add show up as GitHub team
 invitations. For the underlying model, see
 [Roles are GitHub organization roles and teams](How-Classroom-50-Works#roles-are-github-organization-roles-and-teams).
 
-The head TA role exists for exactly the situation where a trusted grader
-needs to manage the classroom (edit assignments, run collection) without
-holding organization-owner power. TAs who only grade need the read-only TA
-role.
+The head TA role covers a trusted grader who manages the classroom (edits
+assignments, runs collection) without holding organization-owner power. TAs
+who only grade need the read-only TA role.
 
 ## Adding staff
 
@@ -73,8 +72,8 @@ With read access, TAs can open each student's work and leave reviews on the
 automatic reviewer assignment yet; TAs pick up repositories from the
 submissions page (**Open all Feedback PRs** steps through them).
 
-Because TAs and head TAs are ordinary organization members, graders no longer
-need owner rights to do their job. If your institution's privacy rules (such
+Because TAs and head TAs are ordinary organization members, graders don't
+need owner rights to do their work. If your institution's privacy rules (such
 as FERPA) require limiting who holds administrative access to student data,
 keep the teacher role small and use head TA and TA for everyone else.
 
@@ -109,8 +108,8 @@ student. See
 
 ## One organization or several?
 
-A single organization can hold many classrooms, so the question is really
-about people, not courses:
+A single organization can hold many classrooms, so the question is about
+people, not courses:
 
 - **One organization** works well for a stable teaching team running one
   course across terms or sections: create a classroom per term or section and

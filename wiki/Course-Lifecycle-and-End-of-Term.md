@@ -2,7 +2,7 @@
 
 The moments in a course that aren't covered by day-to-day assignment work:
 staging an assignment before release, ending one at the due date, updating
-starter code mid-flight, and cleaning up when the term is over.
+starter code mid-course, and cleaning up when the term is over.
 
 ## Staging an assignment before release
 
@@ -17,8 +17,8 @@ Two controls build on that:
 - **Lock assignment** (in the submissions page's **Actions** menu) blocks
   access entirely: students can't accept it, and for a private template the
   student team's read access is removed. **Unlock assignment** reopens it and
-  restores template access. Use it to prepare an assignment (or its capstone
-  solution review) without any chance of early accepts.
+  restores template access. Use it to prepare an assignment with no chance
+  of early accepts.
 
 To try the assignment before students do, accept it yourself from a separate
 student account, or add yourself to the roster; see
@@ -64,16 +64,16 @@ What that means in practice:
 
 ## End of term
 
-In rough order:
+Wrap up a finished course in this order:
 
-1. **Close or lock the assignments.** **Close submission** per assignment
+1. Close or lock the assignments. **Close submission** per assignment
    freezes student work (read-only, no new accepts).
-2. **Collect and export.** Run a final collection, then **Download scores
+2. Collect and export. Run a final collection, then **Download scores
    (CSV)**. For the work itself, **Download all submissions** bundles the
    latest submissions into a zip, or `gh teacher download` clones every
    repository and writes a `scores.csv`. See
    [Download submissions](CLI-Teacher-Guide#10-download-submissions).
-3. **Archive the classroom.**
+3. Archive the classroom.
 
    ```sh
    gh teacher classroom archive cs50-fall-2026 cs-principles
@@ -83,7 +83,7 @@ In rough order:
    (after the next publish run), and refuses new assignments; student
    repositories are untouched, and `unarchive` reverses it. See
    [`gh teacher classroom archive`](gh-teacher#classroom-archive--unarchive).
-4. **Optionally archive the student repositories on GitHub.** Archiving a
+4. Optionally, archive the student repositories on GitHub. Archiving a
    repository makes it read-only for everyone while preserving it. Classroom
    50 has no bulk action for this yet, but the GitHub CLI handles it. List
    the candidates first:
@@ -95,16 +95,16 @@ In rough order:
      | grep -vE '^(classroom50|KEEP-THIS-REPO)$'
    ```
 
-   Replace `YOUR-ORGANIZATION` with your organization and extend the `grep`
-   pattern with any repository to keep (it already excludes the `classroom50`
-   repository; templates are excluded by the filter). When the list looks
-   right, append the archiving step:
+   Replace `YOUR-ORGANIZATION` with your organization and `KEEP-THIS-REPO`
+   with any repository to keep; the command already skips the `classroom50`
+   repository and your templates. When the list looks right, append the
+   archiving step:
 
    ```sh
    ... | xargs -I {} gh repo archive YOUR-ORGANIZATION/{} --yes
    ```
 
-5. **Tidy membership if you need to.** Unenrolling a student removes them
+5. Remove students if you need to. Unenrolling a student removes them
    from the roster and classroom team but not from the organization, and
    never deletes repositories; removing them from the organization revokes
    access but still deletes nothing. See
@@ -120,8 +120,9 @@ gh teacher assignment reuse cs50-fall-2026 hello --from cs-principles --to cs-pr
 
 Every field is copied (template, tests, runtime, due date included; update
 the due date after copying). Student repositories and scores are not copied,
-and the target classroom's team is re-granted read on a private in-org
-template. The web app offers the same action on an assignment. See
+and the target classroom's team is re-granted read access to a private
+template inside the organization. The web app offers the same action on an
+assignment. See
 [`gh teacher assignment reuse`](gh-teacher#assignment-reuse).
 
 ## Resetting an organization (destructive)

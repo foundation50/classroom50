@@ -19,8 +19,8 @@ or [CLI Teacher Guide](CLI-Teacher-Guide#3-set-up-the-organization)).
 **Web app:** open your organization at
 `https://classroom50.org/YOUR-ORGANIZATION` and click
 **Import from GitHub Classroom**. Pick the classroom from the list of GitHub
-Classrooms your account administers, review the plan, and confirm; nothing is
-created until you do.
+Classrooms your account administers, review the import summary, and confirm;
+nothing is created until you do.
 
 **CLI:**
 
@@ -51,9 +51,9 @@ starter repository as a template in your organization.
 
 Classroom 50's [declarative tests](Autograders#declarative-tests) fill the
 role of GitHub Classroom's autograding presets: input/output, run-command,
-and pytest checks defined on the assignment, no grading script required. For
-most assignments, re-entering the tests on the imported assignment is the
-whole job.
+and pytest checks defined on the assignment, with no grading script to
+write. For most assignments, migrating the autograder means re-entering
+those tests on the imported assignment.
 
 If you've invested in a working `autograding.json` workflow, you can keep it
 and skip Classroom 50's grading pipeline for that assignment; see
@@ -61,8 +61,8 @@ and skip Classroom 50's grading pipeline for that assignment; see
 
 ## What behaves differently
 
-Most concepts carry over unchanged. The differences you'll hit, roughly in
-the order you'll hit them:
+Most concepts carry over unchanged. The differences, roughly in the order
+you'll meet them:
 
 - **Students don't self-select from a roster.** GitHub Classroom lets a
   student pick their roster entry from an invite link. In Classroom 50 you
@@ -85,15 +85,15 @@ the order you'll hit them:
   download scores as CSV from the submissions page; students read their
   results from their repository's Releases, not inside the app.
 
-For honest gaps rather than differences (features GitHub Classroom has and
-Classroom 50 doesn't), see [Known limitations](Known-Limitations).
+For features GitHub Classroom has and Classroom 50 doesn't, see
+[Known limitations](Known-Limitations).
 
 ## Running both in the same organization
 
 Don't leave active GitHub Classroom classrooms in an organization you use
 with Classroom 50. The two tools disagree about the private-repository
-forking policy and each flips the setting back, an endless tug-of-war that
-shows up as settings warnings. Archive the old GitHub Classroom classrooms
+forking policy, and each keeps flipping the setting back, which shows up as
+recurring settings warnings. Archive the old GitHub Classroom classrooms
 once you've migrated. See
 [Why org policies sometimes "drift"](How-Classroom-50-Works#why-org-policies-sometimes-drift).
 

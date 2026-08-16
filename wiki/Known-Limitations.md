@@ -1,14 +1,14 @@
 # Known limitations
 
-Classroom 50 has no server: state lives in GitHub, work runs as you or as
-GitHub Actions in your organization. That design keeps your data yours, but
-it also rules some features out and makes others behave unexpectedly. This
-page lists those limits candidly, each with the reason and the workaround
-where one exists, so you don't have to rediscover them as bugs.
+Classroom 50 has no server: state lives in GitHub, and work runs as you or
+as GitHub Actions in your organization. That design keeps your data in your
+organization, but it also rules some features out and makes others behave
+unexpectedly. This page lists those limits, each with the reason and the
+workaround where one exists.
 
 ## Roster and enrollment
 
-**You can't add students by email alone.** GitHub's API provides no way to
+**Students can't be added by email alone.** GitHub's API provides no way to
 look up an account from an email address, so a roster is keyed by GitHub
 username. Workarounds: collect usernames up front (a signup form works
 well), or use the email-invitation path, where each student completes a
@@ -42,7 +42,7 @@ grading run fails. GitHub's own notifications still work (for example,
 watching activity on the `classroom50` repository or on feedback pull
 requests).
 
-**What you see refreshes when a page loads.** With no server polling in the
+**State refreshes only when a page loads.** With no server polling in the
 background, the app reads GitHub's current state when you open or reload a
 page, and scores update only when collection runs (nightly, or **Sync now**).
 If a view looks stale, reload it. See
@@ -50,11 +50,11 @@ If a view looks stale, reload it. See
 
 ## Templates and student repositories
 
-**Students can read private in-org templates.** Accept works by giving the
-classroom's team read access to the template, so a curious student can
-browse it, including its history. Never commit solutions (or their history)
-to a template: develop privately and copy or squash the clean state into the
-template repository you register.
+**Students can read private templates in your organization.** Accept works
+by giving the classroom's team read access to the template, so a curious
+student can browse it, including its history. Never commit solutions (or
+their history) to a template: develop privately and copy or squash the clean
+state into the template repository you register.
 
 **Student repositories are not forks.** Accept generates a copy of the
 template; there is no upstream link, so template updates can't be pushed or
@@ -84,8 +84,7 @@ pre-assigned teams. See
 read (the assignment list an accept link resolves against) is published
 through GitHub Pages, and a deploy takes from about 20 seconds to a few
 minutes. Right after you create or change an assignment, an accept link can
-briefly fail or show stale data; wait a minute and retry before debugging
-anything else.
+briefly fail or show stale data; wait a minute and retry.
 
 ## Requested, but architecturally hard
 
@@ -98,11 +97,11 @@ anything else.
   claims.
 
 Classroom 50 is open source and actively developed; if one of these matters
-to your course, weigh in on
+to your course, share your use case in
 [Discussions](https://github.com/foundation50/classroom50/discussions).
 
 ## Further reading
 
-- [How Classroom 50 Works](How-Classroom-50-Works) for the design these
-  limits fall out of.
+- [How Classroom 50 Works](How-Classroom-50-Works) for the design behind
+  these limits.
 - [Troubleshooting](Troubleshooting) for error messages with fixes.
