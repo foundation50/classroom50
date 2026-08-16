@@ -412,7 +412,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--template <owner>/<repo>[@branch]` | Starter-code repo (must be flagged as a template). Omit for a template-less assignment (an initialized repo: README plus the control files). Branch defaults to the template's default. |
 | `--description <text>` | Short description. |
 | `--due <ISO-8601>` | Due date, e.g. `2026-09-15T23:59:00-04:00`. Stored as UTC; the machine's local timezone is assumed if you omit the offset. |
-| `--available-from <ISO-8601>` | Release date; stored as UTC (local timezone assumed without an offset). Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Listing-only, not access control — students who already accepted always see it. |
+| `--available-from <ISO-8601>` | Release date; stored as UTC (local timezone assumed without an offset). Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Listing-only, not access control: students who already accepted always see it. |
 | `--mode individual\|group` | `individual` (default) or `group` (requires `--max-group-size`). |
 | `--max-group-size <N>` | Max group collaborators (2–100). Advisory. |
 | `--runtime <path>` | JSON runtime (`runs-on`, toolchains, `apt`, `container`). See [Advanced Autograding](Advanced-Autograding#the-runtime-block). |
@@ -421,7 +421,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--feedback-pr` | One review PR per student repo. **On by default**; `--feedback-pr=false` disables. |
 | `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; changeable on a same-slug re-add (warns; only affects future accepts); mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode/submission-tag/no-autograder/init-shim. |
 | `--allowed-files <pattern>` | Ordered `.gitignore`-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file. See [Advanced Autograding](Advanced-Autograding#restricting-submission-files-allowed_files). |
-| `--student-permission <role>` | Collaborator role each student gets on their **own** repo at accept: `pull`, `triage`, `push`, `maintain`, or `admin`. Omit for the default (`push` individual, `admin` group). Affects future accepts only. Caution: `admin` on a private repo also lets the student change its visibility. |
+| `--student-permission <role>` | Collaborator role each student gets on their **own** repo at accept: `pull`, `triage`, `push`, `maintain`, or `admin`. Omit for the default (`push` individual, `admin` group). Affects future accepts only. Caution: `admin` lets the student manage the repo's settings and collaborators; the org lockdown from `init` still blocks visibility changes. |
 | `--pass-threshold <0–100>` | Advisory passing bar shown on the submissions page. Off when omitted (distinct from `0`). |
 | `--submission-mode every-push\|tag` | When the autograder fires: `every-push` (default) grades every push; `tag` grades only `submit/*` tag pushes (the submit clients push the tag — plain `git push` costs no Actions minutes). Change it later with `assignment submission-mode`. |
 | `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading: `git tag phase1 && git push origin phase1` grades that commit. Simple globs (`v*`) work; exact names are safer. The record still lives at the canonical `submit/*` tag. Mutually exclusive with `--empty-repo`. |
@@ -580,7 +580,7 @@ gh teacher assignment feedback-pr --user alice <org> <classroom> <assignment>
 
 Opens (or repairs) the [Feedback PR](Autograding-Basics#feedback-pull-requests)
 on every existing student repo for an assignment, retroactively and
-idempotently — for repos that predate the feature or missed the PR because of
+idempotently, for repos that predate the feature or missed the PR because of
 an outage. It re-runs the same ensure flow accept uses, so the runner adopts
 the PR and teachers never see two. Repos that already have a Feedback PR (in
 any state) are left as-is. Pass `--user` to target a single student, `-q` to

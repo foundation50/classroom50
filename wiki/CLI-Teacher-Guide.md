@@ -107,7 +107,7 @@ org-wide.
 ### Create the service token
 
 `init` provisions a repo secret named `CLASSROOM50_SERVICE_TOKEN`, used by the
-score-collection and regrade workflows. Create it from **your own** GitHub
+score-collection, regrade, and token-probe workflows. Create it from **your own** GitHub
 account (there's no separate service account) and scope it tightly to this
 organization.
 

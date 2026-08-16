@@ -557,6 +557,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		shim:               shim,
 		autograderName:     autograderName,
 		emptyRepo:          entry.EmptyRepo,
+		initShim:           entry.InitShim,
 		feedbackPR:         entry.FeedbackPR,
 		feedbackPRTemplate: resolveFeedbackTemplateRef(entry),
 		fullName:           fullName,
@@ -588,6 +589,11 @@ type acceptRepoParams struct {
 	// emptyRepo selects the bare path: no control files are committed and no
 	// marker probe runs — the only provisioning is the idempotent admin grant.
 	emptyRepo bool
+	// initShim marks a template-less assignment whose teacher turned the
+	// README off: the repo is still created with auto_init (GitHub needs an
+	// initial commit to write against), so the accept commit removes the
+	// seeded README, leaving only the control files.
+	initShim bool
 	// feedbackPR opts into opening the Feedback PR at accept time (issue
 	// #228) — best-effort, after provisioning succeeds. Never set together
 	// with emptyRepo (the entry validation fails closed on that combination).
@@ -726,7 +732,8 @@ func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.
 // provisionAcceptedRepo brings a just-created (or partially-provisioned)
 // student repo to a healthy, autogradable state and is safe to re-run:
 //
-//  1. Land .classroom50.yaml + the autograde shim in one Tree commit,
+//  1. Land .classroom50.yaml + the autograde shim in one Tree commit
+//     (removing the auto_init README for an init_shim assignment),
 //     riding out GitHub's post-create git-data lag.
 //  2. Verify the accept marker is readable before declaring success, so
 //     "accepted" always means "will autograde".
@@ -746,7 +753,7 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 	const setupMsg = "Setting up autograder and metadata"
 	setupSp := u.Spinner(setupMsg)
 	setupSp.Start()
-	acceptSHA, err := classroomcfg.DropFiles(client, p.org, p.repoName, p.branch, cfg, p.shim)
+	acceptSHA, err := classroomcfg.DropFiles(client, p.org, p.repoName, p.branch, cfg, p.shim, p.initShim)
 	if err != nil {
 		setupSp.Fail(setupMsg)
 		return err
@@ -838,15 +845,7 @@ var (
 // contents API. 404 → false; other errors propagate so a transient failure
 // isn't misread as "missing".
 func repoFileExists(client githubapi.Client, org, repoName, path string) (bool, error) {
-	apiPath := fmt.Sprintf("repos/%s/%s/contents/%s",
-		url.PathEscape(org), url.PathEscape(repoName), classroomcfg.EscapeContentPath(path))
-	if err := client.Get(apiPath, nil); err != nil {
-		if classroomcfg.IsHTTPNotFound(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("GET %s: %w", apiPath, err)
-	}
-	return true, nil
+	return classroomcfg.FileExists(client, org, repoName, path)
 }
 
 // classroomFromRepo recovers the classroom slug from a derived repo name

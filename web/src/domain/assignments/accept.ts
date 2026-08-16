@@ -5,6 +5,7 @@ import { studentRepoName } from "@/util/studentRepo"
 import {
   createCommitForAssignment,
   createTreeForAssignment,
+  getRepoTreeRecursive,
   updateRefForRepo,
 } from "@/github-core/mutations"
 import { getRepo } from "@/github-core/repoReads"
@@ -68,6 +69,13 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
   branch: string
   metadataYaml: string
   autogradeYaml: string
+  // An init_shim accept creates the repo with auto_init (GitHub needs an
+  // initial commit to write against), which seeds a README the assignment
+  // contract says must not exist — remove it in the same accept commit so the
+  // repo's initial shape lands atomically. The base tree is inspected first:
+  // the Trees API rejects deleting a path absent from base_tree (possible on
+  // a heal re-run), and an absent README just means nothing to remove.
+  removeSeededReadme?: boolean
   // Rebuild the autograde shim for the branch that actually materialized. The
   // default shim's push-trigger branch must match the generated repo's real
   // default branch, which is only known after GitHub's async template copy
@@ -81,6 +89,7 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
     branch,
     metadataYaml,
     autogradeYaml,
+    removeSeededReadme = false,
     rerenderShimForBranch,
   } = params
 
@@ -109,6 +118,19 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
       ? rerenderShimForBranch(targetBranch)
       : autogradeYaml
 
+    let deletePaths: string[] = []
+    if (removeSeededReadme) {
+      const baseTree = await getRepoTreeRecursive({
+        client,
+        owner,
+        repo,
+        treeSha: baseTreeSha,
+      })
+      deletePaths = baseTree.tree.some((e) => e.path === "README.md")
+        ? ["README.md"]
+        : []
+    }
+
     const tree = await createTreeForAssignment({
       client,
       owner,
@@ -116,6 +138,7 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
       baseTreeSha,
       metadataYaml,
       autogradeYaml: shim,
+      deletePaths,
     })
 
     const commit = await createCommitForAssignment({
@@ -219,9 +242,9 @@ function grantFounderAccessStep(params: {
   )
 }
 
-// Provision (or heal) a just-created student repo — grant the founder role,
-// land the control files, then (opt-in) open the Feedback PR. Idempotent, so
-// safe to re-run mid-flow.
+// Provision (or heal) a just-created student repo — land the control files,
+// (opt-in) open the Feedback PR, then grant the founder role last. Idempotent,
+// so safe to re-run mid-flow.
 async function provisionAcceptedRepo(params: {
   client: GitHubClient
   org: string
@@ -236,6 +259,8 @@ async function provisionAcceptedRepo(params: {
   branch: string
   metadataYaml: string
   autogradeYaml: string
+  // Remove the auto_init README in the accept commit (the init_shim shape).
+  removeSeededReadme?: boolean
   // Open the accept-time Feedback PR after setup succeeds (issue #228).
   feedbackPr?: boolean
   // When set, the Feedback PR body is read from this template's
@@ -256,6 +281,7 @@ async function provisionAcceptedRepo(params: {
     branch,
     metadataYaml,
     autogradeYaml,
+    removeSeededReadme = false,
     feedbackPr = false,
     feedbackPrTemplate,
     rerenderShimForBranch,
@@ -283,6 +309,7 @@ async function provisionAcceptedRepo(params: {
         branch,
         metadataYaml,
         autogradeYaml,
+        removeSeededReadme,
         rerenderShimForBranch,
       }),
   )
@@ -1051,6 +1078,7 @@ export async function acceptAssignment(params: {
       branch: created.repo.default_branch || sourceBranch,
       metadataYaml,
       autogradeYaml,
+      removeSeededReadme: isInitShim,
       feedbackPr: wantsFeedbackPr,
       feedbackPrTemplate,
       rerenderShimForBranch: rerenderShim,
@@ -1091,6 +1119,7 @@ export async function acceptAssignment(params: {
     branch: targetBranch,
     metadataYaml,
     autogradeYaml,
+    removeSeededReadme: isInitShim,
     feedbackPr: wantsFeedbackPr,
     feedbackPrTemplate,
     rerenderShimForBranch: rerenderShim,

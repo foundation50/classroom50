@@ -25,7 +25,7 @@ automatically. After it runs, a member can only create a **private** repository
 `classroom50` repository's `assignments.json` stays reachable).
 
 <details>
-<summary>Why student repos can safely leave the student as admin</summary>
+<summary>Why broad access to their own repository is safe for students</summary>
 
 The lockdown denies the dangerous org-wide powers (private Pages, repo
 delete/transfer, visibility change, issue deletion, team creation, dependency
@@ -33,8 +33,9 @@ insights, member-invited outside collaborators). Public-repo creation is the one
 exception by plan: it's locked off only on Enterprise Cloud, because Team/Free
 couples public and private creation and the student flow needs private creation.
 So it's safe for `gh student accept` to grant broad access to a student's own
-repo — individual students are downgraded to **write** after creation, a group
-founder keeps **admin** to add teammates, and the org locks defang the rest.
+repository — individual students are downgraded to **write** after creation, a
+group founder keeps **admin** to add teammates, and the org locks defang the
+rest.
 
 </details>
 
@@ -96,7 +97,8 @@ teacher CLI (or vice versa) needs no re-auth. A student exercises `read:org`
 ### 4. Fine-grained PAT for score collection
 
 `gh teacher init` uploads a PAT into the `CLASSROOM50_SERVICE_TOKEN` secret; the
-`collect-scores.yaml` workflow uses it to read student repos across the org.
+score-collection, regrade, and token-probe workflows (`collect-scores.yaml`,
+`regrade.yaml`, `probe-token.yaml`) use it to read student repos across the org.
 
 Create it at <https://github.com/settings/personal-access-tokens/new> from your
 own account (scope it tightly to the org):
@@ -280,7 +282,7 @@ The CLIs call GitHub through [`go-gh`](https://github.com/cli/go-gh);
 | GET | `/user` | Whoami / git identity. |
 | GET / PATCH | `/user/memberships/orgs/{org}` | Check / accept a pending org invite. |
 | POST | `/repos/{template_owner}/{template_repo}/generate` | Generate the repo from a template. |
-| POST | `/orgs/{org}/repos` | Create an empty repo (template-less). |
+| POST | `/orgs/{org}/repos` | Create the repo directly (template-less accept). |
 | GET / PATCH | `/repos/{owner}/{repo}` | Recover from "already exists"; read the template's features and apply the assignment's repository-feature settings (inherit/on/off). |
 | PUT | `/repos/{owner}/{repo}/collaborators/{username}` | Set the founder role: `push` (individual) or `admin` (group); also backs `gh student invite`. |
 | GET / POST / PATCH | `/repos/{owner}/{repo}/git/{refs,commits,blobs,trees}` + `/branches/{branch}` | Commit the setup files. |
@@ -326,6 +328,7 @@ release` for tags and Releases, and fetches unauthenticated from Pages:
 |------|----------|---------|
 | `publish-pages.yaml` | Push to default branch, `workflow_dispatch` | Deploy `assignments.json`, autograders, shims, `runner.py`, and bundles to Pages. |
 | `collect-scores.yaml` | `workflow_dispatch`, nightly cron | Aggregate `result.json` into `*/scores.json`. |
+| `regrade.yaml` | `workflow_dispatch` | Push regrade tags to student repos for an assignment. |
 | `probe-token.yaml` | `workflow_dispatch` | Read-only service-token scope check. |
 | `autograde-runner.yaml` (reusable) | Called by each student's `autograde.yaml` | Grade, publish, update the latest pointer. |
 
@@ -333,7 +336,7 @@ release` for tags and Releases, and fetches unauthenticated from Pages:
 
 | Variable / Secret | Set by | Used by | Purpose |
 |-------------------|--------|---------|---------|
-| `CLASSROOM50_SERVICE_TOKEN` | `gh teacher init` | `collect-scores.yaml` | Read student repo releases; regrade. |
+| `CLASSROOM50_SERVICE_TOKEN` | `gh teacher init` | `collect-scores.yaml`, `regrade.yaml`, `probe-token.yaml` | Read student repo releases; regrade; probe the token. |
 | `GITHUB_TOKEN` | Actions | Runner jobs | Tags, status, Release, Feedback PR. |
 | `GH_DEBUG=api` | Developer | `go-gh` | Log REST traffic. |
 | `GITHUB_REPOSITORY_OWNER` / `GITHUB_API_URL` | Actions | `collect_scores.py` | Org name and API base (supports Enterprise Server). |

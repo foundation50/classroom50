@@ -37,12 +37,12 @@ URL (provided by your teacher); omit for normal classrooms.
 1. Auto-accepts any pending org invitation.
 2. Looks up the assignment in the classroom's published `assignments.json` on
    Pages. A `template` block resolves the starter; its absence means a
-   template-less, README-initialized repo.
+   template-less repo.
 3. Resolves the autograder workflow shim. The `default` autograder uses the shim
    embedded in `gh-student`; a non-default one is fetched from Pages (resolved
    *before* creating the repo, so a fetch failure leaves no half-baked repo).
 4. Creates the repo — from the template, a README-initialized (`auto_init`)
-   repo, or (for an `empty_repo` assignment) a truly bare repo with steps 3
+   repo, or (for an `empty_repo` assignment) a truly bare repo with steps 3, 6,
    and 7 skipped.
 5. Applies the assignment's repository features (Issues, Wiki, Projects, Pull
    requests). By default each feature **inherits the template's setting**
@@ -51,14 +51,19 @@ URL (provided by your teacher); omit for normal classrooms.
    assignment. A template-less assignment keeps GitHub's own defaults unless
    the teacher forced a feature. Best-effort — a rejected feature update never
    fails accept.
-6. Sets your repo role: `push` for an individual assignment, or `admin` for a
-   group assignment (so a group founder can invite teammates). The teacher can
-   override this per assignment (`student_permission`).
-7. Commits `.classroom50.yaml` and `.github/workflows/autograde.yaml` in one
+6. Commits `.classroom50.yaml` and `.github/workflows/autograde.yaml` in one
    commit. The metadata records the classroom, assignment, and (when present)
    the template repo. `gh student submit` re-fetches `.gitignore` and `.github/`
-   from that template.
-8. Prints the `git clone` command.
+   from that template. For a template-less assignment whose teacher turned the
+   README off, this commit also removes the seeded README, leaving only the
+   setup files.
+7. Opens the Feedback PR when the assignment enables it. Best-effort — if this
+   fails, the autograde runner creates the PR on your first submission instead.
+8. Sets your repo role, last so a failed role change never leaves a
+   half-set-up repo: `push` for an individual assignment, or `admin` for a
+   group assignment (so a group founder can invite teammates). The teacher can
+   override this per assignment (`student_permission`).
+9. Prints the `git clone` command.
 
 </details>
 

@@ -19,14 +19,15 @@ const commitFilesAttempts = 5
 // Retryable.
 var errRefNotReady = errors.New("branch ref not fully propagated")
 
-// CommitFiles lands `files` (path → UTF-8 content) on `branch` as one Tree
-// commit, retrying the read+build while a freshly-templated repo's git-data
-// APIs lag, and returns the new commit's SHA (the Feedback-PR base anchor when
-// this is the accept commit). No rebase loop: this writes to the student's own
-// just-accepted repo, which has no concurrent writers (the teacher-side
-// configwrite.CommitTree handles the contended config repo).
-func CommitFiles(client githubapi.Client, owner, repo, branch, message string, files map[string]string) (string, error) {
-	if len(files) == 0 {
+// CommitFiles lands `files` (path → UTF-8 content) plus any `deletePaths`
+// removals on `branch` as one Tree commit, retrying the read+build while a
+// freshly-templated repo's git-data APIs lag, and returns the new commit's SHA
+// (the Feedback-PR base anchor when this is the accept commit). No rebase loop:
+// this writes to the student's own just-accepted repo, which has no concurrent
+// writers (the teacher-side configwrite.CommitTree handles the contended
+// config repo).
+func CommitFiles(client githubapi.Client, owner, repo, branch, message string, files map[string]string, deletePaths ...string) (string, error) {
+	if len(files) == 0 && len(deletePaths) == 0 {
 		return "", nil
 	}
 
@@ -34,6 +35,7 @@ func CommitFiles(client githubapi.Client, owner, repo, branch, message string, f
 	if err != nil {
 		return "", err
 	}
+	entries = append(entries, gittree.DeletionEntries(deletePaths)...)
 
 	return githubapi.CommitWithFreshRepoRetry(client, owner, repo, branch, message, entries, gittree.FreshRepoRetry{
 		Attempts: commitFilesAttempts,

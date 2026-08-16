@@ -54,8 +54,8 @@ belong to is missing later, see
 After signing in, you'll see the organizations you can use:
 
 - An organization that's set up shows an **Open** button. A token chip appears
-  when the service token needs attention — for example **No service token** or
-  **Token expired** — because score collection needs a valid token.
+  when the service token needs attention (for example **No service token** or
+  **Token expired**) because score collection needs a valid token.
 - Organizations that aren't set up yet appear under **Set up new
   organization**, each with a **Set up** button.
 
@@ -76,8 +76,9 @@ When step 1 is complete, continue to step 2 to add your service token.
 ### Add a service token
 
 The **service token** is a fine-grained personal access token (PAT) scoped to
-your organization, used by the score-collection and regrade workflows to read
-student repositories (and push regrade tags) across the org. The form and the
+your organization, used by the score-collection, regrade, and token-probe
+workflows to read student repositories (and push regrade tags) across the org.
+The form and the
 pre-filled GitHub page set up the required permissions for you; the full
 permission table is in
 [GitHub Integration](GitHub-Integration#4-fine-grained-pat-for-score-collection).
@@ -317,7 +318,7 @@ When you're done, click **Create assignment**.
 
 Students must be on the classroom roster before they can accept assignments.
 
-![Students page, empty](images/web_students_none.png)
+![Roster page, empty](images/web_students_none.png)
 
 On a classroom's **Roster** page, add students and see who has joined and who
 has a pending invitation. Adding a student sends them an invitation to join your

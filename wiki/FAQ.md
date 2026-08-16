@@ -342,7 +342,8 @@ CLI instead; the one documented exception is a `scores.json` score override
 ### What is the service token, and is it the same one the web app set up?
 
 The **service token** is a fine-grained personal access token stored as a secret
-in your `classroom50` repository; the score-collection and regrade workflows use it. It's the
+in your `classroom50` repository; the score-collection, regrade, and token-probe
+workflows use it. It's the
 **same** token whether you set it up through the web app or the CLI — you only
 need one per organization. See
 [the service-token setup](CLI-Teacher-Guide#create-the-service-token).

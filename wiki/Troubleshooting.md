@@ -254,7 +254,7 @@ To enroll students who are already org members:
    do several at once, select the rows and use the bulk **Add to {classroom}**
    action.
 
-Uploading a **username** list or **roster CSV** on the Students page also enrolls
+Uploading a **username** list or **roster CSV** on the **Roster** page also enrolls
 existing members: the invite is skipped, but they're still added to the roster
 and team. Only an **email** upload can't, because an email invite writes nothing
 to the roster until the student onboards, so an already-member email is simply

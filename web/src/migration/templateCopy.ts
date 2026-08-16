@@ -107,7 +107,8 @@ export async function copyOneTemplate(
   }
 
   // Template-less import: no starter repo to copy; the entry is written with no
-  // template and students get an empty repo on accept.
+  // template and students get a README-initialized repo (control files, no
+  // starter) on accept.
   if (item.templateLess) {
     return null
   }

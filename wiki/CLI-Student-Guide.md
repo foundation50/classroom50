@@ -44,7 +44,8 @@ gh student accept <org> <classroom> <assignment>
 
 This creates a **private** repository at
 `<org>/<classroom>-<assignment>-<username>` from the assignment's template (or
-an empty repo if it's template-less), then prints a `git clone` command.
+a new repository with a README and the autograding files if it's
+template-less), then prints a `git clone` command.
 
 <details>
 <summary>What accept does, step by step</summary>
@@ -52,11 +53,13 @@ an empty repo if it's template-less), then prints a `git clone` command.
 1. Auto-accepts any pending organization invitation.
 2. Looks up the assignment in the classroom's published manifest.
 3. Resolves the autograder workflow.
-4. Creates your private repository (a template copy, or an empty repo).
-5. Sets your repo role: `push` for an individual assignment, or `admin` for a
+4. Creates your private repository (a template copy, or a new
+   README-initialized repository).
+5. Commits the setup files (`.classroom50.yaml` and the autograde workflow).
+6. Opens the Feedback PR, when the assignment enables it.
+7. Sets your repo role: `push` for an individual assignment, or `admin` for a
    group assignment (so a group founder can invite teammates).
-6. Commits the setup files (`.classroom50.yaml` and the autograde workflow).
-7. Prints the `git clone` command.
+8. Prints the `git clone` command.
 
 </details>
 
