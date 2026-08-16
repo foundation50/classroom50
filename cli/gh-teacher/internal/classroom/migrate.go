@@ -42,7 +42,7 @@ func classroomMigrateCmd() *cobra.Command {
 			"`gh teacher roster add|import`.\n\n" +
 			"GitHub Classroom is 1:1 with orgs (the org IS the classroom\n" +
 			"container) while Classroom 50 hosts multiple classrooms per\n" +
-			"org under one classroom50 config repo. Migrating N legacy\n" +
+			"org under one classroom50 repository. Migrating N legacy\n" +
 			"classrooms into one target org means running this command N\n" +
 			"times, once per source classroom.\n\n" +
 			"--source accepts a numeric GitHub Classroom ID (e.g., 95884) or\n" +
@@ -78,7 +78,7 @@ func classroomMigrateCmd() *cobra.Command {
 				return errors.New("--source is required (numeric classroom ID or org login)")
 			}
 			if targetVal == "" {
-				return errors.New("--target is required (destination org owning the classroom50 config repo)")
+				return errors.New("--target is required (destination org owning the classroom50 repository)")
 			}
 
 			client, err := githubapi.RequireAuthClient(cmd)
@@ -98,7 +98,7 @@ func classroomMigrateCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&source, "source", "", "Source classroom — numeric ID or org login (required)")
-	cmd.Flags().StringVar(&target, "target", "", "Destination org owning the classroom50 config repo (required)")
+	cmd.Flags().StringVar(&target, "target", "", "Destination org owning the classroom50 repository (required)")
 	cmd.Flags().StringVar(&shortName, "short-name", "", "Override the auto-derived classroom directory name")
 	cmd.Flags().StringVar(&term, "term", "", "Set classroom.json.term (e.g., Spring-2026)")
 	cmd.Flags().StringVar(&templateSuffix, "template-suffix", "", "Suffix appended to every target template repo name (e.g., --template-suffix migrated → readability-migrated)")

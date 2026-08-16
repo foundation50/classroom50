@@ -117,7 +117,7 @@ func (s *initSummary) renderHuman(u *ui.UI) {
 		if s.ConfigRepo.Created {
 			verb = "created"
 		}
-		u.Item("config repo (%s): %s", verb, s.ConfigRepo.URL)
+		u.Item("classroom50 repository (%s): %s", verb, s.ConfigRepo.URL)
 	}
 	if s.PagesURL != "" {
 		u.Item("pages (after first publish-pages run): %s", s.PagesURL)

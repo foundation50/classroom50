@@ -1,5 +1,5 @@
 // Package classroom implements the `gh teacher classroom` command group:
-// managing classroom directories inside the <org>/classroom50 config repo
+// managing classroom directories inside the <org>/classroom50 repository
 // (add/list/edit/remove) plus `classroom migrate` (imports an existing GitHub
 // Classroom). Only NewCmd is exported. The four-file scaffold lands through the
 // race-safe internal/configwrite seam.
@@ -45,8 +45,8 @@ const defaultAutograderName = contract.DefaultAutograderName
 func NewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "classroom",
-		Short: "Manage classroom directories inside the config repo",
-		Long: "Manage classrooms within an org's classroom50 config repo.\n\n" +
+		Short: "Manage classroom directories inside the classroom50 repository",
+		Long: "Manage classrooms within an org's classroom50 repository.\n\n" +
 			"A classroom is a directory at the root of <org>/classroom50,\n" +
 			"named by its short-name (e.g., cs-principles). Each classroom\n" +
 			"holds four files: classroom.json (metadata), assignments.json\n" +
@@ -81,7 +81,7 @@ func classroomAddCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "add <org> <short-name>",
-		Short: "Add a new classroom directory inside the config repo",
+		Short: "Add a new classroom directory inside the classroom50 repository",
 		Long: "Create the directory <short-name>/ inside <org>/classroom50\n" +
 			"and populate it with a four-file scaffold: classroom.json,\n" +
 			"assignments.json, roster.csv, and scores.json.\n\n" +
@@ -373,7 +373,7 @@ func classroomListCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "list <org>",
-		Short: "List the classrooms registered in the config repo",
+		Short: "List the classrooms registered in the classroom50 repository",
 		Long: "List every classroom registered in <org>/classroom50.\n\n" +
 			"A classroom is a root-level directory holding a classroom.json;\n" +
 			"directories without one (e.g., .github) are skipped.\n\n" +
@@ -500,7 +500,7 @@ func classroomEditCmd() *cobra.Command {
 			"The short-name itself is immutable — it flows into student\n" +
 			"repo names (`<short-name>-<assignment>-<username>`), so renaming\n" +
 			"would orphan existing repos. To rename, add a new classroom.\n\n" +
-			"Lands as a single Tree commit on the config repo. Re-running\n" +
+			"Lands as a single Tree commit on the classroom50 repository. Re-running\n" +
 			"with values that already match the file is a no-op.",
 		Example: "  gh teacher classroom edit cs50-fall-2026 cs-principles --name \"CS Principles\"\n" +
 			"  gh teacher classroom edit cs50-fall-2026 cs-principles --term Fall-2026",
@@ -729,7 +729,7 @@ func classroomRemoveCmd() *cobra.Command {
 	var skipConfirm bool
 	cmd := &cobra.Command{
 		Use:   "remove <org> <short-name>",
-		Short: "Remove a classroom directory from the config repo",
+		Short: "Remove a classroom directory from the classroom50 repository",
 		Long: "Delete the <short-name>/ directory (classroom.json,\n" +
 			"assignments.json, roster.csv, scores.json, and any\n" +
 			"autograders/) from <org>/classroom50 in a single commit.\n\n" +

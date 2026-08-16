@@ -181,7 +181,7 @@ func TestCommitSkeleton_UpToDateSkeletonNoOps(t *testing.T) {
 	if err := commitSkeleton(client, strings.NewReader(""), &out, io.Discard, "o", "r", "main", false); err != nil {
 		t.Fatalf("commitSkeleton returned error: %v", err)
 	}
-	if !strings.Contains(out.String(), "skeleton up to date") {
+	if !strings.Contains(out.String(), "workflow files up to date") {
 		t.Errorf("out = %q, want up-to-date note", out.String())
 	}
 	mu.Lock()
@@ -263,7 +263,7 @@ func TestCommitSkeleton_RefreshesStaleFiles(t *testing.T) {
 	if !*patched {
 		t.Error("ref was never PATCHed; the refresh never landed")
 	}
-	if !strings.Contains(out.String(), "skeleton refreshed (1 file(s))") {
+	if !strings.Contains(out.String(), "workflow files refreshed (1 file(s))") {
 		t.Errorf("out = %q, want refreshed note", out.String())
 	}
 	if !strings.Contains(errOut.String(), ".github/scripts/runner.py") {
@@ -307,7 +307,7 @@ func TestCommitSkeleton_RefreshReportsLandedCount(t *testing.T) {
 	if !*patched {
 		t.Error("ref was never PATCHed")
 	}
-	if !strings.Contains(out.String(), "skeleton refreshed (1 file(s))") {
+	if !strings.Contains(out.String(), "workflow files refreshed (1 file(s))") {
 		t.Errorf("out = %q, want the landed count (1), not the initial diff (2)", out.String())
 	}
 }

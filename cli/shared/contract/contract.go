@@ -99,7 +99,7 @@ const (
 	// contract_test.go pins the Go half.
 	RosterFilename = "roster.csv"
 
-	// ServiceTokenSecretName is the repo-level Actions secret on the config repo
+	// ServiceTokenSecretName is the repo-level Actions secret on the classroom50 repository
 	// holding the fine-grained PAT that collect-scores.yaml / regrade.yaml
 	// consume. Hand-mirrored with NO compile-time link in the collect-scores /
 	// regrade workflow YAML, the gh-teacher servicetoken package (SecretName),

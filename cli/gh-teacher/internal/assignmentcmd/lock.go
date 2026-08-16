@@ -132,7 +132,7 @@ func runAssignmentLock(client githubapi.Client, out, errOut io.Writer, org, clas
 		_, _ = fmt.Fprintf(out, "%s/%s/%s: %sed %s\n",
 			org, configrepo.ConfigRepoName, assignmentsFilePath(classroom), verb, slug)
 	} else {
-		_, _ = fmt.Fprintf(out, "%s/%s/%s: %s was already %sed, reconciling template access\n",
+		_, _ = fmt.Fprintf(out, "%s/%s/%s: %s was already %sed, re-checking template access\n",
 			org, configrepo.ConfigRepoName, assignmentsFilePath(classroom), slug, verb)
 	}
 
@@ -144,7 +144,7 @@ func runAssignmentLock(client githubapi.Client, out, errOut io.Writer, org, clas
 	}
 	private, ok, err := templateVisibility(client, template.Owner, template.Repo)
 	if err != nil {
-		_, _ = fmt.Fprintf(errOut, "Warning: %sed %q, but checking the template %s/%s failed (%v); its student-team access was not reconciled.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %sed %q, but checking the template %s/%s failed (%v); its student-team access was not updated.\n",
 			verb, slug, template.Owner, template.Repo, err)
 		return nil
 	}

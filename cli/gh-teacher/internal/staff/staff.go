@@ -30,7 +30,7 @@ func NewCmd() *cobra.Command {
 		Long: "Add or remove teachers, head TAs, and teaching assistants on a\n" +
 			"classroom's staff teams (classroom50-<classroom>-{teacher,hta,ta}).\n\n" +
 			"Staff roles are GitHub Teams. The teacher and head-TA (hta) teams\n" +
-			"get write on the config repo so members can author assignments; the\n" +
+			"get write on the classroom50 repository so members can author assignments; the\n" +
 			"ta team gets read-only. Head TAs are org members, never org owners.\n" +
 			"This mirrors the web GUI's \"Staff & roles\" section — a classroom\n" +
 			"managed from either surface has the same staff.\n\n" +

@@ -319,7 +319,7 @@ func ensureOrgActionsEnabled(client githubapi.Client, out, errOut io.Writer, org
 		_, _ = fmt.Fprintf(out, "%s: Actions already enabled (all repositories)\n", org)
 		return nil
 	case "selected":
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: Actions is enabled only for selected repositories; ensure the classroom50 config repo and the <classroom>-* student repos are included (or switch to All repositories) at https://github.com/organizations/%s/settings/actions — Classroom50's autograde, publish-pages, and collect-scores workflows won't run in any repo left out.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: Actions is enabled only for selected repositories; ensure the classroom50 repository and the <classroom>-* student repos are included (or switch to All repositories) at https://github.com/organizations/%s/settings/actions — Classroom50's autograde, publish-pages, and collect-scores workflows won't run in any repo left out.\n",
 			org, org)
 		return nil
 	case "none":
@@ -375,7 +375,7 @@ type orgWorkflowPermissions struct {
 //
 // Trade-off: GitHub's single field couples "create" and "approve" — no
 // create-only toggle, so this also lets Actions *approve* PRs org-wide. Safe as
-// shipped: neither the config repo's default branch nor student repos have a
+// shipped: neither the classroom50 repository's default branch nor student repos have a
 // required-review gate, so a self-approval grants no merge a student couldn't
 // already do. Residual: if a teacher later adds a required-review rule, a
 // student-controlled token could satisfy it via self-approval (documented in
@@ -879,14 +879,14 @@ func reportOrgWorkflowPermissions(client githubapi.Client, out io.Writer, owner,
 		DefaultWorkflowPermissions string `json:"default_workflow_permissions"`
 	}
 	if err := client.Get(path, &resp); err != nil {
-		_, _ = fmt.Fprintf(out, "%s/%s: workflow permissions are managed by an org policy (HTTP 409 on PUT); skeleton workflows grant workflow-level permissions, so this is OK.\n", owner, repo)
+		_, _ = fmt.Fprintf(out, "%s/%s: workflow permissions are managed by an org policy (HTTP 409 on PUT); workflow files grant workflow-level permissions, so this is OK.\n", owner, repo)
 		return nil
 	}
 	if resp.DefaultWorkflowPermissions == "write" {
 		_, _ = fmt.Fprintf(out, "%s/%s: workflow permissions already write (set at org level)\n", owner, repo)
 		return nil
 	}
-	_, _ = fmt.Fprintf(out, "%s/%s: org default workflow permissions are %q; skeleton workflows grant workflow-level write where needed. To raise the org default: gh api -X PUT /orgs/%s/actions/permissions/workflow -F default_workflow_permissions=write\n",
+	_, _ = fmt.Fprintf(out, "%s/%s: org default workflow permissions are %q; workflow files grant workflow-level write where needed. To raise the org default: gh api -X PUT /orgs/%s/actions/permissions/workflow -F default_workflow_permissions=write\n",
 		owner, repo, resp.DefaultWorkflowPermissions, owner)
 	return nil
 }

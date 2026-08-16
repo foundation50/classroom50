@@ -27,7 +27,7 @@ import (
 var skeletonFS embed.FS
 
 // skeletonProbePath detects "already committed" on re-runs.
-// publish-pages.yaml is unique to the config repo; README.md isn't reliable
+// publish-pages.yaml is unique to the classroom50 repository; README.md isn't reliable
 // (auto_init creates one).
 const skeletonProbePath = ".github/workflows/publish-pages.yaml"
 
@@ -75,7 +75,7 @@ func skeletonFiles(defaultBranch string) (map[string]string, error) {
 }
 
 // skeletonCommitMessage is the single bootstrap commit's message.
-var skeletonCommitMessage = contract.PrefixCommit("Bootstrap classroom50 config repo (gh teacher init)")
+var skeletonCommitMessage = contract.PrefixCommit("Bootstrap classroom50 repository (gh teacher init)")
 
 // skeletonCommitAttempts: read-parent + build-tree retries at 200ms×2^n backoff
 // (~3s) to ride out a fresh repo's git-data lag.
@@ -125,11 +125,11 @@ func commitSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Writer
 		return err
 	}
 
-	_, _ = fmt.Fprintf(out, "%s/%s: skeleton committed (%d files)\n", owner, repo, len(entries))
+	_, _ = fmt.Fprintf(out, "%s/%s: workflow files committed (%d files)\n", owner, repo, len(entries))
 	return nil
 }
 
-// refreshSkeleton brings an already-bootstrapped config repo's skeleton up to
+// refreshSkeleton brings an already-bootstrapped classroom50 repository's skeleton up to
 // date: diff embedded vs repo, confirm (skeleton files are user-editable, so an
 // overwrite resets customizations), then commit only the stale paths. Declining
 // is not an error.
@@ -139,11 +139,11 @@ func refreshSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Write
 		return err
 	}
 	if len(stale) == 0 {
-		_, _ = fmt.Fprintf(out, "%s/%s: skeleton up to date\n", owner, repo)
+		_, _ = fmt.Fprintf(out, "%s/%s: workflow files up to date\n", owner, repo)
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(errOut, "%s/%s: %d skeleton file(s) differ from this CLI's embedded version:\n", owner, repo, len(stale))
+	_, _ = fmt.Fprintf(errOut, "%s/%s: %d workflow file(s) differ from this CLI's embedded version:\n", owner, repo, len(stale))
 	for _, p := range stale {
 		_, _ = fmt.Fprintf(errOut, "  %s\n", p)
 	}
@@ -153,7 +153,7 @@ func refreshSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Write
 			return err
 		}
 		if !ok {
-			_, _ = fmt.Fprintf(out, "%s/%s: skeleton refresh declined, files left untouched (re-run with --yes to skip the prompt)\n", owner, repo)
+			_, _ = fmt.Fprintf(out, "%s/%s: workflow-file refresh declined, files left untouched (re-run with --yes to skip the prompt)\n", owner, repo)
 			return nil
 		}
 	}
@@ -175,17 +175,17 @@ func refreshSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Write
 		refreshed = len(changed)
 		return updates, nil
 	}
-	commitSHA, err := configwrite.CommitTree(client, owner, repo, branch, contract.PrefixCommit("Refresh classroom50 skeleton (gh teacher init)"), build)
+	commitSHA, err := configwrite.CommitTree(client, owner, repo, branch, contract.PrefixCommit("Refresh classroom50 workflow files (gh teacher init)"), build)
 	if err != nil {
 		return err
 	}
 	if commitSHA == "" {
 		// A concurrent writer refreshed the same files between the diff and
 		// the commit; nothing left to land.
-		_, _ = fmt.Fprintf(out, "%s/%s: skeleton already refreshed by a concurrent writer, nothing to commit\n", owner, repo)
+		_, _ = fmt.Fprintf(out, "%s/%s: workflow files already refreshed by a concurrent writer, nothing to commit\n", owner, repo)
 		return nil
 	}
-	_, _ = fmt.Fprintf(out, "%s/%s: skeleton refreshed (%d file(s))\n", owner, repo, refreshed)
+	_, _ = fmt.Fprintf(out, "%s/%s: workflow files refreshed (%d file(s))\n", owner, repo, refreshed)
 	return nil
 }
 

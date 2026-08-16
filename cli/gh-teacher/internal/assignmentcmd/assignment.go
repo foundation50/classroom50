@@ -31,7 +31,7 @@ import (
 func NewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "assignment",
-		Short: "Manage assignments inside the config repo",
+		Short: "Manage assignments inside the classroom50 repository",
 		Long: "Manage assignment entries in <org>/classroom50/<classroom>/assignments.json.\n\n" +
 			"Subcommands:\n" +
 			"  add     register or upsert an assignment\n" +
@@ -131,13 +131,13 @@ func assignmentAddCmd() *cobra.Command {
 			"referenced file must exist at write time. The default is\n" +
 			"`default`, which uses the universal shim embedded in\n" +
 			"gh-student — that shim `uses:` the autograde-runner workflow\n" +
-			"in the config repo.\n\n" +
+			"in the classroom50 repository.\n\n" +
 			"There are three ways to grade. (1) Declarative tests: pass\n" +
 			"--tests <file.json> here (or use `gh teacher assignment test\n" +
 			"add`) to describe io/run/python checks that the runner grades\n" +
 			"with no autograder.py. (2) A per-assignment autograder.py: drop\n" +
 			"an entrypoint plus any sibling fixtures at\n" +
-			"<classroom>/autograders/<slug>/ in the config repo (mutually\n" +
+			"<classroom>/autograders/<slug>/ in the classroom50 repository (mutually\n" +
 			"exclusive with --tests). (3) A classroom default: run\n" +
 			"`gh teacher autograder set-default <org> <classroom>` to install\n" +
 			"<classroom>/autograder.py for every assignment. See the\n" +
@@ -299,13 +299,13 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&availableFrom, "available-from", "", "Optional release date (e.g., 2026-09-15T00:00:00-04:00); stored as UTC. Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Students who already accepted always see it (listing-only, not access control). Omit the offset to use the machine's local timezone.")
 	cmd.Flags().StringVar(&mode, "mode", assignment.ModeIndividual, "Assignment mode: `individual` (default) or `group`. Group mode requires --max-group-size.")
 	cmd.Flags().IntVar(&maxGroupSize, "max-group-size", 0, "Maximum collaborators on a group repo (>= 2; required with --mode group). Enforced within the CLI when students join; direct GitHub-UI invites can bypass it.")
-	cmd.Flags().StringVar(&autograder, "autograder", contract.DefaultAutograderName, "Autograder workflow shim this assignment opts into; resolves to <classroom>/autograders/<name>.yaml in the config repo")
+	cmd.Flags().StringVar(&autograder, "autograder", contract.DefaultAutograderName, "Autograder workflow shim this assignment opts into; resolves to <classroom>/autograders/<name>.yaml in the classroom50 repository")
 	cmd.Flags().StringVar(&runtimeFile, "runtime", "", "Path to a JSON file describing the runtime environment (runs-on as a single label or an array of labels for self-hosted runners, python/node/java/go/rust versions, apt packages, or container image), or `-` to read from stdin. Omit for ubuntu-latest + Python 3.14.")
 	cmd.Flags().StringVar(&testsFile, "tests", "", "Path to a JSON file with a bare array of declarative test specs (io/run/python), or `-` to read from stdin. Sets the assignment's `tests` block; mutually exclusive with a per-assignment autograder.py. See `gh teacher assignment test --help`.")
 	cmd.Flags().BoolVar(&feedbackPR, "feedback-pr", true, "Open one long-lived Feedback pull request per student repo so you can leave inline review comments on the full starter→submission diff. Accept freezes a base branch at the baseline commit and opens the PR right away, so it exists even with GitHub Actions disabled; the autograde runner then adopts and maintains it (and opens it on the first submission if accept could not). Default on; pass --feedback-pr=false to disable. Requires `gh teacher init` to have set up the org prerequisites.")
 	cmd.Flags().BoolVar(&emptyRepo, "empty-repo", false, "Create truly bare student repos: no README/initial commit, no .classroom50.yaml marker, no autograde workflow — for assignments where students build the repo (including their own GitHub Actions) from scratch. Autograding and the Feedback PR are disabled. Changing this on a same-slug re-add applies only to accepts from now on (repositories students already accepted are not retrofitted; a warning is printed). Mutually exclusive with --template, --tests, --feedback-pr, --allowed-files, --pass-threshold, --submission-mode, and --submission-tag.")
 	cmd.Flags().StringArrayVar(&allowedFiles, "allowed-files", nil, "Ordered .gitignore-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. Pass `--allowed-files '*' --allowed-files '!hello.py'` to allow only hello.py. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file.")
-	cmd.Flags().IntVar(&passThreshold, "pass-threshold", 0, "Opt-in passing bar as a percentage of max score (0–100): at/above it a gradebook client shows a submission as passing. Advisory/display-only — it does not change a student's score. Omit to leave it off (no passing concept); pass --pass-threshold 0 for an explicit 0%.")
+	cmd.Flags().IntVar(&passThreshold, "pass-threshold", 0, "Opt-in passing bar as a percentage of max score (0–100): at/above it the submissions page shows a submission as passing. Advisory/display-only — it does not change a student's score. Omit to leave it off (no passing concept); pass --pass-threshold 0 for an explicit 0%.")
 	cmd.Flags().StringVar(&studentPerm, "student-permission", "", "Optional collaborator role each student gets on their OWN assignment repo at accept time: one of pull, triage, push, maintain, admin. Omit for the default (push for individual, admin for group). Choose admin to let students manage repo settings and enable GitHub Pages. Applies to students who accept from now on; existing repos are unchanged. Caution: admin on a private repo also lets the student change its visibility.")
 	cmd.Flags().StringVar(&submissionMd, "submission-mode", contract.SubmissionModeEveryPush, "When the autograder fires: `every-push` (default; every push to the default branch grades) or `tag` (only submit/* tag pushes grade — `gh student submit` pushes the tag, or push any submit/* tag by hand; plain `git push` costs no Actions minutes). Baked into each student repo's shim at accept time; change it later with `gh teacher assignment submission-mode`, which also retrofits existing repos. Mutually exclusive with --empty-repo.")
 	cmd.Flags().StringArrayVar(&submissionTags, "submission-tag", nil, "Milestone tag pattern (repeatable) that ALSO triggers grading — e.g. --submission-tag phase1 --submission-tag phase2, or a glob like 'v*'. A student pushing a matching tag (`git tag phase1 && git push origin phase1`) gets that commit graded; the grading record still lives at the canonical submit/* tag the runner mints, so history and collection are unchanged. The canonical submit/* namespace always triggers too. Baked into the shim at accept time like --submission-mode (same retrofit to change later). Caution: a broad glob like 'v*' grades every matching tag a student pushes. Mutually exclusive with --empty-repo.")
@@ -330,7 +330,7 @@ func assignmentRemoveCmd() *cobra.Command {
 			"clean reset: an --empty-repo flag that differs from the removed\n" +
 			"entry leaves already-accepted repos on the old behavior — the\n" +
 			"change applies only to accepts from now on (a warning is printed;\n" +
-			"reconcile existing repositories yourself).",
+			"update existing repositories yourself).",
 		Example: "  gh teacher assignment remove cs50-fall-2026 cs-principles hello",
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -820,7 +820,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		if hasPrev && entry.PassThreshold == nil && file.Assignments[prevIdx].PassThreshold != nil {
 			droppedPassThreshold = file.Assignments[prevIdx].PassThreshold
 		}
-		// Same footgun for student_permission (often set in the gradebook GUI):
+		// Same footgun for student_permission (often set in the web app):
 		// re-running add without --student-permission drops a prior value back
 		// to the mode default. Empty = omitted (warn if the prior entry set one).
 		if hasPrev && entry.StudentPermission == "" && file.Assignments[prevIdx].StudentPermission != "" {
@@ -958,7 +958,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	}
 	if droppedPassThreshold != nil {
 		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q dropped its pass_threshold (%d%%) — `assignment add` rewrites the whole entry, and you re-ran it without --pass-threshold. The passing bar (often set in the gradebook GUI) is now off. Pass --pass-threshold %d to keep it.\n",
+			"Warning: replacing %q dropped its pass_threshold (%d%%) — `assignment add` rewrites the whole entry, and you re-ran it without --pass-threshold. The passing bar (often set in the web app) is now off. Pass --pass-threshold %d to keep it.\n",
 			slug, *droppedPassThreshold, *droppedPassThreshold)
 	}
 	if droppedStudentPerm != "" {
@@ -972,7 +972,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	// reconciling any resulting inconsistency (mirrors the web app's confirm).
 	if changedEmptyRepo {
 		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q changed its empty_repo setting. Repositories students already accepted are not retrofitted — they keep their original setup, and if autograding is now off their autograde runs start failing and drop out of the gradebook. The new setting applies only to accepts from now on; reconcile existing repositories yourself.\n",
+			"Warning: replacing %q changed its empty_repo setting. Repositories students already accepted are not retrofitted — they keep their original setup, and if autograding is now off their autograde runs start failing and drop out of the collected scores. The new setting applies only to accepts from now on; update existing repositories yourself.\n",
 			slug)
 	}
 	// Heads-up if the encoded file nears GitHub's ~1 MiB contents-API limit

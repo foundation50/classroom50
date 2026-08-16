@@ -199,7 +199,7 @@ func checkOwnership(client githubapi.Client, org, login string) preflightCheck {
 	}
 	if resp.Role != "admin" {
 		c.Status = preflightFail
-		c.Detail = fmt.Sprintf("you are a %q of %q, not an owner; `gh teacher init` needs org-owner rights to lock down member privileges and create the config repo", resp.Role, org)
+		c.Detail = fmt.Sprintf("you are a %q of %q, not an owner; `gh teacher init` needs org-owner rights to lock down member privileges and create the classroom50 repository", resp.Role, org)
 		return c
 	}
 	c.Status = preflightOK
@@ -250,7 +250,7 @@ func currentTokenSource() tokenSource {
 // suppresses per-check lines but always prints failures.
 func renderPreflight(u *ui.UI, res preflightResult, quiet bool) {
 	if !quiet {
-		u.Section("Preflight checks")
+		u.Section("Setup checks")
 	}
 	for _, c := range res.Checks {
 		switch c.Status {
@@ -275,7 +275,7 @@ func preflightFailError(res preflightResult) error {
 			failed = append(failed, fmt.Sprintf("%s (%s)", c.Name, c.Detail))
 		}
 	}
-	return fmt.Errorf("preflight failed — fix before re-running: %s", strings.Join(failed, "; "))
+	return fmt.Errorf("setup checks failed — fix before re-running: %s", strings.Join(failed, "; "))
 }
 
 // initStepLabels are init's phase labels in order — used by --dry-run and the
@@ -286,9 +286,9 @@ var initStepLabels = []string{
 	"Setting the $0 Actions budget cap",
 	"Allowing Actions to create pull requests (org)",
 	"Installing branch rulesets (Feedback PR protections)",
-	"Creating the config repo",
+	"Creating the classroom50 repository",
 	"Enabling repo-level Actions",
-	"Committing the skeleton workflows",
+	"Committing the workflow files",
 	"Enabling GitHub Pages",
 	"Protecting the default branch",
 	"Setting workflow permissions",

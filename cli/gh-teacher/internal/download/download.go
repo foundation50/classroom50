@@ -2,7 +2,7 @@
 // student submission repo for an assignment under <org>/classroom50
 // (team-driven or --by-pattern), refreshing each repo's
 // result.json/results.json from its submit-tag releases, and writing a
-// scores.csv summary. Read-only consumer of the config repo; only NewCmd is
+// scores.csv summary. Read-only consumer of the classroom50 repository; only NewCmd is
 // exported.
 package download
 
@@ -114,7 +114,7 @@ func NewCmd() *cobra.Command {
 			"cloned.\n\n" +
 			"Pass --by-pattern to skip the team lookup and clone every <org> repo\n" +
 			"whose name starts with <classroom>-<assignment>-. No result.json fetch,\n" +
-			"no scores.csv summary — useful when the config repo isn't bootstrapped\n" +
+			"no scores.csv summary — useful when the classroom50 repository isn't bootstrapped\n" +
 			"yet or when you want every matching repo regardless of the roster.\n\n" +
 			"Clones go through `gh repo clone`, so authentication flows through the\n" +
 			"current gh session. The default destination is\n" +
@@ -380,7 +380,7 @@ func matchesAssignmentPrefix(name, classroom, assignment string) bool {
 
 // downloadByPattern: page through <org>'s repos and clone every one whose
 // name starts with <classroom>-<assignment>-. Skips the team lookup,
-// result.json refresh, and scores.csv summary (all depend on the config repo).
+// result.json refresh, and scores.csv summary (all depend on the classroom50 repository).
 func downloadByPattern(client githubapi.Client, out, errOut io.Writer, org, classroom, assignment, dir string, quiet, verbose bool) error {
 	prefix := contract.AssignmentRepoPrefix(classroom, assignment)
 

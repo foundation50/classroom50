@@ -134,7 +134,7 @@ type auditReport struct {
 	// repo's default branch (this value) isn't `main`; recommended, never a
 	// failure. Renameable in the web app; hand-fix link here.
 	ConfigRepoBranchRec string `json:"config_repo_branch_recommendation,omitempty"`
-	// ConfigRepoBranchesURL is the config repo's branches settings page.
+	// ConfigRepoBranchesURL is the classroom50 repository's branches settings page.
 	ConfigRepoBranchesURL string `json:"config_repo_branches_url,omitempty"`
 	// SettingsURL is the org member-privileges page every item lives on.
 	SettingsURL string `json:"settings_url"`
@@ -231,7 +231,7 @@ func buildAuditReport(client githubapi.Client, org, plan string) auditReport {
 		report.RepositoryDefaultsURL = orgpolicy.OrgRepositoryDefaultsURL(org)
 	}
 
-	// Advisory-only: the classroom50 config repo drifted off `main`. Renameable
+	// Advisory-only: the classroom50 repository drifted off `main`. Renameable
 	// in the web app; here we only recommend + link. A read failure (e.g., repo
 	// not yet initialized) simply omits the recommendation — it never gates the
 	// verdict.
@@ -361,7 +361,7 @@ func (r *auditReport) renderHuman(u *ui.UI) {
 		u.Detail("Change it at %s", r.RepositoryDefaultsURL)
 	}
 	if r.ConfigRepoBranchRec != "" {
-		u.Detail("The classroom50 config repo's default branch is %q, not %q; everything still works (reads/writes target the real branch), but renaming it matches Classroom 50's convention. The web app can rename it for you.",
+		u.Detail("The classroom50 repository's default branch is %q, not %q; everything still works (reads/writes target the real branch), but renaming it matches Classroom 50's convention. The web app can rename it for you.",
 			r.ConfigRepoBranchRec, orgpolicy.RecommendedOrgDefaultBranch)
 		u.Detail("Rename it at %s", r.ConfigRepoBranchesURL)
 	}

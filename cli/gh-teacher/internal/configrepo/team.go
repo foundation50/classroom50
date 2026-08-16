@@ -39,7 +39,7 @@ type TeamRef struct {
 
 // StaffRole is a per-classroom staff role backing the web GUI's in-app
 // roles. Each maps to a `secret` GitHub team named
-// `classroom50-<short>-<role>` granted write on the config repo.
+// `classroom50-<short>-<role>` granted write on the classroom50 repository.
 type StaffRole string
 
 const (
@@ -94,7 +94,7 @@ var TemplateReadStaffRoles = []StaffRole{RoleHeadTA, RoleTA}
 // `push`; a plain TA is read-only → `pull`.
 // This is a SEPARATE axis from StaffTeamRepoPermissions above, which governs
 // student assignment repos and private templates. A role absent here is granted
-// nothing on the config repo.
+// nothing on the classroom50 repository.
 var ConfigRepoPermission = map[StaffRole]string{
 	RoleTeacher: "push",
 	RoleHeadTA:  "push",
@@ -327,7 +327,7 @@ func ReconcileClassroomTeamDescription(client githubapi.Client, org, shortName, 
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
 			return false, nil
 		}
-		return false, fmt.Errorf("GET %s (reconcile team description): %w", getPath, err)
+		return false, fmt.Errorf("GET %s (update team description): %w", getPath, err)
 	}
 
 	// Only ever write the record (which may carry the capability secret) onto a
@@ -344,7 +344,7 @@ func ReconcileClassroomTeamDescription(client githubapi.Client, org, shortName, 
 	patchPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(existing.Slug))
 	resp, err := client.Request(http.MethodPatch, patchPath, bytes.NewReader(patch))
 	if err != nil {
-		return false, fmt.Errorf("PATCH %s (reconcile team description): %w", patchPath, err)
+		return false, fmt.Errorf("PATCH %s (update team description): %w", patchPath, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
@@ -437,7 +437,7 @@ func adoptSecretTeamByName(client githubapi.Client, org, name, description, noti
 		patchPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(existing.Slug))
 		resp, err := client.Request(http.MethodPatch, patchPath, bytes.NewReader(body))
 		if err != nil {
-			return TeamRef{}, fmt.Errorf("PATCH %s (reconcile team): %w", patchPath, err)
+			return TeamRef{}, fmt.Errorf("PATCH %s (update team): %w", patchPath, err)
 		}
 		defer func() { _ = resp.Body.Close() }()
 		_, _ = io.Copy(io.Discard, resp.Body)
@@ -663,7 +663,7 @@ func GrantTeamRepoRead(client githubapi.Client, org, slug, repoOwner, repo strin
 }
 
 // GrantTeamRepoWrite grants the team `push` on <repoOwner>/<repo> — the access
-// a staff team needs on the config repo to author assignments. Idempotent;
+// a staff team needs on the classroom50 repository to author assignments. Idempotent;
 // returns whether a new grant was applied. Mirrors the web's
 // grantTeamConfigRepoWrite.
 func GrantTeamRepoWrite(client githubapi.Client, org, slug, repoOwner, repo string) (granted bool, err error) {

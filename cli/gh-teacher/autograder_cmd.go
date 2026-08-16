@@ -55,7 +55,7 @@ func autograderCmd() *cobra.Command {
 			"per-assignment overrides (<classroom>/autograders/<slug>/\n" +
 			"autograder.py) are read-only from the CLI — `list` shows what\n" +
 			"is present; author or delete them via ordinary git operations\n" +
-			"against the config repo.",
+			"against the classroom50 repository.",
 	}
 	cmd.AddCommand(autograderSetDefaultCmd())
 	cmd.AddCommand(autograderShowCmd())
@@ -75,7 +75,7 @@ func autograderSetDefaultCmd() *cobra.Command {
 		Long: "Replace `<classroom>/autograder.py` in <org>/classroom50\n" +
 			"with the contents of --from <path>. Pass `--from -` to\n" +
 			"read from stdin (one-shot agent flows). Lands as a single\n" +
-			"Tree commit on the config repo's default branch and is\n" +
+			"Tree commit on the classroom50 repository's default branch and is\n" +
 			"picked up by every subsequent submission once the next\n" +
 			"`publish-pages.yaml` run deploys (~30s).\n\n" +
 			"When --from is omitted, writes the diagnostic stub shipped\n" +

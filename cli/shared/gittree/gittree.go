@@ -8,7 +8,7 @@
 //
 //   - CommitWithRebase — optimistic update with non-fast-forward retry, for
 //     writes to a repo with *concurrent writers* (the teacher's
-//     <org>/classroom50 config repo).
+//     <org>/classroom50 repository).
 //   - CommitWithFreshRepoRetry — retry the tree+commit build against a
 //     *freshly-created* repo whose ref/git-data APIs briefly 404/409 until they
 //     propagate (the teacher's first skeleton land; the student's accept-time

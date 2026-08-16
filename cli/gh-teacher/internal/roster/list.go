@@ -88,7 +88,7 @@ func rosterListCmd() *cobra.Command {
 	return cmd
 }
 
-// runRosterList reads the roster at the config repo's default branch
+// runRosterList reads the roster at the classroom50 repository's default branch
 // and renders it as a table (default), a JSON array (--json), or
 // username-only lines (--quiet). Read-only; no commit.
 func runRosterList(client githubapi.Client, out, errOut io.Writer, org, classroom string, asJSON, quiet bool) error {
