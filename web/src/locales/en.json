@@ -500,7 +500,7 @@
     "addTitle": "Add member",
     "addHint": "Enter a GitHub username to add a student with their details, or an email to send an organization invite. Email invites capture no name or section — add those later by username or by uploading a roster.",
     "addRoleLabel": "Role",
-    "addStaffHint": "Teachers, head TAs, and TAs are added by GitHub username. Teachers and head TAs get write access to the classroom config repository; TAs get read-only. A teacher is granted organization owner.",
+    "addStaffHint": "Teachers, head TAs, and TAs are added by GitHub username. Teachers and head TAs get write access to the classroom50 repository; TAs get read-only. A teacher is granted organization owner.",
     "namePlaceholder": "Name (optional)",
     "usernamePlaceholder": "github-username",
     "emailPlaceholder": "student@university.edu (optional)",
@@ -1137,7 +1137,7 @@
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
       "repoSource": {
         "label": "Start with a template",
-        "editHelp": "Changing the repository source only affects repositories students accept from now on. Repositories already accepted keep their original starter content, so you'll need to reconcile any difference yourself.",
+        "editHelp": "Changing the repository source only affects repositories students accept from now on. Repositories already accepted keep their original starter content, so you'll need to update the existing repositories yourself.",
         "none": {
           "label": "No template",
           "help": "Create a fresh repository for each student."
@@ -1176,8 +1176,8 @@
       "studentPermission": {
         "label": "Student repo access",
         "learnMore": "Learn more",
-        "help": "The role each student is granted on their own assignment repository at accept time. Push (write) is the default. Choose Admin to let students manage repository settings and enable GitHub Pages. This applies to students who accept from now on; use the gradebook to change repositories already created.",
-        "groupHelp": "Group members join with at least admin so the group owner can add teammates. This applies to repositories created from now on; use the gradebook to change existing ones.",
+        "help": "The role each student is granted on their own assignment repository at accept time. Push (write) is the default. Choose Admin to let students manage repository settings and enable GitHub Pages. This applies to students who accept from now on; use the submissions page to change repositories already created.",
+        "groupHelp": "Group members join with at least admin so the group owner can add teammates. This applies to repositories created from now on; use the submissions page to change existing ones.",
         "default": "Default: {{level}}",
         "levels": {
           "pull": "Read (pull)",
@@ -1189,7 +1189,7 @@
       },
       "autograding": {
         "modeLabel": "Built-in autograder",
-        "editHelp": "Changing the built-in autograder only affects repositories students accept from now on. Repositories already accepted keep their original setup, so you'll need to reconcile any difference yourself.",
+        "editHelp": "Changing the built-in autograder only affects repositories students accept from now on. Repositories already accepted keep their original setup, so you'll need to update the existing repositories yourself.",
         "choices": {
           "none": {
             "label": "Do not use the built-in autograder",
@@ -1233,7 +1233,7 @@
         "heading": "Repository features",
         "refresh": "Refresh template settings",
         "help": "Whether each student repository has Wikis, Issues, Projects, and Pull requests enabled.",
-        "helpExisting": "Changes apply to repositories created from now on. To update ones students already accepted, use the gradebook.",
+        "helpExisting": "Changes apply to repositories created from now on. To update ones students already accepted, use the submissions page.",
         "templateContentWarning": "Inheriting a private template also copies its Wiki, Issues, and Projects content, so keep answer keys out of a template you inherit from.",
         "overrideTemplate": "The default follows the template's settings when a student accepts. Existing repositories won't change if you update the template later.",
         "overrideNoTemplate": "The default keeps GitHub's own repository defaults.",
@@ -1283,7 +1283,7 @@
       "patternCount_one": "{{count}} pattern",
       "patternCount_other": "{{count}} patterns",
       "passThresholdToggle": "Set a passing threshold",
-      "passThresholdTip": "Off by default. When on, the gradebook marks submissions passing or failing against the bar below (Passing rollup, score badges, passing/failing filter). This is a display threshold only. It does not change a student's actual score.",
+      "passThresholdTip": "Off by default. When on, the submissions page marks submissions passing or failing against the bar below (Passing rollup, score badges, passing/failing filter). This is a display threshold only. It does not change a student's actual score.",
       "passThresholdUnit": "% of max score to pass",
       "back": "Back",
       "saveChanges": "Save changes",
@@ -1530,7 +1530,7 @@
     "unlistedWarning": "This classroom uses an unlisted URL: its resources are served at an unguessable path instead of a guessable one. This is obscurity, not access control — the link is the only thing guarding the data, anyone who has it can read the file, and links can leak (browser history, referrers, search crawlers). Share the per-assignment accept link or CLI command (which include the key) from each assignment's page.",
     "banner": {
       "title": "Everything below is served publicly over the internet",
-      "body": "Your classroom50 config repo is private, but its GitHub Pages site is public by design — students and the autograder fetch these files without authenticating. Only the allow-listed files below are published; anything else in the repo (your roster, internal classroom fields, service token) stays private. A classroom can use an unlisted URL to make its files harder to find, but that is obscurity, not access control — the files are still public to anyone who has the link."
+      "body": "Your classroom50 repository is private, but its GitHub Pages site is public by design — students and the autograder fetch these files without authenticating. Only the allow-listed files below are published; anything else in the repo (your roster, internal classroom fields, service token) stays private. A classroom can use an unlisted URL to make its files harder to find, but that is obscurity, not access control — the files are still public to anyone who has the link."
     },
     "orgLevel": "Organization-level",
     "orgLevelServed": "Served at the root of <path>{{base}}/</path>.",
@@ -1667,8 +1667,8 @@
     "manageCollaborators": "Manage collaborators",
     "provisioningConfirm": {
       "title": "Change provisioning settings after students accepted?",
-      "body_one": "{{count}} student has already accepted this assignment. This change only affects repositories accepted from now on; the {{count}} existing repository keeps its original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the gradebook; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to reconcile any inconsistency yourself.",
-      "body_other": "{{count}} students have already accepted this assignment. This change only affects repositories accepted from now on; the {{count}} existing repositories keep their original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the gradebook; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to reconcile any inconsistency yourself.",
+      "body_one": "{{count}} student has already accepted this assignment. This change only affects repositories accepted from now on; the {{count}} existing repository keeps its original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the collected scores; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to resolve any inconsistency yourself.",
+      "body_other": "{{count}} students have already accepted this assignment. This change only affects repositories accepted from now on; the {{count}} existing repositories keep their original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the collected scores; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to resolve any inconsistency yourself.",
       "confirm": "Save changes anyway",
       "cancel": "Cancel"
     }
@@ -1693,7 +1693,7 @@
     },
     "serviceToken": {
       "title": "Service token",
-      "help": "A fine-grained GitHub token that lets Classroom 50 collect scores and regrade across your student repositories. Stored as a secret on your classroom50 config repo.",
+      "help": "A fine-grained GitHub token that lets Classroom 50 collect scores and regrade across your student repositories. Stored as a secret on your classroom50 repository.",
       "checking": "Checking…",
       "statusPresent": "Token set",
       "statusMissing": "No service token set",
@@ -1732,7 +1732,7 @@
         "readFailedStatus": "read failed ({{status}})",
         "notConfigured": "not configured",
         "orgActions": "enabled_repositories=\"{{enabledRepositories}}\", allowed_actions=\"{{allowedActions}}\"",
-        "orgActionsPaused": "Autograding is paused, so GitHub Actions is deliberately restricted to the classroom50 config repo. Turn the pause off in the GitHub Actions section above to restore the standard policy.",
+        "orgActionsPaused": "Autograding is paused, so GitHub Actions is deliberately restricted to the classroom50 repository. Turn the pause off in the GitHub Actions section above to restore the standard policy.",
         "budgetOverThreshold": "Actions budget is ${{amount}} (over ${{threshold}}); recommend a $0 hard-stop cap",
         "budgetMissing": "no $0 hard-stop Actions budget",
         "budgetUnreadable": "couldn't verify the Actions spending cap (read failed ({{reason}})) — likely enterprise-managed billing or a plan without org budgets. Confirm a $0 hard-stop cap manually.",
@@ -1741,12 +1741,12 @@
       },
       "title": "Organization policy",
       "planBadgeTitle": "GitHub plan — determines which policies are in scope (Enterprise unlocks additional member-privilege fields)",
-      "description": "What Classroom 50 configures on your behalf, and whether anything has drifted from the expected lockdown.",
+      "description": "What Classroom 50 configures on your behalf, and whether anything has changed from the expected lockdown.",
       "recheck": "Re-check",
       "auditing": "Auditing organization policy…",
       "auditError": "Couldn't run the policy audit. Try re-checking.",
       "fixError": "Couldn't apply the fix. You may lack owner permissions, or an enterprise policy blocks this change.",
-      "renameError": "Couldn't rename the config repo's default branch. You may lack owner permissions, or the rename didn't go through — try again.",
+      "renameError": "Couldn't rename the classroom50 repository's default branch. You may lack owner permissions, or the rename didn't go through — try again.",
       "fixTransient": "That didn't go through — this can be a temporary rate limit, or the repository may still be initializing. Try again in a moment.",
       "needsManualSetup": "Needs manual setup",
       "couldntAutoConfigure": "We couldn't set this automatically. This can happen when an enterprise or organization policy manages the setting, or when the account lacks permission. Set it manually on the linked page.",
@@ -1767,19 +1767,19 @@
       "orUseFixIt": " (or use \"Fix it\")",
       "requiresManualFix": "Set manually",
       "readError": "Couldn't read the organization to audit the lockdown. Check your access and retry.",
-      "driftCanFix": "Use “Fix it” on a drifted setting, or re-run setup below to re-apply everything at once.",
-      "driftCannotFix": "Ask an organization owner to repair the drift — these changes require owner permissions.",
+      "driftCanFix": "Use “Fix it” on a changed setting, or re-run setup below to re-apply everything at once.",
+      "driftCannotFix": "Ask an organization owner to fix these settings; changing them requires owner permissions.",
       "confirmByHand": "Confirm by hand",
       "confirmByHandBody": "GitHub exposes no API to read these settings, so we can't verify them automatically — confirm each one on the member privileges page.",
       "confirmManually": "Confirm manually",
       "recommended": "Recommended",
       "defaultBranchRec": "Your org's default branch name for new repositories is \"{{current}}\". We recommend \"main\" so new repos (including student assignment repos) match Classroom 50's convention. Existing repos are unaffected and keep working.",
-      "configBranchRec": "The classroom50 config repo's default branch is \"{{current}}\", not \"main\". Everything still works (reads and writes target the real branch), but renaming it to \"main\" matches Classroom 50's convention.",
+      "configBranchRec": "The classroom50 repository's default branch is \"{{current}}\", not \"main\". Everything still works (reads and writes target the real branch), but renaming it to \"main\" matches Classroom 50's convention.",
       "renameToMain": "Rename to main",
-      "renameModalTitle": "Rename the config repo's default branch to main?",
-      "renameModalBody": "This renames the classroom50 config repo's default branch to \"main\". If any students have already accepted assignments, their autograde workflow pins the current branch name and will stop grading until they re-accept or you re-point their shim. Prefer this only before students accept, or be ready to re-run their setup.",
+      "renameModalTitle": "Rename the classroom50 repository's default branch to main?",
+      "renameModalBody": "This renames the classroom50 repository's default branch to \"main\". If any students have already accepted assignments, their autograde workflow pins the current branch name and will stop grading until they re-accept or you re-point their shim. Prefer this only before students accept, or be ready to re-run their setup.",
       "memberPermsToggle": "Member permissions we configure",
-      "memberPermsHint": "The full list of organization member privileges Classroom 50 sets, including the ones already in place. Drifted ones are called out above."
+      "memberPermsHint": "The full list of organization member privileges Classroom 50 sets, including the ones already in place. Changed ones are called out above."
     },
     "actions": {
       "title": "GitHub Actions",
@@ -1811,7 +1811,7 @@
     },
     "rerun": {
       "title": "Re-run setup",
-      "description": "Re-apply every Classroom 50 organization setting. Safe to run any time — it only changes settings that have drifted.",
+      "description": "Re-apply every Classroom 50 organization setting. Safe to run any time — it only updates settings that have changed.",
       "running": "Re-running…",
       "button": "Re-run setup",
       "failed": "Re-run setup did not complete — a required step failed. Review the steps above, resolve the issue, and run it again.",
@@ -1821,15 +1821,15 @@
     },
     "teardown": {
       "title": "Danger zone",
-      "description": "Tear down this organization by deleting <strong>every</strong> repository in it, including the <repo>classroom50</repo> config repo, and removing the GitHub team of every classroom. This is irreversible.",
+      "description": "Tear down this organization by deleting <strong>every</strong> repository in it, including the <repo>classroom50</repo> repository, and removing the GitHub team of every classroom. This is irreversible.",
       "prepareError": "Couldn't prepare the teardown plan.",
       "preparing": "Preparing…",
       "button": "Tear down organization",
       "confirmText": "delete {{org}}",
       "confirmLabel": "Delete all resources",
       "confirmTitle": "Delete every repository in this org?",
-      "confirmBody_one": "This will permanently delete <count>{{count}}</count> repository in <org>{{org}}</org>, including the <repo>classroom50</repo> config repo (deleted last).",
-      "confirmBody_other": "This will permanently delete <count>{{count}}</count> repositories in <org>{{org}}</org>, including the <repo>classroom50</repo> config repo (deleted last).",
+      "confirmBody_one": "This will permanently delete <count>{{count}}</count> repository in <org>{{org}}</org>, including the <repo>classroom50</repo> repository (deleted last).",
+      "confirmBody_other": "This will permanently delete <count>{{count}}</count> repositories in <org>{{org}}</org>, including the <repo>classroom50</repo> repository (deleted last).",
       "confirmBodyTeams_one": "It will also remove <count>{{count}}</count> classroom team.",
       "confirmBodyTeams_other": "It will also remove <count>{{count}}</count> classroom teams.",
       "confirmBodyCannotUndo": "This cannot be undone.",
@@ -1840,7 +1840,7 @@
     "preflight": {
       "categoryServiceToken": "service token",
       "categoryOrgPolicy": "organization policy",
-      "title": "Organization preflight check failed",
+      "title": "Organization setup check failed",
       "body_one": "An issue was found with this organization's {{categories}}.",
       "body_other": "Issues were found with this organization's {{categories}}.",
       "reviewFix": "Review and fix on the <settingsLink>organization settings page</settingsLink>.",
@@ -1852,8 +1852,8 @@
       "title": "Update workflow files to keep grading working?",
       "confirmLabel": "Update now",
       "cancelLabel": "Not now",
-      "body_one": "1 Classroom 50 workflow/script file in your config repo is out of date and will be refreshed:",
-      "body_other": "{{count}} Classroom 50 workflow/script files in your config repo are out of date and will be refreshed:",
+      "body_one": "1 Classroom 50 workflow/script file in your classroom50 repository is out of date and will be refreshed:",
+      "body_other": "{{count}} Classroom 50 workflow/script files in your classroom50 repository are out of date and will be refreshed:",
       "warning": "Classroom 50 manages these files, so updating is safe. Leaving them out of date can stop features like the autograder from running. If you customized a file, choose <keepMine>Not now</keepMine> to keep it as-is for now."
     },
     "steps": {
@@ -1886,8 +1886,8 @@
         "remediation": "Open the org Actions settings and enable \"Allow GitHub Actions to create and approve pull requests\"."
       },
       "configRepo": {
-        "title": "Config repository",
-        "what": "Creates the private classroom50 configuration repository in the organization.",
+        "title": "classroom50 repository",
+        "what": "Creates the private classroom50 repository in the organization.",
         "why": "Classroom 50 has no backend — this repo holds all classroom config, manifests, workflows, and scores.",
         "remediation": "This is a required step. Re-run setup; if it keeps failing, confirm you have owner permissions and that an org/enterprise policy isn't blocking private repository creation."
       },
@@ -1895,7 +1895,7 @@
         "title": "Workflow files",
         "what": "Commits or updates the workflow and script files Classroom 50 needs in the classroom50 repository.",
         "why": "These bundled files run autograding, publishing, and scoring; re-running setup also upgrades them to the latest version.",
-        "remediation": "This is a required step. Re-run setup; if it keeps failing, check that you can push to the classroom50 repo's default branch."
+        "remediation": "This is a required step. Re-run setup; if it keeps failing, check that you can push to the classroom50 repository's default branch."
       },
       "branchProtection": {
         "title": "Branch protection",
@@ -1946,7 +1946,7 @@
   },
   "skeletonDrift": {
     "title": "Classroom workflow files are out of date",
-    "body": "The GitHub Actions workflows in this org's classroom50 config repo are out of date. Update them here to keep grading, score collection, and Pages publishing working.",
+    "body": "The GitHub Actions workflows in this org's classroom50 repository are out of date. Update them here to keep grading, score collection, and Pages publishing working.",
     "overwriteWarning_label": "Heads up:",
     "overwriteWarning": "Updating overwrites the scaffolded workflow files (collect-scores, regrade, publish-pages, autograde-runner) with the defaults, replacing any manual edits — you'll confirm first.",
     "action": "Update workflows now",
@@ -1975,8 +1975,8 @@
     "missingOrgOrClassroom": "Missing organization or classroom.",
     "couldNotLoad": "Could not load classroom data.",
     "loadingClassroom": "Loading classroom",
-    "configRepo": "Config repo",
-    "configRepoTitle": "Open this classroom's folder in the classroom50 config repo on GitHub",
+    "configRepo": "classroom50 repository",
+    "configRepoTitle": "Open this classroom's folder in the classroom50 repository on GitHub",
     "settingsSubtitle": "Configuration for the <classroom>{{classroom}}</classroom> classroom.",
     "somethingWentWrong": "something went wrong",
     "archivedReadOnlyNotice": "This classroom is archived — settings are read-only. Use Unarchive above to make changes.",
@@ -2135,9 +2135,9 @@
       "roleTeacherPlural": "Teachers",
       "roleTaPlural": "TAs",
       "roleHeadTaPlural": "Head TAs",
-      "accessTeacher": "Org owner. Write access to the config repo.",
-      "accessHeadTa": "Org member. Write access to the config repo.",
-      "accessTa": "Org member. Read-only access to the config repo.",
+      "accessTeacher": "Org owner. Write access to the classroom50 repository.",
+      "accessHeadTa": "Org member. Write access to the classroom50 repository.",
+      "accessTa": "Org member. Read-only access to the classroom50 repository.",
       "viewTeamTitle": "Open the {{role}} team on GitHub",
       "pendingCount_one": "{{count}} pending",
       "pendingCount_other": "{{count}} pending",
@@ -2168,13 +2168,13 @@
   },
   "pagesErrors": {
     "autograderLabel": "Autograder \"{{autograderName}}\"",
-    "notPublished": "{{label}} is not published yet. Ask your teacher to confirm the file exists in the config repo and that the publish workflow has been run.",
+    "notPublished": "{{label}} is not published yet. Ask your teacher to confirm the file exists in the classroom50 repository and that the publish workflow has been run.",
     "fetchFailed": "Couldn't load {{label}} (HTTP {{status}}). Ask your teacher to confirm the classroom is published, then try again.",
     "deployInFlight": "The classroom's published files may still be deploying. Wait a minute, then try again.",
     "classroomNotPublished": "This classroom isn't published yet. It may not exist, or the publish workflow may not have run. Ask your teacher to publish it, then try again.",
     "classroomFetchFailed": "Couldn't load this classroom's published files (HTTP {{status}}). Ask your teacher to confirm the classroom is published, then try again.",
     "assignmentNotInManifest": "Assignment \"{{assignmentSlug}}\" isn't in this classroom's published assignments. Check the link, or ask your teacher to publish the assignment.",
-    "autograderMalformed": "Autograder \"{{autograderName}}\" may be malformed YAML. Ask your teacher to check the file in the config repo.",
+    "autograderMalformed": "Autograder \"{{autograderName}}\" may be malformed YAML. Ask your teacher to check the file in the classroom50 repository.",
     "manifestVersionUnsupported": "This classroom uses a newer assignment format (v{{version}}) than this copy of Classroom 50 supports. Reload the page, or ask your teacher to update Classroom 50.",
     "manifestInvalidShape": "This classroom's published assignment list is malformed. Ask your teacher to check the Classroom 50 configuration."
   },
@@ -2369,8 +2369,8 @@
       "title": "Submission metrics"
     },
     "errors": {
-      "gradebookLoad": "Couldn't load the gradebook.",
-      "gradebookLoadWithReason": "Couldn't load the gradebook: {{reason}}",
+      "gradebookLoad": "Couldn't load the collected scores.",
+      "gradebookLoadWithReason": "Couldn't load the collected scores: {{reason}}",
       "gradebookLoadHint": "The counts below may be incomplete — retry before acting on them.",
       "rosterLoad": "Couldn't load the roster from GitHub.",
       "rosterLoadHint": "The enrolled list may be incomplete — this is a load error, not an empty classroom. Retry before acting on the counts.",
@@ -2394,7 +2394,7 @@
       "statusFailed": "The collection run did not complete successfully.",
       "statusFailedWithReason": "Could not start collection: {{reason}}",
       "statusFailedHint": "You can check or trigger it manually on GitHub.",
-      "workflowOutdated": "Could not collect this assignment: the Collect Scores workflow in this organization's classroom50 config repo is out of date. Update the org's workflows (an update banner appears when a newer version is available), then try again.",
+      "workflowOutdated": "Could not collect this assignment: the Collect Scores workflow in this organization's classroom50 repository is out of date. Update the org's workflows (an update banner appears when a newer version is available), then try again.",
       "statusTimeout": "Still running after a while. Check its progress on GitHub, or refresh this page once it finishes."
     },
     "regradeAll": {
@@ -2534,7 +2534,7 @@
       "titleAdd": "Add grade",
       "titleEdit": "Edit grade",
       "titleOverride": "Override score",
-      "descriptionManual": "Enter a score for {{name}}. It's saved to the gradebook and won't be changed by autograding.",
+      "descriptionManual": "Enter a score for {{name}}. It's saved with the collected scores and won't be changed by autograding.",
       "descriptionAuto": "Enter a score for {{name}} to override the autograded result. The autograded score is preserved and restored if you clear the override.",
       "inputLabel": "Score",
       "maxLabel": "Out of (max points)",
