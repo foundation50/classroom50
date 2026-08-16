@@ -8,7 +8,7 @@ const listInviteTeams = vi.fn()
 const readInviteTeam = vi.fn()
 const deleteInviteTeam = vi.fn()
 
-vi.mock("./inviteBackfill", () => ({
+vi.mock("./inviteRecoveries", () => ({
   collectInviteRecoveries: (...a: unknown[]) => collectInviteRecoveries(...a),
   finalizeInviteRecoveries: (...a: unknown[]) => finalizeInviteRecoveries(...a),
 }))
@@ -87,9 +87,11 @@ describe("reconcileRoster", () => {
       }),
     )
     // ...and the recovered teams are deleted only after it.
-    expect(finalizeInviteRecoveries).toHaveBeenCalledWith(client, "org", [
-      RECOVERED,
-    ])
+    expect(finalizeInviteRecoveries).toHaveBeenCalledWith(
+      client,
+      { org: "org", classroom: "cs101" },
+      [RECOVERED],
+    )
     expect(result).toEqual({
       addedUsernames: ["alice"],
       recoveredEmails: ["alice@example.com"],

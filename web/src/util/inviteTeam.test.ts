@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import {
   INVITE_DESCRIPTION_SCHEMA,
   INVITE_TEAM_PREFIX,
@@ -8,6 +10,54 @@ import {
   normalizeInviteEmail,
   parseInviteDescription,
 } from "./inviteTeam"
+
+// schemas/invite-v1.schema.json is the source of truth for the record this
+// module hand-mirrors, with no compile-time link between them. Assert the two
+// agree so a schema edit that isn't mirrored here (or vice versa) fails CI
+// instead of silently drifting — same lockstep guard as submissionTags.test.ts.
+describe("classroom50/invite/v1 — schema/mirror parity", () => {
+  const schemaUrl = new URL(
+    "../../../schemas/invite-v1.schema.json",
+    import.meta.url,
+  )
+  const schema = JSON.parse(readFileSync(fileURLToPath(schemaUrl), "utf8")) as {
+    required: string[]
+    properties: Record<string, { const?: string }>
+  }
+
+  it("matches the schema sentinel", () => {
+    expect(schema.properties.schema.const).toBe(INVITE_DESCRIPTION_SCHEMA)
+  })
+
+  it("marshals exactly the schema's property set, and all of its required ones", () => {
+    const marshaled = JSON.parse(
+      marshalInviteDescription({
+        email: "alice@example.com",
+        classroom: "cs101",
+      }),
+    ) as Record<string, unknown>
+    const marshaledKeys = Object.keys(marshaled).sort()
+    // Every declared property is written, and nothing beyond them.
+    expect(marshaledKeys).toEqual(Object.keys(schema.properties).sort())
+    // Every required field is present in the encoded record.
+    for (const key of schema.required) {
+      expect(marshaled[key]).toBeTruthy()
+    }
+  })
+
+  it("parses back a record that satisfies the schema's required set", () => {
+    const record = parseInviteDescription(
+      marshalInviteDescription({
+        email: "alice@example.com",
+        classroom: "cs101",
+      }),
+    )
+    expect(record).not.toBeNull()
+    for (const key of schema.required) {
+      expect(record).toHaveProperty(key)
+    }
+  })
+})
 
 describe("normalizeInviteEmail", () => {
   it("trims and lowercases", () => {

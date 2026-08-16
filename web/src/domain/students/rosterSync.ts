@@ -27,7 +27,7 @@ import {
   resolveClassroomTeamSlugs,
   listClassroomMembersWithRoles,
 } from "./rosterPrimitives"
-import type { InviteReconcileState } from "./inviteBackfill"
+import type { InviteReconcileState } from "./inviteRecoveries"
 
 export type SyncRosterFromTeamResult = {
   // Team members newly appended to roster.csv as metadata rows.

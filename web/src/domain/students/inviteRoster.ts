@@ -240,12 +240,15 @@ export type BulkInviteByEmailResult = {
 // Bulk-invite a list of EMAIL addresses to the org, carrying the role's team so
 // accepting the single invite activates the right membership: student ->
 // classroom team, ta -> TA team, teacher -> the teacher team AND org
-// OWNER (role "admin"). Writes NOTHING to roster.csv — an email carries no
-// reliable GitHub identity until accepted; the invite surfaces as a `pending`
-// row via the org pending-invitations list. Mirrors inviteRosterStudents'
-// rate-limit handling (stop issuing new invites once throttled; defer the rest),
-// and the same team resolution (resolveTeamIdByRole ensures the staff team for
-// a teacher/ta invite, students-only never creates empty staff teams).
+// OWNER (role "admin"). Every successfully sent invite that carried a per-invite
+// metadata team is then retained on the roster as an email-only PENDING row, all
+// in ONE commit for the batch (see appendEmailInviteRows); each row lives exactly
+// as long as its invite team does, so an invite sent without a metadata team
+// gets no row. The invite also surfaces as a `pending` row via the org
+// pending-invitations list. Mirrors inviteRosterStudents' rate-limit handling
+// (stop issuing new invites once throttled; defer the rest), and the same team
+// resolution (resolveTeamIdByRole ensures the staff team for a teacher/ta
+// invite, students-only never creates empty staff teams).
 export async function bulkInviteByEmail(
   client: GitHubClient,
   input: BulkInviteByEmailInput,

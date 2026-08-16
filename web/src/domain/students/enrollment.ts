@@ -157,16 +157,20 @@ export type InviteByEmailResult = {
 // Send a GitHub org invite for an email, attaching the classroom team so the
 // student lands in it on acceptance, PLUS a per-invite secret metadata team
 // (invite-<hash(classroom,email)>) whose description retains the invited email
-// (PII-minimal: email only). Writes NOTHING to roster.csv: the team is the source
-// of truth for enrollment, and an email carries no reliable GitHub identity
-// until accepted. On acceptance the invitee lands on both teams; a later
-// reconcile pass recovers the email <-> account mapping from the metadata team
-// and backfills roster.csv. The invite shows up in the roster's `pending`
-// section via the org pending-invitations list. If the classroom team can't be
-// resolved, the invite is BLOCKED (throws) rather than sent team-less. If the
-// metadata team can't be created, the invite still goes out with the classroom
-// team alone (the invitee stays collectable; only email retention is lost) and
-// a non-fatal warning is returned.
+// (PII-minimal: email only). On success it also retains the address on the
+// roster as an email-only PENDING row (no username/github_id yet) — that row
+// lives exactly as long as its invite team does: the reconcile fills in the
+// account identity on acceptance and removes the row once the invite is
+// cancelled, expired, or GC'd. A row is written only when the metadata team was
+// attached, since the reconcile would otherwise reap an unbacked row.
+// On acceptance the invitee lands on both teams; a later reconcile pass recovers
+// the email <-> account mapping from the metadata team and folds it into
+// roster.csv. The invite also shows up in the roster's `pending` section via the
+// org pending-invitations list. If the classroom team can't be resolved, the
+// invite is BLOCKED (throws) rather than sent team-less. If the metadata team
+// can't be created, the invite still goes out with the classroom team alone (the
+// invitee stays collectable; only email retention is lost) and a non-fatal
+// warning is returned.
 export async function inviteByEmail(
   client: GitHubClient,
   input: AddEmailInviteToClassroomInput,
@@ -181,8 +185,9 @@ export async function inviteByEmail(
 
   // Resolve the classroom team id up front: in a team-authoritative model, an
   // invite that can't carry the team is broken — the accepted student would land
-  // in the org with no team and (since we write no CSV row) no roster row,
-  // silently uncollected. So block the invite unless we can attach the team.
+  // in the org with no team and, since the pending row carries no identity
+  // until acceptance, no collectable roster row either. So block the invite
+  // unless we can attach the team.
   // resolveClassroomTeamWithRetry returns id: undefined only for a genuine
   // missing team block (no throw); a TRANSIENT read failure is retried and then
   // propagates as its own error, so a brief GitHub blip surfaces "try again"

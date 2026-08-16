@@ -261,7 +261,7 @@ describe("enrollStudentInClassroom — already-member writes the row directly", 
   })
 })
 
-describe("inviteByEmail — org invite only, no CSV write", () => {
+describe("inviteByEmail — org invite plus a pending email row", () => {
   const apiError422 = () =>
     new GitHubAPIError({
       status: 422,
@@ -444,7 +444,7 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
   })
 })
 
-describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => {
+describe("bulkInviteByEmail — bulk org invites by email, one batch row write", () => {
   const apiError = (status: number, message: string) =>
     new GitHubAPIError({
       status,
@@ -2910,6 +2910,103 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       (r) => r.username === "bob",
     )
     expect(bob).toMatchObject({ github_id: "7", email: "bob@x.edu" })
+  })
+
+  it("upgrades a row matched by github_id when its email differs from the invited one", async () => {
+    // The teacher had already added an identity row (id only). The recovery
+    // matches by id via recById, not email, and fills the invited address onto
+    // the blank email cell — no duplicate append.
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + ",,,,,42,student\n",
+      users: {},
+      teamHas: [{ login: "alice", id: 42 }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: inviteState({
+        recovered: [
+          {
+            email: "alice@x.edu",
+            invitee: { id: 42, login: "alice" },
+            slug: "invite-aa",
+          },
+        ],
+      }),
+    })
+
+    expect(result.recoveredEmails).toEqual(["alice@x.edu"])
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      username: "alice",
+      github_id: "42",
+      email: "alice@x.edu",
+    })
+  })
+
+  it("upgrades a row matched by username (case-insensitive) with no email on file", async () => {
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + "ALICE,,,,,,student\n",
+      users: {},
+      teamHas: [{ login: "alice", id: 42 }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: inviteState({
+        recovered: [
+          {
+            email: "alice@x.edu",
+            invitee: { id: 42, login: "alice" },
+            slug: "invite-aa",
+          },
+        ],
+      }),
+    })
+
+    expect(result.recoveredEmails).toEqual(["alice@x.edu"])
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      // The teacher's casing is preserved; only blank cells are borrowed.
+      username: "ALICE",
+      github_id: "42",
+      email: "alice@x.edu",
+    })
+  })
+
+  it("claims one recovery at most once when two rows both match it", async () => {
+    // An email-only invite row AND a separate teacher-added identity row for the
+    // same person: the recovery claims the first match only, so the second row is
+    // left untouched rather than being upgraded (or appended) twice.
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + ",,,alice@x.edu,,,student\n" + "alice,,,,,,\n",
+      users: {},
+      teamHas: [{ login: "alice", id: 42 }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: inviteState({
+        recovered: [
+          {
+            email: "alice@x.edu",
+            invitee: { id: 42, login: "alice" },
+            slug: "invite-aa",
+          },
+        ],
+      }),
+    })
+
+    // Reported once, not twice, and no third row appended.
+    expect(result.recoveredEmails).toEqual(["alice@x.edu"])
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows).toHaveLength(2)
+    expect(rows.filter((r) => r.email === "alice@x.edu")).toHaveLength(1)
   })
 
   it("removes a dead email-only row and keeps one a live invite team backs", async () => {

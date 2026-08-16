@@ -7,8 +7,7 @@ import {
 import { listOrgInvitations, listTeamMembers } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { inviteTeamName } from "@/util/inviteTeam"
-import { classroomTeamSlugs } from "@/util/teamSlug"
-import { log } from "./rosterPrimitives"
+import { log, resolveClassroomTeamSlugs } from "./rosterPrimitives"
 
 // One accepted invite whose email <-> account mapping was recovered from its
 // metadata team. The roster sync folds it into roster.csv; the team at `slug`
@@ -89,13 +88,17 @@ export async function collectInviteRecoveries(
   }
 
   // The invitee must still be on a classroom team (student or staff) for a
-  // recovery to count; fetched lazily once. A read failure propagates to the
-  // per-team catch, never silently reads as "member of nothing".
+  // recovery to count; fetched lazily once. Reads the AUTHORITATIVE slugs from
+  // classroom.json (GitHub can rewrite a team slug on name collision, so a
+  // derived slug would 404 -> [] and make an enrolled invitee look unenrolled).
+  // A read failure propagates to the per-team catch, never silently reads as
+  // "member of nothing".
   let enrolledIds: Set<number> | null = null
   const loadEnrolledIds = async (): Promise<Set<number>> => {
     if (enrolledIds) return enrolledIds
+    const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
     const rosters = await Promise.all(
-      classroomTeamSlugs(classroom).map((slug) =>
+      [slugs.student, ...Object.values(slugs.staff)].map((slug) =>
         listTeamMembers(client, org, slug),
       ),
     )
@@ -103,20 +106,14 @@ export async function collectInviteRecoveries(
     return enrolledIds
   }
 
-  // Live invite-team slugs derived by hashing every pending email invitation's
-  // address; fetched lazily, only when a member-less team is old enough to be
-  // a GC candidate. NOT error-tolerated — a degraded read propagates (skip).
-  let liveInviteSlugs: Set<string> | null = null
+  // Live invite-team slugs, fetched lazily only when a member-less team is old
+  // enough to be a GC candidate. NOT error-tolerated — a degraded read
+  // propagates (skip).
+  let liveSlugs: Set<string> | null = null
   const loadLiveInviteSlugs = async (): Promise<Set<string>> => {
-    if (liveInviteSlugs) return liveInviteSlugs
-    const pending = await listOrgInvitations(client, org)
-    const slugs = await Promise.all(
-      pending
-        .filter((inv) => !inv.login && inv.email)
-        .map((inv) => inviteTeamName(classroom, inv.email as string)),
-    )
-    liveInviteSlugs = new Set(slugs)
-    return liveInviteSlugs
+    if (liveSlugs) return liveSlugs
+    liveSlugs = await liveInviteSlugsFor(client, org, classroom)
+    return liveSlugs
   }
 
   for (const team of inviteTeams) {
@@ -168,7 +165,18 @@ export async function collectInviteRecoveries(
       }
 
       const invitee = invitees[0]
-      if (!(await loadEnrolledIds()).has(invitee.id)) {
+      const enrolled = await loadEnrolledIds()
+      if (enrolled.size === 0) {
+        // This member accepted an invite carrying a classroom team, so a
+        // classroom with zero visible members means the read was degraded, not
+        // that they were unenrolled. Can't prove either state: keep the team.
+        trusted = false
+        log.error("invite reconcile: no classroom members visible; skipping", {
+          slug,
+        })
+        continue
+      }
+      if (!enrolled.has(invitee.id)) {
         // Accepted, then removed from the classroom: the invite lifecycle is
         // over. Delete the team so its record can't resurrect the row later.
         await deleteInviteTeam(client, org, slug)
@@ -199,18 +207,57 @@ export async function collectInviteRecoveries(
 // Post-commit teardown: delete each recovered mapping's invite team, AFTER the
 // roster commit folding it has landed (a failed delete just means the next
 // pass re-recovers idempotently). Best-effort; never throws.
+//
+// Skips any slug a pending invitation now maps to: the slug is a deterministic
+// hash, so a same-email RE-INVITE in the window since collect adopts this very
+// team, and deleting it would tear the metadata team off a brand-new live
+// invitation. An unreadable invitation list keeps every team — a leftover is
+// re-recovered next pass, whereas a wrong delete loses the email for good.
 export async function finalizeInviteRecoveries(
   client: GitHubClient,
-  org: string,
+  input: { org: string; classroom: string },
   recovered: RecoveredInvite[],
 ): Promise<void> {
+  if (recovered.length === 0) return
+  const { org, classroom } = input
+
+  let live: Set<string>
+  try {
+    live = await liveInviteSlugsFor(client, org, classroom)
+  } catch (err) {
+    log.error("invite teardown: liveness read failed; keeping teams", {
+      org,
+      err,
+    })
+    return
+  }
+
   for (const r of recovered) {
+    if (live.has(r.slug)) continue
     try {
       await deleteInviteTeam(client, org, r.slug)
     } catch (err) {
       log.error("invite team post-commit delete failed", { slug: r.slug, err })
     }
   }
+}
+
+// Invite-team slugs a pending EMAIL invitation still maps to. Hashing each
+// pending address reproduces its team's slug, so this is the liveness signal
+// both the GC guard and the post-commit teardown consult. Strict: a failed read
+// propagates so a caller fails closed rather than reading as "nothing is live".
+async function liveInviteSlugsFor(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+): Promise<Set<string>> {
+  const pending = await listOrgInvitations(client, org)
+  const slugs = await Promise.all(
+    pending
+      .filter((inv) => !inv.login && inv.email)
+      .map((inv) => inviteTeamName(classroom, inv.email as string)),
+  )
+  return new Set(slugs)
 }
 
 // Whether a team's created_at is older than the GC age guard. Unparseable or

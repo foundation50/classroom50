@@ -6,6 +6,7 @@ const readInviteTeam = vi.fn()
 const deleteInviteTeam = vi.fn()
 const listTeamMembers = vi.fn()
 const listOrgInvitations = vi.fn()
+const resolveClassroomTeamSlugs = vi.fn()
 
 vi.mock("@/github-core/mutations", () => ({
   listInviteTeams: (...a: unknown[]) => listInviteTeams(...a),
@@ -17,13 +18,15 @@ vi.mock("@/github-core/queries", () => ({
   listOrgInvitations: (...a: unknown[]) => listOrgInvitations(...a),
 }))
 vi.mock("./rosterPrimitives", () => ({
+  resolveClassroomTeamSlugs: (...a: unknown[]) =>
+    resolveClassroomTeamSlugs(...a),
   log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }))
 
 import {
   collectInviteRecoveries,
   finalizeInviteRecoveries,
-} from "./inviteBackfill"
+} from "./inviteRecoveries"
 import { inviteTeamName } from "@/util/inviteTeam"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 
@@ -78,6 +81,15 @@ beforeEach(() => {
   vi.clearAllMocks()
   deleteInviteTeam.mockResolvedValue(undefined)
   listOrgInvitations.mockResolvedValue([])
+  // Authoritative slugs (classroom.json-backed), as the collector resolves them.
+  resolveClassroomTeamSlugs.mockResolvedValue({
+    student: "classroom50-cs101",
+    staff: {
+      teacher: "classroom50-cs101-teacher",
+      hta: "classroom50-cs101-hta",
+      ta: "classroom50-cs101-ta",
+    },
+  })
   // Default: every accepted invitee used below is still on a classroom team.
   listTeamMembers.mockResolvedValue([
     { id: 2, login: "member2" },
@@ -229,12 +241,55 @@ describe("collectInviteRecoveries", () => {
     ])
     listInviteTeams.mockResolvedValue([{ slug: team.slug }])
     readInviteTeam.mockResolvedValue(team)
-    listTeamMembers.mockResolvedValue([]) // on no classroom team
+    // Other members are visible, so the read is trustworthy — this account
+    // genuinely isn't on any classroom team.
+    listTeamMembers.mockResolvedValue([{ id: 2, login: "someone-else" }])
 
     const state = await collectInviteRecoveries(client, INPUT)
     expect(state.recovered).toEqual([])
     expect(state.deletedStale).toBe(1)
     expect(deleteInviteTeam).toHaveBeenCalledWith(client, "org", team.slug)
+  })
+
+  it("keeps the team (untrusted) when NO classroom member is visible at all", async () => {
+    // The invitee accepted an invite carrying the classroom team, so an empty
+    // membership read is a degraded read, not proof of unenrollment.
+    const team = await inviteState("cs101", "held3@example.com", [
+      { id: 2, login: "held3" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: team.slug }])
+    readInviteTeam.mockResolvedValue(team)
+    listTeamMembers.mockResolvedValue([])
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.recovered).toEqual([])
+    expect(state.deletedStale).toBe(0)
+    expect(state.trusted).toBe(false)
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  it("reads enrollment from the AUTHORITATIVE slugs, not derived ones", async () => {
+    // GitHub rewrote the team slug on a name collision; classroom.json holds the
+    // real one. Reading a derived slug would 404 -> [] and look like "unenrolled".
+    resolveClassroomTeamSlugs.mockResolvedValue({
+      student: "classroom50-cs101-2",
+      staff: {
+        teacher: "classroom50-cs101-teacher",
+        hta: "classroom50-cs101-hta",
+        ta: "classroom50-cs101-ta",
+      },
+    })
+    const team = await inviteState("cs101", "renamed@example.com", [
+      { id: 2, login: "renamed" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: team.slug }])
+    readInviteTeam.mockResolvedValue(team)
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.recovered.map((r) => r.email)).toEqual(["renamed@example.com"])
+    const readSlugs = listTeamMembers.mock.calls.map((c) => c[2])
+    expect(readSlugs).toContain("classroom50-cs101-2")
+    expect(readSlugs).not.toContain("classroom50-cs101")
   })
 
   it("flips trusted off when the enrollment read fails, keeping the team", async () => {
@@ -293,15 +348,17 @@ describe("collectInviteRecoveries", () => {
 })
 
 describe("finalizeInviteRecoveries", () => {
+  const RECOVERED = [
+    { email: "a@x", invitee: { id: 1, login: "a" }, slug: "invite-aa" },
+    { email: "b@x", invitee: { id: 2, login: "b" }, slug: "invite-bb" },
+  ]
+
   it("deletes every recovered mapping's team, tolerating per-team failures", async () => {
     deleteInviteTeam
       .mockRejectedValueOnce(new Error("boom"))
       .mockResolvedValueOnce(undefined)
     await expect(
-      finalizeInviteRecoveries(client, "org", [
-        { email: "a@x", invitee: { id: 1, login: "a" }, slug: "invite-aa" },
-        { email: "b@x", invitee: { id: 2, login: "b" }, slug: "invite-bb" },
-      ]),
+      finalizeInviteRecoveries(client, INPUT, RECOVERED),
     ).resolves.toBeUndefined()
     expect(deleteInviteTeam).toHaveBeenCalledTimes(2)
     expect(deleteInviteTeam).toHaveBeenLastCalledWith(
@@ -309,5 +366,34 @@ describe("finalizeInviteRecoveries", () => {
       "org",
       "invite-bb",
     )
+  })
+
+  it("skips a slug a fresh pending invitation now maps to (same-email re-invite)", async () => {
+    // The re-invite adopted the same deterministic slug; deleting it would tear
+    // the metadata team off a brand-new live invitation.
+    const reInvited = await inviteTeamName("cs101", "a@x")
+    listOrgInvitations.mockResolvedValue([{ id: 7, login: null, email: "a@x" }])
+
+    await finalizeInviteRecoveries(client, INPUT, [
+      { email: "a@x", invitee: { id: 1, login: "a" }, slug: reInvited },
+      RECOVERED[1],
+    ])
+
+    expect(deleteInviteTeam).toHaveBeenCalledTimes(1)
+    expect(deleteInviteTeam).toHaveBeenCalledWith(client, "org", "invite-bb")
+  })
+
+  it("keeps every team when the liveness read fails (a leftover beats a wrong delete)", async () => {
+    listOrgInvitations.mockRejectedValue(new Error("boom"))
+    await expect(
+      finalizeInviteRecoveries(client, INPUT, RECOVERED),
+    ).resolves.toBeUndefined()
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  it("does nothing (and reads nothing) with no recoveries", async () => {
+    await finalizeInviteRecoveries(client, INPUT, [])
+    expect(listOrgInvitations).not.toHaveBeenCalled()
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 })
