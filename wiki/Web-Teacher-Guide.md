@@ -77,10 +77,9 @@ When step 1 is complete, continue to step 2 to add your service token.
 
 The **service token** is a fine-grained personal access token (PAT) scoped to
 your organization, used by the score-collection and regrade workflows to read
-student repositories (and push regrade tags) across the org. It needs
-**Contents**, **Actions**, and **Administration** read/write plus
-**Organization → Members** read — the form and the pre-filled GitHub page set
-these up for you; the full permission table is in
+student repositories (and push regrade tags) across the org. The form and the
+pre-filled GitHub page set up the required permissions for you; the full
+permission table is in
 [GitHub Integration](GitHub-Integration#4-fine-grained-pat-for-score-collection).
 Classroom 50 stores it as the `CLASSROOM50_SERVICE_TOKEN` secret in your config
 repo, where the daily score-collection workflow uses it.

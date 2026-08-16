@@ -6,14 +6,40 @@ for each student; `gh student submit` re-fetches a couple of files from it on
 every submission. This page describes the expected layout.
 
 > [!NOTE]
-> **Templates are optional.** Register an assignment without `--template` and
-> students get an *empty* repo containing only the autograder shim — good for
-> write-from-scratch or short-answer work. For repos with *nothing at all* (no
-> shim, no autograding), use `--empty-repo` instead. The rest of this page
-> applies only to assignments that ship a template.
+> **Templates are optional.** An assignment without a template gives each
+> student an initialized repository with a README and the autograding setup —
+> good for write-from-scratch or short-answer work. See
+> [Repository shapes](#repository-shapes) for every option. The rest of this
+> page applies to assignments that ship a template.
 
 A worked example lives at
 [`templates/example-assignment/`](https://github.com/foundation50/classroom50/tree/main/templates/example-assignment).
+
+## Repository shapes
+
+What accept creates is a per-assignment choice. All five shapes:
+
+| Shape | Set with | Students get | Autogrades? |
+| --- | --- | --- | --- |
+| **Template** | `--template` (or the web form's template field) | A copy of the template plus the control files | Yes |
+| **Template, own CI** | `no_autograder: true` (web: **Do not use the built-in autograder**) | A copy of the template with no autograding workflow; the template's own CI runs instead | No; score collection skips it |
+| **Template-less with a README** | Omit `--template` (web: **No template**, **Add a README** on) | An initialized repository: README plus the control files | Yes |
+| **Template-less, no README** | `init_shim: true` (web: **No template**, **Add a README** off) | An initialized repository carrying only the control files | Yes |
+| **Empty repository** | `--empty-repo` (web: **Empty repository**) | A completely bare repository: no commits, no control files, and no feedback pull request, ever | Never |
+
+Two rules apply across all of them:
+
+- **Shape changes affect future accepts only.** Every shape can be changed
+  after creation, but repositories students already accepted keep their
+  original setup; nothing is retrofitted. (**Assignment type** — individual
+  or group — is the exception: it stays locked once set.)
+- **A template brings only its default branch** unless the assignment turns
+  on **Include all branches** (`include_all_branches: true`), which copies
+  every branch into each generated repository. Template-only; it has no
+  effect on the other shapes.
+
+For the flag-level details (mutual exclusions and `assignments.json` fields),
+see [`gh teacher assignment add`](gh-teacher#assignment-add).
 
 ## Structure
 
@@ -72,13 +98,18 @@ gh student accept <org> <classroom> <slug>
 …which creates `<org>/<classroom>-<slug>-<username>` (lowercased) from your
 template.
 
+## Template visibility
+
+A **public** template always works. A **private** template works only if it's
+**inside your organization** — registering the assignment grants the
+classroom's team read access to it. A private template **outside** your
+organization is rejected (students can't be granted access, so accept would
+404). Enterprise Cloud's "internal" visibility also works.
+
 > [!NOTE]
-> **Template visibility.** A **public** template always works. A **private**
-> template works only if it's **inside your organization** — `gh teacher
-> assignment add` grants the classroom team read access to it. A private
-> template **outside** your organization is rejected (students can't be granted
-> access, so accept would 404). Enterprise Cloud's "internal" visibility also
-> works.
+> The team read grant happens when you **create** the assignment. If you
+> create the assignment first and add a private template later by editing it,
+> the grant isn't re-applied and students may get a 404 on accept.
 
 ## Template requirements and gotchas
 

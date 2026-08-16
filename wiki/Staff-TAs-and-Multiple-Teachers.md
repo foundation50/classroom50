@@ -122,9 +122,7 @@ people, not courses:
   can be archived wholesale.
 
 Each organization needs its own one-time setup (plan upgrade, setup run, and
-service token). See
-[Should I create one organization per course?](FAQ#should-i-create-one-organization-per-course-like-github-classroom)
-for the short version.
+service token).
 
 ## Further reading
 

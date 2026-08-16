@@ -87,7 +87,7 @@ shows an advisory warning; see
 
 ## Further reading
 
-- [Can I turn autograding off, or reduce Actions usage?](FAQ#can-i-turn-autograding-off-or-reduce-actions-usage)
-  in the FAQ.
+- [Which commits grade](Autograding-Basics#which-commits-grade) for the full
+  submission-type semantics.
 - [Students can re-enable paused workflows](Known-Limitations#templates-and-student-repositories)
   in Known limitations.

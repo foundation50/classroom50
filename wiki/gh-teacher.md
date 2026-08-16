@@ -81,12 +81,12 @@ stale skeleton files (after a confirmation prompt).
 
 </details>
 
-**Service token requirements:** a fine-grained PAT with **Contents: Read and
-write**, **Actions: Read and write**, **Administration: Read and write** (repo),
-and **Members: Read** (organization). Scope it to **All repositories** — student
-repos are created on demand, so "Only select repositories" misses them. See the
-[CLI Teacher Guide](CLI-Teacher-Guide#create-the-service-token) for the full
-walkthrough.
+**Service token:** a fine-grained PAT `init` validates and uploads as the
+`CLASSROOM50_SERVICE_TOKEN` secret. See the
+[walkthrough](CLI-Teacher-Guide#create-the-service-token) in the CLI Teacher
+Guide and the
+[permission table](GitHub-Integration#4-fine-grained-pat-for-score-collection)
+in GitHub Integration.
 
 <details>
 <summary>Skeleton files shipped into the config repo</summary>
@@ -324,8 +324,10 @@ gh teacher roster import <org> <classroom> <path-to-csv>
 
 Bulk upsert. Accepts a 5-column header
 (`username,first_name,last_name,email,section`) or 6-column with a trailing
-`github_id` (which is ignored and re-resolved). Every username is resolved up
-front — one typo aborts before any commit. New students are invited.
+`github_id` (which is ignored and re-resolved). The field reference is in
+[Roster CSV fields](Web-Teacher-Guide#roster-csv-fields). Every username is
+resolved up front — one typo aborts before any commit. New students are
+invited.
 
 **Errors common to roster commands:** missing config repo → `run gh teacher init
 <org> first`; missing `roster.csv` → points at `classroom add`; bad header →
@@ -351,34 +353,21 @@ membership and is idempotent.
 
 ### Dual roles (staff who are also students)
 
-Classroom 50 does not currently disallow a single account holding more than one
-role in a classroom — most commonly a teacher or TA who also adds themselves to
-the roster to preview the student experience. In practice this only arises on
-the teacher's side: `staff add` and `roster add` each manage their own GitHub
-team, so running both for one account leaves it on both teams. There's no guard
-against it, so it's worth knowing how the app behaves.
+Nothing stops one account from being on a staff team and the roster at once
+(`staff add` and `roster add` each manage their own GitHub team). How a
+dual-role account behaves in the app is covered in
+[Staff who are also students](Staff-TAs-and-Multiple-Teachers#staff-who-are-also-students-dual-roles).
+The CLI-visible effects:
 
-The classroom's GitHub teams are the authority for enrollment and role; the
-`role` column in `roster.csv` is only a display snapshot. With that in mind:
-
-- **Roster view** — team memberships are unioned, so the account shows **all**
-  its role badges and appears under each role's filter.
-- **In-app access** — the **highest** role wins (`teacher > hta > ta > student`),
-  so a teacher-who-is-also-a-student keeps teacher-level access. "View as" only
-  downgrades the preview locally; it never grants access.
-- **`role` column / `roster list`** — records the single **highest** role. The
-  automatic sync refreshes it, so you may see a commit rewrite an empty/`""`
-  role to `teacher` shortly after `roster add`. That's the snapshot updating,
-  not a change to enrollment — nothing reads this column to decide access.
-- **Scores & submissions** — an account with a student enrollment is always
-  listed as a student. (A pure-staff account only appears in submissions once it
-  has actually accepted an assignment repo.)
-- **Unenroll** — drops only the student side (the roster row and student-team
-  membership); any staff role stays intact.
-
-`roster add` prints a note when the target is already staff, so the later
-`role`-column rewrite isn't a surprise. If you want a "pure" student view with no
-staff access, use a separate GitHub account for student testing.
+- **`roster list` and the `role` column** record the single **highest** role
+  (`teacher > hta > ta > student`). The automatic sync refreshes the column,
+  so you may see a commit rewrite an empty role to `teacher` shortly after
+  `roster add` — the snapshot updating, not a change to enrollment; nothing
+  reads this column to decide access.
+- **`roster add` prints a note** when the target is already staff, so the
+  later `role`-column rewrite isn't a surprise.
+- **`roster remove` (unenroll) drops only the student side** — the roster row
+  and student-team membership; any staff role stays intact.
 
 ## `assignment`
 
@@ -425,54 +414,32 @@ default via `gh teacher autograder set-default`. See
 [Autograding Basics](Autograding-Basics#declarative-tests) and
 [Advanced Autograding](Advanced-Autograding#writing-an-autograderpy).
 
-**No built-in autograder (teacher-supplied CI).** A **templated** assignment can
-carry `no_autograder: true` in `assignments.json` to opt out of the built-in
-autograder entirely: accept commits the `.classroom50.yaml` marker and the
-template's content but **no** `.github/workflows/autograde.yaml` shim, so the
-teacher's own CI inside the template runs instead. It **requires** a template
-(the template carries the workflows — use `--empty-repo` for a bare repo with no
-CI). Unlike `--empty-repo` it keeps the template and the Feedback PR (a
-templated repo has a baseline commit); it is mutually exclusive with
-`empty_repo`, a non-default `--autograder`, and the grading-adjacent fields
-(tests/allowed-files/release-assets/pass-threshold/submission-mode/
-submission-tag). It can be changed later, but only affects repositories accepted
-from then on (already-accepted repos aren't retrofitted). Score collection and
-regrade skip it (no `submit/*` releases are produced). Set it in the web app's
-assignment form — choose **"Do not use the built-in autograder"** under
-**Built-in autograder** — or by writing `no_autograder: true` into
-`assignments.json`; there is no `assignment add` flag.
+**Repository shapes.** Three more provisioning settings live in
+`assignments.json` only — there is no `assignment add` flag for them; set them
+in the web assignment form or by editing the file. All three are mutable but
+affect only repositories accepted from then on. The concept-level comparison
+of every shape is in
+[Repository shapes](Assignment-Templates#repository-shapes).
 
-**Built-in autograder on an otherwise-empty repo (`init_shim`).** A
-**template-less** assignment can carry `init_shim: true` in `assignments.json`
-to get an initialized-but-README-less repo carrying **only** the control files:
-accept creates the repo with an initial commit and lands the `.classroom50.yaml`
-marker + the universal default autograde shim — but no README and no other
-starter content. Unlike `--empty-repo` (a bare repo with no commit that **never**
-autogrades), an `init_shim` repo **does** autograde: it commits the default
-shim, produces `submit/*` releases, and is collected/regraded like any built-in
-assignment (the grading pipeline does **not** skip it). It **requires** the
-default autograder and **no** template (a template provides its own starter
-content); it is mutually exclusive with `empty_repo`, `template`,
-`no_autograder`, and a non-default `--autograder`, and it **permits** the
-grading-adjacent fields (it autogrades). It can be changed later, but only
-affects repositories accepted from then on (already-accepted repos aren't
-retrofitted). Set it in the web app's assignment form — pick **"No template"**,
-leave **"Add a README"** off, and keep **"Use the built-in autograder"** — or by
-writing `init_shim: true` into `assignments.json`; there is no `assignment add`
-flag.
-
-**Include all branches (`include_all_branches`).** A **templated** assignment can
-carry `include_all_branches: true` in `assignments.json` to copy **all** of the
-template's branches (not just the default) when each student repo is generated:
-accept passes `include_all_branches` to GitHub's `POST /repos/{template}/generate`.
-It **requires** a template (it only affects the generate call) and is mutually
-exclusive with `empty_repo` and `init_shim` (both template-less, never
-generated); it is **compatible** with everything else, including `no_autograder`
-and the grading-adjacent fields (branches don't affect grading). Like the other
-provisioning settings it is **mutable**, and being **accept-time only** it
-affects only repos generated from now on (already-accepted repos are never
-re-generated). Set it with the web assignment form's **"Include all branches"**
-toggle or via `assignments.json`; there is no `assignment add` flag.
+- **`no_autograder: true`** (web: **Do not use the built-in autograder**) —
+  accept commits the `.classroom50.yaml` marker and the template's content but
+  no autograde workflow, so the template's own CI runs instead. Requires a
+  template (it carries the workflows); keeps the Feedback PR. Score collection
+  and regrade skip it (no `submit/*` releases). Mutually exclusive with
+  `empty_repo`, a non-default `--autograder`, and the grading-adjacent fields
+  (tests/allowed-files/release-assets/pass-threshold/submission-mode/
+  submission-tag).
+- **`init_shim: true`** (web: **No template**, **Add a README** off, built-in
+  autograder on) — an initialized but README-less repo carrying only the
+  control files, which autogrades and is collected like any built-in
+  assignment. Requires the default autograder and no template; mutually
+  exclusive with `empty_repo`, `template`, `no_autograder`, and a non-default
+  `--autograder`; permits the grading-adjacent fields.
+- **`include_all_branches: true`** (web: **Include all branches**) — accept
+  passes `include_all_branches` to GitHub's generate call, so each student
+  repo gets **all** of the template's branches. Requires a template; mutually
+  exclusive with `empty_repo` and `init_shim`; compatible with everything
+  else.
 
 <details>
 <summary>Errors</summary>

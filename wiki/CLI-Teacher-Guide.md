@@ -28,11 +28,8 @@ The CLI doesn't create the organization for you. Do this once on github.com:
    [Assignment Templates](Assignment-Templates) for the expected layout.
 
 > [!NOTE]
-> **Template visibility.** A **public** template always works. A **private**
-> template works only if it's **inside your organization** — `gh teacher
-> assignment add` grants the classroom's team read access to it. A private
-> template **outside** your organization is rejected. (Enterprise Cloud's
-> "internal" visibility also works.)
+> A private template must live **inside your organization**; see
+> [Template visibility](Assignment-Templates#template-visibility).
 
 `gh teacher init` (step 3) locks down organization member privileges for you.
 Four settings have no API and are listed as a manual checklist in that step.
@@ -308,8 +305,10 @@ gh teacher roster import <org> <classroom> <path-to-csv>
 
 Accepts a header of `username,first_name,last_name,email,section` (a trailing
 `github_id` column is accepted but ignored, since the CLI re-resolves each ID
-from GitHub). Every username is resolved up front; one typo aborts the whole
-import before any commit. New students are invited.
+from GitHub). The column-by-column reference is in
+[Roster CSV fields](Web-Teacher-Guide#roster-csv-fields) — the web app and the
+CLI read the same format. Every username is resolved up front; one typo aborts
+the whole import before any commit. New students are invited.
 
 **View the roster:**
 
