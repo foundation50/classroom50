@@ -41,7 +41,9 @@ export {
 } from "./students/rosterSync"
 export {
   backfillInviteMetadata,
+  purgeInviteTeams,
   type BackfillInviteMetadataResult,
+  type PurgeInviteTeamsResult,
 } from "./students/inviteBackfill"
 export {
   writeClassroomRoles,

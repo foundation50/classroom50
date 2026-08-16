@@ -32,14 +32,14 @@ const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
 // Recover the invited-email <-> GitHub-account mapping that only the per-invite
 // metadata teams retain, and fold it into roster.csv. For each invite-<hash>
 // team in the org that belongs to THIS classroom:
-//   - read its description (the invited email/name/section) and regular-role
+//   - read its description (the invited email) and regular-role
 //     members (GitHub keeps org owners as maintainers, so `role=member` is the
 //     accepted-invitee set);
 //   - verify the description's email hashes back to the team name (the team is
 //     invitee-editable after acceptance, so this is the trust boundary — a
 //     tampered email that no longer matches the slug is ignored);
 //   - with exactly one member, require them to still be on one of the
-//     classroom's teams: backfill their email/name/section onto that account's
+//     classroom's teams: backfill their email onto that account's
 //     roster.csv row (creating an identity row if absent; teacher-entered
 //     values always win), then delete the team. A member on NO classroom team
 //     was unenrolled after accepting — delete the team without a roster write
@@ -201,12 +201,50 @@ function isPastGcAge(createdAt: string | null): boolean {
   return Date.now() - created > INVITE_TEAM_GC_MIN_AGE_MS
 }
 
-// Write the invited email/name/section onto the accepted invitee's roster.csv
-// row in one conflict-retried rewrite. Ensures an identity row exists (email
-// invites write no row, so the accepted member may have none yet), then fills
-// blank metadata fields — teacher-entered values always win (borrow-only). Never
-// changes role/enrollment (team-driven). Matches the row by github_id, then
-// login (the same identity join the roster view uses).
+export type PurgeInviteTeamsResult = {
+  // Emails recovered into roster.csv by the backfill run first.
+  recovered: string[]
+  // Remaining invite teams for this classroom deleted afterwards.
+  purged: number
+}
+
+// Teacher-triggered cleanup for the invite teams the automatic pass cannot or
+// will not touch: tampered (hash-mismatched) records, multi-member anomalies,
+// still-pending invites the teacher wants forgotten, and an archived
+// classroom's leftovers. Runs the normal backfill first so anything
+// recoverable lands in roster.csv (a no-op on an archived classroom), then
+// deletes EVERY remaining team whose record claims this classroom — the claim
+// alone suffices here (a tamperer can at worst get their own team deleted).
+// Deliberately no archived guard on the deletes: purging stored emails writes
+// nothing to the frozen roster. Throws on failure (an explicit action the
+// teacher should see fail), except that already-gone teams read as done.
+export async function purgeInviteTeams(
+  client: GitHubClient,
+  input: { org: string; classroom: string },
+): Promise<PurgeInviteTeamsResult> {
+  const { org, classroom } = input
+  const { backfilled } = await backfillInviteMetadata(client, input)
+
+  let purged = 0
+  const teams = await listInviteTeams(client, org)
+  for (const team of teams) {
+    const slug = team.slug
+    if (!slug) continue
+    const state = await readInviteTeam(client, org, slug)
+    if (!state) continue // already gone
+    if (state.description?.classroom !== classroom) continue
+    await deleteInviteTeam(client, org, slug)
+    purged += 1
+  }
+  return { recovered: backfilled, purged }
+}
+
+// Write the invited email onto the accepted invitee's roster.csv row in one
+// conflict-retried rewrite. Ensures an identity row exists (email invites write
+// no row, so the accepted member may have none yet), then fills a blank email —
+// a teacher-entered value always wins (borrow-only). Never changes
+// role/enrollment (team-driven). Matches the row by github_id, then login (the
+// same identity join the roster view uses).
 async function backfillRow(
   client: GitHubClient,
   input: { org: string; classroom: string },
@@ -225,28 +263,17 @@ async function backfillRow(
     }
     const existing = rows.find(matches)
 
-    // Borrow a blank field from the record; a teacher-set value always wins.
-    const fill = (row: StudentCsvRow): StudentCsvRow =>
-      normalizeStudentRow({
-        ...row,
-        username: row.username || invitee.login,
-        github_id: row.github_id || inviteeId,
-        first_name: row.first_name?.trim() || record.first_name || "",
-        last_name: row.last_name?.trim() || record.last_name || "",
-        email: row.email?.trim() || record.email,
-        section: row.section?.trim() || record.section || "",
-      })
-
     if (!existing) {
       // No row yet (the common email-invite case): append an identity row
-      // carrying the recovered metadata.
+      // carrying the recovered email. Names/sections arrive via roster.csv
+      // edits or uploads, joined by this email.
       const added = normalizeStudentRow({
         username: invitee.login,
         github_id: inviteeId,
-        first_name: record.first_name || "",
-        last_name: record.last_name || "",
+        first_name: "",
+        last_name: "",
         email: record.email,
-        section: record.section || "",
+        section: "",
       })
       return {
         nextStudents: [...rows, added],
@@ -258,16 +285,19 @@ async function backfillRow(
     let changed = 0
     const nextStudents = rows.map((row) => {
       if (row !== existing) return row
-      const filled = fill(row)
+      // Borrow-only: fill blank identity/email fields; teacher values win.
+      const filled = normalizeStudentRow({
+        ...row,
+        username: row.username || invitee.login,
+        github_id: row.github_id || inviteeId,
+        email: row.email?.trim() || record.email,
+      })
       // Only count a change when a field actually differs (avoid an empty commit
       // when the teacher already provided everything).
       if (
         filled.username !== row.username ||
         filled.github_id !== row.github_id ||
-        filled.first_name !== row.first_name ||
-        filled.last_name !== row.last_name ||
-        filled.email !== row.email ||
-        filled.section !== row.section
+        filled.email !== row.email
       ) {
         changed = 1
         return filled

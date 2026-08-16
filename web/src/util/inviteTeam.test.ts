@@ -64,17 +64,11 @@ describe("parseInviteDescription", () => {
       schema: INVITE_DESCRIPTION_SCHEMA,
       email: "alice@example.com",
       classroom: "cs101",
-      first_name: "Alice",
-      last_name: "Ng",
-      section: "S1",
     })
     expect(parseInviteDescription(desc)).toEqual({
       schema: INVITE_DESCRIPTION_SCHEMA,
       email: "alice@example.com",
       classroom: "cs101",
-      first_name: "Alice",
-      last_name: "Ng",
-      section: "S1",
     })
   })
 
@@ -91,14 +85,21 @@ describe("parseInviteDescription", () => {
     ).toBeNull()
   })
 
-  it("ignores unknown future fields (additive evolution)", () => {
+  it("tolerates unknown fields, including a legacy record's name/section", () => {
+    // Additive evolution AND backwards compatibility: an earlier release wrote
+    // first_name/last_name/section; the slimmed reader ignores them but still
+    // recovers the email.
     const desc = JSON.stringify({
       schema: INVITE_DESCRIPTION_SCHEMA,
       email: "a@b",
       classroom: "cs",
+      first_name: "Alice",
+      section: "S1",
       futureField: "x",
     })
-    expect(parseInviteDescription(desc)?.email).toBe("a@b")
+    const parsed = parseInviteDescription(desc)
+    expect(parsed?.email).toBe("a@b")
+    expect(parsed?.classroom).toBe("cs")
   })
 
   it("returns null for wrong schema, plain text, non-JSON, null/empty", () => {
@@ -116,92 +117,66 @@ describe("parseInviteDescription", () => {
 })
 
 describe("marshalInviteDescription", () => {
-  it("encodes required fields plus non-empty display fields", () => {
+  it("encodes exactly schema + email + classroom (PII-minimal)", () => {
     const out = marshalInviteDescription({
       email: "alice@example.com",
       classroom: "cs101",
-      first_name: "Alice",
-      last_name: "Ng",
-      section: "S1",
     })
     expect(JSON.parse(out)).toEqual({
       schema: INVITE_DESCRIPTION_SCHEMA,
       email: "alice@example.com",
       classroom: "cs101",
-      first_name: "Alice",
-      last_name: "Ng",
-      section: "S1",
     })
   })
 
-  it("normalizes the stored email and omits empty display fields", () => {
+  it("normalizes the stored email", () => {
     const out = marshalInviteDescription({
       email: "  ALICE@Example.com ",
       classroom: "cs101",
-      first_name: "  ",
     })
-    expect(JSON.parse(out)).toEqual({
-      schema: INVITE_DESCRIPTION_SCHEMA,
-      email: "alice@example.com",
-      classroom: "cs101",
-    })
+    expect(JSON.parse(out).email).toBe("alice@example.com")
   })
 
   it("round-trips through parseInviteDescription", () => {
     const out = marshalInviteDescription({
       email: "alice@example.com",
       classroom: "cs101",
-      first_name: "Alice",
     })
     expect(parseInviteDescription(out)).toEqual({
       schema: INVITE_DESCRIPTION_SCHEMA,
       email: "alice@example.com",
       classroom: "cs101",
-      first_name: "Alice",
     })
   })
 
-  it("drops display fields to fit the byte budget, preserving email/classroom", () => {
-    const longName = "x".repeat(300)
+  it("stays far under GitHub's ~250-char description cap for a long email", () => {
     const out = marshalInviteDescription({
-      email: "alice@example.com",
-      classroom: "cs101",
-      first_name: longName,
-      last_name: longName,
-      section: longName,
+      email: `${"x".repeat(64)}@${"y".repeat(60)}.example.com`,
+      classroom: "a-fairly-long-classroom-name",
     })
-    const parsed = parseInviteDescription(out)
-    expect(parsed?.email).toBe("alice@example.com")
-    expect(parsed?.classroom).toBe("cs101")
-    // The oversized display fields were dropped to stay within budget.
-    expect(parsed?.first_name).toBeUndefined()
-    expect(parsed?.last_name).toBeUndefined()
-    expect(parsed?.section).toBeUndefined()
     expect(out.length).toBeLessThanOrEqual(240)
   })
 
   it("escapes <, >, & (Go json.Marshal parity)", () => {
     const out = marshalInviteDescription({
-      email: "a@b",
+      email: "a&b<c>@x",
       classroom: "cs",
-      first_name: "C++ & <Data>",
     })
     expect(out).toContain("\\u0026")
     expect(out).toContain("\\u003c")
     expect(out).toContain("\\u003e")
     expect(out).not.toMatch(/[<>&]/)
-    expect(parseInviteDescription(out)?.first_name).toBe("C++ & <Data>")
+    expect(parseInviteDescription(out)?.email).toBe("a&b<c>@x")
   })
 
   it("escapes U+2028/U+2029 line/paragraph separators (Go parity)", () => {
     const out = marshalInviteDescription({
       email: "a@b",
-      classroom: "cs",
-      first_name: "a\u2028b\u2029c",
+      classroom: "cs\u2028x\u2029y",
     })
     expect(out).toContain("\\u2028")
     expect(out).toContain("\\u2029")
     expect(out).not.toMatch(/[\u2028\u2029]/)
-    expect(parseInviteDescription(out)?.first_name).toBe("a\u2028b\u2029c")
+    expect(parseInviteDescription(out)?.classroom).toBe("cs\u2028x\u2029y")
   })
 })

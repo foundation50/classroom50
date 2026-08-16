@@ -27,7 +27,7 @@ vi.mock("./rosterPrimitives", () => ({
   log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }))
 
-import { backfillInviteMetadata } from "./inviteBackfill"
+import { backfillInviteMetadata, purgeInviteTeams } from "./inviteBackfill"
 import { inviteTeamName } from "@/util/inviteTeam"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 
@@ -59,24 +59,17 @@ async function inviteState(
   classroom: string,
   email: string,
   members: { id: number; login: string }[],
-  extra: {
-    first_name?: string
-    last_name?: string
-    section?: string
-    createdAt?: string
-  } = {},
+  extra: { createdAt?: string } = {},
 ) {
   const slug = await inviteTeamName(classroom, email)
-  const { createdAt, ...fields } = extra
   return {
     slug,
     description: {
       schema: "classroom50/invite/v1",
       email,
       classroom,
-      ...fields,
     },
-    createdAt: createdAt ?? new Date().toISOString(),
+    createdAt: extra.createdAt ?? new Date().toISOString(),
     members,
   }
 }
@@ -318,15 +311,13 @@ describe("backfillInviteMetadata", () => {
   })
 
   it("teacher-entered roster values win over the recovered record", async () => {
-    const state = await inviteState(
-      "cs101",
-      "frank@example.com",
-      [{ id: 2, login: "frank" }],
-      { first_name: "RecordFirst", section: "RecordSec" },
-    )
+    const state = await inviteState("cs101", "frank@example.com", [
+      { id: 2, login: "frank" },
+    ])
     listInviteTeams.mockResolvedValue([{ slug: state.slug }])
     readInviteTeam.mockResolvedValue(state)
-    // Existing row already has a teacher-set first_name and section.
+    // Existing row already has a teacher-set email (and display metadata the
+    // record never carries — it's PII-minimal, email only).
     withRosterRewrite.mockImplementation(
       async (_c: unknown, _i: unknown, mutate: (rows: unknown[]) => unknown) =>
         mutate([
@@ -335,8 +326,45 @@ describe("backfillInviteMetadata", () => {
             github_id: "2",
             first_name: "TeacherFirst",
             last_name: "",
-            email: "",
+            email: "teacher-set@example.com",
             section: "TeacherSec",
+            role: "",
+          },
+        ]),
+    )
+
+    const result = await backfillInviteMetadata(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    const rewriteResult = await withRosterRewrite.mock.results[0].value
+    const row = rewriteResult.nextStudents[0]
+    // Teacher values kept everywhere; nothing to borrow -> no CSV change, but
+    // the team is still cleaned up.
+    expect(row.first_name).toBe("TeacherFirst")
+    expect(row.section).toBe("TeacherSec")
+    expect(row.email).toBe("teacher-set@example.com")
+    expect(rewriteResult.changed).toBe(0)
+    expect(result.backfilled).toEqual(["frank@example.com"])
+    expect(deleteInviteTeam).toHaveBeenCalledWith(client, "org", state.slug)
+  })
+
+  it("borrows the recovered email onto a matching row with a blank email", async () => {
+    const state = await inviteState("cs101", "hana@example.com", [
+      { id: 2, login: "hana" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: state.slug }])
+    readInviteTeam.mockResolvedValue(state)
+    withRosterRewrite.mockImplementation(
+      async (_c: unknown, _i: unknown, mutate: (rows: unknown[]) => unknown) =>
+        mutate([
+          {
+            username: "hana",
+            github_id: "",
+            first_name: "",
+            last_name: "",
+            email: "",
+            section: "",
             role: "",
           },
         ]),
@@ -345,10 +373,9 @@ describe("backfillInviteMetadata", () => {
     await backfillInviteMetadata(client, { org: "org", classroom: "cs101" })
     const rewriteResult = await withRosterRewrite.mock.results[0].value
     const row = rewriteResult.nextStudents[0]
-    // Teacher values kept; only the blank email borrowed from the record.
-    expect(row.first_name).toBe("TeacherFirst")
-    expect(row.section).toBe("TeacherSec")
-    expect(row.email).toBe("frank@example.com")
+    expect(row.email).toBe("hana@example.com")
+    expect(row.github_id).toBe("2")
+    expect(rewriteResult.changed).toBe(1)
   })
 
   it("one bad team never blocks the rest", async () => {
@@ -403,5 +430,73 @@ describe("backfillInviteMetadata", () => {
     // The roster write completed, so the caller must still invalidate; the
     // leftover team is retried (idempotently) on the next pass.
     expect(result.backfilled).toEqual(["kept@example.com"])
+  })
+})
+
+describe("purgeInviteTeams", () => {
+  it("recovers what it can, then purges the rest of this classroom's teams", async () => {
+    const recoverable = await inviteState("cs101", "alice@example.com", [
+      { id: 2, login: "alice" },
+    ])
+    // Tampered record: the claim says cs101, but the email no longer hashes to
+    // the slug — the backfill skips it, so only the purge can remove it.
+    const tampered = await inviteState("cs101", "bob@example.com", [])
+    tampered.description.email = "tampered@example.com"
+    // Another classroom's team must never be touched.
+    const other = await inviteState("cs202", "eve@example.com", [])
+
+    listInviteTeams.mockResolvedValue([
+      { slug: recoverable.slug },
+      { slug: tampered.slug },
+      { slug: other.slug },
+    ])
+    const deleted = new Set<string>()
+    deleteInviteTeam.mockImplementation(
+      async (_c: unknown, _o: unknown, slug: string) => {
+        deleted.add(slug)
+      },
+    )
+    readInviteTeam.mockImplementation(
+      async (_c: unknown, _o: unknown, slug: string) => {
+        if (deleted.has(slug)) return null
+        if (slug === recoverable.slug) return recoverable
+        if (slug === tampered.slug) return tampered
+        return other
+      },
+    )
+
+    const result = await purgeInviteTeams(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    expect(result.recovered).toEqual(["alice@example.com"])
+    expect(result.purged).toBe(1)
+    expect(deleted.has(tampered.slug)).toBe(true)
+    expect(deleted.has(other.slug)).toBe(false)
+  })
+
+  it("throws on a purge-phase failure (an explicit action surfaces errors)", async () => {
+    listInviteTeams
+      .mockResolvedValueOnce([]) // the backfill run sees nothing
+      .mockRejectedValueOnce(new Error("boom")) // the purge listing fails
+    await expect(
+      purgeInviteTeams(client, { org: "org", classroom: "cs101" }),
+    ).rejects.toThrow("boom")
+  })
+
+  it("still purges when the classroom is archived (backfill no-ops, deletes proceed)", async () => {
+    assertClassroomNotArchived.mockRejectedValue(new Error("archived"))
+    const leftover = await inviteState("cs101", "left@example.com", [])
+    listInviteTeams.mockResolvedValue([{ slug: leftover.slug }])
+    readInviteTeam.mockResolvedValue(leftover)
+
+    const result = await purgeInviteTeams(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    expect(result.recovered).toEqual([])
+    expect(result.purged).toBe(1)
+    expect(deleteInviteTeam).toHaveBeenCalledWith(client, "org", leftover.slug)
+    expect(withRosterRewrite).not.toHaveBeenCalled()
   })
 })

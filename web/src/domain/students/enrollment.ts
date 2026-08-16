@@ -145,12 +145,6 @@ type AddEmailInviteToClassroomInput = {
   org: string
   classroom: string
   email: string
-  // Optional display metadata the teacher typed in the Add-member dialog. Stored
-  // in the invite team's description and backfilled onto roster.csv on
-  // acceptance; best-effort, never authoritative.
-  first_name?: string
-  last_name?: string
-  section?: string
 }
 
 export type InviteByEmailResult = {
@@ -162,7 +156,7 @@ export type InviteByEmailResult = {
 // Send a GitHub org invite for an email, attaching the classroom team so the
 // student lands in it on acceptance, PLUS a per-invite secret metadata team
 // (invite-<hash(classroom,email)>) whose description retains the invited email
-// (and any name/section). Writes NOTHING to roster.csv: the team is the source
+// (PII-minimal: email only). Writes NOTHING to roster.csv: the team is the source
 // of truth for enrollment, and an email carries no reliable GitHub identity
 // until accepted. On acceptance the invitee lands on both teams; a later
 // reconcile pass recovers the email <-> account mapping from the metadata team
@@ -212,9 +206,6 @@ export async function inviteByEmail(
     inviteTeam = await ensureInviteTeam(client, org, {
       email: normalizedEmail,
       classroom,
-      first_name: input.first_name,
-      last_name: input.last_name,
-      section: input.section,
     })
     teamIds.push(inviteTeam.id)
   } catch (err) {

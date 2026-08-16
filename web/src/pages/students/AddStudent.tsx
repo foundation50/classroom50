@@ -339,6 +339,9 @@ const AddStudent = ({
                       {String(field.state.meta.errors[0] ?? "")}
                     </p>
                   )}
+                  <p className="text-base-content/60 text-xs mt-1">
+                    {t("students.emailInviteHint")}
+                  </p>
                 </div>
               )}
             </form.Field>

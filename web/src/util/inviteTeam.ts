@@ -20,23 +20,19 @@ export const INVITE_TEAM_PREFIX = "invite-"
 // `invite-` (7) + 16 = 23 chars, well within GitHub's limit.
 const INVITE_HASH_HEX_LEN = 16
 
-// Byte budget for the encoded description. GitHub caps a team description near
-// 250 chars; a writer over budget drops the optional display fields
-// (first_name/last_name/section) first, always preserving schema/email/classroom
-// (the fields recovery depends on). Kept below the hard cap for safety margin.
-const INVITE_DESCRIPTION_BUDGET = 240
+// The email-only record stays far under GitHub's ~250-char team-description
+// cap for any RFC-length email; there is no drop-fields fallback because there
+// is nothing optional left to drop (PII-minimal by design).
 
-// The invite record. `email` and `classroom` are required (the recovery join and
-// per-classroom scoping); the display fields are optional and best-effort.
-// Unknown fields are ignored (tolerate-only, additive evolution) — the record is
+// The invite record: `email` (the value the record exists to retain) and
+// `classroom` (the recovery scope). Deliberately PII-minimal — display metadata
+// (names/sections) belongs in roster.csv, joined by email, never here. Unknown
+// fields are ignored (tolerate-only, additive evolution) — the record is
 // re-derived on write, never read-modify-written.
 const InviteDescriptionSchema = z.object({
   schema: z.literal(INVITE_DESCRIPTION_SCHEMA),
   email: z.string(),
   classroom: z.string(),
-  first_name: z.string().optional(),
-  last_name: z.string().optional(),
-  section: z.string().optional(),
 })
 
 export type InviteDescription = z.infer<typeof InviteDescriptionSchema>
@@ -44,9 +40,6 @@ export type InviteDescription = z.infer<typeof InviteDescriptionSchema>
 export type InviteMetadata = {
   email: string
   classroom: string
-  first_name?: string
-  last_name?: string
-  section?: string
 }
 
 // Normalize an email for hashing and storage: trim + lowercase. A single source
@@ -101,41 +94,15 @@ export function parseInviteDescription(
 }
 
 // marshalInviteDescription encodes the classroom50/invite/v1 record for a team
-// description — the inverse of parseInviteDescription. Compact JSON, empty
-// display fields omitted. When the full record would exceed the byte budget, the
-// optional display fields are dropped (section, then last_name, then first_name)
-// until it fits, always preserving schema/email/classroom so recovery still
-// works. Applies the same escaping as marshalTeamDescription so the bytes would
-// match a Go json.Marshal writer if one is ever added.
+// description — the inverse of parseInviteDescription. Compact JSON with the
+// same escaping as marshalTeamDescription so the bytes would match a Go
+// json.Marshal writer if one is ever added.
 export function marshalInviteDescription(input: InviteMetadata): string {
-  const email = normalizeInviteEmail(input.email)
-  const base: Record<string, unknown> = {
-    schema: INVITE_DESCRIPTION_SCHEMA,
-    email,
-    classroom: input.classroom,
-  }
-  const first = input.first_name?.trim()
-  const last = input.last_name?.trim()
-  const section = input.section?.trim()
-
-  // Try full, then progressively drop optional display fields to fit the budget.
-  const candidates: Array<Record<string, unknown>> = [
-    { ...base, first_name: first, last_name: last, section },
-    { ...base, first_name: first, last_name: last },
-    { ...base, first_name: first },
-    { ...base },
-  ]
-  for (const candidate of candidates) {
-    // Drop undefined/empty optional fields so they never serialize.
-    const record: Record<string, unknown> = { ...base }
-    if (candidate.first_name) record.first_name = candidate.first_name
-    if (candidate.last_name) record.last_name = candidate.last_name
-    if (candidate.section) record.section = candidate.section
-    const encoded = escapeForGoJsonParity(JSON.stringify(record))
-    if (encoded.length <= INVITE_DESCRIPTION_BUDGET) return encoded
-  }
-  // Even the minimal record exceeds the budget (a pathological email/classroom);
-  // return it anyway — a too-long description is GitHub's error to surface, and
-  // the minimal record is still the most useful thing to attempt.
-  return escapeForGoJsonParity(JSON.stringify(base))
+  return escapeForGoJsonParity(
+    JSON.stringify({
+      schema: INVITE_DESCRIPTION_SCHEMA,
+      email: normalizeInviteEmail(input.email),
+      classroom: input.classroom,
+    }),
+  )
 }
