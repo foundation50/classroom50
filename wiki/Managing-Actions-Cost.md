@@ -60,8 +60,8 @@ you can turn the pipeline off entirely:
   repository can also be paused from its row). A student with admin on their own
   repository can technically re-enable the workflow — a known limitation.
 - **Org-wide** — the organization settings' **Pause autograding for all
-  student repositories** toggle narrows the organization's GitHub Actions policy to the config
-  repository. **This stops all workflows in student repositories**, including any
+  student repositories** toggle narrows the organization's GitHub Actions policy to the
+  `classroom50` repository. **This stops all workflows in student repositories**, including any
   course CI — prefer the per-assignment pause unless that's what you want.
 
 **Catching up after a pause.** Work pushed while autograding was off is not

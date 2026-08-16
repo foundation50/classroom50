@@ -1,5 +1,10 @@
 # Troubleshooting
 
+This page collects known errors and their fixes, grouped by task and titled
+with the message you see, so searching the page for the error text usually
+lands on the answer. If nothing here matches, see
+[Filing an issue](#filing-an-issue).
+
 ## See what the CLI is doing
 
 Both CLIs accept `--verbose` / `-v` on any command. It shows each REST call,
@@ -19,7 +24,9 @@ GH_DEBUG=api gh teacher invite <org> <username>
 
 Commands with informational output also accept `--quiet` / `-q`.
 
-## classroom50.org won't load, or is flagged as unsafe
+## Reaching classroom50.org and signing in
+
+### classroom50.org won't load, or is flagged as unsafe
 
 A few ISPs and school web filters have blocked `classroom50.org` (a relatively
 new domain) as a suspected phishing site — the symptom is a timeout, a
@@ -37,21 +44,37 @@ Workarounds:
 - Please still [report it](https://github.com/foundation50/classroom50/issues)
   with the ISP's name so we can request an unblock.
 
-## "Couldn't verify the Actions spending cap"
+### "Network error reaching the Cloudflare Worker proxy"
 
-Setup creates a **$0 GitHub Actions spending cap** so a runaway workflow can't
-run up a bill — but only when your organization has no Actions cap yet; a cap
-you set yourself is never modified. It then verifies the cap, and that
-verification can fail with an advisory warning (e.g. `read failed (400)`) when
-billing isn't readable by your token — typically **enterprise-managed
-billing**, a plan that doesn't expose organization budgets, or a token without
-Organization Administration read.
+Browser sign-in routes the OAuth exchange through a small Cloudflare Worker,
+and this message ("Network error reaching the Cloudflare Worker proxy; it may
+be down or unreachable.") means your browser couldn't reach it. Two causes:
 
-This is expected and **doesn't block anything** — Classroom 50 keeps working.
-Confirm your Actions spending limits in the organization's billing settings, or
-with your Enterprise/billing administrator.
+- **You're offline.** Check your connection; the app shows a separate
+  "You appear to be offline" notice when it can tell.
+- **A school or corporate filter blocks the proxy.** Ask IT to allow the
+  domains in
+  [Network and allowed domains](GitHub-Integration#network-and-allowed-domains),
+  or select **Sign in with token** to sign in with a personal access token,
+  which skips the proxy entirely.
 
-## My organization doesn't appear
+### `redirect_uri is not associated with this application`
+
+GitHub sometimes shows this during sign-in when a stale authorization is
+replayed, often after switching GitHub accounts. Sign out of classroom50.org
+and sign in again, or use a private browsing window.
+
+### Is GitHub down?
+
+Everything Classroom 50 does runs on GitHub, so a GitHub incident surfaces as
+Classroom 50 failures: assignments stuck publishing, accepts erroring,
+collection runs failing. Before debugging, check
+[githubstatus.com](https://www.githubstatus.com) (the API, Actions, and Pages
+components matter most). It is effectively Classroom 50's status page too.
+
+## Setting up an organization
+
+### My organization doesn't appear
 
 GitHub only reports organizations you've granted Classroom 50 access to. A
 GitHub Education account doesn't change this — an organization you own can stay
@@ -88,46 +111,46 @@ The organization should be listed `active` (and `admin` if you're setting it
 up). The CLI token and the web app's token are separate, so a passing check here
 still leaves the browser grant to do.
 
-## Already an org member, but not on the roster
+### "Couldn't verify the Actions spending cap"
 
-Adding a student who is **already in your organization** (commonly someone from
-a previous course) doesn't put them on the classroom roster, and re-inviting
-them does nothing. GitHub won't send a fresh invitation to an existing member,
-so the web app reports **"Already a member or already invited — no new
-invitation sent"** (and the CLI prints "Already a member" and exits 0). This is
-expected: **organization membership and classroom enrollment are separate.** An
-invite only covers membership; enrolling an existing member is a different
-action.
+Setup creates a **$0 GitHub Actions spending cap** so a runaway workflow can't
+run up a bill — but only when your organization has no Actions cap yet; a cap
+you set yourself is never modified. It then verifies the cap, and that
+verification can fail with an advisory warning (e.g. `read failed (400)`) when
+billing isn't readable by your token — typically **enterprise-managed
+billing**, a plan that doesn't expose organization budgets, or a token without
+Organization Administration read.
 
-To enroll students who are already org members:
+This is expected and **doesn't block anything** — Classroom 50 keeps working.
+Confirm your Actions spending limits in the organization's billing settings, or
+with your Enterprise/billing administrator.
 
-1. In Classroom 50, open the organization's **Members** page (the People view,
-   not a classroom's **Students** page).
-2. Find each student. They show as a member with no classroom, or you can filter
-   by "no classroom".
-3. Use **Add to classroom** to place them on a classroom's roster and team. To
-   do several at once, select the rows and use the bulk **Add to {classroom}**
-   action.
+### Branch protection "Fix it" does nothing
 
-Uploading a **username** list or **roster CSV** on the Students page also enrolls
-existing members: the invite is skipped, but they're still added to the roster
-and team. Only an **email** upload can't, because an email invite writes nothing
-to the roster until the student onboards, so an already-member email is simply
-skipped. From the CLI, `gh teacher roster add <org> <classroom> <username>` (or
-`roster import`) enrolls an existing member the same way.
+The setup checks protect student work through two organization rulesets. For
+what they do, see
+[How student repositories are protected](How-Classroom-50-Works#how-student-repositories-are-protected).
 
-## "Missing scope" / 403 on `gh teacher invite`
+On an enterprise-managed organization, an enterprise-level policy can pin these
+settings, so the organization-level change Classroom 50 requests is ignored:
+**Fix it** appears to succeed but the check stays red, and only an enterprise
+owner can change the setting. Like the spending-cap check, this one is
+advisory. Classroom 50 keeps working without it.
 
-Org invitations need the `admin:org` scope, which a plain `gh auth login`
-doesn't grant. Run:
+### Setup loops between steps 1 and 2
 
-```sh
-gh teacher login
-```
+After you add the service token, the setup wizard returns to step 1 and never
+reaches step 3. This is stale cached state in the browser: sign out, clear the
+browser cache, and sign in again.
 
-The CLI also detects this and logs you in automatically if you skip it.
+### "You have been removed from the team" emails during setup
 
-## `git/trees: HTTP 404` on `gh teacher init`
+Creating a classroom sends you two of these emails, for the `-hta` and `-ta`
+teams. They're expected: Classroom 50 creates the staff teams using your GitHub
+token, which makes you a member of each, then removes you from all but the
+`-teacher` team so you hold a single role.
+
+### `git/trees: HTTP 404` on `gh teacher init`
 
 `init` commits workflow files via the Git Data API, which GitHub gates behind
 the `workflow` scope. A token without it is rejected with a misleading 404,
@@ -142,7 +165,7 @@ gh auth refresh -s admin:org,workflow
 Whether a plain `gh auth login` already granted `workflow` depends on unrelated
 prompt choices, which is why this appears on some machines and not others.
 
-## Will `gh teacher login` disturb my existing `gh` setup?
+### Will `gh teacher login` disturb my existing `gh` setup?
 
 The Classroom 50 CLIs share the GitHub CLI's credential store, so this is worth
 knowing if you already use `gh` for other work.
@@ -179,18 +202,85 @@ github.com (`gh auth status`); switch with `gh auth switch` first. Not sure
 whether anything needs fixing? `gh teacher audit <org>` is read-only and a good
 first probe.
 
-## "Not an admin" on `gh teacher invite`
+## Inviting students and managing the roster
+
+### "Missing scope" / 403 on `gh teacher invite`
+
+Org invitations need the `admin:org` scope, which a plain `gh auth login`
+doesn't grant. Run:
+
+```sh
+gh teacher login
+```
+
+The CLI also detects this and logs you in automatically if you skip it.
+
+### "Not an admin" on `gh teacher invite`
 
 You must be an organization owner for `POST /orgs/{org}/invitations` to succeed.
 Check under `https://github.com/orgs/<org>/people` — you should show **Owner**.
 (Team-based admin isn't enough for the invitation API.)
 
-## "Already a member" / "Pending invite"
+### "Already a member" / "Pending invite"
 
 Not errors — the desired state already exists. The CLI reports them clearly and
 exits 0, so invite commands are safe to re-run in scripts.
 
-## A student's `role` flipped to `teacher` after `roster add`
+### Already an org member, but not on the roster
+
+Adding a student who is **already in your organization** (commonly someone from
+a previous course) doesn't put them on the classroom roster, and re-inviting
+them does nothing. GitHub won't send a fresh invitation to an existing member,
+so the web app reports **"Already a member or already invited — no new
+invitation sent"** (and the CLI prints "Already a member" and exits 0). This is
+expected: **organization membership and classroom enrollment are separate.** An
+invite only covers membership; enrolling an existing member is a different
+action.
+
+To enroll students who are already org members:
+
+1. In Classroom 50, open the organization's **Members** page (the People view,
+   not a classroom's **Students** page).
+2. Find each student. They show as a member with no classroom, or you can filter
+   by "no classroom".
+3. Use **Add to classroom** to place them on a classroom's roster and team. To
+   do several at once, select the rows and use the bulk **Add to {classroom}**
+   action.
+
+Uploading a **username** list or **roster CSV** on the Students page also enrolls
+existing members: the invite is skipped, but they're still added to the roster
+and team. Only an **email** upload can't, because an email invite writes nothing
+to the roster until the student onboards, so an already-member email is simply
+skipped. From the CLI, `gh teacher roster add <org> <classroom> <username>` (or
+`roster import`) enrolls an existing member the same way.
+
+### Invitations or accepts fail on an organization with SAML SSO
+
+When an organization requires SAML single sign-on, GitHub rejects API calls
+made without an authorized SSO session; the underlying error is
+`Resource protected by organization SAML enforcement`. Common symptoms:
+
+- Inviting students fails with a 403 even though you're an organization owner.
+- A student's accept fails with **"Couldn't confirm your membership. If your
+  organization uses single sign-on (SSO), authorize it for this org (or open
+  this link from your LMS), then accept again."**
+
+The fix is to establish the SSO session first: sign in to your identity
+provider, then to github.com, and authorize SSO for the organization (for the
+web app, use **Configure SSO** on
+[Classroom 50's OAuth settings](https://github.com/settings/connections/applications/Ov23liDFFyDtm0pO5NN5)).
+Then retry the invitation or the accept link.
+
+### `line N: username column is empty` when importing a roster CSV
+
+Every roster CSV row must carry a `username`. The line number points at the row
+in your file whose username cell is blank, commonly a student who hasn't
+created or reported a GitHub account yet, or a leftover row from another
+export. Fill in the username or remove the row, then re-run. For the accepted
+columns, see
+[Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
+
+### A student's `role` flipped to `teacher` after `roster add`
 
 Expected when the account is on **both** a staff team and the student team.
 Classroom 50 doesn't currently disallow dual roles (usually a teacher adding
@@ -206,7 +296,23 @@ the student side. `roster add` prints a note when the target is already staff.
 See [Dual roles](gh-teacher#dual-roles-staff-who-are-also-students). For a
 "pure" student, use a separate GitHub account.
 
-## Common `gh student accept` errors
+## Creating and accepting assignments
+
+### `template … has no commits` on `gh teacher assignment add`
+
+Students generate their repositories from the template, and GitHub can't
+generate from an empty repository. The CLI refuses with:
+
+```text
+template `<owner>/<repo>` has no commits — add at least one commit (e.g. a README) so students can generate from it, then re-run
+```
+
+Push at least one commit (a README is enough) and re-run. If the template does
+have commits and an older CLI still reports this, update the CLI: earlier
+releases relied on a repository size field that GitHub computes asynchronously,
+which misreported freshly pushed repositories.
+
+### Common `gh student accept` errors
 
 | Message | What it means |
 | --- | --- |
@@ -217,14 +323,29 @@ See [Dual roles](gh-teacher#dual-roles-staff-who-are-also-students). For a
 | "assignment `<X>` has unsupported mode `<mode>`" | The manifest's `mode` is neither `individual` nor `group` (likely hand-edited). Ask your teacher. |
 | "Assignment already accepted" | Not an error — your repository already exists and your work is untouched. |
 
-## "Assignment already accepted" on `gh student accept`
+### "Assignment already accepted" on `gh student accept`
 
 You've already accepted; the repo is at
 `<org>/<classroom>-<assignment>-<username>`. The CLI short-circuits to protect
 your work. Clone it with the URL from `gh repo view <org>/<repo>` if you don't
 have it locally.
 
-## "Template not found" / 404 on `gh student accept`
+### The accept page loads forever, or reports "not published yet"
+
+Assignment data reaches students through GitHub Pages, and a Pages deployment
+takes at least 20 seconds after every change (longer when GitHub Actions is
+queued). The web app's message is "…is not published yet. Ask your teacher to
+confirm the file exists in the classroom50 repository and that the publish
+workflow has been run." Check in order:
+
+1. Wait a minute and reload the accept link.
+2. The teacher confirms the publish workflow succeeded, under the **Actions**
+   tab of `<org>/classroom50`.
+3. The student has accepted their organization invitation — an unaccepted
+   invite also blocks the accept flow (see the
+   [accept error table](#common-gh-student-accept-errors)).
+
+### "Template not found" / 404 on `gh student accept`
 
 Only applies to assignments with a template. Check, in order:
 
@@ -238,7 +359,24 @@ Only applies to assignments with a template. Check, in order:
 3. **The `<assignment>` argument matches the registered slug** (case is
    normalized; spelling must be exact).
 
-## "You need admin access to the organization before adding a repository to it."
+### "Couldn't copy the template": OAuth App access restrictions
+
+GitHub's raw 403 says the upstream "organization has enabled OAuth App access
+restrictions", and the CLI reports:
+
+```text
+couldn't copy the template `<owner>/<repo>`: it is a fork of a repository in the `<upstream-org>` organization, and copying a fork is governed by that organization's third-party app restrictions
+```
+
+The template is a **fork** whose upstream lives in another organization, and
+GitHub applies the *upstream* organization's app restrictions when copying a
+fork, so approving Classroom 50 for your classroom organization can't fix it.
+Either ask an owner of the upstream organization to approve the Classroom 50
+app there, or (usually better) replace the template with a non-fork copy:
+import the repository into your organization as a fresh repository, mark it as
+a template, and re-add the assignment.
+
+### "You need admin access to the organization before adding a repository to it."
 
 A 403 when a student's repository is created. Despite the wording, the student
 does **not** need admin access, and this is usually **not** a problem with the
@@ -265,20 +403,14 @@ enabled, check that the student's org invitation was accepted (a pending invitee
 can't create a repository) and that they're a member rather than an outside
 collaborator.
 
-## "Could not find `.classroom50.yaml`" on `gh student submit`
-
-`submit` reads that file at the repo root. If it's missing, you're likely running
-submit from outside the cloned assignment repo, or from a clone not created by
-`gh student accept`. `cd` into the directory the `git clone` command created.
-
-## "autograder `<name>` not published yet" on `gh student accept`
+### "autograder `<name>` not published yet" on `gh student accept`
 
 The assignment references an autograder workflow whose YAML isn't on Pages. Two
 causes:
 
 1. **The file doesn't exist.** This fires only for non-default `--autograder
-   <name>` values; `<classroom>/autograders/<name>.yaml` must exist in the config
-   repo. Ask your teacher to confirm.
+   <name>` values; `<classroom>/autograders/<name>.yaml` must exist in the
+   `classroom50` repository. Ask your teacher to confirm.
 2. **`publish-pages.yaml` hasn't run.** A fresh classroom needs one Pages
    deployment. Wait a minute and retry.
 
@@ -286,14 +418,22 @@ causes:
 `gh student` validates before writing, so a broken file never lands. Ask the
 teacher to fix it.)
 
-## Submit pushed a commit but the teacher sees no new work
+## Submitting and grading
+
+### "Could not find `.classroom50.yaml`" on `gh student submit`
+
+`submit` reads that file at the repo root. If it's missing, you're likely running
+submit from outside the cloned assignment repo, or from a clone not created by
+`gh student accept`. `cd` into the directory the `git clone` command created.
+
+### Submit pushed a commit but the teacher sees no new work
 
 `submit` pushes to the repo's actual default branch (`main`, `master`, or
 `develop`), and autograding triggers on that branch. If a submission still isn't
 graded, confirm the push landed on the default branch and that the autograde
 workflow ran under the repo's Actions tab.
 
-## My push didn't grade / the check says "push not graded"
+### My push didn't grade / the check says "push not graded"
 
 The assignment is in **submit-only mode** (`submission_mode: tag`): plain
 pushes don't trigger the autograder there — that's the point (they cost no
@@ -310,7 +450,7 @@ instead — a not-graded commit never shows green there). To be graded, submit e
 If a push shows NO workflow run at all, that's normal for tag mode too: the
 repo's workflow only fires on submission tags.
 
-## My tag ran but the check says "tag is not a submission trigger"
+### My tag ran but the check says "tag is not a submission trigger"
 
 The tag you pushed matches neither `submit/*` nor any milestone tag the
 teacher configured for this assignment, so nothing was graded. Check the
@@ -324,7 +464,49 @@ tag-mode (or vice versa) — run
 `--every-push`) or the web bulk action to update the repositories, and have students
 `git pull` afterward.
 
-## `gh teacher download` clones nothing
+### `pytest: not found` or exit code 127 in the grading log
+
+Exit code 127 means the shell couldn't find a command. For Python assignments
+this used to mean a missing `pytest`; the built-in autograder now installs
+`pytest` and `pytest-json-report` automatically. If a grading run still exits
+127:
+
+- The classroom's workflow files predate the fix: refresh them by re-running
+  `gh teacher init <org>` and accepting the refresh prompt.
+- A custom setup command replaced the Python environment: install the tools
+  your tests import there. See the
+  [Python recipe](Autograder-Recipes#python).
+
+## Collecting scores and downloading submissions
+
+### `collect-scores` warns "collected 0 submissions"
+
+Almost always means the `CLASSROOM50_SERVICE_TOKEN` can't read the student repos
+— not that no one submitted. (A fine-grained PAT returns 404 for
+out-of-scope repos, indistinguishable from "no release yet".)
+
+- Confirm the token has **Contents: Read and write on all org repos** (not "Only
+  select repositories" — student repos are created on demand) **and Organization
+  Members: Read**.
+- Re-scope and rotate with `gh teacher rotate-service-token <org>`.
+- A `401`/`403` (rather than the `0 submissions` warning) means a bad/expired
+  token or a missing `Members: Read` scope.
+
+Also check the assignment itself: with autograding paused or a tag-mode
+assignment no one has submitted to, there are no results to collect.
+
+See the [service-token setup](GitHub-Integration#4-fine-grained-pat-for-score-collection).
+
+### "The collection run did not complete successfully."
+
+The submissions page shows this when the latest score-collection workflow
+failed outright. Open the failing run under the **Actions** tab of
+`<org>/classroom50` (the `collect-scores.yaml` workflow); the log names the
+cause. The most common one is an expired or under-scoped service token; see
+[`collect-scores` warns "collected 0 submissions"](#collect-scores-warns-collected-0-submissions)
+for the token requirements and how to rotate it.
+
+### `gh teacher download` clones nothing
 
 By default `download` is team-driven. If you get zero clones:
 
@@ -338,22 +520,9 @@ By default `download` is team-driven. If you get zero clones:
 If the `classroom50` repository isn't bootstrapped, or you want every matching repo regardless
 of the roster, pass `--by-pattern`.
 
-## `collect-scores` warns "collected 0 submissions"
+## Building the CLIs from source
 
-Almost always means the `CLASSROOM50_SERVICE_TOKEN` can't read the student repos
-— not that no one submitted. (A fine-grained PAT returns 404 for
-out-of-scope repos, indistinguishable from "no release yet".)
-
-- Confirm the token has **Contents: Read and write on all org repos** (not "Only
-  select repositories" — student repos are created on demand) **and Organization
-  Members: Read**.
-- Re-scope and rotate with `gh teacher rotate-service-token <org>`.
-- A `401`/`403` (rather than the `0 submissions` warning) means a bad/expired
-  token or a missing `Members: Read` scope.
-
-See the [service-token setup](GitHub-Integration#4-fine-grained-pat-for-score-collection).
-
-## Build fails after a `git pull`
+### Build fails after a `git pull`
 
 `gh extension install .` registers the binary only the first time. After pulling
 new commits, rebuild:
