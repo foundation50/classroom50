@@ -183,7 +183,7 @@ func allMemberDefaultSettings() []MemberDefaultSetting {
 			// on re-run so a teacher can't accidentally break the student flow.
 			Field:     "members_can_create_pages",
 			Value:     true,
-			Desc:      "Pages creation enabled (required for the public config-repo site)",
+			Desc:      "Pages creation enabled (required for the classroom50 repository's public site)",
 			ManualFix: `check "Allow members to publish Pages sites"`,
 		},
 		{
@@ -192,7 +192,7 @@ func allMemberDefaultSettings() []MemberDefaultSetting {
 			// doesn't exist and the field is rejected (the fallback warns).
 			Field:     "members_can_create_public_pages",
 			Value:     true,
-			Desc:      "public Pages creation enabled (required for the public config-repo site)",
+			Desc:      "public Pages creation enabled (required for the classroom50 repository's public site)",
 			ManualFix: `under "Pages creation", select "Public"`,
 		},
 		{

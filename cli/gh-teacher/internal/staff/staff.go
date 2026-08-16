@@ -69,14 +69,16 @@ func staffAddCmd() *cobra.Command {
 		Use:   "add <org> <classroom> <username>",
 		Short: "Add a user to a classroom's staff team",
 		Long: "Add <username> to the classroom's teacher (default), hta, or\n" +
-			"ta staff team. Teacher and hta members get write on the config\n" +
-			"repo (so they can author assignments); ta members get read-only.\n\n" +
+			"ta staff team. Teacher and hta members get write on the\n" +
+			"classroom50 repository (so they can author assignments); ta\n" +
+			"members get read-only.\n\n" +
 			"If the user isn't yet an org member the membership goes pending\n" +
 			"until they accept the org invitation (same as roster add).\n\n" +
 			"If the classroom predates the staff-teams feature (or its\n" +
 			"`teams` block is partial), this self-heals: it creates/adopts\n" +
-			"the missing team, grants it the role's config-repo access, and\n" +
-			"records the ref in classroom.json before adding the user.\n\n" +
+			"the missing team, grants it the role's access on the\n" +
+			"classroom50 repository, and records the ref in classroom.json\n" +
+			"before adding the user.\n\n" +
 			"Returns non-zero on: classroom not found, or GitHub user not\n" +
 			"found.",
 		Example: "  gh teacher staff add cs50-fall-2026 cs-principles alice\n" +
@@ -200,7 +202,7 @@ func ensureStaffTeamRecorded(client githubapi.Client, out io.Writer, org, classr
 		return configrepo.TeamRef{}, err
 	}
 	if _, err := configrepo.GrantTeamConfigRepoAccess(client, org, team.Slug, role); err != nil {
-		return configrepo.TeamRef{}, fmt.Errorf("grant %s staff team config-repo access: %w", role, err)
+		return configrepo.TeamRef{}, fmt.Errorf("grant %s staff team access to the classroom50 repository: %w", role, err)
 	}
 	// Persist the ref so future resolves and the delete/teardown sweeps find
 	// it. RMW classroom.json in one commit.

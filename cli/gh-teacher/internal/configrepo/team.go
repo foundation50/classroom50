@@ -221,7 +221,7 @@ func EnsureClassroomTeam(client githubapi.Client, org, shortName, description st
 // (#335).
 func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, role StaffRole) (TeamRef, error) {
 	if !CanonicalTeamSlugShortName(shortName) {
-		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking staff membership and config-repo grants)", shortName)
+		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking staff membership and classroom50 repository access)", shortName)
 	}
 	// Staff teams carry no bootstrap description: staff read the authoritative
 	// classroom.json directly, and the secret belongs only on the student team.
@@ -274,7 +274,7 @@ func GrantStaffTeamsConfigRepoAccess(client githubapi.Client, org string, refs *
 			continue
 		}
 		if _, err := GrantTeamConfigRepoAccess(client, org, ref.Slug, role); err != nil {
-			return fmt.Errorf("grant %s staff team config-repo access: %w", role, err)
+			return fmt.Errorf("grant %s staff team access to the classroom50 repository: %w", role, err)
 		}
 	}
 	return nil
@@ -650,7 +650,7 @@ func GrantTeamConfigRepoAccess(client githubapi.Client, org, slug string, role S
 		return false, nil
 	}
 	if err := putTeamRepoPermission(client, org, slug, org, ConfigRepoName, want); err != nil {
-		return false, fmt.Errorf("grant %s config-repo %s: %w", role, want, err)
+		return false, fmt.Errorf("grant %s %s access on the classroom50 repository: %w", role, want, err)
 	}
 	return true, nil
 }

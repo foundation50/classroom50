@@ -237,7 +237,7 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 	// is load-bearing — see GrantStaffTeamsConfigRepoAccess). Best-effort,
 	// mirroring the web: a failure warns but doesn't fail creation.
 	if err := configrepo.GrantStaffTeamsConfigRepoAccess(client, org, staffTeams); err != nil {
-		_, _ = fmt.Fprintf(errOut, "Warning: couldn't grant staff teams config-repo access (%v); staff may lack write until re-affirmed.\n", err)
+		_, _ = fmt.Fprintf(errOut, "Warning: couldn't grant staff teams access to the classroom50 repository (%v); staff may lack write until re-affirmed.\n", err)
 	}
 
 	files, err := classroomScaffold(org, shortName, name, term, secret, nil, nil, &team, staffTeams)

@@ -288,7 +288,7 @@ var initStepLabels = []string{
 	"Installing branch rulesets (Feedback PR protections)",
 	"Creating the classroom50 repository",
 	"Enabling repo-level Actions",
-	"Committing the workflow files",
+	"Committing the workflow and script files",
 	"Enabling GitHub Pages",
 	"Protecting the default branch",
 	"Setting workflow permissions",

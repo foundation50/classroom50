@@ -125,7 +125,7 @@ func commitSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Writer
 		return err
 	}
 
-	_, _ = fmt.Fprintf(out, "%s/%s: workflow files committed (%d files)\n", owner, repo, len(entries))
+	_, _ = fmt.Fprintf(out, "%s/%s: workflow and script files committed (%d files)\n", owner, repo, len(entries))
 	return nil
 }
 
@@ -139,11 +139,11 @@ func refreshSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Write
 		return err
 	}
 	if len(stale) == 0 {
-		_, _ = fmt.Fprintf(out, "%s/%s: workflow files up to date\n", owner, repo)
+		_, _ = fmt.Fprintf(out, "%s/%s: workflow and script files up to date\n", owner, repo)
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(errOut, "%s/%s: %d workflow file(s) differ from this CLI's embedded version:\n", owner, repo, len(stale))
+	_, _ = fmt.Fprintf(errOut, "%s/%s: %d workflow and script file(s) differ from this CLI's embedded version:\n", owner, repo, len(stale))
 	for _, p := range stale {
 		_, _ = fmt.Fprintf(errOut, "  %s\n", p)
 	}
@@ -153,7 +153,7 @@ func refreshSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Write
 			return err
 		}
 		if !ok {
-			_, _ = fmt.Fprintf(out, "%s/%s: workflow-file refresh declined, files left untouched (re-run with --yes to skip the prompt)\n", owner, repo)
+			_, _ = fmt.Fprintf(out, "%s/%s: refresh declined, files left untouched (re-run with --yes to skip the prompt)\n", owner, repo)
 			return nil
 		}
 	}
@@ -175,17 +175,17 @@ func refreshSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Write
 		refreshed = len(changed)
 		return updates, nil
 	}
-	commitSHA, err := configwrite.CommitTree(client, owner, repo, branch, contract.PrefixCommit("Refresh classroom50 workflow files (gh teacher init)"), build)
+	commitSHA, err := configwrite.CommitTree(client, owner, repo, branch, contract.PrefixCommit("Refresh classroom50 workflow and script files (gh teacher init)"), build)
 	if err != nil {
 		return err
 	}
 	if commitSHA == "" {
 		// A concurrent writer refreshed the same files between the diff and
 		// the commit; nothing left to land.
-		_, _ = fmt.Fprintf(out, "%s/%s: workflow files already refreshed by a concurrent writer, nothing to commit\n", owner, repo)
+		_, _ = fmt.Fprintf(out, "%s/%s: workflow and script files already refreshed by a concurrent writer, nothing to commit\n", owner, repo)
 		return nil
 	}
-	_, _ = fmt.Fprintf(out, "%s/%s: workflow files refreshed (%d file(s))\n", owner, repo, refreshed)
+	_, _ = fmt.Fprintf(out, "%s/%s: workflow and script files refreshed (%d file(s))\n", owner, repo, refreshed)
 	return nil
 }
 
