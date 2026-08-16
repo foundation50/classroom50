@@ -47,8 +47,8 @@ func NewCmd() *cobra.Command {
 			"— and thus which reusable runner — handles submissions for this\n" +
 			"assignment. Per-assignment grading lives separately at\n" +
 			"`<classroom>/autograders/<slug>/autograder.py` (entrypoint),\n" +
-			"with optional sibling fixtures alongside (see the Autograders\n" +
-			"wiki page).",
+			"with optional sibling fixtures alongside (see the\n" +
+			"Advanced-Autograding wiki page).",
 	}
 	cmd.AddCommand(assignmentAddCmd())
 	cmd.AddCommand(assignmentReuseCmd())
@@ -122,7 +122,7 @@ func assignmentAddCmd() *cobra.Command {
 			"Pass `-` to read the JSON from stdin instead of a file\n" +
 			"(one-shot agent flows).\n" +
 			"Omit for the defaults (ubuntu-latest + Python 3.14).\n" +
-			"See the Autograders wiki page for the JSON schema and\n" +
+			"See the Advanced-Autograding wiki page for the JSON schema and\n" +
 			"worked examples.\n\n" +
 			"--autograder is reserved for the rare case where you need to\n" +
 			"call a *different reusable workflow* entirely (not just\n" +
@@ -141,8 +141,8 @@ func assignmentAddCmd() *cobra.Command {
 			"exclusive with --tests). (3) A classroom default: run\n" +
 			"`gh teacher autograder set-default <org> <classroom>` to install\n" +
 			"<classroom>/autograder.py for every assignment. See the\n" +
-			"Autograders wiki page for the result.json contract and\n" +
-			"templates (pytest, check50, custom).",
+			"Advanced-Autograding wiki page for the result.json contract and\n" +
+			"templates (pytest, custom).",
 		Example: "  gh teacher assignment add cs50-fall-2026 cs-principles hello \\\n" +
 			"      --name \"Hello\" --template cs50/hello-template \\\n" +
 			"      --due 2026-09-15T23:59:00-04:00\n" +
@@ -293,7 +293,7 @@ func assignmentAddCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", `Display name written into the assignment entry (e.g., "Hello") (required)`)
-	cmd.Flags().StringVar(&template, "template", "", "Optional template repo as <owner>/<repo> or <owner>/<repo>@<branch>. Omit for a template-less assignment (students get an empty repo with just the autograder shim).")
+	cmd.Flags().StringVar(&template, "template", "", "Optional template repo as <owner>/<repo> or <owner>/<repo>@<branch>. Omit for a template-less assignment (students get an initialized repo: a README plus the autograding setup).")
 	cmd.Flags().StringVar(&description, "description", "", "Optional one-line description")
 	cmd.Flags().StringVar(&due, "due", "", "Optional due date (e.g., 2026-09-15T23:59:00-04:00); stored as UTC. Omit the offset to use the machine's local timezone")
 	cmd.Flags().StringVar(&availableFrom, "available-from", "", "Optional release date (e.g., 2026-09-15T00:00:00-04:00); stored as UTC. Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Students who already accepted always see it (listing-only, not access control). Omit the offset to use the machine's local timezone.")

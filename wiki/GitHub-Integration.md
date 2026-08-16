@@ -32,9 +32,9 @@ delete/transfer, visibility change, issue deletion, team creation, dependency
 insights, member-invited outside collaborators). Public-repo creation is the one
 exception by plan: it's locked off only on Enterprise Cloud, because Team/Free
 couples public and private creation and the student flow needs private creation.
-So it's safe for `gh student accept` to leave a student as **admin** of their own
-repo — a group founder needs admin to add teammates, and the org locks defang the
-rest.
+So it's safe for `gh student accept` to grant broad access to a student's own
+repo — individual students are downgraded to **write** after creation, a group
+founder keeps **admin** to add teammates, and the org locks defang the rest.
 
 </details>
 

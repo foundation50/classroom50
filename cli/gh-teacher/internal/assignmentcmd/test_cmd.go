@@ -32,7 +32,7 @@ func assignmentTestCmd() *cobra.Command {
 			"Describe tests here instead of writing an autograder.py: the\n" +
 			"publish-pages workflow materializes them into the assignment's\n" +
 			"Pages bundle and runner.py grades them on every submission. See\n" +
-			"the Autograders wiki page for the field reference.\n\n" +
+			"the Autograding-Basics wiki page for the field reference.\n\n" +
 			"For bulk edits (or a GUI/agent export), `gh teacher assignment\n" +
 			"add <org> <classroom> <slug> --tests <file.json>` sets the whole\n" +
 			"array at once; these subcommands edit one test at a time.",

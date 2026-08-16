@@ -24,8 +24,8 @@ What accept creates is a per-assignment choice. All five shapes:
 | **Template** | `--template` (or the web form's template field) | A copy of the template plus the control files | Yes |
 | **Template, own CI** | `no_autograder: true` (web: **Do not use the built-in autograder**) | A copy of the template with no autograding workflow; the template's own CI runs instead | No; score collection skips it |
 | **Template-less with a README** | Omit `--template` (web: **No template**, **Add a README** on) | An initialized repository: README plus the control files | Yes |
-| **Template-less, no README** | `init_shim: true` (web: **No template**, **Add a README** off) | An initialized repository carrying only the control files | Yes |
-| **Empty repository** | `--empty-repo` (web: **Empty repository**) | A completely bare repository: no commits, no control files, and no feedback pull request, ever | Never |
+| **Template-less, no README** | `init_shim: true` (web: **No template**, **Add a README** off, built-in autograder on) | An initialized repository carrying only the control files | Yes |
+| **Empty repository** | `--empty-repo` (web: **No template**, **Add a README** off, **Do not use the built-in autograder**) | A completely bare repository: no commits, no control files, and no feedback pull request, ever | Never |
 
 Two rules apply across all of them:
 

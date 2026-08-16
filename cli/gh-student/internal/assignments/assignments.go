@@ -199,7 +199,8 @@ type TemplateRef struct {
 }
 
 // assignmentsFile is the top-level shape of assignments.json. Schema is
-// checked first so a future v2 file surfaces "this CLI handles only v1" rather
+// checked first so a future v2 file surfaces "this gh-student version is older
+// than the assignments.json shape; update gh-student and try again" rather
 // than silently dropping unknown entries.
 type assignmentsFile struct {
 	Schema      string  `json:"schema"`

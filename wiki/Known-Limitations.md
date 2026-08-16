@@ -91,7 +91,7 @@ briefly fail or show stale data; wait a minute and retry.
 - **LTI / LMS grade passback** needs a server-to-server integration, which
   the serverless design doesn't currently accommodate. Exports (score CSVs
   and `scores.json`) are the supported path into an LMS today.
-- **Live in-app grades for students** are blocked by the cross-origin limit
+- **Live in-app scores for students** are blocked by the cross-origin limit
   above ([#567](https://github.com/foundation50/classroom50/issues/567)).
 - **Roster self-selection** would need a server to arbitrate identity
   claims.

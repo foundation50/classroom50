@@ -60,8 +60,9 @@ for how to choose.
 ### Can a classroom have multiple teachers or TAs?
 
 Yes. Classroom 50 has four roles: **teacher** (organization owner, full
-control), **head TA** (config-repo write, not an owner), **TA** (config-repo
-read-only), and **student**. Manage staff in the web app under a classroom's
+control), **head TA** (write access to the `classroom50` repository, not an
+owner), **TA** (read-only access to the `classroom50` repository), and
+**student**. Manage staff in the web app under a classroom's
 **Settings → Staff and roles**, or with `gh teacher staff add`. See the
 [Glossary](Glossary#roles) for what each role can do.
 
@@ -349,7 +350,7 @@ need one per organization. See
 ## Roadmap
 
 Some capabilities from GitHub Classroom aren't available today, including
-**LTI / LMS grade passback**, in-app **grade visibility for students**, and
+**LTI / LMS grade passback**, in-app **score visibility for students**, and
 **roster self-selection**. See
 [Requested, but architecturally hard](Known-Limitations#requested-but-architecturally-hard)
 in Known limitations for why, and share your use case in

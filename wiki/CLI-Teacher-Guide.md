@@ -95,10 +95,12 @@ the autograder can fetch published files), protects the default branch, raises
 workflow token permissions, allows reusable-workflow access, and uploads the
 service token secret.
 
-This lockdown is what makes it safe for `gh student accept` to leave each
-student as **admin** of their own repository: they need admin to manage
-collaborators, and the organization-level locks remove the dangerous repo-admin
-powers (delete, transfer, visibility change) org-wide.
+This lockdown is what makes it safe for `gh student accept` to give students
+broad access to their own repository: accept creates the repo with the student
+as admin, then downgrades them to **write** (a group **founder** keeps admin,
+which they need to manage collaborators), and the organization-level locks
+remove the dangerous repo-admin powers (delete, transfer, visibility change)
+org-wide.
 
 </details>
 
@@ -189,8 +191,8 @@ gh teacher audit <org>
 It's **read-only** and reports, per setting, whether the least-privilege value is
 in effect: **Verified** (read from the API), **Action required** (changed outside
 Classroom 50), and
-**Confirm by hand** (the four API-less settings above). It exits non-zero when a
-critical field is unenforced, so it's scriptable; add `--json` for a
+**Confirm by hand** (the four API-less settings above). It exits non-zero when
+any API-readable setting is unenforced, so it's scriptable; add `--json` for a
 machine-readable report.
 
 When `init` finishes, it prints the future Pages URL
@@ -346,12 +348,12 @@ Each classroom keeps an `assignments.json`. Register an assignment:
 ```sh
 gh teacher assignment add <org> <classroom> <slug> --name "<name>" [flags]
 gh teacher assignment add cs50-fall-2026 cs-principles hello --name "Hello" --template cs50/hello-template --due 2026-09-15T23:59:00-04:00
-gh teacher assignment add cs50-fall-2026 cs-principles reflection --name "Reflection"   # no template → empty starter repo
+gh teacher assignment add cs50-fall-2026 cs-principles reflection --name "Reflection"   # no template → initialized repo (README + control files)
 ```
 
 **`--name` is required; `--template` is optional.** Omit `--template` for a
-template-less assignment (students get an empty repo with just the autograder
-shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
+template-less assignment (students get an initialized repository with a README
+and the autograding setup). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 
 **Optional flags:**
 

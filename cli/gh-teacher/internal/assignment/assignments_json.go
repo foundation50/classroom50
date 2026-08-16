@@ -94,7 +94,7 @@ type AssignmentsJSON struct {
 // Tests is the optional declarative-grading layer (see tests.go), materialized
 // into the Pages bundle as tests.json. Grade-time entrypoint precedence:
 // per-assignment autograder.py > tests.json > classroom default autograder.py
-// > vacuous pass. See wiki/Autograders.md.
+// > vacuous pass. See wiki/Autograding-Basics.md and wiki/Advanced-Autograding.md.
 //
 // MaxGroupSize bounds collaborators on a group repo: required (>= 2) for group
 // mode, must be 0 for individual. Enforced at join time in the CLI — direct

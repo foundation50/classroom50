@@ -456,7 +456,9 @@ Students never configure tokens or secrets. Grading runs on the job-scoped
 `GITHUB_TOKEN`, unauthenticated Pages fetches, and reusable-workflow access
 between the student repository and the `classroom50` repository (both in the teacher's organization,
 configured by `init`). The only PAT in the system is the teacher-side
-`CLASSROOM50_SERVICE_TOKEN`, used only by `collect-scores.yaml`.
+`CLASSROOM50_SERVICE_TOKEN`, used only by the score-collection, regrade, and
+token-probe workflows (`collect-scores.yaml`, `regrade.yaml`,
+`probe-token.yaml`).
 
 ## Operational notes
 

@@ -10,7 +10,7 @@ const logWorkflows = logger.scope("github:workflows")
 // The org's collect-scores.yaml predates the `assignment` dispatch input, so
 // GitHub rejected the scoped dispatch with a 422 ("Unexpected inputs"). The
 // message is developer-facing (logs); the view layer maps this class to a
-// translated "update your config repo" explanation.
+// translated "update your classroom50 repository" explanation.
 export class CollectInputsUnsupportedError extends Error {
   constructor(cause: unknown) {
     super(

@@ -21,11 +21,15 @@ with a non-zero exit code. Pass `--verbose` / `-v` for per-step detail.
 
 ```sh
 gh student accept <org> <classroom> <assignment>
+gh student accept <org> <classroom> <assignment> --key <access-key>
 ```
 
 Creates a private repo at `<org>/<classroom>-<assignment>-<username>` (a copy of
-the assignment's template, or an empty repo if it's template-less), then prints
-a `git clone` command.
+the assignment's template, or a README-initialized repo if it's template-less),
+then prints a `git clone` command.
+
+**`--key <access-key>`** — access key for a classroom that uses an unlisted
+URL (provided by your teacher); omit for normal classrooms.
 
 <details>
 <summary>What accept does, step by step</summary>
@@ -33,12 +37,13 @@ a `git clone` command.
 1. Auto-accepts any pending org invitation.
 2. Looks up the assignment in the classroom's published `assignments.json` on
    Pages. A `template` block resolves the starter; its absence means a
-   template-less empty repo.
+   template-less, README-initialized repo.
 3. Resolves the autograder workflow shim. The `default` autograder uses the shim
    embedded in `gh-student`; a non-default one is fetched from Pages (resolved
    *before* creating the repo, so a fetch failure leaves no half-baked repo).
-4. Creates the repo — from the template, an empty `auto_init` repo, or (for an
-   `empty_repo` assignment) a truly bare repo with steps 3 and 7 skipped.
+4. Creates the repo — from the template, a README-initialized (`auto_init`)
+   repo, or (for an `empty_repo` assignment) a truly bare repo with steps 3
+   and 7 skipped.
 5. Applies the assignment's repository features (Issues, Wiki, Projects, Pull
    requests). By default each feature **inherits the template's setting**
    (GitHub's template-generate doesn't copy them, so accept reads the template
@@ -47,7 +52,8 @@ a `git clone` command.
    the teacher forced a feature. Best-effort — a rejected feature update never
    fails accept.
 6. Sets your repo role: `push` for an individual assignment, or `admin` for a
-   group assignment (so a group founder can invite teammates).
+   group assignment (so a group founder can invite teammates). The teacher can
+   override this per assignment (`student_permission`).
 7. Commits `.classroom50.yaml` and `.github/workflows/autograde.yaml` in one
    commit. The metadata records the classroom, assignment, and (when present)
    the template repo. `gh student submit` re-fetches `.gitignore` and `.github/`

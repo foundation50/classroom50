@@ -61,7 +61,7 @@ read it:
   classroom50.org effectively refreshes the roster, teams, and config), and
   signing in as an owner can additionally run sync upkeep. One
   exception: the **organization list** is cached for ten minutes — use
-  **Refresh list** to force it. If a view looks out of date, reopening the page
+  **Refresh** to force it. If a view looks out of date, reopening the page
   usually updates it.
 - **CLI reads** (`roster list`, `classroom list`, `member list`, …) report
   what's committed and on GitHub **at that moment**; they never write or

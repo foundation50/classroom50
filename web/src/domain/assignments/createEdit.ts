@@ -304,7 +304,8 @@ export async function editAssignment(
 }
 
 // Same pre-write probes gh-teacher runs before writing declarative tests (see
-// the "For other clients" section of the Autograders wiki).
+// "Writing assignments.json from another client" in the Advanced-Autograding
+// wiki page).
 async function ensureDeclarativeTestsWritable(
   client: GitHubClient,
   org: string,

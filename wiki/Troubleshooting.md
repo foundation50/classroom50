@@ -96,7 +96,7 @@ invisible until that grant exists. Work through these in order:
 5. **Sign out and back in.** A token issued before the membership existed
    authenticates fine but can't see the organization.
 
-Then return to Classroom 50 and use **Refresh list** — the organization list is
+Then return to Classroom 50 and use **Refresh** — the organization list is
 cached for ten minutes.
 
 To check independently from a terminal:
@@ -223,8 +223,15 @@ Check under `https://github.com/orgs/<org>/people` — you should show **Owner**
 
 ### "Already a member" / "Pending invite"
 
-Not errors — the desired state already exists. The CLI reports them clearly and
-exits 0, so invite commands are safe to re-run in scripts.
+The desired state already exists, but the commands react differently:
+
+- `gh teacher roster add` and `roster import` report it and exit 0, so they're
+  safe to re-run in scripts.
+- Repository invitations (`gh teacher invite <org>/<repo> <username>`) are
+  idempotent: re-running updates the collaborator's permission in place.
+- Organization invitations (`gh teacher invite <org> <username>`) fail with a
+  non-zero exit: GitHub rejects re-invites to a pending or existing member.
+  Use `roster add` when you need a re-runnable enrollment path.
 
 ### Already an org member, but not on the roster
 
@@ -240,7 +247,7 @@ action.
 To enroll students who are already org members:
 
 1. In Classroom 50, open the organization's **Members** page (the People view,
-   not a classroom's **Students** page).
+   not a classroom's **Roster** page).
 2. Find each student. They show as a member with no classroom, or you can filter
    by "no classroom".
 3. Use **Add to classroom** to place them on a classroom's roster and team. To
@@ -420,11 +427,17 @@ teacher to fix it.)
 
 ## Submitting and grading
 
-### "Could not find `.classroom50.yaml`" on `gh student submit`
+### `read .../.classroom50.yaml: ... no such file or directory` on `gh student submit`
 
-`submit` reads that file at the repo root. If it's missing, you're likely running
-submit from outside the cloned assignment repo, or from a clone not created by
-`gh student accept`. `cd` into the directory the `git clone` command created.
+`submit` reads `.classroom50.yaml` at the repo root to identify the assignment.
+Two causes:
+
+- You're running submit from outside the cloned assignment repo, or from a
+  clone not created by `gh student accept`. `cd` into the directory the
+  `git clone` command created.
+- The assignment is an **empty-repository assignment**, whose repos carry no
+  marker file. As the error's hint says, autograding is disabled there and
+  `gh student submit` is not used: commit and `git push` directly.
 
 ### Submit pushed a commit but the teacher sees no new work
 

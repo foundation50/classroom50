@@ -194,9 +194,9 @@ cannot change the runner process or the environment of later tests.
 <details>
 <summary>How tests flow, and where failures surface</summary>
 
-Tests live inline in `assignments.json`. On the next config-repository push,
-publish-pages **materializes** them into the assignment's Pages bundle as
-`tests.json`. At grade time, `runner.py` runs each spec in the student checkout:
+Tests live inline in `assignments.json`. On the next push to the `classroom50`
+repository, publish-pages **materializes** them into the assignment's Pages
+bundle as `tests.json`. At grade time, `runner.py` runs each spec in the student checkout:
 one row per test in `result.json`, plus a failure breakdown in three places — the
 **Release body**, the **grade job log** ("Grade details"), and the **run Summary
 page**. Captured output is truncated at 2000 characters.
