@@ -71,7 +71,7 @@ declarative tests (defined in the assignment) or a Python script you write.
 directly on an assignment, graded with no code to write. They fill the role
 of GitHub Classroom's `autograding.json` presets; an existing
 `autograding.json` workflow can be kept with a
-[custom runner workflow](Autograders#custom-runner-workflow-rare).
+[custom runner workflow](Advanced-Autograding#custom-runner-workflow-rare).
 
 **Runner** — The shared grading engine that runs in GitHub Actions on every
 submission.
@@ -86,7 +86,7 @@ repository for inline review of a student's work.
 (`score` out of `max-score`). The **collected scores** (`scores.json` in the
 `classroom50` repository) are the record of every submission, built by the
 score-collection workflow. Teachers can download them as CSV. See
-[Reading results](Autograders#reading-results) in Autograders.
+[Reading results](Autograding-Basics#reading-results) in Autograding Basics.
 
 **Score override** — A teacher-set score entered on the submissions page,
 stored with the collected scores and left untouched by autograding until

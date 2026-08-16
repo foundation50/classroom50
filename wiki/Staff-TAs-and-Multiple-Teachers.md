@@ -68,7 +68,7 @@ assignments, submissions, and scores. The differences:
   yet, which is expected; it appears after the next collection run.
 
 With read access, TAs can open each student's work and leave reviews on the
-[feedback pull request](Autograders#feedback-pull-requests). There is no
+[feedback pull request](Autograding-Basics#feedback-pull-requests). There is no
 automatic reviewer assignment yet; TAs pick up repositories from the
 submissions page (**Open all Feedback PRs** steps through them).
 

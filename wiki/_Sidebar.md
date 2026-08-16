@@ -16,9 +16,13 @@
   - [Staff, TAs, and Multiple Teachers](Staff-TAs-and-Multiple-Teachers)
   - [Migrating from GitHub Classroom](Migrating-from-GitHub-Classroom)
   - [Course Lifecycle and End of Term](Course-Lifecycle-and-End-of-Term)
+- **Autograding**
+  - [Autograding Basics](Autograding-Basics)
+  - [Autograder Recipes](Autograder-Recipes)
+  - [Advanced Autograding](Advanced-Autograding)
+  - [Managing Actions Cost](Managing-Actions-Cost)
 - **Reference**
   - [Assignment Templates](Assignment-Templates)
-  - [Autograders](Autograders)
   - [GitHub Integration](GitHub-Integration)
   - [Known Limitations](Known-Limitations)
   - [Troubleshooting](Troubleshooting)

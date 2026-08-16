@@ -255,11 +255,11 @@ form, holds optional settings for customizing the autograding environment:
 > Existing organizations must refresh the shared workflow files (re-run
 > setup) before using submission release files. Submission publishing doesn't
 > support GitHub Immutable Releases. See
-> [Autograders](Autograders#attaching-files-to-submission-releases)
+> [Autograders](Advanced-Autograding#attaching-files-to-submission-releases)
 > for path rules and limits.
 
 Commands run in separate shell processes. See
-[Autograders](Autograders#setup-commands-dependencies-and-environment-variables)
+[Autograders](Autograding-Basics#setup-commands-dependencies-and-environment-variables)
 for dependency installation and environment-variable guidance.
 
 ### Autograding tests
@@ -445,7 +445,7 @@ and links to the repository, the commit, the feedback pull request
 (**Review**), and the Release (**View autograder details**). For where every
 result lives — per-test breakdowns, past attempts, grading a specific commit,
 and who submitted — see
-[Reading results](Autograders#reading-results) in Autograders.
+[Reading results](Autograding-Basics#reading-results) in Autograding Basics.
 
 ### Scores and overrides
 
@@ -509,7 +509,7 @@ assignment:
 
 Click **Download scores (CSV)** to export all submissions as a CSV for a
 spreadsheet or external tool. The column-by-column reference is in
-[Score exports](Autograders#score-exports) in Autograders.
+[Score exports](Autograding-Basics#score-exports) in Autograding Basics.
 
 ## Edit assignments and classrooms
 

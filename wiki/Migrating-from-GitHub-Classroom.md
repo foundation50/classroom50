@@ -49,7 +49,7 @@ starter repository as a template in your organization.
 
 ## Reusing your autograders
 
-Classroom 50's [declarative tests](Autograders#declarative-tests) fill the
+Classroom 50's [declarative tests](Autograding-Basics#declarative-tests) fill the
 role of GitHub Classroom's autograding presets: input/output, run-command,
 and pytest checks defined on the assignment, with no grading script to
 write. For most assignments, migrating the autograder means re-entering
@@ -57,7 +57,7 @@ those tests on the imported assignment.
 
 If you've invested in a working `autograding.json` workflow, you can keep it
 and skip Classroom 50's grading pipeline for that assignment; see
-[Bringing a GitHub Classroom autograder along](Autograders#bringing-a-github-classroom-autograder-along).
+[Bringing a GitHub Classroom autograder along](Advanced-Autograding#bringing-a-github-classroom-autograder-along).
 
 ## What behaves differently
 

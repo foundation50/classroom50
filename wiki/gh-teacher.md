@@ -410,7 +410,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--due <ISO-8601>` | Due date; timezone required. Stored verbatim. |
 | `--mode individual\|group` | `individual` (default) or `group` (requires `--max-group-size`). |
 | `--max-group-size <N>` | Max group collaborators (2–100). Advisory. |
-| `--runtime <path>` | JSON runtime (`runs-on`, toolchains, `apt`, `container`). See [Autograders](Autograders). |
+| `--runtime <path>` | JSON runtime (`runs-on`, toolchains, `apt`, `container`). See [Advanced Autograding](Advanced-Autograding#the-runtime-block). |
 | `--tests <path>` | JSON array of declarative tests. Mutually exclusive with a per-assignment `autograder.py`. |
 | `--autograder <name>` | Swap the reusable workflow (rare). Default `default`. |
 | `--feedback-pr` | One review PR per student repo. **On by default**; `--feedback-pr=false` disables. |
@@ -421,7 +421,9 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 
 **Where grading logic lives** (increasing effort): declarative `--tests` → a
 per-assignment `<classroom>/autograders/<slug>/autograder.py` → a classroom
-default via `gh teacher autograder set-default`. See [Autograders](Autograders).
+default via `gh teacher autograder set-default`. See
+[Autograding Basics](Autograding-Basics#declarative-tests) and
+[Advanced Autograding](Advanced-Autograding#writing-an-autograderpy).
 
 **No built-in autograder (teacher-supplied CI).** A **templated** assignment can
 carry `no_autograder: true` in `assignments.json` to opt out of the built-in
@@ -576,7 +578,7 @@ gh teacher assignment test remove <org> <classroom> <slug> <test-name>
 Manage the declarative `tests` block — GitHub Classroom-style io/run/python
 checks graded with no `autograder.py`. `add` upserts by `--name`; it's refused
 while a per-assignment `autograder.py` exists. See
-[Autograders](Autograders#declarative-tests) for fields and semantics. For bulk
+[Autograders](Autograding-Basics#declarative-tests) for fields and semantics. For bulk
 edits, use `assignment add --tests <file.json>`.
 
 ## `autograder`
@@ -604,7 +606,8 @@ gh teacher autograder remove <org> <classroom> [--yes]
   Prompts unless `--yes`. Idempotent.
 
 Named shims and per-assignment `autograder.py` overrides are **read-only from the
-CLI** — author them with ordinary git operations. See [Autograders](Autograders).
+CLI** — author them with ordinary git operations. See
+[Advanced Autograding](Advanced-Autograding).
 
 ## `invite`
 
