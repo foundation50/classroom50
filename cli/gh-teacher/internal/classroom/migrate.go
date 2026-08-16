@@ -33,7 +33,7 @@ func classroomMigrateCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "migrate --source <id-or-org> --target <org>",
-		Short: "Migrate a classroom from GitHub Classroom into the target org's classroom50 repo",
+		Short: "Migrate a classroom from GitHub Classroom into the target org's classroom50 repository",
 		Long: "Migrate a classroom from the legacy GitHub Classroom product into\n" +
 			"<target>/classroom50 — copies each starter repo as a fresh template\n" +
 			"in the target org and registers a matching entry in\n" +
@@ -42,7 +42,7 @@ func classroomMigrateCmd() *cobra.Command {
 			"`gh teacher roster add|import`.\n\n" +
 			"GitHub Classroom is 1:1 with orgs (the org IS the classroom\n" +
 			"container) while Classroom 50 hosts multiple classrooms per\n" +
-			"org under one classroom50 config repo. Migrating N legacy\n" +
+			"org under one classroom50 repository. Migrating N legacy\n" +
 			"classrooms into one target org means running this command N\n" +
 			"times, once per source classroom.\n\n" +
 			"--source accepts a numeric GitHub Classroom ID (e.g., 95884) or\n" +
@@ -51,9 +51,9 @@ func classroomMigrateCmd() *cobra.Command {
 			"Archived classrooms resolve when looked up by numeric ID; they\n" +
 			"are skipped during org-name resolution unless --include-archived\n" +
 			"is passed.\n\n" +
-			"--target is the destination org where the classroom50 config\n" +
-			"repo lives. Run `gh teacher init <target>` first if it doesn't\n" +
-			"yet exist.\n\n" +
+			"--target is the destination org where the classroom50\n" +
+			"repository lives. Run `gh teacher init <target>` first if it\n" +
+			"doesn't yet exist.\n\n" +
 			"--short-name overrides the auto-derived classroom directory\n" +
 			"name. Migrate slugifies the source classroom name (lowercase,\n" +
 			"non-alnum → '-', collapsed, trimmed) and validates against\n" +
@@ -78,7 +78,7 @@ func classroomMigrateCmd() *cobra.Command {
 				return errors.New("--source is required (numeric classroom ID or org login)")
 			}
 			if targetVal == "" {
-				return errors.New("--target is required (destination org owning the classroom50 config repo)")
+				return errors.New("--target is required (destination org owning the classroom50 repository)")
 			}
 
 			client, err := githubapi.RequireAuthClient(cmd)
@@ -98,7 +98,7 @@ func classroomMigrateCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&source, "source", "", "Source classroom — numeric ID or org login (required)")
-	cmd.Flags().StringVar(&target, "target", "", "Destination org owning the classroom50 config repo (required)")
+	cmd.Flags().StringVar(&target, "target", "", "Destination org owning the classroom50 repository (required)")
 	cmd.Flags().StringVar(&shortName, "short-name", "", "Override the auto-derived classroom directory name")
 	cmd.Flags().StringVar(&term, "term", "", "Set classroom.json.term (e.g., Spring-2026)")
 	cmd.Flags().StringVar(&templateSuffix, "template-suffix", "", "Suffix appended to every target template repo name (e.g., --template-suffix migrated → readability-migrated)")
@@ -254,7 +254,7 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 	// Grant staff-team config-repo access AFTER the drop (order is load-bearing —
 	// see EnsureStaffTeams), same as `classroom add`. Best-effort.
 	if err := configrepo.GrantStaffTeamsConfigRepoAccess(client, plan.TargetOrg, staffTeams); err != nil {
-		_, _ = fmt.Fprintf(errOut, "Warning: couldn't grant staff teams config-repo access (%v); staff may lack write until re-affirmed.\n", err)
+		_, _ = fmt.Fprintf(errOut, "Warning: couldn't grant staff teams access to the classroom50 repository (%v); staff may lack write until re-affirmed.\n", err)
 	}
 
 	build := func(parentSHA string) (map[string]string, error) {

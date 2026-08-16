@@ -196,7 +196,7 @@ func autograderListCmd() *cobra.Command {
 			"The classroom DEFAULT autograder (<classroom>/autograder.py)\n" +
 			"is not listed here -- inspect it with `gh teacher autograder\n" +
 			"show`. Named shims and per-assignment overrides are authored\n" +
-			"via ordinary git operations against the config repo; this\n" +
+			"via ordinary git operations against the classroom50 repository; this\n" +
 			"command is read-only and lists what is present.",
 		Example: "  gh teacher autograder list cs50-fall-2026 cs-principles\n" +
 			"  gh teacher autograder list cs50-fall-2026 cs-principles --json",

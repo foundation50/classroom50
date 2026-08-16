@@ -48,7 +48,7 @@ var embeddedShimContent string
 // each student repo's shim references the correct org's reusable
 // autograde-runner workflow. shimBranchPlaceholder is the student repo's
 // default branch (the shim's push trigger); shimConfigBranchPlaceholder is the
-// config repo's default branch (the reusable-workflow ref), which may not be
+// classroom50 repository's default branch (the reusable-workflow ref), which may not be
 // `main` if a config-repo rename could not land.
 const (
 	shimOrgPlaceholder          = "{{ORG}}"
@@ -137,7 +137,7 @@ func acceptCmd() *cobra.Command {
 			"`gh teacher assignment add --autograder <name>`) the shim is\n" +
 			"fetched from Pages instead. The shim is intentionally inert —\n" +
 			"it `uses:` the reusable autograde-runner workflow in the\n" +
-			"teacher's config repo, and that workflow fetches the\n" +
+			"teacher's classroom50 repository, and that workflow fetches the\n" +
 			"runner-side bootstrap and the autograder at workflow runtime.\n" +
 			"Teacher edits to runtime, dependencies, or grading logic\n" +
 			"propagate on the next submission without ever touching the\n" +
@@ -150,7 +150,7 @@ func acceptCmd() *cobra.Command {
 			"single Tree commit, then verified.\n\n" +
 			"Re-running is safe and self-healing: an already-accepted repo\n" +
 			"that is fully provisioned is left in place (its founder role is\n" +
-			"reconciled best-effort), but one whose setup never finished (a\n" +
+			"updated best-effort), but one whose setup never finished (a\n" +
 			"prior run interrupted after the repo was created but before the\n" +
 			"control files landed) is repaired by re-running the idempotent\n" +
 			"provisioning. accept only reports\n" +
@@ -393,7 +393,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	//    The entry carries the template ref, mode, and autograder ref.
 	//    `secret` (the --key value) selects the `<classroom>/<secret>/...`
 	//    path for a protected classroom, else "" — it must arrive via --key
-	//    since students can't read the config repo.
+	//    since students can't read the classroom50 repository.
 	lookup := u.Spinner(fmt.Sprintf("Looking up %s in %s/%s", assignment, org, classroom))
 	lookup.Start()
 	entry, err := assignments.FetchEntry(cmd.Context(), org, classroom, secret, assignment)
@@ -460,7 +460,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	//    leave a half-baked repo. The default (embedded) shim is rendered AFTER
 	//    the repo is created, because its `on: push: branches` must match the
 	//    assignment repo's actual default branch (which GitHub, not the template,
-	//    decides) and its `uses:` ref must match the config repo's branch. An
+	//    decides) and its `uses:` ref must match the classroom50 repository's branch. An
 	//    empty_repo assignment never carries the shim (nothing is committed at
 	//    all), so skip resolution entirely.
 	autograderName := entry.ResolveAutograder()
@@ -522,7 +522,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 
 	// Render the default shim now that the assignment repo's default branch is
 	// known: `on: push: branches` targets commitBranch, and the reusable-workflow
-	// `uses:` ref targets the config repo's actual default branch. On a read
+	// `uses:` ref targets the classroom50 repository's actual default branch. On a read
 	// failure, fall back to the assignment repo's own branch (commitBranch), not
 	// a hardcoded `main` — a wrong `@main` ref would 404 the runner and silently
 	// skip grading on a master-default org. A no-shim assignment (empty_repo or
@@ -631,7 +631,7 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 			// already healthy, so a transient/SSO-403/left-org failure must not
 			// fail a re-run that previously always succeeded — warn and report.
 			if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission)); err != nil && verbose {
-				u.Detail("could not reconcile %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
+				u.Detail("could not update %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 			}
 			p.createSp.Stop(fmt.Sprintf("Repo already exists: %s", p.fullName))
 			// Ensure the Feedback PR exists even on the healthy path: repos
@@ -703,7 +703,7 @@ func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.
 		// (its only provisioning is this grant), so a transient/SSO-403/
 		// left-org failure must not fail a re-run that previously succeeded.
 		if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission)); err != nil && verbose {
-			u.Detail("could not reconcile %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
+			u.Detail("could not update %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 		}
 		return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
 	}
@@ -1370,7 +1370,7 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 	return htmlURL, fullName, defaultBranch, false, nil
 }
 
-// resolveConfigRepoBranch returns the org's classroom50 config repo default
+// resolveConfigRepoBranch returns the org's classroom50 repository default
 // branch for the shim's reusable-workflow `uses:` ref. A read failure is
 // returned as an error so the caller can fall back to the assignment repo's own
 // branch rather than a wrong `@main` ref that would 404 the runner; an empty

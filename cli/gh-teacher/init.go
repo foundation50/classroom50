@@ -25,8 +25,8 @@ func initCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "init <org>",
-		Short: "Bootstrap the classroom50 config repo in an organization",
-		Long: "Bootstrap the classroom50 config repo for a teaching organization.\n" +
+		Short: "Bootstrap the classroom50 repository in an organization",
+		Long: "Bootstrap the classroom50 repository for a teaching organization.\n" +
 			"Run once per org; safe to re-run (idempotent).\n\n" +
 			"What it sets up (in order):\n" +
 			"  1.  Org member-privilege lockdown (least-privilege: the only\n" +
@@ -37,15 +37,15 @@ func initCmd() *cobra.Command {
 			"      an existing teacher-set budget is left untouched).\n" +
 			"  4.  Actions allowed to create pull requests (for Feedback PRs).\n" +
 			"  5.  Branch rulesets protecting submission history + Feedback base.\n" +
-			"  6.  The private classroom50 config repo (auto-initialized).\n" +
+			"  6.  The private classroom50 repository (auto-initialized).\n" +
 			"  7.  Repo-level Actions re-enabled.\n" +
-			"  8.  The embedded skeleton workflows/scripts (single commit).\n" +
+			"  8.  The embedded workflow and script files (single commit).\n" +
 			"  9.  GitHub Pages (workflow build, visibility public).\n" +
 			"  10. Branch protection on the default branch.\n" +
 			"  11. Workflow GITHUB_TOKEN permissions.\n" +
 			"  12. Reusable-workflow access for the org.\n" +
 			"  13. The repo-level CLASSROOM50_SERVICE_TOKEN secret.\n\n" +
-			"Preflight: before any change, init verifies your OAuth scopes,\n" +
+			"Setup checks: before any change, init verifies your OAuth scopes,\n" +
 			"org access and ownership, the org plan, and that a service token\n" +
 			"is available — and stops without mutating if a hard check fails.\n\n" +
 			"Service token: read from the CLASSROOM50_SERVICE_TOKEN environment\n" +
@@ -67,17 +67,17 @@ func initCmd() *cobra.Command {
 			"an already-configured token untouched; replace it with\n" +
 			"`gh teacher rotate-service-token <org>`).\n\n" +
 			"Re-running is safe: init picks up where a prior run left off and\n" +
-			"refreshes skeleton files that differ from this CLI's embedded\n" +
-			"version (so orgs gain new features) after a confirmation prompt;\n" +
-			"--yes skips that prompt for scripted runs.\n\n" +
+			"refreshes workflow and script files that differ from this CLI's\n" +
+			"embedded version (so orgs gain new features) after a confirmation\n" +
+			"prompt; --yes skips that prompt for scripted runs.\n\n" +
 			"Four org member-privilege settings have no REST API; init reports\n" +
 			"them as a manual checklist (and in --json's\n" +
 			"manual_hardening_required). See the CLI Teacher Guide for the full\n" +
 			"hardening context.\n\n" +
-			"Flags: --dry-run (preflight + planned steps, no changes),\n" +
+			"Flags: --dry-run (setup checks + planned steps, no changes),\n" +
 			"--json (machine-readable summary on stdout, implies --quiet),\n" +
-			"--quiet/-q (suppress progress chatter), --yes (skip skeleton-\n" +
-			"refresh prompt).",
+			"--quiet/-q (suppress progress chatter), --yes (skip the refresh\n" +
+			"prompt).",
 		Example: "  CLASSROOM50_SERVICE_TOKEN=github_pat_xxx gh teacher init cs50-fall-2026\n" +
 			"  gh teacher init cs50-fall-2026              # interactive prompt for the token\n" +
 			"  gh teacher init cs50-fall-2026 --dry-run    # preview without changes\n" +
@@ -339,8 +339,8 @@ func initCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVar(&skipConfirm, "yes", false, "Skip the skeleton-refresh confirmation prompt (scripted runs only)")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Run read-only preflight checks and list the steps init would perform, without making any changes")
+	cmd.Flags().BoolVar(&skipConfirm, "yes", false, "Skip the refresh confirmation prompt (scripted runs only)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Run read-only setup checks and list the steps init would perform, without making any changes")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit a machine-readable JSON summary on stdout (implies --quiet); suppresses human output")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress per-step progress and success chatter; keep warnings and the final summary")
 	return cmd

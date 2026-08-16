@@ -74,7 +74,7 @@ func assignmentTestAddCmd() *cobra.Command {
 			"  cases at grade time.\n\n" +
 			"--input-file / --expected-file name a fixture file the teacher\n" +
 			"has committed alongside the assignment at\n" +
-			"<classroom>/autograders/<slug>/ in the config repo; it is bundled\n" +
+			"<classroom>/autograders/<slug>/ in the classroom50 repository; it is bundled\n" +
 			"and read at grade time. Fails if the assignment slug isn't\n" +
 			"registered yet, or if the assignment already has a hand-written\n" +
 			"per-assignment autograder.py (the two are mutually exclusive).",
@@ -387,7 +387,7 @@ func ensureDeclarativeTestsSupported(client githubapi.Client, org, ref string) e
 		return fmt.Errorf("check %s/%s/%s: %w", org, configrepo.ConfigRepoName, materializeScriptPath, err)
 	}
 	if !exists {
-		return fmt.Errorf("%s/%s is missing %s, so declarative tests would never run — re-run `gh teacher init %s` to update the skeleton, then retry",
+		return fmt.Errorf("%s/%s is missing %s, so declarative tests would never run — re-run `gh teacher init %s` to update the workflow files, then retry",
 			org, configrepo.ConfigRepoName, materializeScriptPath, org)
 	}
 	return nil

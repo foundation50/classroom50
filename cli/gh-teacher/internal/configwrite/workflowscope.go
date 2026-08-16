@@ -8,9 +8,9 @@ import (
 )
 
 // ErrMissingWorkflowScope: no `workflow` OAuth scope, so GitHub 404s the
-// Tree write of the skeleton's .github/workflows files. The guidance steers
+// Tree write of the .github/workflows files. The guidance steers
 // the teacher to re-authenticate with the scope granted.
-var ErrMissingWorkflowScope = errors.New("auth token is missing the `workflow` OAuth scope, so init can't commit the skeleton's .github/workflows files; re-run `gh teacher login` (or `gh auth refresh -s admin:org,workflow`), then run init again")
+var ErrMissingWorkflowScope = errors.New("auth token is missing the `workflow` OAuth scope, so init can't commit the .github/workflows files; re-run `gh teacher login` (or `gh auth refresh -s admin:org,workflow`), then run init again")
 
 // tokenLacksWorkflowScope reports whether err's X-OAuth-Scopes header is
 // present but missing `workflow`. An absent header (a fine-grained PAT

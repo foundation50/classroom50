@@ -340,7 +340,7 @@ func IsNotFound(err error) bool {
 // AutogradeWorkflow is the result of a Pages autograder fetch. Content is the
 // raw workflow shim body dropped at `.github/workflows/autograde.yaml`. The
 // shim is intentionally stable — it `uses:` the reusable autograde-runner
-// workflow in the config repo, which fetches the runner-side bootstrap
+// workflow in the classroom50 repository, which fetches the runner-side bootstrap
 // (runner.py) and the autograder fresh on every submission, so a stale shim
 // still grades against the latest teacher-side logic.
 type AutogradeWorkflow struct {
@@ -373,7 +373,7 @@ func fetchAutograderWorkflowFromURL(ctx context.Context, rawURL, name string) (A
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return AutogradeWorkflow{}, fmt.Errorf("autograder %q not published yet (%s returned 404) — ask your teacher to confirm that file exists in the config repo and that `publish-pages.yaml` has run", name, rawURL)
+		return AutogradeWorkflow{}, fmt.Errorf("autograder %q not published yet (%s returned 404) — ask your teacher to confirm that file exists in the classroom50 repository and that `publish-pages.yaml` has run", name, rawURL)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return AutogradeWorkflow{}, fmt.Errorf("GET %s: unexpected status %d", rawURL, resp.StatusCode)
@@ -393,7 +393,7 @@ func fetchAutograderWorkflowFromURL(ctx context.Context, rawURL, name string) (A
 	// release asset, `classroom50/autograde` commit status).
 	var sink any
 	if err := yaml.Unmarshal(body, &sink); err != nil {
-		return AutogradeWorkflow{}, fmt.Errorf("autograder %q is malformed YAML (parsed from %s) — ask your teacher to check the file in the config repo: %w", name, rawURL, err)
+		return AutogradeWorkflow{}, fmt.Errorf("autograder %q is malformed YAML (parsed from %s) — ask your teacher to check the file in the classroom50 repository: %w", name, rawURL, err)
 	}
 
 	return AutogradeWorkflow{Content: string(body)}, nil

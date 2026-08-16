@@ -88,7 +88,7 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 	}
 
 	// Snapshot the classroom team refs (students + staff) BEFORE the repo
-	// deletions remove the config repo that records them, so we can sweep the
+	// deletions remove the classroom50 repository that records them, so we can sweep the
 	// teams afterward. Best-effort: a read failure shouldn't block teardown.
 	teams := collectClassroomTeams(client, org, errOut)
 
@@ -190,7 +190,7 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 func collectClassroomTeams(client githubapi.Client, org string, errOut io.Writer) []configrepo.TeamRef {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: could not resolve the config repo branch to sweep classroom teams (%v); delete any lingering classroom50-* teams by hand.\n", org, err)
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: could not resolve the classroom50 repository branch to sweep classroom teams (%v); delete any lingering classroom50-* teams by hand.\n", org, err)
 		return nil
 	}
 	entries, _, err := configrepo.ListDirContents(client, org, configrepo.ConfigRepoName, "", branch)

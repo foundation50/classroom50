@@ -178,12 +178,12 @@ func allMemberDefaultSettings() []MemberDefaultSetting {
 			enterpriseOnly: true,
 		},
 		{
-			// Enforced TRUE: the config repo publishes a public Pages site
+			// Enforced TRUE: the classroom50 repository publishes a public Pages site
 			// (the unauthenticated assignments.json fetch). init resets this
 			// on re-run so a teacher can't accidentally break the student flow.
 			Field:     "members_can_create_pages",
 			Value:     true,
-			Desc:      "Pages creation enabled (required for the public config-repo site)",
+			Desc:      "Pages creation enabled (required for the classroom50 repository's public site)",
 			ManualFix: `check "Allow members to publish Pages sites"`,
 		},
 		{
@@ -192,7 +192,7 @@ func allMemberDefaultSettings() []MemberDefaultSetting {
 			// doesn't exist and the field is rejected (the fallback warns).
 			Field:     "members_can_create_public_pages",
 			Value:     true,
-			Desc:      "public Pages creation enabled (required for the public config-repo site)",
+			Desc:      "public Pages creation enabled (required for the classroom50 repository's public site)",
 			ManualFix: `under "Pages creation", select "Public"`,
 		},
 		{
@@ -316,7 +316,7 @@ func OrgDefaultBranchRecommendation(live map[string]any) string {
 	return branch
 }
 
-// ConfigRepoDefaultBranchRecommendation returns the config repo's current
+// ConfigRepoDefaultBranchRecommendation returns the classroom50 repository's current
 // default branch when it differs from RecommendedOrgDefaultBranch (so callers
 // can advise renaming it), or "" when it already matches / is unset / couldn't
 // be read. Unlike the org-default recommendation this branch IS API-renameable,
@@ -328,7 +328,7 @@ func ConfigRepoDefaultBranchRecommendation(branch string) string {
 	return branch
 }
 
-// ConfigRepoBranchesURL is the config repo's branches settings page where a
+// ConfigRepoBranchesURL is the classroom50 repository's branches settings page where a
 // teacher can rename the default branch to `main`.
 func ConfigRepoBranchesURL(org string) string {
 	return fmt.Sprintf("https://github.com/%s/classroom50/settings/branches", org)
