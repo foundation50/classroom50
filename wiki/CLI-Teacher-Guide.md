@@ -54,7 +54,7 @@ CLIs.
 
 ## 3. Set up the organization
 
-Run once per organization to create `<org>/classroom50`, the private config repo
+Run once per organization to create `<org>/classroom50`, the private repository
 that holds classroom metadata, published assignment manifests, and collected
 scores:
 
@@ -69,8 +69,8 @@ gh teacher init <org>
 ```
 
 `init` is **idempotent** — re-running picks up where a prior run left off. It
-also offers to refresh the **skeleton files** — the workflow and script files
-Classroom 50 commits to the config repository — when the CLI ships newer versions
+also offers to refresh the **workflow files** (the workflow and script files
+Classroom 50 commits to the `classroom50` repository) when the CLI ships newer versions
 (this is how an existing organization gains new features); it asks before
 overwriting, so your edits are safe. Use `--yes` to skip the prompt in scripts.
 
@@ -78,19 +78,19 @@ overwriting, so your edits are safe. Use `--yes` to skip the prompt in scripts.
 
 | Flag | Purpose |
 | --- | --- |
-| `--dry-run` | Run read-only preflight checks and list planned steps without changing anything. Run this once first to catch problems early. |
+| `--dry-run` | Run read-only setup checks and list planned steps without changing anything. Run this once first to catch problems early. |
 | `--json` | Emit a machine-readable summary (implies `--quiet`). Lets a script check "any manual steps pending?" and "is the org ready?". |
 | `--quiet` / `-q` | Drop per-step progress; keep warnings and the final summary. |
-| `--yes` | Skip the skeleton-refresh confirmation. |
+| `--yes` | Skip the workflow-refresh confirmation. |
 
 <details>
 <summary>What <code>init</code> configures</summary>
 
 `init` applies a least-privilege lockdown of organization member privileges (the
 only member capabilities left on are private-repo creation, so `gh student
-accept` works, and public Pages creation, so the config repo can publish),
+accept` works, and public Pages creation, so the `classroom50` repository can publish),
 enables GitHub Actions, creates the private `classroom50` repo, commits the
-skeleton workflows and scripts, enables GitHub Pages (public, so students and
+workflow and script files, enables GitHub Pages (public, so students and
 the autograder can fetch published files), protects the default branch, raises
 workflow token permissions, allows reusable-workflow access, and uploads the
 service token secret.
@@ -171,7 +171,7 @@ prints this same reminder). Apply them once at
       repositories".
 - [ ] **Projects base permissions** → "No access".
 - [ ] **Uncheck** "Allow repository administrators to rename branches protected
-      by organization rules". (Defense-in-depth; the config repo's rulesets
+      by organization rules". (Defense-in-depth; the `classroom50` repository's rulesets
       already protect submission history.)
 
 > [!NOTE]
@@ -187,7 +187,8 @@ gh teacher audit <org>
 ```
 
 It's **read-only** and reports, per setting, whether the least-privilege value is
-in effect: **Verified** (read from the API), **Action required** (drifted), and
+in effect: **Verified** (read from the API), **Action required** (changed outside
+Classroom 50), and
 **Confirm by hand** (the four API-less settings above). It exits non-zero when a
 critical field is unenforced, so it's scriptable; add `--json` for a
 machine-readable report.
@@ -363,7 +364,7 @@ shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 
 > [!NOTE]
 > **Custom grading isn't registered here.** Drop an `autograder.py` at
-> `<classroom>/autograders/<slug>/` in the config repo, or set a classroom
+> `<classroom>/autograders/<slug>/` in the `classroom50` repository, or set a classroom
 > default with `gh teacher autograder set-default`. See [Advanced Autograding](Advanced-Autograding#classroom-default).
 
 Re-running with the same slug replaces the entry in place; new slugs append.
@@ -422,7 +423,7 @@ gh teacher member list <org>/<repo>  # repo collaborators
 Every submission publishes a GitHub Release carrying a `result.json`. The
 `collect-scores` workflow walks each `(member, assignment)` pair in scope,
 collects each repo's submissions, and aggregates them into
-`<classroom>/scores.json` — the classroom's authoritative gradebook. By default the
+`<classroom>/scores.json` — the classroom's authoritative score record. By default the
 scope is every classroom and every assignment; you can narrow it to one
 classroom, or to a single assignment (see below). Members are the union of the
 student team and the staff teams (teacher/hta/ta), so a staff member who
@@ -516,7 +517,7 @@ gh teacher download -d <dir> <org> <classroom> <assignment>
 ```
 
 > [!NOTE]
-> **Unconfigured classrooms.** If the config repo isn't bootstrapped, or you
+> **Unconfigured classrooms.** If the `classroom50` repository isn't bootstrapped, or you
 > want every matching repo regardless of the roster, pass `--by-pattern`. It
 > clones every repo whose name starts with `<classroom>-<assignment>-` and skips
 > the `result.json` refresh and `scores.csv` summary.

@@ -17,7 +17,7 @@ when minutes run out.
   tests) bills about a minute.
 - **In the default submission type, every push grades.** An assignment in
   `every-push` mode grades each push to the default branch: five pushes in
-  ten minutes are five graded runs. Multiply by class size to estimate an
+  ten minutes are five graded runs. Multiply by roster size to estimate an
   assignment's cost.
 
 ## The levers, by impact

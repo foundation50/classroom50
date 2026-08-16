@@ -20,7 +20,7 @@ The teaching model is familiar — you create assignments (optionally with
 starter code), students accept to get their own repository, and submissions are
 auto-graded — but Classroom 50 has no server or database of its own. Your
 classroom settings, roster, assignments, and scores are stored in a private
-`classroom50` config repo in your organization, and grading runs in GitHub
+`classroom50` repository in your organization, and grading runs in GitHub
 Actions. See [How Classroom 50 Works](How-Classroom-50-Works) for the full
 model, or the [Glossary](Glossary) for the core concepts.
 
@@ -260,7 +260,7 @@ Overridden scores show a **Manual** badge and aren't changed by autograding
 until you clear the override. Use **Clear override** in the dialog to revert.
 
 This editor appears only for organization owners (writing a score writes the
-config repo). Under the hood, an override is just an entry in the classroom's
+`classroom50` repository). Under the hood, an override is just an entry in the classroom's
 `scores.json` with `"override": true`, which collection leaves untouched on
 future runs — so you can still edit it by hand if you prefer (see
 [Collect scores](CLI-Teacher-Guide#9-collect-scores)).
@@ -273,7 +273,7 @@ in the same **Actions** menu bundles every repository's latest submission into
 a single zip (built in your browser). For real clones — e.g. to run your own
 tooling locally — `gh teacher download` clones every submission repo and also
 writes a `scores.csv` summary at the destination root. The raw score data also
-lives in `scores.json` in your config repo, so you can build your own
+lives in `scores.json` in your `classroom50` repository, so you can build your own
 automations against it. The column-by-column reference for both CSVs is in
 [Score exports](Autograding-Basics#score-exports) in Autograding Basics.
 
@@ -297,7 +297,7 @@ student.
 ### Can I import my existing GitHub Classroom?
 
 Yes. `gh teacher classroom migrate` imports a GitHub Classroom into your
-`classroom50` config repo — it copies each starter repo into your organization
+`classroom50` repository — it copies each starter repo into your organization
 as a fresh template and recreates the assignments. Rosters, scores, and past
 student repositories are **not** migrated; you re-onboard students for the new
 term. See [`gh teacher classroom migrate`](gh-teacher#classroom-migrate), and
@@ -331,8 +331,8 @@ Integration.
 ### Can I edit the config files in the `classroom50` repo by hand?
 
 It's not recommended. Some state is derived from both the config files and the
-live state on GitHub.com, and the app's reconciliation process updates the
-files automatically to keep them in sync — a hand-edit can create a state the
+live state on GitHub.com, and the app updates the files automatically to keep
+them in sync; a hand-edit can create a state the
 tools don't know how to handle (and makes problems much harder to
 troubleshoot). Manage the classroom through the web app or the `gh teacher`
 CLI instead; the one documented exception is a `scores.json` score override
@@ -341,7 +341,7 @@ CLI instead; the one documented exception is a `scores.json` score override
 ### What is the service token, and is it the same one the web app set up?
 
 The **service token** is a fine-grained personal access token stored as a secret
-in your config repo; the score-collection and regrade workflows use it. It's the
+in your `classroom50` repository; the score-collection and regrade workflows use it. It's the
 **same** token whether you set it up through the web app or the CLI — you only
 need one per organization. See
 [the service-token setup](CLI-Teacher-Guide#create-the-service-token).

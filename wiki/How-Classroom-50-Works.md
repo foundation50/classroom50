@@ -35,16 +35,16 @@ from this.
 ## Why teachers stay involved
 
 Because there is no always-on server, the app does not change state on its own
-while you are signed out. It cannot reconcile state in the background the way a
+while you are signed out. It cannot sync state in the background the way a
 hosted service can. As a result:
 
 - **Interactive work runs as you.** Creating a classroom, adding a student,
   saving an assignment, or inviting a TA runs at the moment you do it, using
   your signed-in GitHub token. These changes happen only when you make them.
-- **Signing in can trigger reconciliation.** Opening a classroom lets the app
-  correct things that have drifted — for example, migrating an old team name or
-  re-checking organization settings. Some upkeep occurs only after an owner
-  signs in and loads the page.
+- **Signing in can trigger a sync.** Opening a classroom lets the app
+  correct things that have fallen out of date — for example, migrating an old
+  team name or re-checking organization settings. Some upkeep occurs only
+  after an owner signs in and loads the page.
 - **Background jobs require setup.** Score collection and regrading run as
   GitHub Actions on a schedule, but only after you provision the
   [service token](#the-service-token) that lets them act while you are offline.
@@ -59,17 +59,17 @@ read it:
 
 - **Web app** — loading a page reads the current GitHub state (so opening
   classroom50.org effectively refreshes the roster, teams, and config), and
-  signing in as an owner can additionally run reconciliation upkeep. One
+  signing in as an owner can additionally run sync upkeep. One
   exception: the **organization list** is cached for ten minutes — use
   **Refresh list** to force it. If a view looks out of date, reopening the page
   usually updates it.
 - **CLI reads** (`roster list`, `classroom list`, `member list`, …) report
   what's committed and on GitHub **at that moment**; they never write or
-  reconcile. If the web app shows a newer roster than `roster list` did a
-  minute earlier, someone (or a sign-in reconciliation) committed in between.
+  sync. If the web app shows a newer roster than `roster list` did a
+  minute earlier, someone (or a sign-in sync) committed in between.
 - **CLI writes** (`roster add`, `staff add`, `assignment add`, …) update the
-  config repo and GitHub teams immediately, but only for the thing they
-  change — they don't run the web app's broader reconciliation.
+  `classroom50` repository and GitHub teams immediately, but only for the thing they
+  change — they don't run the web app's broader sync.
 - **Scores** refresh only when collection runs: nightly, or on demand with
   **Sync now** / `collect-scores.yaml`.
 
@@ -104,8 +104,8 @@ Classroom 50 has four roles, and each maps directly onto a GitHub construct:
 | Role | On GitHub | Can |
 | --- | --- | --- |
 | **Teacher** | Organization **owner**, on the `-teacher` team | Everything, including org + classroom settings |
-| **Head TA** | Org **member**, on the `-hta` team | Write the config repo; manage the classroom; not an owner |
-| **TA** | Org **member**, on the `-ta` team | Read the config repo; view submissions |
+| **Head TA** | Org **member**, on the `-hta` team | Write the `classroom50` repository; manage the classroom; not an owner |
+| **TA** | Org **member**, on the `-ta` team | Read the `classroom50` repository; view submissions |
 | **Student** | Org **member**, on the classroom team | Accept and submit assignments |
 
 Every classroom has a set of `secret` GitHub teams
@@ -143,11 +143,12 @@ per-repo access and the strict org policy work together.
 > score-collection workflow, not at accept time. A newly accepted repo
 > therefore has no staff team attached to it, which is expected.
 
-## Why org policies sometimes "drift"
+## Why organization settings sometimes change back
 
 If you run both Classroom 50 and GitHub Classroom in the same organization, they
 can disagree on a setting and flip it back and forth, most notably private-repo
-forking. That tug-of-war shows up as "policy drift" in the setup/audit check.
+forking. That tug-of-war shows up in the setup and audit checks as settings that
+changed outside Classroom 50.
 Classroom 50 no longer enforces the forking setting for this reason; private
 templates work either way. If you see a setting you fixed revert later, another
 tool (or an org/enterprise policy) is changing it back.
@@ -157,7 +158,7 @@ tool (or an org/enterprise policy) is changing it back.
 1. A student pushes to their repository (via `gh student submit` or a plain
    `git push`).
 2. A small workflow in their repo calls the shared **autograde runner** in your
-   config repo, which fetches the grading logic from Pages and runs it.
+   `classroom50` repository, which fetches the grading logic from Pages and runs it.
 3. The result is published as a **GitHub Release** on the student's repo.
 4. The **score-collection** workflow gathers those results into `scores.json`.
 
@@ -210,7 +211,7 @@ against them generally work the same as they did with GitHub Classroom.
 ## The service token
 
 The **service token** is a fine-grained personal access token stored as a secret
-in your config repo. The background workflows (score collection, regrade) use it
+in your `classroom50` repository. The background workflows (score collection, regrade) use it
 to read and update student repositories across the org — work that can't run as
 "you" because it happens on a schedule when you're not online. It's the same
 token whether you set it up in the web app or the CLI, and you need only one per
@@ -221,11 +222,11 @@ organization. See [the service-token setup](CLI-Teacher-Guide#create-the-service
 | | GitHub Classroom | Classroom 50 |
 | --- | --- | --- |
 | Backend | Hosted service | None (GitHub repos + Actions) |
-| Classroom ↔ org | Classrooms managed in the hosted dashboard | A folder in your organization's config repository, plus GitHub teams |
+| Classroom ↔ org | Classrooms managed in the hosted dashboard | A folder in your organization's `classroom50` repository, plus GitHub teams |
 | Grading | Hosted autograder | GitHub Actions in each repo |
 | Joining | Students self-select their roster entry from an invite link | The owner invites students; accept links work once they've joined the org |
 | Group naming | Team names | Founder's username |
-| Data | In the service | In your `classroom50` config repo (yours to keep) |
+| Data | In the service | In your `classroom50` repository (yours to keep) |
 
 For a term-by-term mapping of GitHub Classroom vocabulary (cutoff date,
 Download grades, roster identifiers, teams) to Classroom 50's, see

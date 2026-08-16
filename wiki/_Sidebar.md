@@ -1,18 +1,11 @@
-- [Home](Home)
-- [Prerequisites and GitHub Education](Prerequisites-and-GitHub-Education)
-- [How Classroom 50 Works](How-Classroom-50-Works)
-- [Glossary](Glossary)
-- [FAQ](FAQ)
-- **Web app**
+- **Start here**
+  - [Home](Home)
+  - [Prerequisites and GitHub Education](Prerequisites-and-GitHub-Education)
+  - [How Classroom 50 Works](How-Classroom-50-Works)
+  - [Quickstart: Your First Classroom](Quickstart)
+- **Teacher guides**
   - [Web Teacher Guide](Web-Teacher-Guide)
-  - [Web Student Guide](Web-Student-Guide)
-- **Command line**
-  - [Installation](Installation)
   - [CLI Teacher Guide](CLI-Teacher-Guide)
-  - [CLI Student Guide](CLI-Student-Guide)
-  - [gh teacher](gh-teacher)
-  - [gh student](gh-student)
-- **Guides**
   - [Staff, TAs, and Multiple Teachers](Staff-TAs-and-Multiple-Teachers)
   - [Migrating from GitHub Classroom](Migrating-from-GitHub-Classroom)
   - [Course Lifecycle and End of Term](Course-Lifecycle-and-End-of-Term)
@@ -21,8 +14,16 @@
   - [Autograder Recipes](Autograder-Recipes)
   - [Advanced Autograding](Advanced-Autograding)
   - [Managing Actions Cost](Managing-Actions-Cost)
+- **Students**
+  - [Web Student Guide](Web-Student-Guide)
+  - [CLI Student Guide](CLI-Student-Guide)
 - **Reference**
+  - [gh teacher](gh-teacher)
+  - [gh student](gh-student)
+  - [Installation (CLI)](Installation)
   - [Assignment Templates](Assignment-Templates)
   - [GitHub Integration](GitHub-Integration)
   - [Known Limitations](Known-Limitations)
+  - [FAQ](FAQ)
   - [Troubleshooting](Troubleshooting)
+  - [Glossary](Glossary)
