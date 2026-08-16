@@ -6,6 +6,7 @@ import {
   readInviteTeam,
   listInviteTeams,
   deleteInviteTeam,
+  deleteInviteTeamForEmail,
 } from "./inviteTeams"
 import type { GitHubClient } from "../client"
 import { GitHubAPIError, type GitHubRateLimit } from "../errors"
@@ -149,7 +150,11 @@ describe("readInviteTeam", () => {
   it("parses the description and lists regular-role members only", async () => {
     const { client, calls } = makeClient((url) => {
       if (url.includes("/members")) return [{ id: 2, login: "alice" }]
-      return { slug: "invite-abc", description: DESCRIPTION }
+      return {
+        slug: "invite-abc",
+        description: DESCRIPTION,
+        created_at: "2026-08-01T00:00:00Z",
+      }
     })
 
     const state = await readInviteTeam(client, "acme", "invite-abc")
@@ -157,6 +162,7 @@ describe("readInviteTeam", () => {
       email: "alice@example.com",
       classroom: "cs101",
     })
+    expect(state?.createdAt).toBe("2026-08-01T00:00:00Z")
     expect(state?.members).toEqual([{ id: 2, login: "alice" }])
     // The maintainer-excluding filter is what keeps the auto-added owner (and
     // any org owner) out of the invitee set.
@@ -211,5 +217,32 @@ describe("deleteInviteTeam", () => {
       url: "/orgs/acme/teams/invite-abc",
       options: { method: "DELETE" },
     })
+  })
+})
+
+describe("deleteInviteTeamForEmail", () => {
+  it("hashes (classroom, email) to the slug and deletes that team", async () => {
+    const slug = await inviteTeamName("cs101", "alice@example.com")
+    const { client, calls } = makeClient(() => undefined)
+    await deleteInviteTeamForEmail(client, "acme", {
+      classroom: "cs101",
+      email: "alice@example.com",
+    })
+    expect(calls[0]).toMatchObject({
+      url: `/orgs/acme/teams/${slug}`,
+      options: { method: "DELETE" },
+    })
+  })
+
+  it("never throws (best-effort cancel-side teardown)", async () => {
+    const { client } = makeClient(() => {
+      throw apiError(500)
+    })
+    await expect(
+      deleteInviteTeamForEmail(client, "acme", {
+        classroom: "cs101",
+        email: "alice@example.com",
+      }),
+    ).resolves.toBeUndefined()
   })
 })

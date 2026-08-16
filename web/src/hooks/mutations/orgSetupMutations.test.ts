@@ -14,6 +14,9 @@ const renameConfigRepoToMain = vi.fn<(...args: unknown[]) => Promise<void>>(
 const cancelOrgInvitation = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
   Promise.resolve(),
 )
+const deleteInviteTeamForEmail = vi.fn<(...args: unknown[]) => Promise<void>>(
+  () => Promise.resolve(),
+)
 const repairConcern = vi.fn<(...args: unknown[]) => Promise<unknown>>(() =>
   Promise.resolve({}),
 )
@@ -36,6 +39,8 @@ vi.mock("@/github-core/mutations", () => ({
     renameConfigRepoToMain(client, org),
   cancelOrgInvitation: (client: unknown, input: unknown) =>
     cancelOrgInvitation(client, input),
+  deleteInviteTeamForEmail: (client: unknown, org: unknown, input: unknown) =>
+    deleteInviteTeamForEmail(client, org, input),
   initClassroom50: (params: unknown) => initClassroom50(params),
 }))
 vi.mock("@/github-core/queries", async (importOriginal) => ({
@@ -131,21 +136,39 @@ describe("useCancelClassroomInvite", () => {
   it("cancels the invite and invalidates the bound team's queries", async () => {
     const queryClient = freshClient()
     const invalidate = vi.spyOn(queryClient, "invalidateQueries")
-    const { result } = renderHook(() => useCancelClassroomInvite(ORG, TEAM), {
-      wrapper: wrapperWith(queryClient),
-    })
-    result.current.mutate(99)
+    const { result } = renderHook(
+      () => useCancelClassroomInvite(ORG, CLASSROOM, TEAM),
+      { wrapper: wrapperWith(queryClient) },
+    )
+    result.current.mutate({ invitationId: 99 })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(cancelOrgInvitation).toHaveBeenCalledWith(expect.anything(), {
       org: ORG,
       invitationId: 99,
     })
+    // A username invitation has no metadata team to tear down.
+    expect(deleteInviteTeamForEmail).not.toHaveBeenCalled()
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: githubKeys.teamInvitations(ORG, TEAM),
     })
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: githubKeys.teamMembers(ORG, TEAM),
     })
+  })
+
+  it("tears down the metadata team when cancelling an email-only invite", async () => {
+    const queryClient = freshClient()
+    const { result } = renderHook(
+      () => useCancelClassroomInvite(ORG, CLASSROOM, TEAM),
+      { wrapper: wrapperWith(queryClient) },
+    )
+    result.current.mutate({ invitationId: 99, inviteEmail: "ta@x.edu" })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(deleteInviteTeamForEmail).toHaveBeenCalledWith(
+      expect.anything(),
+      ORG,
+      { classroom: CLASSROOM, email: "ta@x.edu" },
+    )
   })
 })
 

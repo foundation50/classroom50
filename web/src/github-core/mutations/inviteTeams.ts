@@ -99,6 +99,9 @@ export async function ensureInviteTeam(
 export type InviteTeamState = {
   slug: string
   description: InviteDescription | null
+  // From the full-team read; null when GitHub omits it. Drives the GC age
+  // guard (a team too young to judge is never reaped).
+  createdAt: string | null
   // Regular-role members only (?role=member). GitHub auto-promotes the
   // creating owner — and any org owner — to team maintainer, so the invitee
   // (added via the invitation's team_ids as a plain member) is exactly what's
@@ -138,6 +141,7 @@ export async function readInviteTeam(
   return {
     slug: team.slug,
     description: parseInviteDescription(team.description),
+    createdAt: team.created_at ?? null,
     members,
   }
 }
@@ -182,6 +186,24 @@ export async function deleteInviteTeam(
       ),
     undefined,
   )
+}
+
+// Best-effort delete of the (classroom, email) invite team — the cancel-side
+// teardown: when a teacher cancels or dismisses an email invitation, the
+// stored email should go with it rather than wait for the next GC pass. Never
+// throws (the cancel already succeeded; a leftover team is only a GC-pending
+// orphan). Safe to call for an email with no team (404 = already gone).
+export async function deleteInviteTeamForEmail(
+  client: GitHubClient,
+  org: string,
+  input: { classroom: string; email: string },
+): Promise<void> {
+  try {
+    const slug = await inviteTeamName(input.classroom, input.email)
+    await deleteInviteTeam(client, org, slug)
+  } catch (err) {
+    log.error("invite team cancel-cleanup failed", { org, err })
+  }
 }
 
 export { INVITE_TEAM_PREFIX }

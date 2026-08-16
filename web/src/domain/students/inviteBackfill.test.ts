@@ -5,6 +5,7 @@ const listInviteTeams = vi.fn()
 const readInviteTeam = vi.fn()
 const deleteInviteTeam = vi.fn()
 const listTeamMembers = vi.fn()
+const listOrgInvitations = vi.fn()
 const assertClassroomNotArchived = vi.fn()
 const withRosterRewrite = vi.fn()
 
@@ -15,6 +16,7 @@ vi.mock("@/github-core/mutations", () => ({
 }))
 vi.mock("@/github-core/queries", () => ({
   listTeamMembers: (...a: unknown[]) => listTeamMembers(...a),
+  listOrgInvitations: (...a: unknown[]) => listOrgInvitations(...a),
 }))
 vi.mock("../classrooms", () => ({
   assertClassroomNotArchived: (...a: unknown[]) =>
@@ -52,29 +54,41 @@ const rateLimitError = () =>
 // Build a valid invite-team state for (classroom, email) with the given
 // regular-role members (readInviteTeam already excludes maintainers, i.e. the
 // auto-added owner), so the description's email hashes back to the slug.
+// createdAt defaults to "just now" (never a GC candidate).
 async function inviteState(
   classroom: string,
   email: string,
   members: { id: number; login: string }[],
-  extra: { first_name?: string; last_name?: string; section?: string } = {},
+  extra: {
+    first_name?: string
+    last_name?: string
+    section?: string
+    createdAt?: string
+  } = {},
 ) {
   const slug = await inviteTeamName(classroom, email)
+  const { createdAt, ...fields } = extra
   return {
     slug,
     description: {
       schema: "classroom50/invite/v1",
       email,
       classroom,
-      ...extra,
+      ...fields,
     },
+    createdAt: createdAt ?? new Date().toISOString(),
     members,
   }
 }
+
+// Older than the 24h GC age guard.
+const OLD_ENOUGH = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
 
 beforeEach(() => {
   vi.clearAllMocks()
   assertClassroomNotArchived.mockResolvedValue(undefined)
   deleteInviteTeam.mockResolvedValue(undefined)
+  listOrgInvitations.mockResolvedValue([])
   // Default: every accepted invitee used below is still on a classroom team.
   listTeamMembers.mockResolvedValue([
     { id: 2, login: "member2" },
@@ -124,7 +138,7 @@ describe("backfillInviteMetadata", () => {
     })
   })
 
-  it("skips a still-pending team (no regular members) without deleting", async () => {
+  it("keeps a still-pending team (no regular members, younger than the GC age)", async () => {
     const state = await inviteState("cs101", "bob@example.com", [])
     listInviteTeams.mockResolvedValue([{ slug: state.slug }])
     readInviteTeam.mockResolvedValue(state)
@@ -134,6 +148,72 @@ describe("backfillInviteMetadata", () => {
       classroom: "cs101",
     })
     expect(result.backfilled).toEqual([])
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+    // Too young to be a GC candidate — the invitations list isn't even read.
+    expect(listOrgInvitations).not.toHaveBeenCalled()
+  })
+
+  it("GCs an aged member-less team whose org invitation is gone (cancelled/expired)", async () => {
+    const state = await inviteState("cs101", "gone@example.com", [], {
+      createdAt: OLD_ENOUGH,
+    })
+    listInviteTeams.mockResolvedValue([{ slug: state.slug }])
+    readInviteTeam.mockResolvedValue(state)
+
+    const result = await backfillInviteMetadata(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    expect(result.deletedStale).toBe(1)
+    expect(deleteInviteTeam).toHaveBeenCalledWith(client, "org", state.slug)
+    expect(withRosterRewrite).not.toHaveBeenCalled()
+  })
+
+  it("keeps an aged member-less team whose org invitation is still pending", async () => {
+    const state = await inviteState("cs101", "waiting@example.com", [], {
+      createdAt: OLD_ENOUGH,
+    })
+    listInviteTeams.mockResolvedValue([{ slug: state.slug }])
+    readInviteTeam.mockResolvedValue(state)
+    listOrgInvitations.mockResolvedValue([
+      { id: 1, login: null, email: "waiting@example.com" },
+    ])
+
+    const result = await backfillInviteMetadata(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    expect(result.deletedStale).toBe(0)
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  it("keeps an aged member-less team when the invitations read fails (fail-safe)", async () => {
+    const state = await inviteState("cs101", "held@example.com", [], {
+      createdAt: OLD_ENOUGH,
+    })
+    listInviteTeams.mockResolvedValue([{ slug: state.slug }])
+    readInviteTeam.mockResolvedValue(state)
+    listOrgInvitations.mockRejectedValue(new Error("boom"))
+
+    const result = await backfillInviteMetadata(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    expect(result.deletedStale).toBe(0)
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  it("keeps an aged member-less team with no created_at (never reap on uncertainty)", async () => {
+    const state = await inviteState("cs101", "unknown@example.com", [])
+    state.createdAt = null as unknown as string
+    listInviteTeams.mockResolvedValue([{ slug: state.slug }])
+    readInviteTeam.mockResolvedValue(state)
+
+    const result = await backfillInviteMetadata(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    expect(result.deletedStale).toBe(0)
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 

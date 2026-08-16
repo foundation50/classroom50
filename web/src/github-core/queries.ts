@@ -83,6 +83,7 @@ export {
 export {
   getOrgFailedInvitations,
   getOrgFailedInvitationsForTeam,
+  listOrgInvitations,
   listTeamInvitations,
   teamInvitationsQuery,
   teamFailedInvitationsQuery,

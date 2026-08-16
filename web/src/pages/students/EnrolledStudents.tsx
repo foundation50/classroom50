@@ -155,7 +155,7 @@ const EnrolledStudents = ({
   // Dismiss a failed/expired invitation: cancel it on GitHub (removes it from
   // the failed list) and refresh. The hook owns the invite-query invalidation;
   // the error toast stays here so it skips on unmount.
-  const dismissFailedInvite = useDismissFailedInvite(org)
+  const dismissFailedInvite = useDismissFailedInvite(org, classroom)
 
   // Re-invite a failed/expired invitation: dismiss the dead one, then re-issue
   // an equivalent fresh invite — same classroom role (teacher -> org OWNER),
@@ -517,15 +517,22 @@ const EnrolledStudents = ({
           }
           onReinvite={reinvite}
           onDismiss={(inv) =>
-            dismissFailedInvite.mutate(inv.id, {
-              onError: (err) =>
-                notify({
-                  tone: "error",
-                  message: t("students.failedInviteDismissError", {
-                    error: getErrorMessage(err),
+            dismissFailedInvite.mutate(
+              {
+                invitationId: inv.id,
+                // Only an email-only invite has a metadata team to tear down.
+                inviteEmail: inv.login ? undefined : inv.email,
+              },
+              {
+                onError: (err) =>
+                  notify({
+                    tone: "error",
+                    message: t("students.failedInviteDismissError", {
+                      error: getErrorMessage(err),
+                    }),
                   }),
-                }),
-            })
+              },
+            )
           }
         />
       ) : null}

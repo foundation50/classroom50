@@ -145,6 +145,7 @@ export {
   readInviteTeam,
   listInviteTeams,
   deleteInviteTeam,
+  deleteInviteTeamForEmail,
   InviteTeamNotSecretError,
   type InviteTeamRef,
   type InviteTeamState,

@@ -461,7 +461,7 @@ const PendingStaffRow = ({
     role,
     teamSlug,
   )
-  const cancelMutation = useCancelClassroomInvite(org, teamSlug)
+  const cancelMutation = useCancelClassroomInvite(org, classroom, teamSlug)
 
   // One latch per row so a same-tick double-click, or resend racing cancel on
   // the same invite, can't start two overlapping writes before isPending flips.
@@ -537,25 +537,32 @@ const PendingStaffRow = ({
           disabled={disabled || busy}
           onClick={() =>
             void submit(() =>
-              cancelMutation.mutateAsync(invite.id, {
-                onSuccess: () =>
-                  notify({
-                    tone: "success",
-                    durationMs: 4000,
-                    message: t("classes.staff.cancelledToast", { who }),
-                  }),
-                onError: (err) =>
-                  notify({
-                    tone: "error",
-                    message: t("classes.staff.cancelFailed", {
-                      who,
-                      error:
-                        err instanceof Error
-                          ? err.message
-                          : t("classes.somethingWentWrong"),
+              cancelMutation.mutateAsync(
+                {
+                  invitationId: invite.id,
+                  // Only an email-only invite has a metadata team to tear down.
+                  inviteEmail: invite.login ? undefined : invite.email,
+                },
+                {
+                  onSuccess: () =>
+                    notify({
+                      tone: "success",
+                      durationMs: 4000,
+                      message: t("classes.staff.cancelledToast", { who }),
                     }),
-                  }),
-              }),
+                  onError: (err) =>
+                    notify({
+                      tone: "error",
+                      message: t("classes.staff.cancelFailed", {
+                        who,
+                        error:
+                          err instanceof Error
+                            ? err.message
+                            : t("classes.somethingWentWrong"),
+                      }),
+                    }),
+                },
+              ),
             )
           }
         >

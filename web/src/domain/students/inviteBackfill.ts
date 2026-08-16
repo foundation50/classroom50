@@ -4,7 +4,7 @@ import {
   listInviteTeams,
   readInviteTeam,
 } from "@/github-core/mutations"
-import { listTeamMembers } from "@/github-core/queries"
+import { listOrgInvitations, listTeamMembers } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { inviteTeamName, type InviteDescription } from "@/util/inviteTeam"
 import { classroomTeamSlugs } from "@/util/teamSlug"
@@ -16,11 +16,18 @@ import { withRosterRewrite, log } from "./rosterPrimitives"
 export type BackfillInviteMetadataResult = {
   // Emails whose invite team was reconciled into roster.csv and then deleted.
   backfilled: string[]
-  // Invite teams deleted without a backfill (the accepted invitee is no longer
-  // on any classroom team — an unenrolled/removed student whose mapping must
-  // not resurrect a roster row).
+  // Invite teams deleted without a backfill: the accepted invitee is no longer
+  // on any classroom team (unenrolled — their mapping must not resurrect a
+  // roster row), or a member-less team whose org invitation is gone
+  // (cancelled/expired/failed) aged past the GC guard.
   deletedStale: number
 }
+
+// A member-less invite team is only GC'd once it's older than this, so a team
+// created moments before its org invitation lands (or read mid-creation) can
+// never be reaped by a racing reconcile. Cancelled invites are usually torn
+// down immediately by the cancel path; this pass is the backstop.
+const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
 
 // Recover the invited-email <-> GitHub-account mapping that only the per-invite
 // metadata teams retain, and fold it into roster.csv. For each invite-<hash>
@@ -37,7 +44,10 @@ export type BackfillInviteMetadataResult = {
 //     values always win), then delete the team. A member on NO classroom team
 //     was unenrolled after accepting — delete the team without a roster write
 //     so the backfill can't resurrect a removed student;
-//   - with zero members the invite is still pending — leave the team;
+//   - with zero members the invite is pending — keep the team, unless it's
+//     older than the GC age guard AND no pending org invitation still maps to
+//     its (classroom, email): then the invite was cancelled, expired, or
+//     failed, and the team (holding a PII email) is deleted;
 //   - with more than one, skip and warn (an anomaly — a hash collision or a
 //     manually-added member) rather than guess which is the invitee.
 //
@@ -80,6 +90,25 @@ export async function backfillInviteMetadata(
       return enrolledIds
     }
 
+    // The still-live invite-team slugs for this classroom, derived by hashing
+    // every pending email invitation's address; fetched lazily once, only when
+    // a member-less team is old enough to be a GC candidate. listOrgInvitations
+    // is NOT error-tolerated, so a degraded read propagates to the per-team
+    // catch (skip) rather than reading as "nothing is live" and deleting every
+    // pending team.
+    let liveInviteSlugs: Set<string> | null = null
+    const loadLiveInviteSlugs = async (): Promise<Set<string>> => {
+      if (liveInviteSlugs) return liveInviteSlugs
+      const pending = await listOrgInvitations(client, org)
+      const slugs = await Promise.all(
+        pending
+          .filter((inv) => !inv.login && inv.email)
+          .map((inv) => inviteTeamName(classroom, inv.email as string)),
+      )
+      liveInviteSlugs = new Set(slugs)
+      return liveInviteSlugs
+    }
+
     for (const team of inviteTeams) {
       const slug = team.slug
       if (!slug) continue
@@ -108,7 +137,18 @@ export async function backfillInviteMetadata(
         }
 
         const invitees = state.members
-        if (invitees.length === 0) continue // still pending — keep the team
+        if (invitees.length === 0) {
+          // Pending — or abandoned. Reap only when BOTH hold: the team is old
+          // enough that a mid-creation race is impossible, and no pending org
+          // invitation still maps to this slug (the invite was cancelled,
+          // expired, or failed). Uncertainty (missing created_at, unreadable
+          // invitation list) always keeps the team.
+          if (!isPastGcAge(state.createdAt)) continue
+          if ((await loadLiveInviteSlugs()).has(slug)) continue
+          await deleteInviteTeam(client, org, slug)
+          deletedStale += 1
+          continue
+        }
         if (invitees.length > 1) {
           log.error("invite team has multiple regular members; skipping", {
             slug,
@@ -150,6 +190,15 @@ export async function backfillInviteMetadata(
   }
 
   return { backfilled, deletedStale }
+}
+
+// Whether a team's created_at is older than the GC age guard. Unparseable or
+// missing timestamps read as "not old enough" — never reap on uncertainty.
+function isPastGcAge(createdAt: string | null): boolean {
+  if (!createdAt) return false
+  const created = Date.parse(createdAt)
+  if (Number.isNaN(created)) return false
+  return Date.now() - created > INVITE_TEAM_GC_MIN_AGE_MS
 }
 
 // Write the invited email/name/section onto the accepted invitee's roster.csv

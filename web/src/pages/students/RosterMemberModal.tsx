@@ -14,7 +14,10 @@ import {
   resendClassroomInvite,
   type StudentCsvRow,
 } from "@/domain/students"
-import { cancelOrgInvitation } from "@/github-core/mutations"
+import {
+  cancelOrgInvitation,
+  deleteInviteTeamForEmail,
+} from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   isMalformedGitHubId,
@@ -369,6 +372,14 @@ const RosterMemberModal = ({
     setCancelling(true)
     try {
       await cancelOrgInvitation(client, { org, invitationId })
+      if (!row.username && row.email) {
+        // An email-only invite carries a metadata team holding the address;
+        // tear it down with the invite (never throws; GC is the backstop).
+        await deleteInviteTeamForEmail(client, org, {
+          classroom,
+          email: row.email,
+        })
+      }
       onCanceled(row.key)
       onClose()
     } catch (err) {
