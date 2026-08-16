@@ -10,8 +10,6 @@ see [Managing Actions cost](Managing-Actions-Cost).
 
 ## How grading works
 
-The whole pipeline, end to end:
-
 1. You define tests on the assignment — usually
    [declarative tests](#declarative-tests) (input/output checks, run commands,
    or pytest), written in the web form or with `gh teacher assignment test add`.
@@ -335,9 +333,6 @@ To turn autograding off for an assignment, pause it over a break, or reduce
 what grading costs, see [Managing Actions cost](Managing-Actions-Cost).
 
 ## Reading results
-
-Where to find scores, per-test breakdowns, past attempts, and who submitted —
-and what each export contains.
 
 ### Where results live
 
