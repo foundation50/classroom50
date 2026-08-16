@@ -189,6 +189,9 @@ export type GitHubTeam = {
   // Only returned by GET/POST/PATCH .../teams to org members; read defensively.
   notification_setting?: TeamNotificationSetting
   description: string | null
+  // Only on the full-team reads (GET/POST/PATCH .../teams/{slug}), not the org
+  // team list. Drives the invite-team GC age guard; read defensively.
+  created_at?: string | null
 }
 
 // A team as returned by GET /repos/{owner}/{repo}/teams — GitHubTeam plus the

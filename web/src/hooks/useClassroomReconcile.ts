@@ -9,6 +9,7 @@ import {
 import { githubKeys } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { rosterPath } from "@/util/rosterPath"
 import { logger } from "@/lib/logger"
 import { useBestEffortOwnerReconcile } from "@/hooks/useBestEffortOwnerReconcile"
 
@@ -57,6 +58,14 @@ export function useClassroomReconcile(
         // Student enumeration reads GET /user/teams; refresh it so a teacher
         // previewing as a student picks up the rewritten description.
         void queryClient.invalidateQueries({ queryKey: githubKeys.myTeams() })
+      }
+      if (result.rosterChanged) {
+        // The consolidated reconcile committed roster.csv (recovered emails,
+        // removed dead rows, appended members, or refreshed roles) — refresh
+        // the view.
+        void queryClient.invalidateQueries({
+          queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
+        })
       }
     },
     // Latch as permanent only a 403 the viewer can't fix or the description

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/foundation50/classroom50/main/schemas/invite-v1.schema.json",
+  "title": "classroom50/invite/v1",
+  "description": "Compact record stored in the DESCRIPTION of a per-invite `secret` team (`invite-<hash>`, where <hash> is a 16-hex-char SHA-256 prefix of `<classroom>\\u0000<lowercased-email>`) created when a teacher invites a student to a classroom by email. The team is attached to the org invitation's team_ids alongside the classroom team, so on acceptance the invitee becomes a member of BOTH. On the teacher's next visit a reconcile pass finds the team's single regular-role member (the accepted invitee), pairs their login/id with the `email` recorded here, backfills roster.csv, and deletes the team. This exists only to bridge the ONE moment nothing else can: after acceptance GitHub reports the login but no longer the invited email. Deliberately PII-minimal — the email is the only personal datum stored (names/sections belong in roster.csv, supplied by the teacher and joined by email); the encoded JSON stays far under GitHub's ~250-char team-description limit. Readable only by team members and org owners (the team is secret), so an invitee's email is never exposed to other students. The record is temporary storage, never a source of truth — enrollment and role stay team-driven, and teacher-entered roster.csv values win on conflict. Because the accepted invitee can edit their own team's description, a reader treats it as UNTRUSTED input: schema-validate it and require `email` to match the team-name hash before acting on it. `additionalProperties` is true only to TOLERATE a field a newer binary adds; unknown fields are not preserved on a rewrite. Web-only today (email invites exist only in the web app); no Go/Python mirror yet.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema", "email", "classroom"],
+  "properties": {
+    "schema": { "const": "classroom50/invite/v1" },
+    "email": {
+      "type": "string",
+      "description": "The email address the teacher sent the invitation to (normalized: trimmed, lowercased). The value the whole record exists to retain — after acceptance it is written onto the accepted student's roster.csv row so a GitHub account maps back to the person. This is the INVITED address, not necessarily the address the account is registered under."
+    },
+    "classroom": {
+      "type": "string",
+      "description": "Short name of the classroom this invite belongs to. Scopes the team-name hash so the same email invited to two classrooms in one org gets two distinct teams (rather than colliding onto one name and overwriting the first's record), and lets a reconcile pass attribute the recovered mapping to the right classroom."
+    }
+  }
+}

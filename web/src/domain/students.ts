@@ -40,6 +40,12 @@ export {
   type SyncRosterFromTeamResult,
 } from "./students/rosterSync"
 export {
+  reconcileRoster,
+  purgeInviteTeams,
+  type ReconcileRosterResult,
+  type PurgeInviteTeamsResult,
+} from "./students/reconcileRoster"
+export {
   writeClassroomRoles,
   updateClassroomMetadata,
   applyClassroomRoleChange,

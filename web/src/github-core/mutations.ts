@@ -140,4 +140,14 @@ export {
   ClassroomSourceReadError,
   type TeamDescriptionReconcileResult,
 } from "./mutations/teamDescription"
+export {
+  ensureInviteTeam,
+  readInviteTeam,
+  listInviteTeams,
+  deleteInviteTeam,
+  deleteInviteTeamForEmail,
+  InviteTeamNotSecretError,
+  type InviteTeamRef,
+  type InviteTeamState,
+} from "./mutations/inviteTeams"
 export { updateOrgProfile, type OrgProfileUpdate } from "./mutations/orgProfile"

@@ -19,6 +19,18 @@ vi.mock("@/github-core/mutations", () => ({
     reconcileDescription(...a),
   removeUserFromTeam: (...a: unknown[]) => removeUserFromTeam(...a),
 }))
+// The roster reconciliation is exercised in reconcileRoster.test.ts; here it's
+// a no-op so these tests assert only the team/description reconcile.
+vi.mock("./students/reconcileRoster", () => ({
+  reconcileRoster: () =>
+    Promise.resolve({
+      addedUsernames: [],
+      recoveredEmails: [],
+      removedEmails: [],
+      noop: true,
+      deletedStaleTeams: 0,
+    }),
+}))
 
 import { reconcileClassroom } from "./reconcileClassroom"
 import { ClassroomReconcilePermanentError } from "./reconcileClassroom"
@@ -77,6 +89,8 @@ describe("reconcileClassroom", () => {
       skipped: false,
       description: { changed: false },
       staffCreated: [],
+      invitesBackfilled: [],
+      rosterChanged: false,
     })
     expect(ensureStaffTeams).toHaveBeenCalledWith(client, "org", "cs101")
     expect(ensureClassroomTeam).toHaveBeenCalledWith(client, "org", "cs101")
@@ -142,6 +156,8 @@ describe("reconcileClassroom", () => {
       skipped: true,
       description: { changed: false },
       staffCreated: [],
+      invitesBackfilled: [],
+      rosterChanged: false,
     })
     expect(ensureClassroomTeam).not.toHaveBeenCalled()
     expect(ensureStaffTeams).not.toHaveBeenCalled()

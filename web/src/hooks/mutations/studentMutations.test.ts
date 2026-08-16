@@ -13,6 +13,9 @@ import { githubKeys } from "@/github-core/queries"
 const cancelOrgInvitation = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
   Promise.resolve(),
 )
+const deleteInviteTeamForEmail = vi.fn<(...args: unknown[]) => Promise<void>>(
+  () => Promise.resolve(),
+)
 const acceptAssignment = vi.fn<(...args: unknown[]) => Promise<unknown>>(() =>
   Promise.resolve({ status: "created", repo: {}, cloneCommand: "" }),
 )
@@ -30,6 +33,8 @@ const invalidateInviteQueries = vi.fn<(...args: unknown[]) => void>(() => {})
 vi.mock("@/github-core/mutations", () => ({
   cancelOrgInvitation: (client: unknown, input: unknown) =>
     cancelOrgInvitation(client, input),
+  deleteInviteTeamForEmail: (client: unknown, org: unknown, input: unknown) =>
+    deleteInviteTeamForEmail(client, org, input),
 }))
 vi.mock("@/domain/assignments", () => ({
   acceptAssignment: (params: unknown) => acceptAssignment(params),
@@ -81,18 +86,42 @@ beforeEach(() => {
 describe("useDismissFailedInvite", () => {
   it("cancels the invite and invalidates the invite queries on success", async () => {
     const queryClient = freshClient()
-    const { result } = renderHook(() => useDismissFailedInvite(ORG), {
-      wrapper: wrapperWith(queryClient),
-    })
+    const { result } = renderHook(
+      () => useDismissFailedInvite(ORG, CLASSROOM),
+      {
+        wrapper: wrapperWith(queryClient),
+      },
+    )
 
-    result.current.mutate(42)
+    result.current.mutate({ invitationId: 42 })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(cancelOrgInvitation).toHaveBeenCalledWith(expect.anything(), {
       org: ORG,
       invitationId: 42,
     })
+    // A username invitation has no metadata team to tear down.
+    expect(deleteInviteTeamForEmail).not.toHaveBeenCalled()
     expect(invalidateInviteQueries).toHaveBeenCalledWith(queryClient, ORG)
+  })
+
+  it("tears down the metadata team when dismissing an email-only invite", async () => {
+    const queryClient = freshClient()
+    const { result } = renderHook(
+      () => useDismissFailedInvite(ORG, CLASSROOM),
+      {
+        wrapper: wrapperWith(queryClient),
+      },
+    )
+
+    result.current.mutate({ invitationId: 42, inviteEmail: "gone@x.edu" })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(deleteInviteTeamForEmail).toHaveBeenCalledWith(
+      expect.anything(),
+      ORG,
+      { classroom: CLASSROOM, email: "gone@x.edu" },
+    )
   })
 })
 

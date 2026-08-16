@@ -10,6 +10,7 @@ import {
   removeUserFromTeam,
   type TeamDescriptionReconcileResult,
 } from "@/github-core/mutations"
+import { reconcileRoster } from "./students/reconcileRoster"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("domain:reconcileClassroom")
@@ -21,6 +22,12 @@ export type ClassroomReconcileResult = {
   description: TeamDescriptionReconcileResult
   // Staff roles this run newly created (existing teams adopt as no-ops).
   staffCreated: StaffRole[]
+  // Invited emails recovered from per-invite metadata teams and folded into
+  // roster.csv this pass (their teams were then deleted). Empty when none.
+  invitesBackfilled: string[]
+  // The consolidated roster reconciliation committed a change (recovered
+  // fold, dead-row removal, member append, or role/id refresh).
+  rosterChanged: boolean
 }
 
 // A 404 on the student-team read (a derived/wrong slug that never converges) is
@@ -41,6 +48,8 @@ const NOOP_RESULT: ClassroomReconcileResult = {
   skipped: true,
   description: { changed: false },
   staffCreated: [],
+  invitesBackfilled: [],
+  rosterChanged: false,
 }
 
 // Verify (and self-heal) every classroom-scoped GitHub resource a teacher/owner
@@ -116,16 +125,43 @@ export async function reconcileClassroom(
     throw err
   }
 
-  if (description.changed || staffCreated.length > 0) {
+  // The consolidated roster reconciliation: recover accepted email invites,
+  // drop dead email-only rows, and sync identity/role rows from the teams — at
+  // most one commit (see reconcileRoster). Best-effort here: unlike the
+  // never-throw collect half, the sync half can throw (a transient write
+  // failure), and that must not latch the classroom heal off.
+  let rosterChanged = false
+  let invitesBackfilled: string[] = []
+  try {
+    const roster = await reconcileRoster(client, { org, classroom })
+    rosterChanged = !roster.noop
+    invitesBackfilled = roster.recoveredEmails
+  } catch (err) {
+    log.warn("classroom reconcile: roster reconciliation failed", {
+      org,
+      classroom,
+      err,
+    })
+  }
+
+  if (description.changed || staffCreated.length > 0 || rosterChanged) {
     log.info("classroom reconcile: healed drift", {
       org,
       classroom,
       descriptionChanged: description.changed,
       staffCreated,
+      rosterChanged,
+      invitesBackfilled: invitesBackfilled.length,
     })
   }
 
-  return { skipped: false, description, staffCreated }
+  return {
+    skipped: false,
+    description,
+    staffCreated,
+    invitesBackfilled,
+    rosterChanged,
+  }
 }
 
 // Drop the acting owner from the given non-teacher team slugs (never teacher).

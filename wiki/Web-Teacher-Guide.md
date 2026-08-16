@@ -388,9 +388,13 @@ octofez
 
 > [!NOTE]
 > A username list or roster CSV both invites students **and** adds them to the
-> roster. An email list only sends invitations. An email carries no GitHub
-> identity until the student onboards, so those students appear under **pending
-> invitations**, not on the roster, until they accept.
+> roster. An email list sends invitations and records each address as a
+> pending roster row. The row is matched to the student's GitHub account when
+> they accept; if the invitation is cancelled or expires, the row is removed
+> again on the next roster sync. Keep in mind the recorded address is the one
+> **you invited** — not necessarily the email on the student's GitHub account.
+> Names and sections can be filled in afterwards by editing the roster or
+> uploading a roster CSV.
 
 > [!TIP]
 > Adding students who are **already in your organization** (for example, from a

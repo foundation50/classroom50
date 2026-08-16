@@ -3,9 +3,12 @@ import {
   createGitCommit,
   createGitTree,
   createOrgInvitation,
+  deleteInviteTeam,
+  ensureInviteTeam,
   ensureOrgMembership,
   isActiveMember,
   updateRef,
+  type InviteTeamRef,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
@@ -31,6 +34,7 @@ import {
 import { rosterPath } from "@/util/rosterPath"
 import { resolveGitHubId } from "@/util/students"
 import {
+  appendEmailInviteRows,
   log,
   rosterWriteTree,
   resolveClassroomTeam,
@@ -38,6 +42,7 @@ import {
   tryAddUserToTeam,
   StudentAlreadyEnrolledError,
 } from "./rosterPrimitives"
+import i18n from "@/i18n"
 
 export type AddStudentToClassroomResult = CreateClassroomResult & {
   student: StudentCsvRow
@@ -150,13 +155,22 @@ export type InviteByEmailResult = {
 }
 
 // Send a GitHub org invite for an email, attaching the classroom team so the
-// student lands in it on acceptance. Writes NOTHING to roster.csv: the team
-// is the source of truth for enrollment, and an email carries no reliable
-// GitHub identity (it changes to a login only once accepted). The invite shows
-// up in the roster's `pending` section via the org pending-invitations list; to
-// capture name/section metadata, add the student by GitHub username or upload a
-// roster CSV once they've joined. If the classroom team can't be resolved, the
-// invite is BLOCKED (throws) rather than sent team-less — see below.
+// student lands in it on acceptance, PLUS a per-invite secret metadata team
+// (invite-<hash(classroom,email)>) whose description retains the invited email
+// (PII-minimal: email only). On success it also retains the address on the
+// roster as an email-only PENDING row (no username/github_id yet) — that row
+// lives exactly as long as its invite team does: the reconcile fills in the
+// account identity on acceptance and removes the row once the invite is
+// cancelled, expired, or GC'd. A row is written only when the metadata team was
+// attached, since the reconcile would otherwise reap an unbacked row.
+// On acceptance the invitee lands on both teams; a later reconcile pass recovers
+// the email <-> account mapping from the metadata team and folds it into
+// roster.csv. The invite also shows up in the roster's `pending` section via the
+// org pending-invitations list. If the classroom team can't be resolved, the
+// invite is BLOCKED (throws) rather than sent team-less. If the metadata team
+// can't be created, the invite still goes out with the classroom team alone (the
+// invitee stays collectable; only email retention is lost) and a non-fatal
+// warning is returned.
 export async function inviteByEmail(
   client: GitHubClient,
   input: AddEmailInviteToClassroomInput,
@@ -171,8 +185,9 @@ export async function inviteByEmail(
 
   // Resolve the classroom team id up front: in a team-authoritative model, an
   // invite that can't carry the team is broken — the accepted student would land
-  // in the org with no team and (since we write no CSV row) no roster row,
-  // silently uncollected. So block the invite unless we can attach the team.
+  // in the org with no team and, since the pending row carries no identity
+  // until acceptance, no collectable roster row either. So block the invite
+  // unless we can attach the team.
   // resolveClassroomTeamWithRetry returns id: undefined only for a genuine
   // missing team block (no throw); a TRANSIENT read failure is retried and then
   // propagates as its own error, so a brief GitHub blip surfaces "try again"
@@ -187,17 +202,52 @@ export async function inviteByEmail(
     )
   }
 
+  // Best-effort: create the per-invite metadata team and attach it too. A
+  // failure here must NOT block the invite (the invitee stays collectable via
+  // the classroom team) — only email retention is lost, surfaced as a warning.
+  const teamIds = [teamId]
+  let inviteTeam: InviteTeamRef | null = null
+  let metadataWarning = ""
+  try {
+    inviteTeam = await ensureInviteTeam(client, org, {
+      email: normalizedEmail,
+      classroom,
+    })
+    teamIds.push(inviteTeam.id)
+  } catch (err) {
+    log.error("invite metadata team create failed", { err })
+    metadataWarning = i18n.t("students.inviteMetadataFailed", {
+      email: normalizedEmail,
+      message: getErrorMessage(err),
+    })
+  }
+
+  // A doomed invite must not leave a fresh, member-less metadata team behind
+  // (an orphan holding an email GC can't yet reap). Only a team THIS call
+  // created is deleted — an adopted one may hold a prior accepted invite's
+  // still-unrecovered record.
+  const cleanupInviteTeam = async () => {
+    if (!inviteTeam?.created) return
+    try {
+      await deleteInviteTeam(client, org, inviteTeam.slug)
+    } catch (err) {
+      // Best-effort: a leftover team is only an orphan awaiting GC.
+      log.error("invite metadata team cleanup failed", { err })
+    }
+  }
+
   try {
     await createOrgInvitation(client, {
       org,
       email: normalizedEmail,
-      team_ids: [teamId],
+      team_ids: teamIds,
     })
   } catch (err) {
     // A 422 means the email already belongs to a member or is already invited.
     // There's no reliable identity to persist, so just tell the teacher to add
     // them by username (which resolves the immutable github_id).
     if (err instanceof GitHubAPIError && err.status === 422) {
+      await cleanupInviteTeam()
       return {
         inviteWarning:
           `${normalizedEmail} already belongs to a member of the ${org} ` +
@@ -206,6 +256,7 @@ export async function inviteByEmail(
       }
     }
     log.error("org email invite failed", { err })
+    await cleanupInviteTeam()
     return {
       inviteWarning:
         `Sending the organization invite to ${normalizedEmail} failed ` +
@@ -213,7 +264,18 @@ export async function inviteByEmail(
     }
   }
 
-  return {}
+  // Retain the invited email on the roster right away — but only when the
+  // metadata team is attached: the reconcile keeps an email-only row exactly
+  // as long as a live invite team backs it, so a team-less row would just be
+  // removed on the next pass. Best-effort (never throws); on a miss the
+  // accepted invite's reconcile fold appends the row instead.
+  if (inviteTeam) {
+    await appendEmailInviteRows(client, { org, classroom }, [
+      { email: normalizedEmail, role: "student" },
+    ])
+  }
+
+  return metadataWarning ? { inviteWarning: metadataWarning } : {}
 }
 
 export type AddStudentToClassroomInput = {

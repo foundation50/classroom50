@@ -6,7 +6,10 @@ import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
 import { Alert, Button, Modal, Toolbar } from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
-import { cancelOrgInvitation } from "@/github-core/mutations"
+import {
+  cancelOrgInvitation,
+  deleteInviteTeamForEmail,
+} from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   bulkUnenrollRoster,
@@ -331,6 +334,14 @@ const RosterBulkActionsBar = ({
         // report it as "already gone" rather than a phantom cancellation.
         if (didCancel) cancelled.push({ key: row.key, label })
         else alreadyGone.push({ key: row.key, label })
+        if (!row.username && row.email) {
+          // An email-only invite carries a metadata team holding the address;
+          // tear it down with the invite (never throws; GC is the backstop).
+          await deleteInviteTeamForEmail(client, org, {
+            classroom,
+            email: row.email,
+          })
+        }
       } catch (err) {
         log.debug("bulk cancel: per-row cancel failed", { err })
         failed.push({ key: row.key, label, detail: getErrorMessage(err) })

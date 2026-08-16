@@ -21,6 +21,23 @@ export async function getOrgFailedInvitations(
   )
 }
 
+// PENDING org invitations across all pages (GET /orgs/{org}/invitations).
+// Owner-only. The liveness source for the invite-team GC: a member-less
+// invite team whose (classroom, email) no longer matches any pending
+// invitation is stale (cancelled/expired). NOT error-tolerated — a degraded
+// read must fail the GC pass closed rather than read as "no live invites"
+// and delete every pending team.
+export async function listOrgInvitations(
+  client: GitHubClient,
+  org: string,
+): Promise<GitHubOrgInvitation[]> {
+  return paginateAll<GitHubOrgInvitation>(
+    client,
+    (page) =>
+      `/orgs/${encodeURIComponent(org)}/invitations?per_page=100&page=${page}`,
+  )
+}
+
 // Failed org invitations scoped to ONE classroom team. GitHub has no
 // team-scoped failed endpoint, so this reads the org-wide failed list and keeps
 // only invites whose team set (resolved per invite from invitation_teams_url)

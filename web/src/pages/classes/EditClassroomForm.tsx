@@ -3,6 +3,7 @@ import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useArchiveClassroom } from "@/hooks/mutations/useArchiveClassroom"
 import { useDeleteClassroom } from "@/hooks/mutations/useDeleteClassroom"
+import { usePurgeInviteTeams } from "@/hooks/mutations/usePurgeInviteTeams"
 import { useForm } from "@tanstack/react-form"
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { Trash2 } from "lucide-react"
@@ -190,6 +191,84 @@ const ArchiveClassroomButton = ({
   )
 }
 
+// One-shot cleanup of the classroom's stored invite emails (the hidden
+// per-invite teams): recover anything still recoverable into roster.csv, then
+// delete the rest. Kept OUTSIDE the archived-disabled fieldset — an archived
+// classroom's leftover invite teams are exactly what this exists to clear
+// (the automatic reconcile refuses to run there).
+const CleanupInviteDataButton = ({
+  org,
+  classroom,
+}: {
+  org: string
+  classroom: string
+}) => {
+  const { t } = useTranslation()
+  const { notify } = useToast()
+  const [open, setOpen] = useState(false)
+  const purgeMutation = usePurgeInviteTeams(org, classroom)
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        loading={purgeMutation.isPending}
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen(true)
+        }}
+        title={t("classes.inviteCleanup.buttonTitle")}
+      >
+        {t("classes.inviteCleanup.button")}
+      </Button>
+
+      <ConfirmModal
+        open={open}
+        title={t("classes.inviteCleanup.confirmTitle")}
+        description={
+          <Trans
+            i18nKey="classes.inviteCleanup.body"
+            values={{ classroom }}
+            components={{
+              classroom: <EmphasisLtr className="text-base-content" />,
+            }}
+          />
+        }
+        confirmLabel={t("classes.inviteCleanup.confirm")}
+        cancelLabel={t("common.cancel")}
+        confirmText=""
+        needsConfirm={false}
+        dangerous={false}
+        onConfirm={async () => {
+          try {
+            const result = await purgeMutation.mutateAsync()
+            notify({
+              tone: "success",
+              durationMs: 6000,
+              message: t("classes.inviteCleanup.done", {
+                recovered: result.recovered.length,
+                purged: result.purged,
+              }),
+            })
+          } catch (err) {
+            notify({
+              tone: "error",
+              message: t("classes.inviteCleanup.failed", {
+                error:
+                  err instanceof Error
+                    ? err.message
+                    : t("classes.somethingWentWrong"),
+              }),
+            })
+          }
+        }}
+        onClose={() => setOpen(false)}
+      />
+    </>
+  )
+}
+
 const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -252,6 +331,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
             />
           </div>
           <div className="flex items-center gap-2">
+            <CleanupInviteDataButton org={org} classroom={classroom} />
             <ArchiveClassroomButton
               org={org}
               classroom={classroom}
