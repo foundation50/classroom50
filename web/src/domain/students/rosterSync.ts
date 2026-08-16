@@ -19,6 +19,7 @@ import {
   normalizeStudentRow,
   parseStudentsCsv,
   stringifyStudentsCsv,
+  type StudentCsvRow,
 } from "@/util/rosterCsv"
 import { rosterPath } from "@/util/rosterPath"
 import {
@@ -28,6 +29,7 @@ import {
   listClassroomMembersWithRoles,
 } from "./rosterPrimitives"
 import type { InviteReconcileState } from "./inviteRecoveries"
+import { pendingInviteEmails } from "./inviteRecoveries"
 
 export type SyncRosterFromTeamResult = {
   // Team members newly appended to roster.csv as metadata rows.
@@ -46,8 +48,11 @@ export type SyncRosterFromTeamResult = {
 //   1. upgrade rows matched by a recovered invite (fill username/github_id
 //      onto the email row written at invite time);
 //   2. remove email-only rows (no username, no valid github_id) that no live
-//      invite team backs — the invite was cancelled, expired, or GC'd. Gated
-//      on `invites.trusted` so a degraded read can never wipe pending rows;
+//      invite backs — the invite was cancelled, expired, or GC'd. Gated on
+//      `invites.trusted` so a degraded read can never wipe pending rows, and
+//      every candidate is re-confirmed against GitHub's current pending
+//      invitations inside this closure (collect's snapshot predates the CSV
+//      read, so an invite sent in between must not be reaped);
 //   3. the pre-existing team sync: ensure every active member has an IDENTITY
 //      row (username + github_id) carrying their team-derived `role`, refresh
 //      changed roles, and backfill resolvable ids.
@@ -142,19 +147,36 @@ export async function syncRosterFromTeam(
 
     // --- Dead email-row removal ---------------------------------------------
     // An email-ONLY row (no username, no valid github_id) exists on the roster
-    // only while a live invite team backs it; once the invite is cancelled,
-    // expired, or GC'd, the row goes too — in this same commit. Gated on the
-    // reconcile state being trustworthy: a degraded invite-team read must
-    // never masquerade as "no live invites" and wipe pending rows.
+    // only while a live invite backs it; once the invite is cancelled, expired,
+    // or GC'd, the row goes too — in this same commit. Two gates keep that from
+    // eating a legitimate row: the invite-reconcile state must be trustworthy
+    // (a degraded invite-team read must never masquerade as "no live invites"),
+    // and every candidate is confirmed against GitHub's CURRENT pending
+    // invitations. That confirmation is read HERE, inside the retried closure,
+    // because the collect pass snapshotted teams BEFORE this CSV read — an
+    // invite sent in between has its fresh row in `currentStudents` but no
+    // entry in the snapshot, and must not be reaped for it.
+    const deadRows = new Set<StudentCsvRow>()
+    if (invites?.trusted) {
+      for (const s of foldedStudents) {
+        if (s.username.trim()) continue
+        if (resolveGitHubId(s.github_id) !== null) continue
+        const emailKey = normalizeInviteEmail(s.email ?? "")
+        if (!emailKey) continue // a blank junk row is not this pass's call
+        if (invites.liveInviteEmails.has(emailKey)) continue
+        if (recByEmail.has(emailKey)) continue
+        deadRows.add(s)
+      }
+    }
+    // Only pay for the confirmation read when something is actually up for
+    // removal. A failed read yields null and keeps every row (fail closed).
+    const stillPending =
+      deadRows.size > 0 ? await pendingInviteEmails(client, org) : null
     const removedEmails: string[] = []
     const keptStudents = foldedStudents.filter((s) => {
-      if (!invites?.trusted) return true
-      if (s.username.trim()) return true
-      if (resolveGitHubId(s.github_id) !== null) return true
+      if (!deadRows.has(s)) return true
       const emailKey = normalizeInviteEmail(s.email ?? "")
-      if (!emailKey) return true // a blank junk row is not this pass's call
-      if (invites.liveInviteEmails.has(emailKey)) return true
-      if (recByEmail.has(emailKey)) return true
+      if (!stillPending || stillPending.has(emailKey)) return true
       removedEmails.push(emailKey)
       return false
     })

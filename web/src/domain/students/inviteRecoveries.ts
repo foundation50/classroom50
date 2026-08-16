@@ -6,7 +6,7 @@ import {
 } from "@/github-core/mutations"
 import { listOrgInvitations, listTeamMembers } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
-import { inviteTeamName } from "@/util/inviteTeam"
+import { inviteTeamName, normalizeInviteEmail } from "@/util/inviteTeam"
 import { log, resolveClassroomTeamSlugs } from "./rosterPrimitives"
 
 // One accepted invite whose email <-> account mapping was recovered from its
@@ -239,6 +239,32 @@ export async function finalizeInviteRecoveries(
     } catch (err) {
       log.error("invite team post-commit delete failed", { slug: r.slug, err })
     }
+  }
+}
+
+// Emails with a still-pending EMAIL invitation, normalized for roster-row
+// comparison. The liveness signal the sync's dead-row removal confirms against
+// at commit time: collect's team snapshot is taken BEFORE the sync reads
+// roster.csv, so an invite sent in between has a row but no snapshot entry.
+// Returns null when the read fails, so a caller can fail closed rather than
+// reap rows on a blind guess.
+export async function pendingInviteEmails(
+  client: GitHubClient,
+  org: string,
+): Promise<Set<string> | null> {
+  try {
+    const pending = await listOrgInvitations(client, org)
+    return new Set(
+      pending
+        .filter((inv) => !inv.login && inv.email)
+        .map((inv) => normalizeInviteEmail(inv.email as string)),
+    )
+  } catch (err) {
+    log.error("pending invitation read failed; keeping email rows", {
+      org,
+      err,
+    })
+    return null
   }
 }
 

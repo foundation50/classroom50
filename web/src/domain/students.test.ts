@@ -2187,6 +2187,11 @@ const makeTeamClient = (opts: {
   teacherInvites?: { login?: string; email?: string }[]
   htaInvites?: { login?: string; email?: string }[]
   taInvites?: { login?: string; email?: string }[]
+  // Pending ORG invitations (GET /orgs/{org}/invitations) — the liveness the
+  // dead-row removal confirms against. Emails listed here are still pending.
+  orgInviteEmails?: string[]
+  // When set, the org-invitations read rejects, so removal fails closed.
+  orgInvitesReject?: boolean
   // When set, a members read for the teacher/ta team rejects with this
   // non-404 status (to exercise the best-effort staff-read degradation).
   staffReadRejects?: { role: "teacher" | "ta"; status: number }
@@ -2242,6 +2247,22 @@ const makeTeamClient = (opts: {
               : (opts.teamInvites ?? [])
         return Promise.resolve(
           seed.map((i) => ({ login: i.login ?? null, email: i.email ?? null })),
+        )
+      }
+      // Pending ORG invitations (GET /orgs/{org}/invitations), read by the
+      // dead-row removal's liveness confirmation. Must be matched BEFORE the
+      // team-scoped invitations branch would see it (different path shape) and
+      // returns email-only invitees (login: null), as GitHub does.
+      if (/\/orgs\/[^/]+\/invitations(\?|$)/.test(path)) {
+        if (opts.orgInvitesReject) {
+          return Promise.reject(new Error("org invitations read failed"))
+        }
+        return Promise.resolve(
+          (opts.orgInviteEmails ?? []).map((email, i) => ({
+            id: 900 + i,
+            login: null,
+            email,
+          })),
         )
       }
       // Team members list (syncRosterFromTeam): GET .../teams/{slug}/members
@@ -3015,8 +3036,10 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
         HEADER + ",,,dead@x.edu,,,student\n" + ",,,live@x.edu,,,student\n",
       users: {},
       teamHas: [],
-      // The live invitee's pending invitation preserves their recorded role.
+      // The live invitee's pending invitation preserves their recorded role...
       teamInvites: [{ email: "live@x.edu" }],
+      // ...and the org-level pending list is what removal confirms against.
+      orgInviteEmails: ["live@x.edu"],
     })
 
     const result = await syncRosterFromTeam(client, {
@@ -3029,6 +3052,49 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     const rows = rowsFromCsv(committed.content!)
     expect(rows).toHaveLength(1)
     expect(rows[0].email).toBe("live@x.edu")
+  })
+
+  it("keeps a row whose invite was sent after the invite snapshot was taken", async () => {
+    // The race: collect enumerated teams BEFORE this CSV read, so a brand-new
+    // invite's row is present but absent from liveInviteEmails. GitHub's current
+    // pending list still shows it, so the row must survive.
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + ",,,fresh@x.edu,,,student\n",
+      users: {},
+      teamHas: [],
+      teamInvites: [{ email: "fresh@x.edu" }],
+      orgInviteEmails: ["fresh@x.edu"],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      // Snapshot predates the invite: nothing live, nothing recovered.
+      invites: inviteState(),
+    })
+
+    expect(result.removedEmails).toEqual([])
+    expect(result.noop).toBe(true)
+    expect(committed.content).toBeNull()
+  })
+
+  it("keeps every email row when the pending-invitation read fails (fail closed)", async () => {
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + ",,,dead@x.edu,,,student\n",
+      users: {},
+      teamHas: [],
+      teamInvites: [{ email: "dead@x.edu" }],
+      orgInvitesReject: true,
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: inviteState(),
+    })
+
+    expect(result.removedEmails).toEqual([])
+    expect(committed.content).toBeNull()
   })
 
   it("never removes an email row when the reconcile state is untrusted", async () => {
