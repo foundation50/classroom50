@@ -63,14 +63,9 @@ an empty repo if it's template-less), then prints a `git clone` command.
 Already accepted? The command reports `Assignment already accepted` and leaves
 your existing repo (and your work) alone.
 
-**Common errors:**
-
-| Message | What it means |
-| --- | --- |
-| "the classroom may not exist yet, or `publish-pages.yaml` may not have run" | Setup isn't finished or Pages hasn't deployed. Wait a few minutes, or ask your teacher. |
-| "assignment X is not registered" | A typo, or your teacher hasn't added the assignment yet. |
-| "autograder `<name>` not published yet" | The autograder's YAML isn't on the Pages site. Ask your teacher to confirm it exists and that Pages has deployed. |
-| "template `<owner>/<repo>` is not accessible to you" | The template is private and not shared with you. Ask your teacher to make it public or grant access. |
+If accept fails, see
+[Common `gh student accept` errors](Troubleshooting#common-gh-student-accept-errors)
+in Troubleshooting.
 
 ## 3. Clone and work
 

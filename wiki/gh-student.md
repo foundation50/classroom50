@@ -59,15 +59,9 @@ a `git clone` command.
 Already accepted? The command reports `Assignment already accepted: <org>/<repo>`
 and leaves your repo alone.
 
-**Common errors:**
-
-| Message | What it means |
-| --- | --- |
-| "the classroom may not exist yet, or `publish-pages.yaml` may not have run" | Setup isn't finished or Pages hasn't deployed. Wait, or ask your teacher. |
-| "assignment X is not registered" | A typo, or your teacher hasn't added the assignment. |
-| "autograder `<name>` not published yet" / "is malformed YAML" | The autograder's YAML is missing or broken. Ask your teacher. |
-| "template `<owner>/<repo>` is not accessible to you" | The template is private and not shared with you. Ask your teacher to make it public or grant access. |
-| "assignment `<X>` has unsupported mode `<mode>`" | The manifest's `mode` is neither `individual` nor `group` (likely hand-edited). Ask your teacher. |
+If accept fails, see
+[Common `gh student accept` errors](Troubleshooting#common-gh-student-accept-errors)
+in Troubleshooting.
 
 ## `invite`
 

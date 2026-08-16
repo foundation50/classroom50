@@ -206,6 +206,17 @@ the student side. `roster add` prints a note when the target is already staff.
 See [Dual roles](gh-teacher#dual-roles-staff-who-are-also-students). For a
 "pure" student, use a separate GitHub account.
 
+## Common `gh student accept` errors
+
+| Message | What it means |
+| --- | --- |
+| "the classroom may not exist yet, or `publish-pages.yaml` may not have run" | Setup isn't finished or Pages hasn't deployed. Wait a few minutes, or ask your teacher. |
+| "assignment X is not registered" | A typo, or your teacher hasn't added the assignment yet. |
+| "autograder `<name>` not published yet" / "is malformed YAML" | The autograder's YAML is missing or broken; see [below](#autograder-name-not-published-yet-on-gh-student-accept). |
+| "template `<owner>/<repo>` is not accessible to you" | The template is private and not shared with you; see ["Template not found"](#template-not-found--404-on-gh-student-accept). |
+| "assignment `<X>` has unsupported mode `<mode>`" | The manifest's `mode` is neither `individual` nor `group` (likely hand-edited). Ask your teacher. |
+| "Assignment already accepted" | Not an error — your repository already exists and your work is untouched. |
+
 ## "Assignment already accepted" on `gh student accept`
 
 You've already accepted; the repo is at
@@ -217,11 +228,12 @@ have it locally.
 
 Only applies to assignments with a template. Check, in order:
 
-1. **The template is readable by the student.** Public always works. A private
-   template works only if it's inside your org (the classroom team is granted
-   read). A private template outside your org can't be shared — re-add the
-   assignment with an in-org copy or a public template. If a student still 404s,
-   confirm they're on the roster (so they're in the team).
+1. **The template is readable by the student.** Public always works; a
+   private template must be inside your org (see
+   [Template visibility](Assignment-Templates#template-visibility)). If it's
+   outside, re-add the assignment with an in-org copy or a public template.
+   If a student still 404s, confirm they're on the roster (so they're in the
+   team).
 2. **The repo is flagged as a template** in Settings → Template repository.
 3. **The `<assignment>` argument matches the registered slug** (case is
    normalized; spelling must be exact).

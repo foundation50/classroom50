@@ -50,14 +50,12 @@ course, section, or term. Add each with **Create classroom** in the web app or
 
 ### Should I create one organization per course, like GitHub Classroom?
 
-You don't have to. Because one organization holds many classrooms, a single,
-stable teaching team running one course (across terms or sections) works well
-with **one organization** and a classroom per term or section. Prefer
-**separate organizations** when many teachers run very different classes (e.g.
-school-wide adoption) — each teacher then manages their own org — or when a
-large course would otherwise accumulate hundreds of assignment repositories
-per year; in that case, one org per academic year keeps things tidy. Each
-organization needs its own one-time setup.
+You don't have to: one organization can hold many classrooms, so a stable
+teaching team usually keeps one organization with a classroom per term or
+section. Separate organizations fit school-wide adoption or very large
+courses. See
+[One organization or several?](Staff-TAs-and-Multiple-Teachers#one-organization-or-several)
+for how to choose.
 
 ### Can a classroom have multiple teachers or TAs?
 
@@ -105,17 +103,12 @@ See [How Classroom 50 Works](How-Classroom-50-Works#lifecycle-enroll-unenroll-an
 
 ### Can I use a private repository as an assignment template?
 
-Yes, if the template lives **inside your organization**. When you register the
-assignment, Classroom 50 automatically grants the classroom's team read access
-so students can copy it. A **public** template works from anywhere. A private
-template **outside** your organization can't be shared with students — copy it
-into your organization or make it public. See
-[Assignment Templates](Assignment-Templates).
-
-> [!NOTE]
-> Grant the template when you **create** the assignment. If you create the
-> assignment first and add a private template later by editing it, the team
-> read grant isn't re-applied and students may get a 404 on accept.
+Yes, if the template lives **inside your organization** — registering the
+assignment grants the classroom's team read access to it. A private template
+outside your organization can't be shared with students; a public one works
+from anywhere. See
+[Template visibility](Assignment-Templates#template-visibility), including
+why a private template added to an existing assignment can 404 on accept.
 
 ### Can I customize the Feedback PR's first comment?
 
@@ -142,12 +135,9 @@ blocked automatically.
 ### Does the due date cut off student access?
 
 No — there is no cutoff date; the due date only marks later submissions late.
-To actually end an assignment, use **Close submission** in the submissions
-page's **Actions** menu: it blocks new accepts and sets every student's
-repository to read-only (work is preserved). **Reopen submission** restores
-write access — useful when a project continues in a follow-up course. **Update
-student repo access** in the same menu gives finer control over the role
-students hold on their repositories.
+To actually end an assignment, use **Close submission**, which blocks new
+accepts and sets every student's repository to read-only. See
+[Due dates mark late; closing enforces](Course-Lifecycle-and-End-of-Term#due-dates-mark-late-closing-enforces).
 
 ### What's the difference between "template-less" and "empty repository"?
 
@@ -169,7 +159,8 @@ only affects repositories accepted from then on** — repositories students
 already accepted aren't retrofitted, so they keep their original shape. The web
 edit form asks you to confirm when students have already accepted. (**Assignment
 type** — Individual vs. Group — is the exception and stays locked, since
-switching it would invalidate existing submissions.)
+switching it would invalidate existing submissions.) For every shape in one
+table, see [Repository shapes](Assignment-Templates#repository-shapes).
 
 ### How do group assignments work?
 
@@ -197,37 +188,11 @@ and [Advanced Autograding](Advanced-Autograding).
 
 ### Can I turn autograding off, or reduce Actions usage?
 
-Yes, several levers:
-
-- **Grade on submit only** — set the assignment's **Submission type** to **A
-  tagged commit** (`--submission-mode tag` in the CLI). Students' regular
-  pushes then run nothing at all; grading happens only when they submit
-  (`gh student submit` or a hand-pushed `submit/*` tag). This is the biggest
-  saver for large classrooms, where every work-in-progress push would otherwise
-  grade. You can also name **milestone tags** (`--submission-tag phase1`) so
-  students grade specific checkpoints with plain git. See
-  [Which commits grade](Autograding-Basics#which-commits-grade) in Autograding Basics.
-- **Pause autograding for one assignment** (reversible) — **Pause autograding**
-  in the submissions page's **Actions** menu disables the built-in
-  `autograde.yaml` workflow in every student repository (via GitHub's
-  workflow-disable API — no files change). Students' other workflows keep
-  running, and **Resume autograding** re-enables it. Offered on individual
-  assignments that use the built-in autograder, once students have accepted.
-- Create an assignment with **no autograding tests**, and no grading runs
-  (Classroom 50 still uses a lightweight workflow to tag submissions and
-  support written feedback, which uses far fewer Actions minutes).
-- **Don't use the built-in autograder at all** — when creating an
-  assignment, pick **Do not use the built-in autograder**. Accept then installs
-  no autograding workflow: a templated assignment runs only your template's own
-  CI (if any), and score collection skips the assignment. The right choice for
-  project-shaped assignments graded by hand or by your own CI. Can be changed
-  after creation, but only affects repositories accepted from then on (existing
-  ones keep their original setup).
-- **Pause autograding org-wide** — the organization's Actions settings in the
-  web app. **Caution:** this stops **all** workflows in student repositories,
-  not just autograding — any CI your students run stops too. Setup also creates
-  a **$0 Actions spending cap** (only when the organization has none) so a
-  runaway workflow can't run up a bill.
+Yes. Grade only on explicit submits (**Submission type: A tagged commit**),
+skip the built-in autograder for assignments graded elsewhere, pause
+autograding per assignment or organization-wide, or grade on self-hosted
+runners. [Managing Actions cost](Managing-Actions-Cost) covers every lever
+and what each one trades away.
 
 ### Can I use my own (self-hosted) runners?
 
@@ -317,10 +282,9 @@ automations against it. The column-by-column reference for both CSVs is in
 You can — Classroom 50 doesn't currently disallow one account holding both a
 staff and a student role. Add yourself to the roster with `gh teacher roster
 add` (or the web app) while remaining on a staff team; you'll then show **both**
-roles and be graded as a student. (Your in-app access stays at your highest
-role, and the `roster.csv` `role` column records that highest role — an
-automatic sync may rewrite it, which doesn't affect your student enrollment. See
-[Dual roles](gh-teacher#dual-roles-staff-who-are-also-students).)
+roles and be graded as a student. For how the app behaves with a dual-role
+account, see
+[Staff who are also students](Staff-TAs-and-Multiple-Teachers#staff-who-are-also-students-dual-roles).
 
 One caveat: as an **organization owner** you keep `admin` on your own assignment
 repo (GitHub won't let an owner reduce their own access to `write`), so it won't
@@ -358,13 +322,11 @@ though Classroom 50 only acts on classroom ones. This matches the CLI's behavior
 
 ### Why does signing in ask for permission to "Delete repositories"?
 
-One feature uses it: **Tear down organization** (org settings → Danger zone),
-which resets an organization by deleting the repositories Classroom 50 manages
-— and only after you type an explicit confirmation. Nothing else ever deletes a
-repository, and because there's no Classroom 50 server, the token stays in your
-browser. The CLIs don't request it at all unless you opt in
-(`gh teacher login -s delete_repo`). Details:
-[GitHub Integration](GitHub-Integration#2-teacher-authentication).
+One feature uses it: **Tear down organization**, which resets an organization
+by deleting the repositories Classroom 50 manages, and only after you type an
+explicit confirmation. Nothing else ever deletes a repository. See
+[the full explanation](GitHub-Integration#2-teacher-authentication) in GitHub
+Integration.
 
 ### Can I edit the config files in the `classroom50` repo by hand?
 
@@ -388,7 +350,7 @@ need one per organization. See
 
 Some capabilities from GitHub Classroom aren't available today, including
 **LTI / LMS grade passback**, in-app **grade visibility for students**, and
-**roster self-selection** (students picking their own roster entry when
-accepting). Classroom 50 is open source and actively developed — share ideas
-or track direction in
+**roster self-selection**. See
+[Requested, but architecturally hard](Known-Limitations#requested-but-architecturally-hard)
+in Known limitations for why, and share your use case in
 [Discussions](https://github.com/foundation50/classroom50/discussions).

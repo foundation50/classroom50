@@ -16,10 +16,8 @@ The CLI never creates the organization. Before running any CLI command:
    repository**.
 
 > [!NOTE]
-> **Template visibility.** Public works on any plan. A private template works
-> only if it's **inside your org** (`gh teacher assignment add` grants the
-> classroom team read). A private template **outside** your org is rejected.
-> Enterprise Cloud's "internal" visibility also works.
+> A private template must live **inside your org**; see
+> [Template visibility](Assignment-Templates#template-visibility).
 
 `gh teacher init` locks organization member privileges to least-privilege
 automatically. After it runs, a member can only create a **private** repository
@@ -40,16 +38,10 @@ rest.
 
 </details>
 
-**Four member-privilege settings have no API** — apply them once at
-`https://github.com/organizations/<org>/settings/member_privileges` (`init`
-prints this reminder):
-
-- [ ] **App access requests** → "Members only" (or disable).
-- [ ] **Uncheck** "Allow repository admins to install GitHub Apps for their
-      repositories".
-- [ ] **Projects base permissions** → "No access".
-- [ ] **Uncheck** "Allow repository administrators to rename branches protected
-      by organization rules".
+**Four member-privilege settings have no API**, so `init` can't set them and
+`audit` can't read them. Apply them once by hand; the checklist is in
+[Manual organization hardening](CLI-Teacher-Guide#manual-organization-hardening-one-time)
+in the CLI Teacher Guide.
 
 ### 2. Teacher authentication
 
