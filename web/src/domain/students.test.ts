@@ -279,14 +279,14 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
     })
 
   // inviteSucceeds=false makes POST /invitations 422 (the already-member
-  // signal). Records whether any git tree write (a CSV commit) happened so we
-  // can assert email invites never touch roster.csv.
+  // signal). Tracks the roster.csv content committed by the pending-row write
+  // (null = no roster write happened).
   const makeEmailClient = (opts: {
     inviteSucceeds: boolean
     noTeamBlock?: boolean
   }) => {
     const state = {
-      csvWritten: false,
+      committed: null as string | null,
       inviteAttempted: false,
       inviteBody: null as unknown,
       inviteTeamCreated: false,
@@ -307,10 +307,34 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
       .mockImplementation((path: string, options?: { body?: unknown }) => {
         if (/\/repos\/[^/]+\/classroom50$/.test(path))
           return { default_branch: "main" }
+        // The pending-row write's conflict-retried read-modify-write chain.
+        if (path.includes("/contents/") && path.includes("roster.csv")) {
+          const csv =
+            state.committed ??
+            "username,first_name,last_name,email,section,github_id,role\n"
+          return Promise.resolve({
+            type: "file",
+            encoding: "base64",
+            content: Buffer.from(csv, "utf-8").toString("base64"),
+          })
+        }
+        if (path.includes("/git/ref/"))
+          return Promise.resolve({ object: { sha: "base-sha" } })
+        if (path.includes("/git/commits/"))
+          return Promise.resolve({ tree: { sha: "base-tree-sha" } })
         if (path.endsWith("/git/trees")) {
-          state.csvWritten = true
+          const tree = (
+            options as {
+              body?: { tree?: { path: string; content?: string }[] }
+            }
+          )?.body?.tree
+          const entry = tree?.find((t) => t.path.includes("roster.csv"))
+          if (entry?.content != null) state.committed = entry.content
           return Promise.resolve({ sha: "tree-sha" })
         }
+        if (path.endsWith("/git/commits"))
+          return Promise.resolve({ sha: "new-commit-sha" })
+        if (path.endsWith("/git/refs/heads/main")) return Promise.resolve({})
         if (path.endsWith("/invitations")) {
           state.inviteAttempted = true
           if (opts.inviteSucceeds) {
@@ -349,7 +373,7 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
     }
   }
 
-  it("sends the org invite (with team) and writes NO roster.csv row", async () => {
+  it("sends the org invite (with team) and retains the email as a pending row", async () => {
     const { client, state } = makeEmailClient({ inviteSucceeds: true })
 
     const result = await inviteByEmail(client, {
@@ -359,7 +383,6 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
     })
 
     expect(result.inviteWarning).toBeUndefined()
-    expect(state.csvWritten).toBe(false)
     // Both the classroom team and the per-invite metadata team are attached, so
     // acceptance activates classroom membership AND lands the invitee on the
     // metadata team the reconcile later reads to recover the email.
@@ -367,6 +390,16 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
     expect(state.inviteBody).toMatchObject({
       email: "new@x.edu",
       team_ids: [4242, 9001],
+    })
+    // The invited email is retained on the roster right away, as an
+    // email-only pending row (identity arrives via the acceptance reconcile).
+    const rows = rowsFromCsv(state.committed!)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      username: "",
+      github_id: "",
+      email: "new@x.edu",
+      role: "student",
     })
   })
 
@@ -389,7 +422,7 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
 
     // Nothing was sent and nothing was written.
     expect(state.inviteAttempted).toBe(false)
-    expect(state.csvWritten).toBe(false)
+    expect(state.committed).toBeNull()
   })
 
   it("422 already-member -> warns to add by username, writes no row", async () => {
@@ -403,9 +436,9 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
 
     expect(result.inviteWarning).toMatch(/already belongs to a member/i)
     expect(result.inviteWarning).toMatch(/by github username/i)
-    expect(state.csvWritten).toBe(false)
-    // The doomed invite's freshly created metadata team was cleaned up rather
-    // than left as a member-less orphan holding the email.
+    // A doomed invite retains nothing: no roster row, and its freshly created
+    // metadata team is cleaned up rather than left as a member-less orphan.
+    expect(state.committed).toBeNull()
     expect(state.inviteTeamCreated).toBe(true)
     expect(state.inviteTeamDeleted).toBe(true)
   })
@@ -466,7 +499,10 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     const failEmails = new Set(opts?.failEmails ?? [])
     let inviteAttempts = 0
     const state = {
-      csvWritten: false,
+      // roster.csv content committed by the batch pending-row write (null =
+      // no roster write happened).
+      committed: null as string | null,
+      rosterCommits: 0,
       inviteBodies: [] as {
         email: string
         role: string
@@ -492,10 +528,37 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
         (path: string, options?: { body?: unknown; method?: string }) => {
           if (/\/repos\/[^/]+\/classroom50$/.test(path))
             return { default_branch: "main" }
+          // The batch pending-row write's read-modify-write chain.
+          if (path.includes("/contents/") && path.includes("roster.csv")) {
+            const csv =
+              state.committed ??
+              "username,first_name,last_name,email,section,github_id,role\n"
+            return Promise.resolve({
+              type: "file",
+              encoding: "base64",
+              content: Buffer.from(csv, "utf-8").toString("base64"),
+            })
+          }
+          if (path.includes("/git/ref/"))
+            return Promise.resolve({ object: { sha: "base-sha" } })
+          if (path.includes("/git/commits/"))
+            return Promise.resolve({ tree: { sha: "base-tree-sha" } })
           if (path.endsWith("/git/trees")) {
-            state.csvWritten = true
+            const tree = (
+              options as {
+                body?: { tree?: { path: string; content?: string }[] }
+              }
+            )?.body?.tree
+            const entry = tree?.find((t) => t.path.includes("roster.csv"))
+            if (entry?.content != null) {
+              state.committed = entry.content
+              state.rosterCommits += 1
+            }
             return Promise.resolve({ sha: "tree-sha" })
           }
+          if (path.endsWith("/git/commits"))
+            return Promise.resolve({ sha: "new-commit-sha" })
+          if (path.endsWith("/git/refs/heads/main")) return Promise.resolve({})
           // Staff-team ensure (teacher/ta role -> resolveTeamIdByRole) AND the
           // per-invite metadata team create. An invite- name echoes back the
           // exact description (secret) so ensureInviteTeam's fail-closed
@@ -577,7 +640,6 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     ])
     expect(result.skipped).toEqual([])
     expect(result.failed).toEqual([])
-    expect(state.csvWritten).toBe(false)
     // Every invite carried the classroom team AND its per-invite metadata team
     // as a plain member (default role).
     expect(state.inviteTeamNames).toHaveLength(2)
@@ -585,9 +647,21 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
       expect(body.team_ids).toEqual([4242, 9001])
       expect(body.role).toBe("direct_member")
     }
+    // Both invited emails were retained on the roster in ONE batch commit, as
+    // email-only pending rows.
+    expect(state.rosterCommits).toBe(1)
+    const rows = rowsFromCsv(state.committed!)
+    expect(rows.map((r) => r.email).sort()).toEqual(["a@x.edu", "b@x.edu"])
+    for (const row of rows) {
+      expect(row).toMatchObject({
+        username: "",
+        github_id: "",
+        role: "student",
+      })
+    }
   })
 
-  it("still invites (classroom team only) when the metadata team create fails", async () => {
+  it("still invites (classroom team only, no roster row) when the metadata team create fails", async () => {
     const { client, state } = makeClient({ failInviteTeams: true })
 
     const result = await bulkInviteByEmail(client, {
@@ -600,6 +674,9 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     expect(result.invited.map((i) => i.email)).toEqual(["a@x.edu"])
     expect(result.failed).toEqual([])
     expect(state.inviteBodies[0].team_ids).toEqual([4242])
+    // No metadata team -> no roster row: the reconcile would just remove an
+    // email-only row nothing backs.
+    expect(state.committed).toBeNull()
   })
 
   it("invites a teacher as an org OWNER (admin role) with no metadata team", async () => {
@@ -616,8 +693,10 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
       role: "admin",
     })
     // An accepting owner is auto-promoted to team maintainer, so the backfill's
-    // role=member read would never see them — no metadata team is created.
+    // role=member read would never see them — no metadata team is created, and
+    // therefore no roster row either.
     expect(state.inviteTeamNames).toEqual([])
+    expect(state.committed).toBeNull()
   })
 
   it("routes a 422 already-member into skipped and deletes its fresh metadata team", async () => {
@@ -636,6 +715,9 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     // successful invite's team survives.
     expect(state.teamDeletes).toHaveLength(1)
     expect(state.inviteTeamNames).toContain(state.teamDeletes[0])
+    // Only the successfully sent invite's email is retained on the roster.
+    const rows = rowsFromCsv(state.committed!)
+    expect(rows.map((r) => r.email)).toEqual(["fresh@x.edu"])
   })
 
   it("reports progress and returns early for an empty invite list", async () => {
@@ -669,7 +751,7 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     ).rejects.toThrow(/couldn't resolve the classroom team/i)
 
     expect(state.inviteBodies).toEqual([])
-    expect(state.csvWritten).toBe(false)
+    expect(state.committed).toBeNull()
   })
 
   it("routes a non-422, non-rate-limit error into failed (not skipped)", async () => {
@@ -849,6 +931,14 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
       role: "admin",
       team_ids: [5000],
     })
+    // Only the metadata-team-carrying invites get pending roster rows, with
+    // the invited role recorded, in one batch commit.
+    expect(state.rosterCommits).toBe(1)
+    const rows = rowsFromCsv(state.committed!)
+    const roleByEmail = new Map(rows.map((r) => [r.email, r.role]))
+    expect(roleByEmail.get("stu@x.edu")).toBe("student")
+    expect(roleByEmail.get("ta@x.edu")).toBe("ta")
+    expect(roleByEmail.has("prof@x.edu")).toBe(false)
   })
 })
 
@@ -2737,6 +2827,150 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     // octocat/torvalds are matched by id, so nothing is backfilled and the
     // short rows parsed without error.
     expect(result.addedUsernames).toEqual([])
+  })
+
+  // --- the consolidated invite fold/removal (reconcileRoster's sync half) ---
+
+  const inviteState = (
+    over: Partial<{
+      recovered: {
+        email: string
+        invitee: { id: number; login: string }
+        slug: string
+      }[]
+      liveInviteEmails: Set<string>
+      trusted: boolean
+    }> = {},
+  ) => ({
+    recovered: [],
+    liveInviteEmails: new Set<string>(),
+    trusted: true,
+    deletedStale: 0,
+    ...over,
+  })
+
+  it("upgrades the invite-time email row with the recovered identity (no duplicate)", async () => {
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + ",,,alice@x.edu,,,student\n",
+      users: {},
+      teamHas: [{ login: "alice", id: 42 }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: inviteState({
+        recovered: [
+          {
+            email: "alice@x.edu",
+            invitee: { id: 42, login: "alice" },
+            slug: "invite-aa",
+          },
+        ],
+      }),
+    })
+
+    expect(result.recoveredEmails).toEqual(["alice@x.edu"])
+    const rows = rowsFromCsv(committed.content!)
+    // The email row was upgraded in place — NOT duplicated by the member
+    // append (the upgraded row claims the id/login before "missing" runs).
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      username: "alice",
+      github_id: "42",
+      email: "alice@x.edu",
+      role: "student",
+    })
+  })
+
+  it("appends the recovered member WITH their invited email when no row matches", async () => {
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER,
+      users: {},
+      teamHas: [{ login: "bob", id: 7 }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: inviteState({
+        recovered: [
+          {
+            email: "bob@x.edu",
+            invitee: { id: 7, login: "bob" },
+            slug: "invite-bb",
+          },
+        ],
+      }),
+    })
+
+    expect(result.addedUsernames).toEqual(["bob"])
+    expect(result.recoveredEmails).toEqual(["bob@x.edu"])
+    const bob = rowsFromCsv(committed.content!).find(
+      (r) => r.username === "bob",
+    )
+    expect(bob).toMatchObject({ github_id: "7", email: "bob@x.edu" })
+  })
+
+  it("removes a dead email-only row and keeps one a live invite team backs", async () => {
+    const { client, committed } = makeTeamClient({
+      startingCsv:
+        HEADER + ",,,dead@x.edu,,,student\n" + ",,,live@x.edu,,,student\n",
+      users: {},
+      teamHas: [],
+      // The live invitee's pending invitation preserves their recorded role.
+      teamInvites: [{ email: "live@x.edu" }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: inviteState({ liveInviteEmails: new Set(["live@x.edu"]) }),
+    })
+
+    expect(result.removedEmails).toEqual(["dead@x.edu"])
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].email).toBe("live@x.edu")
+  })
+
+  it("never removes an email row when the reconcile state is untrusted", async () => {
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + ",,,dead@x.edu,,,student\n",
+      users: {},
+      teamHas: [],
+      teamInvites: [{ email: "dead@x.edu" }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: inviteState({ trusted: false }),
+    })
+
+    expect(result.removedEmails).toEqual([])
+    expect(result.noop).toBe(true)
+    expect(committed.content).toBeNull()
+  })
+
+  it("never removes an identity row, even with no live invite team", async () => {
+    const { client, committed } = makeTeamClient({
+      // A username row and an id-only row: both are identity rows, not
+      // email-only, so the removal pass must not touch them.
+      startingCsv: HEADER + "carol,,,c@x.edu,,,\n" + ",,,d@x.edu,,55,\n",
+      users: {},
+      teamHas: [],
+      teamInvites: [{ login: "carol" }, { email: "d@x.edu" }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: inviteState(),
+    })
+
+    expect(result.removedEmails).toEqual([])
+    expect(committed.content).toBeNull()
   })
 })
 

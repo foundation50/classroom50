@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { invalidateInviteQueries } from "@/github-core/queries"
+import { githubKeys, invalidateInviteQueries } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import {
@@ -8,6 +8,8 @@ import {
 } from "@/hooks/useTeamRoster"
 import { enrollStudentInClassroom, inviteByEmail } from "@/domain/students"
 import { splitName, toStudent } from "@/util/roster"
+import { CONFIG_REPO } from "@/util/configRepo"
+import { rosterPath } from "@/util/rosterPath"
 
 export type EnrollOrInviteFormValues = {
   name: string
@@ -70,14 +72,12 @@ export function useEnrollOrInviteStudent(
         }
       }
 
-      // Email-only -> a pure GitHub org invite (carrying the classroom team +
-      // a per-invite metadata team that retains the email) and NO roster.csv
-      // write: the team is the enrollment source of truth and an email carries
-      // no reliable identity. The record is PII-minimal (email only) — the
-      // typed name/section can be supplied via roster.csv, joined by email,
-      // once the row exists. The invite surfaces in the roster's "pending"
-      // section via the org pending-invitations list; on acceptance a
-      // reconcile pass recovers the email<->account mapping and backfills the row.
+      // Email-only -> a GitHub org invite (carrying the classroom team + a
+      // per-invite metadata team that retains the email) plus a pending
+      // email-only roster row. The row lives exactly as long as the invite
+      // does: on acceptance the reconcile fills in the account identity; a
+      // cancelled/expired invite's row is removed by the same reconcile. The
+      // typed name/section can be supplied via roster.csv, joined by email.
       const result = await inviteByEmail(githubClient, {
         org,
         classroom,
@@ -106,9 +106,12 @@ export function useEnrollOrInviteStudent(
           invalidateTeamRoster()
         }
       } else {
-        // Email invite writes no CSV row; just refresh so the new pending
-        // org-invitation shows in the roster.
+        // Email invite: refresh the pending-invitation view AND the roster
+        // file (the invite retains the email as a pending email-only row).
         invalidateTeamRoster()
+        void queryClient.invalidateQueries({
+          queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
+        })
       }
     },
   })

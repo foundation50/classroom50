@@ -59,9 +59,10 @@ export function useClassroomReconcile(
         // previewing as a student picks up the rewritten description.
         void queryClient.invalidateQueries({ queryKey: githubKeys.myTeams() })
       }
-      if (result.invitesBackfilled.length > 0) {
-        // Recovered invited emails were written into roster.csv; refresh it so
-        // the roster shows the backfilled name/email/section.
+      if (result.rosterChanged) {
+        // The consolidated reconcile committed roster.csv (recovered emails,
+        // removed dead rows, appended members, or refreshed roles) — refresh
+        // the view.
         void queryClient.invalidateQueries({
           queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
         })

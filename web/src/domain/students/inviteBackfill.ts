@@ -6,22 +6,42 @@ import {
 } from "@/github-core/mutations"
 import { listOrgInvitations, listTeamMembers } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
-import { inviteTeamName, type InviteDescription } from "@/util/inviteTeam"
+import { inviteTeamName } from "@/util/inviteTeam"
 import { classroomTeamSlugs } from "@/util/teamSlug"
-import { normalizeStudentRow, type StudentCsvRow } from "@/util/rosterCsv"
-import { parseGitHubId } from "@/util/identity"
-import { assertClassroomNotArchived } from "../classrooms"
-import { withRosterRewrite, log } from "./rosterPrimitives"
+import { log } from "./rosterPrimitives"
 
-export type BackfillInviteMetadataResult = {
-  // Emails whose invite team was reconciled into roster.csv and then deleted.
-  backfilled: string[]
-  // Invite teams deleted without a backfill: the accepted invitee is no longer
-  // on any classroom team (unenrolled — their mapping must not resurrect a
-  // roster row), or a member-less team whose org invitation is gone
-  // (cancelled/expired/failed) aged past the GC guard.
+// One accepted invite whose email <-> account mapping was recovered from its
+// metadata team. The roster sync folds it into roster.csv; the team at `slug`
+// is deleted only AFTER that commit lands (push-before-delete).
+export type RecoveredInvite = {
+  email: string
+  invitee: { id: number; login: string }
+  slug: string
+}
+
+export type InviteReconcileState = {
+  recovered: RecoveredInvite[]
+  // Normalized emails whose invite team is still live (invite pending, or an
+  // anomaly we refuse to touch). An email-only roster row backed by one of
+  // these must be KEPT by the sync's removal pass.
+  liveInviteEmails: Set<string>
+  // True only when the invite-team enumeration AND every per-team read
+  // completed. When false the sync must not remove email-only rows — an
+  // unreadable team can't prove its row is dead.
+  trusted: boolean
+  // Teams deleted without a recovery: an accepted invitee no longer on any
+  // classroom team (unenrolled — must not resurrect a row), or a member-less
+  // team whose org invitation is gone (cancelled/expired) aged past the GC
+  // guard.
   deletedStale: number
 }
+
+const emptyState = (): InviteReconcileState => ({
+  recovered: [],
+  liveInviteEmails: new Set(),
+  trusted: false,
+  deletedStale: 0,
+})
 
 // A member-less invite team is only GC'd once it's older than this, so a team
 // created moments before its org invitation lands (or read mid-creation) can
@@ -29,167 +49,168 @@ export type BackfillInviteMetadataResult = {
 // down immediately by the cancel path; this pass is the backstop.
 const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
 
-// Recover the invited-email <-> GitHub-account mapping that only the per-invite
-// metadata teams retain, and fold it into roster.csv. For each invite-<hash>
-// team in the org that belongs to THIS classroom:
-//   - read its description (the invited email) and regular-role
-//     members (GitHub keeps org owners as maintainers, so `role=member` is the
-//     accepted-invitee set);
+// Read-only-on-CSV half of the invite reconcile: enumerate this classroom's
+// invite-<hash> teams and classify each one, WITHOUT writing roster.csv (the
+// roster sync folds the result into its single commit). For each team that
+// belongs to THIS classroom (by its validated description):
 //   - verify the description's email hashes back to the team name (the team is
-//     invitee-editable after acceptance, so this is the trust boundary — a
-//     tampered email that no longer matches the slug is ignored);
-//   - with exactly one member, require them to still be on one of the
-//     classroom's teams: backfill their email onto that account's
-//     roster.csv row (creating an identity row if absent; teacher-entered
-//     values always win), then delete the team. A member on NO classroom team
-//     was unenrolled after accepting — delete the team without a roster write
-//     so the backfill can't resurrect a removed student;
-//   - with zero members the invite is pending — keep the team, unless it's
-//     older than the GC age guard AND no pending org invitation still maps to
-//     its (classroom, email): then the invite was cancelled, expired, or
-//     failed, and the team (holding a PII email) is deleted;
-//   - with more than one, skip and warn (an anomaly — a hash collision or a
-//     manually-added member) rather than guess which is the invitee.
+//     invitee-editable after acceptance, so this is the trust boundary);
+//   - with exactly one regular-role member (GitHub keeps org owners as team
+//     maintainers, so role=member is the accepted-invitee set) who is still on
+//     a classroom team -> a RECOVERED mapping. The team is left in place for
+//     the caller to delete after the roster commit lands;
+//   - one member on NO classroom team -> unenrolled after accepting; delete the
+//     team now so the mapping can't resurrect a removed student;
+//   - zero members -> the invite is live (row kept), unless the team aged past
+//     the GC guard AND no pending org invitation still maps to it (cancelled/
+//     expired) -> delete;
+//   - anomalies (tampered hash, >1 member) -> keep the team, count its email
+//     as live, and warn — never guess.
 //
-// Never throws: it runs piggybacked on reconcile/sync flows that must not fail
-// because of it. A per-team failure is logged and skipped; a rate limit stops
-// the pass (returning what completed) rather than hammering the API; any other
-// unexpected failure is logged and yields an empty result. Refuses to run on an
-// archived classroom (roster.csv is frozen there, like every sibling writer).
-// Scoped to one classroom via the description's `classroom` field, so a shared
-// org running several classrooms only touches its own invite teams.
-export async function backfillInviteMetadata(
+// Never throws. Fail-safe: any read failure (enumeration, a team, the org
+// invitation list) flips `trusted` off so the sync skips row removals; a rate
+// limit stops the pass early the same way.
+export async function collectInviteRecoveries(
   client: GitHubClient,
   input: { org: string; classroom: string },
-): Promise<BackfillInviteMetadataResult> {
+): Promise<InviteReconcileState> {
   const { org, classroom } = input
-  const backfilled: string[] = []
+  const recovered: RecoveredInvite[] = []
+  const liveInviteEmails = new Set<string>()
+  let trusted = true
   let deletedStale = 0
 
+  let inviteTeams
   try {
-    await assertClassroomNotArchived(client, org, classroom)
-
-    const inviteTeams = await listInviteTeams(client, org)
-    if (inviteTeams.length === 0) {
-      return { backfilled, deletedStale }
-    }
-
-    // The invitee must still be on a classroom team (student or staff) for a
-    // backfill to write; fetched lazily once, only when a team has an accepted
-    // member. A read failure here propagates to the per-team catch (skip),
-    // never silently reads as "member of nothing".
-    let enrolledIds: Set<number> | null = null
-    const loadEnrolledIds = async (): Promise<Set<number>> => {
-      if (enrolledIds) return enrolledIds
-      const rosters = await Promise.all(
-        classroomTeamSlugs(classroom).map((slug) =>
-          listTeamMembers(client, org, slug),
-        ),
-      )
-      enrolledIds = new Set(rosters.flat().map((m) => m.id))
-      return enrolledIds
-    }
-
-    // The still-live invite-team slugs for this classroom, derived by hashing
-    // every pending email invitation's address; fetched lazily once, only when
-    // a member-less team is old enough to be a GC candidate. listOrgInvitations
-    // is NOT error-tolerated, so a degraded read propagates to the per-team
-    // catch (skip) rather than reading as "nothing is live" and deleting every
-    // pending team.
-    let liveInviteSlugs: Set<string> | null = null
-    const loadLiveInviteSlugs = async (): Promise<Set<string>> => {
-      if (liveInviteSlugs) return liveInviteSlugs
-      const pending = await listOrgInvitations(client, org)
-      const slugs = await Promise.all(
-        pending
-          .filter((inv) => !inv.login && inv.email)
-          .map((inv) => inviteTeamName(classroom, inv.email as string)),
-      )
-      liveInviteSlugs = new Set(slugs)
-      return liveInviteSlugs
-    }
-
-    for (const team of inviteTeams) {
-      const slug = team.slug
-      if (!slug) continue
-      try {
-        const state = await readInviteTeam(client, org, slug)
-        if (!state) continue // already deleted
-        const record = state.description
-        // Not a valid v1 record, or belongs to another classroom — leave it for
-        // that classroom's own reconcile (or manual cleanup); never touch it
-        // here.
-        if (!record || record.classroom !== classroom) continue
-
-        // Trust boundary: the description is invitee-editable after
-        // acceptance, so only act on it when the recorded email still hashes
-        // back to this team's name. A tampered email can't redirect a backfill
-        // onto someone else.
-        const expected = await inviteTeamName(classroom, record.email)
-        if (expected !== slug) {
-          log.error(
-            "invite team email does not match its name hash; skipping",
-            {
-              slug,
-            },
-          )
-          continue
-        }
-
-        const invitees = state.members
-        if (invitees.length === 0) {
-          // Pending — or abandoned. Reap only when BOTH hold: the team is old
-          // enough that a mid-creation race is impossible, and no pending org
-          // invitation still maps to this slug (the invite was cancelled,
-          // expired, or failed). Uncertainty (missing created_at, unreadable
-          // invitation list) always keeps the team.
-          if (!isPastGcAge(state.createdAt)) continue
-          if ((await loadLiveInviteSlugs()).has(slug)) continue
-          await deleteInviteTeam(client, org, slug)
-          deletedStale += 1
-          continue
-        }
-        if (invitees.length > 1) {
-          log.error("invite team has multiple regular members; skipping", {
-            slug,
-            count: invitees.length,
-          })
-          continue
-        }
-
-        const invitee = invitees[0]
-        if (!(await loadEnrolledIds()).has(invitee.id)) {
-          // Accepted, then removed from the classroom: the invite lifecycle is
-          // over. Delete the team so its record can't resurrect the row later.
-          await deleteInviteTeam(client, org, slug)
-          deletedStale += 1
-          continue
-        }
-
-        await backfillRow(client, { org, classroom }, invitee, record)
-        // Record the recovery before the delete: if the delete fails, the next
-        // pass redoes an idempotent rewrite, whereas the reverse order could
-        // report nothing after a completed roster write.
-        backfilled.push(record.email)
-        await deleteInviteTeam(client, org, slug)
-      } catch (err) {
-        if (err instanceof GitHubAPIError && err.isRateLimited) {
-          // Every remaining team would hit the same limit — stop the pass and
-          // let the next reconcile pick up where this one left off.
-          log.error("invite metadata backfill rate-limited; stopping pass", {
-            slug,
-          })
-          break
-        }
-        // One bad team must never block the rest or the enclosing reconcile.
-        log.error("invite metadata backfill failed for team", { slug, err })
-      }
-    }
+    inviteTeams = await listInviteTeams(client, org)
   } catch (err) {
-    log.error("invite metadata backfill failed", { org, classroom, err })
+    log.error("invite reconcile: team listing failed", { org, err })
+    return emptyState()
   }
 
-  return { backfilled, deletedStale }
+  // The invitee must still be on a classroom team (student or staff) for a
+  // recovery to count; fetched lazily once. A read failure propagates to the
+  // per-team catch, never silently reads as "member of nothing".
+  let enrolledIds: Set<number> | null = null
+  const loadEnrolledIds = async (): Promise<Set<number>> => {
+    if (enrolledIds) return enrolledIds
+    const rosters = await Promise.all(
+      classroomTeamSlugs(classroom).map((slug) =>
+        listTeamMembers(client, org, slug),
+      ),
+    )
+    enrolledIds = new Set(rosters.flat().map((m) => m.id))
+    return enrolledIds
+  }
+
+  // Live invite-team slugs derived by hashing every pending email invitation's
+  // address; fetched lazily, only when a member-less team is old enough to be
+  // a GC candidate. NOT error-tolerated — a degraded read propagates (skip).
+  let liveInviteSlugs: Set<string> | null = null
+  const loadLiveInviteSlugs = async (): Promise<Set<string>> => {
+    if (liveInviteSlugs) return liveInviteSlugs
+    const pending = await listOrgInvitations(client, org)
+    const slugs = await Promise.all(
+      pending
+        .filter((inv) => !inv.login && inv.email)
+        .map((inv) => inviteTeamName(classroom, inv.email as string)),
+    )
+    liveInviteSlugs = new Set(slugs)
+    return liveInviteSlugs
+  }
+
+  for (const team of inviteTeams) {
+    const slug = team.slug
+    if (!slug) continue
+    try {
+      const state = await readInviteTeam(client, org, slug)
+      if (!state) continue // already deleted
+      const record = state.description
+      // Not a valid v1 record, or belongs to another classroom — leave it for
+      // that classroom's own reconcile (or manual cleanup); never touch it.
+      if (!record || record.classroom !== classroom) continue
+
+      // Trust boundary: only act on a description whose recorded email still
+      // hashes back to this team's name. A tampered team is kept (and its
+      // email treated as live) rather than acted on.
+      const expected = await inviteTeamName(classroom, record.email)
+      if (expected !== slug) {
+        log.error("invite team email does not match its name hash; skipping", {
+          slug,
+        })
+        liveInviteEmails.add(record.email)
+        continue
+      }
+
+      const invitees = state.members
+      if (invitees.length === 0) {
+        // Pending — or abandoned. Reap only when BOTH hold: old enough that a
+        // mid-creation race is impossible, and no pending org invitation still
+        // maps to this slug. Uncertainty always keeps the team (and the row).
+        if (
+          isPastGcAge(state.createdAt) &&
+          !(await loadLiveInviteSlugs()).has(slug)
+        ) {
+          await deleteInviteTeam(client, org, slug)
+          deletedStale += 1
+        } else {
+          liveInviteEmails.add(record.email)
+        }
+        continue
+      }
+      if (invitees.length > 1) {
+        log.error("invite team has multiple regular members; skipping", {
+          slug,
+          count: invitees.length,
+        })
+        liveInviteEmails.add(record.email)
+        continue
+      }
+
+      const invitee = invitees[0]
+      if (!(await loadEnrolledIds()).has(invitee.id)) {
+        // Accepted, then removed from the classroom: the invite lifecycle is
+        // over. Delete the team so its record can't resurrect the row later.
+        await deleteInviteTeam(client, org, slug)
+        deletedStale += 1
+        continue
+      }
+
+      recovered.push({
+        email: record.email,
+        invitee: { id: invitee.id, login: invitee.login },
+        slug,
+      })
+    } catch (err) {
+      // An unreadable team can't prove its row is dead — removals are off for
+      // this pass either way.
+      trusted = false
+      if (err instanceof GitHubAPIError && err.isRateLimited) {
+        log.error("invite reconcile rate-limited; stopping pass", { slug })
+        break
+      }
+      log.error("invite reconcile failed for team", { slug, err })
+    }
+  }
+
+  return { recovered, liveInviteEmails, trusted, deletedStale }
+}
+
+// Post-commit teardown: delete each recovered mapping's invite team, AFTER the
+// roster commit folding it has landed (a failed delete just means the next
+// pass re-recovers idempotently). Best-effort; never throws.
+export async function finalizeInviteRecoveries(
+  client: GitHubClient,
+  org: string,
+  recovered: RecoveredInvite[],
+): Promise<void> {
+  for (const r of recovered) {
+    try {
+      await deleteInviteTeam(client, org, r.slug)
+    } catch (err) {
+      log.error("invite team post-commit delete failed", { slug: r.slug, err })
+    }
+  }
 }
 
 // Whether a team's created_at is older than the GC age guard. Unparseable or
@@ -199,116 +220,4 @@ function isPastGcAge(createdAt: string | null): boolean {
   const created = Date.parse(createdAt)
   if (Number.isNaN(created)) return false
   return Date.now() - created > INVITE_TEAM_GC_MIN_AGE_MS
-}
-
-export type PurgeInviteTeamsResult = {
-  // Emails recovered into roster.csv by the backfill run first.
-  recovered: string[]
-  // Remaining invite teams for this classroom deleted afterwards.
-  purged: number
-}
-
-// Teacher-triggered cleanup for the invite teams the automatic pass cannot or
-// will not touch: tampered (hash-mismatched) records, multi-member anomalies,
-// still-pending invites the teacher wants forgotten, and an archived
-// classroom's leftovers. Runs the normal backfill first so anything
-// recoverable lands in roster.csv (a no-op on an archived classroom), then
-// deletes EVERY remaining team whose record claims this classroom — the claim
-// alone suffices here (a tamperer can at worst get their own team deleted).
-// Deliberately no archived guard on the deletes: purging stored emails writes
-// nothing to the frozen roster. Throws on failure (an explicit action the
-// teacher should see fail), except that already-gone teams read as done.
-export async function purgeInviteTeams(
-  client: GitHubClient,
-  input: { org: string; classroom: string },
-): Promise<PurgeInviteTeamsResult> {
-  const { org, classroom } = input
-  const { backfilled } = await backfillInviteMetadata(client, input)
-
-  let purged = 0
-  const teams = await listInviteTeams(client, org)
-  for (const team of teams) {
-    const slug = team.slug
-    if (!slug) continue
-    const state = await readInviteTeam(client, org, slug)
-    if (!state) continue // already gone
-    if (state.description?.classroom !== classroom) continue
-    await deleteInviteTeam(client, org, slug)
-    purged += 1
-  }
-  return { recovered: backfilled, purged }
-}
-
-// Write the invited email onto the accepted invitee's roster.csv row in one
-// conflict-retried rewrite. Ensures an identity row exists (email invites write
-// no row, so the accepted member may have none yet), then fills a blank email —
-// a teacher-entered value always wins (borrow-only). Never changes
-// role/enrollment (team-driven). Matches the row by github_id, then login (the
-// same identity join the roster view uses).
-async function backfillRow(
-  client: GitHubClient,
-  input: { org: string; classroom: string },
-  invitee: { id: number; login: string },
-  record: InviteDescription,
-): Promise<void> {
-  const { org, classroom } = input
-  const inviteeId = String(invitee.id)
-  const loginKey = invitee.login.toLowerCase()
-
-  await withRosterRewrite(client, { org, classroom }, (rows) => {
-    const matches = (row: StudentCsvRow) => {
-      const rowId = parseGitHubId(row.github_id)
-      if (rowId !== null && String(rowId) === inviteeId) return true
-      return row.username.trim().toLowerCase() === loginKey
-    }
-    const existing = rows.find(matches)
-
-    if (!existing) {
-      // No row yet (the common email-invite case): append an identity row
-      // carrying the recovered email. Names/sections arrive via roster.csv
-      // edits or uploads, joined by this email.
-      const added = normalizeStudentRow({
-        username: invitee.login,
-        github_id: inviteeId,
-        first_name: "",
-        last_name: "",
-        email: record.email,
-        section: "",
-      })
-      return {
-        nextStudents: [...rows, added],
-        changed: 1,
-        message: `Backfill invited email for ${classroom}/${invitee.login}`,
-      }
-    }
-
-    let changed = 0
-    const nextStudents = rows.map((row) => {
-      if (row !== existing) return row
-      // Borrow-only: fill blank identity/email fields; teacher values win.
-      const filled = normalizeStudentRow({
-        ...row,
-        username: row.username || invitee.login,
-        github_id: row.github_id || inviteeId,
-        email: row.email?.trim() || record.email,
-      })
-      // Only count a change when a field actually differs (avoid an empty commit
-      // when the teacher already provided everything).
-      if (
-        filled.username !== row.username ||
-        filled.github_id !== row.github_id ||
-        filled.email !== row.email
-      ) {
-        changed = 1
-        return filled
-      }
-      return row
-    })
-
-    return {
-      nextStudents,
-      changed,
-      message: `Backfill invited email for ${classroom}/${invitee.login}`,
-    }
-  })
 }

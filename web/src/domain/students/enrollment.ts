@@ -34,6 +34,7 @@ import {
 import { rosterPath } from "@/util/rosterPath"
 import { resolveGitHubId } from "@/util/students"
 import {
+  appendEmailInviteRows,
   log,
   rosterWriteTree,
   resolveClassroomTeam,
@@ -256,6 +257,17 @@ export async function inviteByEmail(
         `Sending the organization invite to ${normalizedEmail} failed ` +
         `(${getErrorMessage(err)}); try again.`,
     }
+  }
+
+  // Retain the invited email on the roster right away — but only when the
+  // metadata team is attached: the reconcile keeps an email-only row exactly
+  // as long as a live invite team backs it, so a team-less row would just be
+  // removed on the next pass. Best-effort (never throws); on a miss the
+  // accepted invite's reconcile fold appends the row instead.
+  if (inviteTeam) {
+    await appendEmailInviteRows(client, { org, classroom }, [
+      { email: normalizedEmail, role: "student" },
+    ])
   }
 
   return metadataWarning ? { inviteWarning: metadataWarning } : {}

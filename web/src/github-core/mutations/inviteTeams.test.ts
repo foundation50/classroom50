@@ -191,11 +191,13 @@ describe("listInviteTeams", () => {
     expect(teams.map((t) => t.slug)).toEqual(["invite-aaaa"])
   })
 
-  it("degrades to [] when the org team list is unreadable (404)", async () => {
+  it("throws when the org team list is unreadable (strict: rows depend on it)", async () => {
     const { client } = makeClient(() => {
       throw apiError(404)
     })
-    await expect(listInviteTeams(client, "acme")).resolves.toEqual([])
+    await expect(listInviteTeams(client, "acme")).rejects.toMatchObject({
+      status: 404,
+    })
   })
 })
 

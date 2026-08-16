@@ -37,6 +37,7 @@ const healthy: ClassroomReconcileResult = {
   description: { changed: false },
   staffCreated: [],
   invitesBackfilled: [],
+  rosterChanged: false,
 }
 
 const archived: ClassroomReconcileResult = {
@@ -44,6 +45,7 @@ const archived: ClassroomReconcileResult = {
   description: { changed: false },
   staffCreated: [],
   invitesBackfilled: [],
+  rosterChanged: false,
 }
 
 function githubAPIError(status: number): GitHubAPIError {

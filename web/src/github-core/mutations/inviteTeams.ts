@@ -147,21 +147,19 @@ export async function readInviteTeam(
 }
 
 // Enumerate the org's invite-<hash> teams (secret teams this feature owns),
-// filtering the org team list by the invite- prefix. Owner/member visibility
-// applies; a non-owner who can't list teams degrades to [] (tolerated upstream),
-// so GC/backfill simply do nothing rather than erroring.
+// filtering the org team list by the invite- prefix. STRICT: a failed listing
+// throws rather than degrading to [] — the reconcile uses this list to decide
+// which email-only roster rows are still backed by a live invite, and a
+// degraded read must never masquerade as "no invite teams" (which would wipe
+// every pending email row). Owner/member visibility still applies.
 export async function listInviteTeams(
   client: GitHubClient,
   org: string,
 ): Promise<GitHubTeam[]> {
-  const teams = await tolerateGitHubError(
-    () =>
-      paginateAll<GitHubTeam>(
-        client,
-        (page) =>
-          `/orgs/${encodeURIComponent(org)}/teams?per_page=100&page=${page}`,
-      ),
-    [],
+  const teams = await paginateAll<GitHubTeam>(
+    client,
+    (page) =>
+      `/orgs/${encodeURIComponent(org)}/teams?per_page=100&page=${page}`,
   )
   return teams.filter((t) => t.slug && isInviteTeamSlug(t.slug))
 }

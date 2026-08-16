@@ -32,10 +32,12 @@ import { rosterPath } from "@/util/rosterPath"
 import { prefixCommit } from "@/util/commit"
 import {
   formatRosterProblems,
+  normalizeStudentRow,
   parseRosterCsv,
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
+import { normalizeInviteEmail } from "@/util/inviteTeam"
 import { withGitConflictRetry } from "../classrooms"
 import {
   ROLE_RANK,
@@ -114,6 +116,60 @@ export async function withRosterRewrite(
     await updateRef(client, org, newCommit.sha, configBranch)
     return { changed }
   })
+}
+
+// Append email-only pending rows for freshly sent email invites, one commit
+// for the whole batch. Only invites that carry a metadata team should be
+// passed in — the reconcile keeps an email-only row exactly as long as a live
+// invite team backs it, so a team-less row would be removed on the next pass.
+// Emails already claimed by any row are skipped (a resend must not duplicate).
+// Best-effort and never throws: a missed row simply appears later, when the
+// accepted invite's reconcile fold appends it.
+export async function appendEmailInviteRows(
+  client: GitHubClient,
+  input: { org: string; classroom: string },
+  invites: { email: string; role: ClassroomRole }[],
+): Promise<void> {
+  if (invites.length === 0) return
+  try {
+    await withRosterRewrite(client, input, (rows) => {
+      const claimed = new Set(
+        rows
+          .map((r) => r.email?.trim().toLowerCase())
+          .filter((e): e is string => Boolean(e)),
+      )
+      const added: StudentCsvRow[] = []
+      for (const invite of invites) {
+        const email = normalizeInviteEmail(invite.email)
+        if (!email || claimed.has(email)) continue
+        claimed.add(email)
+        added.push(
+          normalizeStudentRow({
+            username: "",
+            github_id: "",
+            first_name: "",
+            last_name: "",
+            email,
+            section: "",
+            role: invite.role,
+          }),
+        )
+      }
+      return {
+        nextStudents: [...rows, ...added],
+        changed: added.length,
+        message: `Add ${added.length} invited email${
+          added.length === 1 ? "" : "s"
+        } to roster: ${input.classroom}`,
+      }
+    })
+  } catch (err) {
+    log.error("email invite roster row write failed", {
+      org: input.org,
+      classroom: input.classroom,
+      err,
+    })
+  }
 }
 
 // Slug is authoritative in classroom.json: GitHub may assign a non-derived slug
