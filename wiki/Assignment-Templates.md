@@ -73,7 +73,7 @@ see [`gh teacher assignment add`](gh-teacher#assignment-add).
 > shim is written by `gh student accept` (it's embedded in `gh-student`) and
 > never changes after accept. A copy in the template would be clobbered by
 > submit's `.github/` re-fetch and double-grade or break grading. Autograding
-> logic lives in your config repo, not the template — see [Autograding Basics](Autograding-Basics).
+> logic lives in your `classroom50` repository, not the template — see [Autograding Basics](Autograding-Basics).
 
 ## Set it up
 
@@ -140,7 +140,7 @@ organization is rejected (students can't be granted access, so accept would
     assignment's Repository features settings — by default each **inherits the
     template's current setting**; you can force any of them on or off per
     assignment. This applies on both the web and CLI accept paths. Repos
-    accepted before a change can be reconciled with the submissions page's
+    accepted before a change can be updated with the submissions page's
     **Update repository features** action.
 
 ## Reusing one template across assignments

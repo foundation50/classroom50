@@ -11,7 +11,7 @@ The CLI never creates the organization. Before running any CLI command:
 
 1. **Create the organization** at <https://github.com/account/organizations/new>.
    Free orgs work for public templates; Team or Enterprise Cloud is required for
-   Pages from the private `classroom50` config repo.
+   Pages from the private `classroom50` repository.
 2. **Flag your template repositories** under **Settings → General → Template
    repository**.
 
@@ -69,7 +69,7 @@ warns and asks for confirmation before proceeding. See
 | `admin:org` | Org invitations, reading and removing memberships (implies `read:org`). |
 | `read:org` | Checking org membership. |
 | `repo` | Repo creation, contents writes, collaborators. |
-| `workflow` | Committing the config repo's workflow files during `init` (GitHub 404s the write without it). |
+| `workflow` | Committing the `classroom50` repository's workflow files during `init` (GitHub 404s the write without it). |
 
 > [!NOTE]
 > **Why the web app's sign-in asks for "Delete repositories".** Signing in at
@@ -254,11 +254,11 @@ The CLIs call GitHub through [`go-gh`](https://github.com/cli/go-gh);
 | GET | `/orgs/{org}` | Check org plan. |
 | PATCH | `/orgs/{org}` | Lock down member privileges at `init`. |
 | GET / PUT | `/orgs/{org}/actions/permissions` | Read/enable org Actions. |
-| POST | `/orgs/{org}/repos` | Create the `classroom50` config repo. |
-| GET | `/repos/{owner}/{repo}` | Check the config repo / validate a template. |
+| POST | `/orgs/{org}/repos` | Create the `classroom50` repository. |
+| GET | `/repos/{owner}/{repo}` | Check the `classroom50` repository / validate a template. |
 | POST / PUT | `/repos/{owner}/{repo}/pages` | Enable Pages and set it public. |
-| PUT | `/repos/{owner}/{repo}/branches/{branch}/protection` | Protect the config repo branch. |
-| GET / PUT | `/repos/{owner}/{repo}/actions/permissions` | Read/re-enable Actions on the config repo. |
+| PUT | `/repos/{owner}/{repo}/branches/{branch}/protection` | Protect the `classroom50` repository branch. |
+| GET / PUT | `/repos/{owner}/{repo}/actions/permissions` | Read/re-enable Actions on the `classroom50` repository. |
 | GET / PUT | `/repos/{owner}/{repo}/actions/permissions/workflow` | Read/set `GITHUB_TOKEN` permissions. |
 | PUT | `/repos/{owner}/{repo}/actions/permissions/access` | Allow same-org reusable workflows. |
 | GET / PUT | `/repos/{owner}/{repo}/actions/secrets/...` | Upload the encrypted service PAT. |

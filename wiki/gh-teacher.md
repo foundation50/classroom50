@@ -14,7 +14,7 @@ output, or `--verbose` / `-v` for per-step detail.
 | `whoami` | Print the authenticated GitHub user. |
 | `login` | Log in with the Classroom 50 scopes (`admin:org`, `read:org`, `repo`, `workflow`). Add scopes with `-s` (e.g., `delete_repo`). |
 | `logout` | Log out via `gh auth logout`. |
-| `init <org>` | Set up `<org>/classroom50` (org lockdown, config repo, Pages, branch protection, service token). Idempotent. |
+| `init <org>` | Set up `<org>/classroom50` (org lockdown, repository, Pages, branch protection, service token). Idempotent. |
 | `audit <org>` | Read-only audit of the org member-privilege lockdown. |
 | `rotate-service-token <org>` | Replace the `CLASSROOM50_SERVICE_TOKEN` secret. |
 | `classroom add <org> <short-name>` | Add a classroom. Flags: `--name`, `--term`, `--unlisted`, `--key`. |
@@ -45,7 +45,7 @@ output, or `--verbose` / `-v` for per-step detail.
 
 ## `init`
 
-One-time bootstrap for the per-org `classroom50` config repo. See the
+One-time bootstrap for the per-org `classroom50` repository. See the
 [CLI Teacher Guide](CLI-Teacher-Guide#3-set-up-the-organization) for when to run
 it.
 
@@ -54,11 +54,11 @@ CLASSROOM50_SERVICE_TOKEN=github_pat_... gh teacher init <org>
 gh teacher init <org>              # interactive token prompt
 gh teacher init <org> --dry-run    # preview, no changes
 gh teacher init <org> --json       # machine-readable summary
-gh teacher init <org> --yes        # skip the skeleton-refresh prompt
+gh teacher init <org> --yes        # skip the workflow-refresh prompt
 ```
 
 Idempotent: re-running resumes where a prior run stopped and offers to refresh
-stale skeleton files (after a confirmation prompt).
+stale workflow files (after a confirmation prompt).
 
 <details>
 <summary>Steps <code>init</code> performs, in order</summary>
@@ -69,9 +69,9 @@ stale skeleton files (after a confirmation prompt).
    private-repo creation enabled so `gh student accept` works. On a plan-gated
    rejection it retries per policy and warns per field.
 3. **Enable org Actions** — turns Actions on if it's off org-wide.
-4. **Create or fetch the config repo** — `classroom50`, with `auto_init`.
-5. **Skeleton drop / refresh** — commits the embedded workflows and scripts; on
-   re-runs, refreshes stale files after confirmation (`--yes` skips).
+4. **Create or fetch the `classroom50` repository** — private, with `auto_init`.
+5. **Commit or refresh workflow files** — commits the embedded workflows and
+   scripts; on re-runs, refreshes stale files after confirmation (`--yes` skips).
 6. **Enable Pages** — public, so students and the runner can fetch published
    files unauthenticated.
 7. **Branch protection** — no force-push or deletion on the default branch.
@@ -89,7 +89,7 @@ Guide and the
 in GitHub Integration.
 
 <details>
-<summary>Skeleton files shipped into the config repo</summary>
+<summary>Workflow and script files shipped into the <code>classroom50</code> repository</summary>
 
 | Path | Purpose |
 | --- | --- |
@@ -100,7 +100,7 @@ in GitHub Integration.
 | `.github/scripts/runner.py` | Grading bootstrap fetched from Pages each submission. |
 | `.github/scripts/collect_scores.py` | Team-driven score collector. |
 | `.github/scripts/probe_token.py` | Service-token scope probe. |
-| `README.md` | Describes the config repo layout. |
+| `README.md` | Describes the `classroom50` repository layout. |
 
 Both collection and regrade are **team-driven**: the classroom GitHub teams are
 the source of truth for enrollment. Collection polls the student team plus the
@@ -120,7 +120,7 @@ gh teacher audit <org> --json
 ```
 
 Classifies each in-scope setting as **Verified** (API value matches the
-lockdown), **Action required** (drifted, with the fix), or **Confirm by hand**
+lockdown), **Action required** (changed outside Classroom 50, with the fix), or **Confirm by hand**
 (the four settings GitHub exposes no API to read). Exits non-zero when any
 API-readable field is unenforced, so `gh teacher audit <org> && …` is safe in
 scripts. `--json` emits `{org, plan, read_ok, lockdown_complete, enforced,
@@ -181,7 +181,7 @@ accept).
 
 </details>
 
-**Errors:** missing config repo → `run gh teacher init <org> first`; existing
+**Errors:** missing `classroom50` repository → `run gh teacher init <org> first`; existing
 classroom directory → refuses to overwrite; bad short-name → prints the rule.
 
 ### `classroom list`
@@ -329,7 +329,7 @@ Bulk upsert. Accepts a 5-column header
 resolved up front — one typo aborts before any commit. New students are
 invited.
 
-**Errors common to roster commands:** missing config repo → `run gh teacher init
+**Errors common to roster commands:** missing `classroom50` repository → `run gh teacher init
 <org> first`; missing `roster.csv` → points at `classroom add`; bad header →
 prints the offending header; unknown GitHub user → prints the username; repeated
 rebase failures → `lost the rebase race`, retry.
@@ -337,7 +337,7 @@ rebase failures → `lost the rebase race`, retry.
 ## `staff`
 
 Manage a classroom's **staff teams** — `classroom50-<classroom>-{teacher,hta,ta}`.
-The `teacher` and `hta` (head TA) teams get write on the config repo; `ta` gets
+The `teacher` and `hta` (head TA) teams get write on the `classroom50` repository; `ta` gets
 read-only. The classroom's GitHub teams — not the `role` column in `roster.csv` —
 are the role authority, so a classroom's staff is the same from the CLI or the
 web app.
@@ -404,7 +404,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--autograder <name>` | Swap the reusable workflow (rare). Default `default`. |
 | `--feedback-pr` | One review PR per student repo. **On by default**; `--feedback-pr=false` disables. |
 | `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; changeable on a same-slug re-add (warns; only affects future accepts); mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode/submission-tag/no-autograder/init-shim. |
-| `--pass-threshold <0–100>` | Advisory passing bar shown by gradebook clients. Off when omitted (distinct from `0`). |
+| `--pass-threshold <0–100>` | Advisory passing bar shown on the submissions page. Off when omitted (distinct from `0`). |
 | `--submission-mode every-push\|tag` | When the autograder fires: `every-push` (default) grades every push; `tag` grades only `submit/*` tag pushes (the submit clients push the tag — plain `git push` costs no Actions minutes). Change it later with `assignment submission-mode`. |
 | `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading: `git tag phase1 && git push origin phase1` grades that commit. Simple globs (`v*`) work; exact names are safer. The record still lives at the canonical `submit/*` tag. Mutually exclusive with `--empty-repo`. |
 
@@ -444,7 +444,7 @@ of every shape is in
 <details>
 <summary>Errors</summary>
 
-- Missing config repo / `assignments.json` → points at `init` / `classroom add`.
+- Missing `classroom50` repository / `assignments.json` → points at `init` / `classroom add`.
 - Template 404 → make it public or copy it into the org.
 - Template private and outside `<org>` → rejected (students can't be granted
   access).
@@ -610,7 +610,7 @@ gh teacher member list <org> --quiet
 ```
 
 Shows *actual* GitHub membership (the roster is the *intended* list), so you can
-reconcile drift — e.g., a student who never accepted their invite. Default is an
+spot mismatches — e.g., a student who never accepted their invite. Default is an
 aligned table; `--json` emits `{login, kind, role, github_id}`; `--quiet` prints
 one login per line. Reading org invitations needs `admin:org`. Read-only.
 
@@ -634,7 +634,7 @@ dirs are skipped on clone but still get `result.json` refreshed.
 
 **`--by-pattern`** pages through the org's repos and clones every one whose name
 starts with `<classroom>-<assignment>-`, skipping the team lookup, the
-`result.json` refresh, and the `scores.csv` summary. Use it when the config repo
+`result.json` refresh, and the `scores.csv` summary. Use it when the `classroom50` repository
 isn't bootstrapped, or to grab every matching repo regardless of the roster.
 
 ## `teardown`
@@ -646,7 +646,7 @@ gh teacher teardown --yes <org>    # skip the prompt (scripts only)
 
 Deletes **every** repository in `<org>` — a development reset. It confirms the
 `classroom50` marker repo exists (refusing otherwise), lists all repos, prompts
-for the typed org name, then deletes each (the config repo last, so an
+for the typed org name, then deletes each (the `classroom50` repository last, so an
 interrupted run stays safe to re-run).
 
 > [!WARNING]

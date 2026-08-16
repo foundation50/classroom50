@@ -95,7 +95,7 @@ with Classroom 50. The two tools disagree about the private-repository
 forking policy, and each keeps flipping the setting back, which shows up as
 recurring settings warnings. Archive the old GitHub Classroom classrooms
 once you've migrated. See
-[Why org policies sometimes "drift"](How-Classroom-50-Works#why-org-policies-sometimes-drift).
+[Why organization settings sometimes change back](How-Classroom-50-Works#why-organization-settings-sometimes-change-back).
 
 ## Your existing scripts still work
 

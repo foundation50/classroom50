@@ -56,17 +56,17 @@ served from **GitHub Pages** — all inside your own organization.
 
 ## Get started
 
-**Web app** — no installation required:
-
-1. Teachers: [Web Teacher Guide](Web-Teacher-Guide).
-2. Students: [Web Student Guide](Web-Student-Guide).
-
-**Command line** — needs the [GitHub CLI (`gh`)](https://cli.github.com/) and
-[Go](https://go.dev/):
-
-1. [Install the CLI](Installation).
-2. Teachers: [CLI Teacher Guide](CLI-Teacher-Guide).
-3. Students: [CLI Student Guide](CLI-Student-Guide).
+1. Check the [prerequisites](Prerequisites-and-GitHub-Education): a GitHub
+   organization on the Team or Enterprise plan, free for verified teachers
+   through GitHub Education.
+2. Follow the [Quickstart](Quickstart) from empty organization to a graded
+   assignment. Every step works from the web app (no installation) or the
+   [command-line tools](Installation).
+3. Go deeper with the full walkthroughs: the
+   [Web Teacher Guide](Web-Teacher-Guide) or the
+   [CLI Teacher Guide](CLI-Teacher-Guide), and for students the
+   [Web Student Guide](Web-Student-Guide) or
+   [CLI Student Guide](CLI-Student-Guide).
 
 New to the terminology? See the [Glossary](Glossary). Curious how it all fits
 together? Read [How Classroom 50 Works](How-Classroom-50-Works). Have a question?

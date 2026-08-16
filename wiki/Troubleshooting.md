@@ -254,7 +254,7 @@ Fix it in the org, under Settings → Member privileges → Repository creation:
 
 Re-running **organization setup** in Classroom 50 (Organization settings →
 Re-run setup) applies this along with the rest of the audited lockdown, so it's
-the better fix if the org has drifted in other ways too.
+the better fix if other settings have changed too.
 
 If an enterprise policy pins repository creation at the enterprise level, the
 org-level toggle is ignored and only an enterprise owner can change it. In that
@@ -321,7 +321,7 @@ Teachers: if a repo you *expected* to grade on push shows that status, the
 repo's shim is still on the every-push trigger while the assignment is
 tag-mode (or vice versa) — run
 `gh teacher assignment submission-mode <org> <classroom> <slug> --tag` (or
-`--every-push`) or the web bulk action to reconcile, and have students
+`--every-push`) or the web bulk action to update the repositories, and have students
 `git pull` afterward.
 
 ## `gh teacher download` clones nothing
@@ -335,13 +335,13 @@ By default `download` is team-driven. If you get zero clones:
   `https://github.com/orgs/<org>/repositories?q=<classroom>-<assignment>`.
 - Re-run with `-v` to see which members were probed.
 
-If the config repo isn't bootstrapped, or you want every matching repo regardless
+If the `classroom50` repository isn't bootstrapped, or you want every matching repo regardless
 of the roster, pass `--by-pattern`.
 
 ## `collect-scores` warns "collected 0 submissions"
 
 Almost always means the `CLASSROOM50_SERVICE_TOKEN` can't read the student repos
-— not that the class submitted nothing. (A fine-grained PAT returns 404 for
+— not that no one submitted. (A fine-grained PAT returns 404 for
 out-of-scope repos, indistinguishable from "no release yet".)
 
 - Confirm the token has **Contents: Read and write on all org repos** (not "Only

@@ -138,7 +138,7 @@ On the classroom page, click **+ Assignment**. Fill in:
 - **Name** — the assignment's name.
 - **Description** (optional) — details for students.
 - **Due date** (optional) — a date and time in your local timezone. A due date
-  marks later submissions **late** in the gradebook; it does not block pushes
+  marks later submissions **late** in the collected scores; it does not block pushes
   or revoke access. To actually close an assignment, use the **Close
   submission** action (see below).
 - **Assignment type** — **Individual** (one repository per student) or **Group
@@ -190,7 +190,7 @@ section — most assignments never need them:
   **Inherit from template**, re-applies the template's current setting at
   accept time (again, GitHub's generate doesn't copy these); you can force any
   feature **On** or **Off** instead. Template-less assignments default to
-  GitHub's own defaults. To reconcile repositories that already exist, use the
+  GitHub's own defaults. To update repositories that already exist, use the
   **Update repository features** action on the submissions page.
 
 > [!NOTE]
@@ -198,7 +198,7 @@ section — most assignments never need them:
 > accepted from now on** — repositories students already accepted aren't
 > retrofitted, so they keep their original starter code and setup. When at least
 > one student has already accepted, the edit form asks you to confirm and warns
-> that you'll need to reconcile the existing repositories yourself. (**Assignment
+> that you'll need to update the existing repositories yourself. (**Assignment
 > type** — Individual vs. Group — is the exception: it stays locked on edit,
 > because switching it would invalidate every existing submission.)
 
@@ -217,7 +217,7 @@ section — most assignments never need them:
   choice sticks — leaving Autograded and coming back won't reset it. Can be
   changed after creation (edits only affect repositories accepted from now on;
   turning autograding off later makes already-accepted repositories' autograde
-  runs fail and drop out of the gradebook).
+  runs fail and drop out of the collected scores).
 - **Submission type** — when the autograder runs. **Every push to the default
   branch** (the default) grades each push. **A tagged commit** grades only
   when a student submits (`gh student submit`) or pushes a `submit/*` tag —
@@ -410,7 +410,7 @@ taken to the accept page:
 Accepting creates a repository named `<CLASSROOM>-<ASSIGNMENT>-<USERNAME>`.
 Pushing to it triggers autograding, which builds a Release containing a
 `result.json` file. The score-collection workflow (which runs daily, or on
-demand) aggregates those results into the classroom's gradebook.
+demand) aggregates those results into the classroom's scores.
 
 ![Accept success](images/web_accept_assignment_success.png)
 
@@ -418,12 +418,12 @@ demand) aggregates those results into the classroom's gradebook.
 
 ![Assignment with submissions](images/web_viewing_assignment_submissions.png)
 
-Scores flow into the gradebook when collection runs: the nightly workflow
+Scores update when collection runs: the nightly workflow
 covers every classroom, or click **Sync now** in the freshness strip at the top
 of the submissions page (also **Collect now** in the **Actions** menu). Both
 are **scoped to the current assignment** — they walk only this assignment's
 repositories, so a sync is fast even in a large classroom and doesn't rebuild
-other assignments' gradebooks. The strip shows when this assignment's data was
+other assignments' scores. The strip shows when this assignment's data was
 last synced (a per-assignment `collected_at` stamp in `scores.json`). Click
 **View workflow** to see the Actions run.
 
