@@ -123,19 +123,11 @@ export async function reconcileClassroom(
 
   // Recover any invited-email metadata for students who have accepted since the
   // last visit, folding it into roster.csv and deleting the per-invite teams.
-  // Best-effort: a failure here must never latch the classroom heal off (mirrors
-  // grantStaffTeamsConfigRepoAccess), so it's caught and logged, not rethrown.
-  let invitesBackfilled: string[] = []
-  try {
-    const result = await backfillInviteMetadata(client, { org, classroom })
-    invitesBackfilled = result.backfilled
-  } catch (err) {
-    log.warn("classroom reconcile: invite metadata backfill failed", {
-      org,
-      classroom,
-      err,
-    })
-  }
+  // backfillInviteMetadata never throws (best-effort by contract), so a failure
+  // inside it can't latch the classroom heal off.
+  const invitesBackfilled = (
+    await backfillInviteMetadata(client, { org, classroom })
+  ).backfilled
 
   if (
     description.changed ||

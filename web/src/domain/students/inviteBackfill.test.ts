@@ -4,7 +4,8 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 const listInviteTeams = vi.fn()
 const readInviteTeam = vi.fn()
 const deleteInviteTeam = vi.fn()
-const listOrgAdmins = vi.fn()
+const listTeamMembers = vi.fn()
+const assertClassroomNotArchived = vi.fn()
 const withRosterRewrite = vi.fn()
 
 vi.mock("@/github-core/mutations", () => ({
@@ -13,7 +14,11 @@ vi.mock("@/github-core/mutations", () => ({
   deleteInviteTeam: (...a: unknown[]) => deleteInviteTeam(...a),
 }))
 vi.mock("@/github-core/queries", () => ({
-  listOrgAdmins: (...a: unknown[]) => listOrgAdmins(...a),
+  listTeamMembers: (...a: unknown[]) => listTeamMembers(...a),
+}))
+vi.mock("../classrooms", () => ({
+  assertClassroomNotArchived: (...a: unknown[]) =>
+    assertClassroomNotArchived(...a),
 }))
 vi.mock("./rosterPrimitives", () => ({
   withRosterRewrite: (...a: unknown[]) => withRosterRewrite(...a),
@@ -22,12 +27,31 @@ vi.mock("./rosterPrimitives", () => ({
 
 import { backfillInviteMetadata } from "./inviteBackfill"
 import { inviteTeamName } from "@/util/inviteTeam"
+import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 
 const client = {} as never
-const OWNER = { id: 1, login: "prof" }
+
+const emptyRateLimit: GitHubRateLimit = {
+  limit: null,
+  remaining: null,
+  used: null,
+  reset: null,
+  resource: null,
+  retryAfter: null,
+}
+
+const rateLimitError = () =>
+  new GitHubAPIError({
+    status: 429,
+    url: "https://api.github.com/x",
+    message: "rate limited",
+    body: null,
+    rateLimit: emptyRateLimit,
+  })
 
 // Build a valid invite-team state for (classroom, email) with the given
-// non-owner members, so the description's email hashes back to the slug.
+// regular-role members (readInviteTeam already excludes maintainers, i.e. the
+// auto-added owner), so the description's email hashes back to the slug.
 async function inviteState(
   classroom: string,
   email: string,
@@ -43,14 +67,19 @@ async function inviteState(
       classroom,
       ...extra,
     },
-    members: [OWNER, ...members],
+    members,
   }
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
-  listOrgAdmins.mockResolvedValue([OWNER])
+  assertClassroomNotArchived.mockResolvedValue(undefined)
   deleteInviteTeam.mockResolvedValue(undefined)
+  // Default: every accepted invitee used below is still on a classroom team.
+  listTeamMembers.mockResolvedValue([
+    { id: 2, login: "member2" },
+    { id: 3, login: "member3" },
+  ])
   // Default rewrite: run the mutate fn against an empty roster and report change.
   withRosterRewrite.mockImplementation(
     async (_c: unknown, _i: unknown, mutate: (rows: unknown[]) => unknown) =>
@@ -68,9 +97,10 @@ describe("backfillInviteMetadata", () => {
     expect(result.backfilled).toEqual([])
     expect(withRosterRewrite).not.toHaveBeenCalled()
     expect(deleteInviteTeam).not.toHaveBeenCalled()
+    expect(listTeamMembers).not.toHaveBeenCalled()
   })
 
-  it("backfills the one non-owner member (excluding the owner) and deletes the team", async () => {
+  it("backfills the one accepted member and deletes the team", async () => {
     const state = await inviteState("cs101", "alice@example.com", [
       { id: 2, login: "alice" },
     ])
@@ -94,7 +124,7 @@ describe("backfillInviteMetadata", () => {
     })
   })
 
-  it("skips a still-pending team (owner-only membership) without deleting", async () => {
+  it("skips a still-pending team (no regular members) without deleting", async () => {
     const state = await inviteState("cs101", "bob@example.com", [])
     listInviteTeams.mockResolvedValue([{ slug: state.slug }])
     readInviteTeam.mockResolvedValue(state)
@@ -107,7 +137,7 @@ describe("backfillInviteMetadata", () => {
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
-  it("skips a team with >1 non-owner member (anomaly)", async () => {
+  it("skips a team with >1 regular member (anomaly)", async () => {
     const state = await inviteState("cs101", "carol@example.com", [
       { id: 2, login: "carol" },
       { id: 3, login: "intruder" },
@@ -153,6 +183,58 @@ describe("backfillInviteMetadata", () => {
     })
     expect(result.backfilled).toEqual([])
     expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  it("deletes without a roster write when the invitee is off every classroom team (unenrolled)", async () => {
+    const state = await inviteState("cs101", "gone@example.com", [
+      { id: 99, login: "gone" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: state.slug }])
+    readInviteTeam.mockResolvedValue(state)
+    listTeamMembers.mockResolvedValue([]) // on no classroom team
+
+    const result = await backfillInviteMetadata(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    expect(result.backfilled).toEqual([])
+    expect(result.deletedStale).toBe(1)
+    expect(withRosterRewrite).not.toHaveBeenCalled()
+    expect(deleteInviteTeam).toHaveBeenCalledWith(client, "org", state.slug)
+  })
+
+  it("skips a team (no delete) when the enrollment read fails", async () => {
+    const state = await inviteState("cs101", "held@example.com", [
+      { id: 2, login: "held" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: state.slug }])
+    readInviteTeam.mockResolvedValue(state)
+    listTeamMembers.mockRejectedValue(new Error("boom"))
+
+    const result = await backfillInviteMetadata(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    expect(result.backfilled).toEqual([])
+    expect(result.deletedStale).toBe(0)
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  it("does nothing on an archived classroom", async () => {
+    assertClassroomNotArchived.mockRejectedValue(new Error("archived"))
+    const result = await backfillInviteMetadata(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    expect(result.backfilled).toEqual([])
+    expect(listInviteTeams).not.toHaveBeenCalled()
+  })
+
+  it("never throws: a failing team list yields an empty result", async () => {
+    listInviteTeams.mockRejectedValue(new Error("boom"))
+    await expect(
+      backfillInviteMetadata(client, { org: "org", classroom: "cs101" }),
+    ).resolves.toEqual({ backfilled: [], deletedStale: 0 })
   })
 
   it("teacher-entered roster values win over the recovered record", async () => {
@@ -209,5 +291,37 @@ describe("backfillInviteMetadata", () => {
       classroom: "cs101",
     })
     expect(result.backfilled).toEqual(["grace@example.com"])
+  })
+
+  it("a rate limit stops the pass instead of hammering the remaining teams", async () => {
+    listInviteTeams.mockResolvedValue([
+      { slug: "invite-aaaaaaaaaaaaaaaa" },
+      { slug: "invite-bbbbbbbbbbbbbbbb" },
+    ])
+    readInviteTeam.mockRejectedValue(rateLimitError())
+
+    const result = await backfillInviteMetadata(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    expect(result.backfilled).toEqual([])
+    expect(readInviteTeam).toHaveBeenCalledTimes(1)
+  })
+
+  it("reports a completed backfill even when the team delete fails", async () => {
+    const state = await inviteState("cs101", "kept@example.com", [
+      { id: 2, login: "kept" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: state.slug }])
+    readInviteTeam.mockResolvedValue(state)
+    deleteInviteTeam.mockRejectedValue(new Error("boom"))
+
+    const result = await backfillInviteMetadata(client, {
+      org: "org",
+      classroom: "cs101",
+    })
+    // The roster write completed, so the caller must still invalidate; the
+    // leftover team is retried (idempotently) on the next pass.
+    expect(result.backfilled).toEqual(["kept@example.com"])
   })
 })

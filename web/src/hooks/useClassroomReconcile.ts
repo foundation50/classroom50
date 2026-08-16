@@ -9,6 +9,7 @@ import {
 import { githubKeys } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { rosterPath } from "@/util/rosterPath"
 import { logger } from "@/lib/logger"
 import { useBestEffortOwnerReconcile } from "@/hooks/useBestEffortOwnerReconcile"
 
@@ -62,11 +63,7 @@ export function useClassroomReconcile(
         // Recovered invited emails were written into roster.csv; refresh it so
         // the roster shows the backfilled name/email/section.
         void queryClient.invalidateQueries({
-          queryKey: githubKeys.csvFile(
-            org,
-            CONFIG_REPO,
-            `${classroom}/roster.csv`,
-          ),
+          queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
         })
       }
     },

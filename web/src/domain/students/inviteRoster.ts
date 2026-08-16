@@ -1,8 +1,10 @@
 import type { GitHubClient } from "@/github-core/client"
 import {
   createOrgInvitation,
+  deleteInviteTeam,
   ensureInviteTeam,
   ensureOrgMembership,
+  type InviteTeamRef,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { assertClassroomNotArchived } from "../classrooms"
@@ -304,26 +306,52 @@ export async function bulkInviteByEmail(
   const inviteOne = async (target: EmailTarget) => {
     const teamId = teamIdByRole[target.role]
     const teamIds = teamId ? [teamId] : []
-    try {
-      const inviteTeam = await ensureInviteTeam(client, org, {
-        email: target.email,
-        classroom,
-      })
-      teamIds.push(inviteTeam.id)
-    } catch (err) {
-      if (err instanceof GitHubAPIError && err.isRateLimited) throw err
-      log.error("bulk invite metadata team create failed", {
-        email: target.email,
-        err,
-      })
-      // Non-rate-limit failure: proceed with the classroom team only.
+    let inviteTeam: InviteTeamRef | null = null
+    // Skip the metadata team for admin-role (teacher) invites: an accepting
+    // owner is auto-promoted to team maintainer, so the backfill's role=member
+    // read would never see them and the team would sit forever as a "pending"
+    // orphan holding their email.
+    if (githubOrgRoleForRole(target.role) !== "admin") {
+      try {
+        inviteTeam = await ensureInviteTeam(client, org, {
+          email: target.email,
+          classroom,
+        })
+        teamIds.push(inviteTeam.id)
+      } catch (err) {
+        if (err instanceof GitHubAPIError && err.isRateLimited) throw err
+        log.error("bulk invite metadata team create failed", {
+          email: target.email,
+          err,
+        })
+        // Non-rate-limit failure: proceed with the classroom team only.
+      }
     }
-    return createOrgInvitation(client, {
-      org,
-      email: target.email,
-      team_ids: teamIds.length > 0 ? teamIds : undefined,
-      role: githubOrgRoleForRole(target.role),
-    })
+    try {
+      return await createOrgInvitation(client, {
+        org,
+        email: target.email,
+        team_ids: teamIds.length > 0 ? teamIds : undefined,
+        role: githubOrgRoleForRole(target.role),
+      })
+    } catch (err) {
+      // A doomed invite (422 already-member/-invited, or a hard failure) must
+      // not leave a fresh, member-less metadata team behind for GC to reap.
+      // Keep it on a rate limit (the deferred retry re-adopts it) and keep an
+      // adopted team (it may hold a prior invite's still-unrecovered record).
+      const rateLimited = err instanceof GitHubAPIError && err.isRateLimited
+      if (!rateLimited && inviteTeam?.created) {
+        try {
+          await deleteInviteTeam(client, org, inviteTeam.slug)
+        } catch (cleanupErr) {
+          log.error("bulk invite metadata team cleanup failed", {
+            email: target.email,
+            err: cleanupErr,
+          })
+        }
+      }
+      throw err
+    }
   }
 
   let rateLimited = false

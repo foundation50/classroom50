@@ -290,6 +290,7 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
       inviteAttempted: false,
       inviteBody: null as unknown,
       inviteTeamCreated: false,
+      inviteTeamDeleted: false,
     }
 
     const requestRaw = vi.fn().mockImplementation((path: string) => {
@@ -330,6 +331,14 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
             privacy: "secret",
             description: body?.description,
           })
+        }
+        // The doomed-invite cleanup deletes the fresh metadata team.
+        if (
+          path.includes("/teams/invite-") &&
+          (options as { method?: string } | undefined)?.method === "DELETE"
+        ) {
+          state.inviteTeamDeleted = true
+          return Promise.resolve({})
         }
         return Promise.reject(new Error(`unexpected request: ${path}`))
       })
@@ -395,6 +404,10 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
     expect(result.inviteWarning).toMatch(/already belongs to a member/i)
     expect(result.inviteWarning).toMatch(/by github username/i)
     expect(state.csvWritten).toBe(false)
+    // The doomed invite's freshly created metadata team was cleaned up rather
+    // than left as a member-less orphan holding the email.
+    expect(state.inviteTeamCreated).toBe(true)
+    expect(state.inviteTeamDeleted).toBe(true)
   })
 })
 
@@ -444,6 +457,9 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     // 429 (with Retry-After) the first N POST /invitations attempts, then let
     // later attempts through — exercises the Retry-After-backed retry pass.
     rateLimitFirstN?: number
+    // 500 every per-invite metadata team create — exercises the graceful
+    // degradation (invite still sent with the classroom team alone).
+    failInviteTeams?: boolean
   }) => {
     const memberEmails = new Set(opts?.memberEmails ?? [])
     const rateLimitEmails = new Set(opts?.rateLimitEmails ?? [])
@@ -456,6 +472,9 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
         role: string
         team_ids?: number[]
       }[],
+      // Names of per-invite metadata teams created / slugs deleted.
+      inviteTeamNames: [] as string[],
+      teamDeletes: [] as string[],
     }
 
     const requestRaw = vi.fn().mockImplementation((path: string) => {
@@ -477,15 +496,36 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
             state.csvWritten = true
             return Promise.resolve({ sha: "tree-sha" })
           }
-          // Staff-team ensure (teacher/ta role -> resolveTeamIdByRole): create
-          // returns a fresh team; the config-repo write grant is a no-op PUT.
+          // Staff-team ensure (teacher/ta role -> resolveTeamIdByRole) AND the
+          // per-invite metadata team create. An invite- name echoes back the
+          // exact description (secret) so ensureInviteTeam's fail-closed
+          // read-back is a no-op; a staff name returns a fresh team.
           if (path.endsWith("/teams") && options?.method === "POST") {
-            const body = (options as { body?: { name?: string } }).body
+            const body = (
+              options as { body?: { name?: string; description?: string } }
+            ).body
+            if (body?.name?.startsWith("invite-")) {
+              if (opts?.failInviteTeams) {
+                return Promise.reject(apiError(500, "team create failed"))
+              }
+              state.inviteTeamNames.push(body.name)
+              return Promise.resolve({
+                id: 9001,
+                slug: body.name,
+                privacy: "secret",
+                description: body.description,
+              })
+            }
             return Promise.resolve({
               id: 5000,
               slug: body?.name ?? "team",
               privacy: "secret",
             })
+          }
+          // The doomed-invite cleanup deletes the fresh metadata team.
+          if (path.includes("/teams/invite-") && options?.method === "DELETE") {
+            state.teamDeletes.push(path.split("/teams/")[1])
+            return Promise.resolve({})
           }
           if (path.includes("/teams/") && path.includes("/repos/")) {
             return Promise.resolve({})
@@ -538,14 +578,31 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     expect(result.skipped).toEqual([])
     expect(result.failed).toEqual([])
     expect(state.csvWritten).toBe(false)
-    // Every invite carried the classroom team as a plain member (default role).
+    // Every invite carried the classroom team AND its per-invite metadata team
+    // as a plain member (default role).
+    expect(state.inviteTeamNames).toHaveLength(2)
     for (const body of state.inviteBodies) {
-      expect(body.team_ids).toEqual([4242])
+      expect(body.team_ids).toEqual([4242, 9001])
       expect(body.role).toBe("direct_member")
     }
   })
 
-  it("invites a teacher as an org OWNER (admin role)", async () => {
+  it("still invites (classroom team only) when the metadata team create fails", async () => {
+    const { client, state } = makeClient({ failInviteTeams: true })
+
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [{ email: "a@x.edu" }],
+    })
+
+    // Graceful degradation: only email retention is lost, never the invite.
+    expect(result.invited.map((i) => i.email)).toEqual(["a@x.edu"])
+    expect(result.failed).toEqual([])
+    expect(state.inviteBodies[0].team_ids).toEqual([4242])
+  })
+
+  it("invites a teacher as an org OWNER (admin role) with no metadata team", async () => {
     const { client, state } = makeClient()
 
     await bulkInviteByEmail(client, {
@@ -558,10 +615,13 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
       email: "prof@x.edu",
       role: "admin",
     })
+    // An accepting owner is auto-promoted to team maintainer, so the backfill's
+    // role=member read would never see them — no metadata team is created.
+    expect(state.inviteTeamNames).toEqual([])
   })
 
-  it("routes a 422 already-member into skipped, not failed", async () => {
-    const { client } = makeClient({ memberEmails: ["member@x.edu"] })
+  it("routes a 422 already-member into skipped and deletes its fresh metadata team", async () => {
+    const { client, state } = makeClient({ memberEmails: ["member@x.edu"] })
 
     const result = await bulkInviteByEmail(client, {
       org: "acme",
@@ -572,6 +632,10 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     expect(result.skipped).toEqual([{ email: "member@x.edu" }])
     expect(result.invited.map((i) => i.email)).toEqual(["fresh@x.edu"])
     expect(result.failed).toEqual([])
+    // The doomed invite's freshly created metadata team was cleaned up; the
+    // successful invite's team survives.
+    expect(state.teamDeletes).toHaveLength(1)
+    expect(state.inviteTeamNames).toContain(state.teamDeletes[0])
   })
 
   it("reports progress and returns early for an empty invite list", async () => {
@@ -611,7 +675,7 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
   it("routes a non-422, non-rate-limit error into failed (not skipped)", async () => {
     // A 500 (or any non-422/non-throttle error) must land in `failed` with its
     // message surfaced, while the rest of the batch still invites.
-    const { client } = makeClient({ failEmails: ["broken@x.edu"] })
+    const { client, state } = makeClient({ failEmails: ["broken@x.edu"] })
 
     const result = await bulkInviteByEmail(client, {
       org: "acme",
@@ -625,6 +689,8 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     expect(result.invited.map((i) => i.email)).toEqual(["ok@x.edu"])
     expect(result.skipped).toEqual([])
     expect(result.deferred).toEqual([])
+    // The failed invite's fresh metadata team was deleted, not orphaned.
+    expect(state.teamDeletes).toHaveLength(1)
   })
 
   it("defers the rest once a mid-batch rate limit hits, sending no new invites", async () => {
@@ -767,17 +833,18 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
     })
 
     const byEmail = new Map(state.inviteBodies.map((b) => [b.email, b]))
-    // Student rides the classroom team (id 4242) as a plain member.
+    // Student rides the classroom team (id 4242) plus their metadata team.
     expect(byEmail.get("stu@x.edu")).toMatchObject({
       role: "direct_member",
-      team_ids: [4242],
+      team_ids: [4242, 9001],
     })
-    // TA rides the ensured staff team (id 5000) as a plain member.
+    // TA rides the ensured staff team (id 5000) plus their metadata team.
     expect(byEmail.get("ta@x.edu")).toMatchObject({
       role: "direct_member",
-      team_ids: [5000],
+      team_ids: [5000, 9001],
     })
-    // Teacher becomes an org OWNER on the ensured staff team.
+    // Teacher becomes an org OWNER on the ensured staff team; no metadata team
+    // (an owner would be a maintainer the backfill can never see).
     expect(byEmail.get("prof@x.edu")).toMatchObject({
       role: "admin",
       team_ids: [5000],

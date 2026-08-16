@@ -12,7 +12,6 @@ import {
   type InviteDescription,
   type InviteMetadata,
 } from "@/util/inviteTeam"
-import { listTeamMembers } from "../queries/teamReads"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("mutations:inviteTeams")
@@ -32,7 +31,11 @@ export class InviteTeamNotSecretError extends Error {
   }
 }
 
-export type InviteTeamRef = { id: number; slug: string }
+// `created` distinguishes a team this call freshly created from an adopted
+// pre-existing one, so a caller whose org invite then fails can safely delete
+// only what it created (an adopted team may hold a still-unrecovered record
+// from an earlier accepted invite).
+export type InviteTeamRef = { id: number; slug: string; created: boolean }
 
 // Create (or adopt) the per-invite SECRET team for (classroom, email) and write
 // the classroom50/invite/v1 record into its description. The team name is the
@@ -51,6 +54,7 @@ export async function ensureInviteTeam(
   const description = marshalInviteDescription(metadata)
 
   let team: GitHubTeam
+  let created = true
   try {
     team = await createTeam(client, {
       org,
@@ -64,6 +68,7 @@ export async function ensureInviteTeam(
       // A same-named team already exists (a resend, a retry, or a prior invite
       // to the same email+classroom): adopt it, forcing secret + refreshing the
       // description. Name is slug-safe, so it doubles as the lookup slug.
+      created = false
       team = await client.request<GitHubTeam>(
         `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(name)}`,
       )
@@ -88,14 +93,17 @@ export async function ensureInviteTeam(
     throw new InviteTeamNotSecretError(team.slug)
   }
 
-  return { id: team.id, slug: team.slug }
+  return { id: team.id, slug: team.slug, created }
 }
 
 export type InviteTeamState = {
   slug: string
   description: InviteDescription | null
-  // Members of the team, EXCLUDING no one here — the caller filters out org
-  // owners (the auto-added creator/maintainer) to find the accepted invitee.
+  // Regular-role members only (?role=member). GitHub auto-promotes the
+  // creating owner — and any org owner — to team maintainer, so the invitee
+  // (added via the invitation's team_ids as a plain member) is exactly what's
+  // left; no org-admin subtraction needed. 404 (team vanished mid-read) yields
+  // [] so the team simply looks pending; other errors propagate.
   members: GitHubUser[]
 }
 
@@ -116,7 +124,17 @@ export async function readInviteTeam(
     null,
   )
   if (!team) return null
-  const members = await listTeamMembers(client, org, slug)
+  const members = await tolerateGitHubError(
+    () =>
+      paginateAll<GitHubUser>(
+        client,
+        (page) =>
+          `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+            slug,
+          )}/members?role=member&per_page=100&page=${page}`,
+      ),
+    [],
+  )
   return {
     slug: team.slug,
     description: parseInviteDescription(team.description),

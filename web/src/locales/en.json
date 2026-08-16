@@ -509,6 +509,7 @@
     "unenrollStudent": "Unenroll student",
     "added": "Added {{label}}.",
     "invited": "Sent an organization invite to {{label}}.",
+    "inviteMetadataFailed": "{{email}} was invited, but saving their email for later matching failed ({{message}}); their email won't be retained automatically. You can add it after they accept.",
     "alreadyEnrolled": "{{label}} is already enrolled in this classroom.",
     "addFailed": "Couldn't add {{label}}: {{message}}",
     "membersEnrolledCount_one": "{{count}} member enrolled",

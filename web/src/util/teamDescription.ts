@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { SECRET_PATTERN, isValidSecret } from "./secret"
+import { escapeForGoJsonParity } from "./goJsonEscape"
 
 // Schema sentinel for the classroom50/team/v1 bootstrap record stored in a
 // classroom's secret student-team description. Byte-mirror of the CLI's
@@ -64,16 +65,5 @@ export function marshalTeamDescription(input: {
   if (input.term) record.term = input.term
   if (input.secret && isValidSecret(input.secret)) record.secret = input.secret
   if (!input.active) record.active = false
-  // Match Go's json.Marshal, which HTML-escapes <, >, & AND the U+2028/U+2029
-  // line/paragraph separators by default (no SetEscapeHTML(false) on the CLI
-  // writer). JSON.stringify escapes none of these, so without this the two tools
-  // would produce different bytes for a name/term containing them and perpetually
-  // overwrite each other's description (the reconcile compares strings for exact
-  // equality).
-  return JSON.stringify(record)
-    .replaceAll("<", "\\u003c")
-    .replaceAll(">", "\\u003e")
-    .replaceAll("&", "\\u0026")
-    .replaceAll("\u2028", "\\u2028")
-    .replaceAll("\u2029", "\\u2029")
+  return escapeForGoJsonParity(JSON.stringify(record))
 }

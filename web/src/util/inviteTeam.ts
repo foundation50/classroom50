@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { escapeForGoJsonParity } from "./goJsonEscape"
 
 // Schema sentinel for the classroom50/invite/v1 record stored in a per-invite
 // secret team's description. Byte-mirror of schemas/invite-v1.schema.json.
@@ -130,23 +131,11 @@ export function marshalInviteDescription(input: InviteMetadata): string {
     if (candidate.first_name) record.first_name = candidate.first_name
     if (candidate.last_name) record.last_name = candidate.last_name
     if (candidate.section) record.section = candidate.section
-    const encoded = escapeForGoParity(JSON.stringify(record))
+    const encoded = escapeForGoJsonParity(JSON.stringify(record))
     if (encoded.length <= INVITE_DESCRIPTION_BUDGET) return encoded
   }
   // Even the minimal record exceeds the budget (a pathological email/classroom);
   // return it anyway — a too-long description is GitHub's error to surface, and
   // the minimal record is still the most useful thing to attempt.
-  return escapeForGoParity(JSON.stringify(base))
-}
-
-// Match Go's json.Marshal, which HTML-escapes <, >, & and the U+2028/U+2029
-// line/paragraph separators by default. JSON.stringify escapes none; matching
-// keeps the bytes identical to a future Go writer (see marshalTeamDescription).
-function escapeForGoParity(json: string): string {
-  return json
-    .replaceAll("<", "\\u003c")
-    .replaceAll(">", "\\u003e")
-    .replaceAll("&", "\\u0026")
-    .replaceAll("\u2028", "\\u2028")
-    .replaceAll("\u2029", "\\u2029")
+  return escapeForGoJsonParity(JSON.stringify(base))
 }

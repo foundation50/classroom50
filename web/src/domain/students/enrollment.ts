@@ -3,10 +3,12 @@ import {
   createGitCommit,
   createGitTree,
   createOrgInvitation,
+  deleteInviteTeam,
   ensureInviteTeam,
   ensureOrgMembership,
   isActiveMember,
   updateRef,
+  type InviteTeamRef,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
@@ -39,6 +41,7 @@ import {
   tryAddUserToTeam,
   StudentAlreadyEnrolledError,
 } from "./rosterPrimitives"
+import i18n from "@/i18n"
 
 export type AddStudentToClassroomResult = CreateClassroomResult & {
   student: StudentCsvRow
@@ -203,9 +206,10 @@ export async function inviteByEmail(
   // failure here must NOT block the invite (the invitee stays collectable via
   // the classroom team) — only email retention is lost, surfaced as a warning.
   const teamIds = [teamId]
+  let inviteTeam: InviteTeamRef | null = null
   let metadataWarning = ""
   try {
-    const inviteTeam = await ensureInviteTeam(client, org, {
+    inviteTeam = await ensureInviteTeam(client, org, {
       email: normalizedEmail,
       classroom,
       first_name: input.first_name,
@@ -215,10 +219,24 @@ export async function inviteByEmail(
     teamIds.push(inviteTeam.id)
   } catch (err) {
     log.error("invite metadata team create failed", { err })
-    metadataWarning =
-      `${normalizedEmail} was invited, but saving their email for later ` +
-      `matching failed (${getErrorMessage(err)}); their email won't be ` +
-      `retained automatically. You can add it after they accept.`
+    metadataWarning = i18n.t("students.inviteMetadataFailed", {
+      email: normalizedEmail,
+      message: getErrorMessage(err),
+    })
+  }
+
+  // A doomed invite must not leave a fresh, member-less metadata team behind
+  // (an orphan holding an email GC can't yet reap). Only a team THIS call
+  // created is deleted — an adopted one may hold a prior accepted invite's
+  // still-unrecovered record.
+  const cleanupInviteTeam = async () => {
+    if (!inviteTeam?.created) return
+    try {
+      await deleteInviteTeam(client, org, inviteTeam.slug)
+    } catch (err) {
+      // Best-effort: a leftover team is only an orphan awaiting GC.
+      log.error("invite metadata team cleanup failed", { err })
+    }
   }
 
   try {
@@ -232,6 +250,7 @@ export async function inviteByEmail(
     // There's no reliable identity to persist, so just tell the teacher to add
     // them by username (which resolves the immutable github_id).
     if (err instanceof GitHubAPIError && err.status === 422) {
+      await cleanupInviteTeam()
       return {
         inviteWarning:
           `${normalizedEmail} already belongs to a member of the ${org} ` +
@@ -240,6 +259,7 @@ export async function inviteByEmail(
       }
     }
     log.error("org email invite failed", { err })
+    await cleanupInviteTeam()
     return {
       inviteWarning:
         `Sending the organization invite to ${normalizedEmail} failed ` +

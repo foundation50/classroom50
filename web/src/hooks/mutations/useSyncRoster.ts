@@ -16,9 +16,10 @@ export function useSyncRoster(org: string, classroom: string) {
 
   return useMutation({
     mutationFn: async () => {
-      // Best-effort: never let a metadata-recovery hiccup block the team sync
-      // the teacher explicitly asked for.
-      await backfillInviteMetadata(client, { org, classroom }).catch(() => {})
+      // Best-effort by contract (backfillInviteMetadata never throws): a
+      // metadata-recovery hiccup can't block the team sync the teacher asked
+      // for.
+      await backfillInviteMetadata(client, { org, classroom })
       return syncRosterFromTeam(client, { org, classroom })
     },
     onSuccess: () => {
