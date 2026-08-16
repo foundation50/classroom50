@@ -1,4 +1,5 @@
 - [Home](Home)
+- [Prerequisites and GitHub Education](Prerequisites-and-GitHub-Education)
 - [How Classroom 50 Works](How-Classroom-50-Works)
 - [Glossary](Glossary)
 - [FAQ](FAQ)
@@ -11,8 +12,13 @@
   - [CLI Student Guide](CLI-Student-Guide)
   - [gh teacher](gh-teacher)
   - [gh student](gh-student)
+- **Guides**
+  - [Staff, TAs, and Multiple Teachers](Staff-TAs-and-Multiple-Teachers)
+  - [Migrating from GitHub Classroom](Migrating-from-GitHub-Classroom)
+  - [Course Lifecycle and End of Term](Course-Lifecycle-and-End-of-Term)
 - **Reference**
   - [Assignment Templates](Assignment-Templates)
   - [Autograders](Autograders)
   - [GitHub Integration](GitHub-Integration)
+  - [Known Limitations](Known-Limitations)
   - [Troubleshooting](Troubleshooting)
