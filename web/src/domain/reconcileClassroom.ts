@@ -10,6 +10,7 @@ import {
   removeUserFromTeam,
   type TeamDescriptionReconcileResult,
 } from "@/github-core/mutations"
+import { backfillInviteMetadata } from "./students/inviteBackfill"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("domain:reconcileClassroom")
@@ -21,6 +22,9 @@ export type ClassroomReconcileResult = {
   description: TeamDescriptionReconcileResult
   // Staff roles this run newly created (existing teams adopt as no-ops).
   staffCreated: StaffRole[]
+  // Invited emails recovered from per-invite metadata teams and folded into
+  // roster.csv this pass (their teams were then deleted). Empty when none.
+  invitesBackfilled: string[]
 }
 
 // A 404 on the student-team read (a derived/wrong slug that never converges) is
@@ -41,6 +45,7 @@ const NOOP_RESULT: ClassroomReconcileResult = {
   skipped: true,
   description: { changed: false },
   staffCreated: [],
+  invitesBackfilled: [],
 }
 
 // Verify (and self-heal) every classroom-scoped GitHub resource a teacher/owner
@@ -116,16 +121,37 @@ export async function reconcileClassroom(
     throw err
   }
 
-  if (description.changed || staffCreated.length > 0) {
+  // Recover any invited-email metadata for students who have accepted since the
+  // last visit, folding it into roster.csv and deleting the per-invite teams.
+  // Best-effort: a failure here must never latch the classroom heal off (mirrors
+  // grantStaffTeamsConfigRepoAccess), so it's caught and logged, not rethrown.
+  let invitesBackfilled: string[] = []
+  try {
+    const result = await backfillInviteMetadata(client, { org, classroom })
+    invitesBackfilled = result.backfilled
+  } catch (err) {
+    log.warn("classroom reconcile: invite metadata backfill failed", {
+      org,
+      classroom,
+      err,
+    })
+  }
+
+  if (
+    description.changed ||
+    staffCreated.length > 0 ||
+    invitesBackfilled.length > 0
+  ) {
     log.info("classroom reconcile: healed drift", {
       org,
       classroom,
       descriptionChanged: description.changed,
       staffCreated,
+      invitesBackfilled: invitesBackfilled.length,
     })
   }
 
-  return { skipped: false, description, staffCreated }
+  return { skipped: false, description, staffCreated, invitesBackfilled }
 }
 
 // Drop the acting owner from the given non-teacher team slugs (never teacher).

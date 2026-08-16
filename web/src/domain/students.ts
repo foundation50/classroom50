@@ -40,6 +40,10 @@ export {
   type SyncRosterFromTeamResult,
 } from "./students/rosterSync"
 export {
+  backfillInviteMetadata,
+  type BackfillInviteMetadataResult,
+} from "./students/inviteBackfill"
+export {
   writeClassroomRoles,
   updateClassroomMetadata,
   applyClassroomRoleChange,

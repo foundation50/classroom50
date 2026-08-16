@@ -36,12 +36,14 @@ const healthy: ClassroomReconcileResult = {
   skipped: false,
   description: { changed: false },
   staffCreated: [],
+  invitesBackfilled: [],
 }
 
 const archived: ClassroomReconcileResult = {
   skipped: true,
   description: { changed: false },
   staffCreated: [],
+  invitesBackfilled: [],
 }
 
 function githubAPIError(status: number): GitHubAPIError {

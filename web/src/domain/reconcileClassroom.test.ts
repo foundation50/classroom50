@@ -19,6 +19,12 @@ vi.mock("@/github-core/mutations", () => ({
     reconcileDescription(...a),
   removeUserFromTeam: (...a: unknown[]) => removeUserFromTeam(...a),
 }))
+// The invite-metadata backfill is exercised in inviteBackfill.test.ts; here it's
+// a no-op so these tests assert only the team/description reconcile.
+vi.mock("./students/inviteBackfill", () => ({
+  backfillInviteMetadata: () =>
+    Promise.resolve({ backfilled: [], deletedStale: 0 }),
+}))
 
 import { reconcileClassroom } from "./reconcileClassroom"
 import { ClassroomReconcilePermanentError } from "./reconcileClassroom"
@@ -77,6 +83,7 @@ describe("reconcileClassroom", () => {
       skipped: false,
       description: { changed: false },
       staffCreated: [],
+      invitesBackfilled: [],
     })
     expect(ensureStaffTeams).toHaveBeenCalledWith(client, "org", "cs101")
     expect(ensureClassroomTeam).toHaveBeenCalledWith(client, "org", "cs101")
@@ -142,6 +149,7 @@ describe("reconcileClassroom", () => {
       skipped: true,
       description: { changed: false },
       staffCreated: [],
+      invitesBackfilled: [],
     })
     expect(ensureClassroomTeam).not.toHaveBeenCalled()
     expect(ensureStaffTeams).not.toHaveBeenCalled()

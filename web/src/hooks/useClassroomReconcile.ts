@@ -58,6 +58,17 @@ export function useClassroomReconcile(
         // previewing as a student picks up the rewritten description.
         void queryClient.invalidateQueries({ queryKey: githubKeys.myTeams() })
       }
+      if (result.invitesBackfilled.length > 0) {
+        // Recovered invited emails were written into roster.csv; refresh it so
+        // the roster shows the backfilled name/email/section.
+        void queryClient.invalidateQueries({
+          queryKey: githubKeys.csvFile(
+            org,
+            CONFIG_REPO,
+            `${classroom}/roster.csv`,
+          ),
+        })
+      }
     },
     // Latch as permanent only a 403 the viewer can't fix or the description
     // step's wrong-slug team 404 (a derived slug that never converges). Every
