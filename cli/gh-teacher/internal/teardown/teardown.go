@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/classroom50-cli-shared/ghui"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
@@ -178,10 +179,38 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 		_, _ = fmt.Fprintf(out, "%s: deleted team %s\n", org, t.Slug)
 	}
 
+	// Sweep the web's per-invite metadata teams too. They hold an invited
+	// student's email address, are recorded nowhere in the config repo (so the
+	// snapshot above can't see them), and nothing else ever reaps them — leaving
+	// them behind would strand that email in the org after teardown. Org-wide by
+	// nature: the slug is a hash, so a sweep can't be scoped to one classroom
+	// without reading each description. Best-effort, like the classroom sweep.
+	sweepInviteTeams(client, org, out, errOut)
+
 	if failed > 0 {
 		return fmt.Errorf("%d repo(s) failed to delete — see stderr for per-repo errors", failed)
 	}
 	return nil
+}
+
+// sweepInviteTeams deletes every `invite-<hash>` metadata team in the org. A
+// list failure is warned and skipped (the teardown itself succeeded); each
+// delete is namespace-fenced by configrepo.DeleteInviteTeam and idempotent.
+func sweepInviteTeams(client githubapi.Client, org string, out, errOut io.Writer) {
+	invites, err := configrepo.ListInviteTeams(client, org)
+	if err != nil {
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: could not list invite teams to sweep (%v); delete any lingering %s* teams by hand at https://github.com/orgs/%s/teams.\n",
+			org, err, contract.InviteTeamPrefix, org)
+		return
+	}
+	for _, t := range invites {
+		if err := configrepo.DeleteInviteTeam(client, org, t.Slug); err != nil {
+			_, _ = fmt.Fprintf(errOut, "Warning: %s: could not delete invite team %q (%v); delete it by hand at https://github.com/orgs/%s/teams if it lingers.\n",
+				org, t.Slug, err, org)
+			continue
+		}
+		_, _ = fmt.Fprintf(out, "%s: deleted invite team %s\n", org, t.Slug)
+	}
 }
 
 // collectClassroomTeams reads every classroom.json and returns the team refs to

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
@@ -495,6 +496,65 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 			team.Slug, org, live.ID, team.ID)
 	}
 	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(team.Slug))
+	resp, err := client.Request(http.MethodDelete, path, nil)
+	if err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return nil
+		}
+		return fmt.Errorf("DELETE %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return nil
+}
+
+// ListInviteTeams returns the org's per-invite metadata teams — the
+// `invite-<hash>` secret teams the web creates to retain an invited email until
+// the student accepts (schemas/invite-v1.schema.json). The CLI never writes
+// them; it lists them so teardown can sweep what an org leaves behind.
+//
+// Descriptions are not read, so this cannot attribute a team to one classroom —
+// callers must be org-wide. Paginates; a read failure propagates so a caller
+// can report it rather than silently sweeping nothing.
+func ListInviteTeams(client githubapi.Client, org string) ([]TeamRef, error) {
+	var refs []TeamRef
+	for page := 1; ; page++ {
+		path := fmt.Sprintf("orgs/%s/teams?per_page=100&page=%d", url.PathEscape(org), page)
+		var batch []struct {
+			ID   int64  `json:"id"`
+			Slug string `json:"slug"`
+		}
+		if err := client.Get(path, &batch); err != nil {
+			return nil, fmt.Errorf("GET %s: %w", path, err)
+		}
+		for _, t := range batch {
+			if strings.HasPrefix(t.Slug, contract.InviteTeamPrefix) {
+				refs = append(refs, TeamRef{Slug: t.Slug, ID: t.ID})
+			}
+		}
+		if len(batch) < 100 {
+			return refs, nil
+		}
+	}
+}
+
+// DeleteInviteTeam removes one per-invite metadata team. Fenced to the
+// `invite-` namespace so a caller can never steer this into a classroom or
+// unrelated team (mirrors the web's deleteInviteTeam guard). 404 is success, so
+// a sweep is idempotent.
+//
+// Unlike DeleteClassroomTeam there is no recorded id to verify against — these
+// teams are web-created and referenced nowhere in the config repo — so the
+// prefix IS the guard. A caller must therefore pass a slug it read from
+// ListInviteTeams, not one it derived from user input.
+func DeleteInviteTeam(client githubapi.Client, org, slug string) error {
+	if slug == "" {
+		return nil
+	}
+	if !strings.HasPrefix(slug, contract.InviteTeamPrefix) {
+		return fmt.Errorf("refusing to delete team %q at %s — not an %s-namespaced invite team; remove it by hand if intended", slug, org, contract.InviteTeamPrefix)
+	}
+	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	resp, err := client.Request(http.MethodDelete, path, nil)
 	if err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {

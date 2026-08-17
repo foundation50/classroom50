@@ -3,6 +3,7 @@ package teardown
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,6 +26,8 @@ type teardownTestServer struct {
 	classroomJSON     map[string]string // "<dir>/classroom.json" → contents-API JSON body
 	teamGET           map[string]string // "/orgs/{org}/teams/{slug}" → GET body (id verify)
 	deletedTeams      []string          // team slugs that received DELETE
+	orgTeams          []string          // GET /orgs/{org}/teams slugs (invite-team sweep)
+	failOrgTeamsList  bool              // when true, GET /orgs/{org}/teams 500s
 }
 
 func (s *teardownTestServer) handler(t *testing.T, org string) http.Handler {
@@ -81,6 +84,27 @@ func (s *teardownTestServer) handler(t *testing.T, org string) http.Handler {
 				return
 			}
 			w.WriteHeader(http.StatusNotFound)
+		case path == "/orgs/"+org+"/teams" && r.Method == http.MethodGet:
+			// The invite-team sweep enumerates org teams. Page 1 = configured
+			// slugs, page 2+ = empty (fewer than per_page ends pagination).
+			if s.failOrgTeamsList {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			if r.URL.Query().Get("page") != "1" {
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
+			var sb strings.Builder
+			sb.WriteByte('[')
+			for i, slug := range s.orgTeams {
+				if i > 0 {
+					sb.WriteByte(',')
+				}
+				fmt.Fprintf(&sb, `{"id":%d,"slug":%q}`, 1000+i, slug)
+			}
+			sb.WriteByte(']')
+			_, _ = w.Write([]byte(sb.String()))
 		case strings.HasPrefix(path, "/orgs/"+org+"/teams/") && r.Method == http.MethodGet:
 			// Team id-verify before delete during the sweep.
 			if body, ok := s.teamGET[path]; ok {
@@ -164,6 +188,67 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
 		if !want[slug] {
 			t.Errorf("deleted unexpected team %q", slug)
 		}
+	}
+}
+
+// The web's per-invite metadata teams hold an invited student's email and are
+// recorded nowhere in the config repo, so nothing else ever reaps them. Teardown
+// sweeps them org-wide; unrelated teams must be left alone.
+func TestRunTeardown_SweepsInviteTeams(t *testing.T) {
+	state := &teardownTestServer{
+		classroom50Exists: true,
+		repos:             []string{"classroom50"},
+		failOnDelete:      map[string]int{},
+		orgTeams: []string{
+			"invite-0123456789abcdef",
+			"invite-fedcba9876543210",
+			"classroom50-cs-principles", // not an invite team
+			"some-unrelated-team",       // not ours at all
+		},
+	}
+	server := httptest.NewServer(state.handler(t, "classroom50-test"))
+	defer server.Close()
+
+	var out, errOut bytes.Buffer
+	if err := runTeardown(githubtest.NewTestClient(t, server), strings.NewReader(""), &out, &errOut, "classroom50-test", true); err != nil {
+		t.Fatalf("runTeardown: %v\nstderr:\n%s", err, errOut.String())
+	}
+
+	state.mu.Lock()
+	deleted := append([]string(nil), state.deletedTeams...)
+	state.mu.Unlock()
+	want := []string{"invite-0123456789abcdef", "invite-fedcba9876543210"}
+	if len(deleted) != len(want) {
+		t.Fatalf("deleted teams = %v, want exactly %v", deleted, want)
+	}
+	for _, slug := range deleted {
+		if !strings.HasPrefix(slug, "invite-") {
+			t.Errorf("swept a non-invite team %q", slug)
+		}
+	}
+	if !strings.Contains(out.String(), "deleted invite team invite-0123456789abcdef") {
+		t.Errorf("stdout should report each swept invite team, got %q", out.String())
+	}
+}
+
+// A failed team listing must not fail the teardown: the repos are already gone,
+// so the sweep warns and points the teacher at the org's teams page.
+func TestRunTeardown_InviteSweepListFailureIsNonFatal(t *testing.T) {
+	state := &teardownTestServer{
+		classroom50Exists: true,
+		repos:             []string{"classroom50"},
+		failOnDelete:      map[string]int{},
+		failOrgTeamsList:  true,
+	}
+	server := httptest.NewServer(state.handler(t, "classroom50-test"))
+	defer server.Close()
+
+	var out, errOut bytes.Buffer
+	if err := runTeardown(githubtest.NewTestClient(t, server), strings.NewReader(""), &out, &errOut, "classroom50-test", true); err != nil {
+		t.Fatalf("runTeardown must not fail on a degraded team listing: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "could not list invite teams") {
+		t.Errorf("stderr should warn about the skipped sweep, got %q", errOut.String())
 	}
 }
 

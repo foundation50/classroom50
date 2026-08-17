@@ -578,6 +578,96 @@ func TestDeleteClassroomTeam_RefusesZeroID(t *testing.T) {
 	}
 }
 
+// TestDeleteInviteTeam_NamespaceGuard is the fail-closed fence for the
+// web-created invite teams: unlike a classroom team there is no recorded id to
+// verify against, so the `invite-` prefix IS the guard. A slug outside that
+// namespace must be refused without issuing any request.
+func TestDeleteInviteTeam_NamespaceGuard(t *testing.T) {
+	for _, slug := range []string{"classroom50-cs-principles", "some-unrelated-team", "invite"} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Errorf("must not issue any request for slug %q: %s %s", slug, r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}))
+		client := githubtest.NewTestClient(t, server)
+		err := DeleteInviteTeam(client, "o", slug)
+		server.Close()
+		if err == nil || !strings.Contains(err.Error(), "refusing to delete") {
+			t.Errorf("slug %q: err = %v, want a namespace-guard refusal", slug, err)
+		}
+	}
+}
+
+// An empty slug is a silent no-op (nothing to delete), and a 404 reads as
+// success so a re-run of the sweep is idempotent.
+func TestDeleteInviteTeam_EmptySlugAndAlreadyGone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	if err := DeleteInviteTeam(client, "o", ""); err != nil {
+		t.Errorf("empty slug should no-op, got %v", err)
+	}
+	if err := DeleteInviteTeam(client, "o", "invite-0123456789abcdef"); err != nil {
+		t.Errorf("404 should read as already-deleted, got %v", err)
+	}
+}
+
+// ListInviteTeams keeps only the invite- namespace and paginates.
+func TestListInviteTeams_FiltersAndPaginates(t *testing.T) {
+	var pages int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/orgs/o/teams" {
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		pages++
+		// Page 1 fills the page (100) so pagination continues; page 2 ends it.
+		if r.URL.Query().Get("page") == "1" {
+			var sb strings.Builder
+			sb.WriteByte('[')
+			for i := 0; i < 100; i++ {
+				if i > 0 {
+					sb.WriteByte(',')
+				}
+				slug := fmt.Sprintf("classroom50-filler-%d", i)
+				if i == 0 {
+					slug = "invite-aaaaaaaaaaaaaaaa"
+				}
+				fmt.Fprintf(&sb, `{"id":%d,"slug":%q}`, i+1, slug)
+			}
+			sb.WriteByte(']')
+			_, _ = w.Write([]byte(sb.String()))
+			return
+		}
+		_, _ = w.Write([]byte(`[{"id":900,"slug":"invite-bbbbbbbbbbbbbbbb"},{"id":901,"slug":"other"}]`))
+	}))
+	t.Cleanup(server.Close)
+
+	refs, err := ListInviteTeams(githubtest.NewTestClient(t, server), "o")
+	if err != nil {
+		t.Fatalf("ListInviteTeams: %v", err)
+	}
+	if pages < 2 {
+		t.Errorf("pages read = %d, want at least 2 (pagination)", pages)
+	}
+	var slugs []string
+	for _, r := range refs {
+		slugs = append(slugs, r.Slug)
+	}
+	want := []string{"invite-aaaaaaaaaaaaaaaa", "invite-bbbbbbbbbbbbbbbb"}
+	if len(slugs) != len(want) {
+		t.Fatalf("slugs = %v, want %v", slugs, want)
+	}
+	for i := range want {
+		if slugs[i] != want[i] {
+			t.Errorf("slug %d = %q, want %q", i, slugs[i], want[i])
+		}
+	}
+}
+
 // TestIsDeletableClassroomTeamRef pins the shared predicate: deletable
 // only when classroom50--prefixed AND id>0 (mirrors the web).
 func TestIsDeletableClassroomTeamRef(t *testing.T) {

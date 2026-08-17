@@ -35,6 +35,10 @@ func TestContractLiterals(t *testing.T) {
 		{"ConfigRepoName", ConfigRepoName, "classroom50"},
 		{"AssignmentsSchemaV1", AssignmentsSchemaV1, "classroom50/assignments/v1"},
 		{"TeamSchemaV1", TeamSchemaV1, "classroom50/team/v1"},
+		// InviteTeamPrefix is mirrored, with NO compile-time link, in the web
+		// writer (web/src/util/inviteTeam.ts INVITE_TEAM_PREFIX). Update both
+		// copies in lockstep on change.
+		{"InviteTeamPrefix", InviteTeamPrefix, "invite-"},
 		{"DefaultAutograderName", DefaultAutograderName, "default"},
 		{"ModeIndividual", ModeIndividual, "individual"},
 		{"ModeGroup", ModeGroup, "group"},
