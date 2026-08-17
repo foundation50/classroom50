@@ -104,14 +104,16 @@ const IdentityCell = ({
 }) => {
   const { t } = useTranslation()
   if (row.identity.kind === "email") {
-    // An address the roster already carries would be skipped on process, so say
-    // so rather than promising an invitation this row won't send.
+    // The address is invited either way; a roster row already carrying it just
+    // means no second row is written, and GitHub may answer the invite with a
+    // 422 if that person is already a member. Say that rather than implying the
+    // row is either a fresh invite or no action at all.
     return (
       <td>
         <Badge tone={alreadyOnRoster ? "neutral" : "info"} size="sm">
           {t(
             alreadyOnRoster
-              ? "students.previewAlreadyOnRoster"
+              ? "students.previewEmailOnRoster"
               : "students.previewInviteByEmail",
           )}
         </Badge>
@@ -156,9 +158,9 @@ export const RosterPreviewTable = ({
   changes?: RowChanges
   roleChanges?: RowRoleChanges
   identityChanges?: RowIdentityChanges
-  // Rows the import will skip (an email address the roster already claims), so
-  // the identity cell can say "already on the roster" instead of promising an
-  // invitation that won't be sent.
+  // Rows the roster already carries the address for. The import still invites
+  // them (GitHub decides whether that is redundant), but no second roster row is
+  // written, so the identity cell says so instead of implying a fresh invite.
   noopRowKeys?: ReadonlySet<string>
   // While the preflight resolves, the per-cell changes aren't known yet: render
   // the change-bearing columns as skeletons to signal "computing changes" in

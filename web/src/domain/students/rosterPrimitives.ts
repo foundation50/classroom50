@@ -181,33 +181,34 @@ export async function appendEmailInviteRows(
   }
 }
 
-// Drop the pending row an email invite left on the roster, for when that invite
-// is cancelled or dismissed. Without this the row survives the cancel and is
-// INVISIBLE: an email-only row never renders on its own (see teamRoster's
-// legacyByEmail donors), so a teacher can neither see nor clear it until some
-// unrelated reconcile happens to run.
+// Drop the pending rows a set of email invites left on the roster, in ONE commit
+// for the batch — the plural sibling of the single-address path, and what a bulk
+// cancel must use so a class-sized selection doesn't spend a read-modify-write
+// per row and walk into GitHub's content-creation secondary rate limit.
 //
-// Only an identity-less row is removed — no username and no usable github_id.
+// Only identity-less rows are removed — no username and no usable github_id.
 // That is the row an unaccepted invite writes, and the narrow guard is what
 // keeps an enrolled student who merely shares a contact address from being
 // dropped. Mirrors the Go reader's UpsertRosterRow claim rule.
 //
-// Best-effort and never throws: the cancel has already succeeded by the time
-// this runs, so a malformed roster must not surface as a failed cancellation.
-// The reconcile's dead-row reap remains the backstop.
-export async function removeEmailInviteRow(
+// Best-effort and never throws: the cancellations have already succeeded by the
+// time this runs, so a malformed roster must not surface as a failed cancel. The
+// reconcile's dead-row reap remains the backstop.
+export async function removeEmailInviteRows(
   client: GitHubClient,
   input: { org: string; classroom: string },
-  email: string,
+  emails: string[],
 ): Promise<void> {
-  const target = normalizeInviteEmail(email)
-  if (!target) return
+  const targets = new Set(
+    emails.map((e) => normalizeInviteEmail(e)).filter(Boolean),
+  )
+  if (targets.size === 0) return
   try {
     await withRosterRewrite(client, input, (rows) => {
       const nextStudents = rows.filter(
         (row) =>
           !(
-            normalizeInviteEmail(row.email ?? "") === target &&
+            targets.has(normalizeInviteEmail(row.email ?? "")) &&
             !row.username.trim() &&
             resolveGitHubId(row.github_id) === null
           ),
@@ -216,7 +217,9 @@ export async function removeEmailInviteRow(
       return {
         nextStudents,
         changed,
-        message: `Remove invited email from roster: ${input.classroom}`,
+        message: `Remove ${changed} invited email${
+          changed === 1 ? "" : "s"
+        } from roster: ${input.classroom}`,
       }
     })
   } catch (err) {
@@ -226,6 +229,16 @@ export async function removeEmailInviteRow(
       err,
     })
   }
+}
+
+// Single-address convenience over removeEmailInviteRows, for the one-at-a-time
+// cancel paths. Same guard, same never-throws contract.
+export async function removeEmailInviteRow(
+  client: GitHubClient,
+  input: { org: string; classroom: string },
+  email: string,
+): Promise<void> {
+  await removeEmailInviteRows(client, input, [email])
 }
 
 // Slug is authoritative in classroom.json: GitHub may assign a non-derived slug

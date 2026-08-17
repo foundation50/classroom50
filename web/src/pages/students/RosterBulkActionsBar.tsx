@@ -12,7 +12,7 @@ import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,
 } from "@/domain/roster/bulkUnenrollRoster"
-import { resendClassroomInvite, retireEmailInvite } from "@/domain/students"
+import { resendClassroomInvite, retireEmailInvites } from "@/domain/students"
 import { isMalformedGitHubId, resolveGitHubId } from "@/util/students"
 import { sortRolesByRank } from "@/util/teamRoster"
 import {
@@ -318,6 +318,10 @@ const RosterBulkActionsBar = ({
     const cancelled: { key: string; label: string }[] = []
     const alreadyGone: { key: string; label: string }[] = []
     const failed: { key: string; label: string; detail?: string }[] = []
+    // Addresses whose invitations we cancelled; their invite teams and pending
+    // roster rows are retired together after the loop, so the batch makes ONE
+    // roster commit instead of one per row.
+    const retiredEmails: string[] = []
     let processed = 0
     for (const row of cancellableSelected) {
       const label = row.username || row.email
@@ -331,12 +335,7 @@ const RosterBulkActionsBar = ({
         // report it as "already gone" rather than a phantom cancellation.
         if (didCancel) cancelled.push({ key: row.key, label })
         else alreadyGone.push({ key: row.key, label })
-        if (!row.username && row.email) {
-          // An email-only invite leaves a metadata team holding the address and a
-          // pending roster row; retire both with the invite (never throws — the
-          // GC and reconcile passes are the backstops).
-          await retireEmailInvite(client, { org, classroom, email: row.email })
-        }
+        if (!row.username && row.email) retiredEmails.push(row.email)
       } catch (err) {
         log.debug("bulk cancel: per-row cancel failed", { err })
         failed.push({ key: row.key, label, detail: getErrorMessage(err) })
@@ -344,6 +343,15 @@ const RosterBulkActionsBar = ({
       processed += 1
       setProgress({ processed, total, message: label })
     }
+
+    // An email-only invite leaves a metadata team holding the address and a
+    // pending roster row; retire both (never throws — the GC and reconcile
+    // passes are the backstops).
+    await retireEmailInvites(client, {
+      org,
+      classroom,
+      emails: retiredEmails,
+    })
 
     const sections: BulkResultView["sections"] = []
     if (alreadyGone.length > 0)

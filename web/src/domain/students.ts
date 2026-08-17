@@ -17,8 +17,14 @@ export {
   RosterCsvMalformedError,
   type ClassroomPendingInvite,
 } from "./students/rosterPrimitives"
-export { removeEmailInviteRow } from "./students/rosterPrimitives"
-export { retireEmailInvite } from "./students/retireEmailInvite"
+export {
+  removeEmailInviteRow,
+  removeEmailInviteRows,
+} from "./students/rosterPrimitives"
+export {
+  retireEmailInvite,
+  retireEmailInvites,
+} from "./students/retireEmailInvite"
 export {
   addStudentToClassroom,
   addStudentToClassroomWithConflictRetry,

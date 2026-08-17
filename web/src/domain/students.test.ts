@@ -9,6 +9,7 @@ import {
   bulkUnenrollStudents,
   removeEmailInviteRow,
   retireEmailInvite,
+  retireEmailInvites,
   resolveClassroomPendingInvite,
   resendClassroomInvite,
   bulkEnrollStudentsInClassroom,
@@ -2367,6 +2368,34 @@ describe("removeEmailInviteRow — retiring a cancelled invite's pending row", (
     })
 
     expect(parseStudentsCsv(committed.content!)).toEqual([])
+  })
+
+  it("retireEmailInvites clears a batch of rows in ONE commit", async () => {
+    // A read-modify-write per row would push a class-sized bulk cancel into
+    // GitHub's content-creation secondary rate limit partway through, failing the
+    // cancellations that hadn't run yet.
+    let treeWrites = 0
+    const { client, committed } = makeClient({
+      startingCsv:
+        HEADER +
+        ",,,a@x.edu,,,student\n" +
+        ",,,b@x.edu,,,student\n" +
+        "keep,,,keep@x.edu,,100,student\n",
+      onTree: () => {
+        treeWrites += 1
+      },
+    })
+
+    await retireEmailInvites(client, {
+      org: "acme",
+      classroom: "cs101",
+      emails: ["a@x.edu", "b@x.edu"],
+    })
+
+    expect(treeWrites).toBe(1)
+    expect(parseStudentsCsv(committed.content!)).toEqual([
+      expect.objectContaining({ username: "keep" }),
+    ])
   })
 })
 

@@ -649,10 +649,14 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
     await waitFor(() => expect(button.disabled).toBe(false))
   })
 
-  it("marks an already-claimed email as a no-op and excludes it from the counts", async () => {
+  it("labels an email the roster already carries, but still invites it", async () => {
     const user = userEvent.setup()
-    // The roster already carries zoe@x.edu, so appendEmailInviteRows would skip
-    // that address. The preview must say so rather than promising an invitation.
+    // A roster row already carries zoe@x.edu, so appendEmailInviteRows will skip
+    // writing a SECOND row for it. The invitation still goes out — GitHub is the
+    // authority on whether it's redundant, and answers with a 422 that lands in
+    // the skipped bucket. Suppressing the send here would silently drop a person
+    // the teacher listed: the address could belong to a shared contact, or to a
+    // pending row whose invitation has since died.
     resolveRosterUploadContext.mockResolvedValue({
       ...stubContext,
       claimedEmails: new Set(["zoe@x.edu"]),
@@ -675,21 +679,19 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
       file("roster.csv", "email\nzoe@x.edu\nnewbie@x.edu\n"),
     )
 
-    // Two email rows, but only one is a real invitation.
+    // Both rows are invitations, so the counts say 2 — not 1.
     await waitFor(() =>
       expect(
         screen.getByRole("button", {
-          name: "students.importAndInviteMembers:1",
+          name: "students.importAndInviteMembers:2",
         }),
       ).toBeTruthy(),
     )
-    expect(screen.getByText("students.uploadInviteNotice:1")).toBeTruthy()
-    // The summary accounts for both rows: one to add, one to skip.
-    expect(screen.getByText("students.summary_add:1")).toBeTruthy()
-    expect(screen.getByText("students.summary_skip:1")).toBeTruthy()
-    // The skipped row is still shown, labelled for what it is.
+    expect(screen.getByText("students.uploadInviteNotice:2")).toBeTruthy()
+
+    // The already-carried row is distinguished in the preview.
     await user.click(screen.getByText("students.summaryViewDetails"))
-    expect(screen.getByText("students.previewAlreadyOnRoster")).toBeTruthy()
+    expect(screen.getByText("students.previewEmailOnRoster")).toBeTruthy()
     expect(screen.getByText("students.previewInviteByEmail")).toBeTruthy()
 
     bulkEnrollStudentsInClassroom.mockResolvedValue({
@@ -698,20 +700,20 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
     })
     bulkInviteByEmail.mockResolvedValue({
       invited: [{ email: "newbie@x.edu", role: "student" }],
-      skipped: [],
+      skipped: [{ email: "zoe@x.edu" }],
       failed: [],
       deferred: [],
     })
     await user.click(
       screen.getByRole("button", {
-        name: "students.importAndInviteMembers:1",
+        name: "students.importAndInviteMembers:2",
       }),
     )
 
-    // Only the unclaimed address is actually sent.
+    // BOTH addresses are sent; GitHub decides which is redundant.
     await waitFor(() => expect(bulkInviteByEmail).toHaveBeenCalledTimes(1))
     expect(bulkInviteByEmail.mock.calls[0][1]).toMatchObject({
-      invites: [{ email: "newbie@x.edu" }],
+      invites: [{ email: "zoe@x.edu" }, { email: "newbie@x.edu" }],
     })
   })
 

@@ -318,19 +318,17 @@ const UploadRoster = ({
     () => resolvedRows.filter(isEmailRow),
     [resolvedRows],
   )
-  // Split the email rows by what processing will actually do. An address a
-  // stored roster row already claims is skipped by appendEmailInviteRows, so
-  // counting it as an invitation would overstate the batch — the same class of
-  // error as counting rows instead of invitations. The row still renders, marked
-  // as needing no action, so the teacher can see it was read.
+  // Addresses a stored roster row already carries. These still get an invitation
+  // — GitHub is the authority on whether one is redundant, and answers with a
+  // 422 that lands in bulkInviteByEmail's `skipped` bucket. What the roster claim
+  // predicts is only that appendEmailInviteRows will skip writing a SECOND row
+  // for the address, so the preview labels the row rather than dropping it.
+  //
+  // Deliberately not used to filter the send list: an address can be claimed by
+  // someone else's row (a shared parent or lab contact), or by a pending row
+  // whose invitation has since died, and in both cases a real person the teacher
+  // listed still needs inviting.
   const claimedEmails = preflightContext?.claimedEmails
-  const emailRowsToInvite = useMemo(
-    () =>
-      claimedEmails
-        ? emailRows.filter((r) => !claimedEmails.has(r.identity.email))
-        : emailRows,
-    [emailRows, claimedEmails],
-  )
   const noopEmailKeys = useMemo(() => {
     const keys = new Set<string>()
     if (!claimedEmails) return keys
@@ -444,9 +442,9 @@ const UploadRoster = ({
   // fold them into the same gate rather than letting a roster CSV do silently
   // what the dedicated email upload requires a checkbox for.
   const teacherEmailRows = useMemo(
-    () => emailRowsToInvite.filter((r) => isTeacherRole(roleFor(r.identity))),
+    () => emailRows.filter((r) => isTeacherRole(roleFor(r.identity))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [emailRowsToInvite, rolesByUser],
+    [emailRows, rolesByUser],
   )
   const mismatches = useMemo(
     () => preflight?.identityMismatches ?? [],
@@ -478,7 +476,7 @@ const UploadRoster = ({
   // org invitation and lands a pending roster row. So is a confirmed identity
   // mismatch — it repairs the stored username. Counting only the preflight
   // buckets would leave either kind of file on a disabled "No changes to apply".
-  const emailRowCount = emailRowsToInvite.length
+  const emailRowCount = emailRows.length
   // How many people this upload will actually invite: non-members it will invite
   // by username, plus every email-identity row. ONE source, so the notice, the
   // summary, and the primary button can't disagree — a row that's already a
@@ -696,7 +694,7 @@ const UploadRoster = ({
       section: r.section,
       role: roleFor(r.identity),
     }))
-    const emailInvites = emailRowsToInvite.map((r) => ({
+    const emailInvites = emailRows.map((r) => ({
       email: r.identity.email,
       role: roleFor(r.identity),
       first_name: r.first_name,
@@ -880,7 +878,6 @@ const UploadRoster = ({
                 <PreflightSummary
                   preflight={preflight}
                   emailInviteCount={emailRowCount}
-                  emailNoopCount={noopEmailKeys.size}
                   detailsOpen={detailsOpen}
                   onToggleDetails={() => setDetailsOpen((v) => !v)}
                   canToggle={!forceDetails}
