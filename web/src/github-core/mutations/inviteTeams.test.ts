@@ -31,6 +31,15 @@ const apiError = (status: number, message = `boom ${status}`) =>
     rateLimit: emptyRateLimit,
   })
 
+const rateLimitError = () =>
+  new GitHubAPIError({
+    status: 429,
+    url: "https://api.github.com/x",
+    message: "rate limited",
+    body: null,
+    rateLimit: emptyRateLimit,
+  })
+
 const METADATA = { email: "alice@example.com", classroom: "cs101" }
 const DESCRIPTION = marshalInviteDescription(METADATA)
 
@@ -282,14 +291,18 @@ describe("purgeClassroomInviteTeams", () => {
     })
 
     const result = await purgeClassroomInviteTeams(client, "acme", "cs101")
-    expect(result).toEqual({ purged: 1, failedSlugs: [] })
+    expect(result).toEqual({
+      purged: 1,
+      failedSlugs: [],
+      unreadable: 0,
+      listFailed: false,
+    })
     expect(deleted).toEqual([mine.slug])
   })
 
   it("deletes a team whose record was tampered into claiming this classroom", async () => {
-    // The purge only ever deletes, so the claim alone is enough — a tamperer can
-    // at worst get their own team removed. (The reconcile, which writes a roster
-    // row, does verify the email hashes back to the slug.)
+    // The purge only ever deletes, so it takes the claim at face value (the
+    // reconcile, which writes a roster row, does verify the hash).
     const foreign = await inviteTeamName("cs999", "someone@x.edu")
     const deleted: string[] = []
     const { client } = makeClient((url, options) => {
@@ -323,15 +336,55 @@ describe("purgeClassroomInviteTeams", () => {
     })
 
     const result = await purgeClassroomInviteTeams(client, "acme", "cs101")
-    expect(result).toEqual({ purged: 0, failedSlugs: [mine.slug] })
+    expect(result.purged).toBe(0)
+    expect(result.failedSlugs).toEqual([mine.slug])
+    expect(result.listFailed).toBe(false)
   })
 
-  it("never throws when the team listing fails (the config commit already landed)", async () => {
+  // A team we couldn't READ has an unknown classroom, so naming it to the
+  // teacher could send them to delete a live classroom's invite record.
+  it("counts an unreadable team without naming it as this classroom's", async () => {
+    const { client } = makeClient((url) => {
+      if (url.includes("/teams?"))
+        return [{ id: 1, slug: "invite-aaaaaaaaaaaaaaaa" }]
+      throw apiError(403)
+    })
+
+    const result = await purgeClassroomInviteTeams(client, "acme", "cs101")
+    expect(result.unreadable).toBe(1)
+    expect(result.failedSlugs).toEqual([])
+    expect(result.purged).toBe(0)
+  })
+
+  it("stops the pass on a rate limit rather than hammering", async () => {
+    const reads: string[] = []
+    const { client } = makeClient((url) => {
+      if (url.includes("/teams?")) {
+        return [
+          { id: 1, slug: "invite-aaaaaaaaaaaaaaaa" },
+          { id: 2, slug: "invite-bbbbbbbbbbbbbbbb" },
+          { id: 3, slug: "invite-cccccccccccccccc" },
+        ]
+      }
+      reads.push(url)
+      throw rateLimitError()
+    })
+
+    const result = await purgeClassroomInviteTeams(client, "acme", "cs101")
+    expect(reads).toHaveLength(1)
+    expect(result.unreadable).toBe(1)
+  })
+
+  it("flags a failed listing so the caller can still warn (nothing was checked)", async () => {
     const { client } = makeClient(() => {
       throw apiError(500)
     })
-    await expect(
-      purgeClassroomInviteTeams(client, "acme", "cs101"),
-    ).resolves.toEqual({ purged: 0, failedSlugs: [] })
+    const result = await purgeClassroomInviteTeams(client, "acme", "cs101")
+    expect(result).toEqual({
+      purged: 0,
+      failedSlugs: [],
+      unreadable: 0,
+      listFailed: true,
+    })
   })
 })

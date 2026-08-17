@@ -207,10 +207,13 @@ export async function deleteInviteTeamForEmail(
 export { INVITE_TEAM_PREFIX }
 
 // Delete every invite team whose stored record claims `classroom`, for the
-// teardown of that classroom itself. The record's claim is enough here: unlike
-// the reconcile (which folds an email onto a roster row and so must verify the
-// email hashes back to the slug), this only ever deletes, and a tampered record
-// can at worst get its own team deleted.
+// teardown of that classroom itself. The claim is taken at face value: this path
+// only ever deletes, never writes a roster row, so it doesn't need the
+// reconcile's hash verification. Note the consequence — a record hand-edited to
+// claim this classroom is deleted with it, which for a tampered team belonging
+// to another classroom costs that classroom its email<->account mapping. The
+// namespace fence in deleteInviteTeam still applies, so nothing outside the
+// invite- namespace can ever be deleted.
 //
 // Exists because these teams are recorded nowhere in the config repo, so once a
 // classroom's directory is gone nothing can find them again — the reconcile is
@@ -219,35 +222,67 @@ export { INVITE_TEAM_PREFIX }
 // strand that student's address in a secret team forever.
 //
 // Best-effort and never throws: the caller has already committed the deletion,
-// so a failure here is a leftover team to report, not a reason to fail. Returns
-// the slugs it could not delete.
+// so a failure here is a leftover team to report, not a reason to fail.
+// `failedSlugs` names only teams confirmed to belong to THIS classroom whose
+// delete failed — safe to show a teacher as "delete by hand". A team we could
+// not read is counted in `unreadable` instead: its classroom is unknown, so
+// naming it could send the teacher to delete a live classroom's invite record.
+// `listFailed` means the enumeration itself failed, so nothing was checked at
+// all — the caller must still warn, since this is exactly the case where an
+// invited email would otherwise be stranded silently.
 export async function purgeClassroomInviteTeams(
   client: GitHubClient,
   org: string,
   classroom: string,
-): Promise<{ purged: number; failedSlugs: string[] }> {
+): Promise<{
+  purged: number
+  failedSlugs: string[]
+  unreadable: number
+  listFailed: boolean
+}> {
   const failedSlugs: string[] = []
   let purged = 0
+  let unreadable = 0
   let teams: GitHubTeam[]
   try {
     teams = await listInviteTeams(client, org)
   } catch (err) {
     log.error("invite team purge: listing failed", { org, classroom, err })
-    return { purged, failedSlugs }
+    return { purged, failedSlugs, unreadable, listFailed: true }
   }
 
   for (const team of teams) {
     const slug = team.slug
     if (!slug) continue
+
+    // Read and delete are separate failure classes. Until the read succeeds we
+    // don't know which classroom the team belongs to, so a read failure must
+    // never reach the teacher-facing slug list.
+    let state: Awaited<ReturnType<typeof readInviteTeam>>
     try {
-      const state = await readInviteTeam(client, org, slug)
-      if (!state || state.description?.classroom !== classroom) continue
+      state = await readInviteTeam(client, org, slug)
+    } catch (err) {
+      unreadable += 1
+      log.error("invite team purge: read failed; scope unknown", {
+        org,
+        slug,
+        err,
+      })
+      if (err instanceof GitHubAPIError && err.isRateLimited) break
+      continue
+    }
+    if (!state || state.description?.classroom !== classroom) continue
+
+    try {
       await deleteInviteTeam(client, org, slug)
       purged += 1
     } catch (err) {
       log.error("invite team purge: delete failed", { org, slug, err })
       failedSlugs.push(slug)
+      // Every remaining delete would hit the same limit; stop rather than
+      // hammering a throttled endpoint and reporting every team as lingering.
+      if (err instanceof GitHubAPIError && err.isRateLimited) break
     }
   }
-  return { purged, failedSlugs }
+  return { purged, failedSlugs, unreadable, listFailed: false }
 }

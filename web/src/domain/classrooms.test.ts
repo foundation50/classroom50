@@ -371,10 +371,12 @@ describe("deleteClassroom invite-team purge", () => {
     })
 
     await deleteClassroom(client, { org: "acme", classroom: "cs101" })
-    expect(deleted).not.toContain(`/orgs/acme/teams/${inviteSlug}`)
+    // Nothing at all was deleted — the only team in the listing belongs to
+    // another classroom (the test above is the positive control).
+    expect(deleted).toEqual([])
   })
 
-  it("still reports the deletion when the purge can't list teams", async () => {
+  it("warns that invitation records went unchecked when the listing fails", async () => {
     const deleted: string[] = []
     const client = deleteFlowClient({
       onDelete: (p) => deleted.push(p),
@@ -385,6 +387,11 @@ describe("deleteClassroom invite-team purge", () => {
       org: "acme",
       classroom: "cs101",
     })
+
+    // The config deletion still succeeded, but the teacher must learn that a
+    // stored email address may be left behind — this is the silent-failure case.
     expect(result.deleted).toBe(true)
+    expect(result.teamDeleteWarning).toMatch(/invitation records/i)
+    expect(result.teamDeleteWarning).toMatch(/email address/i)
   })
 })
