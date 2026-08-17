@@ -285,8 +285,17 @@ func recordToRow(record []string, canonicalLen int, extraColumns []string, line 
 		Email:     strings.TrimSpace(undefangCSVCell(record[3])),
 		Section:   undefangCSVCell(record[4]),
 	}
-	if row.Username == "" {
-		return RosterRow{}, fmt.Errorf("line %d: username column is empty", line)
+	// A row needs at least ONE identity column. An identity-less row addresses
+	// nobody, so it stays an error (lenient parsing preserves it raw). A row
+	// with only an email is valid and deliberate: the web writes it when a
+	// teacher invites by email, and fills in the account once the student
+	// accepts. Rejecting it would abort the whole file for `roster list` while
+	// any invite is outstanding. Keep-rule mirrors the web's parseRosterCsv
+	// filter (web/src/util/rosterCsv.ts) — non-empty raw cell, not a resolvable
+	// id, so an unusable-but-present github_id still counts. Shared cases:
+	// cli/shared/testdata/roster_row_cases.json.
+	if row.Username == "" && row.Email == "" && strings.TrimSpace(record[5]) == "" {
+		return RosterRow{}, fmt.Errorf("line %d: row has no username, github_id, or email — at least one is required to identify a student", line)
 	}
 	if trimmed := strings.TrimSpace(record[5]); trimmed != "" {
 		id, err := parseGitHubID(trimmed)

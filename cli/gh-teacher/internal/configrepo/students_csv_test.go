@@ -147,6 +147,52 @@ func TestParseRoster_UnusableGitHubIDIsUnresolvedNotFatal(t *testing.T) {
 	}
 }
 
+// A teacher who invites by email gets a pending roster row carrying only that
+// address: the web writes it at invite time and fills in the account identity
+// when the student accepts (web/src/domain/students/rosterSync.ts). The strict
+// reader must keep it, or `roster list` fails for the whole classroom while any
+// invite is outstanding. The keep-rule mirrors the web's parseRosterCsv filter:
+// a row needs at least one of username, github_id, or email.
+func TestParseRoster_KeepsEmailOnlyPendingRow(t *testing.T) {
+	in := "username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,Alice,A,alice@x.edu,s,1,student\n" +
+		",,,pending@x.edu,,,student\n"
+	rows, err := ParseRoster([]byte(in))
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(rows))
+	}
+	pending := rows[1]
+	if pending.isRaw() {
+		t.Fatal("email-only row must parse, not fall back to a preserved raw row")
+	}
+	if pending.Username != "" || pending.GitHubID != 0 {
+		t.Fatalf("identity = %q/%d, want empty", pending.Username, pending.GitHubID)
+	}
+	if pending.Email != "pending@x.edu" {
+		t.Fatalf("Email = %q, want pending@x.edu", pending.Email)
+	}
+	if pending.Role != "student" {
+		t.Fatalf("Role = %q, want student", pending.Role)
+	}
+}
+
+// A row carrying only a github_id is equally valid under the keep-rule (the web
+// accepts it too), so a username-less id row must not be rejected either.
+func TestParseRoster_KeepsIDOnlyRow(t *testing.T) {
+	in := "username,first_name,last_name,email,section,github_id,role\n" +
+		",,,,,4242,student\n"
+	rows, err := ParseRoster([]byte(in))
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	if len(rows) != 1 || rows[0].GitHubID != 4242 {
+		t.Fatalf("rows = %+v, want one row with GitHubID 4242", rows)
+	}
+}
+
 func TestParseRoster_RejectsBadInputs(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -157,7 +203,7 @@ func TestParseRoster_RejectsBadInputs(t *testing.T) {
 		{"missing github_id column", "username,first_name,last_name,email,section\nalice,A,A,a@x,s\n", "unexpected header"},
 		{"missing email column", "username,first_name,last_name,section,github_id\nalice,A,A,s,1\n", "unexpected header"},
 		{"renamed first column", "user,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,1,student\n", "unexpected header"},
-		{"username empty", "username,first_name,last_name,email,section,github_id,role\n,A,A,,s,1,student\n", "username column is empty"},
+		{"no identity columns", "username,first_name,last_name,email,section,github_id,role\n,A,A,,s,,student\n", "no username, github_id, or email"},
 		{"non-numeric github_id", "username,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,nope,student\n", "invalid github_id"},
 		{"wrong field count", "username,first_name,last_name,email,section,github_id,role\nalice,A,A\n", "wrong number"},
 	}
@@ -850,12 +896,15 @@ func TestEncodeRoster_DefangsEveryColumnButGitHubID(t *testing.T) {
 // round-trip it.
 func TestParseRosterLenient_PreservesMalformedRow(t *testing.T) {
 	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
-		",Ghost,G,,,,\n" + // empty username: strict ParseRoster rejects this
+		",Ghost,G,,,,\n" + // no identity column at all: strict ParseRoster rejects this
 		"alice,Alice,A,alice@example.edu,s1,12345,student\n")
 
-	// Strict parse still rejects, proving lenient is the behavior change.
+	// Strict parse still rejects, proving lenient is the behavior change. Note
+	// the row is rejected for having NO identity column (no username, no
+	// github_id, no email) — an email-only row is valid and parses (see
+	// TestParseRoster_KeepsEmailOnlyPendingRow).
 	if _, err := ParseRoster(in); err == nil {
-		t.Fatal("strict ParseRoster must still reject an empty-username row")
+		t.Fatal("strict ParseRoster must still reject a row with no identity column")
 	}
 
 	rows, err := ParseRosterLenient(in)

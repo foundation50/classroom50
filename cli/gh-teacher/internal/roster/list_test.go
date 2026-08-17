@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/foundation50/gh-teacher/internal/githubapi"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
 
@@ -180,6 +181,52 @@ func TestRunRosterList(t *testing.T) {
 		}
 		if errOut.Len() != 0 {
 			t.Errorf("--quiet should suppress the stderr summary, got %q", errOut.String())
+		}
+	})
+
+	// A classroom with an outstanding email invite carries a pending row with no
+	// username. It must reach the table and --json (the teacher needs to see the
+	// invited address), but never --quiet, which feeds scripts.
+	t.Run("pending email row: shown in table and json, skipped by --quiet", func(t *testing.T) {
+		const withPending = "username,first_name,last_name,email,section,github_id,role\n" +
+			"alice,Alice,A,alice@example.edu,s1,1,student\n" +
+			",,,pending@example.edu,,,student\n"
+
+		newClient := func(t *testing.T) githubapi.Client {
+			mock := &rosterListMock{files: map[string]string{
+				"cs-principles/roster.csv": withPending,
+			}}
+			server := httptest.NewServer(mock.handler(t))
+			t.Cleanup(server.Close)
+			return githubtest.NewTestClient(t, server)
+		}
+
+		var tableOut, tableErr bytes.Buffer
+		if err := runRosterList(newClient(t), &tableOut, &tableErr, "o", "cs-principles", false, false); err != nil {
+			t.Fatalf("runRosterList: %v", err)
+		}
+		if !strings.Contains(tableOut.String(), "pending@example.edu") {
+			t.Errorf("table should show the pending invite's email, got %q", tableOut.String())
+		}
+
+		var jsonOut, jsonErr bytes.Buffer
+		if err := runRosterList(newClient(t), &jsonOut, &jsonErr, "o", "cs-principles", true, false); err != nil {
+			t.Fatalf("runRosterList --json: %v", err)
+		}
+		var entries []rosterListEntry
+		if err := json.Unmarshal(jsonOut.Bytes(), &entries); err != nil {
+			t.Fatalf("unmarshal --json: %v\n%s", err, jsonOut.String())
+		}
+		if len(entries) != 2 {
+			t.Fatalf("--json entries = %d, want 2", len(entries))
+		}
+
+		var quietOut, quietErr bytes.Buffer
+		if err := runRosterList(newClient(t), &quietOut, &quietErr, "o", "cs-principles", false, true); err != nil {
+			t.Fatalf("runRosterList --quiet: %v", err)
+		}
+		if got := quietOut.String(); got != "alice\n" {
+			t.Errorf("--quiet = %q, want just \"alice\\n\" (no blank line for the pending row)", got)
 		}
 	})
 

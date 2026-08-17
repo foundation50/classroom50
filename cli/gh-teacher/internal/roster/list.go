@@ -126,6 +126,13 @@ func runRosterList(client githubapi.Client, out, errOut io.Writer, org, classroo
 
 	if quiet {
 		for _, r := range rows {
+			// A pending email-invite row has no username yet. --quiet feeds
+			// scripts (xargs, loops), so emitting a blank line would hand the
+			// caller an empty argument; skip until the invite is accepted and
+			// the reconcile fills in the account.
+			if r.Username == "" {
+				continue
+			}
 			_, _ = fmt.Fprintln(out, r.Username)
 		}
 		return nil
