@@ -279,7 +279,11 @@ const MemberDetailModal = ({
             </div>
           ) : (
             <div className="rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-              {t("orgMembers.notMemberNoId")}
+              {t(
+                row.classification === "invitation-pending"
+                  ? "orgMembers.invitePendingNotice"
+                  : "orgMembers.notMemberNoId",
+              )}
             </div>
           )
         ) : confirming ? (

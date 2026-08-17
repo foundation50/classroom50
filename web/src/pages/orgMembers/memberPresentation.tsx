@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, Info, ShieldCheck } from "lucide-react"
+import { AlertTriangle, Info, MailCheck, ShieldCheck } from "lucide-react"
 
 import { Badge } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"
@@ -32,6 +32,16 @@ export const ClassificationBadge = ({
       <Badge tone="error" className="gap-1">
         <AlertTriangle aria-hidden="true" className="size-3" />{" "}
         {t("orgMembers.badgeNotMember")}
+      </Badge>
+    )
+  }
+  // An unaccepted email invite. Informational, not a discrepancy: there is no
+  // account yet to be missing from the org.
+  if (row.classification === "invitation-pending") {
+    return (
+      <Badge tone="info" className="gap-1">
+        <MailCheck aria-hidden="true" className="size-3" />{" "}
+        {t("orgMembers.badgeInvitePending")}
       </Badge>
     )
   }

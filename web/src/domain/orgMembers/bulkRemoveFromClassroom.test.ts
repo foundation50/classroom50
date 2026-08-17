@@ -178,4 +178,46 @@ describe("bulkRemoveFromClassroom", () => {
     expect(res.outcomes.every((o) => o.status === "failed")).toBe(true)
     expect(res.outcomes[0].detail).toMatch(/409/)
   })
+
+  it("skips a pending email invite instead of reporting 'already removed'", async () => {
+    // The roster matcher keys on username/github_id, so bulkUnenrollStudents
+    // drops an identity-less target. Without this pre-filter the row reconciles
+    // to "already removed" while both the row AND the live invitation survive —
+    // the teacher is told the work is done when nothing happened.
+    bulkUnenrollMock.mockReset().mockImplementation((_c, input) =>
+      Promise.resolve({
+        removed: input.students as Student[],
+        notFound: [],
+        warnings: [],
+      }),
+    )
+
+    const res = await bulkRemoveFromClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      rows: [
+        row({
+          key: "ada@uni.edu",
+          username: "",
+          github_id: "",
+          email: "ada@uni.edu",
+          isMember: false,
+          classification: "invitation-pending",
+          classrooms: [access("cs101")],
+        }),
+      ],
+    })
+
+    expect(res.removedCount).toBe(0)
+    expect(res.outcomes).toEqual([
+      {
+        key: "ada@uni.edu",
+        label: "ada@uni.edu",
+        status: "skipped",
+        detail: "pending-email-invite",
+      },
+    ])
+    // And it never reaches the writer, so no roster commit is spent on it.
+    expect(bulkUnenrollMock).not.toHaveBeenCalled()
+  })
 })

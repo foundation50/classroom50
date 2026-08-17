@@ -2,6 +2,7 @@ import type { GitHubClient } from "@/github-core/client"
 import { bulkUnenrollStudents } from "@/domain/students"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { studentKey } from "@/util/identity"
+import { canTargetForUnenroll } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import { logger } from "@/lib/logger"
@@ -55,6 +56,11 @@ const rowToStudent = (row: OrgMemberRow): Student => ({
 // This layer owns the per-row PRE-filtering the members view needs:
 //   - rows not on the target classroom (nothing to remove) -> skipped
 //   - rows on an ARCHIVED instance -> skipped (read-only; the write would throw)
+//   - rows with NO GitHub identity — an unaccepted email invite — -> skipped.
+//     The roster matcher keys on username/github_id (a shared address must never
+//     widen a removal), so bulkUnenrollStudents drops such a target and it would
+//     otherwise reconcile to "already removed" while both the row AND the live
+//     invitation survived. Cancelling the invitation is the action that retires it.
 // so only removable rows reach the batch writer. Per-row outcomes are
 // reconciled from the batch result (removed / not-found).
 export async function bulkRemoveFromClassroom(
@@ -88,6 +94,15 @@ export async function bulkRemoveFromClassroom(
         label: labelFor(row),
         status: "skipped",
         detail: "archived",
+      })
+      continue
+    }
+    if (!canTargetForUnenroll(row)) {
+      outcomes.push({
+        key: row.key,
+        label: labelFor(row),
+        status: "skipped",
+        detail: "pending-email-invite",
       })
       continue
     }
