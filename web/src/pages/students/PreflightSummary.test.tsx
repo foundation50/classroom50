@@ -25,6 +25,7 @@ const result = (over: Partial<PreflightResult> = {}): PreflightResult => ({
   needsInvite: [],
   enroll: [],
   roleChanges: [],
+  identityMismatches: [],
   allAlreadyMembers: true,
   ...over,
 })

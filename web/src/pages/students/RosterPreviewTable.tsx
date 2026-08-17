@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Select, SkeletonCell } from "@/components/ui"
-import type { ImportRosterRow } from "@/domain/students"
+import { Badge, Select, SkeletonCell } from "@/components/ui"
 import type { ClassroomRole } from "@/util/teamRoster"
 import {
   ROLE_LABEL_KEY,
@@ -8,23 +7,34 @@ import {
 } from "@/util/classroomRoleUI"
 import type { MetadataField } from "@/util/rosterMetadataMerge"
 import type { MetadataChange } from "@/util/rosterUploadPreflight"
+import {
+  identityKey,
+  type ResolvedImportRow,
+} from "@/pages/students/rosterImportResolve"
 import { coerceImportRole } from "./rosterImportParse"
 
-// Per-username metadata changes the preflight detected (from metadata_update or
-// role_change outcomes), keyed by lowercased username. Drives the cell
-// highlighting + hover tooltips in the preview so the teacher sees exactly which
-// values the import will overwrite, in place, rather than in a separate list.
+// Per-row metadata changes the preflight detected (from metadata_update or
+// role_change outcomes), keyed by identityKey. Drives the cell highlighting +
+// hover tooltips in the preview so the teacher sees exactly which values the
+// import will overwrite, in place, rather than in a separate list.
 export type RowChanges = Record<string, MetadataChange[]>
 
-// Per-username role change (current -> CSV role), keyed by lowercased username,
-// so the Role cell highlights consistently with the metadata cells.
+// Per-row role change (current -> CSV role), keyed by identityKey, so the Role
+// cell highlights consistently with the metadata cells.
 export type RowRoleChanges = Record<
   string,
   { from: ClassroomRole; to: ClassroomRole }
 >
 
-// Shared highlight classes so a changed metadata cell and a changed role cell
-// read identically (single source — no drift between the two columns).
+// Per-row identity mismatch (the username the FILE declared -> the login its
+// github_id actually resolves to), keyed by identityKey. Deliberately NOT routed
+// through MetadataChange: username is not a MetadataField, and threading it
+// through the metadata machinery would leak a non-metadata field into
+// mergeStudentMetadata and the metadata label map.
+export type RowIdentityChanges = Record<string, { declaredUsername: string }>
+
+// Shared highlight classes so a changed metadata cell, a changed role cell, and a
+// corrected username read identically (single source — no drift between columns).
 const CHANGED_CELL_CLASS =
   "bg-warning/25 font-semibold text-base-content ring-1 ring-inset ring-warning/50"
 const CHANGED_TOOLTIP_CLASS =
@@ -77,7 +87,46 @@ const PreviewCell = ({
   )
 }
 
-// The parsed-roster preview: one row per deduped username with its name/email/
+// The identity column. An account row shows its login, tinted with an inline
+// "was <username>" hint when a github_id corrected it — the same treatment the
+// Role column uses for a role change, rather than a hover tooltip a keyboard or
+// touch user can't reach. An email row shows an explicit badge instead of a blank
+// cell, which would otherwise read as missing data (and announce as nothing at
+// all to a screen reader).
+const IdentityCell = ({
+  row,
+  declaredUsername,
+}: {
+  row: ResolvedImportRow
+  declaredUsername?: string
+}) => {
+  const { t } = useTranslation()
+  if (row.identity.kind === "email") {
+    return (
+      <td>
+        <Badge tone="info" size="sm">
+          {t("students.previewInviteByEmail")}
+        </Badge>
+      </td>
+    )
+  }
+  return (
+    <td className={declaredUsername ? CHANGED_CELL_CLASS : undefined}>
+      <div className="flex flex-col gap-0.5">
+        <code>{row.identity.username}</code>
+        {declaredUsername ? (
+          <span className="text-xs opacity-70">
+            {t("students.previewPreviousUsernameHint", {
+              username: declaredUsername,
+            })}
+          </span>
+        ) : null}
+      </div>
+    </td>
+  )
+}
+
+// The parsed-roster preview: one row per deduped identity with its name/email/
 // section and an editable role Select (seeded from the CSV role column). Role
 // edits bubble up so the parent can re-run the preflight. When `changes` marks a
 // row, its changed cells are highlighted with a hover tooltip showing the
@@ -88,20 +137,30 @@ export const RosterPreviewTable = ({
   onRoleChange,
   changes = {},
   roleChanges = {},
+  identityChanges = {},
   loading = false,
+  skeletonRowCount,
 }: {
-  rows: ImportRosterRow[]
+  rows: ResolvedImportRow[]
   rolesByUser: Record<string, ClassroomRole>
-  onRoleChange: (usernameKey: string, role: ClassroomRole) => void
+  onRoleChange: (rowKey: string, role: ClassroomRole) => void
   changes?: RowChanges
   roleChanges?: RowRoleChanges
+  identityChanges?: RowIdentityChanges
   // While the preflight resolves, the per-cell changes aren't known yet: render
-  // the change-bearing columns (name/email/section/role) as skeletons to signal
-  // "computing changes" in place, rather than briefly showing static values that
-  // then sprout highlights.
+  // the change-bearing columns as skeletons to signal "computing changes" in
+  // place, rather than briefly showing static values that then sprout highlights.
+  // The identity column is change-bearing too now (a github_id can correct a
+  // stale login), so it skeletons with the rest.
   loading?: boolean
+  // How many placeholder rows to draw while loading. Identities aren't resolved
+  // yet at that point, so `rows` is empty and the caller passes the parsed count.
+  skeletonRowCount?: number
 }) => {
   const { t } = useTranslation()
+  const skeletonRows = Array.from({
+    length: skeletonRowCount ?? rows.length,
+  })
   return (
     <div className="max-h-80 overflow-auto rounded-box border border-base-300">
       <table className="table table-sm" aria-busy={loading}>
@@ -117,13 +176,11 @@ export const RosterPreviewTable = ({
         </thead>
         <tbody>
           {loading
-            ? rows.map((row, index) => (
+            ? skeletonRows.map((_, index) => (
                 // Decorative loading placeholder — hidden from assistive tech.
-                <tr key={row.username.toLowerCase()} aria-hidden="true">
+                <tr key={`skeleton-${index}`} aria-hidden="true">
                   <td>{index + 1}</td>
-                  <td>
-                    <code>{row.username}</code>
-                  </td>
+                  <SkeletonCell bar="h-4 w-24" />
                   <SkeletonCell bar="h-4 w-28" />
                   <SkeletonCell bar="h-4 w-40" />
                   <SkeletonCell bar="h-4 w-16" />
@@ -131,19 +188,24 @@ export const RosterPreviewTable = ({
                 </tr>
               ))
             : rows.map((row, index) => {
-                const key = row.username.toLowerCase()
+                const key = identityKey(row.identity)
                 const rowChanges = changes[key] ?? []
                 const roleChange = roleChanges[key]
-                const changed = rowChanges.length > 0 || Boolean(roleChange)
+                const identityChange = identityChanges[key]
+                const changed =
+                  rowChanges.length > 0 ||
+                  Boolean(roleChange) ||
+                  Boolean(identityChange)
                 return (
                   <tr
                     key={key}
                     className={changed ? "bg-warning/10" : undefined}
                   >
                     <td>{index + 1}</td>
-                    <td>
-                      <code>{row.username}</code>
-                    </td>
+                    <IdentityCell
+                      row={row}
+                      declaredUsername={identityChange?.declaredUsername}
+                    />
                     <PreviewCell
                       value={[row.first_name, row.last_name]
                         .filter(Boolean)

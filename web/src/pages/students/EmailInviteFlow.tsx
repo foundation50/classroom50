@@ -5,6 +5,7 @@ import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type { ClassroomRole } from "@/util/teamRoster"
 import type { BulkInviteByEmailResult } from "@/domain/students"
 import type { InvalidEmailLine } from "@/pages/students/emailInvite"
+import type { ImportResultSectionRow } from "@/pages/students/RosterImportResult"
 import type { UploadKind } from "@/pages/students/uploadClassify"
 
 // The "Detected format" header + override picker, rendered once above the
@@ -202,6 +203,55 @@ export const EmailInvitePreview = ({
   )
 }
 
+// The four buckets a completed bulkInviteByEmail produces, as titled sections.
+// Shared so the dedicated email-invite screen and the roster-import screen render
+// them identically — only the titles differ, because "invited" by address must
+// not read as "invited" by handle on the merged screen.
+export const emailInviteSections = (
+  result: BulkInviteByEmailResult,
+  t: (key: string) => string,
+  titles: {
+    invited: string
+    skipped: string
+    deferred: string
+    failed: string
+  },
+): { title: string; rows: ImportResultSectionRow[] }[] =>
+  [
+    {
+      title: titles.invited,
+      rows: result.invited.map(({ email, role }) => ({
+        key: email,
+        label: email,
+        detail: t(ROLE_LABEL_KEY[role]),
+      })),
+    },
+    {
+      title: titles.skipped,
+      rows: result.skipped.map(({ email }) => ({
+        key: email,
+        label: email,
+        detail: t("students.emailInviteSkippedDetail"),
+      })),
+    },
+    {
+      title: titles.deferred,
+      rows: result.deferred.map((email) => ({
+        key: email,
+        label: email,
+        detail: t("students.inviteDeferredDetail"),
+      })),
+    },
+    {
+      title: titles.failed,
+      rows: result.failed.map((f) => ({
+        key: f.email,
+        label: f.email,
+        detail: f.message,
+      })),
+    },
+  ].filter((section) => section.rows.length > 0)
+
 // The email-invite result screen: the invited/skipped/deferred/failed buckets
 // from a completed bulkInviteByEmail. Uses the passed section renderer so it
 // reuses the modal's ImportResultSection without importing it (avoids a cycle).
@@ -214,7 +264,7 @@ export const EmailInviteResult = ({
   onDone: () => void
   renderSection: (props: {
     title: string
-    rows: { key: string; label: string; detail?: string }[]
+    rows: ImportResultSectionRow[]
   }) => React.ReactNode
 }) => {
   const { t } = useTranslation()
@@ -226,42 +276,14 @@ export const EmailInviteResult = ({
         </span>
       </Alert>
 
-      {result.invited.length > 0 &&
-        renderSection({
-          title: t("students.resultInvited"),
-          rows: result.invited.map(({ email, role }) => ({
-            key: email,
-            label: email,
-            detail: t(ROLE_LABEL_KEY[role]),
-          })),
-        })}
-      {result.skipped.length > 0 &&
-        renderSection({
-          title: t("students.resultSkipped"),
-          rows: result.skipped.map(({ email }) => ({
-            key: email,
-            label: email,
-            detail: t("students.emailInviteSkippedDetail"),
-          })),
-        })}
-      {result.deferred.length > 0 &&
-        renderSection({
-          title: t("students.resultInvitesDeferred"),
-          rows: result.deferred.map((email) => ({
-            key: email,
-            label: email,
-            detail: t("students.inviteDeferredDetail"),
-          })),
-        })}
-      {result.failed.length > 0 &&
-        renderSection({
-          title: t("students.resultInvitesFailed"),
-          rows: result.failed.map((f) => ({
-            key: f.email,
-            label: f.email,
-            detail: f.message,
-          })),
-        })}
+      {emailInviteSections(result, t, {
+        invited: t("students.resultInvited"),
+        skipped: t("students.resultSkipped"),
+        deferred: t("students.resultInvitesDeferred"),
+        failed: t("students.resultInvitesFailed"),
+      }).map((section) => (
+        <div key={section.title}>{renderSection(section)}</div>
+      ))}
 
       <div className="modal-action">
         <Button variant="primary" onClick={onDone}>

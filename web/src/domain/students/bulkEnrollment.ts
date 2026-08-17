@@ -44,10 +44,17 @@ type BulkImportProgress = {
 }
 
 // A parsed roster-upload row. Only username is required; the rest is optional
-// metadata. github_id is intentionally NOT taken from the file — it's re-derived
-// from GitHub so the stored id is always authoritative.
+// metadata. A `github_id` here is one the CALLER already resolved against GitHub
+// (the upload's preview trades a file's id for the account's current login) — it
+// is never taken straight from the uploaded file, so the stored id stays
+// authoritative.
 export type ImportRosterRow = {
   username: string
+  // The immutable account id, when the caller already resolved it (the upload's
+  // preview does, from a `github_id` column). Threaded so downstream writes can
+  // join on the account rather than a login that may be stale; the enroll pass
+  // still re-resolves from GitHub for rows that don't carry one.
+  github_id?: string
   first_name?: string
   last_name?: string
   email?: string

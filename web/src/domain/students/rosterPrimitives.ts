@@ -119,16 +119,24 @@ export async function withRosterRewrite(
 }
 
 // Append email-only pending rows for freshly sent email invites, one commit
-// for the whole batch. Only invites that carry a metadata team should be
+// for the whole batch. Only invites that carry an invite team should be
 // passed in — the reconcile keeps an email-only row exactly as long as a live
 // invite team backs it, so a team-less row would be removed on the next pass.
 // Emails already claimed by any row are skipped (a resend must not duplicate).
+// Any name/section the caller supplies is written with the row: the student has
+// no account yet, so the acceptance fold can't recover it later.
 // Best-effort and never throws: a missed row simply appears later, when the
 // accepted invite's reconcile fold appends it.
 export async function appendEmailInviteRows(
   client: GitHubClient,
   input: { org: string; classroom: string },
-  invites: { email: string; role: ClassroomRole }[],
+  invites: {
+    email: string
+    role: ClassroomRole
+    first_name?: string
+    last_name?: string
+    section?: string
+  }[],
 ): Promise<void> {
   if (invites.length === 0) return
   try {
@@ -147,10 +155,10 @@ export async function appendEmailInviteRows(
           normalizeStudentRow({
             username: "",
             github_id: "",
-            first_name: "",
-            last_name: "",
+            first_name: invite.first_name?.trim() ?? "",
+            last_name: invite.last_name?.trim() ?? "",
             email,
-            section: "",
+            section: invite.section?.trim() ?? "",
             role: invite.role,
           }),
         )

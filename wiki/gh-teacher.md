@@ -348,7 +348,8 @@ Bulk upsert. Accepts a 5-column header
 `github_id` (which is ignored and re-resolved). The field reference is in
 [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields). Every username is
 resolved up front — one typo aborts before any commit. New students are
-invited.
+invited. Every row must carry a `username`: unlike the web app's **Upload**, this
+command can't identify a student by `github_id` or by email alone.
 
 **Errors common to roster commands:** missing `classroom50` repository → `run gh teacher init
 <org> first`; missing `roster.csv` → points at `classroom add`; bad header →

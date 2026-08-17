@@ -13,16 +13,26 @@ export type SummaryCategory = {
 }
 
 // Collapse the five preflight buckets into the three teacher-facing categories:
-//  - add:    a membership will be created/activated (invite + enroll)
+//  - add:    a membership will be created/activated (invite + enroll), plus any
+//            email-identity row, each of which sends an invitation of its own
 //  - update: an existing member's details or role change (metadata + role_change)
 //  - skip:   already correct, nothing to do (no_action)
-export function summarizePreflight(preflight: PreflightResult): {
+//
+// `emailInviteCount` is passed in rather than read off the preflight because
+// email rows never enter the classification — they have no GitHub account to
+// classify against — but they are still work the summary must account for, or the
+// pills would under-report the visible row count.
+export function summarizePreflight(
+  preflight: PreflightResult,
+  emailInviteCount = 0,
+): {
   categories: SummaryCategory[]
   addCount: number
   updateCount: number
   skipCount: number
 } {
-  const addCount = preflight.needsInvite.length + preflight.enroll.length
+  const addCount =
+    preflight.needsInvite.length + preflight.enroll.length + emailInviteCount
   const updateCount =
     preflight.metadataUpdate.length + preflight.roleChanges.length
   const skipCount = preflight.noAction.length
@@ -40,11 +50,13 @@ export function summarizePreflight(preflight: PreflightResult): {
 // than a wall of tiles (most of them zero).
 export const PreflightSummary = ({
   preflight,
+  emailInviteCount = 0,
   detailsOpen,
   onToggleDetails,
   canToggle = true,
 }: {
   preflight: PreflightResult
+  emailInviteCount?: number
   detailsOpen: boolean
   onToggleDetails: () => void
   // Whether the details toggle is meaningful. False when the table is force-open
@@ -53,7 +65,7 @@ export const PreflightSummary = ({
   canToggle?: boolean
 }) => {
   const { t } = useTranslation()
-  const { categories } = summarizePreflight(preflight)
+  const { categories } = summarizePreflight(preflight, emailInviteCount)
   const active = categories.filter((c) => c.count > 0)
 
   return (

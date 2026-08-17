@@ -208,7 +208,16 @@ export type BulkInviteByEmailInput = {
   org: string
   classroom: string
   // Emails to invite, each with the role the teacher assigned in the preview.
-  invites: { email: string; role?: ClassroomRole }[]
+  // The optional name/section ride along onto the pending roster row so a CSV
+  // import doesn't lose the metadata it supplied (the row is written before the
+  // student has an account, so nothing else can fill it in).
+  invites: {
+    email: string
+    role?: ClassroomRole
+    first_name?: string
+    last_name?: string
+    section?: string
+  }[]
   onProgress?: (progress: {
     processed: number
     total: number
@@ -270,7 +279,13 @@ export async function bulkInviteByEmail(
   const deferred: string[] = []
 
   const targets = invites
-    .map((i) => ({ email: i.email.trim(), role: i.role ?? "student" }))
+    .map((i) => ({
+      email: i.email.trim(),
+      role: i.role ?? "student",
+      first_name: i.first_name,
+      last_name: i.last_name,
+      section: i.section,
+    }))
     .filter((i) => i.email)
   if (targets.length === 0) return { invited, skipped, failed, deferred }
 
@@ -404,8 +419,24 @@ export async function bulkInviteByEmail(
 
   // Retain the invited emails on the roster, one commit for the whole batch
   // (best-effort; a miss is appended by the acceptance reconcile). Every
-  // successful invite carries its metadata team, so `invited` is the row set.
-  await appendEmailInviteRows(client, { org, classroom }, invited)
+  // successful invite carries its invite team, so `invited` is the row set. The
+  // name/section the caller supplied ride along, since the row is written before
+  // the student has an account and nothing else can fill them in.
+  const metadataByEmail = new Map(targets.map((t) => [t.email, t]))
+  await appendEmailInviteRows(
+    client,
+    { org, classroom },
+    invited.map(({ email, role }) => {
+      const target = metadataByEmail.get(email)
+      return {
+        email,
+        role,
+        first_name: target?.first_name,
+        last_name: target?.last_name,
+        section: target?.section,
+      }
+    }),
+  )
 
   return { invited, skipped, failed, deferred }
 }

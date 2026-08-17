@@ -27,9 +27,10 @@ teams: there is no separate team-creation step and no group names.
 
 **Roster** — The list of students in a classroom. Backed by a `roster.csv`
 file, but the classroom's GitHub team is the source of truth for who is
-enrolled. Most rows are keyed by GitHub username; a student invited by email
-has a **pending row** until they accept. There is no equivalent of GitHub
-Classroom's roster identifier or student self-linking.
+enrolled. A row identifies a student by `github_id` or GitHub username; a student
+invited by email has a **pending row**, identified by their address, until they
+accept. There is no equivalent of GitHub Classroom's roster identifier or student
+self-linking.
 
 **Pending row** — A `roster.csv` row for someone invited by email who hasn't
 accepted yet. It holds the invited address and role, with no username or

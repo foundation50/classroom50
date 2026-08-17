@@ -332,34 +332,45 @@ GitHub organization.
 optional). You can enter an email instead of a username; that student then
 completes a separate onboarding process (see below).
 
-**Upload** — bulk-add students from a file. The upload accepts three
-formats and auto-detects which one you uploaded (you can override the guess):
+**Upload** — bulk-add students from a file. Roster CSV is how every upload is
+read, and it handles all three shapes; the other two entries in **Read the file
+as** are overrides that force one interpretation:
 
-- **A username list**: one GitHub username per line, no header. Simplest when
-  you already know everyone's handle.
 - **A roster CSV**: a header row plus one student per line. See the fields and
   example below.
-- **An email list**: one email address per line. Use this when you don't know
-  students' GitHub usernames. Each becomes an email invitation the student
-  completes by onboarding (see below).
+- **A plain list**: one GitHub username or one email address per line, no
+  header. Each line is read for what it is, so a mixed list works.
+- **The overrides**: choose **GitHub usernames** to read every line as a handle
+  even if it looks like an address, or **Email addresses** to send an
+  invitation to every line and read no columns at all.
 
 ### Roster CSV fields
 
-Only `username` is required in a CSV you upload. Every other column is optional
-and can be left out. Headers are matched case-insensitively, and any
-unrecognized column is ignored, so a CSV exported from your SIS or gradebook
-usually works unchanged. (A `github_id` column, if present, is ignored and
-re-resolved from GitHub.)
+Each row needs at least one column that identifies a student: `github_id`,
+`username`, or `email`. Every other column is optional. Headers are matched
+case-insensitively, and any unrecognized column is ignored, so a CSV exported
+from your SIS or gradebook usually works unchanged.
 
-| Column | Required | Description |
+When a row has more than one, they're used in that order — `github_id` first,
+then `username`, then `email`:
+
+| Column | Identifies a student | Description |
 | --- | --- | --- |
-| `username` | **Yes** | The student's GitHub username, e.g. `octocat`. |
+| `github_id` | Yes, first choice | The account's immutable numeric id, as written by Classroom 50's own `roster.csv`. Used to look up the account's current username, so a student who renamed their account is still found. |
+| `username` | Yes, if there's no `github_id` | The student's GitHub username, e.g. `octocat`. |
+| `email` | Yes, if there's neither | Invites the student by email. Also stored as their contact email on every row. |
 | `first_name` | No | Given name, for display and score exports. |
 | `last_name` | No | Family name, for display and score exports. |
 | `name` | No | Full name in one column, split into first/last. Use instead of `first_name`/`last_name`. |
-| `email` | No | Contact email. This does not send an email invite; the `username` invites them. |
 | `section` | No | A section or group label you can filter by. |
 | `role` | No | `student` (default), `ta`, `hta`, or `teacher`. Leave blank for students. |
+
+> [!NOTE]
+> If a row's `github_id` and `username` disagree, the upload uses the account
+> the id belongs to and asks you to confirm before importing — the preview shows
+> both, and the roster's stored username is corrected to match. An id that
+> doesn't match any GitHub account skips that row rather than falling back to
+> the username, since the username could belong to someone else entirely.
 
 A complete roster CSV looks like this:
 
@@ -387,20 +398,33 @@ hubot
 octofez
 ```
 
+So is a file that identifies some students by account and others only by email —
+useful at the start of term, when not everyone has reported a GitHub username:
+
+```csv
+github_id,username,email,first_name,section
+583231,octocat,octocat@example.edu,Mona,A
+,hubot,,Hu,A
+,,octofez@example.edu,Octo,B
+```
+
+Here `octocat` is found by id (even after a rename), `hubot` by username, and
+`octofez` is invited by email and appears as a pending row until they accept.
+
 > [!NOTE]
-> A username list or roster CSV both invites students **and** adds them to the
-> roster. An email list sends invitations and records each address as a
-> pending roster row. The row is matched to the student's GitHub account when
-> they accept; if the invitation is cancelled or expires, the row is removed
-> again on the next roster sync. Keep in mind the recorded address is the one
-> **you invited** — not necessarily the email on the student's GitHub account.
-> Names and sections can be filled in afterwards by editing the roster or
-> uploading a roster CSV.
+> A row identified by account (`github_id` or `username`) is both invited **and**
+> added to the roster. A row identified only by an email address is invited by
+> email, and the address is recorded as a pending roster row. That row is matched
+> to the student's GitHub account when they accept; if the invitation is
+> cancelled or expires, the row is removed again on the next roster sync. Keep in
+> mind the recorded address is the one **you invited** — not necessarily the email
+> on the student's GitHub account. A name and section supplied in the CSV are kept
+> on the pending row, so they're already there when the student joins.
 
 A pending row is why the stored `roster.csv` can hold a row with no `username`
-or `github_id`. Those rows are valid in the file, but not in a CSV you feed back
-in: **Upload** skips them, and `gh teacher roster import` rejects them. For more
-information, see
+or `github_id`. Re-uploading such a file to **Upload** is fine — it reads those
+rows by email — but `gh teacher roster import` rejects them, since the CLI still
+requires a username. For more information, see
 [Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
 > [!TIP]

@@ -317,9 +317,16 @@ gh teacher roster import <org> <classroom> <path-to-csv>
 Accepts a header of `username,first_name,last_name,email,section` (a trailing
 `github_id` column is accepted but ignored, since the CLI re-resolves each ID
 from GitHub). The column-by-column reference is in
-[Roster CSV fields](Web-Teacher-Guide#roster-csv-fields) — the web app and the
-CLI read the same format. Every username is resolved up front; one typo aborts
-the whole import before any commit. New students are invited.
+[Roster CSV fields](Web-Teacher-Guide#roster-csv-fields). Every username is
+resolved up front; one typo aborts the whole import before any commit. New
+students are invited.
+
+> [!NOTE]
+> The CLI reads a narrower format than the web app. Every row here needs a
+> `username`: the CLI ignores a `github_id` column rather than identifying a
+> student by it, rejects a trailing `role` column, and can't invite by email. So
+> a file the web app's **Upload** accepts may still be rejected here. Use the web
+> app for a roster that identifies students by id or by email alone.
 
 **View the roster:**
 

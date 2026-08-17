@@ -1,12 +1,15 @@
 import {
   applyClassroomRoleChange,
   bulkEnrollStudentsInClassroom,
+  bulkInviteByEmail,
   inviteRosterStudents,
   NoNewStudentsError,
+  repairRosterUsernames,
   RosterCsvMalformedError,
   updateClassroomMetadata,
   writeClassroomRoles,
   type BulkImportResult,
+  type BulkInviteByEmailResult,
   type ImportRosterRow,
 } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
@@ -44,6 +47,7 @@ export type RosterImportMessages = {
   roleWritebackFailed: string
   metadataWritebackMalformed: string
   metadataWritebackFailed: string
+  invitingEmails: string
 }
 
 // The full roster-import outcome. On a hard enroll failure (nothing written) the
@@ -57,31 +61,61 @@ export type RosterImportOutcome =
       inviteOutcome: InviteOutcome | null
       inviteError: string | null
       roleChangeOutcome: RoleChangeOutcome | null
+      // The email-invite pass's result, when the batch carried email-identity
+      // rows. Null when it carried none.
+      emailResult: BulkInviteByEmailResult | null
+      // A hard failure of the email pass. The roster write already landed, so
+      // this is surfaced on the completed screen rather than replacing it.
+      emailError: string | null
     }
 
-// The roster-CSV import flow (username/CSV upload branch): write roster.csv +
-// team-add existing members, invite non-members, write back assigned roles, and
-// apply the confirmed team moves the preflight identified. Extracted from
-// UploadRoster so the multi-step sequencing is reasoned about (and tested) apart
-// from the modal's phase/setState wiring. The caller owns all React state; this
-// returns the outcomes to map onto it. `onProgress` streams the same progress
-// shape the component renders.
+// The roster-import flow. Runs up to two pipelines SEQUENTIALLY over one shared
+// roster.csv: account rows (write rows + team-add members, invite non-members,
+// write back roles/metadata, apply confirmed team moves), then email rows (org
+// invitations that each land a pending row). Extracted from UploadRoster so the
+// multi-step sequencing is reasoned about (and tested) apart from the modal's
+// phase/setState wiring. The caller owns all React state; this returns the
+// outcomes to map onto it. `onProgress` streams the same progress shape the
+// component renders.
+//
+// The passes are never concurrent: every step here is a read-modify-write on the
+// same branch ref, so overlapping them would contend for it.
 export async function runRosterImport(
   client: GitHubClient,
   params: {
     org: string
     classroom: string
     rows: ImportRosterRow[]
-    rolesByUser: Record<string, ClassroomRole>
+    // Email-identity rows, each already carrying the role the teacher assigned
+    // and any name/section the file supplied. Empty for an account-only file.
+    emailInvites?: {
+      email: string
+      role: ClassroomRole
+      first_name?: string
+      last_name?: string
+      section?: string
+    }[]
     // The classification computed in the preview, snapshotted so the process
-    // pass matches exactly what the teacher confirmed.
+    // pass matches exactly what the teacher confirmed. Its identityMismatches
+    // are the confirmed stale-username repairs.
     plan: PreflightResult | null
     onProgress: (progress: ImportProgress) => void
     messages: RosterImportMessages
   },
 ): Promise<RosterImportOutcome> {
-  const { org, classroom, rows, rolesByUser, plan, onProgress, messages } =
-    params
+  const {
+    org,
+    classroom,
+    rows,
+    emailInvites = [],
+    plan,
+    onProgress,
+    messages,
+  } = params
+
+  // Every write below joins on the immutable account when the preview resolved
+  // one, rather than a login that may be stale.
+  const rowByLogin = new Map(rows.map((r) => [r.username.toLowerCase(), r]))
 
   onProgress({
     processed: 0,
@@ -95,24 +129,32 @@ export async function runRosterImport(
   //    benign here: we still run the invite pass below so a student whose first
   //    invite was rate-limited/failed gets re-invited. Any other enroll error is
   //    a genuine failure (nothing written) -> error screen.
-  let importResult: BulkImportResult
-  try {
-    importResult = await bulkEnrollStudentsInClassroom(client, {
-      org,
-      classroom,
-      rows,
-      onProgress,
-    })
-  } catch (err) {
-    if (err instanceof NoNewStudentsError) {
-      // All rows already in roster.csv — synthesize an empty result so the
-      // completed view still renders, then fall through to the invite pass.
-      importResult = { addedStudents: [], skippedStudents: [] }
-    } else {
-      log.error("roster import failed", { err, record: true })
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : messages.importFailed,
+  //
+  //    Skipped entirely for an email-only file: addStudentsToClassroom requires
+  //    at least one username, so calling it with no account rows would fail a
+  //    batch that has real work to do in the email pass below.
+  let importResult: BulkImportResult = {
+    addedStudents: [],
+    skippedStudents: [],
+  }
+  if (rows.length > 0) {
+    try {
+      importResult = await bulkEnrollStudentsInClassroom(client, {
+        org,
+        classroom,
+        rows,
+        onProgress,
+      })
+    } catch (err) {
+      // NoNewStudentsError means every row already exists in roster.csv. Benign:
+      // keep the empty result so the completed view renders, and fall through to
+      // the invite pass so a previously rate-limited student is re-invited.
+      if (!(err instanceof NoNewStudentsError)) {
+        log.error("roster import failed", { err, record: true })
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : messages.importFailed,
+        }
       }
     }
   }
@@ -120,6 +162,32 @@ export async function runRosterImport(
   let inviteOutcome: InviteOutcome | null = null
   let inviteError: string | null = null
   let roleChangeOutcome: RoleChangeOutcome | null = null
+  let emailResult: BulkInviteByEmailResult | null = null
+  let emailError: string | null = null
+
+  // 1.5) Repair a stale stored username BEFORE any login-keyed write below. The
+  //    teacher confirmed these in the preview: the row's github_id resolved to a
+  //    different login than the file declared, which means the student renamed
+  //    their account. Nothing else in the app repairs this (the reconcile fills a
+  //    blank username but never repoints an existing one), so without it the role
+  //    writeback below would keep missing the row and the same warning would
+  //    reappear on every future upload. Best-effort — a failure only means the
+  //    id-keyed writes still land while the stored login stays stale.
+  const usernameRepairs = (plan?.identityMismatches ?? []).map((m) => ({
+    github_id: m.github_id,
+    username: m.username,
+  }))
+  if (usernameRepairs.length > 0) {
+    try {
+      await repairRosterUsernames(client, {
+        org,
+        classroom,
+        repairs: usernameRepairs,
+      })
+    } catch (err) {
+      log.warn("roster username repair failed", { err, record: true })
+    }
+  }
 
   // 2) The team is the source of truth for who shows on the roster, so send org
   //    invites for uploaded students who aren't already members — they then
@@ -128,11 +196,11 @@ export async function runRosterImport(
   //    active/pending, so a re-run after a rate limit still re-invites a student
   //    whose first invite was deferred (their CSV row already exists, so they'd
   //    otherwise be skipped as a duplicate and, since CSV-only rows don't
-  //    render, silently lost). Thread the github_id the enroll pass just
-  //    resolved (from addedStudents, keyed by login) so the invite targets the
-  //    immutable account rather than re-resolving a possibly recycled/renamed
-  //    login. Their roster.csv row enriches the pending row; deferred/failed
-  //    invites are surfaced in the result dialog.
+  //    render, silently lost). Thread the github_id — the one the preview
+  //    resolved, else the one the enroll pass just captured — so the invite
+  //    targets the immutable account rather than re-resolving a possibly
+  //    recycled/renamed login. Their roster.csv row enriches the pending row;
+  //    deferred/failed invites are surfaced in the result dialog.
   //
   //    SKIP the invite pass entirely when the preflight found every uploaded
   //    username is already an active org member — there's nothing to invite, so
@@ -143,7 +211,11 @@ export async function runRosterImport(
       s.github_id,
     ]),
   )
-  if (!plan?.allAlreadyMembers) {
+  const resolvedIdFor = (username: string): string =>
+    rowByLogin.get(username.toLowerCase())?.github_id ??
+    idByLogin.get(username.toLowerCase()) ??
+    ""
+  if (rows.length > 0 && !plan?.allAlreadyMembers) {
     onProgress({
       processed: 0,
       total: rows.length,
@@ -155,8 +227,8 @@ export async function runRosterImport(
         classroom,
         students: rows.map((r) => ({
           username: r.username,
-          github_id: idByLogin.get(r.username.toLowerCase()) ?? "",
-          role: rolesByUser[r.username.toLowerCase()] ?? "student",
+          github_id: resolvedIdFor(r.username),
+          role: r.role ?? "student",
         })),
         onProgress,
       })
@@ -189,7 +261,8 @@ export async function runRosterImport(
   const roleWriteback = rows
     .map((r) => ({
       username: r.username,
-      role: rolesByUser[r.username.toLowerCase()] ?? "student",
+      github_id: resolvedIdFor(r.username) || undefined,
+      role: r.role ?? "student",
     }))
     .filter((r) => r.username.trim())
   if (roleWriteback.length > 0) {
@@ -225,13 +298,12 @@ export async function runRosterImport(
     ...(plan?.roleChanges ?? []).filter((c) => c.changedFields.length > 0),
     ...(plan?.enroll ?? []).filter((e) => e.changedFields.length > 0),
   ]
-  const rowByLogin = new Map(rows.map((r) => [r.username.toLowerCase(), r]))
   const metadataUpdates = metadataOutcomes
     .map((o) => rowByLogin.get(o.username.toLowerCase()))
     .filter((r): r is ImportRosterRow => Boolean(r))
     .map((r) => ({
       username: r.username,
-      github_id: idByLogin.get(r.username.toLowerCase()) || undefined,
+      github_id: resolvedIdFor(r.username) || undefined,
       first_name: r.first_name,
       last_name: r.last_name,
       email: r.email,
@@ -295,7 +367,7 @@ export async function runRosterImport(
           org,
           classroom,
           username: move.username,
-          github_id: idByLogin.get(move.username.toLowerCase()),
+          github_id: resolvedIdFor(move.username) || undefined,
           fromRoles: move.fromRoles,
           toRole: move.toRole,
         })
@@ -323,11 +395,42 @@ export async function runRosterImport(
     roleChangeOutcome = { changed, failed }
   }
 
+  // 5) Send the email-identity rows' invitations LAST, after every account-row
+  //    write has committed. Each successful invite lands a pending roster row
+  //    carrying the name/section the file supplied, so the teacher's metadata
+  //    survives even though the student has no GitHub account yet.
+  //
+  //    Wrapped rather than thrown: bulkInviteByEmail throws outright when a
+  //    role's team can't be resolved, and by this point the roster write has
+  //    already landed — dropping the teacher onto the bare error screen would
+  //    hide it. Surface the failure on the completed screen instead, the way the
+  //    account invite pass already does.
+  if (emailInvites.length > 0) {
+    onProgress({
+      processed: 0,
+      total: emailInvites.length,
+      message: messages.invitingEmails,
+    })
+    try {
+      emailResult = await bulkInviteByEmail(client, {
+        org,
+        classroom,
+        invites: emailInvites,
+        onProgress,
+      })
+    } catch (err) {
+      log.error("roster email invite pass failed", { err, record: true })
+      emailError = err instanceof Error ? err.message : messages.importFailed
+    }
+  }
+
   return {
     ok: true,
     importResult,
     inviteOutcome,
     inviteError,
     roleChangeOutcome,
+    emailResult,
+    emailError,
   }
 }

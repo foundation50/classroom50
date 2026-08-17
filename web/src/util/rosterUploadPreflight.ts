@@ -57,6 +57,11 @@ export type PreflightRow = StudentMetadata & {
   username: string
   github_id?: string
   role: PreflightRole
+  // Set when the row's github_id resolved to a login that disagrees with the
+  // username the file declared. Surfaced as an identityMismatch so the import
+  // sits behind an explicit confirmation: a mis-keyed id would otherwise invite
+  // a stranger into the org under this row's name and section.
+  declaredUsername?: string
 }
 
 // The stored roster.csv metadata for a member, returned by the storedByIdentity
@@ -110,6 +115,15 @@ export type PreflightOutcome =
       changes: MetadataChange[]
     }
 
+// A row whose file-declared username disagrees with the login its github_id
+// resolved to. The id wins (it addresses the immutable account), but the teacher
+// confirms before we act on it.
+export type IdentityMismatch = {
+  username: string
+  declaredUsername: string
+  github_id: string
+}
+
 export type PreflightResult = {
   outcomes: PreflightOutcome[]
   noAction: Extract<PreflightOutcome, { kind: "no_action" }>[]
@@ -117,6 +131,7 @@ export type PreflightResult = {
   needsInvite: Extract<PreflightOutcome, { kind: "needs_invite" }>[]
   enroll: Extract<PreflightOutcome, { kind: "enroll" }>[]
   roleChanges: Extract<PreflightOutcome, { kind: "role_change" }>[]
+  identityMismatches: IdentityMismatch[]
   // True when EVERY uploaded username is already an active org member, so no
   // invitations will be sent (the caller can skip the invite pass entirely).
   allAlreadyMembers: boolean
@@ -260,6 +275,14 @@ export function classifyRosterUpload(
       o.kind === "role_change",
   )
 
+  const identityMismatches: IdentityMismatch[] = rows
+    .filter((row) => row.declaredUsername && row.github_id)
+    .map((row) => ({
+      username: row.username.trim(),
+      declaredUsername: row.declaredUsername as string,
+      github_id: row.github_id as string,
+    }))
+
   return {
     outcomes,
     noAction,
@@ -267,6 +290,7 @@ export function classifyRosterUpload(
     needsInvite,
     enroll,
     roleChanges,
+    identityMismatches,
     allAlreadyMembers: needsInvite.length === 0,
   }
 }
