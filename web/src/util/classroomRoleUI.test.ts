@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  canCancelInviteFor,
   canTargetForUnenroll,
   countByRole,
   enrolledCountsByRole,
@@ -54,6 +55,27 @@ describe("canTargetForUnenroll", () => {
       true,
     )
     expect(canTargetForUnenroll({ username: "", github_id: "4242" })).toBe(true)
+  })
+})
+
+// The complement of canTargetForUnenroll: the action that CAN retire a pending
+// email invite. Selection keys on both, so the bulk bar's three actions aren't
+// gated by whichever one happens to be the most restrictive.
+describe("canCancelInviteFor", () => {
+  it("is true for a pending row with an invitation id, identity or not", () => {
+    expect(canCancelInviteFor({ state: "pending", invitation_id: 7 })).toBe(
+      true,
+    )
+  })
+  it("is false for an enrolled row", () => {
+    expect(canCancelInviteFor({ state: "enrolled", invitation_id: 7 })).toBe(
+      false,
+    )
+  })
+  it("is false for a pending row with no invitation id to cancel", () => {
+    expect(
+      canCancelInviteFor({ state: "pending", invitation_id: undefined }),
+    ).toBe(false)
   })
 })
 

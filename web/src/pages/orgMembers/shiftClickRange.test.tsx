@@ -16,9 +16,13 @@ type Row = { key: string }
 function Harness({
   rows,
   selectable = () => true,
+  // Real callers disable a non-selectable checkbox. A test can turn that off to
+  // exercise the hook's own gate rather than the DOM's.
+  disableUnselectable = true,
 }: {
   rows: Row[]
   selectable?: (row: Row) => boolean
+  disableUnselectable?: boolean
 }) {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   const { handleToggleRow, handleRowCheckboxClick } = useRangeSelection(
@@ -35,7 +39,7 @@ function Harness({
           <input
             type="checkbox"
             aria-label={row.key}
-            disabled={!selectable(row)}
+            disabled={disableUnselectable && !selectable(row)}
             checked={selectedKeys.has(row.key)}
             onClick={(e) => handleRowCheckboxClick(e, row.key)}
             onChange={() => handleToggleRow(row.key)}
@@ -104,5 +108,28 @@ describe("shift-click range selection (useRangeSelection wiring)", () => {
     await shiftClick(user, "d")
 
     expect(screen.getByTestId("selected").textContent).toBe("a,c,d")
+  })
+
+  it("refuses a plain click on a non-selectable row", async () => {
+    // The single-click path must honour `selectable` as selectRange does. A caller
+    // that doesn't also disable the input (or a click reaching it another way)
+    // would otherwise add the key, render the box CHECKED, and then have
+    // resolveSelectedRows filter it out — a ticked box that selects nothing.
+    // Rendered enabled on purpose: a disabled input would mask the hook's own gate.
+    const user = userEvent.setup()
+    render(
+      <Harness
+        rows={[{ key: "a" }, { key: "pending" }]}
+        selectable={(row) => row.key !== "pending"}
+        disableUnselectable={false}
+      />,
+    )
+
+    await user.click(screen.getByLabelText("pending"))
+    expect(screen.getByTestId("selected").textContent).toBe("")
+
+    // And a selectable row still toggles normally.
+    await user.click(screen.getByLabelText("a"))
+    expect(screen.getByTestId("selected").textContent).toBe("a")
   })
 })

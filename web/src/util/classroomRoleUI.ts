@@ -102,6 +102,16 @@ export function canTargetForUnenroll(
   return Boolean(row.username || row.github_id)
 }
 
+// Whether this row's invitation can be cancelled — the action that retires a
+// pending row unenroll can't target. Keyed on the org-invitation id rather than
+// an identity, because that id is what cancelOrgInvitation needs and it is
+// present on a pending row even when no GitHub account exists yet.
+export function canCancelInviteFor(
+  row: Pick<TeamRosterRow, "state" | "invitation_id">,
+): boolean {
+  return row.state === "pending" && typeof row.invitation_id === "number"
+}
+
 // Per-role head counts across the roster. `student` counts every row carrying
 // the student role (a student who is also staff still counts as a student);
 // `teacher`/`hta`/`ta` count every row holding that staff role. A person on two

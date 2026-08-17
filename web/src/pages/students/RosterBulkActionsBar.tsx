@@ -22,6 +22,7 @@ import {
   type BulkResultView,
 } from "@/components/bulk/resultView"
 import type { TeamRosterRow } from "@/util/teamRoster"
+import { canTargetForUnenroll } from "@/util/classroomRoleUI"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("students:RosterBulkActionsBar")
@@ -157,6 +158,11 @@ const RosterBulkActionsBar = ({
   const cancellableSelected = pendingSelected.filter(
     (r) => typeof r.invitation_id === "number",
   )
+  // Unenroll can only target a row the roster matcher can find. A selection may
+  // now mix an email-only pending invite (cancellable, not unenrollable) with
+  // ordinary rows, so filter rather than sending the whole selection and letting
+  // the writer silently report the pending ones as "already removed".
+  const unenrollableSelected = selectedRows.filter(canTargetForUnenroll)
 
   const isOpen = phase !== "idle"
 
@@ -169,21 +175,21 @@ const RosterBulkActionsBar = ({
   }
 
   const runUnenroll = async () => {
-    if (selectedRows.length === 0) return
+    if (unenrollableSelected.length === 0) return
     setAction("unenroll")
     setPhase("working")
     setError(null)
     setResult(null)
     setProgress({
       processed: 0,
-      total: selectedRows.length,
+      total: unenrollableSelected.length,
       message: t("students.bulk.starting"),
     })
     try {
       const res = await bulkUnenrollRoster(client, {
         org,
         classroom,
-        rows: selectedRows,
+        rows: unenrollableSelected,
         onProgress: setProgress,
       })
       setResult(buildUnenrollResult(res, t))
@@ -197,7 +203,7 @@ const RosterBulkActionsBar = ({
       )
       onDone(
         "unenroll",
-        selectedRows
+        unenrollableSelected
           .filter((r) => removedKeys.has(r.key))
           .map((r) => ({ username: r.username })),
       )
@@ -485,11 +491,12 @@ const RosterBulkActionsBar = ({
                   size="sm"
                   className="join-item text-error hover:bg-error/10"
                   aria-label={t("students.bulk.unenrollSelected", {
-                    count: selectedRows.length,
+                    count: unenrollableSelected.length,
                   })}
                   title={t("students.bulk.unenrollSelected", {
-                    count: selectedRows.length,
+                    count: unenrollableSelected.length,
                   })}
+                  disabled={unenrollableSelected.length === 0}
                   onClick={() => setConfirmingUnenroll(true)}
                 >
                   {t("students.bulk.unenroll")}
@@ -516,10 +523,10 @@ const RosterBulkActionsBar = ({
         dangerous
         needsConfirm={false}
         title={t("students.bulk.confirmUnenrollTitle", {
-          count: selectedRows.length,
+          count: unenrollableSelected.length,
         })}
         description={t("students.bulk.confirmUnenrollBody", {
-          count: selectedRows.length,
+          count: unenrollableSelected.length,
         })}
         confirmLabel={t("students.bulk.unenroll")}
         onConfirm={async () => {

@@ -298,7 +298,12 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       state: "pending",
       roles: [role],
       username: login,
-      github_id: own?.github_id?.trim() ?? "",
+      // Only inherit an id when the invitation names a login. An email invite
+      // matched to an identity-bearing row by a SHARED address (a returning
+      // student's old row) would otherwise get a login-less row carrying someone's
+      // id: enough to pass the identity guards, so Resend would offer a button
+      // that always errors and unenroll would match — and remove — the OTHER row.
+      github_id: login ? (own?.github_id?.trim() ?? "") : "",
       avatar_url: "",
       invitation_id: invite.id,
       ...metadataFrom(own, legacyFor(emailKey || own?.email)),

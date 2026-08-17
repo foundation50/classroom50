@@ -558,6 +558,7 @@
       "colName": "Name",
       "colSection": "Section",
       "colRole": "Role",
+      "invitePending": "Invited by email — hasn't joined yet",
       "empty": "No one is listed in roster.csv yet."
     },
     "classroomTeamLabel": "Classroom team",

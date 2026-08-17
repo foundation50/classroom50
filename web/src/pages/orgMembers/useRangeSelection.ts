@@ -40,6 +40,12 @@ export function useRangeSelection<T extends Keyed>(
       rangeHandledRef.current = false
       return
     }
+    // Honour `selectable` here as selectRange already does. Without it a row the
+    // bulk bar can't act on still enters the set, so its checkbox renders checked
+    // while resolveSelectedRows filters it back out — a ticked box that does
+    // nothing, and a selection count that disagrees with the toolbar.
+    const row = order.find((r) => r.key === key)
+    if (row && !selectable(row)) return
     setSelectedKeys((prev) => toggleRow(prev, key))
     rangeAnchorKey.current = key
   }

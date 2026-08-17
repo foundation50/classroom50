@@ -19,9 +19,13 @@ export const RosterRow = ({
   onOpen,
   onCheckboxClick,
   onToggle,
+  selectable = true,
 }: {
   row: TeamRosterRow
   selfRow: boolean
+  // False when the bulk bar can't act on this row. Rendered as a disabled
+  // checkbox so it reads as unavailable rather than silently ignoring the click.
+  selectable?: boolean
   checked: boolean
   onOpen: (key: string) => void
   onCheckboxClick: (
@@ -49,7 +53,7 @@ export const RosterRow = ({
             ? t("students.bulk.selfNotSelectable")
             : t("students.bulk.selectRow", { label: displayHandle })
         }
-        disabled={selfRow}
+        disabled={selfRow || !selectable}
         title={selfRow ? t("students.bulk.selfNotSelectable") : undefined}
         checked={checked}
         onClick={(e) => {

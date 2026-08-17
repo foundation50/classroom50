@@ -154,6 +154,39 @@ describe("buildTeamRoster", () => {
     expect(rows[0].invitation_id).toBe(3)
   })
 
+  it("does not give a login-less invite an id borrowed via a shared address", () => {
+    // A returning student's old row carries their id AND their address. An email
+    // invite matched to it by address would otherwise produce a login-less row
+    // carrying that id — enough to pass the identity guards, so Resend offers a
+    // button that always errors and unenroll matches (and removes) the OTHER row.
+    const rows = buildTeamRoster({
+      members: [],
+      invitations: [invite({ id: 4, email: "shared@uni.edu" })],
+      students: [
+        csvRow({
+          github_id: "909",
+          username: "returning",
+          email: "shared@uni.edu",
+        }),
+      ],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      state: "pending",
+      username: "",
+      github_id: "",
+    })
+  })
+
+  it("still carries the id when the invitation names a login", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      invitations: [invite({ id: 5, login: "ada" })],
+      students: [csvRow({ github_id: "101", username: "ada" })],
+    })
+    expect(rows[0]).toMatchObject({ username: "ada", github_id: "101" })
+  })
+
   it("does NOT emit a row for a CSV person not on any team or invite", () => {
     const rows = buildTeamRoster({
       members: [member(101, "ada")],
