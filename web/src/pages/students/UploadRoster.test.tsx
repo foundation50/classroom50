@@ -951,14 +951,13 @@ describe("UploadRoster identity mismatch gate", () => {
     )
 
     await waitFor(() =>
-      expect(screen.getByText("students.dropUnresolvedId")).toBeTruthy(),
+      expect(screen.getByText("students.importBlocked:1")).toBeTruthy(),
     )
-    // Which line and which id is asserted in importProblems.test.ts — this
-    // harness's t() only interpolates {{count}}. What matters here is that the row
-    // never reached the table and the preview was replaced by the report, so there
-    // is no partial import to press.
+    // WHICH line and which id is asserted in importProblems.test.ts: the per-line
+    // sentences render through <Trans>, which needs a real i18n instance this
+    // harness doesn't set up. What matters here is that the row never reached the
+    // table and the preview was replaced, so there is no partial import to press.
     expect(screen.queryByText("someone-else")).toBeNull()
-    expect(screen.getByText("students.importBlocked:1")).toBeTruthy()
     expect(screen.queryByText("students.summaryViewDetails")).toBeNull()
   })
 })

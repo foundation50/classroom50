@@ -1,27 +1,24 @@
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { Alert, Button, MonoLtr } from "@/components/ui"
 import type { ImportProblem } from "@/pages/students/importProblems"
 
-// The per-line list both report variants share. The whole explanation is ONE
-// interpolated string per reason rather than assembled fragments, so a translator
-// can reorder it; the value is rendered LTR because a handle, address, or id is
-// always LTR even in an RTL locale.
-const ProblemList = ({ problems }: { problems: readonly ImportProblem[] }) => {
-  const { t } = useTranslation()
-  return (
-    <ul className="ms-4 list-disc text-sm">
-      {problems.map((p) => (
-        <li key={`${p.line}-${p.key}`}>
-          {p.value ? (
-            <MonoLtr>{t(p.key, { line: p.line, value: p.value })}</MonoLtr>
-          ) : (
-            t(p.key, { line: p.line })
-          )}
-        </li>
-      ))}
-    </ul>
-  )
-}
+// The per-line list both report variants share. Each explanation is ONE
+// translatable sentence so a translator can reorder it, with the offending value
+// marked up as a <v> tag: only the identifier is monospaced and LTR-isolated,
+// which keeps the sentence itself reading correctly in an RTL locale.
+const ProblemList = ({ problems }: { problems: readonly ImportProblem[] }) => (
+  <ul className="ms-4 list-disc text-sm">
+    {problems.map((p) => (
+      <li key={`${p.line}-${p.key}`}>
+        <Trans
+          i18nKey={p.key}
+          values={{ line: p.line, value: p.value }}
+          components={{ v: <MonoLtr /> }}
+        />
+      </li>
+    ))}
+  </ul>
+)
 
 // The blocking report: shown INSTEAD of the preview when any row carries content
 // we couldn't use, so there is no table and no import button to press. The file

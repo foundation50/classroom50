@@ -138,6 +138,16 @@ describe("parseRosterImportFile", () => {
         { line: 4, reason: "bad-value", value: "John Smith" },
       ])
     })
+
+    it("counts a newline inside a quoted field", () => {
+      // The row spans lines 2-3, so the row AFTER it is on line 4. Deriving lines
+      // by splitting on newlines would report 3 and send the teacher to the middle
+      // of someone else's row.
+      const csv = 'username,note\nada,"one\ntwo"\n-bad-,x\n'
+      expect(parse(csv).dropped).toEqual([
+        { line: 4, reason: "bad-username", value: "-bad-" },
+      ])
+    })
   })
 
   it("reports a metadata-only row as incomplete, not as bad content", () => {

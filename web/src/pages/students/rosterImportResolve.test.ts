@@ -130,20 +130,25 @@ describe("resolveImportIdentities", () => {
 
   it("stops resolving on a rate limit and reports the rest as a lookup failure", async () => {
     getUserById.mockClear()
-    getUserById.mockRejectedValueOnce(rateLimitError())
+    // Lookups run in bounded-concurrency batches, so a rate limit can't unsend the
+    // requests already in flight beside it — what it must do is stop the batches
+    // AFTER it. 40 ids is several batches; only the first should be spent.
+    getUserById.mockRejectedValue(rateLimitError())
+    const ids = Array.from({ length: 40 }, (_, i) => i + 1)
     const res = await resolveImportIdentities(
       client,
-      [row({ githubId: 1 }), row({ githubId: 2 })],
+      ids.map((id) => row({ githubId: id })),
       new Map(),
     )
-    expect(getUserById).toHaveBeenCalledTimes(1)
+    expect(getUserById.mock.calls.length).toBeLessThan(ids.length)
     expect(res.rows).toEqual([])
     // A rate limit says nothing about whether the accounts exist, so these must
     // NOT be reported as bad ids — that would send the teacher to edit a fine file.
-    expect(res.unusable.map((u) => u.reason)).toEqual([
-      "id-lookup-failed",
-      "id-lookup-failed",
-    ])
+    expect(res.unusable).toHaveLength(ids.length)
+    expect(res.unusable.every((u) => u.reason === "id-lookup-failed")).toBe(
+      true,
+    )
+    getUserById.mockReset()
   })
 
   it("reports a transient server error as a lookup failure, not a bad id", async () => {
@@ -157,6 +162,32 @@ describe("resolveImportIdentities", () => {
     expect(res.unusable[0]?.reason).toBe("id-lookup-failed")
     // Still fails closed: the username cell is never substituted.
     expect(res.rows).toEqual([])
+  })
+
+  it("bounds how many lookups are in flight at once", async () => {
+    getUserById.mockClear()
+    // A preview blocks on resolution, so the cap must not become that many serial
+    // round-trips — but it must not burst either, since GitHub's secondary limits
+    // throttle concurrency. Track the high-water mark of overlapping calls.
+    let inFlight = 0
+    let peak = 0
+    getUserById.mockImplementation(async (_c: unknown, id: number) => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await Promise.resolve()
+      inFlight--
+      return { id, login: `user${id}` }
+    })
+    const ids = Array.from({ length: 60 }, (_, i) => i + 1)
+    const res = await resolveImportIdentities(
+      client,
+      ids.map((id) => row({ githubId: id })),
+      new Map(),
+    )
+    expect(res.rows).toHaveLength(ids.length)
+    expect(peak).toBeGreaterThan(1)
+    expect(peak).toBeLessThanOrEqual(10)
+    getUserById.mockReset()
   })
 
   it("caps the network fallback and reports the rows beyond it", async () => {

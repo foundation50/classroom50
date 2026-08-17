@@ -13,8 +13,6 @@ export type ImportResultSectionRow = {
   detail?: string
 }
 
-// A titled, scrollable table of result rows (code + detail). Shared by the
-// roster-result view below and the email-invite result (via renderSection).
 // The four buckets a completed bulkInviteByEmail produces, as titled sections.
 // Titles are passed in because "invited" by address must not read as "invited" by
 // handle on a screen that reports both.
@@ -63,7 +61,8 @@ const emailInviteSections = (
     },
   ].filter((section) => section.rows.length > 0)
 
-export const ImportResultSection = ({
+// A titled, scrollable table of result rows (code + detail).
+const ImportResultSection = ({
   title,
   rows,
 }: {

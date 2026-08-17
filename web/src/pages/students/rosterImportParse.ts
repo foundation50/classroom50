@@ -109,24 +109,43 @@ const structuralErrorOf = (
 
 const stripMailto = (value: string) => value.replace(/^mailto:/i, "").trim()
 
-// The true 1-based file line of each row Papa will hand back, header first.
+const countNewlines = (s: string) => {
+  let n = 0
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) === 10) n++
+  return n
+}
+
+// Parse a headed CSV, pairing each row with the TRUE 1-based file line it ENDS on.
 //
-// Papa is given the TRIMMED text and skips blank rows (`skipEmptyLines: greedy`),
-// so a data row's index is not its line: leading blank lines vanish and every
-// interior blank line shifts the rest. A reported line number is the teacher's
-// only handle on the row to edit, so walk the original text and record the lines
-// Papa will keep. `greedy` drops a line whose every field is blank, which is what
-// this mirrors — using the delimiter Papa actually detected, so a `,,,` row is
-// counted as skipped here exactly as it is there.
-const keptLineNumbers = (text: string, delimiter: string): number[] => {
-  const lines: number[] = []
-  text.split(/\r?\n/).forEach((line, index) => {
-    const blank = delimiter
-      ? line.split(delimiter).every((cell) => cell.trim() === "")
-      : line.trim() === ""
-    if (!blank) lines.push(index + 1)
+// Papa skips blank rows (`skipEmptyLines: greedy`), so a row's index is not its
+// line, and a reported line number is the teacher's only handle on the row to
+// edit. Rather than re-deriving the mapping by splitting on newlines — which
+// diverges from Papa the moment a quoted field contains one — use the per-row
+// `cursor` Papa reports through `step`: the offset it has consumed up to the end
+// of that row. Counting the newlines before it is then Papa's own idea of where
+// the row sits, so the two cannot drift. A row is one line in every ordinary file;
+// only a quoted multi-line field makes end differ from start, and pointing at its
+// last line is still inside the row the teacher must edit.
+const parseRowsWithLines = (text: string) => {
+  const rows: { raw: Record<string, string>; line: number }[] = []
+  // In `step` mode Papa reports each row's errors to the callback and leaves the
+  // top-level `errors` empty, so collect them here or the malformed-CSV guard
+  // would never fire.
+  const errors: Papa.ParseError[] = []
+  let consumed = 0
+  let newlines = 0
+  const parsed = Papa.parse<Record<string, string>>(text, {
+    ...PAPA_OPTIONS,
+    step: (result: Papa.ParseStepResult<Record<string, string>>) => {
+      errors.push(...result.errors)
+      // Advance from the previous row's end, so the file is scanned once overall
+      // rather than once per row.
+      newlines += countNewlines(text.slice(consumed, result.meta.cursor))
+      consumed = result.meta.cursor
+      rows.push({ raw: result.data, line: newlines })
+    },
   })
-  return lines
+  return { rows, fields: parsed.meta.fields ?? [], errors }
 }
 
 // Read a row's identity cells in precedence order. A present-but-unusable
@@ -224,9 +243,10 @@ export const parseRosterImportFile = (
   // us was a flat list.
   if (kind === "email-list") return parseAddressList(text)
 
-  const parsed = Papa.parse<Record<string, string>>(trimmed, PAPA_OPTIONS)
-  const fields = parsed.meta.fields ?? []
-  const structural = structuralErrorOf(parsed.errors)
+  // Parse the ORIGINAL text, not a trimmed copy, so each row's cursor is an offset
+  // into the file the teacher is looking at.
+  const { rows: rawRows, fields, errors } = parseRowsWithLines(text)
+  const structural = structuralErrorOf(errors)
   // A structural error means the columns can't be trusted, so don't quietly
   // re-read the file as a bare list — the caller surfaces `malformed` instead.
   if (structural) return { rows: [], dropped: [] }
@@ -239,10 +259,7 @@ export const parseRosterImportFile = (
   const dropped: DroppedRow[] = []
 
   if (hasIdentityColumn) {
-    // Index 0 is the header, so data row i is at index i + 1.
-    const lines = keptLineNumbers(text, parsed.meta.delimiter)
-    parsed.data.forEach((raw, index) => {
-      const line = lines[index + 1] ?? index + 2
+    rawRows.forEach(({ raw, line }) => {
       const identity = readIdentity(raw)
       if (!hasAnyIdentity(identity)) {
         dropped.push(blameFor(raw, line))
