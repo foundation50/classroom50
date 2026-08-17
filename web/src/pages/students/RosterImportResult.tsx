@@ -1,7 +1,10 @@
 import { useTranslation } from "react-i18next"
 import { Alert, Button } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
-import type { BulkImportResult } from "@/domain/students"
+import type {
+  BulkImportResult,
+  BulkInviteByEmailResult,
+} from "@/domain/students"
 import type { InviteOutcome, RoleChangeOutcome } from "./runRosterImport"
 
 export type ImportResultSectionRow = {
@@ -41,28 +44,41 @@ export const ImportResultSection = ({
   )
 }
 
-// The completed roster-import view: the added-count banner, an optional invite-
-// pass error, and per-outcome result sections (added / skipped / team failures /
-// invited / deferred / failed / role changes / role-change failures).
+// The completed roster-import view: one banner covering both passes, optional
+// invite/email-pass errors, and per-outcome result sections (added / skipped /
+// team failures / invited / deferred / failed / role changes / role-change
+// failures), followed by the email-invite buckets when the batch carried
+// email-identity rows. One screen, one Done button — a mixed batch must not paint
+// two stacked result panels.
 export const RosterImportResult = ({
   result,
   inviteError,
   inviteOutcome,
   roleChangeOutcome,
+  emailResult = null,
+  emailError = null,
   onDone,
 }: {
   result: BulkImportResult
   inviteError: string | null
   inviteOutcome: InviteOutcome | null
   roleChangeOutcome: RoleChangeOutcome | null
+  emailResult?: BulkInviteByEmailResult | null
+  emailError?: string | null
   onDone: () => void
 }) => {
   const { t } = useTranslation()
+  const emailInvitedCount = emailResult?.invited.length ?? 0
   return (
     <div className="mt-6 space-y-4">
       <Alert tone="success">
         <span>
-          {t("students.addedCount", { count: result.addedStudents.length })}
+          {emailInvitedCount > 0
+            ? t("students.importedAndInvitedCount", {
+                added: result.addedStudents.length,
+                invited: emailInvitedCount,
+              })
+            : t("students.addedCount", { count: result.addedStudents.length })}
         </span>
       </Alert>
 
@@ -70,6 +86,14 @@ export const RosterImportResult = ({
         <Alert tone="error">
           <span>
             {t("students.invitePassFailed", { message: inviteError })}
+          </span>
+        </Alert>
+      )}
+
+      {emailError && (
+        <Alert tone="error">
+          <span>
+            {t("students.emailInvitePassFailed", { message: emailError })}
           </span>
         </Alert>
       )}
@@ -163,6 +187,52 @@ export const RosterImportResult = ({
           rows={roleChangeOutcome.failed.map((f, i) => ({
             key: `${f.username}-${i}`,
             label: f.username,
+            detail: f.message,
+          }))}
+        />
+      )}
+
+      {/* The email pass's buckets, under titles distinct from the account ones so
+          "invited" by address never reads as "invited" by handle. */}
+      {emailResult && emailResult.invited.length > 0 && (
+        <ImportResultSection
+          title={t("students.resultEmailInvited")}
+          rows={emailResult.invited.map(({ email, role }) => ({
+            key: email,
+            label: email,
+            detail: t(ROLE_LABEL_KEY[role]),
+          }))}
+        />
+      )}
+
+      {emailResult && emailResult.skipped.length > 0 && (
+        <ImportResultSection
+          title={t("students.resultEmailSkipped")}
+          rows={emailResult.skipped.map(({ email }) => ({
+            key: email,
+            label: email,
+            detail: t("students.emailInviteSkippedDetail"),
+          }))}
+        />
+      )}
+
+      {emailResult && emailResult.deferred.length > 0 && (
+        <ImportResultSection
+          title={t("students.resultEmailInvitesDeferred")}
+          rows={emailResult.deferred.map((email) => ({
+            key: email,
+            label: email,
+            detail: t("students.inviteDeferredDetail"),
+          }))}
+        />
+      )}
+
+      {emailResult && emailResult.failed.length > 0 && (
+        <ImportResultSection
+          title={t("students.resultEmailInvitesFailed")}
+          rows={emailResult.failed.map((f) => ({
+            key: f.email,
+            label: f.email,
             detail: f.message,
           }))}
         />

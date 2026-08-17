@@ -22,6 +22,10 @@ const bulkInviteByEmail = vi.fn()
 const resolveRosterUploadContext = vi.fn()
 const inviteRosterStudents = vi.fn()
 const bulkEnrollStudentsInClassroom = vi.fn()
+const repairRosterUsernames = vi.fn()
+const writeClassroomRoles = vi.fn()
+const updateClassroomMetadata = vi.fn()
+const getUserById = vi.fn()
 
 vi.mock("@/domain/students", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/domain/students")>()
@@ -33,6 +37,20 @@ vi.mock("@/domain/students", async (importOriginal) => {
     inviteRosterStudents: (...args: unknown[]) => inviteRosterStudents(...args),
     bulkEnrollStudentsInClassroom: (...args: unknown[]) =>
       bulkEnrollStudentsInClassroom(...args),
+    repairRosterUsernames: (...args: unknown[]) =>
+      repairRosterUsernames(...args),
+    writeClassroomRoles: (...args: unknown[]) => writeClassroomRoles(...args),
+    updateClassroomMetadata: (...args: unknown[]) =>
+      updateClassroomMetadata(...args),
+  }
+})
+
+// The id -> login network fallback, used only for an id the org-member map lacks.
+vi.mock("@/github-core/queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/github-core/queries")>()
+  return {
+    ...actual,
+    getUserById: (...args: unknown[]) => getUserById(...args),
   }
 })
 
@@ -52,6 +70,7 @@ vi.mock("@/util/rosterUploadPreflight", async (importOriginal) => {
 
 import UploadRoster from "./UploadRoster"
 import type { GitHubClient } from "@/github-core/client"
+import { GitHubAPIError } from "@/github-core/errors"
 
 afterEach(() => {
   cleanup()
@@ -63,6 +82,7 @@ afterEach(() => {
 const stubContext = {
   lookup: () => undefined,
   storedByIdentity: () => undefined,
+  loginById: new Map<number, string>(),
 }
 beforeEach(() => {
   resolveRosterUploadContext.mockResolvedValue(stubContext)
@@ -72,6 +92,7 @@ beforeEach(() => {
     needsInvite: [],
     enroll: [],
     roleChanges: [],
+    identityMismatches: [],
     allAlreadyMembers: true,
   })
 })
@@ -93,6 +114,15 @@ const uploadFile = async (
   await user.upload(input, f)
 }
 
+// Every upload opens as Roster CSV now, so a test exercising the dedicated
+// email-list branch has to select it explicitly.
+const chooseEmailList = async (user: ReturnType<typeof userEvent.setup>) => {
+  const select = await waitFor(
+    () => screen.getByLabelText("students.detectedFormat") as HTMLSelectElement,
+  )
+  await user.selectOptions(select, "email-list")
+}
+
 const primaryButton = () =>
   screen
     .getByRole("button", {
@@ -108,9 +138,10 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
     )
 
     await uploadFile(user, file("emails.txt", "prof@x.edu\n"))
+    await chooseEmailList(user)
 
-    // Auto-detected as email-list; the send button renders and is disabled
-    // while a teacher role would grant owner but is unconfirmed.
+    // The send button renders and is disabled while a teacher role would grant
+    // owner but is unconfirmed.
     const send = await waitFor(() => primaryButton())
 
     // Assign the sole address the teacher role -> owner-grant path.
@@ -144,6 +175,7 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
     )
 
     await uploadFile(user, file("emails.txt", "prof@x.edu\n"))
+    await chooseEmailList(user)
     await waitFor(() => primaryButton())
     await user.selectOptions(
       screen.getByLabelText("students.assignRoleLabel"),
@@ -157,8 +189,8 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
   })
 })
 
-describe("UploadRoster detected-kind override", () => {
-  it("re-parses the same text and swaps the preview branch (email <-> roster)", async () => {
+describe("UploadRoster format override", () => {
+  it("re-parses the same text and swaps the preview branch (roster <-> email)", async () => {
     const user = userEvent.setup()
     classifyRosterUpload.mockReturnValue({
       noAction: [],
@@ -166,30 +198,35 @@ describe("UploadRoster detected-kind override", () => {
       enroll: [],
       roleChanges: [],
       metadataUpdate: [],
+      identityMismatches: [],
       allAlreadyMembers: false,
     })
     renderModal(
       <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
     )
 
-    // An email list auto-detects as email-list: the email preview shows.
+    // An address list opens as Roster CSV — the smart parser reads the line as an
+    // email identity, so the roster table shows it as an invite-by-email row.
     await uploadFile(user, file("list.txt", "ada@x.edu\n"))
-    await waitFor(() => screen.getByText("students.emailsFound:1"))
+    await waitFor(() => screen.getByText("students.summaryViewDetails"))
+    await user.click(screen.getByText("students.summaryViewDetails"))
+    expect(screen.getByText("students.previewInviteByEmail")).toBeTruthy()
 
-    // Override to a username list: the same text re-parses on the roster path,
-    // the email preview is gone and the roster table (username row) appears.
+    // Overriding to the dedicated email branch swaps to the email preview.
+    await chooseEmailList(user)
+    await waitFor(() => screen.getByText("students.emailsFound:1"))
+    expect(screen.queryByText("students.previewInviteByEmail")).toBeNull()
+
+    // Overriding to a username list forces the line to be read as a handle;
+    // "ada@x.edu" isn't a plausible one, so no rows survive.
     const overrideSelect = screen.getByLabelText(
       "students.detectedFormat",
     ) as HTMLSelectElement
     await user.selectOptions(overrideSelect, "username-list")
-
     await waitFor(() =>
       expect(screen.queryByText("students.emailsFound:1")).toBeNull(),
     )
-    // "ada@x.edu" is not a valid GitHub username, so the roster parse yields no
-    // rows -> the no-valid-usernames warning, proving the branch swapped and
-    // the email state was cleared.
-    expect(screen.getByText("students.noValidUsernames")).toBeTruthy()
+    expect(screen.getByText("students.noUsableRows")).toBeTruthy()
   })
 })
 
@@ -201,6 +238,7 @@ describe("UploadRoster open->false reset", () => {
     )
 
     await uploadFile(user, file("emails.txt", "ada@x.edu\n"))
+    await chooseEmailList(user)
     await waitFor(() => screen.getByText("students.emailsFound:1"))
 
     // Close (open -> false), then reopen (open -> true).
@@ -229,6 +267,7 @@ describe("UploadRoster canProcess gating", () => {
       enroll: [],
       roleChanges: [],
       metadataUpdate: [],
+      identityMismatches: [],
       allAlreadyMembers: true,
     })
     renderModal(
@@ -274,6 +313,7 @@ describe("UploadRoster canProcess gating", () => {
           changes: [{ field: "email", from: "old@x.edu", to: "ada@x.edu" }],
         },
       ],
+      identityMismatches: [],
       allAlreadyMembers: true,
     })
     renderModal(
@@ -333,6 +373,7 @@ describe("UploadRoster role-edit reclassification", () => {
         },
       ],
       metadataUpdate: [],
+      identityMismatches: [],
       allAlreadyMembers: true,
     })
     renderModal(
@@ -388,6 +429,7 @@ describe("UploadRoster role-edit reclassification", () => {
         },
       ],
       metadataUpdate: [],
+      identityMismatches: [],
       allAlreadyMembers: true,
     })
     renderModal(
@@ -440,6 +482,7 @@ describe("UploadRoster role-edit reclassification", () => {
           changes: [{ field: "email", from: "old@x.edu", to: "a@x.edu" }],
         },
       ],
+      identityMismatches: [],
       allAlreadyMembers: true,
     })
     renderModal(
@@ -460,11 +503,218 @@ describe("UploadRoster role-edit reclassification", () => {
       .closest("button") as HTMLButtonElement
     await waitFor(() => expect(button.disabled).toBe(false))
 
-    // Re-upload a file with the SAME username (ada) but a DIFFERENT email. The
-    // username set + roles are unchanged, so the rolesKey reset effect alone
-    // wouldn't fire — applyKind must re-arm the gate so the teacher re-confirms.
+    // Re-upload a file with the SAME username (ada) but a DIFFERENT email, so
+    // applyKind must re-arm the gate and the teacher re-confirms. Re-query rather
+    // than reusing the node: the changed row content remounts the recap.
     await uploadFile(user, file("roster.csv", "username,email\nada,b@x.edu\n"))
-    await waitFor(() => expect(confirm.checked).toBe(false))
-    expect(button.disabled).toBe(true)
+    await waitFor(() => {
+      const box = screen
+        .getByText(/preflightConfirmMetadata/)
+        .closest("label")!
+        .querySelector("input[type=checkbox]") as HTMLInputElement
+      expect(box.checked).toBe(false)
+    })
+    expect(
+      (
+        screen
+          .getByRole("button", { name: /updateMetadata/ })
+          .closest("button") as HTMLButtonElement
+      ).disabled,
+    ).toBe(true)
+  })
+})
+
+describe("UploadRoster email-identity rows in a roster CSV", () => {
+  it("makes an email-only CSV processable and invites each address", async () => {
+    const user = userEvent.setup()
+    // No account rows at all, so every preflight bucket is empty. The gate must
+    // still open — the email rows ARE the work.
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(
+      user,
+      file(
+        "roster.csv",
+        "email,first_name,last_name,section\nzoe@x.edu,Zoe,Z,Lab 2\n",
+      ),
+    )
+
+    const button = await waitFor(() => {
+      const b = screen
+        .getByRole("button", { name: /importAndInviteMembers/ })
+        .closest("button") as HTMLButtonElement
+      expect(b.disabled).toBe(false)
+      return b
+    })
+
+    bulkEnrollStudentsInClassroom.mockResolvedValue({
+      addedStudents: [],
+      skippedStudents: [],
+    })
+    bulkInviteByEmail.mockResolvedValue({
+      invited: [{ email: "zoe@x.edu", role: "student" }],
+      skipped: [],
+      failed: [],
+      deferred: [],
+    })
+
+    await user.click(button)
+
+    // The address is invited, carrying the CSV's name and section onto its
+    // pending roster row — and the account pipeline is never called, since the
+    // file had no account rows.
+    await waitFor(() => expect(bulkInviteByEmail).toHaveBeenCalledTimes(1))
+    expect(bulkInviteByEmail.mock.calls[0][1]).toMatchObject({
+      invites: [
+        {
+          email: "zoe@x.edu",
+          role: "student",
+          first_name: "Zoe",
+          last_name: "Z",
+          section: "Lab 2",
+        },
+      ],
+    })
+    expect(bulkEnrollStudentsInClassroom).not.toHaveBeenCalled()
+  })
+
+  it("gates a teacher-role email row behind the owner confirmation", async () => {
+    const user = userEvent.setup()
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(
+      user,
+      file("roster.csv", "email,role\nprof@x.edu,teacher\n"),
+    )
+
+    // A teacher-role email invitation makes that person an org OWNER, so the
+    // roster branch must gate it exactly as the email-list branch does.
+    const button = await waitFor(() => {
+      const b = screen
+        .getByRole("button", { name: /importAndInviteMembers/ })
+        .closest("button") as HTMLButtonElement
+      expect(b.disabled).toBe(true)
+      return b
+    })
+    expect(screen.getByText(/preflightTeacherEmailNotice/)).toBeTruthy()
+
+    const confirm = screen
+      .getByText(/preflightConfirmRoleChanges/)
+      .closest("label")!
+      .querySelector("input[type=checkbox]") as HTMLInputElement
+    await user.click(confirm)
+    await waitFor(() => expect(button.disabled).toBe(false))
+  })
+})
+
+describe("UploadRoster identity mismatch gate", () => {
+  it("blocks until the teacher confirms, then repairs the stored username", async () => {
+    const user = userEvent.setup()
+    // github_id 42 resolves to "ada-new", but the file says "ada-old".
+    resolveRosterUploadContext.mockResolvedValue({
+      ...stubContext,
+      loginById: new Map([[42, "ada-new"]]),
+    })
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [{ username: "ada-new" }],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [],
+      identityMismatches: [
+        {
+          username: "ada-new",
+          declaredUsername: "ada-old",
+          github_id: "42",
+        },
+      ],
+      allAlreadyMembers: false,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(
+      user,
+      file("roster.csv", "github_id,username\n42,ada-old\n"),
+    )
+
+    const button = await waitFor(() => {
+      const b = screen
+        .getByRole("button", { name: /importAndInviteMembers/ })
+        .closest("button") as HTMLButtonElement
+      expect(b.disabled).toBe(true)
+      return b
+    })
+    // The preview shows the account the id belongs to, and what the file claimed.
+    expect(screen.getAllByText("ada-new").length).toBeGreaterThan(0)
+    expect(screen.getByText(/previewPreviousUsernameHint/)).toBeTruthy()
+    expect(screen.queryByText("ada-old")).toBeNull()
+
+    const confirm = screen
+      .getByText(/preflightConfirmIdentity/)
+      .closest("label")!
+      .querySelector("input[type=checkbox]") as HTMLInputElement
+    await user.click(confirm)
+    await waitFor(() => expect(button.disabled).toBe(false))
+
+    bulkEnrollStudentsInClassroom.mockResolvedValue({
+      addedStudents: [],
+      skippedStudents: [],
+    })
+    inviteRosterStudents.mockResolvedValue({
+      invited: [],
+      skipped: [],
+      failed: [],
+      deferred: [],
+    })
+    await user.click(button)
+
+    // The row is imported under the id's account, and the stale stored login is
+    // repaired so the same warning doesn't reappear on every future upload.
+    await waitFor(() => expect(repairRosterUsernames).toHaveBeenCalledTimes(1))
+    expect(repairRosterUsernames.mock.calls[0][1]).toMatchObject({
+      repairs: [{ github_id: "42", username: "ada-new" }],
+    })
+  })
+
+  it("skips a row whose github_id cannot be resolved, rather than using its username", async () => {
+    const user = userEvent.setup()
+    // The id is absent from the org-member map and the network lookup 404s, so
+    // the row must be reported — never re-keyed to the username cell, which
+    // could belong to someone else entirely.
+    getUserById.mockRejectedValue(
+      new GitHubAPIError({
+        status: 404,
+        url: "https://api.github.com/user/999",
+        message: "not found",
+        body: null,
+        rateLimit: {
+          limit: null,
+          remaining: null,
+          used: null,
+          reset: null,
+          resource: null,
+          retryAfter: null,
+        },
+      }),
+    )
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(
+      user,
+      file("roster.csv", "github_id,username\n999,someone-else\n"),
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText(/unresolvedIdRows/)).toBeTruthy(),
+    )
+    expect(screen.queryByText("someone-else")).toBeNull()
   })
 })

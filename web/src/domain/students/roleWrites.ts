@@ -55,31 +55,38 @@ export type WriteClassroomRolesInput = {
   classroom: string
   // Usernames -> the role to persist on their roster.csv row. Used by the upload
   // to write an assigned role for a freshly-invited (still-pending) member,
-  // whose role auto-sync can't yet derive from team membership.
-  roles: { username: string; role: ClassroomRole }[]
+  // whose role auto-sync can't yet derive from team membership. `github_id` is
+  // threaded when known so a row whose stored username is stale (the student
+  // renamed) still matches — a login-only join would silently skip it.
+  roles: { username: string; role: ClassroomRole; github_id?: string }[]
 }
 
-// Set the `role` column on existing roster.csv rows matched by username. Only
-// touches rows that exist and whose role actually changes; never appends,
-// removes, or edits other fields. Best-effort caller (upload) — a conflict-safe
-// single commit.
+// Set the `role` column on existing roster.csv rows, matched by github_id when
+// known then by lowercased username. Only touches rows that exist and whose role
+// actually changes; never appends, removes, or edits other fields. Best-effort
+// caller (upload) — a conflict-safe single commit.
 export async function writeClassroomRoles(
   client: GitHubClient,
   input: WriteClassroomRolesInput,
 ): Promise<{ changed: number }> {
   const { org, classroom } = input
   await assertClassroomNotArchived(client, org, classroom)
-  const roleByLogin = new Map(
-    input.roles
-      .map((r) => [r.username.trim().toLowerCase(), r.role] as const)
-      .filter(([login]) => login),
-  )
-  if (roleByLogin.size === 0) return { changed: 0 }
+  const roleById = new Map<string, ClassroomRole>()
+  const roleByLogin = new Map<string, ClassroomRole>()
+  for (const r of input.roles) {
+    const id = r.github_id?.trim()
+    const login = r.username.trim().toLowerCase()
+    if (id) roleById.set(id, r.role)
+    if (login) roleByLogin.set(login, r.role)
+  }
+  if (roleById.size === 0 && roleByLogin.size === 0) return { changed: 0 }
 
   return withRosterRewrite(client, { org, classroom }, (currentStudents) => {
     let changed = 0
     const nextStudents = currentStudents.map((s) => {
-      const role = roleByLogin.get(s.username.trim().toLowerCase())
+      const role =
+        (s.github_id ? roleById.get(s.github_id.trim()) : undefined) ??
+        roleByLogin.get(s.username.trim().toLowerCase())
       if (role && role !== s.role) {
         changed++
         return { ...s, role }
@@ -90,6 +97,53 @@ export async function writeClassroomRoles(
       nextStudents,
       changed,
       message: `Set role on ${changed} roster member${changed === 1 ? "" : "s"}: ${classroom}`,
+    }
+  })
+}
+
+export type RepairRosterUsernamesInput = {
+  org: string
+  classroom: string
+  // Accounts whose stored roster row carries a stale username. Matched strictly
+  // by github_id — the whole point is that the login can't be trusted.
+  repairs: { github_id: string; username: string }[]
+}
+
+// Rewrite the `username` column on rows whose stored login has gone stale after
+// the student renamed their GitHub account, matched by the immutable github_id.
+//
+// This is the only path that repairs a stale login. The reconcile deliberately
+// won't: syncRosterFromTeam fills a BLANK username but never repoints a row that
+// already has one. Without this, a teacher who confirms an identity mismatch
+// would see the same warning on every future upload, and every login-keyed write
+// would keep missing the row.
+export async function repairRosterUsernames(
+  client: GitHubClient,
+  input: RepairRosterUsernamesInput,
+): Promise<{ changed: number }> {
+  const { org, classroom } = input
+  await assertClassroomNotArchived(client, org, classroom)
+  const loginById = new Map(
+    input.repairs
+      .map((r) => [r.github_id.trim(), r.username.trim()] as const)
+      .filter(([id, login]) => id && login),
+  )
+  if (loginById.size === 0) return { changed: 0 }
+
+  return withRosterRewrite(client, { org, classroom }, (currentStudents) => {
+    let changed = 0
+    const nextStudents = currentStudents.map((s) => {
+      const login = s.github_id ? loginById.get(s.github_id.trim()) : undefined
+      if (login && login !== s.username) {
+        changed++
+        return { ...s, username: login }
+      }
+      return s
+    })
+    return {
+      nextStudents,
+      changed,
+      message: `Update username on ${changed} roster member${changed === 1 ? "" : "s"}: ${classroom}`,
     }
   })
 }
@@ -170,6 +224,13 @@ export type ResolveRosterUploadPreflightInput = {
 export type RosterUploadContext = {
   lookup: (row: PreflightRow) => CurrentMembership
   storedByIdentity: (row: PreflightRow) => StoredRosterRow | undefined
+  // Current login per numeric github_id, for resolving an uploaded `github_id`
+  // column without a network round-trip. Sourced from the org-member list ONLY —
+  // never from roster.csv, whose `username` cell is exactly the stale login a
+  // rename left behind (nothing rewrites it: syncRosterFromTeam backfills only a
+  // BLANK username). Seeding it from there would resolve a renamed student to
+  // their old handle and silently defeat the point of reading the id.
+  loginById: ReadonlyMap<number, string>
 }
 
 // Read the classroom's CURRENT GitHub membership + stored roster.csv metadata
@@ -223,7 +284,11 @@ export async function resolveRosterUploadContext(
     },
   }
 
-  return { lookup: membershipLookup(resolved), storedByIdentity }
+  const loginById = new Map<number, string>(
+    orgMembers.map((member) => [member.id, member.login]),
+  )
+
+  return { lookup: membershipLookup(resolved), storedByIdentity, loginById }
 }
 
 // Convenience wrapper: read the context (see resolveRosterUploadContext) and

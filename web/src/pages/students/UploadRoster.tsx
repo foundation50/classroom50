@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next"
 import { Upload } from "lucide-react"
 
 import {
-  bulkInviteByEmail,
   resolveRosterUploadContext,
+  bulkInviteByEmail,
 } from "@/domain/students"
 import type {
   BulkImportResult,
@@ -20,9 +20,10 @@ import {
   type PreflightResult,
 } from "@/util/rosterUploadPreflight"
 import { logger } from "@/lib/logger"
+import { isTeacherRole } from "@/authz"
 import type { ClassroomRole } from "@/util/teamRoster"
 import {
-  classifyUploadFile,
+  DEFAULT_UPLOAD_KIND,
   type UploadKind,
 } from "@/pages/students/uploadClassify"
 import {
@@ -35,10 +36,18 @@ import {
   EmailInviteResult,
 } from "@/pages/students/EmailInviteFlow"
 import {
+  identityKey,
+  resolveImportIdentities,
+  type ResolvedImportRow,
+  type UnusableRow,
+} from "@/pages/students/rosterImportResolve"
+import {
   coerceImportRole,
   detectImportHeaderIssue,
   parseRosterImportFile,
+  type DroppedRow,
   type ImportHeaderIssue,
+  type ParsedImportRow,
 } from "./rosterImportParse"
 import { runRosterImport, type ImportProgress } from "./runRosterImport"
 import type { InviteOutcome, RoleChangeOutcome } from "./runRosterImport"
@@ -47,6 +56,7 @@ import { PreflightSummary } from "./PreflightSummary"
 import {
   RosterPreviewTable,
   type RowChanges,
+  type RowIdentityChanges,
   type RowRoleChanges,
 } from "./RosterPreviewTable"
 import { ImportResultSection, RosterImportResult } from "./RosterImportResult"
@@ -68,9 +78,10 @@ type UploadRosterProps = {
   classroom: string
   client: GitHubClient
   onSuccess?: (result: BulkImportResult) => void
-  // Fired after a successful email-invite batch (uploadKind === "email-list").
-  // Separate from onSuccess because email invites write no roster.csv row — the
-  // parent refreshes the pending-invite + team caches rather than the roster.
+  // Fired after any batch that sent email invitations — the dedicated
+  // "Email addresses" upload, or a roster CSV carrying email-identity rows. Each
+  // invited address lands a pending roster.csv row, so the parent refreshes the
+  // pending-invite and team caches; for a mixed batch onSuccess fires too.
   onEmailSuccess?: (result: BulkInviteByEmailResult) => void
   // When true, render the modal (idle -> drop zone). The drop zone / Choose File
   // button drives file selection from there.
@@ -94,11 +105,20 @@ const UploadRoster = ({
 
   const [phase, setPhase] = useState<ImportPhase>("idle")
   const [fileName, setFileName] = useState("")
-  // The raw uploaded text, kept so switching the detected kind re-parses without
-  // re-reading the file, and the auto-detected/overridable format.
+  // The raw uploaded text, kept so switching the format re-parses without
+  // re-reading the file, and the format the parse is read under. Roster CSV is
+  // always the initial one — its parser handles all three shapes — so the other
+  // two exist only as the teacher's explicit override.
   const [fileText, setFileText] = useState("")
-  const [uploadKind, setUploadKind] = useState<UploadKind>("username-list")
-  const [rows, setRows] = useState<ImportRosterRow[]>([])
+  const [uploadKind, setUploadKind] = useState<UploadKind>(DEFAULT_UPLOAD_KIND)
+  // Rows as parsed, before identity resolution, plus the lines the parse could
+  // not address to anyone.
+  const [parsedRows, setParsedRows] = useState<ParsedImportRow[]>([])
+  const [droppedRows, setDroppedRows] = useState<DroppedRow[]>([])
+  // Rows with a resolved identity (account or email), and the ones a github_id
+  // made unusable. Null until resolution runs.
+  const [resolved, setResolved] = useState<ResolvedImportRow[] | null>(null)
+  const [unusableRows, setUnusableRows] = useState<UnusableRow[]>([])
   // Email-invite branch (uploadKind === "email-list"): parsed addresses, the
   // per-address role, the org-owner confirmation, and the send result. Kept
   // separate from the roster rows so the two flows don't entangle.
@@ -113,19 +133,20 @@ const UploadRoster = ({
   const [emailOwnerConfirmed, setEmailOwnerConfirmed] = useState(false)
   const [emailResult, setEmailResult] =
     useState<BulkInviteByEmailResult | null>(null)
+  const [emailError, setEmailError] = useState<string | null>(null)
   // Why an empty parse produced no rows, when the cause is the file's shape (no
-  // `username` header, or malformed CSV) rather than merely invalid handles.
+  // identity column, or malformed CSV) rather than merely unusable values.
   const [headerIssue, setHeaderIssue] = useState<ImportHeaderIssue | null>(null)
-  // Per-row role the teacher is about to invite as, keyed by lowercased
-  // username. Seeded from the CSV `role` column (else "student") and editable.
+  // Per-row role the teacher is about to invite as, keyed by identityKey. Seeded
+  // from the CSV `role` column (else "student") and editable.
   const [rolesByUser, setRolesByUser] = useState<Record<string, ClassroomRole>>(
     {},
   )
   // The role-independent GitHub membership + stored-roster read, fetched ONCE
-  // per uploaded file and tagged with the usersKey it was fetched for. Null
+  // per uploaded file and tagged with the rowsKey it was fetched for. Null
   // until the read resolves.
   const [preflightContext, setPreflightContext] = useState<
-    (RosterUploadContext & { usersKey: string }) | null
+    (RosterUploadContext & { rowsKey: string }) | null
   >(null)
   const [preflighting, setPreflighting] = useState(false)
   const [preflightError, setPreflightError] = useState<string | null>(null)
@@ -134,6 +155,9 @@ const UploadRoster = ({
   // The teacher's explicit confirmation of the metadata-update rows (independent
   // of the role-change confirmation, so either or both can be pending).
   const [metadataConfirmed, setMetadataConfirmed] = useState(false)
+  // The teacher's explicit confirmation that a row whose github_id disagrees
+  // with its username cell should be imported under the id's account.
+  const [mismatchConfirmed, setMismatchConfirmed] = useState(false)
   // Whether the detailed per-row preview table is expanded. Collapsed by default
   // so the summary reads cleanly; auto-opened when a confirmation is required so
   // the highlighted changes are visible.
@@ -161,14 +185,18 @@ const UploadRoster = ({
     setPhase("idle")
     setFileName("")
     setFileText("")
-    setUploadKind("username-list")
-    setRows([])
+    setUploadKind(DEFAULT_UPLOAD_KIND)
+    setParsedRows([])
+    setDroppedRows([])
+    setResolved(null)
+    setUnusableRows([])
     setHeaderIssue(null)
     setEmails([])
     setInvalidEmails([])
     setEmailRoles({})
     setEmailOwnerConfirmed(false)
     setEmailResult(null)
+    setEmailError(null)
     setProgress({ processed: 0, total: 0, message: "" })
     setResult(null)
     setInviteOutcome(null)
@@ -180,6 +208,7 @@ const UploadRoster = ({
     setPreflightError(null)
     setRoleChangesConfirmed(false)
     setMetadataConfirmed(false)
+    setMismatchConfirmed(false)
     setDetailsOpen(false)
     setRoleChangeOutcome(null)
     if (fileInputRef.current) {
@@ -201,34 +230,59 @@ const UploadRoster = ({
     onOpenChange?.(false)
   }
 
-  // Fetch the role-independent membership + stored-roster context ONCE per
-  // uploaded file (keyed on usernames, not roles). A stale-response guard drops
-  // a slow read superseded by a new file. Tagged with its usersKey so the
-  // derived classification below can reject a context left over from a prior
-  // file (this effect runs post-commit, after the new rows are already set).
+  // Resolve identities and read the role-independent membership + stored-roster
+  // context ONCE per uploaded file. A stale-response guard drops a slow read
+  // superseded by a new file. Both are tagged with the rowsKey they ran for so
+  // the derived classification below can reject leftovers from a prior file
+  // (this effect runs post-commit, after the new rows are already set).
+  //
+  // Identity resolution has to happen here rather than in the parser: trading a
+  // github_id for its current login is a network read, and the local org-member
+  // map that usually satisfies it comes from this very context.
   const preflightToken = useRef(0)
-  const usersKey = rows
-    .map((r) => r.username.toLowerCase())
+  const rowsKey = parsedRows
+    .map((r) => {
+      const { githubId, malformedGithubId, username, email } = r.identity
+      return `${githubId ?? malformedGithubId ?? ""}|${username ?? ""}|${email ?? ""}`
+    })
     .sort()
-    .join("|")
+    .join("~")
   useEffect(() => {
-    if (phase !== "preview" || rows.length === 0) return
+    if (phase !== "preview" || parsedRows.length === 0) return
     const token = ++preflightToken.current
-    const fetchedFor = usersKey
+    const fetchedFor = rowsKey
     /* eslint-disable react-hooks/set-state-in-effect */
     setPreflighting(true)
     setPreflightError(null)
     setPreflightContext(null)
+    setResolved(null)
     /* eslint-enable react-hooks/set-state-in-effect */
     void resolveRosterUploadContext(client, { org, classroom })
-      .then((context) => {
+      .then(async (context) => {
         if (preflightToken.current !== token) return
-        setPreflightContext({ usersKey: fetchedFor, ...context })
+        const resolvedFile = await resolveImportIdentities(
+          client,
+          parsedRows,
+          context.loginById,
+        )
+        if (preflightToken.current !== token) return
+        setResolved(resolvedFile.rows)
+        setUnusableRows(resolvedFile.unusable)
+        setRolesByUser((prev) =>
+          Object.fromEntries(
+            resolvedFile.rows.map((r) => {
+              const key = identityKey(r.identity)
+              return [key, prev[key] ?? r.role ?? "student"]
+            }),
+          ),
+        )
+        setPreflightContext({ rowsKey: fetchedFor, ...context })
       })
       .catch((err) => {
         if (preflightToken.current !== token) return
         log.warn("roster upload preflight failed", { err, record: true })
         setPreflightContext(null)
+        setResolved(null)
         setPreflightError(
           err instanceof Error ? err.message : t("students.somethingWentWrong"),
         )
@@ -237,83 +291,157 @@ const UploadRoster = ({
         if (preflightToken.current === token) setPreflighting(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, usersKey, org, classroom])
+  }, [phase, rowsKey, org, classroom])
+
+  // The resolved rows split by identity kind. Account rows drive the preflight
+  // classification (which is username-keyed by design); email rows never enter it
+  // — they have no GitHub account to classify against — so every gate and label
+  // below has to count them separately.
+  const resolvedRows = useMemo(() => resolved ?? [], [resolved])
+  const accountRows = useMemo(
+    () => resolvedRows.filter((r) => r.identity.kind === "account"),
+    [resolvedRows],
+  )
+  const emailRows = useMemo(
+    () => resolvedRows.filter((r) => r.identity.kind === "email"),
+    [resolvedRows],
+  )
 
   // Derive the classification synchronously from the fetched context + current
   // roles, so a role edit re-previews with no loading state. Only trust a
-  // context fetched for the CURRENT usernames — a stale context from a just-
-  // replaced file must not classify the new rows (the fetch effect that nulls
-  // it runs after this render).
+  // context fetched for the CURRENT rows — a stale context from a just-replaced
+  // file must not classify the new rows (the fetch effect that nulls it runs
+  // after this render).
   const preflight = useMemo<PreflightResult | null>(() => {
-    if (!preflightContext || preflightContext.usersKey !== usersKey) return null
-    const preflightRows = rows.map((r) => ({
-      username: r.username,
-      first_name: r.first_name,
-      last_name: r.last_name,
-      email: r.email,
-      section: r.section,
-      role:
-        rolesByUser[r.username.toLowerCase()] ?? ("student" as ClassroomRole),
-    }))
+    if (!preflightContext || preflightContext.rowsKey !== rowsKey) return null
+    const preflightRows = accountRows.map((r) => {
+      const identity = r.identity as Extract<
+        ResolvedImportRow["identity"],
+        { kind: "account" }
+      >
+      return {
+        username: identity.username,
+        github_id: identity.github_id,
+        declaredUsername: identity.declaredUsername,
+        first_name: r.first_name,
+        last_name: r.last_name,
+        email: r.email,
+        section: r.section,
+        role:
+          rolesByUser[identityKey(r.identity)] ?? ("student" as ClassroomRole),
+      }
+    })
     return classifyRosterUpload(
       preflightRows,
       preflightContext.lookup,
       preflightContext.storedByIdentity,
     )
-  }, [preflightContext, usersKey, rows, rolesByUser])
+  }, [preflightContext, rowsKey, accountRows, rolesByUser])
 
   // A role edit changes the plan (a team move / owner grant may appear or
   // vanish), so any prior confirmation is stale — clear the checkboxes when the
   // assigned roles change.
-  const rolesKey = rows
-    .map(
-      (r) =>
-        `${r.username.toLowerCase()}:${rolesByUser[r.username.toLowerCase()] ?? "student"}`,
-    )
+  const rolesKey = resolvedRows
+    .map((r) => {
+      const key = identityKey(r.identity)
+      return `${key}:${rolesByUser[key] ?? "student"}`
+    })
     .join("|")
   useEffect(() => {
     setRoleChangesConfirmed(false)
     setMetadataConfirmed(false)
+    setMismatchConfirmed(false)
   }, [rolesKey])
 
   const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
-  // Per-username metadata changes to highlight in the preview table (from
-  // metadata_update rows and role_change rows that also carry a metadata delta),
-  // keyed by lowercased username. The table shows the stored -> CSV transition
-  // inline, so the recap no longer needs a text list of them.
+  // The preflight is keyed by username; the table is keyed by identity. One
+  // lookup bridges them so every highlight map below indexes the same way.
+  const rowKeyByUsername = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const r of accountRows) {
+      const identity = r.identity as Extract<
+        ResolvedImportRow["identity"],
+        { kind: "account" }
+      >
+      map[identity.username.toLowerCase()] = identityKey(r.identity)
+    }
+    return map
+  }, [accountRows])
+  const rowKeyFor = (username: string) =>
+    rowKeyByUsername[username.toLowerCase()] ??
+    `login:${username.toLowerCase()}`
+
+  // Per-row metadata changes to highlight in the preview table (from
+  // metadata_update rows and role_change rows that also carry a metadata delta).
+  // The table shows the stored -> CSV transition inline, so the recap no longer
+  // needs a text list of them.
   const rowChanges = useMemo(() => {
     const map: RowChanges = {}
     for (const m of preflight?.metadataUpdate ?? []) {
-      if (m.changes.length > 0) map[m.username.toLowerCase()] = m.changes
+      if (m.changes.length > 0) map[rowKeyFor(m.username)] = m.changes
     }
     for (const c of preflight?.roleChanges ?? []) {
-      if (c.changes.length > 0) map[c.username.toLowerCase()] = c.changes
+      if (c.changes.length > 0) map[rowKeyFor(c.username)] = c.changes
     }
     for (const e of preflight?.enroll ?? []) {
-      if (e.changes.length > 0) map[e.username.toLowerCase()] = e.changes
+      if (e.changes.length > 0) map[rowKeyFor(e.username)] = e.changes
     }
     return map
-  }, [preflight])
-  // Per-username role change (current -> CSV role) to highlight the Role cell,
-  // keyed by lowercased username. Kept separate from the metadata `changes` map
-  // because a role change lives in the Role column's Select, not a text cell.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preflight, rowKeyByUsername])
+  // Per-row role change (current -> CSV role) to highlight the Role cell. Kept
+  // separate from the metadata `changes` map because a role change lives in the
+  // Role column's Select, not a text cell.
   const roleChangeByUser = useMemo(() => {
     const map: RowRoleChanges = {}
     for (const c of preflight?.roleChanges ?? []) {
-      map[c.username.toLowerCase()] = { from: c.currentRole, to: c.role }
+      map[rowKeyFor(c.username)] = { from: c.currentRole, to: c.role }
     }
     return map
-  }, [preflight])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preflight, rowKeyByUsername])
+  // Per-row identity mismatch, to tint the username cell and show what the file
+  // claimed. The id wins, so the cell shows the resolved login.
+  const identityChangeByUser = useMemo(() => {
+    const map: RowIdentityChanges = {}
+    for (const m of preflight?.identityMismatches ?? []) {
+      map[rowKeyFor(m.username)] = { declaredUsername: m.declaredUsername }
+    }
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preflight, rowKeyByUsername])
   // Enroll rows targeting teacher grant org OWNER on process, so — like a
   // confirmed role change — they must sit behind the confirmation checkbox.
   const teacherEnrolls = useMemo(
     () => (preflight?.enroll ?? []).filter((e) => e.role === "teacher"),
     [preflight],
   )
-  const needsRoleConfirm = roleChanges.length > 0 || teacherEnrolls.length > 0
+  // Email rows assigned teacher are an org-OWNER grant too: accepting an admin
+  // invitation makes that person an owner. They never reach the preflight, so
+  // fold them into the same gate rather than letting a roster CSV do silently
+  // what the dedicated email upload requires a checkbox for.
+  const teacherEmailRows = useMemo(
+    () =>
+      emailRows.filter((r) =>
+        isTeacherRole(rolesByUser[identityKey(r.identity)] ?? "student"),
+      ),
+    [emailRows, rolesByUser],
+  )
+  const mismatches = useMemo(
+    () => preflight?.identityMismatches ?? [],
+    [preflight],
+  )
+  const needsMismatchConfirm = mismatches.length > 0
+  const needsRoleConfirm =
+    roleChanges.length > 0 ||
+    teacherEnrolls.length > 0 ||
+    teacherEmailRows.length > 0
   const confirmGrantsOwner = useMemo(
-    () => hasTeacherPromotion(roleChanges) || teacherEnrolls.length > 0,
-    [roleChanges, teacherEnrolls],
+    () =>
+      hasTeacherPromotion(roleChanges) ||
+      teacherEnrolls.length > 0 ||
+      teacherEmailRows.length > 0,
+    [roleChanges, teacherEnrolls, teacherEmailRows],
   )
   const anyTeacherAssigned = useMemo(
     () =>
@@ -324,37 +452,51 @@ const UploadRoster = ({
   const emailHasTeacher = emails.some(
     (e) => (emailRoles[e.toLowerCase()] ?? "student") === "teacher",
   )
+  // Email-identity rows are actionable work in their own right: each one sends an
+  // org invitation and lands a pending roster row. Counting only the preflight
+  // buckets would leave an email-only file with a disabled "No changes to apply".
+  const emailRowCount = emailRows.length
   const hasActionableWork =
     (preflight?.needsInvite.length ?? 0) +
       (preflight?.enroll.length ?? 0) +
       (preflight?.roleChanges.length ?? 0) +
-      (preflight?.metadataUpdate.length ?? 0) >
+      (preflight?.metadataUpdate.length ?? 0) +
+      emailRowCount >
     0
   const needsMetadataConfirm = (preflight?.metadataUpdate.length ?? 0) > 0
   // Show the detailed table when the teacher opened it, when a confirmation is
-  // pending (so the highlighted role/detail changes are visible to confirm), or
-  // when the preflight found NO actionable changes — so the teacher still sees
-  // the whole parsed CSV and can confirm it was read correctly, rather than an
-  // empty summary with a collapsed table.
+  // pending (so the highlighted role/detail changes are visible to confirm), when
+  // any row's identity came from a github_id (the teacher can't eyeball a numeric
+  // id, so the resolved login must be visible before processing), or when the
+  // preflight found NO actionable changes — so the teacher still sees the whole
+  // parsed CSV and can confirm it was read correctly.
+  const anyIdResolved = accountRows.some(
+    (r) => r.identity.kind === "account" && Boolean(r.identity.resolvedFromId),
+  )
   const showDetails =
     detailsOpen ||
     needsRoleConfirm ||
     needsMetadataConfirm ||
+    needsMismatchConfirm ||
+    anyIdResolved ||
     (!!preflight && !hasActionableWork)
   const canProcess =
     uploadKind === "email-list"
       ? emails.length > 0 &&
         invalidEmails.length === 0 &&
         (!emailHasTeacher || emailOwnerConfirmed)
-      : rows.length > 0 &&
+      : resolvedRows.length > 0 &&
         !preflighting &&
         !preflightError &&
         (!preflight || hasActionableWork) &&
         (!needsRoleConfirm || roleChangesConfirmed) &&
-        (!needsMetadataConfirm || metadataConfirmed)
+        (!needsMetadataConfirm || metadataConfirmed) &&
+        (!needsMismatchConfirm || mismatchConfirmed)
 
   // The roster primary-button label reflects what processing will actually do.
-  const willSendInvites = (preflight?.needsInvite.length ?? 0) > 0
+  // An email row always sends an invitation, so it counts toward "will invite".
+  const willSendInvites =
+    (preflight?.needsInvite.length ?? 0) + emailRowCount > 0
   // Metadata-only: no invites, no enrolls, no role changes — just metadata.
   const metadataOnly =
     !willSendInvites &&
@@ -362,7 +504,7 @@ const UploadRoster = ({
     (preflight?.roleChanges.length ?? 0) === 0 &&
     (preflight?.metadataUpdate.length ?? 0) > 0
   const rosterPrimaryLabel = willSendInvites
-    ? t("students.importAndInviteMembers", { count: rows.length })
+    ? t("students.importAndInviteMembers", { count: resolvedRows.length })
     : preflight
       ? metadataOnly
         ? t("students.updateMetadata", {
@@ -371,19 +513,20 @@ const UploadRoster = ({
         : hasActionableWork
           ? t("students.confirmChanges")
           : t("students.noChangesToApply")
-      : t("students.importMembers", { count: rows.length })
+      : t("students.importMembers", { count: resolvedRows.length })
 
-  // Seed the preview state for a given kind from the raw text. Used both on
-  // initial ingest and when the teacher overrides the detected kind.
+  // Seed the preview state for a given format from the raw text. Used both on
+  // initial ingest and when the teacher overrides the format.
   const applyKind = (text: string, kind: UploadKind) => {
     setUploadKind(kind)
-    // A new file (or a re-parse under a different kind) is a fresh plan, so any
+    // A new file (or a re-parse under a different format) is a fresh plan, so any
     // confirmation the teacher ticked for the PREVIOUS content is stale — even
-    // when the new file shares the same usernames/roles (only metadata changed),
+    // when the new file shares the same identities/roles (only metadata changed),
     // which the rolesKey reset effect wouldn't catch. Re-arm the gates here so a
     // changed plan can never be processed against an old confirmation.
     setRoleChangesConfirmed(false)
     setMetadataConfirmed(false)
+    setMismatchConfirmed(false)
     if (kind === "email-list") {
       const parsed = parseEmailInviteFile(text)
       setEmails(parsed.valid.map((r) => r.email))
@@ -394,22 +537,21 @@ const UploadRoster = ({
         ),
       )
       setEmailOwnerConfirmed(false)
-      setRows([])
+      setParsedRows([])
+      setDroppedRows([])
+      setResolved(null)
+      setUnusableRows([])
       setHeaderIssue(null)
     } else {
-      const parsedRows = parseRosterImportFile(text)
-      setRows(parsedRows)
+      const parsed = parseRosterImportFile(text, kind)
+      setParsedRows(parsed.rows)
+      setDroppedRows(parsed.dropped)
+      setResolved(null)
+      setUnusableRows([])
       setHeaderIssue(
-        parsedRows.length === 0 ? detectImportHeaderIssue(text) : null,
+        parsed.rows.length === 0 ? detectImportHeaderIssue(text) : null,
       )
-      setRolesByUser(
-        Object.fromEntries(
-          parsedRows.map((r) => [
-            r.username.toLowerCase(),
-            r.role ?? "student",
-          ]),
-        ),
-      )
+      setRolesByUser({})
       setEmails([])
       setInvalidEmails([])
     }
@@ -422,7 +564,7 @@ const UploadRoster = ({
       if (ingestToken.current !== token) return
       setFileName(file.name)
       setFileText(text)
-      applyKind(text, classifyUploadFile(text))
+      applyKind(text, DEFAULT_UPLOAD_KIND)
       setResult(null)
       setEmailResult(null)
       setInviteOutcome(null)
@@ -463,8 +605,8 @@ const UploadRoster = ({
     // concurrent imports racing the same roster.csv read-modify-write.
     if (phase === "importing") return
 
-    // Email-list branch: send org invitations by email (no roster.csv write),
-    // then land on the same result screen.
+    // Email-list branch: the teacher asserted every line is an address, so send
+    // org invitations directly. Each one lands a pending roster row.
     if (uploadKind === "email-list") {
       setPhase("importing")
       setError(null)
@@ -502,13 +644,64 @@ const UploadRoster = ({
     setResult(null)
     setInviteOutcome(null)
     setInviteError(null)
+    setEmailResult(null)
+    setEmailError(null)
     setRoleChangeOutcome(null)
+
+    // Account rows go to the domain's username-keyed row shape; email rows carry
+    // their own metadata to the invite pass. Both run inside runRosterImport,
+    // sequentially, because every step commits to the same roster.csv.
+    const accountImportRows: ImportRosterRow[] = accountRows.map((r) => {
+      const identity = r.identity as Extract<
+        ResolvedImportRow["identity"],
+        { kind: "account" }
+      >
+      return {
+        username: identity.username,
+        github_id: identity.github_id,
+        first_name: r.first_name,
+        last_name: r.last_name,
+        email: r.email,
+        section: r.section,
+        role: rolesByUser[identityKey(r.identity)] ?? "student",
+      }
+    })
+    const emailInvites = emailRows.map((r) => {
+      const identity = r.identity as Extract<
+        ResolvedImportRow["identity"],
+        { kind: "email" }
+      >
+      return {
+        email: identity.email,
+        role:
+          rolesByUser[identityKey(r.identity)] ?? ("student" as ClassroomRole),
+        first_name: r.first_name,
+        last_name: r.last_name,
+        section: r.section,
+      }
+    })
+    // The teacher confirmed these, so repair the stored row's stale login. Keyed
+    // by github_id — the whole point is that the stored username can't be trusted.
+    const usernameRepairs = mismatches.map((m) => ({
+      github_id: m.github_id,
+      username: m.username,
+    }))
+
+    // Roles are keyed by identity in the modal but by login in the domain layer.
+    const rolesByLogin = Object.fromEntries(
+      accountImportRows.map((r) => [
+        r.username.toLowerCase(),
+        r.role ?? "student",
+      ]),
+    )
 
     const outcome = await runRosterImport(client, {
       org,
       classroom,
-      rows,
-      rolesByUser,
+      rows: accountImportRows,
+      rolesByUser: rolesByLogin,
+      emailInvites,
+      usernameRepairs,
       // Snapshot the classification computed in the preview so the process pass
       // matches exactly what the teacher confirmed.
       plan: preflight,
@@ -522,6 +715,7 @@ const UploadRoster = ({
         roleWritebackFailed: t("students.roleWritebackFailed"),
         metadataWritebackMalformed: t("students.metadataWritebackMalformed"),
         metadataWritebackFailed: t("students.metadataWritebackFailed"),
+        invitingEmails: t("students.invitingEmails"),
       },
     })
 
@@ -535,8 +729,12 @@ const UploadRoster = ({
     setInviteOutcome(outcome.inviteOutcome)
     setInviteError(outcome.inviteError)
     setRoleChangeOutcome(outcome.roleChangeOutcome)
+    setEmailResult(outcome.emailResult)
+    setEmailError(outcome.emailError)
     setPhase("complete")
     onSuccess?.(outcome.importResult)
+    // A mixed batch touches both caches, so both callbacks fire.
+    if (outcome.emailResult) onEmailSuccess?.(outcome.emailResult)
   }
 
   const progressPercent =
@@ -618,7 +816,8 @@ const UploadRoster = ({
 
         {phase === "preview" && (
           <div className="mt-6">
-            {/* Detected format + override, above the branch split. */}
+            {/* How the file is being read, with an override, above the branch
+                split. Roster CSV is always the initial choice. */}
             <DetectedFormatSelect
               value={uploadKind}
               onChange={(kind) => applyKind(fileText, kind)}
@@ -659,29 +858,34 @@ const UploadRoster = ({
             ) : preflight ? (
               <>
                 {/* At-a-glance summary of add / update / skip, with an invite
-                    note when memberships will be created, and a details toggle. */}
-                {preflight.needsInvite.length > 0 ? (
+                    note when memberships will be created, and a details toggle.
+                    Email rows always send an invitation, so they count here. */}
+                {preflight.needsInvite.length + emailRowCount > 0 ? (
                   <Alert tone="warning" className="mb-4">
                     <span>
                       {t("students.uploadInviteNotice", {
-                        count: preflight.needsInvite.length,
+                        count: preflight.needsInvite.length + emailRowCount,
                       })}
                     </span>
                   </Alert>
                 ) : null}
                 <PreflightSummary
                   preflight={preflight}
+                  emailInviteCount={emailRowCount}
                   detailsOpen={detailsOpen}
                   onToggleDetails={() => setDetailsOpen((v) => !v)}
                   canToggle={
                     hasActionableWork &&
                     !needsRoleConfirm &&
-                    !needsMetadataConfirm
+                    !needsMetadataConfirm &&
+                    !needsMismatchConfirm &&
+                    !anyIdResolved
                   }
                 />
                 <PreflightRecap
                   roleChanges={roleChanges}
                   teacherEnrolls={teacherEnrolls}
+                  teacherEmailCount={teacherEmailRows.length}
                   needsRoleConfirm={needsRoleConfirm}
                   confirmGrantsOwner={confirmGrantsOwner}
                   roleChangesConfirmed={roleChangesConfirmed}
@@ -690,6 +894,9 @@ const UploadRoster = ({
                   metadataUpdateCount={preflight.metadataUpdate.length}
                   metadataConfirmed={metadataConfirmed}
                   onMetadataConfirmedChange={setMetadataConfirmed}
+                  identityMismatches={mismatches}
+                  mismatchConfirmed={mismatchConfirmed}
+                  onMismatchConfirmedChange={setMismatchConfirmed}
                 />
               </>
             ) : null}
@@ -702,17 +909,38 @@ const UploadRoster = ({
               </Alert>
             ) : null}
 
-            {rows.length > 0 ? (
-              // While the preflight resolves, show the table as a skeleton
-              // (loading). Before it has ever resolved, show it so roles can be
+            {/* Rows we refuse to act on. An unresolvable github_id fails closed
+                rather than falling back to the row's username cell, which would
+                target whoever holds that login today. */}
+            {unusableRows.length > 0 ? (
+              <Alert tone="warning" className="mb-4">
+                <span>
+                  {t("students.unresolvedIdRows", {
+                    count: unusableRows.length,
+                  })}
+                </span>
+              </Alert>
+            ) : null}
+            {droppedRows.length > 0 ? (
+              <Alert tone="warning" className="mb-4">
+                <span>
+                  {t("students.droppedRows", { count: droppedRows.length })}
+                </span>
+              </Alert>
+            ) : null}
+
+            {parsedRows.length > 0 ? (
+              // While identities resolve, show the table as a skeleton (loading).
+              // Before the preflight has ever resolved, show it so roles can be
               // assigned; after it resolves, show it only when expanded or a
               // confirmation needs the highlighted changes visible.
               preflighting || !preflight || showDetails ? (
                 <RosterPreviewTable
-                  rows={rows}
+                  rows={resolvedRows}
                   rolesByUser={rolesByUser}
                   changes={rowChanges}
                   roleChanges={roleChangeByUser}
+                  identityChanges={identityChangeByUser}
                   loading={preflighting}
                   onRoleChange={(key, role) =>
                     setRolesByUser((prev) => ({ ...prev, [key]: role }))
@@ -721,14 +949,14 @@ const UploadRoster = ({
               ) : null
             ) : (
               <Alert tone="warning">
-                {headerIssue?.kind === "missing-username-header" ? (
+                {headerIssue?.kind === "missing-identity-header" ? (
                   <div className="flex flex-col gap-1">
                     <span className="font-medium">
-                      {t("students.missingUsernameHeader")}
+                      {t("students.missingIdentityHeader")}
                     </span>
                     <span className="text-sm">
                       {t("students.expectedHeaders", {
-                        headers: headerIssue.optional.join(", "),
+                        headers: headerIssue.identity.join(", "),
                       })}
                     </span>
                   </div>
@@ -740,7 +968,7 @@ const UploadRoster = ({
                     <span className="text-sm">{headerIssue.detail}</span>
                   </div>
                 ) : (
-                  t("students.noValidUsernames")
+                  t("students.noUsableRows")
                 )}
               </Alert>
             )}
@@ -789,7 +1017,9 @@ const UploadRoster = ({
           </div>
         )}
 
-        {phase === "complete" && emailResult && (
+        {/* The dedicated "Email addresses" upload has no roster result to merge,
+            so it keeps its own screen. */}
+        {phase === "complete" && uploadKind === "email-list" && emailResult && (
           <EmailInviteResult
             result={emailResult}
             onDone={handleClose}
@@ -797,12 +1027,17 @@ const UploadRoster = ({
           />
         )}
 
-        {phase === "complete" && result && (
+        {/* A roster CSV lands on ONE screen even when it carried both kinds of
+            row: two independent result blocks would paint two success banners and
+            two Done buttons. */}
+        {phase === "complete" && uploadKind !== "email-list" && result && (
           <RosterImportResult
             result={result}
             inviteError={inviteError}
             inviteOutcome={inviteOutcome}
             roleChangeOutcome={roleChangeOutcome}
+            emailResult={emailResult}
+            emailError={emailError}
             onDone={handleClose}
           />
         )}

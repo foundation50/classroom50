@@ -48,6 +48,7 @@ export {
 export {
   writeClassroomRoles,
   updateClassroomMetadata,
+  repairRosterUsernames,
   applyClassroomRoleChange,
   assignRosterMemberRole,
   addClassroomStaffMember,
@@ -56,6 +57,7 @@ export {
   resolveRosterUploadContext,
   type WriteClassroomRolesInput,
   type UpdateClassroomMetadataInput,
+  type RepairRosterUsernamesInput,
   type ApplyClassroomRoleChangeInput,
   type ApplyClassroomRoleChangeResult,
   type AssignRosterMemberRoleInput,

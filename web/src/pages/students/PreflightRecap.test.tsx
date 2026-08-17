@@ -47,6 +47,8 @@ describe("PreflightRecap confirmation gate", () => {
         metadataUpdateCount={0}
         metadataConfirmed={false}
         onMetadataConfirmedChange={noop}
+        mismatchConfirmed={false}
+        onMismatchConfirmedChange={noop}
       />,
     )
     expect(container.firstChild).toBeNull()
@@ -65,6 +67,8 @@ describe("PreflightRecap confirmation gate", () => {
         metadataUpdateCount={1}
         metadataConfirmed={false}
         onMetadataConfirmedChange={noop}
+        mismatchConfirmed={false}
+        onMismatchConfirmedChange={noop}
       />,
     )
     expect(screen.getByText(/preflightMetadataReviewHint:1/)).toBeTruthy()
@@ -91,6 +95,8 @@ describe("PreflightRecap confirmation gate", () => {
         metadataUpdateCount={0}
         metadataConfirmed={false}
         onMetadataConfirmedChange={noop}
+        mismatchConfirmed={false}
+        onMismatchConfirmedChange={noop}
       />,
     )
     expect(
@@ -112,6 +118,8 @@ describe("PreflightRecap confirmation gate", () => {
         metadataUpdateCount={0}
         metadataConfirmed={false}
         onMetadataConfirmedChange={noop}
+        mismatchConfirmed={false}
+        onMismatchConfirmedChange={noop}
       />,
     )
     expect(

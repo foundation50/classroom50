@@ -9,6 +9,8 @@ const updateClassroomMetadata =
   vi.fn<(...args: unknown[]) => Promise<unknown>>()
 const applyClassroomRoleChange =
   vi.fn<(...args: unknown[]) => Promise<unknown>>()
+const bulkInviteByEmail = vi.fn<(...args: unknown[]) => Promise<unknown>>()
+const repairRosterUsernames = vi.fn<(...args: unknown[]) => Promise<unknown>>()
 
 vi.mock("@/domain/students", () => {
   // Declared inside the (hoisted) factory so they exist when the mock evaluates.
@@ -22,6 +24,8 @@ vi.mock("@/domain/students", () => {
     updateClassroomMetadata: (...a: unknown[]) => updateClassroomMetadata(...a),
     applyClassroomRoleChange: (...a: unknown[]) =>
       applyClassroomRoleChange(...a),
+    bulkInviteByEmail: (...a: unknown[]) => bulkInviteByEmail(...a),
+    repairRosterUsernames: (...a: unknown[]) => repairRosterUsernames(...a),
     NoNewStudentsError,
     RosterCsvMalformedError,
   }
@@ -49,6 +53,7 @@ const messages = {
   roleWritebackFailed: "roleback-failed",
   metadataWritebackMalformed: "metadata-malformed",
   metadataWritebackFailed: "metadata-failed",
+  invitingEmails: "inviting-emails",
 }
 
 const rows: ImportRosterRow[] = [{ username: "alice" }, { username: "bob" }]

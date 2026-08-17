@@ -3,14 +3,15 @@ import { Alert } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type { PreflightResult } from "@/util/rosterUploadPreflight"
 
-// The confirmation gate for a resolved preflight: the destructive/owner-granting
-// role-move box and the non-destructive detail-update box. The at-a-glance
-// counts live in PreflightSummary and the per-row detail in the preview table;
-// this component is now only the checkboxes that gate the primary button, shown
-// only when a confirmation is actually required.
+// The confirmation gate for a resolved preflight: the identity-mismatch box, the
+// destructive/owner-granting role-move box, and the non-destructive
+// detail-update box. The at-a-glance counts live in PreflightSummary and the
+// per-row detail in the preview table; this component is only the checkboxes that
+// gate the primary button, shown only when a confirmation is actually required.
 export const PreflightRecap = ({
   roleChanges,
   teacherEnrolls,
+  teacherEmailCount = 0,
   needsRoleConfirm,
   confirmGrantsOwner,
   roleChangesConfirmed,
@@ -19,9 +20,16 @@ export const PreflightRecap = ({
   metadataUpdateCount,
   metadataConfirmed,
   onMetadataConfirmedChange,
+  identityMismatches = [],
+  mismatchConfirmed,
+  onMismatchConfirmedChange,
 }: {
   roleChanges: PreflightResult["roleChanges"]
   teacherEnrolls: PreflightResult["enroll"]
+  // Email-identity rows assigned the teacher role. They never reach the
+  // preflight, but accepting an admin invitation makes that person an org owner,
+  // so they belong in this gate's count and notice.
+  teacherEmailCount?: number
   needsRoleConfirm: boolean
   confirmGrantsOwner: boolean
   roleChangesConfirmed: boolean
@@ -30,15 +38,68 @@ export const PreflightRecap = ({
   metadataUpdateCount: number
   metadataConfirmed: boolean
   onMetadataConfirmedChange: (checked: boolean) => void
+  identityMismatches?: PreflightResult["identityMismatches"]
+  mismatchConfirmed: boolean
+  onMismatchConfirmedChange: (checked: boolean) => void
 }) => {
   const { t } = useTranslation()
-  if (!needsRoleConfirm && !needsMetadataConfirm) return null
+  const needsMismatchConfirm = identityMismatches.length > 0
+  if (!needsRoleConfirm && !needsMetadataConfirm && !needsMismatchConfirm) {
+    return null
+  }
   return (
     <div className="mb-4 flex flex-col gap-2">
+      {/* First, because it questions WHO the other boxes are about. Warning tone,
+          not error: nothing destructive happens on confirm — the import just
+          proceeds under the account the id addresses. The error tone stays
+          reserved for the team move below. */}
+      {needsMismatchConfirm ? (
+        <div className="flex flex-col gap-2 rounded-box border border-warning/40 bg-warning/10 p-4">
+          <h4 className="text-sm font-semibold">
+            {t("students.preflightIdentityConfirmTitle")}
+          </h4>
+          <p className="text-sm opacity-70">
+            {t("students.preflightIdentityHint")}
+          </p>
+          <ul className="flex flex-col gap-1 text-sm">
+            {identityMismatches.map((m) => (
+              <li
+                key={`mismatch-${m.github_id}`}
+                className="flex items-center justify-between gap-2"
+              >
+                <code>{m.username}</code>
+                <span className="opacity-70">
+                  {t("students.preflightIdentityDetail", {
+                    declared: m.declaredUsername,
+                    id: m.github_id,
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm mt-0.5"
+              checked={mismatchConfirmed}
+              onChange={(e) =>
+                onMismatchConfirmedChange(e.currentTarget.checked)
+              }
+            />
+            <span>
+              {t("students.preflightConfirmIdentity", {
+                count: identityMismatches.length,
+              })}
+            </span>
+          </label>
+        </div>
+      ) : null}
+
       {/* Team moves and org-owner grants need explicit confirmation: a role
           change is a destructive team move, and a teacher target (role
-          change OR enroll) grants org OWNER. Metadata deltas for these rows are
-          shown inline in the preview table (highlighted cells), not re-listed. */}
+          change, enroll, OR email invitation) grants org OWNER. Metadata deltas
+          for these rows are shown inline in the preview table (highlighted
+          cells), not re-listed. */}
       {needsRoleConfirm ? (
         <div className="flex flex-col gap-2 rounded-box border border-error/30 bg-error/5 p-4">
           <h4 className="text-sm font-semibold">
@@ -71,6 +132,13 @@ export const PreflightRecap = ({
               </li>
             ))}
           </ul>
+          {teacherEmailCount > 0 ? (
+            <p className="text-sm opacity-70">
+              {t("students.preflightTeacherEmailNotice", {
+                count: teacherEmailCount,
+              })}
+            </p>
+          ) : null}
           {confirmGrantsOwner ? (
             <Alert tone="warning">
               <span>{t("students.preflightRoleChangeOwnerNotice")}</span>
@@ -92,7 +160,10 @@ export const PreflightRecap = ({
             />
             <span>
               {t("students.preflightConfirmRoleChanges", {
-                count: roleChanges.length + teacherEnrolls.length,
+                count:
+                  roleChanges.length +
+                  teacherEnrolls.length +
+                  teacherEmailCount,
               })}
             </span>
           </label>

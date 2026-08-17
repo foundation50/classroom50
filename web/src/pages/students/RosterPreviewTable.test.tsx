@@ -14,20 +14,25 @@ vi.mock("react-i18next", async (importOriginal) => {
 })
 
 import { RosterPreviewTable, type RowChanges } from "./RosterPreviewTable"
-import type { ImportRosterRow } from "@/domain/students"
+import type { ResolvedImportRow } from "./rosterImportResolve"
 
 afterEach(cleanup)
 
-const rows: ImportRosterRow[] = [
+const account = (username: string): ResolvedImportRow["identity"] => ({
+  kind: "account",
+  username,
+})
+
+const rows: ResolvedImportRow[] = [
   {
-    username: "ada",
+    identity: account("ada"),
     first_name: "Ada",
     last_name: "Lovelace",
     email: "ada@x.edu",
     section: "Lab 1",
   },
   {
-    username: "bob",
+    identity: account("bob"),
     first_name: "Bob",
     last_name: "B",
     email: "bob@x.edu",
@@ -55,7 +60,7 @@ describe("RosterPreviewTable change highlighting", () => {
 
   it("highlights a changed cell and exposes a stored->CSV tooltip", () => {
     const changes: RowChanges = {
-      ada: [{ field: "email", from: "old@x.edu", to: "ada@x.edu" }],
+      "login:ada": [{ field: "email", from: "old@x.edu", to: "ada@x.edu" }],
     }
     render(
       <RosterPreviewTable
@@ -77,7 +82,7 @@ describe("RosterPreviewTable change highlighting", () => {
 
   it("highlights the merged Name cell when either first or last name changed", () => {
     const changes: RowChanges = {
-      ada: [{ field: "last_name", from: "L", to: "Lovelace" }],
+      "login:ada": [{ field: "last_name", from: "L", to: "Lovelace" }],
     }
     render(
       <RosterPreviewTable
@@ -95,7 +100,7 @@ describe("RosterPreviewTable change highlighting", () => {
 
   it("renders the (empty) fallback in the tooltip for a previously-blank value", () => {
     const changes: RowChanges = {
-      ada: [{ field: "section", from: "", to: "Lab 9" }],
+      "login:ada": [{ field: "section", from: "", to: "Lab 9" }],
     }
     render(
       <RosterPreviewTable
@@ -114,7 +119,7 @@ describe("RosterPreviewTable change highlighting", () => {
 
   it("marks the whole row as changed while leaving unchanged rows plain", () => {
     const changes: RowChanges = {
-      ada: [{ field: "email", from: "old@x.edu", to: "ada@x.edu" }],
+      "login:ada": [{ field: "email", from: "old@x.edu", to: "ada@x.edu" }],
     }
     render(
       <RosterPreviewTable
@@ -140,9 +145,9 @@ describe("RosterPreviewTable change highlighting", () => {
     render(
       <RosterPreviewTable
         rows={rows}
-        rolesByUser={{ ada: "student" }}
+        rolesByUser={{ "login:ada": "student" }}
         onRoleChange={vi.fn()}
-        roleChanges={{ ada: { from: "teacher", to: "student" } }}
+        roleChanges={{ "login:ada": { from: "teacher", to: "student" } }}
       />,
     )
     // The Role cell (the one containing the role Select) is highlighted...
@@ -171,11 +176,13 @@ describe("RosterPreviewTable change highlighting", () => {
         loading={true}
       />,
     )
-    // Skeleton bars stand in for the still-resolving change columns...
+    // Skeleton bars stand in for the still-resolving columns...
     expect(container.querySelectorAll(".skeleton").length).toBeGreaterThan(0)
-    // ...the username is still shown (known from parsing)...
-    expect(screen.getByText("ada")).toBeTruthy()
-    // ...but no role Select renders while loading (its change is unknown yet).
+    // ...including the identity column, which is change-bearing now that a
+    // github_id can correct a stale login: showing the file's value first and
+    // flipping it later is the flash this skeleton exists to prevent.
+    expect(screen.queryByText("ada")).toBeNull()
+    // ...and no role Select renders while loading (its change is unknown yet).
     expect(container.querySelector("select")).toBeNull()
     // The table announces its busy state, and the decorative skeleton rows are
     // hidden from assistive tech (no rows of empty cells read aloud).
