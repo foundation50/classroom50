@@ -33,6 +33,7 @@ import {
   type TeamRosterRow,
 } from "@/util/teamRoster"
 import {
+  canTargetForUnenroll,
   hasStudentEnrollment,
   STATE_BADGE_TONE,
   STATE_LABEL_KEY,
@@ -211,8 +212,12 @@ const RosterMemberModal = ({
   const needsRole = canManage && row.state === "needs_attention_in_org"
   const needsInvite = canManage && row.state === "needs_attention_not_in_org"
   // Unenroll drops a roster.csv row + student-team membership — a student-only
-  // action. Hidden for a staff-only row (nothing to unenroll from the roster).
-  const canUnenroll = canManage && !staffOnly
+  // action. Hidden for a staff-only row (nothing to unenroll from the roster),
+  // and for a row unenroll could never match: a pending email invite carries
+  // only the address, and the shared matcher keys on username/github_id (see
+  // canTargetForUnenroll). Cancel invite is the right action there — it revokes
+  // the invitation, so the student can't still accept, and drops the row.
+  const canUnenroll = canManage && !staffOnly && canTargetForUnenroll(row)
   // Per-member role change is offered for an ENROLLED (active-team) member with
   // a resolvable username — but NOT for the viewer's own row: demoting yourself
   // off teacher revokes your own org-owner access mid-change (the mutation

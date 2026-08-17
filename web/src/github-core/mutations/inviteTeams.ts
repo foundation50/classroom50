@@ -205,3 +205,49 @@ export async function deleteInviteTeamForEmail(
 }
 
 export { INVITE_TEAM_PREFIX }
+
+// Delete every invite team whose stored record claims `classroom`, for the
+// teardown of that classroom itself. The record's claim is enough here: unlike
+// the reconcile (which folds an email onto a roster row and so must verify the
+// email hashes back to the slug), this only ever deletes, and a tampered record
+// can at worst get its own team deleted.
+//
+// Exists because these teams are recorded nowhere in the config repo, so once a
+// classroom's directory is gone nothing can find them again — the reconcile is
+// classroom-scoped and its settings page (with the manual cleanup action) is
+// gone too. A classroom deleted with a pending email invite would otherwise
+// strand that student's address in a secret team forever.
+//
+// Best-effort and never throws: the caller has already committed the deletion,
+// so a failure here is a leftover team to report, not a reason to fail. Returns
+// the slugs it could not delete.
+export async function purgeClassroomInviteTeams(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+): Promise<{ purged: number; failedSlugs: string[] }> {
+  const failedSlugs: string[] = []
+  let purged = 0
+  let teams: GitHubTeam[]
+  try {
+    teams = await listInviteTeams(client, org)
+  } catch (err) {
+    log.error("invite team purge: listing failed", { org, classroom, err })
+    return { purged, failedSlugs }
+  }
+
+  for (const team of teams) {
+    const slug = team.slug
+    if (!slug) continue
+    try {
+      const state = await readInviteTeam(client, org, slug)
+      if (!state || state.description?.classroom !== classroom) continue
+      await deleteInviteTeam(client, org, slug)
+      purged += 1
+    } catch (err) {
+      log.error("invite team purge: delete failed", { org, slug, err })
+      failedSlugs.push(slug)
+    }
+  }
+  return { purged, failedSlugs }
+}

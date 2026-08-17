@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  canTargetForUnenroll,
   countByRole,
   enrolledCountsByRole,
   hasStudentEnrollment,
@@ -38,6 +39,21 @@ describe("hasStudentEnrollment", () => {
   })
   it("is true for a student who is also staff (unenroll drops only the student side)", () => {
     expect(hasStudentEnrollment(row(["teacher", "student"]))).toBe(true)
+  })
+})
+
+// A pending email invite's row carries only the invited address, and the shared
+// roster matcher keys on username/github_id — so offering unenroll for it would
+// be a dead action ("does not exist in roster"). Cancel invite retires it.
+describe("canTargetForUnenroll", () => {
+  it("is false for a pending email-only row (nothing for the matcher to key on)", () => {
+    expect(canTargetForUnenroll({ username: "", github_id: "" })).toBe(false)
+  })
+  it("is true once the row carries a username or an id", () => {
+    expect(canTargetForUnenroll({ username: "alice", github_id: "" })).toBe(
+      true,
+    )
+    expect(canTargetForUnenroll({ username: "", github_id: "4242" })).toBe(true)
   })
 })
 

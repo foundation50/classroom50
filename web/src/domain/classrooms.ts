@@ -22,6 +22,7 @@ import {
   removeUserFromTeam,
   isDeletableClassroomTeamRef,
   isNonFastForward,
+  purgeClassroomInviteTeams,
   updateRef,
   type ClassroomTeamRef,
   type EditClassroomInput,
@@ -515,11 +516,18 @@ export async function deleteClassroom(
       failedTeamSlugs.push(teamRef.slug)
     }
   }
+  // Purge this classroom's per-invite metadata teams. They're recorded nowhere
+  // in the config repo, so with the classroom directory now gone nothing else
+  // can ever find them — each holds an invited student's email address in its
+  // description. Runs after the commit (like the team deletes) and never throws.
+  const invitePurge = await purgeClassroomInviteTeams(client, org, classroom)
+
+  const lingeringSlugs = [...failedTeamSlugs, ...invitePurge.failedSlugs]
   const teamDeleteWarning =
-    failedTeamSlugs.length > 0
+    lingeringSlugs.length > 0
       ? `Removed the classroom config but could not delete ${
-          failedTeamSlugs.length === 1 ? "its team" : "its teams"
-        } ${failedTeamSlugs
+          lingeringSlugs.length === 1 ? "its team" : "its teams"
+        } ${lingeringSlugs
           .map((s) => `"${s}"`)
           .join(
             ", ",
@@ -531,6 +539,8 @@ export async function deleteClassroom(
     classroom,
     deletedPaths: entriesToDelete.length,
     teamsFailed: failedTeamSlugs.length,
+    inviteTeamsPurged: invitePurge.purged,
+    inviteTeamsFailed: invitePurge.failedSlugs.length,
   })
 
   return {
