@@ -256,10 +256,11 @@ To enroll students who are already org members:
 
 Uploading a **username** list or **roster CSV** on the **Roster** page also enrolls
 existing members: the invite is skipped, but they're still added to the roster
-and team. Only an **email** upload can't, because an email invite writes nothing
-to the roster until the student onboards, so an already-member email is simply
-skipped. From the CLI, `gh teacher roster add <org> <classroom> <username>` (or
-`roster import`) enrolls an existing member the same way.
+and team. An **email** upload can't, because GitHub won't invite an existing
+member, and Classroom 50 has no way to tell which account owns that address:
+the email is skipped instead. From the CLI,
+`gh teacher roster add <org> <classroom> <username>` (or `roster import`)
+enrolls an existing member the same way.
 
 ### Invitations or accepts fail on an organization with SAML SSO
 
@@ -280,12 +281,37 @@ Then retry the invitation or the accept link.
 
 ### `line N: username column is empty` when importing a roster CSV
 
-Every roster CSV row must carry a `username`. The line number points at the row
-in your file whose username cell is blank, commonly a student who hasn't
-created or reported a GitHub account yet, or a leftover row from another
+Every roster CSV row you upload must carry a `username`. The line number points
+at the row in your file whose username cell is blank, commonly a student who
+hasn't created or reported a GitHub account yet, or a leftover row from another
 export. Fill in the username or remove the row, then re-run. For the accepted
-columns, see
-[Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
+columns, see [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
+
+Exporting a roster and re-importing it can hit this too. A student invited by
+email sits on the roster as a pending row with no username until they accept,
+which is valid in the stored roster but not in a file you upload. Remove those
+rows before importing, or wait until the students have joined.
+
+### "Couldn't prepare the invite … so no invite was sent"
+
+Before emailing an invitation, Classroom 50 sets up the invite team that retains
+the address. If that setup fails, GitHub was usually rate-limiting or briefly
+unavailable. **No invitation was sent** and nothing was written to the roster, so
+there is nothing to cancel: wait a moment and invite the student again.
+
+### `invite-…` teams you didn't create
+
+Each email invitation gets a `secret` team named `invite-` plus a short hash,
+which holds the invited address until that person joins. Seeing one is expected
+while an invitation is outstanding, however long that takes. Classroom 50 deletes
+it when the invitation is accepted or cancelled, and clears one left by an
+expired invitation on a later roster sync.
+
+To clear them early, use **Clean up invite data** on the classroom's
+**Settings** page, which writes anything still recoverable onto the roster
+first. `gh teacher teardown <org>` removes every invite team in the
+organization. An empty one left by an interrupted invitation holds no address
+and is safe to delete on github.com.
 
 ### A student's `role` flipped to `teacher` after `roster add`
 

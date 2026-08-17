@@ -44,6 +44,13 @@ gh teacher staff add cs50-fall-2026 cs-principles octocat --role ta
 (`gh teacher staff remove`, or the web app's staff list) takes away the role
 but doesn't touch their organization membership.
 
+Staff can also be invited by email. On the classroom's **Roster** page, use
+**Upload** to enter the addresses, then pick each person's role in the invite
+list; choosing **Teacher** asks you to confirm, because it makes that person an
+organization owner. As with a student, the address goes onto the roster as a
+pending row and is matched to their GitHub account when they accept. See
+[Invitations by email](How-Classroom-50-Works#invitations-by-email).
+
 > [!NOTE]
 > Granting the **teacher** role makes that person an organization owner, with
 > full control over the whole organization, not only the classroom. Grant it

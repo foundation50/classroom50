@@ -135,8 +135,9 @@ assignment. See
 
 **Tear down organization** (web app: organization settings, Danger zone; CLI:
 `gh teacher teardown`) deletes every repository Classroom 50 manages in the
-organization, after you type an explicit confirmation. It exists for
-development resets and complete decommissioning.
+organization, along with its classroom and invite teams, after you type an
+explicit confirmation. It exists for development resets and complete
+decommissioning.
 
 > [!WARNING]
 > Teardown deletes student work permanently. Export scores and download

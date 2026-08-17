@@ -286,9 +286,10 @@ and author grading under `<classroom>/autograders/<slug>/`.
 
 Manage student rows in `<org>/classroom50/<classroom>/roster.csv`. All write
 subcommands use an optimistic-rebase loop (up to 5 retries), so concurrent
-teacher edits don't lose each other's work. Every row carries an immutable
-numeric `github_id` (CLI-managed — don't hand-edit it) so a username change
-doesn't desynchronize records.
+teacher edits don't lose each other's work. Every row for a student who has
+joined carries an immutable numeric `github_id` (CLI-managed — don't hand-edit
+it) so a username change doesn't desynchronize records. A student invited by
+email has neither a username nor a `github_id` until they accept.
 
 ### `roster list`
 
@@ -298,8 +299,10 @@ gh teacher roster list <org> <classroom> [--json] [--quiet]
 
 Default is an aligned table (empty cells show as `-`). `--json` emits full row
 objects (`github_id` is `0` when unresolved; `role` is `""` when unknown);
-`--quiet` prints one username per line. The `role` column is a display snapshot
-of the account's highest team-derived role — see
+`--quiet` prints one username per line. The table and `--json` include pending
+rows for students invited by email; `--quiet` omits them, since they have no
+username yet and a blank line would feed scripts an empty argument. The `role`
+column is a display snapshot of the account's highest team-derived role — see
 [Dual roles](#dual-roles-staff-who-are-also-students). Read-only.
 
 ### `roster add`
@@ -309,7 +312,9 @@ gh teacher roster add <org> <classroom> <username> [--first-name <n>] [--last-na
 ```
 
 Upserts one row by username (case-insensitive), then invites the student to the
-organization if needed and adds them to the classroom team. Safe to re-run.
+organization if needed and adds them to the classroom team. Safe to re-run. When
+the student has a pending row from an email invitation, this fills in that row by
+matching the address instead of adding a duplicate.
 
 ### `roster update`
 
@@ -703,7 +708,8 @@ gh teacher teardown --yes <org>    # skip the prompt (scripts only)
 Deletes **every** repository in `<org>` — a development reset. It confirms the
 `classroom50` marker repo exists (refusing otherwise), lists all repos, prompts
 for the typed org name, then deletes each (the `classroom50` repository last, so an
-interrupted run stays safe to re-run).
+interrupted run stays safe to re-run). It then removes the classroom and invite
+teams it finds, so no invited address is left behind.
 
 > [!WARNING]
 > Requires the `delete_repo` scope, which is **not** in the default set. Opt in

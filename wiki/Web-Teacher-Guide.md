@@ -345,10 +345,11 @@ formats and auto-detects which one you uploaded (you can override the guess):
 
 ### Roster CSV fields
 
-Only `username` is required. Every other column is optional and can be left out.
-Headers are matched case-insensitively, and any unrecognized column is ignored,
-so a CSV exported from your SIS or gradebook usually works unchanged. (A `github_id`
-column, if present, is ignored and re-resolved from GitHub.)
+Only `username` is required in a CSV you upload. Every other column is optional
+and can be left out. Headers are matched case-insensitively, and any
+unrecognized column is ignored, so a CSV exported from your SIS or gradebook
+usually works unchanged. (A `github_id` column, if present, is ignored and
+re-resolved from GitHub.)
 
 | Column | Required | Description |
 | --- | --- | --- |
@@ -396,6 +397,11 @@ octofez
 > Names and sections can be filled in afterwards by editing the roster or
 > uploading a roster CSV.
 
+A pending row is why the stored `roster.csv` can hold a row with no `username`
+or `github_id`. Those rows are valid in the file but not in a CSV you upload, so
+remove them if you export the roster and import it again. For more information,
+see [Invitations by email](How-Classroom-50-Works#invitations-by-email).
+
 > [!TIP]
 > Adding students who are **already in your organization** (for example, from a
 > previous course) is a different action. Inviting them again does nothing:
@@ -407,8 +413,10 @@ octofez
 
 **The roster list** — everyone already in this classroom. Classroom 50
 gives you two shareable links: one to accept the organization invite, and one to
-onboard students added by email. Below the links, each student's status shows
-whether they've joined the organization.
+onboard students added by email. Neither link enrolls anyone on its own: invite
+the student from the roster first, then share a link so they can accept and sign
+in. Below the links, each student's status shows whether they've joined the
+organization.
 
 ## Collect submissions
 
@@ -533,7 +541,9 @@ spreadsheet or external tool. The column-by-column reference is in
   students have already accepted. **Assignment type** (Individual vs. Group)
   stays locked, since switching it would invalidate existing submissions.
 - **Edit a classroom** — open the classroom, then **Settings**. Same form as
-  creating one, pre-filled.
+  creating one, pre-filled. The page also offers **Clean up invite data**, which
+  clears the addresses held for email invitations that were never accepted. See
+  [Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
 ### Changing the submission type later
 

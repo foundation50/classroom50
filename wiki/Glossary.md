@@ -27,8 +27,22 @@ teams: there is no separate team-creation step and no group names.
 
 **Roster** — The list of students in a classroom. Backed by a `roster.csv`
 file, but the classroom's GitHub team is the source of truth for who is
-enrolled. The roster is keyed by GitHub username; there is no equivalent of
-GitHub Classroom's roster identifier or student self-linking.
+enrolled. Most rows are keyed by GitHub username; a student invited by email
+has a **pending row** until they accept. There is no equivalent of GitHub
+Classroom's roster identifier or student self-linking.
+
+**Pending row** — A `roster.csv` row for someone invited by email who hasn't
+accepted yet. It holds the invited address and role, with no username or
+GitHub id, because GitHub offers no way to look up an account from an email
+address. Accepting fills in the account; a cancelled or expired invitation
+removes the row on the next roster sync.
+
+**Invite team** — A `secret` GitHub team, named `invite-<hash>`, that holds one
+invited address until that person joins. It is how an email invitation is
+matched to the GitHub account that accepts it. Classroom 50 creates one per
+email invitation and deletes it once the invitation is accepted, cancelled, or
+expired. For more information, see
+[Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
 **Organization (org)** — The GitHub organization that hosts a Classroom 50
 setup. Requires the Team or Enterprise plan.
