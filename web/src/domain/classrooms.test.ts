@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { assertClassroomNotArchived, createClassroomFiles } from "./classrooms"
+import {
+  assertClassroomNotArchived,
+  createClassroomFiles,
+  deleteClassroom,
+} from "./classrooms"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 import type { GitHubClient, GitHubRequestOptions } from "@/github-core/client"
 
@@ -256,5 +260,138 @@ describe("createClassroomFiles creator team cleanup", () => {
     expect(deleted).toContain(
       "/orgs/acme/teams/classroom50-cs101-ta/memberships/prof",
     )
+  })
+})
+
+// Deleting a classroom is the last moment its per-invite metadata teams are
+// findable: they're recorded nowhere in the config repo, so once the classroom
+// directory is gone nothing can enumerate them per-classroom again — and each
+// holds an invited student's email address in its description.
+describe("deleteClassroom invite-team purge", () => {
+  const inviteSlug = "invite-0123456789abcdef"
+
+  // A routing client covering the whole delete flow: classroom.json read, tree
+  // read, commit/ref writes, then the org-teams listing + per-team read the
+  // purge performs. Records every DELETE path.
+  const deleteFlowClient = (opts: {
+    onDelete: (path: string) => void
+    inviteClassroom?: string
+    listThrows?: boolean
+  }): GitHubClient => {
+    const request = vi.fn(
+      async (path: string, options?: GitHubRequestOptions) => {
+        const method = options?.method ?? "GET"
+
+        if (method === "DELETE") {
+          opts.onDelete(path)
+          return undefined
+        }
+        if (method === "GET" && /\/repos\/[^/]+\/classroom50$/.test(path)) {
+          return { default_branch: "main" }
+        }
+        if (path.includes("/git/ref/heads/")) {
+          return { object: { sha: "base-sha" } }
+        }
+        if (path.includes("/git/commits/")) {
+          return { tree: { sha: "tree-sha" }, sha: "base-sha" }
+        }
+        if (path.includes("/git/trees/")) {
+          return {
+            tree: [
+              {
+                path: "cs101/classroom.json",
+                mode: "100644",
+                type: "blob",
+                sha: "a",
+              },
+            ],
+            truncated: false,
+          }
+        }
+        if (path.endsWith("/git/trees")) return { sha: "new-tree" }
+        if (path.endsWith("/git/commits")) return { sha: "new-commit" }
+        if (path.includes("/git/refs/heads/")) return {}
+        // The purge's org-teams listing.
+        if (/\/orgs\/[^/]+\/teams\?/.test(path)) {
+          if (opts.listThrows) throw apiError(500)
+          return [{ id: 9, slug: inviteSlug }]
+        }
+        // The purge's per-team read (description carries the claimed classroom).
+        if (
+          path.includes(`/teams/${inviteSlug}`) &&
+          path.includes("/members")
+        ) {
+          return []
+        }
+        if (path.includes(`/teams/${inviteSlug}`)) {
+          return {
+            slug: inviteSlug,
+            description: JSON.stringify({
+              schema: "classroom50/invite/v1",
+              email: "pending@x.edu",
+              classroom: opts.inviteClassroom ?? "cs101",
+            }),
+          }
+        }
+        // Classroom team refs come from classroom.json (requestRaw below).
+        return undefined
+      },
+    )
+    return {
+      request,
+      requestRaw: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          schema: "classroom50/classroom/v1",
+          short_name: "cs101",
+        }),
+      ),
+      fetchArchive: vi.fn(),
+    } as unknown as GitHubClient
+  }
+
+  it("deletes the classroom's invite teams so no invited email is stranded", async () => {
+    const deleted: string[] = []
+    const client = deleteFlowClient({ onDelete: (p) => deleted.push(p) })
+
+    const result = await deleteClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    expect(result.deleted).toBe(true)
+    expect(deleted).toContain(`/orgs/acme/teams/${inviteSlug}`)
+    expect(result.teamDeleteWarning).toBeUndefined()
+  })
+
+  it("leaves another classroom's invite team alone", async () => {
+    const deleted: string[] = []
+    const client = deleteFlowClient({
+      onDelete: (p) => deleted.push(p),
+      inviteClassroom: "cs202",
+    })
+
+    await deleteClassroom(client, { org: "acme", classroom: "cs101" })
+    // Nothing at all was deleted — the only team in the listing belongs to
+    // another classroom (the test above is the positive control).
+    expect(deleted).toEqual([])
+  })
+
+  it("warns that invitation records went unchecked when the listing fails", async () => {
+    const deleted: string[] = []
+    const client = deleteFlowClient({
+      onDelete: (p) => deleted.push(p),
+      listThrows: true,
+    })
+
+    const result = await deleteClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    // The config deletion still succeeded, but the teacher must learn that a
+    // stored email address may be left behind — this is the silent-failure case.
+    expect(result.deleted).toBe(true)
+    expect(result.teamDeleteWarning).toMatch(/invitation records/i)
+    expect(result.teamDeleteWarning).toMatch(/email address/i)
   })
 })

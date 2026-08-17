@@ -146,6 +146,7 @@ export {
   listInviteTeams,
   deleteInviteTeam,
   deleteInviteTeamForEmail,
+  purgeClassroomInviteTeams,
   InviteTeamNotSecretError,
   type InviteTeamRef,
   type InviteTeamState,

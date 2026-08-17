@@ -22,6 +22,7 @@ import {
   removeUserFromTeam,
   isDeletableClassroomTeamRef,
   isNonFastForward,
+  purgeClassroomInviteTeams,
   updateRef,
   type ClassroomTeamRef,
   type EditClassroomInput,
@@ -515,15 +516,35 @@ export async function deleteClassroom(
       failedTeamSlugs.push(teamRef.slug)
     }
   }
+  // Purge this classroom's per-invite metadata teams. They're recorded nowhere
+  // in the config repo, so with the classroom directory now gone nothing else
+  // can ever find them — each holds an invited student's email address in its
+  // description. Runs after the commit (like the team deletes) and never throws.
+  const invitePurge = await purgeClassroomInviteTeams(client, org, classroom)
+
+  // Two warnings, because they ask for different actions. Named slugs are teams
+  // we know belong to this classroom; a failed listing or an unreadable team
+  // can't be named (it might belong to a live classroom), so that case points
+  // the teacher at the teams page instead of at a specific slug.
+  const namedSlugs = [...failedTeamSlugs, ...invitePurge.failedSlugs]
+  const warnings: string[] = []
+  if (namedSlugs.length > 0) {
+    warnings.push(
+      `couldn't delete ${namedSlugs.length === 1 ? "its team" : "its teams"} ${namedSlugs
+        .map((s) => `"${s}"`)
+        .join(", ")}`,
+    )
+  }
+  if (invitePurge.listFailed || invitePurge.unreadable > 0) {
+    warnings.push(
+      "couldn't check for leftover invitation records (each stores an invited student's email address)",
+    )
+  }
   const teamDeleteWarning =
-    failedTeamSlugs.length > 0
-      ? `Removed the classroom config but could not delete ${
-          failedTeamSlugs.length === 1 ? "its team" : "its teams"
-        } ${failedTeamSlugs
-          .map((s) => `"${s}"`)
-          .join(
-            ", ",
-          )}; delete by hand at https://github.com/orgs/${org}/teams if they linger.`
+    warnings.length > 0
+      ? `Removed the classroom config but ${warnings.join(
+          " and ",
+        )}; review https://github.com/orgs/${org}/teams and delete anything that lingers.`
       : undefined
 
   log.info("delete classroom: completed", {
@@ -531,6 +552,10 @@ export async function deleteClassroom(
     classroom,
     deletedPaths: entriesToDelete.length,
     teamsFailed: failedTeamSlugs.length,
+    inviteTeamsPurged: invitePurge.purged,
+    inviteTeamsFailed: invitePurge.failedSlugs.length,
+    inviteTeamsUnreadable: invitePurge.unreadable,
+    inviteListFailed: invitePurge.listFailed,
   })
 
   return {

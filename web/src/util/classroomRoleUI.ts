@@ -86,6 +86,22 @@ export function hasStudentEnrollment(
   return row.roles.includes("student")
 }
 
+// Whether unenroll can actually target this row's roster entry. The shared
+// roster-row matcher identifies a row by username or github_id only (a shared
+// email must never widen a removal), so a row carrying NEITHER — a pending
+// email invite, whose address is all we know until the student accepts — has
+// nothing for unenroll to match and would fail with "does not exist in roster".
+//
+// Such a row is retired by CANCELLING the invitation instead, which is also the
+// only correct action: dropping the roster row alone would leave the invitation
+// live, so the student could still accept and land in the classroom. Cancelling
+// revokes it, deletes the stored email, and the reconcile then drops the row.
+export function canTargetForUnenroll(
+  row: Pick<TeamRosterRow, "username" | "github_id">,
+): boolean {
+  return Boolean(row.username || row.github_id)
+}
+
 // Per-role head counts across the roster. `student` counts every row carrying
 // the student role (a student who is also staff still counts as a student);
 // `teacher`/`hta`/`ta` count every row holding that staff role. A person on two
