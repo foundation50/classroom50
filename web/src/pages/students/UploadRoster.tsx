@@ -458,6 +458,11 @@ const UploadRoster = ({
   // mismatch — it repairs the stored username. Counting only the preflight
   // buckets would leave either kind of file on a disabled "No changes to apply".
   const emailRowCount = emailRows.length
+  // How many people this upload will actually invite: non-members it will invite
+  // by username, plus every email-identity row. ONE source, so the notice, the
+  // summary, and the primary button can't disagree — a row that's already a
+  // member (or only getting its details updated) is not an invitation.
+  const inviteCount = (preflight?.needsInvite.length ?? 0) + emailRowCount
   const hasActionableWork =
     (preflight?.needsInvite.length ?? 0) +
       (preflight?.enroll.length ?? 0) +
@@ -500,20 +505,19 @@ const UploadRoster = ({
         (!needsMetadataConfirm || metadataConfirmed) &&
         (!needsMismatchConfirm || mismatchConfirmed)
 
-  // The roster primary-button label reflects what processing will actually do.
-  // An email row always sends an invitation, so it counts toward "will invite".
-  const willSendInvites =
-    (preflight?.needsInvite.length ?? 0) + emailRowCount > 0
-  // Metadata-only: no invites, no enrolls, no role changes — just metadata.
+  // The roster primary-button label names the action and its scale. Counts here
+  // come from inviteCount / metadataUpdate — never the row total — so the button
+  // can't claim more people than the notice above it says will be contacted.
+  const willSendInvites = inviteCount > 0
+  // Metadata-only: no invites, no enrolls, no role changes — just metadata. Only
+  // reached when willSendInvites is false, per the branch order below.
   const metadataOnly =
     (preflight?.enroll.length ?? 0) === 0 &&
     (preflight?.roleChanges.length ?? 0) === 0 &&
     (preflight?.metadataUpdate.length ?? 0) > 0
   const rosterPrimaryLabel = (() => {
     if (willSendInvites)
-      return t("students.importAndInviteMembers", {
-        count: resolvedRows.length,
-      })
+      return t("students.importAndInviteMembers", { count: inviteCount })
     if (!preflight)
       return t("students.importMembers", { count: resolvedRows.length })
     if (metadataOnly)
@@ -843,11 +847,11 @@ const UploadRoster = ({
                 {/* At-a-glance summary of add / update / skip, with an invite
                     note when memberships will be created, and a details toggle.
                     Email rows always send an invitation, so they count here. */}
-                {preflight.needsInvite.length + emailRowCount > 0 ? (
+                {inviteCount > 0 ? (
                   <Alert tone="warning" className="mb-4">
                     <span>
                       {t("students.uploadInviteNotice", {
-                        count: preflight.needsInvite.length + emailRowCount,
+                        count: inviteCount,
                       })}
                     </span>
                   </Alert>

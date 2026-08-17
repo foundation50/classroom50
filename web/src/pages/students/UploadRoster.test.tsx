@@ -648,6 +648,55 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
     await waitFor(() => expect(button.disabled).toBe(false))
   })
 
+  it("counts invitations, not rows, in the primary button and notice", async () => {
+    const user = userEvent.setup()
+    // The screenshot case: 3 rows, but one is an existing member only getting a
+    // details update. The button must not claim to invite that person.
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [
+        { kind: "needs_invite", username: "rliu50", role: "student" },
+      ],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [
+        {
+          kind: "metadata_update",
+          username: "rongxin-liu",
+          role: "teacher",
+          changedFields: ["email"],
+          changes: [{ field: "email", from: "old@x.edu", to: "new@x.edu" }],
+        },
+      ],
+      identityMismatches: [],
+      allAlreadyMembers: false,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(
+      user,
+      file(
+        "roster.csv",
+        "username,email,role\n" +
+          "rliu50,a@x.edu,student\n" +
+          "rongxin-liu,new@x.edu,teacher\n" +
+          ",zoe@x.edu,student\n",
+      ),
+    )
+
+    // 1 username invite + 1 email row = 2, not the 3 rows in the file.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: "students.importAndInviteMembers:2",
+        }),
+      ).toBeTruthy(),
+    )
+    expect(screen.getByText("students.uploadInviteNotice:2")).toBeTruthy()
+  })
+
   it("re-resolves after a re-parse that yields identical identity cells", async () => {
     const user = userEvent.setup()
     renderModal(
