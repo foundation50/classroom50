@@ -51,10 +51,10 @@ const rateLimitError = () =>
     rateLimit: emptyRateLimit,
   })
 
-// Build a valid invite-team state for (classroom, email) with the given
-// regular-role members (readInviteTeam already excludes maintainers, i.e. the
-// auto-added owner), so the description's email hashes back to the slug.
-// createdAt defaults to "just now" (never a GC candidate).
+// Build a valid invite-team state for (classroom, email) with the given members
+// (readInviteTeam lists EVERY role — the team is left teacher-free at creation,
+// so whoever is on it accepted), so the description's email hashes back to the
+// slug. createdAt defaults to "just now" (never a GC candidate).
 async function inviteState(
   classroom: string,
   email: string,
@@ -123,6 +123,28 @@ describe("collectInviteRecoveries", () => {
     ])
     expect(state.trusted).toBe(true)
     // Push-before-delete: the caller deletes AFTER the roster commit lands.
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  // The case the zero-member invariant exists for: GitHub auto-promotes an org
+  // owner to team maintainer, so an owner invitee is invisible to a role=member
+  // read. Since the team carries no teacher, the unfiltered read sees them and
+  // the mapping recovers like any other.
+  it("recovers an ORG OWNER invitee (present only as a maintainer)", async () => {
+    const team = await inviteState("cs101", "dean@example.com", [
+      { id: 3, login: "dean" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: team.slug }])
+    readInviteTeam.mockResolvedValue(team)
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.recovered).toEqual([
+      {
+        email: "dean@example.com",
+        invitee: { id: 3, login: "dean" },
+        slug: team.slug,
+      },
+    ])
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 

@@ -54,10 +54,11 @@ const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
 // belongs to THIS classroom (by its validated description):
 //   - verify the description's email hashes back to the team name (the team is
 //     invitee-editable after acceptance, so this is the trust boundary);
-//   - with exactly one regular-role member (GitHub keeps org owners as team
-//     maintainers, so role=member is the accepted-invitee set) who is still on
-//     a classroom team -> a RECOVERED mapping. The team is left in place for
-//     the caller to delete after the roster commit lands;
+//   - with exactly one member (of any role — the team holds no teacher, so
+//     whoever is on it accepted, including an org owner GitHub auto-promoted to
+//     maintainer) who is still on a classroom team -> a RECOVERED mapping. The
+//     team is left in place for the caller to delete after the roster commit
+//     lands;
 //   - one member on NO classroom team -> unenrolled after accepting; delete the
 //     team now so the mapping can't resurrect a removed student;
 //   - zero members -> the invite is live (row kept), unless the team aged past
@@ -156,7 +157,7 @@ export async function collectInviteRecoveries(
         continue
       }
       if (invitees.length > 1) {
-        log.error("invite team has multiple regular members; skipping", {
+        log.error("invite team has multiple members; skipping", {
           slug,
           count: invitees.length,
         })

@@ -2,6 +2,7 @@ import type { GitHubClient } from "../client"
 import type { GitHubTeam, GitHubUser } from "../types"
 import { GitHubAPIError, tolerateGitHubError } from "../errors"
 import { createTeam } from "../teamWrites"
+import { removeUserFromTeam } from "./teams"
 import { paginateAll } from "../paginate"
 import {
   INVITE_TEAM_PREFIX,
@@ -31,24 +32,67 @@ export class InviteTeamNotSecretError extends Error {
   }
 }
 
+// Thrown by ensureInviteTeam when the team still has a member after the acting
+// teacher was dropped. Nobody can legitimately be on it yet (the invitation
+// isn't sent until this returns), so a member is a teacher stranded by an
+// earlier interrupted run — and with the role filter gone, a teacher on the team
+// is exactly what the reconcile would misread as the accepted invitee. Fail
+// closed BEFORE the email is written, leaving a team that holds no PII.
+export class InviteTeamNotEmptyError extends Error {
+  slug: string
+  constructor(slug: string) {
+    super(
+      `Invite team "${slug}" still has a member after dropping the acting user; refusing to store an invited email on a team whose membership would be misread as the invitee.`,
+    )
+    this.name = "InviteTeamNotEmptyError"
+    this.slug = slug
+  }
+}
+
 // `created` distinguishes a team this call freshly created from an adopted
 // pre-existing one, so a caller whose org invite then fails can safely delete
 // only what it created (an adopted team may hold a still-unrecovered record
 // from an earlier accepted invite).
 export type InviteTeamRef = { id: number; slug: string; created: boolean }
 
+// Placeholder description a team is created with, so a run that dies before the
+// membership drop leaves a team holding NO email. It deliberately does not parse
+// as a v1 record, which is what makes the reconcile skip such a team.
+const PROVISIONAL_DESCRIPTION = "classroom50: preparing invite"
+
 // Create (or adopt) the per-invite SECRET team for (classroom, email) and write
 // the classroom50/invite/v1 record into its description. The team name is the
 // deterministic invite-<hash(classroom,email)> so a later reconcile can find it
-// from the roster row's email. Fail-closed on privacy: after create/adopt, the
-// team's privacy is confirmed to be `secret` (an adopted non-secret team is
-// PATCHed to secret; if that can't be confirmed, throw InviteTeamNotSecretError
-// rather than store the email where students could read it). Returns the ref so
-// the caller can attach its id to the org invitation's team_ids.
+// from the roster row's email.
+//
+// Three fail-closed invariants, all of which throw rather than return a team
+// that would leak PII or mislead the reconcile:
+//   - SECRET: an adopted team is PATCHed to secret, and if that can't be
+//     confirmed, InviteTeamNotSecretError — never store the email where students
+//     could read it.
+//   - NO TEACHER: GitHub silently adds the creator as a maintainer, and any org
+//     owner it holds is auto-promoted to maintainer too, so a teacher on the team
+//     is indistinguishable from an invitee who accepted. `actor` is dropped
+//     unconditionally (an adopted team may carry one from an earlier run) and the
+//     membership is then read back; a survivor throws InviteTeamNotEmptyError.
+//     This is what lets the reconcile treat any member of any role as the
+//     invitee.
+//   - EMAIL LAST: the create carries only PROVISIONAL_DESCRIPTION, and the real
+//     record is written only once the team is confirmed empty. GitHub adds the
+//     creator during the create itself, so the drop is necessarily a second
+//     request — an interrupted run (or a rate limit that throttles both the drop
+//     and any compensating delete) can always strand a team with a teacher on it.
+//     Ordering the email last makes that leftover harmless: it holds no address
+//     and no valid record, so the reconcile skips it, and the next invite to the
+//     same address adopts and heals it.
+//
+// Returns the ref so the caller can attach its id to the org invitation's
+// team_ids.
 export async function ensureInviteTeam(
   client: GitHubClient,
   org: string,
   metadata: InviteMetadata,
+  actor: string,
 ): Promise<InviteTeamRef> {
   const name = await inviteTeamName(metadata.classroom, metadata.email)
   const description = marshalInviteDescription(metadata)
@@ -59,15 +103,15 @@ export async function ensureInviteTeam(
     team = await createTeam(client, {
       org,
       name,
-      description,
+      description: PROVISIONAL_DESCRIPTION,
       privacy: "secret",
       notification_setting: "notifications_disabled",
     })
   } catch (err) {
     if (err instanceof GitHubAPIError && err.status === 422) {
       // A same-named team already exists (a resend, a retry, or a prior invite
-      // to the same email+classroom): adopt it, forcing secret + refreshing the
-      // description. Name is slug-safe, so it doubles as the lookup slug.
+      // to the same email+classroom): adopt it, forcing secret below. Name is
+      // slug-safe, so it doubles as the lookup slug.
       created = false
       team = await client.request<GitHubTeam>(
         `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(name)}`,
@@ -77,23 +121,59 @@ export async function ensureInviteTeam(
     }
   }
 
-  // Fail-closed secret invariant. On a fresh create GitHub honors privacy:
-  // "secret", but an adopted team may be closed; PATCH it and re-read. Never
-  // leave the email description on a non-secret team.
-  if (team.privacy !== "secret" || team.description !== description) {
+  // Fail-closed secret invariant, settled BEFORE the email is written: an
+  // adopted team may be closed. Never let the email description land on a
+  // non-secret team.
+  if (team.privacy !== "secret") {
     team = await client.request<GitHubTeam>(
       `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(team.slug)}`,
-      {
-        method: "PATCH",
-        body: { privacy: "secret", description },
-      },
+      { method: "PATCH", body: { privacy: "secret" } },
     )
   }
   if (team.privacy !== "secret") {
     throw new InviteTeamNotSecretError(team.slug)
   }
 
-  return { id: team.id, slug: team.slug, created }
+  await requireTeacherFreeTeam(client, org, team.slug, actor)
+
+  // Only now is it safe to store the invited address.
+  const withRecord = await client.request<GitHubTeam>(
+    `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(team.slug)}`,
+    { method: "PATCH", body: { privacy: "secret", description } },
+  )
+  if (withRecord.privacy !== "secret") {
+    throw new InviteTeamNotSecretError(withRecord.slug)
+  }
+
+  return { id: withRecord.id, slug: withRecord.slug, created }
+}
+
+// Drop `actor` from the team, then PROVE no member remains. GitHub adds the
+// creator during the create, so the drop can't be atomic with it; the read-back
+// is what turns the invariant from an assumption into a checked fact, and it also
+// catches a DIFFERENT teacher stranded by an earlier run (whom dropping `actor`
+// alone would miss). A degraded read throws rather than reading as "empty".
+async function requireTeacherFreeTeam(
+  client: GitHubClient,
+  org: string,
+  slug: string,
+  actor: string,
+): Promise<void> {
+  await removeUserFromTeam(client, { org, teamSlug: slug, username: actor })
+  const remaining = await paginateAll<GitHubUser>(
+    client,
+    (page) =>
+      `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+        slug,
+      )}/members?per_page=100&page=${page}`,
+  )
+  if (remaining.length > 0) {
+    log.error("invite team still has a member after dropping the actor", {
+      slug,
+      remaining: remaining.length,
+    })
+    throw new InviteTeamNotEmptyError(slug)
+  }
 }
 
 export type InviteTeamState = {
@@ -102,11 +182,11 @@ export type InviteTeamState = {
   // From the full-team read; null when GitHub omits it. Drives the GC age
   // guard (a team too young to judge is never reaped).
   createdAt: string | null
-  // Regular-role members only (?role=member). GitHub auto-promotes the
-  // creating owner — and any org owner — to team maintainer, so the invitee
-  // (added via the invitation's team_ids as a plain member) is exactly what's
-  // left; no org-admin subtraction needed. 404 (team vanished mid-read) yields
-  // [] so the team simply looks pending; other errors propagate.
+  // Members of EVERY role. ensureInviteTeam leaves no teacher on the team, so
+  // whoever is here accepted the invitation — including an org owner, whom
+  // GitHub auto-promotes to maintainer and a role=member filter would hide.
+  // 404 (team vanished mid-read) yields [] so the team simply looks pending;
+  // other errors propagate.
   members: GitHubUser[]
 }
 
@@ -134,7 +214,7 @@ export async function readInviteTeam(
         (page) =>
           `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
             slug,
-          )}/members?role=member&per_page=100&page=${page}`,
+          )}/members?per_page=100&page=${page}`,
       ),
     [],
   )

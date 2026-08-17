@@ -510,7 +510,7 @@
     "added": "Added {{label}}.",
     "invited": "Sent an organization invite to {{label}}.",
     "emailInviteHint": "Inviting by email only? The address goes onto the roster right away and is matched to the student's GitHub account when they join — note it's the address you invited, not necessarily the email on their GitHub account.",
-    "inviteMetadataFailed": "{{email}} was invited, but saving their email for later matching failed ({{message}}); their email won't be retained automatically. You can add it after they accept.",
+    "inviteMetadataFailed": "Couldn't prepare the invite for {{email}} ({{message}}), so no invite was sent. Try again.",
     "alreadyEnrolled": "{{label}} is already enrolled in this classroom.",
     "addFailed": "Couldn't add {{label}}: {{message}}",
     "membersEnrolledCount_one": "{{count}} member enrolled",

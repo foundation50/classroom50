@@ -4,10 +4,10 @@ import {
   deleteInviteTeam,
   ensureInviteTeam,
   ensureOrgMembership,
-  type InviteTeamRef,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { assertClassroomNotArchived } from "../classrooms"
+import { getAuthenticatedUser } from "../queries/users"
 import { getUser, sleep, REPO_READ_CONCURRENCY } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { resolveGitHubId } from "@/util/students"
@@ -240,15 +240,16 @@ export type BulkInviteByEmailResult = {
 // Bulk-invite a list of EMAIL addresses to the org, carrying the role's team so
 // accepting the single invite activates the right membership: student ->
 // classroom team, ta -> TA team, teacher -> the teacher team AND org
-// OWNER (role "admin"). Every successfully sent invite that carried a per-invite
-// metadata team is then retained on the roster as an email-only PENDING row, all
+// OWNER (role "admin"). Every successfully sent invite carries a per-invite
+// metadata team and is retained on the roster as an email-only PENDING row, all
 // in ONE commit for the batch (see appendEmailInviteRows); each row lives exactly
-// as long as its invite team does, so an invite sent without a metadata team
-// gets no row. The invite also surfaces as a `pending` row via the org
-// pending-invitations list. Mirrors inviteRosterStudents' rate-limit handling
-// (stop issuing new invites once throttled; defer the rest), and the same team
-// resolution (resolveTeamIdByRole ensures the staff team for a teacher/ta
-// invite, students-only never creates empty staff teams).
+// as long as its invite team does. A target whose metadata team can't be
+// prepared is reported as FAILED rather than invited without email retention.
+// The invite also surfaces as a `pending` row via the org pending-invitations
+// list. Mirrors inviteRosterStudents' rate-limit handling (stop issuing new
+// invites once throttled; defer the rest), and the same team resolution
+// (resolveTeamIdByRole ensures the staff team for a teacher/ta invite,
+// students-only never creates empty staff teams).
 export async function bulkInviteByEmail(
   client: GitHubClient,
   input: BulkInviteByEmailInput,
@@ -298,6 +299,10 @@ export async function bulkInviteByEmail(
     )
   }
 
+  // Resolved once for the whole batch: every invite team must be cleared of the
+  // acting teacher, and the identity is the same for all of them.
+  const actor = await getAuthenticatedUser(client)
+
   let processed = 0
   const bump = (email: string) => {
     processed += 1
@@ -306,40 +311,20 @@ export async function bulkInviteByEmail(
 
   type EmailTarget = (typeof targets)[number]
   // Invite one email; throws on error so the caller classifies rate-limit/422.
-  // Returns whether the metadata team rode along, so the caller knows which
-  // invited emails to retain on the roster (a team-less invite must not get a
-  // row — the reconcile would just remove it). Best-effort per-invite metadata
-  // team: on create failure the invite still goes out with the classroom team
-  // alone (the invitee stays collectable; only email retention is lost). A
-  // rate-limit error from the team create surfaces as a thrown GitHubAPIError
-  // so the caller defers the whole target — retrying later recreates the team
-  // too, rather than sending a metadata-less invite.
-  const inviteOne = async (
-    target: EmailTarget,
-  ): Promise<{ hadInviteTeam: boolean }> => {
+  // The metadata team is a precondition, not a nicety: it's the only thing that
+  // retains the invited address, so a failure to prepare it throws and the
+  // target lands in `failed` rather than sending an invite whose email is
+  // silently dropped. Nothing has been sent at that point, so a retry is clean.
+  const inviteOne = async (target: EmailTarget): Promise<void> => {
     const teamId = teamIdByRole[target.role]
     const teamIds = teamId ? [teamId] : []
-    let inviteTeam: InviteTeamRef | null = null
-    // Skip the metadata team for admin-role (teacher) invites: an accepting
-    // owner is auto-promoted to team maintainer, so the backfill's role=member
-    // read would never see them and the team would sit forever as a "pending"
-    // orphan holding their email.
-    if (githubOrgRoleForRole(target.role) !== "admin") {
-      try {
-        inviteTeam = await ensureInviteTeam(client, org, {
-          email: target.email,
-          classroom,
-        })
-        teamIds.push(inviteTeam.id)
-      } catch (err) {
-        if (err instanceof GitHubAPIError && err.isRateLimited) throw err
-        log.error("bulk invite metadata team create failed", {
-          email: target.email,
-          err,
-        })
-        // Non-rate-limit failure: proceed with the classroom team only.
-      }
-    }
+    const inviteTeam = await ensureInviteTeam(
+      client,
+      org,
+      { email: target.email, classroom },
+      actor.login,
+    )
+    teamIds.push(inviteTeam.id)
     try {
       await createOrgInvitation(client, {
         org,
@@ -347,14 +332,13 @@ export async function bulkInviteByEmail(
         team_ids: teamIds.length > 0 ? teamIds : undefined,
         role: githubOrgRoleForRole(target.role),
       })
-      return { hadInviteTeam: inviteTeam !== null }
     } catch (err) {
       // A doomed invite (422 already-member/-invited, or a hard failure) must
       // not leave a fresh, member-less metadata team behind for GC to reap.
       // Keep it on a rate limit (the deferred retry re-adopts it) and keep an
       // adopted team (it may hold a prior invite's still-unrecovered record).
       const rateLimited = err instanceof GitHubAPIError && err.isRateLimited
-      if (!rateLimited && inviteTeam?.created) {
+      if (!rateLimited && inviteTeam.created) {
         try {
           await deleteInviteTeam(client, org, inviteTeam.slug)
         } catch (cleanupErr) {
@@ -371,9 +355,6 @@ export async function bulkInviteByEmail(
   let rateLimited = false
   let retryAfterMs = 0
   const deferredTargets: EmailTarget[] = []
-  // Invited emails whose metadata team rode along — retained on the roster in
-  // ONE batch write below.
-  const rowsToRetain: { email: string; role: ClassroomRole }[] = []
 
   await mapWithConcurrency(targets, REPO_READ_CONCURRENCY, async (target) => {
     const { email } = target
@@ -383,9 +364,8 @@ export async function bulkInviteByEmail(
       return
     }
     try {
-      const { hadInviteTeam } = await inviteOne(target)
+      await inviteOne(target)
       invited.push({ email, role: target.role })
-      if (hadInviteTeam) rowsToRetain.push({ email, role: target.role })
     } catch (err) {
       if (err instanceof GitHubAPIError && err.isRateLimited) {
         rateLimited = true
@@ -410,10 +390,8 @@ export async function bulkInviteByEmail(
     sleepFn,
     initialRetryAfterMs: retryAfterMs,
     attempt: async (target) => {
-      const { hadInviteTeam } = await inviteOne(target)
+      await inviteOne(target)
       invited.push({ email: target.email, role: target.role })
-      if (hadInviteTeam)
-        rowsToRetain.push({ email: target.email, role: target.role })
     },
     onError: (target, err) => {
       // A 422 on retry means already-member/already-invited, not a failure.
@@ -424,9 +402,10 @@ export async function bulkInviteByEmail(
   })
   for (const target of stillDeferred) deferred.push(target.email)
 
-  // Retain the successfully invited emails on the roster, one commit for the
-  // whole batch (best-effort; a miss is appended by the acceptance reconcile).
-  await appendEmailInviteRows(client, { org, classroom }, rowsToRetain)
+  // Retain the invited emails on the roster, one commit for the whole batch
+  // (best-effort; a miss is appended by the acceptance reconcile). Every
+  // successful invite carries its metadata team, so `invited` is the row set.
+  await appendEmailInviteRows(client, { org, classroom }, invited)
 
   return { invited, skipped, failed, deferred }
 }

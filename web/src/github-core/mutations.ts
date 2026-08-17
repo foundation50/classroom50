@@ -148,6 +148,7 @@ export {
   deleteInviteTeamForEmail,
   purgeClassroomInviteTeams,
   InviteTeamNotSecretError,
+  InviteTeamNotEmptyError,
   type InviteTeamRef,
   type InviteTeamState,
 } from "./mutations/inviteTeams"

@@ -291,6 +291,9 @@ describe("inviteByEmail — org invite plus a pending email row", () => {
       inviteBody: null as unknown,
       inviteTeamCreated: false,
       inviteTeamDeleted: false,
+      actorDroppedFrom: null as string | null,
+      inviteRecordWritten: null as string | null,
+      inviteTeamCreateDescription: null as string | null,
     }
 
     const requestRaw = vi.fn().mockImplementation((path: string) => {
@@ -343,12 +346,39 @@ describe("inviteByEmail — org invite plus a pending email row", () => {
           }
           return Promise.reject(apiError422())
         }
+        // The acting teacher's identity, so the invite team can be cleared of
+        // them (GitHub auto-adds the creator as a maintainer).
+        if (path === "/user") return Promise.resolve({ login: "teacher" })
+        // Dropping the acting teacher from the freshly created invite team.
+        if (path.includes("/memberships/")) {
+          state.actorDroppedFrom = path
+          return Promise.resolve({})
+        }
+        // The read-back proving no teacher remains, then the PATCH that writes
+        // the invite record now that it's safe to store the email.
+        if (path.includes("/teams/invite-") && path.includes("/members")) {
+          return Promise.resolve([])
+        }
+        if (
+          path.includes("/teams/invite-") &&
+          (options as { method?: string } | undefined)?.method === "PATCH"
+        ) {
+          const body = options?.body as { description?: string }
+          state.inviteRecordWritten = body?.description ?? null
+          return Promise.resolve({
+            id: 9001,
+            slug: path.split("/teams/")[1],
+            privacy: "secret",
+            description: body?.description,
+          })
+        }
         // The per-invite metadata team create (POST /orgs/{org}/teams). Return
         // it as a secret team carrying the exact description the caller wrote,
         // so ensureInviteTeam's fail-closed read-back is a no-op (no PATCH/GET).
         if (path.endsWith("/teams")) {
           const body = options?.body as { name?: string; description?: string }
           state.inviteTeamCreated = true
+          state.inviteTeamCreateDescription = body?.description ?? null
           return Promise.resolve({
             id: 9001,
             slug: body?.name,
@@ -391,6 +421,13 @@ describe("inviteByEmail — org invite plus a pending email row", () => {
       email: "new@x.edu",
       team_ids: [4242, 9001],
     })
+    // The metadata team is left holding NO teacher, so the reconcile can read
+    // whoever accepts as the invitee regardless of their org role. The email is
+    // written only after that's settled, so an interrupted run strands a team
+    // holding no address.
+    expect(state.actorDroppedFrom).toMatch(/\/memberships\/teacher$/)
+    expect(state.inviteTeamCreateDescription).not.toContain("new@x.edu")
+    expect(state.inviteRecordWritten).toContain("new@x.edu")
     // The invited email is retained on the roster right away, as an
     // email-only pending row (identity arrives via the acceptance reconcile).
     const rows = rowsFromCsv(state.committed!)
@@ -490,8 +527,8 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     // 429 (with Retry-After) the first N POST /invitations attempts, then let
     // later attempts through — exercises the Retry-After-backed retry pass.
     rateLimitFirstN?: number
-    // 500 every per-invite metadata team create — exercises the graceful
-    // degradation (invite still sent with the classroom team alone).
+    // 500 every per-invite metadata team create — the invite must then be
+    // reported as failed rather than sent without email retention.
     failInviteTeams?: boolean
   }) => {
     const memberEmails = new Set(opts?.memberEmails ?? [])
@@ -511,6 +548,8 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
       // Names of per-invite metadata teams created / slugs deleted.
       inviteTeamNames: [] as string[],
       teamDeletes: [] as string[],
+      // Invite teams the acting teacher was dropped from.
+      actorDrops: [] as string[],
     }
 
     const requestRaw = vi.fn().mockImplementation((path: string) => {
@@ -526,6 +565,25 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
       .fn()
       .mockImplementation(
         (path: string, options?: { body?: unknown; method?: string }) => {
+          if (path === "/user") return Promise.resolve({ login: "teacher" })
+          if (path.includes("/memberships/")) {
+            state.actorDrops.push(path)
+            return Promise.resolve({})
+          }
+          // The read-back proving the invite team is teacher-free, then the
+          // PATCH writing its record once that's settled.
+          if (path.includes("/teams/invite-") && path.includes("/members")) {
+            return Promise.resolve([])
+          }
+          if (path.includes("/teams/invite-") && options?.method === "PATCH") {
+            const body = options.body as { description?: string }
+            return Promise.resolve({
+              id: 9001,
+              slug: path.split("/teams/")[1],
+              privacy: "secret",
+              description: body?.description,
+            })
+          }
           if (/\/repos\/[^/]+\/classroom50$/.test(path))
             return { default_branch: "main" }
           // The batch pending-row write's read-modify-write chain.
@@ -661,7 +719,7 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     }
   })
 
-  it("still invites (classroom team only, no roster row) when the metadata team create fails", async () => {
+  it("reports the target as FAILED (sending nothing) when the metadata team can't be prepared", async () => {
     const { client, state } = makeClient({ failInviteTeams: true })
 
     const result = await bulkInviteByEmail(client, {
@@ -670,16 +728,16 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
       invites: [{ email: "a@x.edu" }],
     })
 
-    // Graceful degradation: only email retention is lost, never the invite.
-    expect(result.invited.map((i) => i.email)).toEqual(["a@x.edu"])
-    expect(result.failed).toEqual([])
-    expect(state.inviteBodies[0].team_ids).toEqual([4242])
-    // No metadata team -> no roster row: the reconcile would just remove an
-    // email-only row nothing backs.
+    // The metadata team is the only thing retaining the address, so an invite
+    // without it would silently drop the email. Nothing is sent, and the
+    // teacher can retry cleanly.
+    expect(result.invited).toEqual([])
+    expect(result.failed.map((f) => f.email)).toEqual(["a@x.edu"])
+    expect(state.inviteBodies).toEqual([])
     expect(state.committed).toBeNull()
   })
 
-  it("invites a teacher as an org OWNER (admin role) with no metadata team", async () => {
+  it("invites a teacher as an org OWNER (admin role), retaining their email too", async () => {
     const { client, state } = makeClient()
 
     await bulkInviteByEmail(client, {
@@ -692,11 +750,14 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
       email: "prof@x.edu",
       role: "admin",
     })
-    // An accepting owner is auto-promoted to team maintainer, so the backfill's
-    // role=member read would never see them — no metadata team is created, and
-    // therefore no roster row either.
-    expect(state.inviteTeamNames).toEqual([])
-    expect(state.committed).toBeNull()
+    // An accepting owner is auto-promoted to team maintainer, but the invite
+    // team holds no teacher and the reconcile reads members of every role, so a
+    // teacher-role invite gets a metadata team and its email retained like any
+    // other.
+    expect(state.inviteTeamNames).toHaveLength(1)
+    expect(rowsFromCsv(state.committed!).map((r) => r.email)).toEqual([
+      "prof@x.edu",
+    ])
   })
 
   it("routes a 422 already-member into skipped and deletes its fresh metadata team", async () => {
@@ -925,20 +986,22 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
       role: "direct_member",
       team_ids: [5000, 9001],
     })
-    // Teacher becomes an org OWNER on the ensured staff team; no metadata team
-    // (an owner would be a maintainer the backfill can never see).
+    // Teacher becomes an org OWNER on the ensured staff team, and carries a
+    // metadata team like everyone else: the team holds no teacher, so the
+    // reconcile sees an accepting owner even though GitHub makes them a
+    // maintainer.
     expect(byEmail.get("prof@x.edu")).toMatchObject({
       role: "admin",
-      team_ids: [5000],
+      team_ids: [5000, 9001],
     })
-    // Only the metadata-team-carrying invites get pending roster rows, with
-    // the invited role recorded, in one batch commit.
+    // Every invited email gets a pending roster row recording its invited role,
+    // in one batch commit.
     expect(state.rosterCommits).toBe(1)
     const rows = rowsFromCsv(state.committed!)
     const roleByEmail = new Map(rows.map((r) => [r.email, r.role]))
     expect(roleByEmail.get("stu@x.edu")).toBe("student")
     expect(roleByEmail.get("ta@x.edu")).toBe("ta")
-    expect(roleByEmail.has("prof@x.edu")).toBe(false)
+    expect(roleByEmail.get("prof@x.edu")).toBe("teacher")
   })
 })
 

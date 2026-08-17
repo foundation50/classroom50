@@ -17,6 +17,7 @@ import {
   type CreateClassroomResult,
 } from "../classrooms"
 import { getRawFile, getUser } from "@/github-core/queries"
+import { getAuthenticatedUser } from "../queries/users"
 import {
   getBranchRef,
   getCommit,
@@ -161,16 +162,15 @@ export type InviteByEmailResult = {
 // roster as an email-only PENDING row (no username/github_id yet) — that row
 // lives exactly as long as its invite team does: the reconcile fills in the
 // account identity on acceptance and removes the row once the invite is
-// cancelled, expired, or GC'd. A row is written only when the metadata team was
-// attached, since the reconcile would otherwise reap an unbacked row.
+// cancelled, expired, or GC'd.
 // On acceptance the invitee lands on both teams; a later reconcile pass recovers
 // the email <-> account mapping from the metadata team and folds it into
 // roster.csv. The invite also shows up in the roster's `pending` section via the
-// org pending-invitations list. If the classroom team can't be resolved, the
-// invite is BLOCKED (throws) rather than sent team-less. If the metadata team
-// can't be created, the invite still goes out with the classroom team alone (the
-// invitee stays collectable; only email retention is lost) and a non-fatal
-// warning is returned.
+// org pending-invitations list. The invite is BLOCKED (throws) unless BOTH teams
+// are ready: an invite that can't carry the classroom team would land the
+// student in the org with nothing to collect them, and one without its metadata
+// team would silently lose the address it was sent to. Nothing has been sent at
+// that point, so the teacher just retries.
 export async function inviteByEmail(
   client: GitHubClient,
   input: AddEmailInviteToClassroomInput,
@@ -202,32 +202,37 @@ export async function inviteByEmail(
     )
   }
 
-  // Best-effort: create the per-invite metadata team and attach it too. A
-  // failure here must NOT block the invite (the invitee stays collectable via
-  // the classroom team) — only email retention is lost, surfaced as a warning.
-  const teamIds = [teamId]
-  let inviteTeam: InviteTeamRef | null = null
-  let metadataWarning = ""
+  // The metadata team is a precondition, not a nicety: it's the only thing that
+  // retains the invited address, so an invite without it would go out with the
+  // email silently dropped. Nothing has been sent yet, so failing here costs a
+  // retry rather than a stranded invitation.
+  const actor = await getAuthenticatedUser(client)
+  let inviteTeam: InviteTeamRef
   try {
-    inviteTeam = await ensureInviteTeam(client, org, {
-      email: normalizedEmail,
-      classroom,
-    })
-    teamIds.push(inviteTeam.id)
+    inviteTeam = await ensureInviteTeam(
+      client,
+      org,
+      { email: normalizedEmail, classroom },
+      actor.login,
+    )
   } catch (err) {
     log.error("invite metadata team create failed", { err })
-    metadataWarning = i18n.t("students.inviteMetadataFailed", {
-      email: normalizedEmail,
-      message: getErrorMessage(err),
-    })
+    throw new Error(
+      i18n.t("students.inviteMetadataFailed", {
+        email: normalizedEmail,
+        message: getErrorMessage(err),
+      }),
+      { cause: err },
+    )
   }
+  const teamIds = [teamId, inviteTeam.id]
 
   // A doomed invite must not leave a fresh, member-less metadata team behind
   // (an orphan holding an email GC can't yet reap). Only a team THIS call
   // created is deleted — an adopted one may hold a prior accepted invite's
   // still-unrecovered record.
   const cleanupInviteTeam = async () => {
-    if (!inviteTeam?.created) return
+    if (!inviteTeam.created) return
     try {
       await deleteInviteTeam(client, org, inviteTeam.slug)
     } catch (err) {
@@ -264,18 +269,14 @@ export async function inviteByEmail(
     }
   }
 
-  // Retain the invited email on the roster right away — but only when the
-  // metadata team is attached: the reconcile keeps an email-only row exactly
-  // as long as a live invite team backs it, so a team-less row would just be
-  // removed on the next pass. Best-effort (never throws); on a miss the
-  // accepted invite's reconcile fold appends the row instead.
-  if (inviteTeam) {
-    await appendEmailInviteRows(client, { org, classroom }, [
-      { email: normalizedEmail, role: "student" },
-    ])
-  }
+  // Retain the invited email on the roster right away. Best-effort (never
+  // throws); on a miss the accepted invite's reconcile fold appends the row
+  // instead.
+  await appendEmailInviteRows(client, { org, classroom }, [
+    { email: normalizedEmail, role: "student" },
+  ])
 
-  return metadataWarning ? { inviteWarning: metadataWarning } : {}
+  return {}
 }
 
 export type AddStudentToClassroomInput = {
