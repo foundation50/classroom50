@@ -297,21 +297,43 @@ on import. Remove those rows, or wait until the students have joined. The web
 app's **Upload** reads the same file without either edit: it accepts a `role`
 column and identifies a pending row by its email address.
 
-### A row was skipped because its `github_id` doesn't match an account
+### The upload says a row can't be imported
+
+The web app's **Upload** reads every row before changing anything, and if any row
+carries a value it can't use, it lists those rows and imports none of them. Each
+line in the report names the file line and the offending value, so one editing
+pass fixes the file. Re-uploading is safe: students already in the classroom are
+left alone, so nothing is duplicated by importing the corrected file.
+
+It blocks rather than importing the rows it understood because a bad value usually
+means the file isn't what the app thinks it is — a column shifted by one, an
+export from another system, or the wrong format selected above the preview. In
+that situation "import the good rows" would enroll a handful of people and quietly
+drop the rest.
+
+One case is reported but does **not** block: a row with no `github_id`, `username`,
+or `email` at all — commonly a student who hasn't given you a GitHub account yet.
+There's nothing to correct in that row, so the upload names it and imports everyone
+else.
+
+### A row can't be imported because its `github_id` doesn't match an account
 
 The web app's **Upload** reads a `github_id` column as the row's identity and
 looks up that account's current username, which is what lets a re-uploaded export
 still find a student who renamed their GitHub account. When an id matches no
-account, that row is skipped and reported rather than falling back to the
+account, the upload reports that row and stops rather than falling back to the
 `username` next to it — a wrong id plus a stale username could invite a stranger
-into your organization, so the upload refuses to guess.
+into your organization, so it refuses to guess.
 
 Usually the id was mangled by a spreadsheet: opening `roster.csv` in Excel can
 turn `583231` into `5.83231E+05`. Re-export without reformatting that column, or
 delete the `github_id` column entirely and let the `username` column identify
 each row.
 
-If the id is right but the username beside it is out of date, nothing is skipped:
+If instead the message says GitHub couldn't be reached to look up the id, your file
+is fine — that's a rate limit or a transient error. Wait a moment and upload again.
+
+If the id is right but the username beside it is out of date, nothing is blocked:
 the upload uses the account the id belongs to, shows both values in the preview,
 asks you to confirm, and corrects the stored username.
 
