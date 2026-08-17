@@ -2867,6 +2867,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     liveInviteEmails: new Set<string>(),
     trusted: true,
     deletedStale: 0,
+    ownerAccepted: [],
     ...over,
   })
 

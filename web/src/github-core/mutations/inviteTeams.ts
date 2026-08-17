@@ -111,6 +111,37 @@ export type InviteTeamState = {
 }
 
 // Read one invite team's parsed description + members, for the reconcile pass.
+// The team's MAINTAINERS, read separately from readInviteTeam's regular-member
+// list because GitHub's member listing doesn't report each member's role.
+//
+// Needed to tell two states apart that both look member-less through the
+// `role=member` lens: a cancelled/expired invite nobody accepted, and an invite
+// accepted by an ORG OWNER — GitHub auto-promotes an owner to team maintainer,
+// so an owner invitee never appears as a regular member. The creating teacher is
+// also a maintainer, so more than one maintainer means somebody joined.
+//
+// Only called on the GC decision path, so the common reconcile pass doesn't pay
+// for it. 404 (team gone) -> [].
+export async function listInviteTeamMaintainers(
+  client: GitHubClient,
+  org: string,
+  slug: string,
+): Promise<GitHubUser[]> {
+  return tolerateGitHubError(
+    () =>
+      paginateAll<GitHubUser>(
+        client,
+        (page) =>
+          `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+            slug,
+          )}/members?role=maintainer&per_page=100&page=${page}`,
+      ),
+    [],
+  )
+}
+
+// The team's description plus its regular-role members. Reads the full team
+// record so `created_at` is available for the GC age guard.
 // 404 (team already deleted) -> null. `description` is null when the team's
 // description isn't a valid v1 record (hand-edited, or a slug collision with a
 // non-invite team); the caller skips such a team rather than acting on garbage.

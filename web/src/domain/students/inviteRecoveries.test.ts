@@ -4,6 +4,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 const listInviteTeams = vi.fn()
 const readInviteTeam = vi.fn()
 const deleteInviteTeam = vi.fn()
+const listInviteTeamMaintainers = vi.fn()
 const listTeamMembers = vi.fn()
 const listOrgInvitations = vi.fn()
 const resolveClassroomTeamSlugs = vi.fn()
@@ -12,6 +13,8 @@ vi.mock("@/github-core/mutations", () => ({
   listInviteTeams: (...a: unknown[]) => listInviteTeams(...a),
   readInviteTeam: (...a: unknown[]) => readInviteTeam(...a),
   deleteInviteTeam: (...a: unknown[]) => deleteInviteTeam(...a),
+  listInviteTeamMaintainers: (...a: unknown[]) =>
+    listInviteTeamMaintainers(...a),
 }))
 vi.mock("@/github-core/queries", () => ({
   listTeamMembers: (...a: unknown[]) => listTeamMembers(...a),
@@ -81,6 +84,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   deleteInviteTeam.mockResolvedValue(undefined)
   listOrgInvitations.mockResolvedValue([])
+  // One maintainer = just the creating teacher, i.e. nobody accepted.
+  listInviteTeamMaintainers.mockResolvedValue([{ id: 1, login: "prof" }])
   // Authoritative slugs (classroom.json-backed), as the collector resolves them.
   resolveClassroomTeamSlugs.mockResolvedValue({
     student: "classroom50-cs101",
@@ -135,6 +140,9 @@ describe("collectInviteRecoveries", () => {
     expect(state.liveInviteEmails.has("bob@example.com")).toBe(true)
     expect(state.trusted).toBe(true)
     expect(listOrgInvitations).not.toHaveBeenCalled()
+    // The maintainer read is a GC-path cost only; a young pending team never
+    // reaches the reap decision, so the common pass must not pay for it.
+    expect(listInviteTeamMaintainers).not.toHaveBeenCalled()
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
@@ -149,6 +157,44 @@ describe("collectInviteRecoveries", () => {
     expect(state.deletedStale).toBe(1)
     expect(state.liveInviteEmails.has("gone@example.com")).toBe(false)
     expect(deleteInviteTeam).toHaveBeenCalledWith(client, "org", team.slug)
+  })
+
+  // GitHub auto-promotes an org owner to team maintainer, so an owner who
+  // accepts never appears in the role=member read — the team looks abandoned.
+  // Reaping it would discard a real invited address (and the sync would then
+  // drop its roster row as dead), so the record is kept instead.
+  it("keeps an aged member-less team a second maintainer proves was accepted", async () => {
+    const team = await inviteState("cs101", "owner@example.com", [], {
+      createdAt: OLD_ENOUGH,
+    })
+    listInviteTeams.mockResolvedValue([{ slug: team.slug }])
+    readInviteTeam.mockResolvedValue(team)
+    // The creating teacher plus the accepted invitee, both maintainers.
+    listInviteTeamMaintainers.mockResolvedValue([
+      { id: 1, login: "prof" },
+      { id: 2, login: "promoted-student" },
+    ])
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.deletedStale).toBe(0)
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+    // Reported so a caller can surface it, and kept live so the sync's removal
+    // pass leaves the roster row (and its address) in place.
+    expect(state.ownerAccepted).toEqual(["owner@example.com"])
+    expect(state.liveInviteEmails.has("owner@example.com")).toBe(true)
+  })
+
+  it("still reaps when the maintainer read shows only the creating teacher", async () => {
+    const team = await inviteState("cs101", "abandoned@example.com", [], {
+      createdAt: OLD_ENOUGH,
+    })
+    listInviteTeams.mockResolvedValue([{ slug: team.slug }])
+    readInviteTeam.mockResolvedValue(team)
+    listInviteTeamMaintainers.mockResolvedValue([{ id: 1, login: "prof" }])
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.deletedStale).toBe(1)
+    expect(state.ownerAccepted).toEqual([])
   })
 
   it("keeps an aged member-less team whose org invitation is still pending (live)", async () => {

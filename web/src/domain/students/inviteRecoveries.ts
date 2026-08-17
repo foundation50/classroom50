@@ -1,6 +1,7 @@
 import type { GitHubClient } from "@/github-core/client"
 import {
   deleteInviteTeam,
+  listInviteTeamMaintainers,
   listInviteTeams,
   readInviteTeam,
 } from "@/github-core/mutations"
@@ -33,6 +34,12 @@ export type InviteReconcileState = {
   // team whose org invitation is gone (cancelled/expired) aged past the GC
   // guard.
   deletedStale: number
+  // Emails whose invite was accepted by an ORG OWNER — auto-promoted to team
+  // maintainer, so invisible to the regular-member read the recovery uses. The
+  // mapping can't be recovered from team membership, so the team and its roster
+  // row are KEPT rather than reaped: the teacher keeps seeing the address and
+  // can finish the row by hand or cancel it.
+  ownerAccepted: string[]
 }
 
 const emptyState = (): InviteReconcileState => ({
@@ -40,6 +47,7 @@ const emptyState = (): InviteReconcileState => ({
   liveInviteEmails: new Set(),
   trusted: false,
   deletedStale: 0,
+  ownerAccepted: [],
 })
 
 // A member-less invite team is only GC'd once it's older than this, so a team
@@ -78,6 +86,7 @@ export async function collectInviteRecoveries(
   const liveInviteEmails = new Set<string>()
   let trusted = true
   let deletedStale = 0
+  const ownerAccepted: string[] = []
 
   let inviteTeams
   try {
@@ -141,13 +150,35 @@ export async function collectInviteRecoveries(
 
       const invitees = state.members
       if (invitees.length === 0) {
-        // Pending — or abandoned. Reap only when BOTH hold: old enough that a
-        // mid-creation race is impossible, and no pending org invitation still
-        // maps to this slug. Uncertainty always keeps the team (and the row).
+        // Pending — or abandoned — or accepted by an ORG OWNER. GitHub
+        // auto-promotes an owner to team maintainer, so an owner invitee never
+        // shows up in the `role=member` list this reads; a student promoted to
+        // teacher (org admin) between invite and reconcile lands exactly here.
+        // Reap only when BOTH hold: old enough that a mid-creation race is
+        // impossible, and no pending org invitation still maps to this slug.
+        // Uncertainty always keeps the team (and the row).
         if (
           isPastGcAge(state.createdAt) &&
           !(await loadLiveInviteSlugs()).has(slug)
         ) {
+          // Before reaping, check for the owner case: the creating teacher is a
+          // maintainer, so a SECOND maintainer means somebody accepted and was
+          // auto-promoted. Their address is real and its mapping is not
+          // recoverable from here (an owner-invitee is indistinguishable from
+          // the inviting teacher by team membership alone), so keep the team and
+          // its roster row rather than silently discarding the email the invite
+          // was sent to. A teacher can retire it with Cancel invite, or by
+          // filling in the row's username by hand.
+          const maintainers = await listInviteTeamMaintainers(client, org, slug)
+          if (maintainers.length > 1) {
+            log.error(
+              "invite accepted by an org owner; mapping unrecoverable, keeping the record",
+              { slug, maintainers: maintainers.length },
+            )
+            ownerAccepted.push(record.email)
+            liveInviteEmails.add(record.email)
+            continue
+          }
           await deleteInviteTeam(client, org, slug)
           deletedStale += 1
         } else {
@@ -201,7 +232,7 @@ export async function collectInviteRecoveries(
     }
   }
 
-  return { recovered, liveInviteEmails, trusted, deletedStale }
+  return { recovered, liveInviteEmails, trusted, deletedStale, ownerAccepted }
 }
 
 // Post-commit teardown: delete each recovered mapping's invite team, AFTER the
