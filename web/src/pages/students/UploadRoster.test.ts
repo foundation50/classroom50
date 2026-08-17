@@ -4,11 +4,12 @@ import {
   detectImportHeaderIssue,
   parseRosterImportFile,
 } from "./UploadRoster"
+import type { UploadKind } from "./uploadClassify"
 
 // The parser returns UNRESOLVED identities: it records the file's cells and
 // leaves trading a github_id for a login to rosterImportResolve (that needs the
 // network). These tests therefore assert on identity cells, not final logins.
-const parse = (text: string, kind?: "roster-csv" | "username-list") =>
+const parse = (text: string, kind?: UploadKind) =>
   parseRosterImportFile(text, kind)
 
 describe("parseRosterImportFile", () => {
@@ -18,6 +19,7 @@ describe("parseRosterImportFile", () => {
       "ada,Ada,Lovelace,ada@uni.edu,Lab 1\n"
     expect(parse(csv).rows).toEqual([
       {
+        line: 2,
         identity: { username: "ada", email: "ada@uni.edu" },
         first_name: "Ada",
         last_name: "Lovelace",
@@ -85,7 +87,193 @@ describe("parseRosterImportFile", () => {
     const csv = "email,first_name\nn/a,Nobody\nok@uni.edu,Ok\n"
     const parsed = parse(csv)
     expect(parsed.rows).toHaveLength(1)
-    expect(parsed.dropped).toEqual([{ line: 2, reason: "bad-email" }])
+    // The offending cell rides along so the preview can quote it — telling the
+    // teacher the address was "missing" when they typed `n/a` is what the old
+    // single count-only message did.
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-email", value: "n/a" },
+    ])
+  })
+
+  it("blames the username cell when it holds content that isn't a handle", () => {
+    // A leading hyphen fails isLikelyGithubUsername. Reported as a bad username
+    // rather than as an empty row, which is what makes the import block: content
+    // we couldn't read means the FILE is wrong.
+    const parsed = parse("username,first_name\n-bad-,Ann\n")
+    expect(parsed.rows).toHaveLength(0)
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-username", value: "-bad-" },
+    ])
+  })
+
+  // A reported line number is the teacher's only handle on the row to edit, and
+  // both the trim and Papa's blank-row skipping would otherwise shift it.
+  describe("reports the TRUE file line", () => {
+    it("counts leading blank lines", () => {
+      expect(parse("\n\nusername\nada\n-bad-\n").dropped).toEqual([
+        { line: 5, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("counts an interior blank line", () => {
+      expect(parse("username\nada\n\n-bad-\n").dropped).toEqual([
+        { line: 4, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("counts an all-blank-cell row, which Papa also skips", () => {
+      expect(parse("username,email\nada,\n,\n-bad-,\n").dropped).toEqual([
+        { line: 4, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("counts CRLF line endings", () => {
+      expect(parse("username\r\nada\r\n\r\n-bad-\r\n").dropped).toEqual([
+        { line: 4, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("counts leading blank lines in a bare list", () => {
+      expect(parse("\n\nada\nJohn Smith\n").dropped).toEqual([
+        { line: 4, reason: "bad-value", value: "John Smith" },
+      ])
+    })
+
+    it("counts a newline inside a quoted field", () => {
+      // The row spans lines 2-3, so the row AFTER it is on line 4. Deriving lines
+      // by splitting on newlines would report 3 and send the teacher to the middle
+      // of someone else's row.
+      const csv = 'username,note\nada,"one\ntwo"\n-bad-,x\n'
+      expect(parse(csv).dropped).toEqual([
+        { line: 4, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("is unaffected by a leading BOM", () => {
+      // Excel's "CSV UTF-8" writes one. The BOM is stripped up front so the
+      // cursor arithmetic doesn't rely on its offset shift happening to cancel out.
+      expect(parse("\uFEFFusername\nada\n-bad-\n").dropped).toEqual([
+        { line: 3, reason: "bad-username", value: "-bad-" },
+      ])
+      // And the first header is still recognised, rather than read as "\uFEFFusername".
+      expect(parse("\uFEFFusername\nada\n").rows[0]?.identity).toEqual({
+        username: "ada",
+      })
+    })
+
+    it("counts a last row that has no trailing newline", () => {
+      // Papa ends that row's cursor at the input length rather than past a newline,
+      // so without compensating it would inherit the previous row's number.
+      expect(parse("username\nada\n-bad-").dropped).toEqual([
+        { line: 3, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("keeps consecutive unterminated bad rows distinct", () => {
+      // Two rows reported against one line also collide as React keys in the list.
+      expect(parse("username\n-b1-\n-b2-").dropped).toEqual([
+        { line: 2, reason: "bad-username", value: "-b1-" },
+        { line: 3, reason: "bad-username", value: "-b2-" },
+      ])
+    })
+
+    it("counts lone-CR line endings", () => {
+      // A legacy Mac / older Excel export. Counting only LF would report every row
+      // as line 1 — and identical line+reason pairs collide as React keys.
+      expect(parse("username\rada\r-bad-\r").dropped).toEqual([
+        { line: 3, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("counts lone-CR line endings in a bare list", () => {
+      expect(parse("ada\rJohn Smith\r").dropped).toEqual([
+        { line: 2, reason: "bad-value", value: "John Smith" },
+      ])
+    })
+  })
+
+  it("yields nothing for a headered CSV with no identity column", () => {
+    // A SHAPE problem, not a row-content one. Re-reading such a file one value per
+    // line would blame the header and every data row for not being a username,
+    // burying the one message that helps — which detectImportHeaderIssue provides.
+    const csv = "first_name,last_name\nAda,Lovelace\nGrace,Hopper\n"
+    expect(parse(csv)).toEqual({ rows: [], dropped: [] })
+    expect(detectImportHeaderIssue(csv)?.kind).toBe("missing-identity-header")
+  })
+
+  it("skips a recognized column caption instead of importing it as a student", () => {
+    // A spreadsheet export of a single column starts with that column's title.
+    // `username` is handle-shaped, so without this it would import as a student.
+    const parsed = parse("username\nada\nbob\n")
+    expect(parsed.rows.map((r) => r.identity)).toEqual([
+      { username: "ada" },
+      { username: "bob" },
+    ])
+    expect(parsed.dropped).toEqual([])
+  })
+
+  it("reports an unrecognized bad first line rather than guessing it's a caption", () => {
+    // "Didn't parse, but a later line did" describes a typo'd first entry just as
+    // well as a caption — guessing would silently omit a student the teacher listed.
+    const parsed = parse("GitHub Username\nada\n")
+    expect(parsed.rows.map((r) => r.identity)).toEqual([{ username: "ada" }])
+    expect(parsed.dropped).toEqual([
+      { line: 1, reason: "bad-value", value: "GitHub Username" },
+    ])
+  })
+
+  it("still reports the first line when nothing else parses either", () => {
+    const parsed = parse("Student Name\nAnother Name\n")
+    expect(parsed.rows).toHaveLength(0)
+    expect(parsed.dropped.map((d) => d.line)).toEqual([1, 2])
+  })
+
+  it("reports a metadata-only row as incomplete, not as bad content", () => {
+    // No identity cell at all: a student who hasn't supplied a handle yet. This
+    // is the ONE non-blocking case — there is nothing for the teacher to correct.
+    const parsed = parse("username,email,first_name,section\n,,Nobody,Sec A\n")
+    expect(parsed.rows).toHaveLength(0)
+    expect(parsed.dropped).toEqual([{ line: 2, reason: "incomplete" }])
+  })
+
+  it("reports BOTH unusable cells rather than blaming just one", () => {
+    // The old behavior picked a single cell to blame. Reporting both is what lets
+    // one editing pass fix the row.
+    const parsed = parse("username,email\n-bad-,n/a\n")
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-username", value: "-bad-" },
+      { line: 2, reason: "bad-email", value: "n/a" },
+    ])
+  })
+
+  it("reports an unusable cell even when a sibling cell resolves", () => {
+    // The shifted-column case: `n/a` in the email column beside a valid username.
+    // Before this was reported the row imported silently AND stored `n/a` as the
+    // student's contact address.
+    const parsed = parse("username,email\nada,n/a\n")
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-email", value: "n/a" },
+    ])
+    expect(parsed.rows[0]?.identity).toEqual({ username: "ada" })
+    // And the unusable value never rides into roster.csv as metadata.
+    expect(parsed.rows[0]?.email).toBe("")
+  })
+
+  it("drops an unreadable bare line as bad-value, naming neither shape", () => {
+    // Under the default the line could have been a handle or an address and was
+    // neither, so the message can't claim to know which the teacher meant.
+    const parsed = parse("ada\nJohn Smith\n")
+    expect(parsed.rows).toHaveLength(1)
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-value", value: "John Smith" },
+    ])
+  })
+
+  it("blames the handle shape for a bad bare line under the username override", () => {
+    const parsed = parse("ada\nJohn Smith\n", "username-list")
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-username", value: "John Smith" },
+    ])
   })
 
   it("reads a bare list per line, detecting addresses and handles", () => {
@@ -113,13 +301,24 @@ describe("parseRosterImportFile", () => {
     ])
   })
 
+  it("reads a headed CSV as a flat list under the username-list override", () => {
+    // The override is an assertion about EVERY line, so a header row is data too.
+    // Reading it columnar would silently ignore what the teacher asserted.
+    const parsed = parse("username\nada\nbob\n", "username-list")
+    expect(parsed.rows.map((r) => r.identity)).toEqual([
+      { username: "ada" },
+      { username: "bob" },
+    ])
+    // `username` is a recognized column name, so it's treated as the caption it is.
+    expect(parsed.dropped).toEqual([])
+  })
+
   it("drops rows whose username is missing or not a valid GitHub handle", () => {
     const csv = "username,first_name\n,Nobody\n-bad-,Bad\nvalid-user,Ok\n"
     expect(parse(csv).rows.map((r) => r.identity.username)).toEqual([
       "valid-user",
     ])
   })
-
   it("keeps the raw email cell as metadata so an unchanged roster shows no delta", () => {
     // Stored roster addresses are never lower-cased, and mergeStudentMetadata
     // compares case-sensitively — so normalizing here would report a metadata
@@ -225,5 +424,82 @@ describe("coerceImportRole", () => {
     // Not a silent alias for admin/owner — an unknown role never escalates.
     expect(coerceImportRole("admin")).toBeUndefined()
     expect(coerceImportRole("owner")).toBeUndefined()
+  })
+})
+
+// The email-list override, previously a separate line-oriented parser. Selecting
+// it asserts every line is an address, so nothing is read columnar and no line is
+// re-read as a handle.
+describe("parseRosterImportFile: email-list override", () => {
+  const emails = (text: string) =>
+    parse(text, "email-list").rows.map((r) => r.identity.email)
+
+  it("reads one address per line, trimming and stripping mailto:", () => {
+    const text = "  ada@uni.edu  \nmailto:bob@example.com\nMAILTO:cara@x.io\n"
+    expect(emails(text)).toEqual([
+      "ada@uni.edu",
+      "bob@example.com",
+      "cara@x.io",
+    ])
+  })
+
+  it("does NOT read a header row as headers", () => {
+    // The whole point of the short-circuit: Papa would consume line 1 as a header
+    // and take the columnar branch on a file the teacher told us was a flat list.
+    expect(emails("email\nada@uni.edu\n")).toEqual(["ada@uni.edu"])
+  })
+
+  it("blocks a handle instead of silently importing it as an email row", () => {
+    const parsed = parse("ada@uni.edu\noctocat\n", "email-list")
+    expect(parsed.rows).toHaveLength(1)
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-email", value: "octocat" },
+    ])
+  })
+
+  it("reports each invalid line with its number and raw value", () => {
+    const parsed = parse(
+      "ada@uni.edu\nnot-an-email\n@handle\nbob@x\n",
+      "email-list",
+    )
+    expect(parsed.rows).toHaveLength(1)
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-email", value: "not-an-email" },
+      { line: 3, reason: "bad-email", value: "@handle" },
+      { line: 4, reason: "bad-email", value: "bob@x" },
+    ])
+  })
+
+  it("skips blank lines silently rather than reporting them", () => {
+    const parsed = parse("ada@uni.edu\n\n   \nbob@example.com\n", "email-list")
+    expect(parsed.rows).toHaveLength(2)
+    expect(parsed.dropped).toEqual([])
+  })
+
+  it("counts a leading blank line when reporting a bad one", () => {
+    expect(parse("\nada@uni.edu\n\nnope\n", "email-list").dropped).toEqual([
+      { line: 4, reason: "bad-email", value: "nope" },
+    ])
+  })
+
+  it("ignores a leading BOM rather than corrupting the first address", () => {
+    expect(parse("\uFEFFada@uni.edu\n", "email-list").rows).toEqual([
+      { line: 1, identity: { email: "ada@uni.edu" }, email: "ada@uni.edu" },
+    ])
+  })
+
+  it("normalizes casing so one person can't be invited twice", () => {
+    // identityKey is derived from the address, so keeping the file's casing would
+    // make these three separate identities and send three invitations.
+    expect(emails("Ada@Uni.edu\nada@uni.edu\nADA@UNI.EDU\n")).toEqual([
+      "ada@uni.edu",
+      "ada@uni.edu",
+      "ada@uni.edu",
+    ])
+  })
+
+  it("returns nothing for empty or whitespace-only input", () => {
+    expect(parse("", "email-list")).toEqual({ rows: [], dropped: [] })
+    expect(parse("  \n \n", "email-list")).toEqual({ rows: [], dropped: [] })
   })
 })

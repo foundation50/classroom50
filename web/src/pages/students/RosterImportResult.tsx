@@ -5,18 +5,64 @@ import type {
   BulkImportResult,
   BulkInviteByEmailResult,
 } from "@/domain/students"
-import { emailInviteSections } from "./EmailInviteFlow"
 import type { InviteOutcome, RoleChangeOutcome } from "./runRosterImport"
 
-export type ImportResultSectionRow = {
+type ImportResultSectionRow = {
   key: string
   label: string
   detail?: string
 }
 
-// A titled, scrollable table of result rows (code + detail). Shared by the
-// roster-result view below and the email-invite result (via renderSection).
-export const ImportResultSection = ({
+// The four buckets a completed bulkInviteByEmail produces, as titled sections.
+// Titles are passed in because "invited" by address must not read as "invited" by
+// handle on a screen that reports both.
+const emailInviteSections = (
+  result: BulkInviteByEmailResult,
+  t: (key: string) => string,
+  titles: {
+    invited: string
+    skipped: string
+    deferred: string
+    failed: string
+  },
+): { title: string; rows: ImportResultSectionRow[] }[] =>
+  [
+    {
+      title: titles.invited,
+      rows: result.invited.map(({ email, role }) => ({
+        key: email,
+        label: email,
+        detail: t(ROLE_LABEL_KEY[role]),
+      })),
+    },
+    {
+      title: titles.skipped,
+      rows: result.skipped.map(({ email }) => ({
+        key: email,
+        label: email,
+        detail: t("students.emailInviteSkippedDetail"),
+      })),
+    },
+    {
+      title: titles.deferred,
+      rows: result.deferred.map((email) => ({
+        key: email,
+        label: email,
+        detail: t("students.inviteDeferredDetail"),
+      })),
+    },
+    {
+      title: titles.failed,
+      rows: result.failed.map((f) => ({
+        key: f.email,
+        label: f.email,
+        detail: f.message,
+      })),
+    },
+  ].filter((section) => section.rows.length > 0)
+
+// A titled, scrollable table of result rows (code + detail).
+const ImportResultSection = ({
   title,
   rows,
 }: {

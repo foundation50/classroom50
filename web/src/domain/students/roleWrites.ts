@@ -233,8 +233,9 @@ export type RosterUploadContext = {
   // their old handle and silently defeat the point of reading the id.
   loginById: ReadonlyMap<number, string>
   // Addresses already claimed by a stored roster row. An uploaded email-only row
-  // whose address is in here would be skipped by appendEmailInviteRows, so the
-  // preview marks it a no-op instead of counting it as an invitation to send.
+  // whose address is in here is still invited — GitHub decides whether that is
+  // redundant — but appendEmailInviteRows won't write a SECOND row for it, so the
+  // preview labels the row instead of implying a fresh invite.
   claimedEmails: ReadonlySet<string>
 }
 

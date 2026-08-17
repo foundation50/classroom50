@@ -13,9 +13,13 @@ vi.mock("@/github-core/queries", () => ({ getUserById }))
 
 const client = {} as GitHubClient
 
-const row = (identity: ParsedImportRow["identity"]): ParsedImportRow => ({
-  identity,
-})
+// Line numbers are irrelevant to resolution itself, so each fixture row gets a
+// distinct one only where a test asserts which line a problem is reported against.
+let nextLine = 1
+const row = (
+  identity: ParsedImportRow["identity"],
+  line = nextLine++,
+): ParsedImportRow => ({ line, identity })
 
 const noRateLimit: GitHubRateLimit = {
   limit: null,
@@ -96,41 +100,55 @@ describe("resolveImportIdentities", () => {
     getUserById.mockRejectedValueOnce(apiError(404))
     const res = await resolveImportIdentities(
       client,
-      [row({ githubId: 999, username: "someone-else" })],
+      [row({ githubId: 999, username: "someone-else" }, 4)],
       new Map(),
     )
     expect(res.rows).toEqual([])
     expect(res.unusable).toEqual([
-      { reason: "unresolved-id", githubId: "999", username: "someone-else" },
+      {
+        line: 4,
+        reason: "unresolved-id",
+        githubId: "999",
+        username: "someone-else",
+      },
     ])
   })
 
-  it("fails closed on a malformed id", async () => {
+  it("fails closed on a malformed id, reporting the line it came from", async () => {
     const res = await resolveImportIdentities(
       client,
-      [row({ malformedGithubId: "5.83231E+05", username: "ada" })],
+      [row({ malformedGithubId: "5.83231E+05", username: "ada" }, 7)],
       new Map(),
     )
     expect(res.rows).toEqual([])
-    expect(res.unusable[0]?.reason).toBe("unresolved-id")
+    expect(res.unusable[0]).toMatchObject({
+      line: 7,
+      reason: "unresolved-id",
+      githubId: "5.83231E+05",
+    })
   })
 
   it("stops resolving on a rate limit and reports the rest as a lookup failure", async () => {
     getUserById.mockClear()
-    getUserById.mockRejectedValueOnce(rateLimitError())
+    // Lookups run in bounded-concurrency batches, so a rate limit can't unsend the
+    // requests already in flight beside it — what it must do is stop the batches
+    // AFTER it. 40 ids is several batches; only the first should be spent.
+    getUserById.mockRejectedValue(rateLimitError())
+    const ids = Array.from({ length: 40 }, (_, i) => i + 1)
     const res = await resolveImportIdentities(
       client,
-      [row({ githubId: 1 }), row({ githubId: 2 })],
+      ids.map((id) => row({ githubId: id })),
       new Map(),
     )
-    expect(getUserById).toHaveBeenCalledTimes(1)
+    expect(getUserById.mock.calls.length).toBeLessThan(ids.length)
     expect(res.rows).toEqual([])
     // A rate limit says nothing about whether the accounts exist, so these must
     // NOT be reported as bad ids — that would send the teacher to edit a fine file.
-    expect(res.unusable.map((u) => u.reason)).toEqual([
-      "id-lookup-failed",
-      "id-lookup-failed",
-    ])
+    expect(res.unusable).toHaveLength(ids.length)
+    expect(res.unusable.every((u) => u.reason === "id-lookup-failed")).toBe(
+      true,
+    )
+    getUserById.mockReset()
   })
 
   it("reports a transient server error as a lookup failure, not a bad id", async () => {
@@ -146,6 +164,32 @@ describe("resolveImportIdentities", () => {
     expect(res.rows).toEqual([])
   })
 
+  it("bounds how many lookups are in flight at once", async () => {
+    getUserById.mockClear()
+    // A preview blocks on resolution, so the cap must not become that many serial
+    // round-trips — but it must not burst either, since GitHub's secondary limits
+    // throttle concurrency. Track the high-water mark of overlapping calls.
+    let inFlight = 0
+    let peak = 0
+    getUserById.mockImplementation(async (_c: unknown, id: number) => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await Promise.resolve()
+      inFlight--
+      return { id, login: `user${id}` }
+    })
+    const ids = Array.from({ length: 60 }, (_, i) => i + 1)
+    const res = await resolveImportIdentities(
+      client,
+      ids.map((id) => row({ githubId: id })),
+      new Map(),
+    )
+    expect(res.rows).toHaveLength(ids.length)
+    expect(peak).toBeGreaterThan(1)
+    expect(peak).toBeLessThanOrEqual(10)
+    getUserById.mockReset()
+  })
+
   it("caps the network fallback and reports the rows beyond it", async () => {
     getUserById.mockClear()
     getUserById.mockImplementation((_c: unknown, id: number) =>
@@ -159,11 +203,12 @@ describe("resolveImportIdentities", () => {
     )
     expect(getUserById).toHaveBeenCalledTimes(ID_RESOLUTION_CAP)
     expect(res.rows).toHaveLength(ID_RESOLUTION_CAP)
-    // Never asked, so never "wrong" — the teacher should retry, not edit.
+    // Capped, not failed: a retry would cap at the same place, so the copy must
+    // point at editing the file rather than trying again.
     expect(res.unusable.map((u) => u.reason)).toEqual([
-      "id-lookup-failed",
-      "id-lookup-failed",
-      "id-lookup-failed",
+      "id-lookup-capped",
+      "id-lookup-capped",
+      "id-lookup-capped",
     ])
     getUserById.mockReset()
   })
@@ -192,11 +237,5 @@ describe("resolveImportIdentities", () => {
     expect(res.rows).toHaveLength(1)
     // First occurrence wins, so the id-resolved row's metadata is kept.
     expect(res.rows[0]?.identity).toMatchObject({ github_id: "42" })
-  })
-
-  it("reports a row with no identity cell at all", async () => {
-    const res = await resolveImportIdentities(client, [row({})], new Map())
-    expect(res.rows).toEqual([])
-    expect(res.unusable).toEqual([{ reason: "no-identity" }])
   })
 })

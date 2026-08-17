@@ -48,11 +48,13 @@ export type SyncRosterFromTeamResult = {
 //   1. upgrade rows matched by a recovered invite (fill username/github_id
 //      onto the email row written at invite time);
 //   2. remove email-only rows (no username, no valid github_id) that no live
-//      invite backs — the invite was cancelled, expired, or GC'd. Gated on
-//      `invites.trusted` so a degraded read can never wipe pending rows, and
-//      every candidate is re-confirmed against GitHub's current pending
-//      invitations inside this closure (collect's snapshot predates the CSV
-//      read, so an invite sent in between must not be reaped);
+//      invite backs — the invite expired, was GC'd, or was cancelled by a path
+//      whose own row write failed. A cancel normally drops the row itself, so
+//      this is the backstop, not the mechanism. Gated on `invites.trusted` so a
+//      degraded read can never wipe pending rows, and every candidate is
+//      re-confirmed against GitHub's current pending invitations inside this
+//      closure (collect's snapshot predates the CSV read, so an invite sent in
+//      between must not be reaped);
 //   3. the pre-existing team sync: ensure every active member has an IDENTITY
 //      row (username + github_id) carrying their team-derived `role`, refresh
 //      changed roles, and backfill resolvable ids.

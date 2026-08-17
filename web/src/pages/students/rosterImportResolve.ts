@@ -8,11 +8,18 @@ import type { ParsedImportRow } from "@/pages/students/rosterImportParse"
 const log = logger.scope("students:rosterImportResolve")
 
 // How many unknown ids we'll trade for a current login over the network during a
-// preview. The local org-member map covers every enrolled student for free, so
-// this only bounds the tail: ids for accounts that have left the org, or an
-// export from another system. Past the cap a row is reported, never silently
-// re-keyed to its username cell.
-export const ID_RESOLUTION_CAP = 25
+// preview. The local org-member map covers every enrolled student for free, so this
+// only bounds the tail: ids for accounts that have left the org, or an export from
+// another system. Sized so a whole cohort imported by github_id into a fresh
+// organization still previews — a row past the cap can't be imported at all (it is
+// never silently re-keyed to its username cell), so a stingy cap would refuse a
+// legitimate file outright rather than merely slowing it down.
+export const ID_RESOLUTION_CAP = 200
+
+// Lookups in flight at once. Enough that the cap is a handful of round-trips
+// rather than hundreds, small enough not to burst into GitHub's secondary rate
+// limits — which throttle concurrency, not just total volume.
+const ID_RESOLUTION_BATCH = 10
 
 // A row's resolved identity. `account` addresses a GitHub account (the login is
 // authoritative once resolved); `email` addresses someone with no account on file
@@ -41,9 +48,9 @@ export type ResolvedImportRow = {
   role?: ClassroomRole
 }
 
-export type AccountIdentity = Extract<ImportIdentity, { kind: "account" }>
-export type AccountImportRow = ResolvedImportRow & { identity: AccountIdentity }
-export type EmailImportRow = ResolvedImportRow & {
+type AccountIdentity = Extract<ImportIdentity, { kind: "account" }>
+type AccountImportRow = ResolvedImportRow & { identity: AccountIdentity }
+type EmailImportRow = ResolvedImportRow & {
   identity: Extract<ImportIdentity, { kind: "email" }>
 }
 
@@ -55,15 +62,19 @@ export const isAccountRow = (r: ResolvedImportRow): r is AccountImportRow =>
 export const isEmailRow = (r: ResolvedImportRow): r is EmailImportRow =>
   r.identity.kind === "email"
 
-// A row excluded from the import, with enough detail for the preview to say why.
-// `unresolved-id` means the file's github_id is not usable — malformed, or no
-// such account. `id-lookup-failed` means we could not ASK: a rate limit, a 5xx,
-// an SSO-gated 403. Both fail closed (the row is never re-keyed to its username
-// cell), but they need different advice: one is a file to fix, the other is a
-// retry.
+// A row excluded from the import, with enough detail for the preview to name the
+// line the teacher has to edit. `unresolved-id` means the file's github_id is not
+// usable — malformed, or no such account. `id-lookup-failed` means we could not
+// ASK: a rate limit, a 5xx, an SSO-gated 403. `id-lookup-capped` means we CHOSE
+// not to ask, having already spent ID_RESOLUTION_CAP lookups on this file. All
+// three fail closed (the row is never re-keyed to its username cell), but they
+// need different advice: a file to fix, a retry, and a file too big to check in
+// one pass — where a retry would deterministically fail, so it must not be
+// suggested.
 export type UnusableRow = {
-  reason: "unresolved-id" | "id-lookup-failed" | "no-identity"
-  githubId?: string
+  line: number
+  reason: "unresolved-id" | "id-lookup-failed" | "id-lookup-capped"
+  githubId: string
   username?: string
 }
 
@@ -110,10 +121,14 @@ export async function resolveImportIdentities(
   // teacher's file to fix.
   const missingIds = new Set<number>()
   const unaskedIds = new Set<number>()
+  // Ids we skipped because the file exhausted the lookup budget. Distinct from
+  // unasked: a retry can fix a rate limit, but the cap is deterministic, so
+  // telling the teacher to try again would be a dead end.
+  const cappedIds = new Set<number>()
 
   // Only ids absent from the local map cost a request. Deduped first so a file
   // listing the same id twice spends one call, and capped so a large import from
-  // another system can't fan out into hundreds of requests.
+  // another system can't fan out without bound.
   const unknownIds = [
     ...new Set(
       rows
@@ -124,29 +139,41 @@ export async function resolveImportIdentities(
     ),
   ]
 
+  for (const id of unknownIds.slice(ID_RESOLUTION_CAP)) cappedIds.add(id)
+
+  // Resolve in bounded-concurrency batches rather than one id at a time: a preview
+  // blocks on this, and a serial walk of the cap would be that many round-trips
+  // deep. A batch also gives the rate-limit stop a natural checkpoint — once
+  // GitHub pushes back, every remaining id is reported unasked instead of spending
+  // the rest of the budget re-learning the same thing.
   let stopped = false
-  for (const [index, id] of unknownIds.entries()) {
-    // Past the cap, or after a rate limit, we stop asking — those ids are
-    // "unasked", not "missing".
-    if (stopped || index >= ID_RESOLUTION_CAP) {
-      unaskedIds.add(id)
-      continue
+  const askable = unknownIds.slice(0, ID_RESOLUTION_CAP)
+  for (let i = 0; i < askable.length; i += ID_RESOLUTION_BATCH) {
+    if (stopped) {
+      for (const id of askable.slice(i)) unaskedIds.add(id)
+      break
     }
-    try {
-      const user = await getUserById(client, id)
-      resolvedLogins.set(id, user.login)
-    } catch (err) {
-      if (err instanceof GitHubAPIError && err.isNotFound) {
-        missingIds.add(id)
-        continue
-      }
-      // Anything else (rate limit, 5xx, SSO-gated 403) says nothing about whether
-      // the account exists, so don't tell the teacher their id is wrong. A rate
-      // limit also means every remaining lookup would fail, so stop asking.
-      unaskedIds.add(id)
-      if (err instanceof GitHubAPIError && err.isRateLimited) stopped = true
-      log.warn("id resolution failed", { id, err })
-    }
+    const batch = askable.slice(i, i + ID_RESOLUTION_BATCH)
+    await Promise.all(
+      batch.map(async (id) => {
+        try {
+          const user = await getUserById(client, id)
+          resolvedLogins.set(id, user.login)
+        } catch (err) {
+          if (err instanceof GitHubAPIError && err.isNotFound) {
+            missingIds.add(id)
+            return
+          }
+          // Anything else (rate limit, 5xx, SSO-gated 403) says nothing about
+          // whether the account exists, so don't tell the teacher their id is
+          // wrong. A rate limit also means every remaining lookup would fail, so
+          // stop after this batch.
+          unaskedIds.add(id)
+          if (err instanceof GitHubAPIError && err.isRateLimited) stopped = true
+          log.warn("id resolution failed", { id, err })
+        }
+      }),
+    )
   }
 
   const rowsOut: ResolvedImportRow[] = []
@@ -166,6 +193,7 @@ export async function resolveImportIdentities(
     // A cell that isn't a canonical id at all — see UnusableRow.
     if (malformedGithubId !== undefined) {
       unusable.push({
+        line: row.line,
         reason: "unresolved-id",
         githubId: malformedGithubId,
         username,
@@ -178,11 +206,15 @@ export async function resolveImportIdentities(
       const login = resolvedLogins.get(githubId)
       if (!login) {
         unusable.push({
-          // missingIds and unaskedIds are disjoint: each id takes exactly one
-          // path through the loop above.
-          reason: unaskedIds.has(githubId)
-            ? "id-lookup-failed"
-            : "unresolved-id",
+          line: row.line,
+          // missingIds, unaskedIds and cappedIds are disjoint by construction:
+          // capped ids are sliced out of `askable`, and each askable id lands
+          // in exactly one of resolved / missing / unasked.
+          reason: cappedIds.has(githubId)
+            ? "id-lookup-capped"
+            : unaskedIds.has(githubId)
+              ? "id-lookup-failed"
+              : "unresolved-id",
           githubId: String(githubId),
           username,
         })
@@ -202,7 +234,9 @@ export async function resolveImportIdentities(
     } else if (email !== undefined) {
       identity = { kind: "email", email }
     } else {
-      unusable.push({ reason: "no-identity" })
+      // Unreachable: the parser never emits an identity-less row (hasAnyIdentity
+      // gates it) — such a row is dropped as `incomplete` with its line number
+      // before resolution, so there is nothing left to report here.
       continue
     }
 

@@ -115,8 +115,8 @@ const uploadFile = async (
   await user.upload(input, f)
 }
 
-// Every upload opens as Roster CSV now, so a test exercising the dedicated
-// email-list branch has to select it explicitly.
+// Selecting the email-list format, i.e. the teacher asserting every line of the
+// file is an address. Every upload opens as Roster CSV.
 const chooseEmailList = async (user: ReturnType<typeof userEvent.setup>) => {
   const select = await waitFor(
     () => screen.getByLabelText("students.detectedFormat") as HTMLSelectElement,
@@ -127,33 +127,47 @@ const chooseEmailList = async (user: ReturnType<typeof userEvent.setup>) => {
 const primaryButton = () =>
   screen
     .getByRole("button", {
-      name: /sendInviteCount|importAndInviteMembers|importMembers|confirmChanges|noChangesToApply/,
+      name: /importAndInviteMembers|importMembers|confirmChanges|noChangesToApply/,
     })
     .closest("button") as HTMLButtonElement
 
+// The same button, but absent-tolerant: a blocked file renders no import control at
+// all, and `getByRole` would throw before the assertion could say so.
+const importButton = () =>
+  screen.queryByRole("button", {
+    name: /importAndInviteMembers|importMembers|confirmChanges|noChangesToApply/,
+  }) as HTMLButtonElement | null
+
+// An address-only file now runs through the roster path like any other, so the
+// owner gate under test is PreflightRecap's — the one that also covers a username
+// row promoted to teacher. Before the email-list branch was collapsed this same
+// property was enforced by a second, parallel checkbox inside the email preview.
 describe("UploadRoster email-invite owner-confirmation gate", () => {
-  it("keeps Send disabled for a teacher email until the owner checkbox is ticked", async () => {
+  it("keeps the import disabled for a teacher email until the owner checkbox is ticked", async () => {
     const user = userEvent.setup()
     renderModal(
       <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
     )
 
     await uploadFile(user, file("emails.txt", "prof@x.edu\n"))
-    await chooseEmailList(user)
-
-    // The send button renders and is disabled while a teacher role would grant
-    // owner but is unconfirmed.
     const send = await waitFor(() => primaryButton())
 
+    // The per-row role picker lives in the details table, which stays collapsed
+    // until a confirmation needs it — so open it the way a teacher would.
+    await user.click(
+      await waitFor(() => screen.getByText("students.summaryViewDetails")),
+    )
+
     // Assign the sole address the teacher role -> owner-grant path.
-    const roleSelect = screen.getByLabelText(
-      "students.assignRoleLabel",
-    ) as HTMLSelectElement
+    const roleSelect = await waitFor(
+      () =>
+        screen.getByLabelText("students.assignRoleLabel") as HTMLSelectElement,
+    )
     await user.selectOptions(roleSelect, "teacher")
 
     expect(send.disabled).toBe(true)
 
-    // Ticking the confirmation enables Send.
+    // Ticking the confirmation enables the import.
     const checkbox = screen.getByRole("checkbox") as HTMLInputElement
     await user.click(checkbox)
     await waitFor(() => expect(primaryButton().disabled).toBe(false))
@@ -176,10 +190,12 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
     )
 
     await uploadFile(user, file("emails.txt", "prof@x.edu\n"))
-    await chooseEmailList(user)
     await waitFor(() => primaryButton())
+    await user.click(
+      await waitFor(() => screen.getByText("students.summaryViewDetails")),
+    )
     await user.selectOptions(
-      screen.getByLabelText("students.assignRoleLabel"),
+      await waitFor(() => screen.getByLabelText("students.assignRoleLabel")),
       "teacher",
     )
 
@@ -191,7 +207,7 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
 })
 
 describe("UploadRoster format override", () => {
-  it("re-parses the same text and swaps the preview branch (roster <-> email)", async () => {
+  it("re-parses the same text under each format the teacher can assert", async () => {
     const user = userEvent.setup()
     classifyRosterUpload.mockReturnValue({
       noAction: [],
@@ -213,21 +229,23 @@ describe("UploadRoster format override", () => {
     await user.click(screen.getByText("students.summaryViewDetails"))
     expect(screen.getByText("students.previewInviteByEmail")).toBeTruthy()
 
-    // Overriding to the dedicated email branch swaps to the email preview.
+    // Asserting "email addresses" keeps it an email row — same parser, same table.
     await chooseEmailList(user)
-    await waitFor(() => screen.getByText("students.emailsFound:1"))
-    expect(screen.queryByText("students.previewInviteByEmail")).toBeNull()
+    await waitFor(() =>
+      expect(screen.getByText("students.previewInviteByEmail")).toBeTruthy(),
+    )
 
     // Overriding to a username list forces the line to be read as a handle;
-    // "ada@x.edu" isn't a plausible one, so no rows survive.
+    // "ada@x.edu" isn't a plausible one, so the file now carries content we
+    // couldn't read — the blocking report replaces the preview and names the line.
     const overrideSelect = screen.getByLabelText(
       "students.detectedFormat",
     ) as HTMLSelectElement
     await user.selectOptions(overrideSelect, "username-list")
     await waitFor(() =>
-      expect(screen.queryByText("students.emailsFound:1")).toBeNull(),
+      expect(screen.getByText("students.importBlocked:1")).toBeTruthy(),
     )
-    expect(screen.getByText("students.noUsableRows")).toBeTruthy()
+    expect(screen.queryByText("students.previewInviteByEmail")).toBeNull()
   })
 })
 
@@ -239,8 +257,12 @@ describe("UploadRoster open->false reset", () => {
     )
 
     await uploadFile(user, file("emails.txt", "ada@x.edu\n"))
+    // Selecting an override is part of the state this reset has to clear, so keep
+    // exercising it here.
     await chooseEmailList(user)
-    await waitFor(() => screen.getByText("students.emailsFound:1"))
+    await waitFor(() =>
+      expect(screen.getByText("students.summaryViewDetails")).toBeTruthy(),
+    )
 
     // Close (open -> false), then reopen (open -> true).
     rerender(
@@ -254,7 +276,7 @@ describe("UploadRoster open->false reset", () => {
     await waitFor(() =>
       expect(screen.getByText("students.uploadDropPrompt")).toBeTruthy(),
     )
-    expect(screen.queryByText("students.emailsFound:1")).toBeNull()
+    expect(screen.queryByText("students.summaryViewDetails")).toBeNull()
   })
 })
 
@@ -788,6 +810,27 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
     await waitFor(() => expect(screen.getAllByText("ada").length).toBe(1))
     expect(screen.queryByText("students.noUsableRows")).toBeNull()
   })
+
+  it("explains a missing identity column instead of blaming each line", async () => {
+    const user = userEvent.setup()
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    // A shape problem: the file has a header row but no github_id/username/email.
+    // Reading it one value per line would report the header and every data row as
+    // an unusable value, burying the one message that tells the teacher what to add.
+    await uploadFile(
+      user,
+      file("roster.csv", "first_name,last_name\nAda,Lovelace\nGrace,Hopper\n"),
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText("students.missingIdentityHeader")).toBeTruthy(),
+    )
+    expect(screen.getByText("students.expectedHeaders")).toBeTruthy()
+    expect(screen.queryByText(/students.importBlocked/)).toBeNull()
+  })
 })
 
 describe("UploadRoster identity mismatch gate", () => {
@@ -904,11 +947,12 @@ describe("UploadRoster identity mismatch gate", () => {
     await waitFor(() => expect(button.disabled).toBe(false))
   })
 
-  it("skips a row whose github_id cannot be resolved, rather than using its username", async () => {
+  it("blocks the import on a github_id it cannot resolve, rather than using its username", async () => {
     const user = userEvent.setup()
     // The id is absent from the org-member map and the network lookup 404s, so
     // the row must be reported — never re-keyed to the username cell, which
-    // could belong to someone else entirely.
+    // could belong to someone else entirely. And because content we couldn't read
+    // means the FILE is wrong, there is no partial import to press.
     getUserById.mockRejectedValue(
       new GitHubAPIError({
         status: 404,
@@ -935,8 +979,74 @@ describe("UploadRoster identity mismatch gate", () => {
     )
 
     await waitFor(() =>
-      expect(screen.getByText(/unresolvedIdRows/)).toBeTruthy(),
+      expect(screen.getByText("students.importBlocked:1")).toBeTruthy(),
     )
+    // WHICH line and which id is asserted in importProblems.test.ts: the per-line
+    // sentences render through <Trans>, which needs a real i18n instance this
+    // harness doesn't set up. What matters here is that the row never reached the
+    // table and there is genuinely nothing to press.
     expect(screen.queryByText("someone-else")).toBeNull()
+    expect(importButton()).toBeNull()
+    expect(screen.queryByRole("table")).toBeNull()
+  })
+
+  it("blocks a file whose OTHER rows are importable", async () => {
+    const user = userEvent.setup()
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [{ username: "ada" }],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [],
+      identityMismatches: [],
+      allAlreadyMembers: false,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    // The case that matters: one bad line beside good ones. A single-row bad file
+    // would block even if the gate were broken, because there'd be nothing to
+    // import — only a mixed file proves the gate itself holds.
+    await uploadFile(
+      user,
+      file("roster.csv", "username,email\nada,ada@x.edu\nbob,n/a\n"),
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText("students.importBlocked:1")).toBeTruthy(),
+    )
+    expect(importButton()).toBeNull()
+    expect(screen.queryByRole("table")).toBeNull()
+    expect(bulkEnrollStudentsInClassroom).not.toHaveBeenCalled()
+  })
+
+  it("reports an identity-less row but still imports everyone else", async () => {
+    const user = userEvent.setup()
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [{ username: "ada" }],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [],
+      identityMismatches: [],
+      allAlreadyMembers: false,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    // The one deliberate non-blocking case: a student who hasn't supplied a handle.
+    // There is nothing to fix, so the import must stay available.
+    await uploadFile(
+      user,
+      file("roster.csv", "username,email,first_name\nada,,Ada\n,,Nobody\n"),
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText("students.importSkipped:1")).toBeTruthy(),
+    )
+    expect(screen.queryByText(/students.importBlocked/)).toBeNull()
+    expect(importButton()?.disabled).toBe(false)
   })
 })

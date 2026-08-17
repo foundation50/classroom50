@@ -341,8 +341,19 @@ as** are overrides that force one interpretation:
 - **A plain list**: one GitHub username or one email address per line, no
   header. Each line is read for what it is, so a mixed list works.
 - **The overrides**: choose **GitHub usernames** to read every line as a handle
-  even if it looks like an address, or **Email addresses** to send an
-  invitation to every line and read no columns at all.
+  even if it looks like an address, or **Email addresses** to read every line as
+  an address and no columns at all. Either one is you telling the app what every
+  line is, so a line that doesn't fit is reported rather than read the other way.
+
+If any row carries a value the upload can't use — an address that isn't valid, a
+`github_id` matching no account, a line that's neither a handle nor an address —
+it lists those rows with their line numbers and imports none of them. Fix the
+file and upload it again; re-uploading is safe, because students already in the
+classroom are left alone. That check covers every identity column independently, so
+a shifted column is caught even when the row's other cells look fine. The one
+exception is a row with no identifying column at all, usually a student who hasn't
+given you a GitHub account yet: that row is reported and skipped, and everyone else
+is imported.
 
 ### Roster CSV fields
 
@@ -369,7 +380,7 @@ then `username`, then `email`:
 > If a row's `github_id` and `username` disagree, the upload uses the account
 > the id belongs to and asks you to confirm before importing — the preview shows
 > both, and the roster's stored username is corrected to match. An id that
-> doesn't match any GitHub account skips that row rather than falling back to
+> doesn't match any GitHub account stops the import rather than falling back to
 > the username, since the username could belong to someone else entirely.
 
 A complete roster CSV looks like this:

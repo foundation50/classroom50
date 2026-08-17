@@ -148,7 +148,7 @@ export const RosterPreviewTable = ({
   changes = {},
   roleChanges = {},
   identityChanges = {},
-  noopRowKeys,
+  alreadyOnRosterKeys,
   loading = false,
   skeletonRowCount,
 }: {
@@ -161,7 +161,7 @@ export const RosterPreviewTable = ({
   // Rows the roster already carries the address for. The import still invites
   // them (GitHub decides whether that is redundant), but no second roster row is
   // written, so the identity cell says so instead of implying a fresh invite.
-  noopRowKeys?: ReadonlySet<string>
+  alreadyOnRosterKeys?: ReadonlySet<string>
   // While the preflight resolves, the per-cell changes aren't known yet: render
   // the change-bearing columns as skeletons to signal "computing changes" in
   // place, rather than briefly showing static values that then sprout highlights.
@@ -220,7 +220,7 @@ export const RosterPreviewTable = ({
                     <IdentityCell
                       row={row}
                       declaredUsername={identityChange?.declaredUsername}
-                      alreadyOnRoster={noopRowKeys?.has(key)}
+                      alreadyOnRoster={alreadyOnRosterKeys?.has(key)}
                     />
                     <PreviewCell
                       value={[row.first_name, row.last_name]
