@@ -292,6 +292,8 @@ describe("inviteByEmail — org invite plus a pending email row", () => {
       inviteTeamCreated: false,
       inviteTeamDeleted: false,
       actorDroppedFrom: null as string | null,
+      inviteRecordWritten: null as string | null,
+      inviteTeamCreateDescription: null as string | null,
     }
 
     const requestRaw = vi.fn().mockImplementation((path: string) => {
@@ -352,12 +354,31 @@ describe("inviteByEmail — org invite plus a pending email row", () => {
           state.actorDroppedFrom = path
           return Promise.resolve({})
         }
+        // The read-back proving no teacher remains, then the PATCH that writes
+        // the invite record now that it's safe to store the email.
+        if (path.includes("/teams/invite-") && path.includes("/members")) {
+          return Promise.resolve([])
+        }
+        if (
+          path.includes("/teams/invite-") &&
+          (options as { method?: string } | undefined)?.method === "PATCH"
+        ) {
+          const body = options?.body as { description?: string }
+          state.inviteRecordWritten = body?.description ?? null
+          return Promise.resolve({
+            id: 9001,
+            slug: path.split("/teams/")[1],
+            privacy: "secret",
+            description: body?.description,
+          })
+        }
         // The per-invite metadata team create (POST /orgs/{org}/teams). Return
         // it as a secret team carrying the exact description the caller wrote,
         // so ensureInviteTeam's fail-closed read-back is a no-op (no PATCH/GET).
         if (path.endsWith("/teams")) {
           const body = options?.body as { name?: string; description?: string }
           state.inviteTeamCreated = true
+          state.inviteTeamCreateDescription = body?.description ?? null
           return Promise.resolve({
             id: 9001,
             slug: body?.name,
@@ -401,8 +422,12 @@ describe("inviteByEmail — org invite plus a pending email row", () => {
       team_ids: [4242, 9001],
     })
     // The metadata team is left holding NO teacher, so the reconcile can read
-    // whoever accepts as the invitee regardless of their org role.
+    // whoever accepts as the invitee regardless of their org role. The email is
+    // written only after that's settled, so an interrupted run strands a team
+    // holding no address.
     expect(state.actorDroppedFrom).toMatch(/\/memberships\/teacher$/)
+    expect(state.inviteTeamCreateDescription).not.toContain("new@x.edu")
+    expect(state.inviteRecordWritten).toContain("new@x.edu")
     // The invited email is retained on the roster right away, as an
     // email-only pending row (identity arrives via the acceptance reconcile).
     const rows = rowsFromCsv(state.committed!)
@@ -544,6 +569,20 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
           if (path.includes("/memberships/")) {
             state.actorDrops.push(path)
             return Promise.resolve({})
+          }
+          // The read-back proving the invite team is teacher-free, then the
+          // PATCH writing its record once that's settled.
+          if (path.includes("/teams/invite-") && path.includes("/members")) {
+            return Promise.resolve([])
+          }
+          if (path.includes("/teams/invite-") && options?.method === "PATCH") {
+            const body = options.body as { description?: string }
+            return Promise.resolve({
+              id: 9001,
+              slug: path.split("/teams/")[1],
+              privacy: "secret",
+              description: body?.description,
+            })
           }
           if (/\/repos\/[^/]+\/classroom50$/.test(path))
             return { default_branch: "main" }

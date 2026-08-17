@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   ensureInviteTeam,
   InviteTeamNotSecretError,
+  InviteTeamNotEmptyError,
   readInviteTeam,
   listInviteTeams,
   deleteInviteTeam,
@@ -11,7 +12,11 @@ import {
 } from "./inviteTeams"
 import type { GitHubClient } from "../client"
 import { GitHubAPIError, type GitHubRateLimit } from "../errors"
-import { inviteTeamName, marshalInviteDescription } from "@/util/inviteTeam"
+import {
+  inviteTeamName,
+  marshalInviteDescription,
+  parseInviteDescription,
+} from "@/util/inviteTeam"
 
 const emptyRateLimit: GitHubRateLimit = {
   limit: null,
@@ -71,40 +76,23 @@ describe("ensureInviteTeam", () => {
   const isMembershipDelete = (c: Call) =>
     c.options?.method === "DELETE" && c.url.includes("/memberships/")
 
-  it("creates a fresh secret team and drops the acting teacher (no PATCH)", async () => {
+  it("creates a fresh secret team, drops the acting teacher, then writes the email", async () => {
     const name = await inviteTeamName(METADATA.classroom, METADATA.email)
     const { client, calls } = makeClient((url, options) => {
       if (options?.method === "POST" && url === "/orgs/acme/teams") {
         const body = options.body as Record<string, unknown>
         expect(body.privacy).toBe("secret")
-        expect(body.description).toBe(DESCRIPTION)
         expect(body.name).toBe(name)
         return {
           id: 7,
           slug: name,
           privacy: "secret",
-          description: DESCRIPTION,
+          description: body.description,
         }
       }
       if (options?.method === "DELETE") return undefined
-      throw new Error(`unexpected ${url}`)
-    })
-
-    const ref = await ensureInviteTeam(client, "acme", METADATA, ACTOR)
-    expect(ref).toEqual({ id: 7, slug: name, created: true })
-    expect(methodsOf(calls)).toEqual(["POST", "DELETE"])
-    expect(calls[1].url).toBe(`/orgs/acme/teams/${name}/memberships/${ACTOR}`)
-  })
-
-  it("adopts an existing team on 422, forcing secret + description via PATCH (created: false)", async () => {
-    const name = await inviteTeamName(METADATA.classroom, METADATA.email)
-    const { client, calls } = makeClient((_url, options) => {
-      if (options?.method === "POST") throw apiError(422)
+      if (url.includes("/members")) return []
       if (options?.method === "PATCH") {
-        expect(options.body).toEqual({
-          privacy: "secret",
-          description: DESCRIPTION,
-        })
         return {
           id: 7,
           slug: name,
@@ -112,13 +100,51 @@ describe("ensureInviteTeam", () => {
           description: DESCRIPTION,
         }
       }
+      throw new Error(`unexpected ${url}`)
+    })
+
+    const ref = await ensureInviteTeam(client, "acme", METADATA, ACTOR)
+    expect(ref).toEqual({ id: 7, slug: name, created: true })
+    // Create (no email) -> drop the teacher -> prove empty -> write the email.
+    expect(methodsOf(calls)).toEqual(["POST", "DELETE", "GET", "PATCH"])
+    expect(calls[1].url).toBe(`/orgs/acme/teams/${name}/memberships/${ACTOR}`)
+  })
+
+  it("adopts an existing team on 422, forcing secret before writing the email", async () => {
+    const name = await inviteTeamName(METADATA.classroom, METADATA.email)
+    const privacyPatches: unknown[] = []
+    const { client, calls } = makeClient((url, options) => {
+      if (options?.method === "POST") throw apiError(422)
       if (options?.method === "DELETE") return undefined
+      if (url.includes("/members")) return []
+      if (options?.method === "PATCH") {
+        privacyPatches.push(options.body)
+        return {
+          id: 7,
+          slug: name,
+          privacy: "secret",
+          description: DESCRIPTION,
+        }
+      }
       // The adopt read: a pre-existing CLOSED team with a stale description.
       return { id: 7, slug: name, privacy: "closed", description: "old" }
     })
     const ref = await ensureInviteTeam(client, "acme", METADATA, ACTOR)
     expect(ref).toEqual({ id: 7, slug: name, created: false })
-    expect(methodsOf(calls)).toEqual(["POST", "GET", "PATCH", "DELETE"])
+    expect(methodsOf(calls)).toEqual([
+      "POST",
+      "GET",
+      "PATCH",
+      "DELETE",
+      "GET",
+      "PATCH",
+    ])
+    // Privacy is fixed first, on its own — the email rides only the last PATCH.
+    expect(privacyPatches[0]).toEqual({ privacy: "secret" })
+    expect(privacyPatches[1]).toEqual({
+      privacy: "secret",
+      description: DESCRIPTION,
+    })
   })
 
   // Not gated on created-vs-adopted: a team that already exists may still carry
@@ -126,15 +152,16 @@ describe("ensureInviteTeam", () => {
   // reconcile read the teacher as the accepted invitee.
   it("drops the acting teacher from an ADOPTED team too", async () => {
     const name = await inviteTeamName(METADATA.classroom, METADATA.email)
-    const { client, calls } = makeClient((_url, options) => {
+    const { client, calls } = makeClient((url, options) => {
       if (options?.method === "POST") throw apiError(422)
       if (options?.method === "DELETE") return undefined
+      if (url.includes("/members")) return []
       return { id: 7, slug: name, privacy: "secret", description: DESCRIPTION }
     })
 
     const ref = await ensureInviteTeam(client, "acme", METADATA, ACTOR)
     expect(ref.created).toBe(false)
-    expect(methodsOf(calls)).toEqual(["POST", "GET", "DELETE"])
+    expect(methodsOf(calls)).toEqual(["POST", "GET", "DELETE", "GET", "PATCH"])
     expect(calls[2].url).toBe(`/orgs/acme/teams/${name}/memberships/${ACTOR}`)
   })
 
@@ -152,6 +179,77 @@ describe("ensureInviteTeam", () => {
     expect(calls.filter(isMembershipDelete)).toEqual([])
   })
 
+  it("writes the email only AFTER the team is confirmed teacher-free", async () => {
+    const name = await inviteTeamName(METADATA.classroom, METADATA.email)
+    const bodies: { method: string; description?: string }[] = []
+    const { client } = makeClient((url, options) => {
+      const method = options?.method ?? "GET"
+      const body = options?.body as { description?: string } | undefined
+      if (method === "POST" || method === "PATCH") {
+        bodies.push({ method, description: body?.description })
+      }
+      if (method === "POST") {
+        return {
+          id: 7,
+          slug: name,
+          privacy: "secret",
+          description: body?.description,
+        }
+      }
+      if (method === "DELETE") return undefined
+      if (url.includes("/members")) return []
+      if (method === "PATCH") {
+        return {
+          id: 7,
+          slug: name,
+          privacy: "secret",
+          description: DESCRIPTION,
+        }
+      }
+      throw new Error(`unexpected ${url}`)
+    })
+
+    await ensureInviteTeam(client, "acme", METADATA, ACTOR)
+
+    // The create must not carry the invited address: if the run dies before the
+    // actor is dropped, the leftover team holds a teacher but NO email, so the
+    // reconcile can't misread it as an accepted invite.
+    expect(bodies[0].method).toBe("POST")
+    expect(bodies[0].description).not.toContain(METADATA.email)
+    // And whatever it does carry must not parse as an invite record.
+    expect(parseInviteDescription(bodies[0].description ?? null)).toBeNull()
+    // The real record lands last, after the membership DELETE.
+    expect(bodies.at(-1)).toMatchObject({
+      method: "PATCH",
+      description: DESCRIPTION,
+    })
+  })
+
+  // An adopted team may still carry a DIFFERENT teacher stranded by an earlier
+  // run, and dropping `actor` alone wouldn't clear them. Nobody has accepted yet
+  // (the invitation isn't sent until this returns), so any member is a stray.
+  it("fails closed when an ADOPTED team still has a member, writing no email", async () => {
+    const name = await inviteTeamName(METADATA.classroom, METADATA.email)
+    const patched: unknown[] = []
+    const { client } = makeClient((_url, options) => {
+      if (options?.method === "POST") throw apiError(422)
+      if (options?.method === "PATCH") {
+        patched.push(options.body)
+        return { id: 7, slug: name, privacy: "secret", description: "x" }
+      }
+      if (options?.method === "DELETE") return undefined
+      if (_url.includes("/members")) return [{ id: 99, login: "other-teacher" }]
+      return { id: 7, slug: name, privacy: "secret", description: "x" }
+    })
+
+    await expect(
+      ensureInviteTeam(client, "acme", METADATA, ACTOR),
+    ).rejects.toThrow(InviteTeamNotEmptyError)
+    expect(
+      patched.filter((b) => JSON.stringify(b).includes(METADATA.email)),
+    ).toEqual([])
+  })
+
   it("rethrows a non-422 create failure", async () => {
     const { client } = makeClient(() => {
       throw apiError(500)
@@ -161,56 +259,54 @@ describe("ensureInviteTeam", () => {
     ).rejects.toMatchObject({ status: 500 })
   })
 
-  // A team we created but couldn't clear must not survive: it holds a student's
-  // email AND a teacher, which the reconcile would read as "the teacher
-  // accepted this invite" and write onto the roster.
-  it("deletes the team it created when the acting teacher can't be dropped", async () => {
+  // A run that dies between the create and the membership drop is unavoidable
+  // (GitHub adds the creator during the create itself), so the leftover team is
+  // made harmless rather than cleaned up: it holds a teacher but no email, and
+  // no parseable record, so the reconcile skips it entirely.
+  it("leaves no email behind when the acting teacher can't be dropped", async () => {
     const name = await inviteTeamName(METADATA.classroom, METADATA.email)
-    const { client, calls } = makeClient((url, options) => {
+    const descriptions: (string | undefined)[] = []
+    const { client } = makeClient((url, options) => {
+      const body = options?.body as { description?: string } | undefined
       if (options?.method === "POST") {
+        descriptions.push(body?.description)
         return {
           id: 7,
           slug: name,
           privacy: "secret",
-          description: DESCRIPTION,
+          description: body?.description,
         }
       }
+      if (options?.method === "PATCH") descriptions.push(body?.description)
       if (options?.method === "DELETE" && url.includes("/memberships/")) {
         throw apiError(500)
       }
-      if (options?.method === "DELETE") return undefined
       throw new Error(`unexpected ${url}`)
     })
 
     await expect(
       ensureInviteTeam(client, "acme", METADATA, ACTOR),
     ).rejects.toMatchObject({ status: 500 })
-    expect(calls.at(-1)).toMatchObject({
-      url: `/orgs/acme/teams/${name}`,
-      options: { method: "DELETE" },
-    })
+    for (const d of descriptions) expect(d ?? "").not.toContain(METADATA.email)
   })
 
-  // The mirror case: an ADOPTED team may hold an earlier accepted invite's
-  // still-unrecovered record, so a failure must never delete it.
-  it("keeps an ADOPTED team when the acting teacher can't be dropped", async () => {
+  // The membership read-back is the proof, so a degraded read must not pass as
+  // "empty" and let the email be written onto a team holding a teacher.
+  it("fails closed when the membership read-back fails", async () => {
     const name = await inviteTeamName(METADATA.classroom, METADATA.email)
     const { client, calls } = makeClient((url, options) => {
-      if (options?.method === "POST") throw apiError(422)
-      if (options?.method === "DELETE" && url.includes("/memberships/")) {
-        throw apiError(500)
+      if (options?.method === "POST") {
+        return { id: 7, slug: name, privacy: "secret", description: "x" }
       }
-      return { id: 7, slug: name, privacy: "secret", description: DESCRIPTION }
+      if (options?.method === "DELETE") return undefined
+      if (url.includes("/members")) throw apiError(500)
+      throw new Error(`unexpected ${url}`)
     })
 
     await expect(
       ensureInviteTeam(client, "acme", METADATA, ACTOR),
     ).rejects.toMatchObject({ status: 500 })
-    expect(
-      calls.filter(
-        (c) => c.options?.method === "DELETE" && !isMembershipDelete(c),
-      ),
-    ).toEqual([])
+    expect(calls.filter((c) => c.options?.method === "PATCH")).toEqual([])
   })
 })
 

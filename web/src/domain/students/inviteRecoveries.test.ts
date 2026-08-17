@@ -51,10 +51,10 @@ const rateLimitError = () =>
     rateLimit: emptyRateLimit,
   })
 
-// Build a valid invite-team state for (classroom, email) with the given
-// regular-role members (readInviteTeam already excludes maintainers, i.e. the
-// auto-added owner), so the description's email hashes back to the slug.
-// createdAt defaults to "just now" (never a GC candidate).
+// Build a valid invite-team state for (classroom, email) with the given members
+// (readInviteTeam lists EVERY role — the team is left teacher-free at creation,
+// so whoever is on it accepted), so the description's email hashes back to the
+// slug. createdAt defaults to "just now" (never a GC candidate).
 async function inviteState(
   classroom: string,
   email: string,
