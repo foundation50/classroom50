@@ -79,7 +79,7 @@ describe("aggregateOrgMembers", () => {
     expect(rows[0].username).toBe("teacher")
   })
 
-  it("dedupes an email-only student by email and marks them not-a-member", () => {
+  it("dedupes an email-only student by email across rosters", () => {
     const rows = aggregateOrgMembers(
       [],
       [
@@ -88,7 +88,9 @@ describe("aggregateOrgMembers", () => {
       ],
     )
     expect(rows).toHaveLength(1)
-    expect(rows[0].classification).toBe("on-roster-not-member")
+    // An identity-less row is an unaccepted email invite, not a departed member.
+    expect(rows[0].classification).toBe("invitation-pending")
+    expect(rows[0].isMember).toBe(false)
     expect(rows[0].classrooms).toHaveLength(2)
   })
 
@@ -235,5 +237,36 @@ describe("aggregateOrgMembers — team-verified membership / unprovisioned", () 
     expect(rows[0].unprovisionedClassrooms).toEqual(["cs201"])
     const cs201 = rows[0].classrooms.find((c) => c.classroom === "cs201")
     expect(cs201?.state).toBe("unprovisioned")
+  })
+
+  it("classifies an unaccepted email invite as pending, not a discrepancy", () => {
+    // The row an email invite writes: an address and nothing else. It is NOT a
+    // person who left the org — there is no account yet — so counting it in the
+    // "on a roster but not a member" tally cries wolf on a healthy invitation.
+    const rows = aggregateOrgMembers(
+      [],
+      [roster("cs101", [student({ email: "ada@uni.edu", first_name: "Ada" })])],
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].classification).toBe("invitation-pending")
+    expect(rows[0].isMember).toBe(false)
+  })
+
+  it("sorts a pending invitation below healthy members", () => {
+    // A pending row is informational; ordering it above members would bury the
+    // rows a teacher can actually act on.
+    const rows = aggregateOrgMembers(
+      [member(42, "alice")],
+      [
+        roster("cs101", [
+          student({ email: "ada@uni.edu" }),
+          student({ username: "alice", github_id: "42" }),
+        ]),
+      ],
+    )
+    expect(rows.map((r) => r.classification)).toEqual([
+      "member-on-roster",
+      "invitation-pending",
+    ])
   })
 })

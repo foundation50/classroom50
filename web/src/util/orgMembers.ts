@@ -23,10 +23,17 @@ export type ClassroomAccess = {
 //  - member-on-roster: a healthy member on >=1 roster.
 //  - on-roster-not-member: the target discrepancy — on a roster but no longer
 //    (or never) an org member.
+//  - invitation-pending: on a roster with NO GitHub identity at all, which is
+//    what an unaccepted email invite's row looks like. Not a discrepancy: the
+//    invitation is live and the account simply doesn't exist here yet, so it must
+//    not land in the count that asks the teacher to act.
 //  - member-no-roster: an org member on no roster (e.g., co-teacher, or a
 //    leftover after an unenroll).
 export type MemberClassification =
-  "member-on-roster" | "on-roster-not-member" | "member-no-roster"
+  | "member-on-roster"
+  | "on-roster-not-member"
+  | "invitation-pending"
+  | "member-no-roster"
 
 export type OrgMemberRow = {
   // Stable identity, mirroring studentKey (github_id || username || email).
@@ -172,7 +179,14 @@ export function aggregateOrgMembers(
       email: acc.email,
       isMember,
       classrooms,
-      classification: isMember ? "member-on-roster" : "on-roster-not-member",
+      // An identity-less roster row is an unaccepted email invite, not a person
+      // who left the org — there is no account to have left. Classify it as
+      // pending so it stays visible without being counted as a discrepancy.
+      classification: isMember
+        ? "member-on-roster"
+        : acc.username || acc.github_id
+          ? "on-roster-not-member"
+          : "invitation-pending",
       unprovisionedClassrooms,
     })
   }
@@ -195,10 +209,13 @@ export function aggregateOrgMembers(
   }
 
   // Discrepancies first (the actionable rows), then members, then by login/name.
+  // A pending invitation sorts after healthy members: it is informational, and
+  // putting it above them would bury the rows a teacher can act on.
   const order: Record<MemberClassification, number> = {
     "on-roster-not-member": 0,
     "member-on-roster": 1,
-    "member-no-roster": 2,
+    "invitation-pending": 2,
+    "member-no-roster": 3,
   }
   rows.sort((a, b) => {
     const byClass = order[a.classification] - order[b.classification]

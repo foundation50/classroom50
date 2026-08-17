@@ -3004,6 +3004,7 @@
     "classroomCount_one": "{{count}} classroom",
     "classroomCount_other": "{{count}} classrooms",
     "badgeNotMember": "Not an org member",
+    "badgeInvitePending": "Invitation pending",
     "badgeNoClassroom": "No classroom",
     "badgeMember": "Member",
     "badgeOwner": "Owner",
@@ -3025,6 +3026,7 @@
     "inviteToOrg": "Invite to organization",
     "confirmInviteBody": "Send an organization invitation to {{label}}? The invite is sent to their GitHub account by id and they'll rejoin {{org}} with their prior classroom access once they accept.",
     "notMemberNoId": "This student is on a roster but is not an organization member. They have no GitHub id on file yet, so invite them from their classroom's Roster page.",
+    "invitePendingNotice": "This student was invited by email and hasn't accepted yet, so they have no GitHub account on file. Nothing is wrong — their details fill in automatically when they join. You can cancel the invitation from their classroom's Roster page.",
     "confirmUnenroll_one": "{{label}} will first be unenrolled from <count>{{count}} classroom</count> ({{classrooms}}), then removed from the <org>{{org}}</org> organization. Their assignment repositories are not deleted.",
     "confirmUnenroll_other": "{{label}} will first be unenrolled from <count>{{count}} classrooms</count> ({{classrooms}}), then removed from the <org>{{org}}</org> organization. Their assignment repositories are not deleted.",
     "confirmRemove": "{{label}} will be removed from the <org>{{org}}</org> organization.",
@@ -3083,6 +3085,7 @@
         "already-on-classroom": "Already on this classroom.",
         "not-on-classroom": "Not on this classroom.",
         "already-removed": "Already removed from this classroom.",
+        "pending-email-invite": "Invited by email and not accepted yet — cancel the invitation from the classroom's Roster page instead.",
         "archived": "Classroom is archived — unarchive it to change membership.",
         "resolve-failed": "Couldn't resolve their current GitHub account."
       }
