@@ -743,6 +743,8 @@
     "malformedCsv": "This file couldn't be parsed as CSV.",
     "unresolvedIdRows_one": "{{count}} row was skipped because its github_id doesn't match a GitHub account. Fix the id or remove the column, then re-upload — we don't fall back to the username, because that could invite the wrong person.",
     "unresolvedIdRows_other": "{{count}} rows were skipped because their github_id doesn't match a GitHub account. Fix the ids or remove the column, then re-upload — we don't fall back to the username, because that could invite the wrong person.",
+    "idLookupFailedRows_one": "{{count}} row was skipped because GitHub couldn't be reached to look up its github_id. Try again in a moment — we don't fall back to the username, because that could invite the wrong person.",
+    "idLookupFailedRows_other": "{{count}} rows were skipped because GitHub couldn't be reached to look up their github_id. Try again in a moment — we don't fall back to the username, because that could invite the wrong person.",
     "droppedRows_one": "{{count}} row was skipped because it had no usable GitHub username or email address.",
     "droppedRows_other": "{{count}} rows were skipped because they had no usable GitHub username or email address.",
     "previewInviteByEmail": "Invite by email",

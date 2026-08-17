@@ -115,7 +115,7 @@ describe("resolveImportIdentities", () => {
     expect(res.unusable[0]?.reason).toBe("unresolved-id")
   })
 
-  it("stops resolving on a rate limit and reports the rest", async () => {
+  it("stops resolving on a rate limit and reports the rest as a lookup failure", async () => {
     getUserById.mockClear()
     getUserById.mockRejectedValueOnce(rateLimitError())
     const res = await resolveImportIdentities(
@@ -125,7 +125,25 @@ describe("resolveImportIdentities", () => {
     )
     expect(getUserById).toHaveBeenCalledTimes(1)
     expect(res.rows).toEqual([])
-    expect(res.unusable).toHaveLength(2)
+    // A rate limit says nothing about whether the accounts exist, so these must
+    // NOT be reported as bad ids — that would send the teacher to edit a fine file.
+    expect(res.unusable.map((u) => u.reason)).toEqual([
+      "id-lookup-failed",
+      "id-lookup-failed",
+    ])
+  })
+
+  it("reports a transient server error as a lookup failure, not a bad id", async () => {
+    getUserById.mockClear()
+    getUserById.mockRejectedValueOnce(apiError(500))
+    const res = await resolveImportIdentities(
+      client,
+      [row({ githubId: 7, username: "someone-else" })],
+      new Map(),
+    )
+    expect(res.unusable[0]?.reason).toBe("id-lookup-failed")
+    // Still fails closed: the username cell is never substituted.
+    expect(res.rows).toEqual([])
   })
 
   it("caps the network fallback and reports the rows beyond it", async () => {
@@ -141,7 +159,12 @@ describe("resolveImportIdentities", () => {
     )
     expect(getUserById).toHaveBeenCalledTimes(ID_RESOLUTION_CAP)
     expect(res.rows).toHaveLength(ID_RESOLUTION_CAP)
-    expect(res.unusable).toHaveLength(3)
+    // Never asked, so never "wrong" — the teacher should retry, not edit.
+    expect(res.unusable.map((u) => u.reason)).toEqual([
+      "id-lookup-failed",
+      "id-lookup-failed",
+      "id-lookup-failed",
+    ])
     getUserById.mockReset()
   })
 

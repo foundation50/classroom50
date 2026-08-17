@@ -112,9 +112,11 @@ const UploadRoster = ({
   const [fileText, setFileText] = useState("")
   const [uploadKind, setUploadKind] = useState<UploadKind>(DEFAULT_UPLOAD_KIND)
   // Rows as parsed, before identity resolution, plus the lines the parse could
-  // not address to anyone.
+  // not address to anyone. `parseId` increments on every parse so the resolution
+  // effect below re-runs even when a re-parse yields identical identity cells.
   const [parsedRows, setParsedRows] = useState<ParsedImportRow[]>([])
   const [droppedRows, setDroppedRows] = useState<DroppedRow[]>([])
+  const [parseId, setParseId] = useState(0)
   // Rows with a resolved identity (account or email), and the ones a github_id
   // made unusable. Null until resolution runs.
   const [resolved, setResolved] = useState<ResolvedImportRow[] | null>(null)
@@ -143,10 +145,10 @@ const UploadRoster = ({
     {},
   )
   // The role-independent GitHub membership + stored-roster read, fetched ONCE
-  // per uploaded file and tagged with the rowsKey it was fetched for. Null
+  // per uploaded file and tagged with the parseId it was fetched for. Null
   // until the read resolves.
   const [preflightContext, setPreflightContext] = useState<
-    (RosterUploadContext & { rowsKey: string }) | null
+    (RosterUploadContext & { parseId: number }) | null
   >(null)
   const [preflighting, setPreflighting] = useState(false)
   const [preflightError, setPreflightError] = useState<string | null>(null)
@@ -231,31 +233,28 @@ const UploadRoster = ({
   }
 
   // Resolve identities and read the role-independent membership + stored-roster
-  // context ONCE per uploaded file. A stale-response guard drops a slow read
-  // superseded by a new file. Both are tagged with the rowsKey they ran for so
-  // the derived classification below can reject leftovers from a prior file
-  // (this effect runs post-commit, after the new rows are already set).
+  // context ONCE per parse. A stale-response guard drops a slow read superseded
+  // by a new file. Both are tagged with the parse they ran for so the derived
+  // classification below can reject leftovers from a prior file (this effect runs
+  // post-commit, after the new rows are already set).
   //
   // Identity resolution has to happen here rather than in the parser: trading a
   // github_id for its current login is a network read, and the local org-member
   // map that usually satisfies it comes from this very context.
+  //
+  // Keyed on parseId, not on the rows' content: a re-parse that yields the same
+  // identity cells (switching format on a headed CSV, or re-uploading a file that
+  // only corrected a name) still has to re-resolve, or the cleared rows would
+  // never come back and the preview would sit empty with the button disabled.
   const preflightToken = useRef(0)
-  const rowsKey = parsedRows
-    .map((r) => {
-      const { githubId, malformedGithubId, username, email } = r.identity
-      return `${githubId ?? malformedGithubId ?? ""}|${username ?? ""}|${email ?? ""}`
-    })
-    .sort()
-    .join("~")
   useEffect(() => {
     if (phase !== "preview" || parsedRows.length === 0) return
     const token = ++preflightToken.current
-    const fetchedFor = rowsKey
+    const fetchedFor = parseId
     /* eslint-disable react-hooks/set-state-in-effect */
     setPreflighting(true)
     setPreflightError(null)
     setPreflightContext(null)
-    setResolved(null)
     /* eslint-enable react-hooks/set-state-in-effect */
     void resolveRosterUploadContext(client, { org, classroom })
       .then(async (context) => {
@@ -276,7 +275,7 @@ const UploadRoster = ({
             }),
           ),
         )
-        setPreflightContext({ rowsKey: fetchedFor, ...context })
+        setPreflightContext({ parseId: fetchedFor, ...context })
       })
       .catch((err) => {
         if (preflightToken.current !== token) return
@@ -291,7 +290,7 @@ const UploadRoster = ({
         if (preflightToken.current === token) setPreflighting(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, rowsKey, org, classroom])
+  }, [phase, parseId, org, classroom])
 
   // The resolved rows split by identity kind. Account rows drive the preflight
   // classification (which is username-keyed by design); email rows never enter it
@@ -313,7 +312,7 @@ const UploadRoster = ({
   // file must not classify the new rows (the fetch effect that nulls it runs
   // after this render).
   const preflight = useMemo<PreflightResult | null>(() => {
-    if (!preflightContext || preflightContext.rowsKey !== rowsKey) return null
+    if (!preflightContext || preflightContext.parseId !== parseId) return null
     const preflightRows = accountRows.map((r) => {
       const identity = r.identity as Extract<
         ResolvedImportRow["identity"],
@@ -336,7 +335,7 @@ const UploadRoster = ({
       preflightContext.lookup,
       preflightContext.storedByIdentity,
     )
-  }, [preflightContext, rowsKey, accountRows, rolesByUser])
+  }, [preflightContext, parseId, accountRows, rolesByUser])
 
   // A role edit changes the plan (a team move / owner grant may appear or
   // vanish), so any prior confirmation is stale — clear the checkboxes when the
@@ -527,6 +526,7 @@ const UploadRoster = ({
     setRoleChangesConfirmed(false)
     setMetadataConfirmed(false)
     setMismatchConfirmed(false)
+    setParseId((n) => n + 1)
     if (kind === "email-list") {
       const parsed = parseEmailInviteFile(text)
       setEmails(parsed.valid.map((r) => r.email))
@@ -911,12 +911,26 @@ const UploadRoster = ({
 
             {/* Rows we refuse to act on. An unresolvable github_id fails closed
                 rather than falling back to the row's username cell, which would
-                target whoever holds that login today. */}
-            {unusableRows.length > 0 ? (
+                target whoever holds that login today. A lookup we couldn't
+                complete is reported separately — that's a retry, not a bad file. */}
+            {unusableRows.some((r) => r.reason === "unresolved-id") ? (
               <Alert tone="warning" className="mb-4">
                 <span>
                   {t("students.unresolvedIdRows", {
-                    count: unusableRows.length,
+                    count: unusableRows.filter(
+                      (r) => r.reason === "unresolved-id",
+                    ).length,
+                  })}
+                </span>
+              </Alert>
+            ) : null}
+            {unusableRows.some((r) => r.reason === "id-lookup-failed") ? (
+              <Alert tone="warning" className="mb-4">
+                <span>
+                  {t("students.idLookupFailedRows", {
+                    count: unusableRows.filter(
+                      (r) => r.reason === "id-lookup-failed",
+                    ).length,
                   })}
                 </span>
               </Alert>
@@ -937,6 +951,10 @@ const UploadRoster = ({
               preflighting || !preflight || showDetails ? (
                 <RosterPreviewTable
                   rows={resolvedRows}
+                  // Identities aren't resolved yet while loading, so drive the
+                  // skeleton's row count off the parsed rows — otherwise the
+                  // placeholder renders as an empty header-only table.
+                  skeletonRowCount={parsedRows.length}
                   rolesByUser={rolesByUser}
                   changes={rowChanges}
                   roleChanges={roleChangeByUser}

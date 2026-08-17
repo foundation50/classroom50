@@ -139,6 +139,7 @@ export const RosterPreviewTable = ({
   roleChanges = {},
   identityChanges = {},
   loading = false,
+  skeletonRowCount,
 }: {
   rows: ResolvedImportRow[]
   rolesByUser: Record<string, ClassroomRole>
@@ -152,8 +153,14 @@ export const RosterPreviewTable = ({
   // The identity column is change-bearing too now (a github_id can correct a
   // stale login), so it skeletons with the rest.
   loading?: boolean
+  // How many placeholder rows to draw while loading. Identities aren't resolved
+  // yet at that point, so `rows` is empty and the caller passes the parsed count.
+  skeletonRowCount?: number
 }) => {
   const { t } = useTranslation()
+  const skeletonRows = Array.from({
+    length: skeletonRowCount ?? rows.length,
+  })
   return (
     <div className="max-h-80 overflow-auto rounded-box border border-base-300">
       <table className="table table-sm" aria-busy={loading}>
@@ -169,9 +176,9 @@ export const RosterPreviewTable = ({
         </thead>
         <tbody>
           {loading
-            ? rows.map((row, index) => (
+            ? skeletonRows.map((_, index) => (
                 // Decorative loading placeholder — hidden from assistive tech.
-                <tr key={identityKey(row.identity)} aria-hidden="true">
+                <tr key={`skeleton-${index}`} aria-hidden="true">
                   <td>{index + 1}</td>
                   <SkeletonCell bar="h-4 w-24" />
                   <SkeletonCell bar="h-4 w-28" />

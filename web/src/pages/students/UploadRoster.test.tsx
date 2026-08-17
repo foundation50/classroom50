@@ -609,6 +609,29 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
     await user.click(confirm)
     await waitFor(() => expect(button.disabled).toBe(false))
   })
+
+  it("re-resolves after a re-parse that yields identical identity cells", async () => {
+    const user = userEvent.setup()
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    // First upload resolves and previews.
+    await uploadFile(user, file("roster.csv", "username,section\nada,Lab 1\n"))
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /noChangesToApply|importMembers/ }),
+      ).toBeTruthy(),
+    )
+
+    // Re-upload the SAME identity (ada) with only the section changed. The
+    // identity set is byte-identical, so an effect keyed on row content alone
+    // would clear the resolved rows and never recompute them — leaving an empty
+    // preview with no way forward.
+    await uploadFile(user, file("roster.csv", "username,section\nada,Lab 9\n"))
+    await waitFor(() => expect(screen.getAllByText("ada").length).toBe(1))
+    expect(screen.queryByText("students.noUsableRows")).toBeNull()
+  })
 })
 
 describe("UploadRoster identity mismatch gate", () => {

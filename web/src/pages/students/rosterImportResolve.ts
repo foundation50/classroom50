@@ -42,10 +42,13 @@ export type ResolvedImportRow = {
 }
 
 // A row excluded from the import, with enough detail for the preview to say why.
-// `unresolved-id` is the fail-closed case: the file carried a github_id we could
-// not turn into a login, so we refuse to act on the row at all.
+// `unresolved-id` means the file's github_id is not usable — malformed, or no
+// such account. `id-lookup-failed` means we could not ASK: a rate limit, a 5xx,
+// an SSO-gated 403. Both fail closed (the row is never re-keyed to its username
+// cell), but they need different advice: one is a file to fix, the other is a
+// retry.
 export type UnusableRow = {
-  reason: "unresolved-id" | "no-identity"
+  reason: "unresolved-id" | "id-lookup-failed" | "no-identity"
   githubId?: string
   username?: string
 }
@@ -85,7 +88,11 @@ export async function resolveImportIdentities(
   loginById: ReadonlyMap<number, string>,
 ): Promise<ResolvedImportFile> {
   const resolvedLogins = new Map<number, string>(loginById)
-  const unresolvableIds = new Set<number>()
+  // Ids GitHub told us don't exist, vs. ids we couldn't ask about (rate limit,
+  // 5xx, SSO). Both keep their row out of the import, but only the first is the
+  // teacher's file to fix.
+  const missingIds = new Set<number>()
+  const unaskedIds = new Set<number>()
 
   // Only ids absent from the local map cost a request. Deduped first so a file
   // listing the same id twice spends one call, and capped so a large import from
@@ -100,22 +107,28 @@ export async function resolveImportIdentities(
     ),
   ]
 
-  let rateLimited = false
-  for (const id of unknownIds.slice(0, ID_RESOLUTION_CAP)) {
-    if (rateLimited) break
+  let stopped = false
+  for (const [index, id] of unknownIds.entries()) {
+    // Past the cap, or after a rate limit, we stop asking — those ids are
+    // "unasked", not "missing".
+    if (stopped || index >= ID_RESOLUTION_CAP) {
+      unaskedIds.add(id)
+      continue
+    }
     try {
       const user = await getUserById(client, id)
       resolvedLogins.set(id, user.login)
     } catch (err) {
-      if (err instanceof GitHubAPIError && err.isRateLimited) {
-        // Stop issuing requests; every remaining id stays unresolved and its row
-        // is reported rather than guessed at.
-        rateLimited = true
-        log.warn("id resolution rate limited", { id })
-      } else {
-        unresolvableIds.add(id)
-        log.debug("id resolution failed", { id, err })
+      if (err instanceof GitHubAPIError && err.status === 404) {
+        missingIds.add(id)
+        continue
       }
+      // Anything else (rate limit, 5xx, SSO-gated 403) says nothing about whether
+      // the account exists, so don't tell the teacher their id is wrong. A rate
+      // limit also means every remaining lookup would fail, so stop asking.
+      unaskedIds.add(id)
+      if (err instanceof GitHubAPIError && err.isRateLimited) stopped = true
+      log.warn("id resolution failed", { id, err })
     }
   }
 
@@ -149,7 +162,12 @@ export async function resolveImportIdentities(
       const login = resolvedLogins.get(githubId)
       if (!login) {
         unusable.push({
-          reason: "unresolved-id",
+          // A 404 means the file's id is wrong; anything else means we never got
+          // an answer, so don't tell the teacher to fix a file that may be fine.
+          reason:
+            unaskedIds.has(githubId) && !missingIds.has(githubId)
+              ? "id-lookup-failed"
+              : "unresolved-id",
           githubId: String(githubId),
           username,
         })
