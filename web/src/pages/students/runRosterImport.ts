@@ -195,8 +195,8 @@ export async function runRosterImport(
   //    newly-added rows): inviteRosterStudents no-ops anyone already
   //    active/pending, so a re-run after a rate limit still re-invites a student
   //    whose first invite was deferred (their CSV row already exists, so they'd
-  //    otherwise be skipped as a duplicate and, since CSV-only rows don't
-  //    render, silently lost). Thread the github_id — the one the preview
+  //    otherwise be skipped as a duplicate and left sitting as a needs-attention
+  //    row with no invitation). Thread the github_id — the one the preview
   //    resolved, else the one the enroll pass just captured — so the invite
   //    targets the immutable account rather than re-resolving a possibly
   //    recycled/renamed login. Their roster.csv row enriches the pending row;

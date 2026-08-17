@@ -11,10 +11,10 @@
 //
 // There is deliberately no content classifier: Roster CSV is ALWAYS the kind an
 // upload opens as, because its parser already handles all three shapes. Guessing
-// `email-list` from content would route a bare address list to the email-only
-// branch, where the roster parser's per-line detection never runs and the file's
-// name/section columns are discarded. The other two kinds are reachable only by
-// the teacher's explicit override.
+// `email-list` from content would read a bare address list through the flat
+// address reader, where per-line shape detection never runs and any columns the
+// file carried are discarded. The other two kinds are reachable only by the
+// teacher's explicit override.
 export type UploadKind = "roster-csv" | "username-list" | "email-list"
 
 export const DEFAULT_UPLOAD_KIND: UploadKind = "roster-csv"

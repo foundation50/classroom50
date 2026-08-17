@@ -35,8 +35,9 @@ self-linking.
 **Pending row** — A `roster.csv` row for someone invited by email who hasn't
 accepted yet. It holds the invited address and role, with no username or
 `github_id`, because GitHub offers no way to look up an account from an email
-address. Accepting fills in the account on the next roster sync; a cancelled or
-expired invitation removes the row instead.
+address. Accepting fills in the account on the next roster sync; cancelling the
+invitation removes the row immediately, and an expired one is cleared by the next
+sync.
 
 **Invite team** — A `secret` GitHub team, named `invite-<hash>`, that holds one
 invited address until that person joins. It is how an email invitation is

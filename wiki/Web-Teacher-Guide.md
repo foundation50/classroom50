@@ -426,8 +426,9 @@ Here `octocat` is found by id (even after a rename), `hubot` by username, and
 > A row identified by account (`github_id` or `username`) is both invited **and**
 > added to the roster. A row identified only by an email address is invited by
 > email, and the address is recorded as a pending roster row. That row is matched
-> to the student's GitHub account when they accept; if the invitation is
-> cancelled or expires, the row is removed again on the next roster sync. Keep in
+> to the student's GitHub account when they accept; if you cancel the invitation
+> the row is removed with it, and an expired one is cleared by the next roster
+> sync. Keep in
 > mind the recorded address is the one **you invited** — not necessarily the email
 > on the student's GitHub account. A name and section supplied in the CSV are kept
 > on the pending row, so they're already there when the student joins — and you
