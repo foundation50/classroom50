@@ -399,8 +399,16 @@ func collectExtraColumns(rows []RosterRow) []string {
 	return ordered
 }
 
-// UpsertRosterRow replaces by Username (case-insensitive) or appends. Position
-// preserved on replace. Returns the slice and whether a row was replaced.
+// UpsertRosterRow replaces by Username (case-insensitive), else claims a pending
+// email-invite row with the same email, else appends. Position preserved on
+// replace. Returns the slice and whether a row was replaced.
+//
+// The email fallback finishes what an email invite started: that row carries
+// only the invited address until the student accepts, so adding them by username
+// would otherwise leave a second row for the same person. It is deliberately
+// narrow — only a row with NO username and NO usable github_id is claimable, so
+// two students sharing a contact email can never overwrite each other, and a
+// username match always wins.
 //
 // On replace, the existing row's Extra is carried over UNLESS the incoming row
 // supplies its own — so a CLI `roster add` (canonical fields only) never wipes
@@ -408,20 +416,38 @@ func collectExtraColumns(rows []RosterRow) []string {
 // Role (a caller that doesn't know the team-derived role) preserves the
 // existing recorded role rather than blanking it.
 func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
+	claim := func(i int) ([]RosterRow, bool) {
+		if row.Extra == nil && rows[i].Extra != nil {
+			row.Extra = rows[i].Extra
+			row.ExtraOrder = rows[i].ExtraOrder
+		}
+		if row.Role == "" && rows[i].Role != "" {
+			row.Role = rows[i].Role
+		}
+		rows[i] = row
+		return rows, true
+	}
 	for i := range rows {
 		if rows[i].isRaw() {
 			continue // preserved malformed row: no usable username to match
 		}
-		if strings.EqualFold(rows[i].Username, row.Username) {
-			if row.Extra == nil && rows[i].Extra != nil {
-				row.Extra = rows[i].Extra
-				row.ExtraOrder = rows[i].ExtraOrder
+		// Guard the empty-vs-empty case: an incoming row with no username must
+		// not match an identity-less pending row just because both are blank.
+		if row.Username != "" && strings.EqualFold(rows[i].Username, row.Username) {
+			return claim(i)
+		}
+	}
+	// No username match: claim a pending email-invite row for the same address.
+	// Only an identity-less row qualifies (see the doc comment), and a blank
+	// incoming email matches nothing.
+	if row.Email != "" {
+		for i := range rows {
+			if rows[i].isRaw() || rows[i].Username != "" || rows[i].GitHubID != 0 {
+				continue
 			}
-			if row.Role == "" && rows[i].Role != "" {
-				row.Role = rows[i].Role
+			if strings.EqualFold(strings.TrimSpace(rows[i].Email), strings.TrimSpace(row.Email)) {
+				return claim(i)
 			}
-			rows[i] = row
-			return rows, true
 		}
 	}
 	return append(rows, row), false

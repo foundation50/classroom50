@@ -153,6 +153,89 @@ func TestParseRoster_UnusableGitHubIDIsUnresolvedNotFatal(t *testing.T) {
 // reader must keep it, or `roster list` fails for the whole classroom while any
 // invite is outstanding. The keep-rule mirrors the web's parseRosterCsv filter:
 // a row needs at least one of username, github_id, or email.
+// A student invited by email has a pending roster row carrying only that
+// address. When the teacher later adds them by username with the same email,
+// that pending row must be claimed rather than left beside a second row for the
+// same person — mirroring the web reconcile's email-match fold.
+func TestUpsertRosterRow_ClaimsPendingEmailRow(t *testing.T) {
+	rows := []RosterRow{
+		{Username: "alice", Email: "alice@x.edu", GitHubID: 1},
+		{Email: "pending@x.edu", Role: "student"},
+	}
+	incoming := RosterRow{Username: "bob", Email: "Pending@X.edu", GitHubID: 2}
+
+	updated, replaced := UpsertRosterRow(rows, incoming)
+	if !replaced {
+		t.Fatal("replaced = false, want true (the pending row was claimed)")
+	}
+	if len(updated) != 2 {
+		t.Fatalf("rows = %d, want 2 (claimed in place, not appended)", len(updated))
+	}
+	claimed := updated[1]
+	if claimed.Username != "bob" || claimed.GitHubID != 2 {
+		t.Fatalf("identity = %q/%d, want bob/2", claimed.Username, claimed.GitHubID)
+	}
+	// The pending row's recorded role survives, like the username-match path.
+	if claimed.Role != "student" {
+		t.Fatalf("Role = %q, want student (preserved from the pending row)", claimed.Role)
+	}
+}
+
+// The email fallback must never touch a row that already identifies someone:
+// two students can share a contact email (a shared family address), so an
+// email match on an enrolled row would rewrite the wrong person's identity.
+func TestUpsertRosterRow_EmailMatchNeverClaimsAnIdentifiedRow(t *testing.T) {
+	rows := []RosterRow{{Username: "alice", Email: "shared@x.edu", GitHubID: 1}}
+	incoming := RosterRow{Username: "bob", Email: "shared@x.edu", GitHubID: 2}
+
+	updated, replaced := UpsertRosterRow(rows, incoming)
+	if replaced {
+		t.Fatal("replaced = true, want false: an identified row must not be claimed by email")
+	}
+	if len(updated) != 2 {
+		t.Fatalf("rows = %d, want 2 (bob appended as his own row)", len(updated))
+	}
+	if updated[0].Username != "alice" || updated[0].GitHubID != 1 {
+		t.Fatalf("alice's row was modified: %+v", updated[0])
+	}
+}
+
+// A username match wins over an email match, so re-adding an enrolled student
+// updates their own row even when an unrelated pending row shares the email.
+func TestUpsertRosterRow_UsernameMatchWinsOverEmail(t *testing.T) {
+	rows := []RosterRow{
+		{Email: "dup@x.edu", Role: "student"},
+		{Username: "alice", GitHubID: 1},
+	}
+	incoming := RosterRow{Username: "ALICE", Email: "dup@x.edu", GitHubID: 1}
+
+	updated, replaced := UpsertRosterRow(rows, incoming)
+	if !replaced || len(updated) != 2 {
+		t.Fatalf("replaced=%v rows=%d, want true/2", replaced, len(updated))
+	}
+	if updated[0].Username != "" {
+		t.Fatalf("the pending row was claimed instead of alice's own row: %+v", updated[0])
+	}
+	if updated[1].Username != "ALICE" {
+		t.Fatalf("alice's row = %+v, want the incoming row", updated[1])
+	}
+}
+
+// An incoming row with no email must not claim an identity-less row by matching
+// "" == "" — that would hijack an unrelated pending invite.
+func TestUpsertRosterRow_EmptyEmailClaimsNothing(t *testing.T) {
+	rows := []RosterRow{{Email: "pending@x.edu", Role: "student"}}
+	incoming := RosterRow{Username: "bob", GitHubID: 2}
+
+	updated, replaced := UpsertRosterRow(rows, incoming)
+	if replaced {
+		t.Fatal("replaced = true, want false: a blank email matches nothing")
+	}
+	if len(updated) != 2 || updated[0].Email != "pending@x.edu" {
+		t.Fatalf("pending row disturbed: %+v", updated)
+	}
+}
+
 func TestParseRoster_KeepsEmailOnlyPendingRow(t *testing.T) {
 	in := "username,first_name,last_name,email,section,github_id,role\n" +
 		"alice,Alice,A,alice@x.edu,s,1,student\n" +
