@@ -11,9 +11,9 @@ import type { ConcernId } from "@/orgPolicy/audit"
 const renameConfigRepoToMain = vi.fn<(...args: unknown[]) => Promise<void>>(
   () => Promise.resolve(),
 )
-const cancelOrgInvitation = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
-  Promise.resolve(),
-)
+const cancelOrgInvitation = vi.fn<
+  (...args: unknown[]) => Promise<{ cancelled: boolean }>
+>(() => Promise.resolve({ cancelled: true }))
 const retireEmailInvite = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
   Promise.resolve(),
 )
@@ -158,6 +158,22 @@ describe("useCancelClassroomInvite", () => {
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: githubKeys.teamMembers(ORG, TEAM),
     })
+  })
+
+  it("does NOT retire anything when the invitation id was already stale", async () => {
+    // A 404 (cancelled: false) does not mean the person has no live invitation —
+    // resendOrgInvitation recreates before cancelling, so an unrefreshed view
+    // holds an old id while a fresh invite is still pending. Dropping the row
+    // there would delete the invite-time details of someone who can still accept.
+    cancelOrgInvitation.mockResolvedValueOnce({ cancelled: false })
+    const queryClient = freshClient()
+    const { result } = renderHook(
+      () => useCancelClassroomInvite(ORG, CLASSROOM, TEAM),
+      { wrapper: wrapperWith(queryClient) },
+    )
+    result.current.mutate({ invitationId: 99, inviteEmail: "ta@x.edu" })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(retireEmailInvite).not.toHaveBeenCalled()
   })
 
   it("retires the invite team AND its pending roster row when cancelling an email-only invite", async () => {

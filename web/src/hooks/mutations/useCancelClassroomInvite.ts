@@ -31,7 +31,12 @@ export function useCancelClassroomInvite(
         org,
         invitationId: input.invitationId,
       })
-      if (input.inviteEmail) {
+      // Only retire on a real cancellation: a stale id 404s (cancelled: false)
+      // while a live invitation for the same address may still exist —
+      // resendOrgInvitation recreates before cancelling — and dropping the row
+      // there would delete the invite-time details of someone who can still
+      // accept.
+      if (result.cancelled && input.inviteEmail) {
         await retireEmailInvite(client, {
           org,
           classroom,

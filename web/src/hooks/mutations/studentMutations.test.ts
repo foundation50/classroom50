@@ -10,9 +10,9 @@ import { githubKeys } from "@/github-core/queries"
 // Domain/github-core writes are mocked so each hook test asserts only the
 // hook's own responsibility: that it delegates to the right fn and (where it
 // owns cache reconcile) invalidates the right keys.
-const cancelOrgInvitation = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
-  Promise.resolve(),
-)
+const cancelOrgInvitation = vi.fn<
+  (...args: unknown[]) => Promise<{ cancelled: boolean }>
+>(() => Promise.resolve({ cancelled: true }))
 const retireEmailInvite = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
   Promise.resolve(),
 )

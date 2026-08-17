@@ -318,9 +318,13 @@ const RosterBulkActionsBar = ({
     const cancelled: { key: string; label: string }[] = []
     const alreadyGone: { key: string; label: string }[] = []
     const failed: { key: string; label: string; detail?: string }[] = []
-    // Addresses whose invitations we cancelled; their invite teams and pending
-    // roster rows are retired together after the loop, so the batch makes ONE
-    // roster commit instead of one per row.
+    // Addresses whose invitation this pass actually revoked. A stale id (404 ->
+    // `alreadyGone`) is deliberately excluded: it does NOT mean the person has no
+    // live invitation. resendOrgInvitation recreates before cancelling, so a view
+    // that hasn't refetched — or another teacher's session — holds an old id
+    // while a fresh invitation for the same address is still pending. Retiring
+    // the row there would delete the invite-time name/section for someone who can
+    // still accept, leaving them to land as a blank identity row.
     const retiredEmails: string[] = []
     let processed = 0
     for (const row of cancellableSelected) {
@@ -335,7 +339,9 @@ const RosterBulkActionsBar = ({
         // report it as "already gone" rather than a phantom cancellation.
         if (didCancel) cancelled.push({ key: row.key, label })
         else alreadyGone.push({ key: row.key, label })
-        if (!row.username && row.email) retiredEmails.push(row.email)
+        if (didCancel && !row.username && row.email) {
+          retiredEmails.push(row.email)
+        }
       } catch (err) {
         log.debug("bulk cancel: per-row cancel failed", { err })
         failed.push({ key: row.key, label, detail: getErrorMessage(err) })
@@ -345,8 +351,9 @@ const RosterBulkActionsBar = ({
     }
 
     // An email-only invite leaves a metadata team holding the address and a
-    // pending roster row; retire both (never throws — the GC and reconcile
-    // passes are the backstops).
+    // pending roster row; retire both for the ones actually revoked. Runs after
+    // the loop so the batch makes ONE roster commit (never throws — the GC and
+    // reconcile passes are the backstops).
     await retireEmailInvites(client, {
       org,
       classroom,

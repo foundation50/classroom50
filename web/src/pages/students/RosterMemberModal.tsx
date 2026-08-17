@@ -374,11 +374,19 @@ const RosterMemberModal = ({
     }
     setCancelling(true)
     try {
-      await cancelOrgInvitation(client, { org, invitationId })
-      if (!row.username && row.email) {
+      const { cancelled: didCancel } = await cancelOrgInvitation(client, {
+        org,
+        invitationId,
+      })
+      if (didCancel && !row.username && row.email) {
         // An email-only invite leaves a metadata team holding the address and a
         // pending roster row; retire both with the invite (never throws — the GC
         // and reconcile passes are the backstops).
+        //
+        // Only on a real cancellation: a stale id 404s while a live invitation
+        // for the same address may still exist (resendOrgInvitation recreates
+        // before cancelling), and dropping the row there would delete the
+        // invite-time details of someone who can still accept.
         await retireEmailInvite(client, { org, classroom, email: row.email })
       }
       onCanceled(row.key)
