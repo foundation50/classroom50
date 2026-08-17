@@ -65,6 +65,12 @@ func rosterAddCmd() *cobra.Command {
 			"numeric ID is resolved at write time and stored in the\n" +
 			"`github_id` column, defending against mid-class username\n" +
 			"changes.\n\n" +
+			"If no username matches and --email is given, an existing row\n" +
+			"holding only that address is completed in place instead of a\n" +
+			"second row being added: that is the pending row an email\n" +
+			"invitation created in the web app. Only a row with no username\n" +
+			"and no github_id can be completed this way, and it does not\n" +
+			"carry over that row's recorded role.\n\n" +
 			"After the roster write lands, if the student isn't already a\n" +
 			"member of <org> (and doesn't already have a pending invite),\n" +
 			"this command sends an org invitation (same path `gh teacher\n" +

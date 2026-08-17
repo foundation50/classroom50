@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import {
   INVITE_DESCRIPTION_SCHEMA,
+  INVITE_HASH_HEX_LEN,
   INVITE_TEAM_PREFIX,
   inviteTeamName,
   isInviteTeamSlug,
@@ -15,6 +16,18 @@ import {
 // module hand-mirrors, with no compile-time link between them. Assert the two
 // agree so a schema edit that isn't mirrored here (or vice versa) fails CI
 // instead of silently drifting — same lockstep guard as submissionTags.test.ts.
+// The teacher CLI's `teardown` sweep matches these teams by name shape
+// (cli/shared/contract InviteTeamPrefix / InviteHashHexLen, pinned there by
+// contract_test.go). There is no compile-time link, so pin the web half too:
+// renaming or resizing on this side alone would leave the CLI matching nothing
+// and silently stranding invited emails in the org.
+describe("invite team name shape — cross-tool contract", () => {
+  it("pins the prefix and hash length the CLI sweep expects", () => {
+    expect(INVITE_TEAM_PREFIX).toBe("invite-")
+    expect(INVITE_HASH_HEX_LEN).toBe(16)
+  })
+})
+
 describe("classroom50/invite/v1 — schema/mirror parity", () => {
   const schemaUrl = new URL(
     "../../../schemas/invite-v1.schema.json",

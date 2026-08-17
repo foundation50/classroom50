@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
@@ -513,46 +514,68 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 // the student accepts (schemas/invite-v1.schema.json). The CLI never writes
 // them; it lists them so teardown can sweep what an org leaves behind.
 //
-// Descriptions are not read, so this cannot attribute a team to one classroom —
-// callers must be org-wide. Paginates; a read failure propagates so a caller
-// can report it rather than silently sweeping nothing.
+// Filters on the full hashed shape, not the bare prefix: `invite-` is a generic
+// namespace a human team can land in ("Invite Only" slugs to `invite-only`), and
+// only a `invite-<16 hex>` slug is one this feature owns. Descriptions are not
+// read, so this cannot attribute a team to one classroom — callers must be
+// org-wide. A read failure propagates so a caller can report it rather than
+// silently sweeping nothing.
 func ListInviteTeams(client githubapi.Client, org string) ([]TeamRef, error) {
+	type orgTeam struct {
+		ID   int64  `json:"id"`
+		Slug string `json:"slug"`
+	}
+	const perPage, maxPages = 100, 100
+	teams, err := githubapi.PaginateAll[orgTeam](
+		client, perPage, maxPages,
+		func(page int) string {
+			return fmt.Sprintf("orgs/%s/teams?per_page=%d&page=%d",
+				url.PathEscape(org), perPage, page)
+		},
+		func(path string, err error) error {
+			return fmt.Errorf("GET %s: %w", path, err)
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
 	var refs []TeamRef
-	for page := 1; ; page++ {
-		path := fmt.Sprintf("orgs/%s/teams?per_page=100&page=%d", url.PathEscape(org), page)
-		var batch []struct {
-			ID   int64  `json:"id"`
-			Slug string `json:"slug"`
-		}
-		if err := client.Get(path, &batch); err != nil {
-			return nil, fmt.Errorf("GET %s: %w", path, err)
-		}
-		for _, t := range batch {
-			if strings.HasPrefix(t.Slug, contract.InviteTeamPrefix) {
-				refs = append(refs, TeamRef{Slug: t.Slug, ID: t.ID})
-			}
-		}
-		if len(batch) < 100 {
-			return refs, nil
+	for _, t := range teams {
+		if IsInviteTeamSlug(t.Slug) {
+			refs = append(refs, TeamRef{Slug: t.Slug, ID: t.ID})
 		}
 	}
+	return refs, nil
 }
 
-// DeleteInviteTeam removes one per-invite metadata team. Fenced to the
-// `invite-` namespace so a caller can never steer this into a classroom or
-// unrelated team (mirrors the web's deleteInviteTeam guard). 404 is success, so
-// a sweep is idempotent.
+// inviteTeamSlugRe matches the exact slug shape the web writes:
+// `invite-` plus contract.InviteHashHexLen lowercase hex chars. Anchored so a
+// human-created team that merely starts with `invite-` can never be swept.
+var inviteTeamSlugRe = regexp.MustCompile(
+	`^` + regexp.QuoteMeta(contract.InviteTeamPrefix) +
+		fmt.Sprintf(`[0-9a-f]{%d}$`, contract.InviteHashHexLen))
+
+// IsInviteTeamSlug reports whether a slug is one this feature owns — the
+// fail-closed predicate both the sweep's filter and its delete share, mirroring
+// the web's isInviteTeamSlug.
+func IsInviteTeamSlug(slug string) bool {
+	return inviteTeamSlugRe.MatchString(slug)
+}
+
+// DeleteInviteTeam removes one per-invite metadata team. Fenced to the hashed
+// `invite-<16 hex>` shape so a caller can never steer this into a classroom
+// team, an unrelated team, or a human-created team that merely starts with
+// `invite-`. 404 is success, so a sweep is idempotent.
 //
 // Unlike DeleteClassroomTeam there is no recorded id to verify against — these
-// teams are web-created and referenced nowhere in the config repo — so the
-// prefix IS the guard. A caller must therefore pass a slug it read from
-// ListInviteTeams, not one it derived from user input.
+// teams are web-created and referenced nowhere in the config repo — so the slug
+// shape IS the guard.
 func DeleteInviteTeam(client githubapi.Client, org, slug string) error {
 	if slug == "" {
 		return nil
 	}
-	if !strings.HasPrefix(slug, contract.InviteTeamPrefix) {
-		return fmt.Errorf("refusing to delete team %q at %s — not an %s-namespaced invite team; remove it by hand if intended", slug, org, contract.InviteTeamPrefix)
+	if !IsInviteTeamSlug(slug) {
+		return fmt.Errorf("refusing to delete team %q at %s — not a %s<hash> invite team; remove it by hand if intended", slug, org, contract.InviteTeamPrefix)
 	}
 	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	resp, err := client.Request(http.MethodDelete, path, nil)

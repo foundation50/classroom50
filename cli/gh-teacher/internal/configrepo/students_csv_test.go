@@ -178,9 +178,63 @@ func TestUpsertRosterRow_ClaimsPendingEmailRow(t *testing.T) {
 	if claimed.Username != "bob" || claimed.GitHubID != 2 {
 		t.Fatalf("identity = %q/%d, want bob/2", claimed.Username, claimed.GitHubID)
 	}
-	// The pending row's recorded role survives, like the username-match path.
-	if claimed.Role != "student" {
-		t.Fatalf("Role = %q, want student (preserved from the pending row)", claimed.Role)
+	// The pending row's Role is NOT inherited: an email invite may have been
+	// sent for staff, and carrying that onto whoever the teacher names here
+	// would silently grant it. The team is the role authority.
+	if claimed.Role != "" {
+		t.Fatalf("Role = %q, want \"\" (not inherited across an email claim)", claimed.Role)
+	}
+}
+
+// A staff email invite's row must not hand its role to the student a teacher
+// later adds under that address.
+func TestUpsertRosterRow_EmailClaimDoesNotGrantStaffRole(t *testing.T) {
+	rows := []RosterRow{{Email: "ta@x.edu", Role: "ta"}}
+	incoming := RosterRow{Username: "student1", Email: "ta@x.edu", GitHubID: 9}
+
+	updated, replaced := UpsertRosterRow(rows, incoming)
+	if !replaced || len(updated) != 1 {
+		t.Fatalf("replaced=%v rows=%d, want true/1", replaced, len(updated))
+	}
+	if updated[0].Role == "ta" {
+		t.Error("the claim granted the pending row's staff role to the added student")
+	}
+}
+
+// A username match still carries the recorded role over, so re-adding an
+// enrolled student doesn't blank the role a sync recorded for them.
+func TestUpsertRosterRow_UsernameMatchStillInheritsRole(t *testing.T) {
+	rows := []RosterRow{{Username: "alice", GitHubID: 1, Role: "ta"}}
+	incoming := RosterRow{Username: "alice", GitHubID: 1}
+
+	updated, _ := UpsertRosterRow(rows, incoming)
+	if updated[0].Role != "ta" {
+		t.Fatalf("Role = %q, want ta preserved on a username match", updated[0].Role)
+	}
+}
+
+// A row whose github_id cell is present but unusable is still identified by it
+// (the reader preserves the raw cell), so an email claim must skip it rather
+// than replace the row and discard what the teacher typed.
+func TestUpsertRosterRow_EmailClaimSkipsPreservedRawID(t *testing.T) {
+	in := "username,first_name,last_name,email,section,github_id,role\n" +
+		",,,pending@x.edu,,0,student\n"
+	rows, err := ParseRoster([]byte(in))
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	if rows[0].githubIDRaw == "" {
+		t.Fatal("fixture precondition: expected the raw github_id cell to be preserved")
+	}
+
+	updated, replaced := UpsertRosterRow(rows, RosterRow{
+		Username: "bob", Email: "pending@x.edu", GitHubID: 2,
+	})
+	if replaced {
+		t.Fatal("replaced = true, want false: a row identified by a raw github_id must not be claimed")
+	}
+	if len(updated) != 2 {
+		t.Fatalf("rows = %d, want 2 (bob appended)", len(updated))
 	}
 }
 

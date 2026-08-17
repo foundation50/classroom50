@@ -3,9 +3,11 @@ import { escapeForGoJsonParity } from "./goJsonEscape"
 
 // Schema sentinel for the classroom50/invite/v1 record stored in a per-invite
 // secret team's description. Byte-mirror of schemas/invite-v1.schema.json.
-// Web-only today (email invites exist only in the web app), so there is no Go
-// contract constant yet; if a CLI email-invite path is added, this becomes a
-// cross-tool contract and must be kept in lockstep.
+// The web is the only WRITER (email invites exist only here), but the teacher
+// CLI knows the team-name shape so `teardown` can sweep leftover invite teams —
+// so INVITE_TEAM_PREFIX and INVITE_HASH_HEX_LEN below are a cross-tool contract
+// mirrored in cli/shared/contract (InviteTeamPrefix / InviteHashHexLen) with no
+// compile-time link. Keep them in lockstep; both sides pin their own half.
 export const INVITE_DESCRIPTION_SCHEMA = "classroom50/invite/v1"
 
 // Team-name prefix for a per-invite metadata team. GitHub derives a team's slug
@@ -17,8 +19,11 @@ export const INVITE_TEAM_PREFIX = "invite-"
 
 // SHA-256 prefix length (hex chars) used in the team name. 16 hex = 64 bits —
 // ample collision resistance for a class-sized roster; total name length is
-// `invite-` (7) + 16 = 23 chars, well within GitHub's limit.
-const INVITE_HASH_HEX_LEN = 16
+// `invite-` (7) + 16 = 23 chars, well within GitHub's limit. Exported because
+// the prefix alone is too loose to identify one of these teams — a human team
+// named "Invite Only" also slugs to `invite-…` — so the CLI's teardown sweep
+// matches the full `invite-<16 hex>` shape and pins this length.
+export const INVITE_HASH_HEX_LEN = 16
 
 // The email-only record stays far under GitHub's ~250-char team-description
 // cap for any RFC-length email; there is no drop-fields fallback because there

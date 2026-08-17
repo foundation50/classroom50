@@ -583,7 +583,20 @@ func TestDeleteClassroomTeam_RefusesZeroID(t *testing.T) {
 // verify against, so the `invite-` prefix IS the guard. A slug outside that
 // namespace must be refused without issuing any request.
 func TestDeleteInviteTeam_NamespaceGuard(t *testing.T) {
-	for _, slug := range []string{"classroom50-cs-principles", "some-unrelated-team", "invite"} {
+	// Each of these must be refused: a classroom team, an unrelated team, the
+	// bare prefix, a HUMAN team that merely starts with `invite-` ("Invite Only"
+	// slugs to `invite-only`), a too-short/too-long hash, and uppercase hex.
+	for _, slug := range []string{
+		"classroom50-cs-principles",
+		"some-unrelated-team",
+		"invite",
+		"invite-",
+		"invite-only",
+		"invite-reviewers",
+		"invite-0123456789abcde",   // 15 hex
+		"invite-0123456789abcdef0", // 17 hex
+		"invite-0123456789ABCDEF",  // uppercase
+	} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Errorf("must not issue any request for slug %q: %s %s", slug, r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -593,6 +606,32 @@ func TestDeleteInviteTeam_NamespaceGuard(t *testing.T) {
 		server.Close()
 		if err == nil || !strings.Contains(err.Error(), "refusing to delete") {
 			t.Errorf("slug %q: err = %v, want a namespace-guard refusal", slug, err)
+		}
+	}
+}
+
+// IsInviteTeamSlug is the fail-closed predicate the sweep's filter and its
+// delete share; pin both directions so a loosened regex fails here.
+func TestIsInviteTeamSlug(t *testing.T) {
+	cases := []struct {
+		slug string
+		want bool
+	}{
+		{"invite-0123456789abcdef", true},
+		{"invite-ffffffffffffffff", true},
+		{"invite-only", false},
+		{"invite-", false},
+		{"invite", false},
+		{"", false},
+		{"classroom50-cs101", false},
+		{"invite-0123456789ABCDEF", false},
+		{"invite-0123456789abcde", false},
+		{"invite-0123456789abcdef0", false},
+		{"xinvite-0123456789abcdef", false},
+	}
+	for _, tc := range cases {
+		if got := IsInviteTeamSlug(tc.slug); got != tc.want {
+			t.Errorf("IsInviteTeamSlug(%q) = %v, want %v", tc.slug, got, tc.want)
 		}
 	}
 }
@@ -614,7 +653,8 @@ func TestDeleteInviteTeam_EmptySlugAndAlreadyGone(t *testing.T) {
 	}
 }
 
-// ListInviteTeams keeps only the invite- namespace and paginates.
+// ListInviteTeams keeps only the hashed invite- shape and paginates via the
+// shared PaginateAll helper (Link-header driven, page-capped).
 func TestListInviteTeams_FiltersAndPaginates(t *testing.T) {
 	var pages int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -624,8 +664,8 @@ func TestListInviteTeams_FiltersAndPaginates(t *testing.T) {
 			return
 		}
 		pages++
-		// Page 1 fills the page (100) so pagination continues; page 2 ends it.
 		if r.URL.Query().Get("page") == "1" {
+			// A full page plus a next link keeps pagination going.
 			var sb strings.Builder
 			sb.WriteByte('[')
 			for i := 0; i < 100; i++ {
@@ -639,10 +679,14 @@ func TestListInviteTeams_FiltersAndPaginates(t *testing.T) {
 				fmt.Fprintf(&sb, `{"id":%d,"slug":%q}`, i+1, slug)
 			}
 			sb.WriteByte(']')
+			// Absolute next link, as GitHub sends.
+			w.Header().Set("Link", `<http://`+r.Host+r.URL.Path+`?per_page=100&page=2>; rel="next"`)
 			_, _ = w.Write([]byte(sb.String()))
 			return
 		}
-		_, _ = w.Write([]byte(`[{"id":900,"slug":"invite-bbbbbbbbbbbbbbbb"},{"id":901,"slug":"other"}]`))
+		// Page 2: one real invite team, one human team that merely starts with
+		// the prefix (must be filtered out), one unrelated team.
+		_, _ = w.Write([]byte(`[{"id":900,"slug":"invite-bbbbbbbbbbbbbbbb"},{"id":901,"slug":"invite-only"},{"id":902,"slug":"other"}]`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -665,6 +709,18 @@ func TestListInviteTeams_FiltersAndPaginates(t *testing.T) {
 		if slugs[i] != want[i] {
 			t.Errorf("slug %d = %q, want %q", i, slugs[i], want[i])
 		}
+	}
+}
+
+// A failed org-team read must surface as an error, not an empty sweep set —
+// silently sweeping nothing would strand invited emails without a warning.
+func TestListInviteTeams_ReadFailurePropagates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	if _, err := ListInviteTeams(githubtest.NewTestClient(t, server), "o"); err == nil {
+		t.Fatal("err = nil, want the read failure to propagate")
 	}
 }
 

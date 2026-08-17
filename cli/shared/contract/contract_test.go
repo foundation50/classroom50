@@ -35,9 +35,10 @@ func TestContractLiterals(t *testing.T) {
 		{"ConfigRepoName", ConfigRepoName, "classroom50"},
 		{"AssignmentsSchemaV1", AssignmentsSchemaV1, "classroom50/assignments/v1"},
 		{"TeamSchemaV1", TeamSchemaV1, "classroom50/team/v1"},
-		// InviteTeamPrefix is mirrored, with NO compile-time link, in the web
-		// writer (web/src/util/inviteTeam.ts INVITE_TEAM_PREFIX). Update both
-		// copies in lockstep on change.
+		// InviteTeamPrefix + InviteHashHexLen are mirrored, with NO compile-time
+		// link, in the web writer (web/src/util/inviteTeam.ts
+		// INVITE_TEAM_PREFIX / INVITE_HASH_HEX_LEN, pinned there by
+		// inviteTeam.test.ts). Update every copy in lockstep on change.
 		{"InviteTeamPrefix", InviteTeamPrefix, "invite-"},
 		{"DefaultAutograderName", DefaultAutograderName, "default"},
 		{"ModeIndividual", ModeIndividual, "individual"},
@@ -107,6 +108,17 @@ func TestContractLiterals(t *testing.T) {
 		if tc.got != tc.want {
 			t.Errorf("%s = %q, want %q (cross-binary contract drift — update every language copy in lockstep)", tc.name, tc.got, tc.want)
 		}
+	}
+}
+
+// TestInviteHashHexLen pins the numeric half of the invite-team slug shape (the
+// string table above can't carry an int). Mirrored, with NO compile-time link,
+// in web/src/util/inviteTeam.ts INVITE_HASH_HEX_LEN. Load-bearing for the CLI's
+// teardown sweep: the full `invite-<16 hex>` shape is what keeps a human team
+// named "Invite Only" (slug `invite-only`) from being swept.
+func TestInviteHashHexLen(t *testing.T) {
+	if InviteHashHexLen != 16 {
+		t.Errorf("InviteHashHexLen = %d, want 16", InviteHashHexLen)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
 
@@ -204,6 +205,8 @@ func TestRunTeardown_SweepsInviteTeams(t *testing.T) {
 			"invite-fedcba9876543210",
 			"classroom50-cs-principles", // not an invite team
 			"some-unrelated-team",       // not ours at all
+			"invite-only",               // a human team named "Invite Only" — NOT ours
+			"invite-0123456789ABCDEF",   // uppercase hex: not the shape the web writes
 		},
 	}
 	server := httptest.NewServer(state.handler(t, "classroom50-test"))
@@ -222,8 +225,8 @@ func TestRunTeardown_SweepsInviteTeams(t *testing.T) {
 		t.Fatalf("deleted teams = %v, want exactly %v", deleted, want)
 	}
 	for _, slug := range deleted {
-		if !strings.HasPrefix(slug, "invite-") {
-			t.Errorf("swept a non-invite team %q", slug)
+		if !configrepo.IsInviteTeamSlug(slug) {
+			t.Errorf("swept a team outside the invite-<hash> shape: %q", slug)
 		}
 	}
 	if !strings.Contains(out.String(), "deleted invite team invite-0123456789abcdef") {
