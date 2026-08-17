@@ -398,9 +398,10 @@ octofez
 > uploading a roster CSV.
 
 A pending row is why the stored `roster.csv` can hold a row with no `username`
-or `github_id`. Those rows are valid in the file but not in a CSV you upload, so
-remove them if you export the roster and import it again. For more information,
-see [Invitations by email](How-Classroom-50-Works#invitations-by-email).
+or `github_id`. Those rows are valid in the file, but not in a CSV you feed back
+in: **Upload** skips them, and `gh teacher roster import` rejects them. For more
+information, see
+[Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
 > [!TIP]
 > Adding students who are **already in your organization** (for example, from a

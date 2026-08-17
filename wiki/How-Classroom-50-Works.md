@@ -25,7 +25,7 @@ state is represented by ordinary GitHub data:
 | Your classrooms, assignments, scores | Config files in a private `classroom50` repo in your org |
 | Who's enrolled | GitHub organization and team membership |
 | Who's staff (teacher/TA) | Membership in `secret` GitHub teams |
-| An address you invited, before that person joins | A `secret` per-invite team, deleted once they accept |
+| An address you invited, before that person joins | A `secret` per-invite team, removed once they're on the roster |
 | A student's submissions | Commit history and Releases in their repo |
 | Who can do what | GitHub permissions |
 
@@ -148,28 +148,31 @@ up an account from an address, and the person who accepts could sign in with any
 account. Classroom 50 bridges that gap with an **invite team**.
 
 1. Inviting an address creates a `secret` team named `invite-<hash>` that holds
-   that one address, and writes the address to `roster.csv` as a **pending row**
-   with no username yet.
-2. The invitation carries both the classroom team and the invite team.
-3. Accepting adds the student to both. Because the invite team holds exactly one
-   person, whoever is on it is the student who accepted, so the next roster sync
-   fills their account into the pending row and deletes the invite team.
+   that one address. If this can't be set up, no invitation is sent.
+2. GitHub emails the invitation, carrying both the classroom team and the invite
+   team.
+3. The address is written to `roster.csv` as a **pending row**, with a role but no
+   username yet.
+4. Accepting adds the student to both teams. Because the invite team holds exactly
+   one person, whoever is on it is the student who accepted, so the next roster
+   sync fills their account into the pending row and then deletes the invite team.
 
-An invitation nobody accepts leaves nothing behind. Cancelling one deletes its
-invite team at once, and the pending row goes away on the next roster sync. An
-invitation that expires on GitHub's side is cleaned up the same way, once the
-team is more than 24 hours old; a still-pending invitation is never touched,
-however long it stays outstanding. To clear stored addresses early, use
-**Clean up invite data** on the classroom's **Settings** page; deleting a
-classroom removes its invite teams too.
+An outstanding invitation keeps its team and its pending row, so a teacher can see
+who was invited. Cancelling one deletes its invite team at once, and the pending
+row goes away on the next roster sync. A team left by an expired invitation is
+cleaned up the same way, once it is more than 24 hours old and GitHub no longer
+lists the invitation as pending; a still-pending invitation is never touched.
+To clear stored addresses early, use **Clean up invite data** on the classroom's
+**Settings** page; deleting a classroom removes its invite teams too.
 
 > [!NOTE]
 > Invite teams are the one place Classroom 50 stores an address that GitHub
 > hasn't yet linked to an account. Each holds only the invited address and the
-> classroom name, never names or sections, and `secret` teams are readable only
-> by organization owners, so students and TAs can't see them. The address on a
-> pending row is the one **you invited**, which is not necessarily the email on
-> the student's GitHub account.
+> classroom name, never names or sections. Because the team is `secret`, no other
+> student or TA can see it: before the invitation is accepted the team has no
+> members at all, and afterwards only that student and the organization's owners
+> can read it. The address on a pending row is the one **you invited**, which is
+> not necessarily the email on the student's GitHub account.
 
 ### Who sees what
 

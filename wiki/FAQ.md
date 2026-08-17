@@ -88,7 +88,9 @@ they accept. See
 
 Yes. The submissions view lists every rostered student, not just those who
 accepted, with their status — so you can see at a glance who hasn't started.
-Students you invited by email appear too, listed by address until they accept.
+Students you invited by email appear too, listed by address until they accept,
+though only organization owners see them: GitHub keeps pending invitations
+owner-only, so a TA's view leaves them out.
 
 ### What happens when I unenroll or remove a student?
 

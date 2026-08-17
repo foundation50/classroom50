@@ -45,10 +45,11 @@ gh teacher staff add cs50-fall-2026 cs-principles octocat --role ta
 but doesn't touch their organization membership.
 
 Staff can also be invited by email. On the classroom's **Roster** page, use
-**Upload** to enter the addresses, then pick each person's role in the invite
-list; choosing **Teacher** asks you to confirm, because it makes that person an
-organization owner. As with a student, the address goes onto the roster as a
-pending row and is matched to their GitHub account when they accept. See
+**Upload** with a file of addresses, one per line, then set each person's role in
+the preview's **Role** column. Choosing **Teacher** requires a separate
+confirmation, because the teacher role makes that person an organization owner.
+As with a student, the address goes onto the roster as a pending row and is
+matched to their GitHub account when they accept. See
 [Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
 > [!NOTE]

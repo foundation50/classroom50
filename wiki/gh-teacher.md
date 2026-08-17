@@ -313,8 +313,9 @@ gh teacher roster add <org> <classroom> <username> [--first-name <n>] [--last-na
 
 Upserts one row by username (case-insensitive), then invites the student to the
 organization if needed and adds them to the classroom team. Safe to re-run. When
-the student has a pending row from an email invitation, this fills in that row by
-matching the address instead of adding a duplicate.
+no row matches the username and `--email` matches a pending row's address, that
+row is filled in rather than duplicated; the pending row's `role` is deliberately
+not inherited, since the team is the authority for role.
 
 ### `roster update`
 

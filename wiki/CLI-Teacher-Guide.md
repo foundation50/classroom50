@@ -293,8 +293,9 @@ gh teacher roster add cs50-fall-2026 cs-principles alice --first-name Alice --em
 Resolves the student's numeric `github_id`, upserts the row (case-insensitive by
 username), sends an organization invite if needed, and adds the student to the
 classroom team (so they can read in-org private templates). Re-running is safe.
-If the student already has a pending row from an email invitation, `add` fills in
-that row rather than adding a second one for the same person.
+If the student was invited by email, pass `--email` with that same address and
+`add` fills in the pending row instead of adding a second one for the same
+person. Without it, the pending row stays until the next roster sync.
 
 **Correct an existing student's details:**
 

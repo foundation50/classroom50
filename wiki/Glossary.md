@@ -33,15 +33,15 @@ Classroom's roster identifier or student self-linking.
 
 **Pending row** — A `roster.csv` row for someone invited by email who hasn't
 accepted yet. It holds the invited address and role, with no username or
-GitHub id, because GitHub offers no way to look up an account from an email
-address. Accepting fills in the account; a cancelled or expired invitation
-removes the row on the next roster sync.
+`github_id`, because GitHub offers no way to look up an account from an email
+address. Accepting fills in the account on the next roster sync; a cancelled or
+expired invitation removes the row instead.
 
 **Invite team** — A `secret` GitHub team, named `invite-<hash>`, that holds one
 invited address until that person joins. It is how an email invitation is
 matched to the GitHub account that accepts it. Classroom 50 creates one per
-email invitation and deletes it once the invitation is accepted, cancelled, or
-expired. For more information, see
+email invitation and removes it once the invitation has been accepted, cancelled,
+or expired. For more information, see
 [Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
 **Organization (org)** — The GitHub organization that hosts a Classroom 50
