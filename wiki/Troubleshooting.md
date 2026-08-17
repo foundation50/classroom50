@@ -254,11 +254,11 @@ To enroll students who are already org members:
    do several at once, select the rows and use the bulk **Add to {classroom}**
    action.
 
-Uploading a **username** list or **roster CSV** on the **Roster** page also enrolls
-existing members: the invite is skipped, but they're still added to the roster
-and team. An **email** upload can't, because GitHub won't invite an existing
-member, and Classroom 50 has no way to tell which account owns that address:
-the email is skipped instead. From the CLI,
+Uploading a **roster CSV** or a plain list of usernames on the **Roster** page
+also enrolls existing members: the invite is skipped, but they're still added to
+the roster and team. A row identified only by an **email address** can't, because
+GitHub won't invite an existing member, and Classroom 50 has no way to tell which
+account owns that address: the email is skipped instead. From the CLI,
 `gh teacher roster add <org> <classroom> <username>` (or `roster import`)
 enrolls an existing member the same way.
 
@@ -294,8 +294,26 @@ accepts the `username` through `github_id` columns, so a stored roster's trailin
 columns to drop. And a student invited by email sits on the roster as a pending
 row with no username until they accept, which is valid in the stored file but not
 on import. Remove those rows, or wait until the students have joined. The web
-app's **Upload** is more forgiving: it skips any row without a usable username
-instead of failing, so check its preview count matches what you expected.
+app's **Upload** reads the same file without either edit: it accepts a `role`
+column and identifies a pending row by its email address.
+
+### A row was skipped because its `github_id` doesn't match an account
+
+The web app's **Upload** reads a `github_id` column as the row's identity and
+looks up that account's current username, which is what lets a re-uploaded export
+still find a student who renamed their GitHub account. When an id matches no
+account, that row is skipped and reported rather than falling back to the
+`username` next to it — a wrong id plus a stale username could invite a stranger
+into your organization, so the upload refuses to guess.
+
+Usually the id was mangled by a spreadsheet: opening `roster.csv` in Excel can
+turn `583231` into `5.83231E+05`. Re-export without reformatting that column, or
+delete the `github_id` column entirely and let the `username` column identify
+each row.
+
+If the id is right but the username beside it is out of date, nothing is skipped:
+the upload uses the account the id belongs to, shows both values in the preview,
+asks you to confirm, and corrects the stored username.
 
 ### "Couldn't prepare the invite … so no invite was sent"
 
