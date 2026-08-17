@@ -16,15 +16,18 @@ export type SummaryCategory = {
 //  - add:    a membership will be created/activated (invite + enroll), plus any
 //            email-identity row, each of which sends an invitation of its own
 //  - update: an existing member's details or role change (metadata + role_change)
-//  - skip:   already correct, nothing to do (no_action)
+//  - skip:   already correct, nothing to do (no_action), plus any email row whose
+//            address the roster already claims — that invite would be skipped
 //
-// `emailInviteCount` is passed in rather than read off the preflight because
-// email rows never enter the classification — they have no GitHub account to
-// classify against — but they are still work the summary must account for, or the
-// pills would under-report the visible row count.
+// `emailInviteCount` and `emailNoopCount` are passed in rather than read off the
+// preflight because email rows never enter the classification — they have no
+// GitHub account to classify against — but they are still work (or explicitly
+// not work) the summary must account for, or the pills would under-report the
+// visible row count.
 export function summarizePreflight(
   preflight: PreflightResult,
   emailInviteCount = 0,
+  emailNoopCount = 0,
 ): {
   categories: SummaryCategory[]
   addCount: number
@@ -35,7 +38,7 @@ export function summarizePreflight(
     preflight.needsInvite.length + preflight.enroll.length + emailInviteCount
   const updateCount =
     preflight.metadataUpdate.length + preflight.roleChanges.length
-  const skipCount = preflight.noAction.length
+  const skipCount = preflight.noAction.length + emailNoopCount
   const categories: SummaryCategory[] = [
     { key: "add", count: addCount, pillClass: "badge-success" },
     { key: "update", count: updateCount, pillClass: "badge-warning" },
@@ -51,12 +54,14 @@ export function summarizePreflight(
 export const PreflightSummary = ({
   preflight,
   emailInviteCount = 0,
+  emailNoopCount = 0,
   detailsOpen,
   onToggleDetails,
   canToggle = true,
 }: {
   preflight: PreflightResult
   emailInviteCount?: number
+  emailNoopCount?: number
   detailsOpen: boolean
   onToggleDetails: () => void
   // Whether the details toggle is meaningful. False when the table is force-open
@@ -65,7 +70,11 @@ export const PreflightSummary = ({
   canToggle?: boolean
 }) => {
   const { t } = useTranslation()
-  const { categories } = summarizePreflight(preflight, emailInviteCount)
+  const { categories } = summarizePreflight(
+    preflight,
+    emailInviteCount,
+    emailNoopCount,
+  )
   const active = categories.filter((c) => c.count > 0)
 
   return (

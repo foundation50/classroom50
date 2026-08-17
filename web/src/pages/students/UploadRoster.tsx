@@ -318,6 +318,27 @@ const UploadRoster = ({
     () => resolvedRows.filter(isEmailRow),
     [resolvedRows],
   )
+  // Split the email rows by what processing will actually do. An address a
+  // stored roster row already claims is skipped by appendEmailInviteRows, so
+  // counting it as an invitation would overstate the batch — the same class of
+  // error as counting rows instead of invitations. The row still renders, marked
+  // as needing no action, so the teacher can see it was read.
+  const claimedEmails = preflightContext?.claimedEmails
+  const emailRowsToInvite = useMemo(
+    () =>
+      claimedEmails
+        ? emailRows.filter((r) => !claimedEmails.has(r.identity.email))
+        : emailRows,
+    [emailRows, claimedEmails],
+  )
+  const noopEmailKeys = useMemo(() => {
+    const keys = new Set<string>()
+    if (!claimedEmails) return keys
+    for (const r of emailRows) {
+      if (claimedEmails.has(r.identity.email)) keys.add(identityKey(r.identity))
+    }
+    return keys
+  }, [emailRows, claimedEmails])
   // The role the teacher assigned a row, defaulting to student.
   const roleFor = (identity: ImportIdentity): ClassroomRole =>
     rolesByUser[identityKey(identity)] ?? "student"
@@ -423,9 +444,9 @@ const UploadRoster = ({
   // fold them into the same gate rather than letting a roster CSV do silently
   // what the dedicated email upload requires a checkbox for.
   const teacherEmailRows = useMemo(
-    () => emailRows.filter((r) => isTeacherRole(roleFor(r.identity))),
+    () => emailRowsToInvite.filter((r) => isTeacherRole(roleFor(r.identity))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [emailRows, rolesByUser],
+    [emailRowsToInvite, rolesByUser],
   )
   const mismatches = useMemo(
     () => preflight?.identityMismatches ?? [],
@@ -457,7 +478,7 @@ const UploadRoster = ({
   // org invitation and lands a pending roster row. So is a confirmed identity
   // mismatch — it repairs the stored username. Counting only the preflight
   // buckets would leave either kind of file on a disabled "No changes to apply".
-  const emailRowCount = emailRows.length
+  const emailRowCount = emailRowsToInvite.length
   // How many people this upload will actually invite: non-members it will invite
   // by username, plus every email-identity row. ONE source, so the notice, the
   // summary, and the primary button can't disagree — a row that's already a
@@ -675,7 +696,7 @@ const UploadRoster = ({
       section: r.section,
       role: roleFor(r.identity),
     }))
-    const emailInvites = emailRows.map((r) => ({
+    const emailInvites = emailRowsToInvite.map((r) => ({
       email: r.identity.email,
       role: roleFor(r.identity),
       first_name: r.first_name,
@@ -859,6 +880,7 @@ const UploadRoster = ({
                 <PreflightSummary
                   preflight={preflight}
                   emailInviteCount={emailRowCount}
+                  emailNoopCount={noopEmailKeys.size}
                   detailsOpen={detailsOpen}
                   onToggleDetails={() => setDetailsOpen((v) => !v)}
                   canToggle={!forceDetails}
@@ -927,6 +949,7 @@ const UploadRoster = ({
                   changes={rowChanges}
                   roleChanges={roleChangeByUser}
                   identityChanges={identityChangeByUser}
+                  noopRowKeys={noopEmailKeys}
                   loading={preflighting}
                   onRoleChange={(key, role) =>
                     setRolesByUser((prev) => ({ ...prev, [key]: role }))

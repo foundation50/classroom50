@@ -12,12 +12,10 @@ import {
   applyClassroomRoleChange,
   inviteRosterStudents,
   resendClassroomInvite,
+  retireEmailInvite,
   type StudentCsvRow,
 } from "@/domain/students"
-import {
-  cancelOrgInvitation,
-  deleteInviteTeamForEmail,
-} from "@/github-core/mutations"
+import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   isMalformedGitHubId,
@@ -378,12 +376,10 @@ const RosterMemberModal = ({
     try {
       await cancelOrgInvitation(client, { org, invitationId })
       if (!row.username && row.email) {
-        // An email-only invite carries a metadata team holding the address;
-        // tear it down with the invite (never throws; GC is the backstop).
-        await deleteInviteTeamForEmail(client, org, {
-          classroom,
-          email: row.email,
-        })
+        // An email-only invite leaves a metadata team holding the address and a
+        // pending roster row; retire both with the invite (never throws — the GC
+        // and reconcile passes are the backstops).
+        await retireEmailInvite(client, { org, classroom, email: row.email })
       }
       onCanceled(row.key)
       onClose()

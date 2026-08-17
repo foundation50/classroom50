@@ -13,6 +13,9 @@ import { githubKeys } from "@/github-core/queries"
 const cancelOrgInvitation = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
   Promise.resolve(),
 )
+const retireEmailInvite = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
+  Promise.resolve(),
+)
 const deleteInviteTeamForEmail = vi.fn<(...args: unknown[]) => Promise<void>>(
   () => Promise.resolve(),
 )
@@ -46,6 +49,8 @@ vi.mock("@/domain/students", () => ({
     unenrollStudent(client, input),
   updateStudentWithConflictRetry: (client: unknown, input: unknown) =>
     updateStudentWithConflictRetry(client, input),
+  retireEmailInvite: (client: unknown, input: unknown) =>
+    retireEmailInvite(client, input),
 }))
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({ request: vi.fn() }),
@@ -105,7 +110,7 @@ describe("useDismissFailedInvite", () => {
     expect(invalidateInviteQueries).toHaveBeenCalledWith(queryClient, ORG)
   })
 
-  it("tears down the metadata team when dismissing an email-only invite", async () => {
+  it("retires the invite team AND its pending roster row when dismissing an email-only invite", async () => {
     const queryClient = freshClient()
     const { result } = renderHook(
       () => useDismissFailedInvite(ORG, CLASSROOM),
@@ -117,11 +122,13 @@ describe("useDismissFailedInvite", () => {
     result.current.mutate({ invitationId: 42, inviteEmail: "gone@x.edu" })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(deleteInviteTeamForEmail).toHaveBeenCalledWith(
-      expect.anything(),
-      ORG,
-      { classroom: CLASSROOM, email: "gone@x.edu" },
-    )
+    // One helper clears both the metadata team and the roster row; leaving the
+    // row behind would strand it invisibly on roster.csv.
+    expect(retireEmailInvite).toHaveBeenCalledWith(expect.anything(), {
+      org: ORG,
+      classroom: CLASSROOM,
+      email: "gone@x.edu",
+    })
   })
 })
 

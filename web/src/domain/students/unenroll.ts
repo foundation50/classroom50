@@ -45,12 +45,17 @@ export async function unenrollStudent(
   log.info("unenroll student: started", { org, classroom })
   await assertClassroomNotArchived(client, org, classroom)
   const normalizedUsername = toRemoveStudent?.username.trim()
-  const normalizedEmail = toRemoveStudent?.email?.trim()
+  const normalizedGithubId = toRemoveStudent?.github_id?.trim()
 
-  // An email-invited row not yet claimed has no username, so accept email too.
-  // One of the two must be present to target a row.
-  if (!normalizedUsername && !normalizedEmail) {
-    throw new Error("Student's GitHub username or email is required")
+  // Unenroll targets a roster row by GitHub identity, because matchesRosterRow
+  // deliberately won't key on email (a shared address must never widen a
+  // removal). An email-only row — an unaccepted email invitation — is retired by
+  // CANCELLING the invitation instead, which also revokes it and drops the row:
+  // see retireEmailInvite. Rejecting it here rather than downstream keeps the
+  // failure honest; accepting it would throw "does not exist in roster" after
+  // the caller had every reason to think email was a supported key.
+  if (!normalizedUsername && !normalizedGithubId) {
+    throw new Error("Student's GitHub username or ID is required")
   }
 
   // Resolve the slug concurrently with the commit. Can reject on a transient
@@ -90,7 +95,7 @@ export async function unenrollStudent(
 
   if (!exists) {
     throw new Error(
-      `Student ${toRemoveStudent.username || normalizedEmail} does not exist in roster!`,
+      `Student ${normalizedUsername || normalizedGithubId} does not exist in roster!`,
     )
   }
 
@@ -106,7 +111,7 @@ export async function unenrollStudent(
   const newCommit = await createGitCommit(client, {
     org,
     message: prefixCommit(
-      `Remove student: ${classroom}/${toRemoveStudent.username || normalizedEmail}`,
+      `Remove student: ${classroom}/${normalizedUsername || normalizedGithubId}`,
     ),
     tree_sha: tree.sha,
     parents: [ref.object.sha],
@@ -230,8 +235,12 @@ export async function bulkUnenrollStudents(
   const { org, classroom, students, onProgress } = input
   await assertClassroomNotArchived(client, org, classroom)
 
+  // Identity only, matching matchesRosterRow: an email-only target could never
+  // match a row, so accepting one here would silently report it as `notFound`
+  // ("already removed") while both the row and its live invitation survived.
+  // Cancel the invitation instead — see retireEmailInvite.
   const targets = students.filter(
-    (s) => s.username?.trim() || s.email?.trim() || s.github_id?.trim(),
+    (s) => s.username?.trim() || s.github_id?.trim(),
   )
   if (targets.length === 0) {
     return { removed: [], notFound: [], warnings: [] }

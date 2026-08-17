@@ -1,8 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import {
-  cancelOrgInvitation,
-  deleteInviteTeamForEmail,
-} from "@/github-core/mutations"
+import { cancelOrgInvitation } from "@/github-core/mutations"
+import { retireEmailInvite } from "@/domain/students"
 import { invalidateInviteQueries } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
@@ -11,9 +9,10 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 // invite-status queries. Hook owns the invalidation; the error toast stays at
 // the call site (see ./README.md). Sibling of useReinviteFailedInvite.
 //
-// For an email-only invitation (no login), pass `inviteEmail` so the per-invite
-// metadata team holding that address is torn down with the dismissal
-// (best-effort; the GC pass is the backstop).
+// For an email-only invitation (no login), pass `inviteEmail` so everything the
+// invite left behind is retired with the dismissal: the per-invite metadata team
+// holding that address, and its pending roster.csv row (best-effort; the GC and
+// reconcile passes are the backstops).
 export function useDismissFailedInvite(org: string, classroom: string) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
@@ -28,7 +27,8 @@ export function useDismissFailedInvite(org: string, classroom: string) {
         invitationId: input.invitationId,
       })
       if (input.inviteEmail) {
-        await deleteInviteTeamForEmail(client, org, {
+        await retireEmailInvite(client, {
+          org,
           classroom,
           email: input.inviteEmail,
         })

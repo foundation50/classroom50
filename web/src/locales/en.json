@@ -748,6 +748,7 @@
     "droppedRows_one": "{{count}} row was skipped because it had no usable GitHub username or email address.",
     "droppedRows_other": "{{count}} rows were skipped because they had no usable GitHub username or email address.",
     "previewInviteByEmail": "Invite by email",
+    "previewAlreadyOnRoster": "Already on the roster",
     "previewPreviousUsernameHint": "file said {{username}}",
     "preflightIdentityConfirmTitle": "Check these accounts before importing",
     "preflightIdentityHint": "The github_id in these rows belongs to a different account than the username next to it — usually because the student renamed their GitHub account. We'll use the account the id belongs to, and correct the username on the roster.",

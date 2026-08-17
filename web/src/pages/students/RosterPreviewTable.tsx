@@ -96,16 +96,24 @@ const PreviewCell = ({
 const IdentityCell = ({
   row,
   declaredUsername,
+  alreadyOnRoster,
 }: {
   row: ResolvedImportRow
   declaredUsername?: string
+  alreadyOnRoster?: boolean
 }) => {
   const { t } = useTranslation()
   if (row.identity.kind === "email") {
+    // An address the roster already carries would be skipped on process, so say
+    // so rather than promising an invitation this row won't send.
     return (
       <td>
-        <Badge tone="info" size="sm">
-          {t("students.previewInviteByEmail")}
+        <Badge tone={alreadyOnRoster ? "neutral" : "info"} size="sm">
+          {t(
+            alreadyOnRoster
+              ? "students.previewAlreadyOnRoster"
+              : "students.previewInviteByEmail",
+          )}
         </Badge>
       </td>
     )
@@ -138,6 +146,7 @@ export const RosterPreviewTable = ({
   changes = {},
   roleChanges = {},
   identityChanges = {},
+  noopRowKeys,
   loading = false,
   skeletonRowCount,
 }: {
@@ -147,6 +156,10 @@ export const RosterPreviewTable = ({
   changes?: RowChanges
   roleChanges?: RowRoleChanges
   identityChanges?: RowIdentityChanges
+  // Rows the import will skip (an email address the roster already claims), so
+  // the identity cell can say "already on the roster" instead of promising an
+  // invitation that won't be sent.
+  noopRowKeys?: ReadonlySet<string>
   // While the preflight resolves, the per-cell changes aren't known yet: render
   // the change-bearing columns as skeletons to signal "computing changes" in
   // place, rather than briefly showing static values that then sprout highlights.
@@ -205,6 +218,7 @@ export const RosterPreviewTable = ({
                     <IdentityCell
                       row={row}
                       declaredUsername={identityChange?.declaredUsername}
+                      alreadyOnRoster={noopRowKeys?.has(key)}
                     />
                     <PreviewCell
                       value={[row.first_name, row.last_name]

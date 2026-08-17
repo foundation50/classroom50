@@ -6,16 +6,13 @@ import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
 import { Alert, Button, Modal, Toolbar } from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
-import {
-  cancelOrgInvitation,
-  deleteInviteTeamForEmail,
-} from "@/github-core/mutations"
+import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,
 } from "@/domain/roster/bulkUnenrollRoster"
-import { resendClassroomInvite } from "@/domain/students"
+import { resendClassroomInvite, retireEmailInvite } from "@/domain/students"
 import { isMalformedGitHubId, resolveGitHubId } from "@/util/students"
 import { sortRolesByRank } from "@/util/teamRoster"
 import {
@@ -335,12 +332,10 @@ const RosterBulkActionsBar = ({
         if (didCancel) cancelled.push({ key: row.key, label })
         else alreadyGone.push({ key: row.key, label })
         if (!row.username && row.email) {
-          // An email-only invite carries a metadata team holding the address;
-          // tear it down with the invite (never throws; GC is the backstop).
-          await deleteInviteTeamForEmail(client, org, {
-            classroom,
-            email: row.email,
-          })
+          // An email-only invite leaves a metadata team holding the address and a
+          // pending roster row; retire both with the invite (never throws — the
+          // GC and reconcile passes are the backstops).
+          await retireEmailInvite(client, { org, classroom, email: row.email })
         }
       } catch (err) {
         log.debug("bulk cancel: per-row cancel failed", { err })

@@ -14,6 +14,9 @@ const renameConfigRepoToMain = vi.fn<(...args: unknown[]) => Promise<void>>(
 const cancelOrgInvitation = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
   Promise.resolve(),
 )
+const retireEmailInvite = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
+  Promise.resolve(),
+)
 const deleteInviteTeamForEmail = vi.fn<(...args: unknown[]) => Promise<void>>(
   () => Promise.resolve(),
 )
@@ -53,6 +56,7 @@ vi.mock("@/domain/students", () => ({
   resendClassroomInvite: (...a: unknown[]) => resendClassroomInvite(...a),
   removeClassroomStaffMember: (...a: unknown[]) =>
     removeClassroomStaffMember(...a),
+  retireEmailInvite: (...a: unknown[]) => retireEmailInvite(...a),
 }))
 vi.mock("@/orgPolicy/repair", () => ({
   repairConcern: (client: unknown, org: unknown, id: unknown, plan: unknown) =>
@@ -146,8 +150,8 @@ describe("useCancelClassroomInvite", () => {
       org: ORG,
       invitationId: 99,
     })
-    // A username invitation has no metadata team to tear down.
-    expect(deleteInviteTeamForEmail).not.toHaveBeenCalled()
+    // A username invitation leaves neither a metadata team nor a pending row.
+    expect(retireEmailInvite).not.toHaveBeenCalled()
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: githubKeys.teamInvitations(ORG, TEAM),
     })
@@ -156,7 +160,7 @@ describe("useCancelClassroomInvite", () => {
     })
   })
 
-  it("tears down the metadata team when cancelling an email-only invite", async () => {
+  it("retires the invite team AND its pending roster row when cancelling an email-only invite", async () => {
     const queryClient = freshClient()
     const { result } = renderHook(
       () => useCancelClassroomInvite(ORG, CLASSROOM, TEAM),
@@ -164,11 +168,13 @@ describe("useCancelClassroomInvite", () => {
     )
     result.current.mutate({ invitationId: 99, inviteEmail: "ta@x.edu" })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(deleteInviteTeamForEmail).toHaveBeenCalledWith(
-      expect.anything(),
-      ORG,
-      { classroom: CLASSROOM, email: "ta@x.edu" },
-    )
+    // One helper clears both the metadata team and the roster row; leaving the
+    // row behind would strand it invisibly on roster.csv.
+    expect(retireEmailInvite).toHaveBeenCalledWith(expect.anything(), {
+      org: ORG,
+      classroom: CLASSROOM,
+      email: "ta@x.edu",
+    })
   })
 })
 

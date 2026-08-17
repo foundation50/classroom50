@@ -83,6 +83,7 @@ const stubContext = {
   lookup: () => undefined,
   storedByIdentity: () => undefined,
   loginById: new Map<number, string>(),
+  claimedEmails: new Set<string>(),
 }
 beforeEach(() => {
   resolveRosterUploadContext.mockResolvedValue(stubContext)
@@ -646,6 +647,72 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
       .querySelector("input[type=checkbox]") as HTMLInputElement
     await user.click(confirm)
     await waitFor(() => expect(button.disabled).toBe(false))
+  })
+
+  it("marks an already-claimed email as a no-op and excludes it from the counts", async () => {
+    const user = userEvent.setup()
+    // The roster already carries zoe@x.edu, so appendEmailInviteRows would skip
+    // that address. The preview must say so rather than promising an invitation.
+    resolveRosterUploadContext.mockResolvedValue({
+      ...stubContext,
+      claimedEmails: new Set(["zoe@x.edu"]),
+    })
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [],
+      identityMismatches: [],
+      allAlreadyMembers: true,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(
+      user,
+      file("roster.csv", "email\nzoe@x.edu\nnewbie@x.edu\n"),
+    )
+
+    // Two email rows, but only one is a real invitation.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: "students.importAndInviteMembers:1",
+        }),
+      ).toBeTruthy(),
+    )
+    expect(screen.getByText("students.uploadInviteNotice:1")).toBeTruthy()
+    // The summary accounts for both rows: one to add, one to skip.
+    expect(screen.getByText("students.summary_add:1")).toBeTruthy()
+    expect(screen.getByText("students.summary_skip:1")).toBeTruthy()
+    // The skipped row is still shown, labelled for what it is.
+    await user.click(screen.getByText("students.summaryViewDetails"))
+    expect(screen.getByText("students.previewAlreadyOnRoster")).toBeTruthy()
+    expect(screen.getByText("students.previewInviteByEmail")).toBeTruthy()
+
+    bulkEnrollStudentsInClassroom.mockResolvedValue({
+      addedStudents: [],
+      skippedStudents: [],
+    })
+    bulkInviteByEmail.mockResolvedValue({
+      invited: [{ email: "newbie@x.edu", role: "student" }],
+      skipped: [],
+      failed: [],
+      deferred: [],
+    })
+    await user.click(
+      screen.getByRole("button", {
+        name: "students.importAndInviteMembers:1",
+      }),
+    )
+
+    // Only the unclaimed address is actually sent.
+    await waitFor(() => expect(bulkInviteByEmail).toHaveBeenCalledTimes(1))
+    expect(bulkInviteByEmail.mock.calls[0][1]).toMatchObject({
+      invites: [{ email: "newbie@x.edu" }],
+    })
   })
 
   it("counts invitations, not rows, in the primary button and notice", async () => {
