@@ -148,6 +148,34 @@ describe("parseRosterImportFile", () => {
         { line: 4, reason: "bad-username", value: "-bad-" },
       ])
     })
+
+    it("is unaffected by a leading BOM", () => {
+      // Excel's "CSV UTF-8" writes one. The BOM is stripped up front so the
+      // cursor arithmetic doesn't rely on its offset shift happening to cancel out.
+      expect(parse("\uFEFFusername\nada\n-bad-\n").dropped).toEqual([
+        { line: 3, reason: "bad-username", value: "-bad-" },
+      ])
+      // And the first header is still recognised, rather than read as "\uFEFFusername".
+      expect(parse("\uFEFFusername\nada\n").rows[0]?.identity).toEqual({
+        username: "ada",
+      })
+    })
+
+    it("counts a last row that has no trailing newline", () => {
+      // Papa ends that row's cursor at the input length rather than past a newline,
+      // so without compensating it would inherit the previous row's number.
+      expect(parse("username\nada\n-bad-").dropped).toEqual([
+        { line: 3, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("keeps consecutive unterminated bad rows distinct", () => {
+      // Two rows reported against one line also collide as React keys in the list.
+      expect(parse("username\n-b1-\n-b2-").dropped).toEqual([
+        { line: 2, reason: "bad-username", value: "-b1-" },
+        { line: 3, reason: "bad-username", value: "-b2-" },
+      ])
+    })
   })
 
   it("reports a metadata-only row as incomplete, not as bad content", () => {
@@ -373,6 +401,12 @@ describe("parseRosterImportFile: email-list override", () => {
   it("counts a leading blank line when reporting a bad one", () => {
     expect(parse("\nada@uni.edu\n\nnope\n", "email-list").dropped).toEqual([
       { line: 4, reason: "bad-email", value: "nope" },
+    ])
+  })
+
+  it("ignores a leading BOM rather than corrupting the first address", () => {
+    expect(parse("\uFEFFada@uni.edu\n", "email-list").rows).toEqual([
+      { line: 1, identity: { email: "ada@uni.edu" }, email: "ada@uni.edu" },
     ])
   })
 

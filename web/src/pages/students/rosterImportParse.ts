@@ -115,17 +115,22 @@ const countNewlines = (s: string) => {
   return n
 }
 
-// Parse a headed CSV, pairing each row with the TRUE 1-based file line it ENDS on.
+// Parse a headed CSV, pairing each row with its TRUE 1-based file line.
 //
 // Papa skips blank rows (`skipEmptyLines: greedy`), so a row's index is not its
 // line, and a reported line number is the teacher's only handle on the row to
 // edit. Rather than re-deriving the mapping by splitting on newlines — which
 // diverges from Papa the moment a quoted field contains one — use the per-row
-// `cursor` Papa reports through `step`: the offset it has consumed up to the end
-// of that row. Counting the newlines before it is then Papa's own idea of where
-// the row sits, so the two cannot drift. A row is one line in every ordinary file;
-// only a quoted multi-line field makes end differ from start, and pointing at its
-// last line is still inside the row the teacher must edit.
+// `cursor` Papa reports through `step`: the offset it has consumed through the end
+// of that row, terminating newline included. Counting the newlines before it is
+// then Papa's own idea of where the row sits, so the two cannot drift.
+//
+// Two details keep that arithmetic exact. `text` must already have any BOM removed
+// (parseRosterImportFile does it), because Papa strips one internally and its
+// cursors would otherwise be one character ahead of the string being sliced. And a
+// final row with no trailing newline ends the file without consuming one, so it
+// takes the +1 that newline would have contributed — otherwise it inherits the
+// previous row's number, which also collides as a React key in the report.
 const parseRowsWithLines = (text: string) => {
   const rows: { raw: Record<string, string>; line: number }[] = []
   // In `step` mode Papa reports each row's errors to the callback and leaves the
@@ -138,11 +143,13 @@ const parseRowsWithLines = (text: string) => {
     ...PAPA_OPTIONS,
     step: (result: Papa.ParseStepResult<Record<string, string>>) => {
       errors.push(...result.errors)
+      const cursor = result.meta.cursor
       // Advance from the previous row's end, so the file is scanned once overall
       // rather than once per row.
-      newlines += countNewlines(text.slice(consumed, result.meta.cursor))
-      consumed = result.meta.cursor
-      rows.push({ raw: result.data, line: newlines })
+      newlines += countNewlines(text.slice(consumed, cursor))
+      consumed = cursor
+      const unterminated = text.charCodeAt(cursor - 1) !== 10
+      rows.push({ raw: result.data, line: newlines + (unterminated ? 1 : 0) })
     },
   })
   return { rows, fields: parsed.meta.fields ?? [], errors }
@@ -231,11 +238,17 @@ const parseAddressList = (text: string): ParsedImportFile => {
 // Rows are NOT deduped here: two rows can only be known to name the same person
 // after ids resolve, so rosterImportResolve owns dedupe.
 export const parseRosterImportFile = (
-  text: string,
+  rawText: string,
   kind: UploadKind = "roster-csv",
 ): ParsedImportFile => {
-  const trimmed = text.trim()
-  if (!trimmed) return { rows: [], dropped: [] }
+  // Strip a leading BOM once, up front, so every reader below sees plain text.
+  // Papa strips one internally, so its row cursors would otherwise sit one
+  // character ahead of the string parseRowsWithLines slices to count lines. That
+  // shift happens to cancel out today (every row then looks unterminated and takes
+  // the same +1), which is a coincidence worth not depending on — Excel's
+  // "CSV UTF-8" export writes a BOM, so this is a common file.
+  const text = rawText.replace(/^\uFEFF/, "")
+  if (!text.trim()) return { rows: [], dropped: [] }
 
   // Before any CSV reading: under the email override every line is an address, so
   // a header row is data too. Papa.parse would otherwise consume the first line
@@ -243,8 +256,8 @@ export const parseRosterImportFile = (
   // us was a flat list.
   if (kind === "email-list") return parseAddressList(text)
 
-  // Parse the ORIGINAL text, not a trimmed copy, so each row's cursor is an offset
-  // into the file the teacher is looking at.
+  // Parse the un-trimmed text, so each row's cursor is an offset into the file the
+  // teacher is looking at and a leading blank line still counts.
   const { rows: rawRows, fields, errors } = parseRowsWithLines(text)
   const structural = structuralErrorOf(errors)
   // A structural error means the columns can't be trusted, so don't quietly
