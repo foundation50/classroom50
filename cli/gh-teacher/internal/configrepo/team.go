@@ -521,12 +521,10 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 // org-wide. A read failure propagates so a caller can report it rather than
 // silently sweeping nothing.
 func ListInviteTeams(client githubapi.Client, org string) ([]TeamRef, error) {
-	type orgTeam struct {
-		ID   int64  `json:"id"`
-		Slug string `json:"slug"`
-	}
+	// TeamRef's json tags already match the org-teams payload's id/slug, so it
+	// doubles as the decode target.
 	const perPage, maxPages = 100, 100
-	teams, err := githubapi.PaginateAll[orgTeam](
+	teams, err := githubapi.PaginateAll[TeamRef](
 		client, perPage, maxPages,
 		func(page int) string {
 			return fmt.Sprintf("orgs/%s/teams?per_page=%d&page=%d",
@@ -542,7 +540,7 @@ func ListInviteTeams(client githubapi.Client, org string) ([]TeamRef, error) {
 	var refs []TeamRef
 	for _, t := range teams {
 		if IsInviteTeamSlug(t.Slug) {
-			refs = append(refs, TeamRef{Slug: t.Slug, ID: t.ID})
+			refs = append(refs, t)
 		}
 	}
 	return refs, nil
