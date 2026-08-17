@@ -51,6 +51,24 @@ describe("classifyImportProblems", () => {
     ])
   })
 
+  it("tells a capped id apart from one we couldn't reach", () => {
+    // The lookup cap is DETERMINISTIC, so "try again in a moment" would be a dead
+    // end: the same file re-uploaded caps at the same place. It gets its own copy,
+    // pointing at the fix that works (drop the column, or split the file).
+    const problems = classifyImportProblems(
+      [],
+      [unusable({ line: 9, reason: "id-lookup-capped", githubId: "1234" })],
+    )
+    expect(problems).toEqual([
+      {
+        line: 9,
+        key: "students.dropIdLookupCapped",
+        value: "1234",
+        blocking: true,
+      },
+    ])
+  })
+
   it("merges both stages into one list ordered by file line", () => {
     // The two stages find problems independently; a teacher reads the FILE, so a
     // single ascending list is what one editing pass needs.

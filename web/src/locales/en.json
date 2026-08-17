@@ -752,6 +752,7 @@
     "dropIncomplete": "Line {{line}}: no GitHub username, github_id, or email address.",
     "dropUnresolvedId": "Line {{line}}: github_id {{value}} doesn't match any GitHub account. We won't fall back to the username column, because that could invite the wrong person.",
     "dropIdLookupFailed": "Line {{line}}: GitHub couldn't be reached to look up github_id {{value}}. Try again in a moment — we won't fall back to the username column, because that could invite the wrong person.",
+    "dropIdLookupCapped": "Line {{line}}: too many github_id values in this file to check at once, so {{value}} wasn't looked up. Delete the github_id column and let the username column identify each row, or split the file.",
     "previewInviteByEmail": "Invite by email",
     "previewEmailOnRoster": "Invite by email — already on the roster",
     "previewPreviousUsernameHint": "file said {{username}}",

@@ -109,6 +109,26 @@ const structuralErrorOf = (
 
 const stripMailto = (value: string) => value.replace(/^mailto:/i, "").trim()
 
+// The true 1-based file line of each row Papa will hand back, header first.
+//
+// Papa is given the TRIMMED text and skips blank rows (`skipEmptyLines: greedy`),
+// so a data row's index is not its line: leading blank lines vanish and every
+// interior blank line shifts the rest. A reported line number is the teacher's
+// only handle on the row to edit, so walk the original text and record the lines
+// Papa will keep. `greedy` drops a line whose every field is blank, which is what
+// this mirrors — using the delimiter Papa actually detected, so a `,,,` row is
+// counted as skipped here exactly as it is there.
+const keptLineNumbers = (text: string, delimiter: string): number[] => {
+  const lines: number[] = []
+  text.split(/\r?\n/).forEach((line, index) => {
+    const blank = delimiter
+      ? line.split(delimiter).every((cell) => cell.trim() === "")
+      : line.trim() === ""
+    if (!blank) lines.push(index + 1)
+  })
+  return lines
+}
+
 // Read a row's identity cells in precedence order. A present-but-unusable
 // github_id is recorded rather than ignored: falling back to the username cell
 // would send the invite to whoever holds that login today, so the caller fails
@@ -153,10 +173,12 @@ const blameFor = (raw: Record<string, string>, line: number): DroppedRow => {
 // for a bare address list: identityKey is derived from the address, so keeping
 // the file's casing would make `Ada@x.edu` and `ada@x.edu` two identities and
 // invite the same person twice.
-const parseAddressList = (trimmed: string): ParsedImportFile => {
+const parseAddressList = (text: string): ParsedImportFile => {
   const rows: ParsedImportRow[] = []
   const dropped: DroppedRow[] = []
-  trimmed.split(/\r?\n/).forEach((rawLine, index) => {
+  // Split the ORIGINAL text, not a trimmed copy: a reported line number is the
+  // teacher's only way to find the row, so leading blank lines must still count.
+  text.split(/\r?\n/).forEach((rawLine, index) => {
     const line = index + 1
     const value = rawLine.trim()
     if (!value) return
@@ -200,7 +222,7 @@ export const parseRosterImportFile = (
   // a header row is data too. Papa.parse would otherwise consume the first line
   // as headers and take the columnar branch on a file the teacher explicitly told
   // us was a flat list.
-  if (kind === "email-list") return parseAddressList(trimmed)
+  if (kind === "email-list") return parseAddressList(text)
 
   const parsed = Papa.parse<Record<string, string>>(trimmed, PAPA_OPTIONS)
   const fields = parsed.meta.fields ?? []
@@ -217,9 +239,10 @@ export const parseRosterImportFile = (
   const dropped: DroppedRow[] = []
 
   if (hasIdentityColumn) {
+    // Index 0 is the header, so data row i is at index i + 1.
+    const lines = keptLineNumbers(text, parsed.meta.delimiter)
     parsed.data.forEach((raw, index) => {
-      // +2: one for the header row, one for 1-based line numbers.
-      const line = index + 2
+      const line = lines[index + 1] ?? index + 2
       const identity = readIdentity(raw)
       if (!hasAnyIdentity(identity)) {
         dropped.push(blameFor(raw, line))
@@ -246,7 +269,9 @@ export const parseRosterImportFile = (
     return { rows, dropped }
   }
 
-  trimmed.split(/\r?\n/).forEach((rawLine, index) => {
+  // Split the ORIGINAL text, so a reported line number matches what the teacher
+  // sees in their editor even when the file opens with blank lines.
+  text.split(/\r?\n/).forEach((rawLine, index) => {
     const line = index + 1
     const value = rawLine.trim()
     if (!value) return

@@ -9,10 +9,13 @@ const log = logger.scope("students:rosterImportResolve")
 
 // How many unknown ids we'll trade for a current login over the network during a
 // preview. The local org-member map covers every enrolled student for free, so
-// this only bounds the tail: ids for accounts that have left the org, or an
-// export from another system. Past the cap a row is reported, never silently
-// re-keyed to its username cell.
-export const ID_RESOLUTION_CAP = 25
+// this only bounds the tail: ids for accounts that have left the org, or an export
+// from another system. Generous because the real guard is the rate-limit stop
+// below — one cheap GET per id, abandoned the moment GitHub pushes back — and
+// because a row past the cap can't be imported at all (it is never silently
+// re-keyed to its username cell), so a stingy cap would just refuse a legitimate
+// large cohort imported by id.
+export const ID_RESOLUTION_CAP = 300
 
 // A row's resolved identity. `account` addresses a GitHub account (the login is
 // authoritative once resolved); `email` addresses someone with no account on file
@@ -58,12 +61,15 @@ export const isEmailRow = (r: ResolvedImportRow): r is EmailImportRow =>
 // A row excluded from the import, with enough detail for the preview to name the
 // line the teacher has to edit. `unresolved-id` means the file's github_id is not
 // usable — malformed, or no such account. `id-lookup-failed` means we could not
-// ASK: a rate limit, a 5xx, an SSO-gated 403. Both fail closed (the row is never
-// re-keyed to its username cell), but they need different advice: one is a file to
-// fix, the other is a retry.
+// ASK: a rate limit, a 5xx, an SSO-gated 403. `id-lookup-capped` means we CHOSE
+// not to ask, having already spent ID_RESOLUTION_CAP lookups on this file. All
+// three fail closed (the row is never re-keyed to its username cell), but they
+// need different advice: a file to fix, a retry, and a file too big to check in
+// one pass — where a retry would deterministically fail, so it must not be
+// suggested.
 export type UnusableRow = {
   line: number
-  reason: "unresolved-id" | "id-lookup-failed"
+  reason: "unresolved-id" | "id-lookup-failed" | "id-lookup-capped"
   githubId: string
   username?: string
 }
@@ -111,6 +117,10 @@ export async function resolveImportIdentities(
   // teacher's file to fix.
   const missingIds = new Set<number>()
   const unaskedIds = new Set<number>()
+  // Ids we skipped because the file exhausted the lookup budget. Distinct from
+  // unasked: a retry can fix a rate limit, but the cap is deterministic, so
+  // telling the teacher to try again would be a dead end.
+  const cappedIds = new Set<number>()
 
   // Only ids absent from the local map cost a request. Deduped first so a file
   // listing the same id twice spends one call, and capped so a large import from
@@ -127,10 +137,14 @@ export async function resolveImportIdentities(
 
   let stopped = false
   for (const [index, id] of unknownIds.entries()) {
-    // Past the cap, or after a rate limit, we stop asking — those ids are
-    // "unasked", not "missing".
-    if (stopped || index >= ID_RESOLUTION_CAP) {
+    // Past the cap we chose not to ask; after a rate limit we couldn't. Neither is
+    // "missing", and the two need different advice.
+    if (stopped) {
       unaskedIds.add(id)
+      continue
+    }
+    if (index >= ID_RESOLUTION_CAP) {
+      cappedIds.add(id)
       continue
     }
     try {
@@ -181,11 +195,13 @@ export async function resolveImportIdentities(
       if (!login) {
         unusable.push({
           line: row.line,
-          // missingIds and unaskedIds are disjoint: each id takes exactly one
-          // path through the loop above.
-          reason: unaskedIds.has(githubId)
-            ? "id-lookup-failed"
-            : "unresolved-id",
+          // missingIds, unaskedIds and cappedIds are disjoint: each id takes
+          // exactly one path through the loop above.
+          reason: cappedIds.has(githubId)
+            ? "id-lookup-capped"
+            : unaskedIds.has(githubId)
+              ? "id-lookup-failed"
+              : "unresolved-id",
           githubId: String(githubId),
           username,
         })

@@ -333,6 +333,11 @@ each row.
 If instead the message says GitHub couldn't be reached to look up the id, your file
 is fine — that's a rate limit or a transient error. Wait a moment and upload again.
 
+If it says there were too many `github_id` values to check at once, uploading again
+won't help: delete the `github_id` column and let `username` identify each row, or
+split the file. This only comes up for a large roster whose students aren't in the
+organization yet, since ids for current members are checked for free.
+
 If the id is right but the username beside it is out of date, nothing is blocked:
 the upload uses the account the id belongs to, shows both values in the preview,
 asks you to confirm, and corrects the stored username.

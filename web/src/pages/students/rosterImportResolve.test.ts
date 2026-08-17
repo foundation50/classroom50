@@ -172,11 +172,12 @@ describe("resolveImportIdentities", () => {
     )
     expect(getUserById).toHaveBeenCalledTimes(ID_RESOLUTION_CAP)
     expect(res.rows).toHaveLength(ID_RESOLUTION_CAP)
-    // Never asked, so never "wrong" — the teacher should retry, not edit.
+    // Capped, not failed: a retry would cap at the same place, so the copy must
+    // point at editing the file rather than trying again.
     expect(res.unusable.map((u) => u.reason)).toEqual([
-      "id-lookup-failed",
-      "id-lookup-failed",
-      "id-lookup-failed",
+      "id-lookup-capped",
+      "id-lookup-capped",
+      "id-lookup-capped",
     ])
     getUserById.mockReset()
   })

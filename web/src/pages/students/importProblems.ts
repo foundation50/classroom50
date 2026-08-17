@@ -35,6 +35,7 @@ const DROP_KEYS: Record<DroppedRow["reason"], string> = {
 const UNUSABLE_KEYS: Record<UnusableRow["reason"], string> = {
   "unresolved-id": "students.dropUnresolvedId",
   "id-lookup-failed": "students.dropIdLookupFailed",
+  "id-lookup-capped": "students.dropIdLookupCapped",
 }
 
 // Merge and classify both stages' rejected rows.

@@ -106,6 +106,40 @@ describe("parseRosterImportFile", () => {
     ])
   })
 
+  // A reported line number is the teacher's only handle on the row to edit, and
+  // both the trim and Papa's blank-row skipping would otherwise shift it.
+  describe("reports the TRUE file line", () => {
+    it("counts leading blank lines", () => {
+      expect(parse("\n\nusername\nada\n-bad-\n").dropped).toEqual([
+        { line: 5, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("counts an interior blank line", () => {
+      expect(parse("username\nada\n\n-bad-\n").dropped).toEqual([
+        { line: 4, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("counts an all-blank-cell row, which Papa also skips", () => {
+      expect(parse("username,email\nada,\n,\n-bad-,\n").dropped).toEqual([
+        { line: 4, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("counts CRLF line endings", () => {
+      expect(parse("username\r\nada\r\n\r\n-bad-\r\n").dropped).toEqual([
+        { line: 4, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("counts leading blank lines in a bare list", () => {
+      expect(parse("\n\nada\nJohn Smith\n").dropped).toEqual([
+        { line: 4, reason: "bad-value", value: "John Smith" },
+      ])
+    })
+  })
+
   it("reports a metadata-only row as incomplete, not as bad content", () => {
     // No identity cell at all: a student who hasn't supplied a handle yet. This
     // is the ONE non-blocking case — there is nothing for the teacher to correct.
@@ -324,6 +358,12 @@ describe("parseRosterImportFile: email-list override", () => {
     const parsed = parse("ada@uni.edu\n\n   \nbob@example.com\n", "email-list")
     expect(parsed.rows).toHaveLength(2)
     expect(parsed.dropped).toEqual([])
+  })
+
+  it("counts a leading blank line when reporting a bad one", () => {
+    expect(parse("\nada@uni.edu\n\nnope\n", "email-list").dropped).toEqual([
+      { line: 4, reason: "bad-email", value: "nope" },
+    ])
   })
 
   it("normalizes casing so one person can't be invited twice", () => {
