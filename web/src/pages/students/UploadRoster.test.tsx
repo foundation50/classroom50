@@ -115,8 +115,8 @@ const uploadFile = async (
   await user.upload(input, f)
 }
 
-// Every upload opens as Roster CSV now, so a test exercising the dedicated
-// email-list branch has to select it explicitly.
+// Selecting the email-list format, i.e. the teacher asserting every line of the
+// file is an address. Every upload opens as Roster CSV.
 const chooseEmailList = async (user: ReturnType<typeof userEvent.setup>) => {
   const select = await waitFor(
     () => screen.getByLabelText("students.detectedFormat") as HTMLSelectElement,
@@ -127,33 +127,40 @@ const chooseEmailList = async (user: ReturnType<typeof userEvent.setup>) => {
 const primaryButton = () =>
   screen
     .getByRole("button", {
-      name: /sendInviteCount|importAndInviteMembers|importMembers|confirmChanges|noChangesToApply/,
+      name: /importAndInviteMembers|importMembers|confirmChanges|noChangesToApply/,
     })
     .closest("button") as HTMLButtonElement
 
+// An address-only file now runs through the roster path like any other, so the
+// owner gate under test is PreflightRecap's — the one that also covers a username
+// row promoted to teacher. Before the email-list branch was collapsed this same
+// property was enforced by a second, parallel checkbox inside the email preview.
 describe("UploadRoster email-invite owner-confirmation gate", () => {
-  it("keeps Send disabled for a teacher email until the owner checkbox is ticked", async () => {
+  it("keeps the import disabled for a teacher email until the owner checkbox is ticked", async () => {
     const user = userEvent.setup()
     renderModal(
       <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
     )
 
     await uploadFile(user, file("emails.txt", "prof@x.edu\n"))
-    await chooseEmailList(user)
-
-    // The send button renders and is disabled while a teacher role would grant
-    // owner but is unconfirmed.
     const send = await waitFor(() => primaryButton())
 
+    // The per-row role picker lives in the details table, which stays collapsed
+    // until a confirmation needs it — so open it the way a teacher would.
+    await user.click(
+      await waitFor(() => screen.getByText("students.summaryViewDetails")),
+    )
+
     // Assign the sole address the teacher role -> owner-grant path.
-    const roleSelect = screen.getByLabelText(
-      "students.assignRoleLabel",
-    ) as HTMLSelectElement
+    const roleSelect = await waitFor(
+      () =>
+        screen.getByLabelText("students.assignRoleLabel") as HTMLSelectElement,
+    )
     await user.selectOptions(roleSelect, "teacher")
 
     expect(send.disabled).toBe(true)
 
-    // Ticking the confirmation enables Send.
+    // Ticking the confirmation enables the import.
     const checkbox = screen.getByRole("checkbox") as HTMLInputElement
     await user.click(checkbox)
     await waitFor(() => expect(primaryButton().disabled).toBe(false))
@@ -176,10 +183,12 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
     )
 
     await uploadFile(user, file("emails.txt", "prof@x.edu\n"))
-    await chooseEmailList(user)
     await waitFor(() => primaryButton())
+    await user.click(
+      await waitFor(() => screen.getByText("students.summaryViewDetails")),
+    )
     await user.selectOptions(
-      screen.getByLabelText("students.assignRoleLabel"),
+      await waitFor(() => screen.getByLabelText("students.assignRoleLabel")),
       "teacher",
     )
 
@@ -191,7 +200,7 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
 })
 
 describe("UploadRoster format override", () => {
-  it("re-parses the same text and swaps the preview branch (roster <-> email)", async () => {
+  it("re-parses the same text under each format the teacher can assert", async () => {
     const user = userEvent.setup()
     classifyRosterUpload.mockReturnValue({
       noAction: [],
@@ -213,10 +222,11 @@ describe("UploadRoster format override", () => {
     await user.click(screen.getByText("students.summaryViewDetails"))
     expect(screen.getByText("students.previewInviteByEmail")).toBeTruthy()
 
-    // Overriding to the dedicated email branch swaps to the email preview.
+    // Asserting "email addresses" keeps it an email row — same parser, same table.
     await chooseEmailList(user)
-    await waitFor(() => screen.getByText("students.emailsFound:1"))
-    expect(screen.queryByText("students.previewInviteByEmail")).toBeNull()
+    await waitFor(() =>
+      expect(screen.getByText("students.previewInviteByEmail")).toBeTruthy(),
+    )
 
     // Overriding to a username list forces the line to be read as a handle;
     // "ada@x.edu" isn't a plausible one, so the file now carries content we
@@ -226,9 +236,9 @@ describe("UploadRoster format override", () => {
     ) as HTMLSelectElement
     await user.selectOptions(overrideSelect, "username-list")
     await waitFor(() =>
-      expect(screen.queryByText("students.emailsFound:1")).toBeNull(),
+      expect(screen.getByText("students.importBlocked:1")).toBeTruthy(),
     )
-    expect(screen.getByText("students.importBlocked:1")).toBeTruthy()
+    expect(screen.queryByText("students.previewInviteByEmail")).toBeNull()
   })
 })
 
@@ -240,8 +250,12 @@ describe("UploadRoster open->false reset", () => {
     )
 
     await uploadFile(user, file("emails.txt", "ada@x.edu\n"))
+    // Selecting an override is part of the state this reset has to clear, so keep
+    // exercising it here.
     await chooseEmailList(user)
-    await waitFor(() => screen.getByText("students.emailsFound:1"))
+    await waitFor(() =>
+      expect(screen.getByText("students.summaryViewDetails")).toBeTruthy(),
+    )
 
     // Close (open -> false), then reopen (open -> true).
     rerender(
@@ -255,7 +269,7 @@ describe("UploadRoster open->false reset", () => {
     await waitFor(() =>
       expect(screen.getByText("students.uploadDropPrompt")).toBeTruthy(),
     )
-    expect(screen.queryByText("students.emailsFound:1")).toBeNull()
+    expect(screen.queryByText("students.summaryViewDetails")).toBeNull()
   })
 })
 

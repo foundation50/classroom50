@@ -7,7 +7,6 @@ import {
   bulkInviteByEmail,
   unenrollStudent,
   bulkUnenrollStudents,
-  removeEmailInviteRow,
   retireEmailInvite,
   retireEmailInvites,
   resolveClassroomPendingInvite,
@@ -30,6 +29,7 @@ import {
   STUDENT_CSV_FIELDS,
   StudentAlreadyEnrolledError,
 } from "./students"
+import { removeEmailInviteRow } from "./students/rosterPrimitives"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { GitHubClient } from "@/github-core/client"
 

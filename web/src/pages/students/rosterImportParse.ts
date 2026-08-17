@@ -148,16 +148,44 @@ const blameFor = (raw: Record<string, string>, line: number): DroppedRow => {
   return { line, reason: "incomplete" }
 }
 
+// Read every line of a flat file as an email address, for the email-list
+// override. Addresses are normalized, exactly as the default kind already does
+// for a bare address list: identityKey is derived from the address, so keeping
+// the file's casing would make `Ada@x.edu` and `ada@x.edu` two identities and
+// invite the same person twice.
+const parseAddressList = (trimmed: string): ParsedImportFile => {
+  const rows: ParsedImportRow[] = []
+  const dropped: DroppedRow[] = []
+  trimmed.split(/\r?\n/).forEach((rawLine, index) => {
+    const line = index + 1
+    const value = rawLine.trim()
+    if (!value) return
+    const bare = stripMailto(value)
+    if (!isValidEmail(bare)) {
+      dropped.push({ line, reason: "bad-email", value })
+      return
+    }
+    const email = normalizeEmail(bare)
+    rows.push({ line, identity: { email }, email })
+  })
+  return { rows, dropped }
+}
+
 // Parse an uploaded roster into rows carrying an UNRESOLVED identity plus
 // metadata. A CSV with a header row reads github_id/username/email as identity
 // columns (precedence in that order) and first_name/last_name/name/section/role
 // as metadata, all case- and order-insensitive. Anything without a header row is
 // read one value per line.
 //
-// `kind` is what makes the modal's format override real: "username-list" reads
-// every bare line as a GitHub handle even when it looks like an address, while
-// "roster-csv" (the default) detects each bare line. "email-list" never reaches
-// here — that branch has its own line-oriented parser.
+// `kind` is what makes the modal's format override real, and each override is an
+// assertion by the teacher about EVERY line, so neither does any columnar reading:
+//   - "username-list" reads every line as a GitHub handle, even one shaped like
+//     an address;
+//   - "email-list" reads every line as an address, even one shaped like a handle.
+// A line that contradicts the assertion is dropped rather than re-read as the
+// other shape — silently importing `octocat` as an email row (or vice versa) from
+// a file the teacher told us the shape of would defeat the point of the override.
+// "roster-csv" (the default) detects each bare line instead.
 //
 // Rows are NOT deduped here: two rows can only be known to name the same person
 // after ids resolve, so rosterImportResolve owns dedupe.
@@ -167,6 +195,12 @@ export const parseRosterImportFile = (
 ): ParsedImportFile => {
   const trimmed = text.trim()
   if (!trimmed) return { rows: [], dropped: [] }
+
+  // Before any CSV reading: under the email override every line is an address, so
+  // a header row is data too. Papa.parse would otherwise consume the first line
+  // as headers and take the columnar branch on a file the teacher explicitly told
+  // us was a flat list.
+  if (kind === "email-list") return parseAddressList(trimmed)
 
   const parsed = Papa.parse<Record<string, string>>(trimmed, PAPA_OPTIONS)
   const fields = parsed.meta.fields ?? []

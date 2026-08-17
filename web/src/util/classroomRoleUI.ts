@@ -95,7 +95,7 @@ export function hasStudentEnrollment(
 // Such a row is retired by CANCELLING the invitation instead, which is also the
 // only correct action: dropping the roster row alone would leave the invitation
 // live, so the student could still accept and land in the classroom. Cancelling
-// revokes it, deletes the stored email, and the reconcile then drops the row.
+// revokes it, deletes the stored email, and drops the row.
 export function canTargetForUnenroll(
   row: Pick<TeamRosterRow, "username" | "github_id">,
 ): boolean {

@@ -41,9 +41,9 @@ export type ResolvedImportRow = {
   role?: ClassroomRole
 }
 
-export type AccountIdentity = Extract<ImportIdentity, { kind: "account" }>
-export type AccountImportRow = ResolvedImportRow & { identity: AccountIdentity }
-export type EmailImportRow = ResolvedImportRow & {
+type AccountIdentity = Extract<ImportIdentity, { kind: "account" }>
+type AccountImportRow = ResolvedImportRow & { identity: AccountIdentity }
+type EmailImportRow = ResolvedImportRow & {
   identity: Extract<ImportIdentity, { kind: "email" }>
 }
 

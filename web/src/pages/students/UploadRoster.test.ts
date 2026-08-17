@@ -4,11 +4,12 @@ import {
   detectImportHeaderIssue,
   parseRosterImportFile,
 } from "./UploadRoster"
+import type { UploadKind } from "./uploadClassify"
 
 // The parser returns UNRESOLVED identities: it records the file's cells and
 // leaves trading a github_id for a login to rosterImportResolve (that needs the
 // network). These tests therefore assert on identity cells, not final logins.
-const parse = (text: string, kind?: "roster-csv" | "username-list") =>
+const parse = (text: string, kind?: UploadKind) =>
   parseRosterImportFile(text, kind)
 
 describe("parseRosterImportFile", () => {
@@ -168,7 +169,6 @@ describe("parseRosterImportFile", () => {
       "valid-user",
     ])
   })
-
   it("keeps the raw email cell as metadata so an unchanged roster shows no delta", () => {
     // Stored roster addresses are never lower-cased, and mergeStudentMetadata
     // compares case-sensitively — so normalizing here would report a metadata
@@ -274,5 +274,70 @@ describe("coerceImportRole", () => {
     // Not a silent alias for admin/owner — an unknown role never escalates.
     expect(coerceImportRole("admin")).toBeUndefined()
     expect(coerceImportRole("owner")).toBeUndefined()
+  })
+})
+
+// The email-list override, previously a separate line-oriented parser. Selecting
+// it asserts every line is an address, so nothing is read columnar and no line is
+// re-read as a handle.
+describe("parseRosterImportFile: email-list override", () => {
+  const emails = (text: string) =>
+    parse(text, "email-list").rows.map((r) => r.identity.email)
+
+  it("reads one address per line, trimming and stripping mailto:", () => {
+    const text = "  ada@uni.edu  \nmailto:bob@example.com\nMAILTO:cara@x.io\n"
+    expect(emails(text)).toEqual([
+      "ada@uni.edu",
+      "bob@example.com",
+      "cara@x.io",
+    ])
+  })
+
+  it("does NOT read a header row as headers", () => {
+    // The whole point of the short-circuit: Papa would consume line 1 as a header
+    // and take the columnar branch on a file the teacher told us was a flat list.
+    expect(emails("email\nada@uni.edu\n")).toEqual(["ada@uni.edu"])
+  })
+
+  it("blocks a handle instead of silently importing it as an email row", () => {
+    const parsed = parse("ada@uni.edu\noctocat\n", "email-list")
+    expect(parsed.rows).toHaveLength(1)
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-email", value: "octocat" },
+    ])
+  })
+
+  it("reports each invalid line with its number and raw value", () => {
+    const parsed = parse(
+      "ada@uni.edu\nnot-an-email\n@handle\nbob@x\n",
+      "email-list",
+    )
+    expect(parsed.rows).toHaveLength(1)
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-email", value: "not-an-email" },
+      { line: 3, reason: "bad-email", value: "@handle" },
+      { line: 4, reason: "bad-email", value: "bob@x" },
+    ])
+  })
+
+  it("skips blank lines silently rather than reporting them", () => {
+    const parsed = parse("ada@uni.edu\n\n   \nbob@example.com\n", "email-list")
+    expect(parsed.rows).toHaveLength(2)
+    expect(parsed.dropped).toEqual([])
+  })
+
+  it("normalizes casing so one person can't be invited twice", () => {
+    // identityKey is derived from the address, so keeping the file's casing would
+    // make these three separate identities and send three invitations.
+    expect(emails("Ada@Uni.edu\nada@uni.edu\nADA@UNI.EDU\n")).toEqual([
+      "ada@uni.edu",
+      "ada@uni.edu",
+      "ada@uni.edu",
+    ])
+  })
+
+  it("returns nothing for empty or whitespace-only input", () => {
+    expect(parse("", "email-list")).toEqual({ rows: [], dropped: [] })
+    expect(parse("  \n \n", "email-list")).toEqual({ rows: [], dropped: [] })
   })
 })

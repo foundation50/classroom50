@@ -2,10 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Upload } from "lucide-react"
 
-import {
-  resolveRosterUploadContext,
-  bulkInviteByEmail,
-} from "@/domain/students"
+import { resolveRosterUploadContext } from "@/domain/students"
 import type {
   BulkImportResult,
   BulkInviteByEmailResult,
@@ -26,15 +23,7 @@ import {
   DEFAULT_UPLOAD_KIND,
   type UploadKind,
 } from "@/pages/students/uploadClassify"
-import {
-  parseEmailInviteFile,
-  type InvalidEmailLine,
-} from "@/pages/students/emailInvite"
-import {
-  DetectedFormatSelect,
-  EmailInvitePreview,
-  EmailInviteResult,
-} from "@/pages/students/EmailInviteFlow"
+import { DetectedFormatSelect } from "@/pages/students/DetectedFormatSelect"
 import {
   identityKey,
   isAccountRow,
@@ -46,7 +35,6 @@ import {
   type UnusableRow,
 } from "@/pages/students/rosterImportResolve"
 import {
-  coerceImportRole,
   detectImportHeaderIssue,
   parseRosterImportFile,
   type DroppedRow,
@@ -63,7 +51,7 @@ import {
   type RowIdentityChanges,
   type RowRoleChanges,
 } from "./RosterPreviewTable"
-import { ImportResultSection, RosterImportResult } from "./RosterImportResult"
+import { RosterImportResult } from "./RosterImportResult"
 import { classifyImportProblems } from "./importProblems"
 import {
   ImportBlockedReport,
@@ -130,18 +118,8 @@ const UploadRoster = ({
   // made unusable. Null until resolution runs.
   const [resolved, setResolved] = useState<ResolvedImportRow[] | null>(null)
   const [unusableRows, setUnusableRows] = useState<UnusableRow[]>([])
-  // Email-invite branch (uploadKind === "email-list"): parsed addresses, the
-  // per-address role, the org-owner confirmation, and the send result. Kept
-  // separate from the roster rows so the two flows don't entangle.
-  const [emails, setEmails] = useState<string[]>([])
-  // Non-empty lines in an email-list upload that aren't valid addresses, with
-  // their file line numbers, so the preview can flag exactly which rows to fix
-  // (empty lines are skipped silently). Valid emails still import.
-  const [invalidEmails, setInvalidEmails] = useState<InvalidEmailLine[]>([])
-  const [emailRoles, setEmailRoles] = useState<Record<string, ClassroomRole>>(
-    {},
-  )
-  const [emailOwnerConfirmed, setEmailOwnerConfirmed] = useState(false)
+  // The email pass's outcome, from whichever kind produced it: every format
+  // routes email-identity rows through the same invite pass.
   const [emailResult, setEmailResult] =
     useState<BulkInviteByEmailResult | null>(null)
   const [emailError, setEmailError] = useState<string | null>(null)
@@ -202,10 +180,6 @@ const UploadRoster = ({
     setResolved(null)
     setUnusableRows([])
     setHeaderIssue(null)
-    setEmails([])
-    setInvalidEmails([])
-    setEmailRoles({})
-    setEmailOwnerConfirmed(false)
     setEmailResult(null)
     setEmailError(null)
     setProgress({ processed: 0, total: 0, message: "" })
@@ -466,9 +440,6 @@ const UploadRoster = ({
       Object.values(rolesByUser).some(isTeacherRole),
     [parsedRows, rolesByUser],
   )
-  const emailHasTeacher = emails.some((e) =>
-    isTeacherRole(emailRoles[e.toLowerCase()] ?? "student"),
-  )
   // Email-identity rows are actionable work in their own right: each one sends an
   // org invitation and lands a pending roster row. So is a confirmed identity
   // mismatch — it repairs the stored username. Counting only the preflight
@@ -512,18 +483,14 @@ const UploadRoster = ({
     (!!preflight && !hasActionableWork)
   const showDetails = detailsOpen || forceDetails
   const canProcess =
-    uploadKind === "email-list"
-      ? emails.length > 0 &&
-        invalidEmails.length === 0 &&
-        (!emailHasTeacher || emailOwnerConfirmed)
-      : resolvedRows.length > 0 &&
-        !blocked &&
-        !preflighting &&
-        !preflightError &&
-        (!preflight || hasActionableWork) &&
-        (!needsRoleConfirm || roleChangesConfirmed) &&
-        (!needsMetadataConfirm || metadataConfirmed) &&
-        (!needsMismatchConfirm || mismatchConfirmed)
+    resolvedRows.length > 0 &&
+    !blocked &&
+    !preflighting &&
+    !preflightError &&
+    (!preflight || hasActionableWork) &&
+    (!needsRoleConfirm || roleChangesConfirmed) &&
+    (!needsMetadataConfirm || metadataConfirmed) &&
+    (!needsMismatchConfirm || mismatchConfirmed)
 
   // The roster primary-button label names the action and its scale. Counts here
   // come from inviteCount / metadataUpdate — never the row total — so the button
@@ -562,34 +529,15 @@ const UploadRoster = ({
     setMetadataConfirmed(false)
     setMismatchConfirmed(false)
     setParseId((n) => n + 1)
-    if (kind === "email-list") {
-      const parsed = parseEmailInviteFile(text)
-      setEmails(parsed.valid.map((r) => r.email))
-      setInvalidEmails(parsed.invalid)
-      setEmailRoles(
-        Object.fromEntries(
-          parsed.valid.map((r) => [r.email.toLowerCase(), "student"]),
-        ),
-      )
-      setEmailOwnerConfirmed(false)
-      setParsedRows([])
-      setDroppedRows([])
-      setResolved(null)
-      setUnusableRows([])
-      setHeaderIssue(null)
-    } else {
-      const parsed = parseRosterImportFile(text, kind)
-      setParsedRows(parsed.rows)
-      setDroppedRows(parsed.dropped)
-      setResolved(null)
-      setUnusableRows([])
-      setHeaderIssue(
-        parsed.rows.length === 0 ? detectImportHeaderIssue(text) : null,
-      )
-      setRolesByUser({})
-      setEmails([])
-      setInvalidEmails([])
-    }
+    const parsed = parseRosterImportFile(text, kind)
+    setParsedRows(parsed.rows)
+    setDroppedRows(parsed.dropped)
+    setResolved(null)
+    setUnusableRows([])
+    setHeaderIssue(
+      parsed.rows.length === 0 ? detectImportHeaderIssue(text) : null,
+    )
+    setRolesByUser({})
   }
 
   const ingestFile = async (file: File) => {
@@ -639,40 +587,6 @@ const UploadRoster = ({
     // Re-entry guard: a synchronous double-click would otherwise fire two
     // concurrent imports racing the same roster.csv read-modify-write.
     if (phase === "importing") return
-
-    // Email-list branch: the teacher asserted every line is an address, so send
-    // org invitations directly. Each one lands a pending roster row.
-    if (uploadKind === "email-list") {
-      setPhase("importing")
-      setError(null)
-      setEmailResult(null)
-      setProgress({
-        processed: 0,
-        total: emails.length,
-        message: t("students.startingImport"),
-      })
-      try {
-        const res = await bulkInviteByEmail(client, {
-          org,
-          classroom,
-          invites: emails.map((email) => ({
-            email,
-            role: emailRoles[email.toLowerCase()] ?? "student",
-          })),
-          onProgress: setProgress,
-        })
-        setEmailResult(res)
-        setPhase("complete")
-        onEmailSuccess?.(res)
-      } catch (err) {
-        log.error("bulk email invite failed", { err, record: true })
-        setError(
-          err instanceof Error ? err.message : t("students.importFailed"),
-        )
-        setPhase("error")
-      }
-      return
-    }
 
     setPhase("importing")
     setError(null)
@@ -823,30 +737,13 @@ const UploadRoster = ({
 
         {phase === "preview" && (
           <div className="mt-6">
-            {/* How the file is being read, with an override, above the branch
-                split. Roster CSV is always the initial choice. */}
+            {/* How the file is being read, with an override. Roster CSV is always
+                the initial choice; the other two are assertions about every line
+                that the same parser honours. */}
             <DetectedFormatSelect
               value={uploadKind}
               onChange={(kind) => applyKind(fileText, kind)}
             />
-
-            {uploadKind === "email-list" ? (
-              <EmailInvitePreview
-                emails={emails}
-                invalidEmails={invalidEmails}
-                emailRoles={emailRoles}
-                emailOwnerConfirmed={emailOwnerConfirmed}
-                emailHasTeacher={emailHasTeacher}
-                canProcess={canProcess}
-                onRoleChange={(key, rawValue) => {
-                  const role = coerceImportRole(rawValue) ?? "student"
-                  setEmailRoles((prev) => ({ ...prev, [key]: role }))
-                }}
-                onOwnerConfirmedChange={setEmailOwnerConfirmed}
-                onCancel={resetToDropZone}
-                onSend={startImport}
-              />
-            ) : null}
           </div>
         )}
 
@@ -855,11 +752,11 @@ const UploadRoster = ({
             on a file the teacher and the app disagree about. Resolution still runs
             underneath, so an unusable github_id joins the list rather than waiting
             for the teacher's next upload. */}
-        {phase === "preview" && uploadKind !== "email-list" && blocked && (
+        {phase === "preview" && blocked && (
           <ImportBlockedReport problems={problems} onCancel={resetToDropZone} />
         )}
 
-        {phase === "preview" && uploadKind !== "email-list" && !blocked && (
+        {phase === "preview" && !blocked && (
           <div>
             {/* Preflight against current GitHub membership: what processing will
                 do to each row. While it resolves, the summary/recap are withheld
@@ -883,6 +780,14 @@ const UploadRoster = ({
                         count: inviteCount,
                       })}
                     </span>
+                  </Alert>
+                ) : null}
+                {/* An email row behaves unlike a username row in a way the table
+                    can't show: it lands a PENDING roster row now and only binds to
+                    an account on acceptance. Say so whenever the batch has one. */}
+                {emailRowCount > 0 ? (
+                  <Alert tone="info" className="mb-4">
+                    <span>{t("students.emailInviteRosterNotice")}</span>
                   </Alert>
                 ) : null}
                 <PreflightSummary
@@ -1020,20 +925,10 @@ const UploadRoster = ({
           </div>
         )}
 
-        {/* The dedicated "Email addresses" upload has no roster result to merge,
-            so it keeps its own screen. */}
-        {phase === "complete" && uploadKind === "email-list" && emailResult && (
-          <EmailInviteResult
-            result={emailResult}
-            onDone={handleClose}
-            renderSection={(props) => <ImportResultSection {...props} />}
-          />
-        )}
-
-        {/* A roster CSV lands on ONE screen even when it carried both kinds of
+        {/* Every upload lands on ONE screen, even one that carried both kinds of
             row: two independent result blocks would paint two success banners and
             two Done buttons. */}
-        {phase === "complete" && uploadKind !== "email-list" && result && (
+        {phase === "complete" && result && (
           <RosterImportResult
             result={result}
             inviteError={inviteError}
