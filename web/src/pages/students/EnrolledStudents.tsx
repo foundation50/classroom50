@@ -30,6 +30,7 @@ import { sortTeamRosterRows } from "@/util/teamRoster"
 import { STAFF_ROLES } from "@/types/classroom"
 import {
   ROLE_LABEL_KEY,
+  canCancelInviteFor,
   canTargetForUnenroll,
   hasStudentEnrollment,
 } from "@/util/classroomRoleUI"
@@ -199,14 +200,17 @@ const EnrolledStudents = ({
       github_id: row.github_id,
       username: row.username,
     })
-  // Selectable for the bulk actions bar, whose destructive action is unenroll.
-  // A pending email invite is excluded for the same reason the row modal hides
-  // Remove (canTargetForUnenroll): the roster matcher keys on username/github_id,
-  // so unenroll can't match that row — it would silently report "already
-  // removed" while the row AND the live invitation survive. Cancel the
-  // invitation instead (offered per row in the modal).
+  // Selectable for the bulk actions bar. The bar offers THREE actions (unenroll,
+  // role change, cancel invite), so eligibility is per-action rather than one
+  // unenroll-shaped gate: a pending email invite can't be unenrolled (the roster
+  // matcher keys on username/github_id, so it would report "already removed"
+  // while the row and the live invitation survive) but cancelling its invitation
+  // is exactly the right bulk action. Gating selection on unenroll alone made
+  // that path unreachable — and a class-sized email invite un-bulk-cancellable.
   const isSelectable = (row: TeamRosterRow) =>
-    !isSelf(row) && hasStudentEnrollment(row) && canTargetForUnenroll(row)
+    !isSelf(row) &&
+    hasStudentEnrollment(row) &&
+    (canTargetForUnenroll(row) || canCancelInviteFor(row))
 
   // Distinct sections present across all rows (status-independent so switching
   // status never empties the section dropdown), sorted with "No section" last.
@@ -453,6 +457,7 @@ const EnrolledStudents = ({
       key={row.key}
       row={row}
       selfRow={isSelf(row)}
+      selectable={isSelectable(row)}
       checked={selectedKeys.has(row.key)}
       onOpen={setSelectedKey}
       onCheckboxClick={handleRowCheckboxClick}
