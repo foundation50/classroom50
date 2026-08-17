@@ -201,12 +201,10 @@ describe("parseRosterImportFile", () => {
     expect(detectImportHeaderIssue(csv)?.kind).toBe("missing-identity-header")
   })
 
-  it("skips a one-column caption line instead of blocking the file", () => {
-    // A spreadsheet export of a single column starts with its column title. Papa
-    // reads a one-column first line as data and looksLikeHeaderRow can't tell that
-    // token from a handle, so left alone the caption would be reported as unusable
-    // content and block every student behind it.
-    const parsed = parse("GitHub Username\nada\nbob\n")
+  it("skips a recognized column caption instead of importing it as a student", () => {
+    // A spreadsheet export of a single column starts with that column's title.
+    // `username` is handle-shaped, so without this it would import as a student.
+    const parsed = parse("username\nada\nbob\n")
     expect(parsed.rows.map((r) => r.identity)).toEqual([
       { username: "ada" },
       { username: "bob" },
@@ -214,9 +212,17 @@ describe("parseRosterImportFile", () => {
     expect(parsed.dropped).toEqual([])
   })
 
+  it("reports an unrecognized bad first line rather than guessing it's a caption", () => {
+    // "Didn't parse, but a later line did" describes a typo'd first entry just as
+    // well as a caption — guessing would silently omit a student the teacher listed.
+    const parsed = parse("GitHub Username\nada\n")
+    expect(parsed.rows.map((r) => r.identity)).toEqual([{ username: "ada" }])
+    expect(parsed.dropped).toEqual([
+      { line: 1, reason: "bad-value", value: "GitHub Username" },
+    ])
+  })
+
   it("still reports the first line when nothing else parses either", () => {
-    // Without a parsing line below it, the file isn't a captioned list — so the
-    // caption exemption must not silently swallow the only evidence of a bad file.
     const parsed = parse("Student Name\nAnother Name\n")
     expect(parsed.rows).toHaveLength(0)
     expect(parsed.dropped.map((d) => d.line)).toEqual([1, 2])

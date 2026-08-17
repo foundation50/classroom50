@@ -217,34 +217,24 @@ const hasAnyIdentity = (identity: UnresolvedIdentity) =>
 
 // The index of a leading caption line to skip, or -1.
 //
-// The first non-blank line of a one-column file is often a caption a spreadsheet
-// added ("GitHub Username", "student_email", or a bare "username"). Papa treats a
-// single-column first line as data and looksLikeHeaderRow cannot recognize it (one
-// unrecognized token is indistinguishable from a handle), so left alone it is
-// either reported as unusable content — BLOCKING the whole file — or, when the
-// caption happens to be handle-shaped, imported as a student named after a column.
-// Two signals mark a caption: the line is a recognized column name, or it parses as
-// nothing while a later line parses. One helper so the address-list and bare-list
-// readers can't diverge on it.
-const captionLineIndex = (
-  lines: readonly string[],
-  parses: (value: string) => boolean,
-): number => {
+// A spreadsheet export of a single column starts with that column's title. Papa
+// reads a one-column first line as data and looksLikeHeaderRow can't recognize it,
+// so left alone the caption is either reported as unusable content — blocking the
+// whole file — or, when it happens to be handle-shaped, imported as a student named
+// after a column.
+//
+// The signal is deliberately narrow: the line must BE a recognized column name.
+// "It didn't parse but a later line did" is not enough — that describes a typo'd
+// first entry just as well as a caption, and guessing would silently omit a student
+// the teacher listed, which is the failure this whole change exists to remove. An
+// unrecognized bad first line stays reported.
+const captionLineIndex = (lines: readonly string[]): number => {
   const first = lines.findIndex((l) => l.trim() !== "")
   if (first < 0) return -1
-  const value = lines[first]!.trim()
-  if (
-    (RECOGNIZED_IMPORT_HEADERS as readonly string[]).includes(
-      value.toLowerCase(),
-    )
-  ) {
-    return first
-  }
-  if (parses(value)) return -1
-  const laterLineParses = lines.some(
-    (l, i) => i > first && l.trim() !== "" && parses(l.trim()),
-  )
-  return laterLineParses ? first : -1
+  const value = lines[first]!.trim().toLowerCase()
+  return (RECOGNIZED_IMPORT_HEADERS as readonly string[]).includes(value)
+    ? first
+    : -1
 }
 
 // Read every line of a flat file as an email address, for the email-list
@@ -258,7 +248,7 @@ const parseAddressList = (text: string): ParsedImportFile => {
   // Split the ORIGINAL text, not a trimmed copy: a reported line number is the
   // teacher's only way to find the row, so leading blank lines must still count.
   const lines = splitLines(text)
-  const caption = captionLineIndex(lines, (v) => isValidEmail(stripMailto(v)))
+  const caption = captionLineIndex(lines)
   lines.forEach((rawLine, index) => {
     const line = index + 1
     const value = rawLine.trim()
@@ -286,12 +276,7 @@ const parseFlatList = (text: string, kind: UploadKind): ParsedImportFile => {
   // Split the ORIGINAL text, so a reported line number matches what the teacher
   // sees in their editor even when the file opens with blank lines.
   const lines = splitLines(text)
-  const parses = (value: string) => {
-    if (!asHandlesOnly && isValidEmail(stripMailto(value))) return true
-    const username = normalizeGithubUsername(value)
-    return Boolean(username && isLikelyGithubUsername(username))
-  }
-  const caption = captionLineIndex(lines, parses)
+  const caption = captionLineIndex(lines)
 
   lines.forEach((rawLine, index) => {
     const line = index + 1

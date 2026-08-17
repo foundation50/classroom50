@@ -316,9 +316,11 @@ or `email` at all — commonly a student who hasn't given you a GitHub account y
 There's nothing to correct in that row, so the upload names it and imports everyone
 else.
 
-A leading title line is fine. If the first line of a one-column file is a caption
-your spreadsheet added (`GitHub Username`, `student_email`), it's recognized as a
-heading and skipped rather than treated as a student.
+A leading column title is fine. If the first line of a one-column file is the
+column's name (`username`, `email`, `github_id`), it's recognized as a heading and
+skipped rather than treated as a student. Any other unusable first line is reported
+like every other bad row — a typo'd first entry looks the same as a caption, and
+guessing would leave that student silently out of the import.
 
 ### A row can't be imported because its `github_id` doesn't match an account
 
