@@ -49,10 +49,10 @@ export type CurrentMembership = {
 
 // The uploaded row reduced to what the classifier needs: an identity + intended
 // role, plus the optional CSV metadata used to detect a metadata_update against
-// the stored roster. `username` is the normalized login; `github_id` (when the
-// enroll pass resolved it) anchors membership lookup across a rename. NOTE: at
-// preflight time github_id is typically absent (it's resolved later, in the
-// enroll pass), so the stored-roster metadata join is effectively login-only.
+// the stored roster. `username` is the normalized login; `github_id` is set for
+// any row the preview resolved from a github_id column (resolveImportIdentities
+// runs BEFORE the preflight), and anchors the membership + stored-roster join
+// across a rename. A username-only row still joins by login.
 export type PreflightRow = StudentMetadata & {
   username: string
   github_id?: string

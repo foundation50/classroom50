@@ -210,9 +210,9 @@ export async function updateClassroomMetadata(
 export type ResolveRosterUploadPreflightInput = {
   org: string
   classroom: string
-  // The uploaded rows reduced to identity + intended role. github_id is
-  // optional (threaded when the enroll pass has resolved it) and anchors the
-  // membership lookup across a login rename.
+  // The uploaded rows reduced to identity + intended role. github_id is set for
+  // any row the preview resolved from a github_id column, and anchors the
+  // membership lookup across a login rename; a username-only row joins by login.
   rows: PreflightRow[]
 }
 

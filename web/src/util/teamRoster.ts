@@ -118,16 +118,16 @@ export function csvForMember(
   )
 }
 
-// Metadata for a row, merging the row's own CSV student with an optional legacy
-// (email-only) fallback per field: the row's own value wins; a blank field
-// borrows from the legacy row. email is always the row's own (never borrowed).
+// Metadata for a row, merging the row's own CSV student with an optional
+// email-only donor per field: the row's own value wins; a blank field borrows
+// from the donor. email is always the row's own (never borrowed).
 const metadataFrom = (
   student: Student | undefined,
-  legacy?: Student | undefined,
+  donor?: Student | undefined,
 ) => ({
-  first_name: (student?.first_name?.trim() || legacy?.first_name?.trim()) ?? "",
-  last_name: (student?.last_name?.trim() || legacy?.last_name?.trim()) ?? "",
-  section: (student?.section?.trim() || legacy?.section?.trim()) ?? "",
+  first_name: (student?.first_name?.trim() || donor?.first_name?.trim()) ?? "",
+  last_name: (student?.last_name?.trim() || donor?.last_name?.trim()) ?? "",
+  section: (student?.section?.trim() || donor?.section?.trim()) ?? "",
   email: student?.email?.trim() ?? "",
 })
 
@@ -186,21 +186,26 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   } = input
   const csv = indexCsv(students)
 
-  // Legacy username-less rows indexed by email, to enrich a real (username or
-  // id-carrying) row that shares the email. This is the ONLY use of email-only
-  // rows — they never render on their own.
-  const legacyByEmail = new Map<string, Student>()
+  // Identity-less rows (an unaccepted email invite's pending row) indexed by
+  // email, so a row that shares the address can borrow the name/section captured
+  // at invite time. Such a row never renders on its own — see the
+  // needs-attention pass below — but it IS read elsewhere: csv.byEmail is what
+  // gives a pending invite its own metadata.
+  const donorByEmail = new Map<string, Student>()
   for (const s of students) {
     const hasIdentity = Boolean(s.github_id?.trim() || s.username?.trim())
     const email = s.email?.trim().toLowerCase()
-    if (!hasIdentity && email && !legacyByEmail.has(email)) {
-      legacyByEmail.set(email, s)
+    if (!hasIdentity && email && !donorByEmail.has(email)) {
+      donorByEmail.set(email, s)
     }
   }
 
-  // A legacy email-only row (name/section donor) for a given email, if any.
-  const legacyFor = (email: string | undefined): Student | undefined =>
-    email ? legacyByEmail.get(email.toLowerCase()) : undefined
+  // The email-only row donating name/section for a given address, if any. Still
+  // load-bearing on the ENROLLED path, where `own` is resolved by id/login and so
+  // can never be the donor itself: it is how a just-accepted student keeps the
+  // name and section captured before the reconcile folded their row.
+  const donorFor = (email: string | undefined): Student | undefined =>
+    email ? donorByEmail.get(email.toLowerCase()) : undefined
 
   const rows: TeamRosterRow[] = []
   // Logins of ACTIVE members only. A pending invite for one of these is stale
@@ -245,7 +250,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       username: member.login,
       github_id: id,
       avatar_url: member.avatar_url,
-      ...metadataFrom(own, legacyFor(email)),
+      ...metadataFrom(own, donorFor(email)),
     }
     enrolledById.set(id, row)
     rows.push(row)
@@ -306,7 +311,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       github_id: login ? (own?.github_id?.trim() ?? "") : "",
       avatar_url: "",
       invitation_id: invite.id,
-      ...metadataFrom(own, legacyFor(emailKey || own?.email)),
+      ...metadataFrom(own, donorFor(emailKey || own?.email)),
       // Prefer the row's own email; fall back to the invite's target email.
       email: own?.email?.trim() || email,
     }
@@ -338,8 +343,10 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       const login = student.username?.trim() ?? ""
       const loginKey = login.toLowerCase()
       const email = student.email?.trim().toLowerCase() ?? ""
-      // A row must carry a GitHub identity to appear on its own; a legacy
-      // email-only row only enriches (handled above).
+      // A row must carry a GitHub identity to appear on its own; an email-only
+      // row only donates metadata (handled above). Note the consequence: an
+      // email-only row whose invitation has died is invisible here until the
+      // reconcile's dead-row reap removes it.
       if (!id && !loginKey) continue
       // Already an enrolled member or a pending invite?
       if (id && enrolledById.has(id)) continue
@@ -363,7 +370,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
         username: login,
         github_id: id,
         avatar_url: "",
-        ...metadataFrom(student, legacyFor(email)),
+        ...metadataFrom(student, donorFor(email)),
       })
     }
   }

@@ -158,10 +158,11 @@ account. Classroom 50 bridges that gap with an **invite team**.
    sync fills their account into the pending row and then deletes the invite team.
 
 An outstanding invitation keeps its team and its pending row, so a teacher can see
-who was invited. Cancelling one deletes its invite team at once, and the pending
-row goes away on the next roster sync. A team left by an expired invitation is
-cleaned up the same way, once it is more than 24 hours old and GitHub no longer
-lists the invitation as pending; a still-pending invitation is never touched.
+who was invited. Cancelling one deletes its invite team and its pending row right
+away; if either write fails, the next roster sync clears whatever is left. A team
+left by an expired invitation is cleaned up the same way, once it is more than 24
+hours old and GitHub no longer lists the invitation as pending; a still-pending
+invitation is never touched.
 To clear stored addresses early, use **Clean up invite data** on the classroom's
 **Settings** page; deleting a classroom removes its invite teams too.
 
