@@ -26,9 +26,9 @@ export const PreflightRecap = ({
 }: {
   roleChanges: PreflightResult["roleChanges"]
   teacherEnrolls: PreflightResult["enroll"]
-  // Email-identity rows assigned the teacher role. They never reach the
-  // preflight, but accepting an admin invitation makes that person an org owner,
-  // so they belong in this gate's count and notice.
+  // People who will be granted org OWNER without a team move: a teacher-role
+  // enroll, invitation, or email invitation. They belong in this gate's count and
+  // notice even though none of them is a role CHANGE.
   teacherEmailCount?: number
   needsRoleConfirm: boolean
   confirmGrantsOwner: boolean

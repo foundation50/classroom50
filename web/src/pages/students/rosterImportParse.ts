@@ -172,7 +172,10 @@ export const parseRosterImportFile = (
         identity,
         first_name: (raw.first_name ?? fromName.first_name).trim(),
         last_name: (raw.last_name ?? fromName.last_name).trim(),
-        email: identity.email ?? "",
+        // The RAW cell, not the normalized identity address: metadata is compared
+        // case-sensitively against the stored roster, so lower-casing here would
+        // report a delta on every row whose stored address has a capital letter.
+        email: (raw.email ?? "").trim(),
         section: cell("section"),
         role: coerceImportRole(cell("role")),
       })

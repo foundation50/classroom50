@@ -120,6 +120,17 @@ describe("parseRosterImportFile", () => {
     ])
   })
 
+  it("keeps the raw email cell as metadata so an unchanged roster shows no delta", () => {
+    // Stored roster addresses are never lower-cased, and mergeStudentMetadata
+    // compares case-sensitively — so normalizing here would report a metadata
+    // change on every row whose address has a capital letter.
+    const csv = "username,email\nada,Ada@Uni.edu\n"
+    const parsed = parse(csv).rows[0]
+    expect(parsed?.email).toBe("Ada@Uni.edu")
+    // The identity still normalizes, since that's what addresses the invite.
+    expect(parsed?.identity.email).toBe("ada@uni.edu")
+  })
+
   it("returns no rows for empty or whitespace-only input", () => {
     expect(parse("").rows).toEqual([])
     expect(parse("   \n  ").rows).toEqual([])

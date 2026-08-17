@@ -411,6 +411,13 @@ const UploadRoster = ({
     () => (preflight?.enroll ?? []).filter((e) => isTeacherRole(e.role)),
     [preflight],
   )
+  // Invited rows targeting teacher grant org OWNER too, on acceptance. They are
+  // not team moves, so the preflight puts them in `needsInvite` rather than
+  // `enroll` — but the grant is identical, so they belong in the same gate.
+  const teacherInvites = useMemo(
+    () => (preflight?.needsInvite ?? []).filter((i) => isTeacherRole(i.role)),
+    [preflight],
+  )
   // Email rows assigned teacher are an org-OWNER grant too: accepting an admin
   // invitation makes that person an owner. They never reach the preflight, so
   // fold them into the same gate rather than letting a roster CSV do silently
@@ -425,34 +432,39 @@ const UploadRoster = ({
     [preflight],
   )
   const needsMismatchConfirm = mismatches.length > 0
-  const needsRoleConfirm =
-    roleChanges.length > 0 ||
-    teacherEnrolls.length > 0 ||
-    teacherEmailRows.length > 0
+  // Every path that hands someone org ownership goes through one checkbox.
+  const ownerGrantCount =
+    teacherEnrolls.length + teacherInvites.length + teacherEmailRows.length
+  const needsRoleConfirm = roleChanges.length > 0 || ownerGrantCount > 0
   const confirmGrantsOwner = useMemo(
-    () =>
-      hasTeacherPromotion(roleChanges) ||
-      teacherEnrolls.length > 0 ||
-      teacherEmailRows.length > 0,
-    [roleChanges, teacherEnrolls, teacherEmailRows],
+    () => hasTeacherPromotion(roleChanges) || ownerGrantCount > 0,
+    [roleChanges, ownerGrantCount],
   )
+  // Any teacher assignment is an org-OWNER grant on acceptance. Read from the
+  // PARSED rows as well as the resolved ones: roles only land in `rolesByUser`
+  // once identities resolve, and by then `preflight` is set, so a check on
+  // `rolesByUser` alone could never fire while the notice below is visible.
   const anyTeacherAssigned = useMemo(
-    () => Object.values(rolesByUser).some(isTeacherRole),
-    [rolesByUser],
+    () =>
+      parsedRows.some((r) => r.role && isTeacherRole(r.role)) ||
+      Object.values(rolesByUser).some(isTeacherRole),
+    [parsedRows, rolesByUser],
   )
   const emailHasTeacher = emails.some((e) =>
     isTeacherRole(emailRoles[e.toLowerCase()] ?? "student"),
   )
   // Email-identity rows are actionable work in their own right: each one sends an
-  // org invitation and lands a pending roster row. Counting only the preflight
-  // buckets would leave an email-only file with a disabled "No changes to apply".
+  // org invitation and lands a pending roster row. So is a confirmed identity
+  // mismatch — it repairs the stored username. Counting only the preflight
+  // buckets would leave either kind of file on a disabled "No changes to apply".
   const emailRowCount = emailRows.length
   const hasActionableWork =
     (preflight?.needsInvite.length ?? 0) +
       (preflight?.enroll.length ?? 0) +
       (preflight?.roleChanges.length ?? 0) +
       (preflight?.metadataUpdate.length ?? 0) +
-      emailRowCount >
+      emailRowCount +
+      mismatches.length >
     0
   const needsMetadataConfirm = (preflight?.metadataUpdate.length ?? 0) > 0
   const anyIdResolved = accountRows.some((r) => r.identity.resolvedFromId)
@@ -850,7 +862,9 @@ const UploadRoster = ({
                 <PreflightRecap
                   roleChanges={roleChanges}
                   teacherEnrolls={teacherEnrolls}
-                  teacherEmailCount={teacherEmailRows.length}
+                  teacherEmailCount={
+                    teacherInvites.length + teacherEmailRows.length
+                  }
                   needsRoleConfirm={needsRoleConfirm}
                   confirmGrantsOwner={confirmGrantsOwner}
                   roleChangesConfirmed={roleChangesConfirmed}

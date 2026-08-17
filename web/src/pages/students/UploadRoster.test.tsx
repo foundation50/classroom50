@@ -610,6 +610,44 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
     await waitFor(() => expect(button.disabled).toBe(false))
   })
 
+  it("gates a teacher-role invited account behind the owner confirmation", async () => {
+    const user = userEvent.setup()
+    // A non-member assigned teacher classifies as needs_invite, not enroll — but
+    // accepting still makes them an org OWNER, so it needs the same checkbox.
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [
+        { kind: "needs_invite", username: "prof", role: "teacher" },
+      ],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [],
+      identityMismatches: [],
+      allAlreadyMembers: false,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(user, file("roster.csv", "username,role\nprof,teacher\n"))
+
+    const button = await waitFor(() => {
+      const b = screen
+        .getByRole("button", { name: /importAndInviteMembers/ })
+        .closest("button") as HTMLButtonElement
+      expect(b.disabled).toBe(true)
+      return b
+    })
+    expect(screen.getByText(/preflightRoleChangeOwnerNotice/)).toBeTruthy()
+
+    const confirm = screen
+      .getByText(/preflightConfirmRoleChanges/)
+      .closest("label")!
+      .querySelector("input[type=checkbox]") as HTMLInputElement
+    await user.click(confirm)
+    await waitFor(() => expect(button.disabled).toBe(false))
+  })
+
   it("re-resolves after a re-parse that yields identical identity cells", async () => {
     const user = userEvent.setup()
     renderModal(
@@ -703,6 +741,49 @@ describe("UploadRoster identity mismatch gate", () => {
     expect(repairRosterUsernames.mock.calls[0][1]).toMatchObject({
       repairs: [{ github_id: "42", username: "ada-new" }],
     })
+  })
+
+  it("keeps a mismatch-only upload processable so the repair can land", async () => {
+    const user = userEvent.setup()
+    // Every row is already correct except for a stale stored username. That
+    // repair IS the work, so the button must not read "no changes to apply".
+    resolveRosterUploadContext.mockResolvedValue({
+      ...stubContext,
+      loginById: new Map([[42, "ada-new"]]),
+    })
+    classifyRosterUpload.mockReturnValue({
+      noAction: [{ kind: "no_action", username: "ada-new", role: "student" }],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [],
+      identityMismatches: [
+        { username: "ada-new", declaredUsername: "ada-old", github_id: "42" },
+      ],
+      allAlreadyMembers: true,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(
+      user,
+      file("roster.csv", "github_id,username\n42,ada-old\n"),
+    )
+
+    const confirm = await waitFor(
+      () =>
+        screen
+          .getByText(/preflightConfirmIdentity/)
+          .closest("label")!
+          .querySelector("input[type=checkbox]") as HTMLInputElement,
+    )
+    await user.click(confirm)
+    // "Confirm changes", not "no changes to apply" — and enabled.
+    const button = screen
+      .getByRole("button", { name: /confirmChanges/ })
+      .closest("button") as HTMLButtonElement
+    await waitFor(() => expect(button.disabled).toBe(false))
   })
 
   it("skips a row whose github_id cannot be resolved, rather than using its username", async () => {
