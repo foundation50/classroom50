@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import {
   FORMULA_GUARDED_FIELDS,
   STUDENT_CSV_FIELDS,
@@ -16,6 +18,38 @@ import { FORMULA_LEAD_SOURCE } from "./csv"
 // roster import, sync, and write goes through.
 
 const HEADER = STUDENT_CSV_FIELDS.join(",")
+
+// The Go teacher CLI reads the same roster.csv this module writes, and its
+// strict reader aborts the WHOLE file on a row it rejects. So the keep-rule is a
+// cross-tool contract, not a local parser detail: this suite and the Go
+// TestParseRoster_SharedKeepRuleParity assert the same golden cases, so a
+// one-sided change (e.g. requiring a username again) fails on the other side.
+describe("roster row keep-rule — shared fixture parity", () => {
+  const fixtureUrl = new URL(
+    "../../../cli/shared/testdata/roster_row_cases.json",
+    import.meta.url,
+  )
+  const doc = JSON.parse(readFileSync(fileURLToPath(fixtureUrl), "utf8")) as {
+    columns: string[]
+    cases: { why: string; record: string[]; keep: boolean }[]
+  }
+
+  it("addresses the canonical columns", () => {
+    expect(doc.columns).toEqual([...STUDENT_CSV_FIELDS])
+    expect(doc.cases.length).toBeGreaterThan(0)
+  })
+
+  for (const c of doc.cases) {
+    it(`${c.keep ? "keeps" : "drops"}: ${c.why}`, () => {
+      // Quote every cell so whitespace-only values survive into the parser.
+      const line = c.record.map((cell) => `"${cell.replaceAll('"', '""')}"`)
+      const csv = `${HEADER}\n${line.join(",")}\n`
+      const { rows, problems } = parseRosterCsv(csv)
+      expect(problems).toEqual([])
+      expect(rows).toHaveLength(c.keep ? 1 : 0)
+    })
+  }
+})
 
 // The guard is only useful if both writers defang the same columns on the same
 // triggers: a cell one side guards and the other doesn't un-defang keeps the

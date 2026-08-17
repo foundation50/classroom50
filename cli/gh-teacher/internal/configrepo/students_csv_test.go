@@ -2,6 +2,9 @@ package configrepo
 
 import (
 	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -234,6 +237,72 @@ func TestUpsertRosterRow_EmptyEmailClaimsNothing(t *testing.T) {
 	if len(updated) != 2 || updated[0].Email != "pending@x.edu" {
 		t.Fatalf("pending row disturbed: %+v", updated)
 	}
+}
+
+// sharedRosterRowCasesPath locates the cross-language golden fixture for the
+// roster-row keep-rule, also consumed by the TS reader's parity test
+// (web/src/util/rosterCsv.test.ts).
+const sharedRosterRowCasesPath = "../../../shared/testdata/roster_row_cases.json"
+
+// TestParseRoster_SharedKeepRuleParity pins the Go strict reader to the shared
+// keep-rule cases so it can't drift from the web reader. This is load-bearing:
+// the web WRITES an email-only pending row when a teacher invites by email, and
+// a Go side that rejected it would abort `roster list` for the whole classroom
+// until the student accepted (the regression this fixture exists to prevent).
+func TestParseRoster_SharedKeepRuleParity(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Clean(sharedRosterRowCasesPath))
+	if err != nil {
+		t.Fatalf("read shared fixture: %v", err)
+	}
+	var doc struct {
+		Columns []string `json:"columns"`
+		Cases   []struct {
+			Why    string   `json:"why"`
+			Record []string `json:"record"`
+			Keep   bool     `json:"keep"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal shared fixture: %v", err)
+	}
+	if len(doc.Cases) == 0 {
+		t.Fatal("shared fixture has no cases")
+	}
+	// The fixture's column list must be the canonical header, or its records
+	// aren't addressing the columns this reader parses.
+	if strings.Join(doc.Columns, ",") != strings.Join(RosterColumns, ",") {
+		t.Fatalf("fixture columns = %v, want %v", doc.Columns, RosterColumns)
+	}
+
+	for _, tc := range doc.Cases {
+		t.Run(tc.Why, func(t *testing.T) {
+			in := FullRosterHeader + "\n" + strings.Join(quoteCSVCells(tc.Record), ",") + "\n"
+			rows, err := ParseRoster([]byte(in))
+			if tc.Keep {
+				if err != nil {
+					t.Fatalf("ParseRoster rejected a row the keep-rule keeps: %v\ninput: %q", err, in)
+				}
+				if len(rows) != 1 {
+					t.Fatalf("rows = %d, want 1", len(rows))
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("ParseRoster kept a row the keep-rule rejects: %q", in)
+			}
+		})
+	}
+}
+
+// quoteCSVCells wraps each fixture cell in double quotes so whitespace-only
+// cells reach the parser intact and a cell containing a comma can't split the
+// record.
+func quoteCSVCells(cells []string) []string {
+	out := make([]string, len(cells))
+	for i, c := range cells {
+		out[i] = `"` + strings.ReplaceAll(c, `"`, `""`) + `"`
+	}
+	return out
 }
 
 func TestParseRoster_KeepsEmailOnlyPendingRow(t *testing.T) {
