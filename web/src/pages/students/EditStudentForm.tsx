@@ -36,6 +36,7 @@ const EditStudentForm = ({
   onSaved,
   onSubmittingChange,
   showGitHubPanel = true,
+  lockEmail = false,
 }: {
   org: string
   classroom: string
@@ -48,6 +49,10 @@ const EditStudentForm = ({
   // The read-only "GitHub: @username" panel. Hidden when a parent already shows
   // the GitHub identity elsewhere (e.g., the roster detail modal's header).
   showGitHubPanel?: boolean
+  // Show the address read-only. Set for a pending email invite, whose address IS
+  // the row's identity and is hashed into its invite team name — rewriting it
+  // would orphan the row from its own invitation.
+  lockEmail?: boolean
 }) => {
   const runSave = useSafeSubmit()
   const { t } = useTranslation()
@@ -92,7 +97,10 @@ const EditStudentForm = ({
             patch: {
               first_name: value.first_name.trim(),
               last_name: value.last_name.trim(),
-              email: value.email.trim(),
+              // When the address is locked it is the row's identity, so send the
+              // stored one rather than the field: a disabled input still submits,
+              // and an emptied address would orphan the row from its invitation.
+              email: lockEmail ? (student.email ?? "") : value.email.trim(),
               section: value.section.trim(),
             },
             // Seed a row if none exists yet (a team member — often staff — added
@@ -200,17 +208,32 @@ const EditStudentForm = ({
                     type="email"
                     placeholder={t("students.editEmailPlaceholder")}
                     aria-label={t("students.emailLabel")}
+                    readOnly={lockEmail}
+                    disabled={lockEmail}
+                    title={
+                      lockEmail ? t("students.inviteEmailLocked") : undefined
+                    }
                     invalid={field.state.meta.errors.length > 0}
                     aria-describedby={
-                      field.state.meta.errors.length > 0
-                        ? `${field.name}-error`
-                        : undefined
+                      lockEmail
+                        ? `${field.name}-locked`
+                        : field.state.meta.errors.length > 0
+                          ? `${field.name}-error`
+                          : undefined
                     }
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
                   />
                 </div>
+                {lockEmail ? (
+                  <p
+                    id={`${field.name}-locked`}
+                    className="mt-1 text-sm text-base-content/70"
+                  >
+                    {t("students.inviteEmailLocked")}
+                  </p>
+                ) : null}
                 {field.state.meta.errors.length > 0 && (
                   <p
                     id={`${field.name}-error`}

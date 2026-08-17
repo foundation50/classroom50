@@ -262,6 +262,48 @@ describe("enrollStudentInClassroom — already-member writes the row directly", 
       }),
     ).rejects.toMatchObject({ login: "new-alice" })
   })
+
+  it("refuses an email a pending invitation already claims", async () => {
+    // The sequence that bites: email-invite ada@x.edu, then add the same person
+    // by username carrying that address. Two rows would then share it, and
+    // updateStudent's clash guard refuses EVERY later email edit for either row —
+    // a dead end whose cause isn't visible from the UI.
+    const { client, committed } = makeClient({
+      startingCsv: `${HEADER},,,ada@x.edu,,,student\n`,
+      membershipState: "active",
+      user: { login: "ada", id: 42 },
+    })
+
+    await expect(
+      enrollStudentInClassroom(client, {
+        org: "acme",
+        classroom: "cs101",
+        username: "ada",
+        email: "ada@x.edu",
+      }),
+    ).rejects.toThrow(/pending email invitation/)
+    // Nothing written: the teacher fixes the collision, not a half-applied roster.
+    expect(committed.content).toBeFalsy()
+  })
+
+  it("still enrolls when the same person is added without an email", async () => {
+    // The address is what collides, so the escape hatch the error names must work.
+    const { client, committed } = makeClient({
+      startingCsv: `${HEADER},,,ada@x.edu,,,student\n`,
+      membershipState: "active",
+      user: { login: "ada", id: 42 },
+    })
+
+    await enrollStudentInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "ada",
+    })
+
+    expect(
+      rowsFromCsv(committed.content!).find((r) => r.username === "ada"),
+    ).toMatchObject({ github_id: "42" })
+  })
 })
 
 describe("inviteByEmail — org invite plus a pending email row", () => {
@@ -440,6 +482,30 @@ describe("inviteByEmail — org invite plus a pending email row", () => {
       github_id: "",
       email: "new@x.edu",
       role: "student",
+    })
+  })
+
+  it("writes the typed name and section onto the pending row", async () => {
+    // The student has no account yet, so nothing downstream can recover these:
+    // the acceptance fold only fills in identity, and a re-upload of the same
+    // address is skipped as already claimed. Dropping them here left the row
+    // permanently blank.
+    const { client, state } = makeEmailClient({ inviteSucceeds: true })
+
+    await inviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      email: "ada@x.edu",
+      first_name: "Ada",
+      last_name: "Lovelace",
+      section: "Lab 1",
+    })
+
+    expect(rowsFromCsv(state.committed!)[0]).toMatchObject({
+      email: "ada@x.edu",
+      first_name: "Ada",
+      last_name: "Lovelace",
+      section: "Lab 1",
     })
   })
 

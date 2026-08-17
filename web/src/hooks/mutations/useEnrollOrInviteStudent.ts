@@ -77,11 +77,15 @@ export function useEnrollOrInviteStudent(
       // email-only roster row. The row lives exactly as long as the invite
       // does: on acceptance the reconcile fills in the account identity; a
       // cancelled/expired invite's row is removed by the same reconcile. The
-      // typed name/section can be supplied via roster.csv, joined by email.
+      // typed name/section ride along onto that row — nothing else can recover
+      // them before the student has an account.
       const result = await inviteByEmail(githubClient, {
         org,
         classroom,
         email,
+        first_name,
+        last_name,
+        section: section || undefined,
       })
       return {
         kind: "email" as const,
