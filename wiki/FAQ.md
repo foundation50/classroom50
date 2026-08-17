@@ -79,13 +79,18 @@ assignment accept links work without any further action from you.
 
 Yes. Upload a CSV or a text file of GitHub usernames (web app: **Upload**; CLI:
 `gh teacher roster import`). You can also invite students by **email address**
-when you don't know their GitHub username — they complete a short onboarding
-step to link their account.
+when you don't know their GitHub username. Each address goes onto the roster
+right away as a pending row, and is matched to the student's GitHub account when
+they accept. See
+[Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
 ### Can I see the whole roster, including students who haven't accepted?
 
 Yes. The submissions view lists every rostered student, not just those who
 accepted, with their status — so you can see at a glance who hasn't started.
+Students you invited by email appear too, listed by address until they accept,
+though only organization owners see them: GitHub keeps pending invitations
+owner-only, so a TA's view leaves them out.
 
 ### What happens when I unenroll or remove a student?
 

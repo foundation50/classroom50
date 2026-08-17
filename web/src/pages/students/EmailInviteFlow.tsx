@@ -112,7 +112,7 @@ export const EmailInvitePreview = ({
         <span>{t("students.emailsFound", { count: emails.length })}</span>
       </Alert>
       <Alert tone="info" className="mb-4">
-        <span>{t("students.emailInviteNoRosterNotice")}</span>
+        <span>{t("students.emailInviteRosterNotice")}</span>
       </Alert>
 
       {emails.length > 0 ? (

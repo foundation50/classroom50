@@ -8,12 +8,18 @@ workaround where one exists.
 
 ## Roster and enrollment
 
-**Students can't be added by email alone.** GitHub's API provides no way to
-look up an account from an email address, so a roster is keyed by GitHub
-username. Workarounds: collect usernames up front (a signup form works
-well), or use the email-invitation path, where each student completes a
-short onboarding step that links their account. See
-[Add students](Web-Teacher-Guide#add-students).
+**Students can't be looked up by email.** GitHub's API provides no way to
+find an account from an email address, so an emailed invitation can't be
+matched to a student until they accept it. Classroom 50 records the address
+on the roster as a pending row and fills in the account when they join. To
+have usernames from the start, collect them up front; a signup form works
+well. See [Add students](Web-Teacher-Guide#add-students).
+
+**A retained address is the one you invited.** When you invite by email, the
+address stored on the roster is what you typed, which is not necessarily the
+email on the student's GitHub account. Treat it as your contact address for
+that student rather than a verified account detail. To record a different
+address, edit the roster row or upload a roster CSV once they've joined.
 
 **Students can't join through a link alone.** GitHub requires an
 organization owner to invite members, so there's no self-service join link.
@@ -23,8 +29,8 @@ it, assignment accept links work with no further action from you.
 **There's no roster self-identification at accept time.** GitHub Classroom
 lets a student claim "I am this roster entry" when accepting. That step
 requires a server to mediate identities, so Classroom 50 identifies students
-by their GitHub account instead. Rows in the roster are usernames, not
-names to be claimed.
+by their GitHub account instead. A roster row names an account, not a person
+waiting to be claimed.
 
 ## Visibility and feedback
 

@@ -25,6 +25,7 @@ state is represented by ordinary GitHub data:
 | Your classrooms, assignments, scores | Config files in a private `classroom50` repo in your org |
 | Who's enrolled | GitHub organization and team membership |
 | Who's staff (teacher/TA) | Membership in `secret` GitHub teams |
+| An address you invited, before that person joins | A `secret` per-invite team, removed once they're on the roster |
 | A student's submissions | Commit history and Releases in their repo |
 | Who can do what | GitHub permissions |
 
@@ -118,8 +119,8 @@ Every classroom has a set of `secret` GitHub teams
 `classroom50-<classroom>`). Membership in these teams *is* the role — there's no
 separate role database. That's why staff you invite show up as GitHub team
 invitations, and why the classroom's **team is the source of truth for who's
-enrolled** (not the `roster.csv`, which only carries display details like name
-and section).
+enrolled** (not the `roster.csv`, which carries details GitHub can't store,
+such as names, sections, and the address of a student who hasn't joined yet).
 
 ### From invitation to enrollment
 
@@ -138,6 +139,40 @@ github.com bypasses enrollment: they become an organization member but never
 join the classroom team. Enroll them from the organization's Members page
 instead. See
 [Already an org member, but not on the roster](Troubleshooting#already-an-org-member-but-not-on-the-roster).
+
+### Invitations by email
+
+Inviting by username records the student on the roster right away, because the
+username is the identity. An email address is not: GitHub offers no way to look
+up an account from an address, and the person who accepts could sign in with any
+account. Classroom 50 bridges that gap with an **invite team**.
+
+1. Inviting an address creates a `secret` team named `invite-<hash>` that holds
+   that one address. If this can't be set up, no invitation is sent.
+2. GitHub emails the invitation, carrying both the classroom team and the invite
+   team.
+3. The address is written to `roster.csv` as a **pending row**, with a role but no
+   username yet.
+4. Accepting adds the student to both teams. Because the invite team holds exactly
+   one person, whoever is on it is the student who accepted, so the next roster
+   sync fills their account into the pending row and then deletes the invite team.
+
+An outstanding invitation keeps its team and its pending row, so a teacher can see
+who was invited. Cancelling one deletes its invite team at once, and the pending
+row goes away on the next roster sync. A team left by an expired invitation is
+cleaned up the same way, once it is more than 24 hours old and GitHub no longer
+lists the invitation as pending; a still-pending invitation is never touched.
+To clear stored addresses early, use **Clean up invite data** on the classroom's
+**Settings** page; deleting a classroom removes its invite teams too.
+
+> [!NOTE]
+> Invite teams are the one place Classroom 50 stores an address that GitHub
+> hasn't yet linked to an account. Each holds only the invited address and the
+> classroom name, never names or sections. Because the team is `secret`, no other
+> student or TA can see it: before the invitation is accepted the team has no
+> members at all, and afterwards only that student and the organization's owners
+> can read it. The address on a pending row is the one **you invited**, which is
+> not necessarily the email on the student's GitHub account.
 
 ### Who sees what
 

@@ -66,9 +66,9 @@ you'll meet them:
 
 - **Students don't self-select from a roster.** GitHub Classroom lets a
   student pick their roster entry from an invite link. In Classroom 50 you
-  add students by GitHub username (individually or by CSV), which sends the
-  organization invitation; the accept link works once they've joined. There
-  are no roster identifiers. See
+  add students by GitHub username or by email address (individually or by
+  CSV), which sends the organization invitation; the accept link works once
+  they've joined. There are no roster identifiers. See
   [Add students](Web-Teacher-Guide#add-students).
 - **Due dates don't cut anything off.** A due date only marks later
   submissions late; there is no cutoff date. To end an assignment, use

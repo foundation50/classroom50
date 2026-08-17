@@ -2,11 +2,65 @@ import { describe, expect, it } from "vitest"
 import {
   groupStudentsBySection,
   nextSelectedKeyAfterSave,
+  rosterSyncMessageKeys,
 } from "./enrolledStudentsHelpers"
 import type { Student } from "@/types/classroom"
 
 const student = (username: string, section?: string): Student =>
   ({ username, section }) as Student
+
+const syncResult = (over: {
+  addedUsernames?: string[]
+  recoveredEmails?: string[]
+  removedEmails?: string[]
+  noop?: boolean
+}) => ({
+  addedUsernames: over.addedUsernames ?? [],
+  recoveredEmails: over.recoveredEmails ?? [],
+  removedEmails: over.removedEmails ?? [],
+  noop: over.noop ?? false,
+})
+
+describe("rosterSyncMessageKeys", () => {
+  // The bug this guards: one pass can complete an accepted email invitation
+  // without appending anyone, which reported "Added 0 team members".
+  it("reports a matched invite without an added-member count", () => {
+    expect(
+      rosterSyncMessageKeys(syncResult({ recoveredEmails: ["a@x.edu"] })),
+    ).toEqual([{ key: "students.syncMatchedEmails", count: 1 }])
+  })
+
+  it("reports every part of a combined pass, in announcement order", () => {
+    expect(
+      rosterSyncMessageKeys(
+        syncResult({
+          addedUsernames: ["octocat", "hubot"],
+          recoveredEmails: ["a@x.edu"],
+          removedEmails: ["gone@x.edu", "old@x.edu"],
+        }),
+      ),
+    ).toEqual([
+      { key: "students.syncAdded", count: 2 },
+      { key: "students.syncMatchedEmails", count: 1 },
+      { key: "students.syncRemovedEmails", count: 2 },
+    ])
+  })
+
+  it("reports nothing for a no-op pass, so the caller says 'up to date'", () => {
+    expect(
+      rosterSyncMessageKeys(
+        syncResult({ addedUsernames: ["octocat"], noop: true }),
+      ),
+    ).toEqual([])
+  })
+
+  // A commit that only refreshed roles or backfilled ids changes the roster
+  // without moving any of the three counts; the caller falls back to a generic
+  // "Roster updated." rather than claiming zero of something.
+  it("reports nothing when a pass committed only role or id changes", () => {
+    expect(rosterSyncMessageKeys(syncResult({}))).toEqual([])
+  })
+})
 
 describe("groupStudentsBySection", () => {
   it("groups by trimmed section name", () => {
