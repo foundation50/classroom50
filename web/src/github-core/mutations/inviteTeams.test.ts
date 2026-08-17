@@ -42,6 +42,9 @@ const rateLimitError = () =>
 
 const METADATA = { email: "alice@example.com", classroom: "cs101" }
 const DESCRIPTION = marshalInviteDescription(METADATA)
+// The teacher performing the invite. GitHub auto-adds them as a maintainer of
+// the team they create, so ensureInviteTeam drops them again.
+const ACTOR = "ms-frizzle"
 
 type Call = { url: string; options?: { method?: string; body?: unknown } }
 
@@ -57,8 +60,18 @@ function makeClient(
   return { client: { request } as unknown as GitHubClient, request, calls }
 }
 
+// The invite team must hold NO teacher: GitHub auto-adds the creator as a
+// maintainer, and a teacher sitting on the team is indistinguishable from an
+// invitee who accepted (an org-owner invitee is auto-promoted to maintainer
+// too). Dropping the actor is what lets the reconcile treat any member of any
+// role as the accepted invitee.
 describe("ensureInviteTeam", () => {
-  it("creates a fresh secret team and reports created: true (no PATCH)", async () => {
+  const methodsOf = (calls: Call[]) =>
+    calls.map((c) => c.options?.method ?? "GET")
+  const isMembershipDelete = (c: Call) =>
+    c.options?.method === "DELETE" && c.url.includes("/memberships/")
+
+  it("creates a fresh secret team and drops the acting teacher (no PATCH)", async () => {
     const name = await inviteTeamName(METADATA.classroom, METADATA.email)
     const { client, calls } = makeClient((url, options) => {
       if (options?.method === "POST" && url === "/orgs/acme/teams") {
@@ -73,12 +86,14 @@ describe("ensureInviteTeam", () => {
           description: DESCRIPTION,
         }
       }
+      if (options?.method === "DELETE") return undefined
       throw new Error(`unexpected ${url}`)
     })
 
-    const ref = await ensureInviteTeam(client, "acme", METADATA)
+    const ref = await ensureInviteTeam(client, "acme", METADATA, ACTOR)
     expect(ref).toEqual({ id: 7, slug: name, created: true })
-    expect(calls).toHaveLength(1)
+    expect(methodsOf(calls)).toEqual(["POST", "DELETE"])
+    expect(calls[1].url).toBe(`/orgs/acme/teams/${name}/memberships/${ACTOR}`)
   })
 
   it("adopts an existing team on 422, forcing secret + description via PATCH (created: false)", async () => {
@@ -97,44 +112,44 @@ describe("ensureInviteTeam", () => {
           description: DESCRIPTION,
         }
       }
+      if (options?.method === "DELETE") return undefined
       // The adopt read: a pre-existing CLOSED team with a stale description.
       return { id: 7, slug: name, privacy: "closed", description: "old" }
     })
-    const ref = await ensureInviteTeam(client, "acme", METADATA)
+    const ref = await ensureInviteTeam(client, "acme", METADATA, ACTOR)
     expect(ref).toEqual({ id: 7, slug: name, created: false })
-    expect(calls.map((c) => c.options?.method ?? "GET")).toEqual([
-      "POST",
-      "GET",
-      "PATCH",
-    ])
+    expect(methodsOf(calls)).toEqual(["POST", "GET", "PATCH", "DELETE"])
   })
 
-  it("skips the PATCH when the adopted team is already secret with the same description", async () => {
+  // Not gated on created-vs-adopted: a team that already exists may still carry
+  // a teacher from an earlier run, and leaving them there would make the next
+  // reconcile read the teacher as the accepted invitee.
+  it("drops the acting teacher from an ADOPTED team too", async () => {
     const name = await inviteTeamName(METADATA.classroom, METADATA.email)
     const { client, calls } = makeClient((_url, options) => {
       if (options?.method === "POST") throw apiError(422)
+      if (options?.method === "DELETE") return undefined
       return { id: 7, slug: name, privacy: "secret", description: DESCRIPTION }
     })
 
-    const ref = await ensureInviteTeam(client, "acme", METADATA)
+    const ref = await ensureInviteTeam(client, "acme", METADATA, ACTOR)
     expect(ref.created).toBe(false)
-    expect(calls.map((c) => c.options?.method ?? "GET")).toEqual([
-      "POST",
-      "GET",
-    ])
+    expect(methodsOf(calls)).toEqual(["POST", "GET", "DELETE"])
+    expect(calls[2].url).toBe(`/orgs/acme/teams/${name}/memberships/${ACTOR}`)
   })
 
-  it("fails closed when the team can't be made secret", async () => {
+  it("fails closed when the team can't be made secret, before touching membership", async () => {
     const name = await inviteTeamName(METADATA.classroom, METADATA.email)
-    const { client } = makeClient((_url, options) => {
+    const { client, calls } = makeClient((_url, options) => {
       if (options?.method === "POST") throw apiError(422)
       // Both the adopt read and the PATCH report a stubbornly closed team.
       return { id: 7, slug: name, privacy: "closed", description: DESCRIPTION }
     })
 
-    await expect(ensureInviteTeam(client, "acme", METADATA)).rejects.toThrow(
-      InviteTeamNotSecretError,
-    )
+    await expect(
+      ensureInviteTeam(client, "acme", METADATA, ACTOR),
+    ).rejects.toThrow(InviteTeamNotSecretError)
+    expect(calls.filter(isMembershipDelete)).toEqual([])
   })
 
   it("rethrows a non-422 create failure", async () => {
@@ -142,8 +157,60 @@ describe("ensureInviteTeam", () => {
       throw apiError(500)
     })
     await expect(
-      ensureInviteTeam(client, "acme", METADATA),
+      ensureInviteTeam(client, "acme", METADATA, ACTOR),
     ).rejects.toMatchObject({ status: 500 })
+  })
+
+  // A team we created but couldn't clear must not survive: it holds a student's
+  // email AND a teacher, which the reconcile would read as "the teacher
+  // accepted this invite" and write onto the roster.
+  it("deletes the team it created when the acting teacher can't be dropped", async () => {
+    const name = await inviteTeamName(METADATA.classroom, METADATA.email)
+    const { client, calls } = makeClient((url, options) => {
+      if (options?.method === "POST") {
+        return {
+          id: 7,
+          slug: name,
+          privacy: "secret",
+          description: DESCRIPTION,
+        }
+      }
+      if (options?.method === "DELETE" && url.includes("/memberships/")) {
+        throw apiError(500)
+      }
+      if (options?.method === "DELETE") return undefined
+      throw new Error(`unexpected ${url}`)
+    })
+
+    await expect(
+      ensureInviteTeam(client, "acme", METADATA, ACTOR),
+    ).rejects.toMatchObject({ status: 500 })
+    expect(calls.at(-1)).toMatchObject({
+      url: `/orgs/acme/teams/${name}`,
+      options: { method: "DELETE" },
+    })
+  })
+
+  // The mirror case: an ADOPTED team may hold an earlier accepted invite's
+  // still-unrecovered record, so a failure must never delete it.
+  it("keeps an ADOPTED team when the acting teacher can't be dropped", async () => {
+    const name = await inviteTeamName(METADATA.classroom, METADATA.email)
+    const { client, calls } = makeClient((url, options) => {
+      if (options?.method === "POST") throw apiError(422)
+      if (options?.method === "DELETE" && url.includes("/memberships/")) {
+        throw apiError(500)
+      }
+      return { id: 7, slug: name, privacy: "secret", description: DESCRIPTION }
+    })
+
+    await expect(
+      ensureInviteTeam(client, "acme", METADATA, ACTOR),
+    ).rejects.toMatchObject({ status: 500 })
+    expect(
+      calls.filter(
+        (c) => c.options?.method === "DELETE" && !isMembershipDelete(c),
+      ),
+    ).toEqual([])
   })
 })
 
@@ -157,7 +224,7 @@ describe("readInviteTeam", () => {
     )
   })
 
-  it("parses the description and lists regular-role members only", async () => {
+  it("parses the description and lists members of EVERY role", async () => {
     const { client, calls } = makeClient((url) => {
       if (url.includes("/members")) return [{ id: 2, login: "alice" }]
       return {
@@ -174,10 +241,11 @@ describe("readInviteTeam", () => {
     })
     expect(state?.createdAt).toBe("2026-08-01T00:00:00Z")
     expect(state?.members).toEqual([{ id: 2, login: "alice" }])
-    // The maintainer-excluding filter is what keeps the auto-added owner (and
-    // any org owner) out of the invitee set.
+    // Unfiltered on purpose: the team holds no teacher, so every member is the
+    // invitee — including an org owner, whom GitHub auto-promotes to maintainer
+    // and a role=member filter would hide.
     const memberCall = calls.find((c) => c.url.includes("/members"))
-    expect(memberCall?.url).toContain("role=member")
+    expect(memberCall?.url).not.toContain("role=")
   })
 
   it("yields a null description for a non-v1 record (hand-edited team)", async () => {

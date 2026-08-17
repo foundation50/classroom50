@@ -126,6 +126,28 @@ describe("collectInviteRecoveries", () => {
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
+  // The case the zero-member invariant exists for: GitHub auto-promotes an org
+  // owner to team maintainer, so an owner invitee is invisible to a role=member
+  // read. Since the team carries no teacher, the unfiltered read sees them and
+  // the mapping recovers like any other.
+  it("recovers an ORG OWNER invitee (present only as a maintainer)", async () => {
+    const team = await inviteState("cs101", "dean@example.com", [
+      { id: 3, login: "dean" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: team.slug }])
+    readInviteTeam.mockResolvedValue(team)
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.recovered).toEqual([
+      {
+        email: "dean@example.com",
+        invitee: { id: 3, login: "dean" },
+        slug: team.slug,
+      },
+    ])
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
   it("counts a young pending team's email as live without reading invitations", async () => {
     const team = await inviteState("cs101", "bob@example.com", [])
     listInviteTeams.mockResolvedValue([{ slug: team.slug }])
