@@ -66,6 +66,7 @@ import { useTranslation } from "react-i18next"
 import {
   groupStudentsBySection,
   nextSelectedKeyAfterSave,
+  rosterSyncMessageKeys,
 } from "./enrolledStudentsHelpers"
 import { useRosterAutoSync } from "./useRosterAutoSync"
 import { RosterRow } from "./RosterRow"
@@ -362,12 +363,15 @@ const EnrolledStudents = ({
   const runSync = () =>
     syncMutation.mutate(undefined, {
       onSuccess: (result) => {
+        const parts = rosterSyncMessageKeys(result)
         notify({
           tone: "success",
           durationMs: 5000,
           message: result.noop
             ? t("students.syncUpToDate")
-            : t("students.syncAdded", { count: result.addedUsernames.length }),
+            : parts.length > 0
+              ? parts.map((p) => t(p.key, { count: p.count })).join(" ")
+              : t("students.syncRosterDone"),
         })
       },
       onError: (err) => {
