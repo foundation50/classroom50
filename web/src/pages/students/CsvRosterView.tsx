@@ -7,6 +7,7 @@ import { RoleBadges } from "./RoleBadges"
 import { StudentSortSelect } from "./StudentSortSelect"
 import { coerceImportRole } from "./rosterImportParse"
 import type { Student } from "@/types/classroom"
+import { studentKey } from "@/util/identity"
 import {
   DEFAULT_STUDENT_SORT,
   sortStudentsByName,
@@ -15,7 +16,9 @@ import {
 
 function displayName(student: Student): string {
   const full = `${student.first_name} ${student.last_name}`.trim()
-  return full || student.username
+  // Fall back to the address for a pending email invite: it carries no username,
+  // and without this the row renders completely blank.
+  return full || student.username || student.email
 }
 
 // The read-only "CSV roster" for a non-owner staffer (TA / head TA), sourced
@@ -67,12 +70,18 @@ const CsvRosterView = ({ students }: { students: Student[] }) => {
               </tr>
             ) : (
               rows.map((student) => (
-                <tr key={student.username || student.github_id}>
+                // studentKey falls back to the email, so two pending invites
+                // don't collide on an empty key.
+                <tr key={studentKey(student)}>
                   <td>
                     <div className="font-bold">{displayName(student)}</div>
                     {student.username ? (
                       <div className="font-mono text-xs text-base-content/70">
                         {student.username}
+                      </div>
+                    ) : student.email ? (
+                      <div className="text-xs text-base-content/70">
+                        {t("students.csvRoster.invitePending")}
                       </div>
                     ) : null}
                   </td>

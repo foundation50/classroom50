@@ -11,6 +11,7 @@ import {
   assignRosterMemberRole,
   applyClassroomRoleChange,
   inviteRosterStudents,
+  bulkInviteByEmail,
   resendClassroomInvite,
   retireEmailInvite,
   type StudentCsvRow,
@@ -198,8 +199,13 @@ const RosterMemberModal = ({
     nameFromParts(row.first_name, row.last_name) || row.username || row.email
   const displayInitials = rosterRowInitials(row)
   const label = row.username || row.email
+  // Re-sending needs SOMETHING to address the invitation to: an account (id), or
+  // an address for an email-only pending invite. Excluding the latter left a
+  // student whose invitation went to spam with no option but Cancel.
   const canResend =
-    canManage && row.state === "pending" && Boolean(row.github_id)
+    canManage &&
+    row.state === "pending" &&
+    Boolean(row.github_id || (!row.username && row.email))
   // Cancelling a pending invite needs its org-invitation id (set on pending
   // rows). Available even for an email-only pending invite (no github_id), so
   // gate on the id, not github_id.
@@ -322,6 +328,38 @@ const RosterMemberModal = ({
 
   const handleResend = async () => {
     if (resending) return
+    // An email-only pending invite has no account to re-invite by id, so re-send
+    // by address instead — bulkInviteByEmail recreates the invitation and its
+    // invite team, the same recipe useReinviteFailedInvite uses for a failed one.
+    // appendEmailInviteRows skips the already-claimed address, so no second row.
+    if (!row.username && row.email) {
+      setResending(true)
+      try {
+        const role = sortRolesByRank(row.roles)[0] ?? "student"
+        const res = await bulkInviteByEmail(client, {
+          org,
+          classroom,
+          invites: [{ email: row.email, role }],
+        })
+        if (res.failed.length > 0) {
+          throw new Error(res.failed[0]!.message)
+        }
+        onResent(row.key)
+        onClose()
+      } catch (err) {
+        onError(
+          row.key,
+          t("students.resendFailed", {
+            username: row.email,
+            error: getErrorMessage(err),
+          }),
+        )
+      } finally {
+        setResending(false)
+        setConfirmingResend(false)
+      }
+      return
+    }
     const inviteeId = resolveGitHubId(row.github_id)
     if (inviteeId === null || !row.username) {
       const username = row.username || row.email
