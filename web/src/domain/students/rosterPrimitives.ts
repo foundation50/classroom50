@@ -38,6 +38,7 @@ import {
   type StudentCsvRow,
 } from "@/util/rosterCsv"
 import { normalizeInviteEmail } from "@/util/inviteTeam"
+import { resolveGitHubId } from "@/util/students"
 import { withGitConflictRetry } from "../classrooms"
 import {
   ROLE_RANK,
@@ -178,6 +179,66 @@ export async function appendEmailInviteRows(
       err,
     })
   }
+}
+
+// Drop the pending rows a set of email invites left on the roster, in ONE commit
+// for the batch — the plural sibling of the single-address path, and what a bulk
+// cancel must use so a class-sized selection doesn't spend a read-modify-write
+// per row and walk into GitHub's content-creation secondary rate limit.
+//
+// Only identity-less rows are removed — no username and no usable github_id.
+// That is the row an unaccepted invite writes, and the narrow guard is what
+// keeps an enrolled student who merely shares a contact address from being
+// dropped. Mirrors the Go reader's UpsertRosterRow claim rule.
+//
+// Best-effort and never throws: the cancellations have already succeeded by the
+// time this runs, so a malformed roster must not surface as a failed cancel. The
+// reconcile's dead-row reap remains the backstop.
+export async function removeEmailInviteRows(
+  client: GitHubClient,
+  input: { org: string; classroom: string },
+  emails: string[],
+): Promise<void> {
+  const targets = new Set(
+    emails.map((e) => normalizeInviteEmail(e)).filter(Boolean),
+  )
+  if (targets.size === 0) return
+  try {
+    await withRosterRewrite(client, input, (rows) => {
+      const nextStudents = rows.filter(
+        (row) =>
+          !(
+            targets.has(normalizeInviteEmail(row.email ?? "")) &&
+            !row.username.trim() &&
+            resolveGitHubId(row.github_id) === null
+          ),
+      )
+      const changed = rows.length - nextStudents.length
+      return {
+        nextStudents,
+        changed,
+        message: `Remove ${changed} invited email${
+          changed === 1 ? "" : "s"
+        } from roster: ${input.classroom}`,
+      }
+    })
+  } catch (err) {
+    log.error("email invite roster row removal failed", {
+      org: input.org,
+      classroom: input.classroom,
+      err,
+    })
+  }
+}
+
+// Single-address convenience over removeEmailInviteRows, for the one-at-a-time
+// cancel paths. Same guard, same never-throws contract.
+export async function removeEmailInviteRow(
+  client: GitHubClient,
+  input: { org: string; classroom: string },
+  email: string,
+): Promise<void> {
+  await removeEmailInviteRows(client, input, [email])
 }
 
 // Slug is authoritative in classroom.json: GitHub may assign a non-derived slug
@@ -713,9 +774,15 @@ export async function resolveTeamIdByRole(
 // authority for matching a removal target to a roster row, shared by
 // unenrollStudent and bulkUnenrollStudents so the two can't drift.
 //
-// Identity is username/github_id only: every roster row now carries a GitHub
-// identity, so email is never a match key (a shared email must not widen the
-// match, and there are no username-less rows to target by email).
+// Identity is username/github_id only, and email is deliberately NOT a key: a
+// contact address can be shared (a parent's, a shared lab account), and widening
+// the match here would let one removal drop someone else's row.
+//
+// So an email-only row — the pending row an unaccepted email invitation writes —
+// is not removable through unenroll. It is retired by CANCELLING the invitation,
+// which is also the only correct action: dropping the row alone would leave the
+// invitation live, so the student could still accept into a classroom whose
+// roster no longer lists them. See retireEmailInvite.
 export function matchesRosterRow(row: StudentCsvRow, target: Student): boolean {
   const username = target.username?.trim()
   const githubId = target.github_id?.trim()

@@ -18,6 +18,14 @@ export {
   type ClassroomPendingInvite,
 } from "./students/rosterPrimitives"
 export {
+  removeEmailInviteRow,
+  removeEmailInviteRows,
+} from "./students/rosterPrimitives"
+export {
+  retireEmailInvite,
+  retireEmailInvites,
+} from "./students/retireEmailInvite"
+export {
   addStudentToClassroom,
   addStudentToClassroomWithConflictRetry,
   inviteByEmail,

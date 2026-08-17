@@ -83,6 +83,7 @@ const stubContext = {
   lookup: () => undefined,
   storedByIdentity: () => undefined,
   loginById: new Map<number, string>(),
+  claimedEmails: new Set<string>(),
 }
 beforeEach(() => {
   resolveRosterUploadContext.mockResolvedValue(stubContext)
@@ -646,6 +647,74 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
       .querySelector("input[type=checkbox]") as HTMLInputElement
     await user.click(confirm)
     await waitFor(() => expect(button.disabled).toBe(false))
+  })
+
+  it("labels an email the roster already carries, but still invites it", async () => {
+    const user = userEvent.setup()
+    // A roster row already carries zoe@x.edu, so appendEmailInviteRows will skip
+    // writing a SECOND row for it. The invitation still goes out — GitHub is the
+    // authority on whether it's redundant, and answers with a 422 that lands in
+    // the skipped bucket. Suppressing the send here would silently drop a person
+    // the teacher listed: the address could belong to a shared contact, or to a
+    // pending row whose invitation has since died.
+    resolveRosterUploadContext.mockResolvedValue({
+      ...stubContext,
+      claimedEmails: new Set(["zoe@x.edu"]),
+    })
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [],
+      identityMismatches: [],
+      allAlreadyMembers: true,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(
+      user,
+      file("roster.csv", "email\nzoe@x.edu\nnewbie@x.edu\n"),
+    )
+
+    // Both rows are invitations, so the counts say 2 — not 1.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: "students.importAndInviteMembers:2",
+        }),
+      ).toBeTruthy(),
+    )
+    expect(screen.getByText("students.uploadInviteNotice:2")).toBeTruthy()
+
+    // The already-carried row is distinguished in the preview.
+    await user.click(screen.getByText("students.summaryViewDetails"))
+    expect(screen.getByText("students.previewEmailOnRoster")).toBeTruthy()
+    expect(screen.getByText("students.previewInviteByEmail")).toBeTruthy()
+
+    bulkEnrollStudentsInClassroom.mockResolvedValue({
+      addedStudents: [],
+      skippedStudents: [],
+    })
+    bulkInviteByEmail.mockResolvedValue({
+      invited: [{ email: "newbie@x.edu", role: "student" }],
+      skipped: [{ email: "zoe@x.edu" }],
+      failed: [],
+      deferred: [],
+    })
+    await user.click(
+      screen.getByRole("button", {
+        name: "students.importAndInviteMembers:2",
+      }),
+    )
+
+    // BOTH addresses are sent; GitHub decides which is redundant.
+    await waitFor(() => expect(bulkInviteByEmail).toHaveBeenCalledTimes(1))
+    expect(bulkInviteByEmail.mock.calls[0][1]).toMatchObject({
+      invites: [{ email: "zoe@x.edu" }, { email: "newbie@x.edu" }],
+    })
   })
 
   it("counts invitations, not rows, in the primary button and notice", async () => {

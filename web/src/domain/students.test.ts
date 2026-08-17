@@ -7,6 +7,9 @@ import {
   bulkInviteByEmail,
   unenrollStudent,
   bulkUnenrollStudents,
+  removeEmailInviteRow,
+  retireEmailInvite,
+  retireEmailInvites,
   resolveClassroomPendingInvite,
   resendClassroomInvite,
   bulkEnrollStudentsInClassroom,
@@ -2172,10 +2175,11 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
     expect(committed.content).toBeNull()
   })
 
-  it("an email-only target matches nothing (identity is username/github_id only)", async () => {
-    // Every roster row now carries a GitHub identity, so removal targets match
-    // by username/github_id only. An email-only target (no username, no id)
-    // matches no row — it can't silently unenroll a same-email sibling.
+  it("rejects an email-only target rather than reporting it as notFound", async () => {
+    // Removal matches by username/github_id only, so an email-only target could
+    // never match a row. Reporting it as notFound would read as "already
+    // removed" while both the row and its live invitation survived — cancel the
+    // invitation instead (retireEmailInvite).
     const startingCsv = HEADER + "sam,,,sam@x.edu,,100\n"
     const { client, committed } = makeClient({ startingCsv })
 
@@ -2195,10 +2199,33 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
       ],
     })
 
-    // Nothing matched: the identified row survives, target reported notFound.
+    // Filtered out up front: nothing committed, and it is NOT reported as a
+    // row that was already gone.
     expect(committed.content).toBeNull()
     expect(result.removed).toHaveLength(0)
-    expect(result.notFound).toHaveLength(1)
+    expect(result.notFound).toHaveLength(0)
+  })
+
+  it("unenrollStudent rejects an email-only target without implying email works", async () => {
+    const startingCsv = HEADER + "sam,,,sam@x.edu,,100\n"
+    const { client, committed } = makeClient({ startingCsv })
+
+    await expect(
+      unenrollStudent(client, {
+        org: "acme",
+        classroom: "cs101",
+        student: {
+          username: "",
+          first_name: "",
+          last_name: "",
+          email: "sam@x.edu",
+          section: "",
+          github_id: "",
+          role: "",
+        },
+      }),
+    ).rejects.toThrow(/username or ID is required/)
+    expect(committed.content).toBeNull()
   })
 
   // Regression (#130): removing the LAST student must not commit a header-less
@@ -2220,6 +2247,155 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
     const csv = committed.content!
     expect(csv.split("\n")[0]).toBe(STUDENT_CSV_FIELDS.join(","))
     expect(parseStudentsCsv(csv)).toEqual([])
+  })
+})
+
+describe("removeEmailInviteRow — retiring a cancelled invite's pending row", () => {
+  it("drops the identity-less row for that address", async () => {
+    const { client, committed } = makeClient({
+      startingCsv: HEADER + ",,,sam@x.edu,,,student\n",
+    })
+
+    await removeEmailInviteRow(
+      client,
+      { org: "acme", classroom: "cs101" },
+      "sam@x.edu",
+    )
+
+    expect(parseStudentsCsv(committed.content!)).toEqual([])
+  })
+
+  it("matches case-insensitively and ignores surrounding whitespace", async () => {
+    const { client, committed } = makeClient({
+      startingCsv: HEADER + ",,,Sam@X.edu,,,student\n",
+    })
+
+    await removeEmailInviteRow(
+      client,
+      { org: "acme", classroom: "cs101" },
+      "  sam@x.edu  ",
+    )
+
+    expect(parseStudentsCsv(committed.content!)).toEqual([])
+  })
+
+  it("keeps a row for the same address that carries a username", async () => {
+    // A shared contact address must never let a cancellation drop an enrolled
+    // student — the whole reason the guard is identity-less-only.
+    const startingCsv = HEADER + "sam,,,shared@x.edu,,100,student\n"
+    const { client, committed } = makeClient({ startingCsv })
+
+    await removeEmailInviteRow(
+      client,
+      { org: "acme", classroom: "cs101" },
+      "shared@x.edu",
+    )
+
+    // changed === 0, so withRosterRewrite commits nothing at all.
+    expect(committed.content).toBeNull()
+  })
+
+  it("treats a present-but-unusable github_id as identity-less", async () => {
+    // An Excel-mangled id addresses no account, so the row is still the pending
+    // one the invite wrote.
+    const { client, committed } = makeClient({
+      startingCsv: HEADER + ",,,sam@x.edu,,5.83231E+05,student\n",
+    })
+
+    await removeEmailInviteRow(
+      client,
+      { org: "acme", classroom: "cs101" },
+      "sam@x.edu",
+    )
+
+    expect(parseStudentsCsv(committed.content!)).toEqual([])
+  })
+
+  it("keeps a row whose github_id resolves, even with a blank username", async () => {
+    const startingCsv = HEADER + ",,,sam@x.edu,,0583231,student\n"
+    const { client, committed } = makeClient({ startingCsv })
+
+    await removeEmailInviteRow(
+      client,
+      { org: "acme", classroom: "cs101" },
+      "sam@x.edu",
+    )
+
+    expect(committed.content).toBeNull()
+  })
+
+  it("never throws on a malformed roster — the cancel already succeeded", async () => {
+    const { client, committed } = makeClient({
+      startingCsv: "username,first_name\nbroken,row,too,many,fields\n",
+    })
+
+    await expect(
+      removeEmailInviteRow(
+        client,
+        { org: "acme", classroom: "cs101" },
+        "sam@x.edu",
+      ),
+    ).resolves.toBeUndefined()
+    expect(committed.content).toBeNull()
+  })
+
+  it("commits nothing for a blank address", async () => {
+    const { client, committed } = makeClient({
+      startingCsv: HEADER + ",,,sam@x.edu,,,student\n",
+    })
+
+    await removeEmailInviteRow(
+      client,
+      { org: "acme", classroom: "cs101" },
+      "   ",
+    )
+
+    expect(committed.content).toBeNull()
+  })
+
+  it("retireEmailInvite clears BOTH the invite team and the pending row", async () => {
+    // The two artifacts an email invitation leaves behind. Clearing only the
+    // team would strand the row invisibly on roster.csv — an email-only row
+    // never renders on its own, so a teacher could neither see nor remove it.
+    const { client, committed } = makeClient({
+      startingCsv: HEADER + ",,,sam@x.edu,,,student\n",
+    })
+
+    await retireEmailInvite(client, {
+      org: "acme",
+      classroom: "cs101",
+      email: "sam@x.edu",
+    })
+
+    expect(parseStudentsCsv(committed.content!)).toEqual([])
+  })
+
+  it("retireEmailInvites clears a batch of rows in ONE commit", async () => {
+    // A read-modify-write per row would push a class-sized bulk cancel into
+    // GitHub's content-creation secondary rate limit partway through, failing the
+    // cancellations that hadn't run yet.
+    let treeWrites = 0
+    const { client, committed } = makeClient({
+      startingCsv:
+        HEADER +
+        ",,,a@x.edu,,,student\n" +
+        ",,,b@x.edu,,,student\n" +
+        "keep,,,keep@x.edu,,100,student\n",
+      onTree: () => {
+        treeWrites += 1
+      },
+    })
+
+    await retireEmailInvites(client, {
+      org: "acme",
+      classroom: "cs101",
+      emails: ["a@x.edu", "b@x.edu"],
+    })
+
+    expect(treeWrites).toBe(1)
+    expect(parseStudentsCsv(committed.content!)).toEqual([
+      expect.objectContaining({ username: "keep" }),
+    ])
   })
 })
 

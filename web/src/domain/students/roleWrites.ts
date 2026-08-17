@@ -24,6 +24,7 @@ import {
 import { isSameGitHubUser } from "@/util/students"
 import { parseRosterCsv } from "@/util/rosterCsv"
 import { rosterPath } from "@/util/rosterPath"
+import { normalizeInviteEmail } from "@/util/inviteTeam"
 import { type ClassroomRole } from "@/util/teamRoster"
 import { isTeacherRole } from "@/authz"
 import { memberIdentitySets } from "@/util/identity"
@@ -231,6 +232,10 @@ export type RosterUploadContext = {
   // BLANK username). Seeding it from there would resolve a renamed student to
   // their old handle and silently defeat the point of reading the id.
   loginById: ReadonlyMap<number, string>
+  // Addresses already claimed by a stored roster row. An uploaded email-only row
+  // whose address is in here would be skipped by appendEmailInviteRows, so the
+  // preview marks it a no-op instead of counting it as an invitation to send.
+  claimedEmails: ReadonlySet<string>
 }
 
 // Read the classroom's CURRENT GitHub membership + stored roster.csv metadata
@@ -249,7 +254,7 @@ export async function resolveRosterUploadContext(
   // run it in the same wave rather than as a serial second stage.
   const [
     [orgMembers, studentMembers, teacherMembers, htaMembers, taMembers],
-    storedByIdentity,
+    { storedByIdentity, claimedEmails },
   ] = await Promise.all([
     Promise.all([
       listAllOrgMembers(client, org),
@@ -288,7 +293,12 @@ export async function resolveRosterUploadContext(
     orgMembers.map((member) => [member.id, member.login]),
   )
 
-  return { lookup: membershipLookup(resolved), storedByIdentity, loginById }
+  return {
+    lookup: membershipLookup(resolved),
+    storedByIdentity,
+    loginById,
+    claimedEmails,
+  }
 }
 
 // Convenience wrapper: read the context (see resolveRosterUploadContext) and
@@ -318,9 +328,13 @@ async function resolveStoredRosterLookup(
   client: GitHubClient,
   org: string,
   classroom: string,
-): Promise<(row: PreflightRow) => StoredRosterRow | undefined> {
+): Promise<{
+  storedByIdentity: (row: PreflightRow) => StoredRosterRow | undefined
+  claimedEmails: ReadonlySet<string>
+}> {
   const byId = new Map<string, StoredRosterRow>()
   const byLogin = new Map<string, StoredRosterRow>()
+  const claimedEmails = new Set<string>()
   try {
     const configBranch = await getConfigRepoBranch(client, org)
     const ref = await getBranchRef(client, org, configBranch)
@@ -339,17 +353,25 @@ async function resolveStoredRosterLookup(
       }
       if (s.github_id) byId.set(s.github_id.trim(), metadata)
       if (s.username) byLogin.set(s.username.trim().toLowerCase(), metadata)
+      // Same normalization appendEmailInviteRows uses for its `claimed` set, so
+      // the preview's "already on the roster" verdict matches what the write
+      // would actually skip.
+      const email = normalizeInviteEmail(s.email ?? "")
+      if (email) claimedEmails.add(email)
     }
   } catch (err) {
     log.warn("roster upload preflight: stored-roster read failed", { err })
-    return () => undefined
+    return { storedByIdentity: () => undefined, claimedEmails: new Set() }
   }
-  return (row: PreflightRow) => {
-    const id = row.github_id?.trim()
-    return (
-      (id ? byId.get(id) : undefined) ??
-      byLogin.get(row.username.trim().toLowerCase())
-    )
+  return {
+    storedByIdentity: (row: PreflightRow) => {
+      const id = row.github_id?.trim()
+      return (
+        (id ? byId.get(id) : undefined) ??
+        byLogin.get(row.username.trim().toLowerCase())
+      )
+    },
+    claimedEmails,
   }
 }
 

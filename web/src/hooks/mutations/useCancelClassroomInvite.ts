@@ -1,8 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import {
-  cancelOrgInvitation,
-  deleteInviteTeamForEmail,
-} from "@/github-core/mutations"
+import { cancelOrgInvitation } from "@/github-core/mutations"
+import { retireEmailInvite } from "@/domain/students"
 import { invalidateClassroomTeam } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
@@ -12,9 +10,10 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 // member modal. Returns the raw cancel outcome so a caller can distinguish a
 // real cancellation from a stale (already-gone) invite id.
 //
-// For an email-only invitation (no login), pass `inviteEmail` so the per-invite
-// metadata team holding that address is torn down with the invite (best-effort;
-// the GC pass is the backstop). A username invitation has no such team.
+// For an email-only invitation (no login), pass `inviteEmail` so everything the
+// invite left behind is retired with it: the per-invite metadata team holding
+// that address, and its pending roster.csv row (best-effort; the GC and
+// reconcile passes are the backstops). A username invitation has neither.
 export function useCancelClassroomInvite(
   org: string,
   classroom: string,
@@ -32,8 +31,14 @@ export function useCancelClassroomInvite(
         org,
         invitationId: input.invitationId,
       })
-      if (input.inviteEmail) {
-        await deleteInviteTeamForEmail(client, org, {
+      // Only retire on a real cancellation: a stale id 404s (cancelled: false)
+      // while a live invitation for the same address may still exist —
+      // resendOrgInvitation recreates before cancelling — and dropping the row
+      // there would delete the invite-time details of someone who can still
+      // accept.
+      if (result.cancelled && input.inviteEmail) {
+        await retireEmailInvite(client, {
+          org,
           classroom,
           email: input.inviteEmail,
         })

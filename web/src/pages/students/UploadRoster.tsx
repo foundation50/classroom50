@@ -318,6 +318,25 @@ const UploadRoster = ({
     () => resolvedRows.filter(isEmailRow),
     [resolvedRows],
   )
+  // Addresses a stored roster row already carries. These still get an invitation
+  // — GitHub is the authority on whether one is redundant, and answers with a
+  // 422 that lands in bulkInviteByEmail's `skipped` bucket. What the roster claim
+  // predicts is only that appendEmailInviteRows will skip writing a SECOND row
+  // for the address, so the preview labels the row rather than dropping it.
+  //
+  // Deliberately not used to filter the send list: an address can be claimed by
+  // someone else's row (a shared parent or lab contact), or by a pending row
+  // whose invitation has since died, and in both cases a real person the teacher
+  // listed still needs inviting.
+  const claimedEmails = preflightContext?.claimedEmails
+  const noopEmailKeys = useMemo(() => {
+    const keys = new Set<string>()
+    if (!claimedEmails) return keys
+    for (const r of emailRows) {
+      if (claimedEmails.has(r.identity.email)) keys.add(identityKey(r.identity))
+    }
+    return keys
+  }, [emailRows, claimedEmails])
   // The role the teacher assigned a row, defaulting to student.
   const roleFor = (identity: ImportIdentity): ClassroomRole =>
     rolesByUser[identityKey(identity)] ?? "student"
@@ -927,6 +946,7 @@ const UploadRoster = ({
                   changes={rowChanges}
                   roleChanges={roleChangeByUser}
                   identityChanges={identityChangeByUser}
+                  noopRowKeys={noopEmailKeys}
                   loading={preflighting}
                   onRoleChange={(key, role) =>
                     setRolesByUser((prev) => ({ ...prev, [key]: role }))
