@@ -13,9 +13,13 @@ vi.mock("@/github-core/queries", () => ({ getUserById }))
 
 const client = {} as GitHubClient
 
-const row = (identity: ParsedImportRow["identity"]): ParsedImportRow => ({
-  identity,
-})
+// Line numbers are irrelevant to resolution itself, so each fixture row gets a
+// distinct one only where a test asserts which line a problem is reported against.
+let nextLine = 1
+const row = (
+  identity: ParsedImportRow["identity"],
+  line = nextLine++,
+): ParsedImportRow => ({ line, identity })
 
 const noRateLimit: GitHubRateLimit = {
   limit: null,
@@ -96,23 +100,32 @@ describe("resolveImportIdentities", () => {
     getUserById.mockRejectedValueOnce(apiError(404))
     const res = await resolveImportIdentities(
       client,
-      [row({ githubId: 999, username: "someone-else" })],
+      [row({ githubId: 999, username: "someone-else" }, 4)],
       new Map(),
     )
     expect(res.rows).toEqual([])
     expect(res.unusable).toEqual([
-      { reason: "unresolved-id", githubId: "999", username: "someone-else" },
+      {
+        line: 4,
+        reason: "unresolved-id",
+        githubId: "999",
+        username: "someone-else",
+      },
     ])
   })
 
-  it("fails closed on a malformed id", async () => {
+  it("fails closed on a malformed id, reporting the line it came from", async () => {
     const res = await resolveImportIdentities(
       client,
-      [row({ malformedGithubId: "5.83231E+05", username: "ada" })],
+      [row({ malformedGithubId: "5.83231E+05", username: "ada" }, 7)],
       new Map(),
     )
     expect(res.rows).toEqual([])
-    expect(res.unusable[0]?.reason).toBe("unresolved-id")
+    expect(res.unusable[0]).toMatchObject({
+      line: 7,
+      reason: "unresolved-id",
+      githubId: "5.83231E+05",
+    })
   })
 
   it("stops resolving on a rate limit and reports the rest as a lookup failure", async () => {
@@ -192,11 +205,5 @@ describe("resolveImportIdentities", () => {
     expect(res.rows).toHaveLength(1)
     // First occurrence wins, so the id-resolved row's metadata is kept.
     expect(res.rows[0]?.identity).toMatchObject({ github_id: "42" })
-  })
-
-  it("reports a row with no identity cell at all", async () => {
-    const res = await resolveImportIdentities(client, [row({})], new Map())
-    expect(res.rows).toEqual([])
-    expect(res.unusable).toEqual([{ reason: "no-identity" }])
   })
 })

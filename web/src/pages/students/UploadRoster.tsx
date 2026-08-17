@@ -64,6 +64,11 @@ import {
   type RowRoleChanges,
 } from "./RosterPreviewTable"
 import { ImportResultSection, RosterImportResult } from "./RosterImportResult"
+import { classifyImportProblems } from "./importProblems"
+import {
+  ImportBlockedReport,
+  ImportSkippedReport,
+} from "./ImportProblemsReport"
 
 // Preserve the module's original public surface: the pure parse helpers live in
 // ./rosterImportParse now, but UploadRoster.test.ts and any importer still pull
@@ -76,15 +81,6 @@ export {
 } from "./rosterImportParse"
 
 const log = logger.scope("students:UploadRoster")
-
-// The unusable-row reasons that get their own alert, with the copy each uses. An
-// unresolvable id is the teacher's file to fix; a lookup we couldn't complete is
-// a retry. `no-identity` is absent deliberately — the parser's `dropped` count
-// already reports those rows.
-const ROW_ISSUE_KEYS = [
-  ["unresolved-id", "students.unresolvedIdRows"],
-  ["id-lookup-failed", "students.idLookupFailedRows"],
-] as const satisfies readonly (readonly [UnusableRow["reason"], string])[]
 
 type UploadRosterProps = {
   org: string
@@ -322,14 +318,15 @@ const UploadRoster = ({
   // — GitHub is the authority on whether one is redundant, and answers with a
   // 422 that lands in bulkInviteByEmail's `skipped` bucket. What the roster claim
   // predicts is only that appendEmailInviteRows will skip writing a SECOND row
-  // for the address, so the preview labels the row rather than dropping it.
+  // for the address, so the preview labels the row rather than implying a fresh
+  // invite.
   //
   // Deliberately not used to filter the send list: an address can be claimed by
   // someone else's row (a shared parent or lab contact), or by a pending row
   // whose invitation has since died, and in both cases a real person the teacher
   // listed still needs inviting.
   const claimedEmails = preflightContext?.claimedEmails
-  const noopEmailKeys = useMemo(() => {
+  const alreadyOnRosterKeys = useMemo(() => {
     const keys = new Set<string>()
     if (!claimedEmails) return keys
     for (const r of emailRows) {
@@ -492,11 +489,14 @@ const UploadRoster = ({
     0
   const needsMetadataConfirm = (preflight?.metadataUpdate.length ?? 0) > 0
   const anyIdResolved = accountRows.some((r) => r.identity.resolvedFromId)
-  const unusableCounts = useMemo(() => {
-    const counts: Partial<Record<UnusableRow["reason"], number>> = {}
-    for (const r of unusableRows) counts[r.reason] = (counts[r.reason] ?? 0) + 1
-    return counts
-  }, [unusableRows])
+  // Every row neither stage could act on, merged and ordered by file line. A
+  // blocking one means the file itself is wrong, so the preview is replaced by the
+  // report — see classifyImportProblems for where that line is drawn.
+  const problems = useMemo(
+    () => classifyImportProblems(droppedRows, unusableRows),
+    [droppedRows, unusableRows],
+  )
+  const blocked = problems.some((p) => p.blocking)
   // The table is forced open when a confirmation is pending (so the highlighted
   // role/detail changes are visible to confirm), when any row's identity came
   // from a github_id (the teacher can't eyeball a numeric id, so the resolved
@@ -517,6 +517,7 @@ const UploadRoster = ({
         invalidEmails.length === 0 &&
         (!emailHasTeacher || emailOwnerConfirmed)
       : resolvedRows.length > 0 &&
+        !blocked &&
         !preflighting &&
         !preflightError &&
         (!preflight || hasActionableWork) &&
@@ -849,7 +850,16 @@ const UploadRoster = ({
           </div>
         )}
 
-        {phase === "preview" && uploadKind !== "email-list" && (
+        {/* A file carrying content we couldn't read replaces the preview
+            entirely: no table, no import button. Importing the remainder would act
+            on a file the teacher and the app disagree about. Resolution still runs
+            underneath, so an unusable github_id joins the list rather than waiting
+            for the teacher's next upload. */}
+        {phase === "preview" && uploadKind !== "email-list" && blocked && (
+          <ImportBlockedReport problems={problems} onCancel={resetToDropZone} />
+        )}
+
+        {phase === "preview" && uploadKind !== "email-list" && !blocked && (
           <div>
             {/* Preflight against current GitHub membership: what processing will
                 do to each row. While it resolves, the summary/recap are withheld
@@ -911,24 +921,11 @@ const UploadRoster = ({
               </Alert>
             ) : null}
 
-            {/* Rows we refuse to act on. An unresolvable github_id fails closed
-                rather than falling back to the row's username cell, which would
-                target whoever holds that login today. `no-identity` isn't listed
-                here — the parser's `dropped` count already covers those. */}
-            {ROW_ISSUE_KEYS.map(([reason, key]) =>
-              (unusableCounts[reason] ?? 0) > 0 ? (
-                <Alert key={reason} tone="warning" className="mb-4">
-                  <span>{t(key, { count: unusableCounts[reason] })}</span>
-                </Alert>
-              ) : null,
-            )}
-            {droppedRows.length > 0 ? (
-              <Alert tone="warning" className="mb-4">
-                <span>
-                  {t("students.droppedRows", { count: droppedRows.length })}
-                </span>
-              </Alert>
-            ) : null}
+            {/* Rows neither stage could act on. A blocking one replaces the whole
+                preview (below), so what reaches here is only the advisory kind: a
+                row with no identity cell, i.e. a student who hasn't supplied a
+                handle. Everyone addressable still imports. */}
+            <ImportSkippedReport problems={problems} />
 
             {parsedRows.length > 0 ? (
               // While identities resolve, show the table as a skeleton (loading).
@@ -946,7 +943,7 @@ const UploadRoster = ({
                   changes={rowChanges}
                   roleChanges={roleChangeByUser}
                   identityChanges={identityChangeByUser}
-                  noopRowKeys={noopEmailKeys}
+                  noopRowKeys={alreadyOnRosterKeys}
                   loading={preflighting}
                   onRoleChange={(key, role) =>
                     setRolesByUser((prev) => ({ ...prev, [key]: role }))

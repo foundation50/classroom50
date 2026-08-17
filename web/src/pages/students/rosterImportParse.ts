@@ -52,6 +52,10 @@ export type UnresolvedIdentity = {
 // the domain's ImportRosterRow stays username-keyed (every write path indexes by
 // login), and startImport maps resolved account rows down to it.
 export type ParsedImportRow = {
+  // The row's 1-based line in the uploaded file, carried so a problem found
+  // downstream (an id that resolves to nothing) can be reported against the line
+  // the teacher has to edit, exactly like one found here.
+  line: number
   identity: UnresolvedIdentity
   first_name?: string
   last_name?: string
@@ -60,9 +64,27 @@ export type ParsedImportRow = {
   role?: ClassroomRole
 }
 
-// Why a non-empty line or row carried no usable identity, so the preview can
-// report the count instead of silently shrinking the import.
-export type DroppedRow = { line: number; reason: "no-identity" | "bad-email" }
+// Why a row yielded no usable identity. The distinction drives BOTH the copy and
+// whether the import may proceed, so the two can't drift:
+//   - a bad-* reason means a cell held content we couldn't use. Something is
+//     wrong with the file (a typo, a shifted column, the wrong file entirely),
+//     the teacher can see exactly what, and the import is blocked on it.
+//   - `incomplete` means every identity cell was blank — a student who hasn't
+//     supplied a handle yet. There is nothing to fix, so the row is reported and
+//     skipped rather than blocking the students who ARE addressable.
+// The offending cell rides along on a bad-* reason (and only there: `incomplete`
+// has nothing to show) so the report can name the value instead of just counting.
+export type DroppedRow =
+  | { line: number; reason: BlockingDropReason; value: string }
+  | { line: number; reason: "incomplete" }
+
+export type BlockingDropReason =
+  // A username/email cell whose content isn't a valid handle/address.
+  | "bad-username"
+  | "bad-email"
+  // A bare one-per-line value that is neither, so we can't even guess which the
+  // teacher meant.
+  | "bad-value"
 
 export type ParsedImportFile = {
   rows: ParsedImportRow[]
@@ -114,6 +136,18 @@ const hasAnyIdentity = (identity: UnresolvedIdentity) =>
   identity.username !== undefined ||
   identity.email !== undefined
 
+// Which cell to blame for a row that yielded no identity, in the order a teacher
+// most likely meant the row to be read. A malformed github_id never reaches here:
+// it is recorded ON the identity, so resolution reports it as an unresolvable id
+// rather than the parser calling the row empty.
+const blameFor = (raw: Record<string, string>, line: number): DroppedRow => {
+  const email = stripMailto(raw.email ?? "")
+  if (email) return { line, reason: "bad-email", value: email }
+  const username = (raw.username ?? "").trim()
+  if (username) return { line, reason: "bad-username", value: username }
+  return { line, reason: "incomplete" }
+}
+
 // Parse an uploaded roster into rows carrying an UNRESOLVED identity plus
 // metadata. A CSV with a header row reads github_id/username/email as identity
 // columns (precedence in that order) and first_name/last_name/name/section/role
@@ -154,13 +188,7 @@ export const parseRosterImportFile = (
       const line = index + 2
       const identity = readIdentity(raw)
       if (!hasAnyIdentity(identity)) {
-        // An email cell that failed validation is a likelier teacher mistake
-        // than a wholly blank row, so name it specifically.
-        const emailCell = stripMailto(raw.email ?? "")
-        dropped.push({
-          line,
-          reason: emailCell ? "bad-email" : "no-identity",
-        })
+        dropped.push(blameFor(raw, line))
         return
       }
       const cell = (header: OptionalImportHeader): string =>
@@ -169,6 +197,7 @@ export const parseRosterImportFile = (
       // merely empty), so a deliberately blank first_name isn't overwritten.
       const fromName = splitName(raw.name ?? null)
       rows.push({
+        line,
         identity,
         first_name: (raw.first_name ?? fromName.first_name).trim(),
         last_name: (raw.last_name ?? fromName.last_name).trim(),
@@ -192,6 +221,7 @@ export const parseRosterImportFile = (
     // username-list override the teacher has asserted every line is a handle.
     if (kind !== "username-list" && isValidEmail(bare)) {
       rows.push({
+        line,
         identity: { email: normalizeEmail(bare) },
         email: normalizeEmail(bare),
       })
@@ -199,10 +229,16 @@ export const parseRosterImportFile = (
     }
     const username = normalizeGithubUsername(value)
     if (!username || !isLikelyGithubUsername(username)) {
-      dropped.push({ line, reason: "no-identity" })
+      // Under the override the teacher named the shape, so blame that shape;
+      // under the default the line could have been either and was neither.
+      dropped.push({
+        line,
+        reason: kind === "username-list" ? "bad-username" : "bad-value",
+        value,
+      })
       return
     }
-    rows.push({ identity: { username } })
+    rows.push({ line, identity: { username } })
   })
 
   return { rows, dropped }

@@ -219,7 +219,8 @@ describe("UploadRoster format override", () => {
     expect(screen.queryByText("students.previewInviteByEmail")).toBeNull()
 
     // Overriding to a username list forces the line to be read as a handle;
-    // "ada@x.edu" isn't a plausible one, so no rows survive.
+    // "ada@x.edu" isn't a plausible one, so the file now carries content we
+    // couldn't read — the blocking report replaces the preview and names the line.
     const overrideSelect = screen.getByLabelText(
       "students.detectedFormat",
     ) as HTMLSelectElement
@@ -227,7 +228,7 @@ describe("UploadRoster format override", () => {
     await waitFor(() =>
       expect(screen.queryByText("students.emailsFound:1")).toBeNull(),
     )
-    expect(screen.getByText("students.noUsableRows")).toBeTruthy()
+    expect(screen.getByText("students.importBlocked:1")).toBeTruthy()
   })
 })
 
@@ -904,11 +905,12 @@ describe("UploadRoster identity mismatch gate", () => {
     await waitFor(() => expect(button.disabled).toBe(false))
   })
 
-  it("skips a row whose github_id cannot be resolved, rather than using its username", async () => {
+  it("blocks the import on a github_id it cannot resolve, rather than using its username", async () => {
     const user = userEvent.setup()
     // The id is absent from the org-member map and the network lookup 404s, so
     // the row must be reported — never re-keyed to the username cell, which
-    // could belong to someone else entirely.
+    // could belong to someone else entirely. And because content we couldn't read
+    // means the FILE is wrong, there is no partial import to press.
     getUserById.mockRejectedValue(
       new GitHubAPIError({
         status: 404,
@@ -935,8 +937,14 @@ describe("UploadRoster identity mismatch gate", () => {
     )
 
     await waitFor(() =>
-      expect(screen.getByText(/unresolvedIdRows/)).toBeTruthy(),
+      expect(screen.getByText("students.dropUnresolvedId")).toBeTruthy(),
     )
+    // Which line and which id is asserted in importProblems.test.ts — this
+    // harness's t() only interpolates {{count}}. What matters here is that the row
+    // never reached the table and the preview was replaced by the report, so there
+    // is no partial import to press.
     expect(screen.queryByText("someone-else")).toBeNull()
+    expect(screen.getByText("students.importBlocked:1")).toBeTruthy()
+    expect(screen.queryByText("students.summaryViewDetails")).toBeNull()
   })
 })

@@ -55,15 +55,16 @@ export const isAccountRow = (r: ResolvedImportRow): r is AccountImportRow =>
 export const isEmailRow = (r: ResolvedImportRow): r is EmailImportRow =>
   r.identity.kind === "email"
 
-// A row excluded from the import, with enough detail for the preview to say why.
-// `unresolved-id` means the file's github_id is not usable — malformed, or no
-// such account. `id-lookup-failed` means we could not ASK: a rate limit, a 5xx,
-// an SSO-gated 403. Both fail closed (the row is never re-keyed to its username
-// cell), but they need different advice: one is a file to fix, the other is a
-// retry.
+// A row excluded from the import, with enough detail for the preview to name the
+// line the teacher has to edit. `unresolved-id` means the file's github_id is not
+// usable — malformed, or no such account. `id-lookup-failed` means we could not
+// ASK: a rate limit, a 5xx, an SSO-gated 403. Both fail closed (the row is never
+// re-keyed to its username cell), but they need different advice: one is a file to
+// fix, the other is a retry.
 export type UnusableRow = {
-  reason: "unresolved-id" | "id-lookup-failed" | "no-identity"
-  githubId?: string
+  line: number
+  reason: "unresolved-id" | "id-lookup-failed"
+  githubId: string
   username?: string
 }
 
@@ -166,6 +167,7 @@ export async function resolveImportIdentities(
     // A cell that isn't a canonical id at all — see UnusableRow.
     if (malformedGithubId !== undefined) {
       unusable.push({
+        line: row.line,
         reason: "unresolved-id",
         githubId: malformedGithubId,
         username,
@@ -178,6 +180,7 @@ export async function resolveImportIdentities(
       const login = resolvedLogins.get(githubId)
       if (!login) {
         unusable.push({
+          line: row.line,
           // missingIds and unaskedIds are disjoint: each id takes exactly one
           // path through the loop above.
           reason: unaskedIds.has(githubId)
@@ -202,7 +205,9 @@ export async function resolveImportIdentities(
     } else if (email !== undefined) {
       identity = { kind: "email", email }
     } else {
-      unusable.push({ reason: "no-identity" })
+      // Unreachable: the parser never emits an identity-less row (hasAnyIdentity
+      // gates it) — such a row is dropped as `incomplete` with its line number
+      // before resolution, so there is nothing left to report here.
       continue
     }
 

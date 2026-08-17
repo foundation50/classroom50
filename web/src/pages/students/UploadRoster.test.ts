@@ -18,6 +18,7 @@ describe("parseRosterImportFile", () => {
       "ada,Ada,Lovelace,ada@uni.edu,Lab 1\n"
     expect(parse(csv).rows).toEqual([
       {
+        line: 2,
         identity: { username: "ada", email: "ada@uni.edu" },
         first_name: "Ada",
         last_name: "Lovelace",
@@ -85,7 +86,55 @@ describe("parseRosterImportFile", () => {
     const csv = "email,first_name\nn/a,Nobody\nok@uni.edu,Ok\n"
     const parsed = parse(csv)
     expect(parsed.rows).toHaveLength(1)
-    expect(parsed.dropped).toEqual([{ line: 2, reason: "bad-email" }])
+    // The offending cell rides along so the preview can quote it — telling the
+    // teacher the address was "missing" when they typed `n/a` is what the old
+    // single count-only message did.
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-email", value: "n/a" },
+    ])
+  })
+
+  it("blames the username cell when it holds content that isn't a handle", () => {
+    // A leading hyphen fails isLikelyGithubUsername. Reported as a bad username
+    // rather than as an empty row, which is what makes the import block: content
+    // we couldn't read means the FILE is wrong.
+    const parsed = parse("username,first_name\n-bad-,Ann\n")
+    expect(parsed.rows).toHaveLength(0)
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-username", value: "-bad-" },
+    ])
+  })
+
+  it("reports a metadata-only row as incomplete, not as bad content", () => {
+    // No identity cell at all: a student who hasn't supplied a handle yet. This
+    // is the ONE non-blocking case — there is nothing for the teacher to correct.
+    const parsed = parse("username,email,first_name,section\n,,Nobody,Sec A\n")
+    expect(parsed.rows).toHaveLength(0)
+    expect(parsed.dropped).toEqual([{ line: 2, reason: "incomplete" }])
+  })
+
+  it("prefers the email cell over the username cell when both are unusable", () => {
+    const parsed = parse("username,email\n-bad-,n/a\n")
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-email", value: "n/a" },
+    ])
+  })
+
+  it("drops an unreadable bare line as bad-value, naming neither shape", () => {
+    // Under the default the line could have been a handle or an address and was
+    // neither, so the message can't claim to know which the teacher meant.
+    const parsed = parse("ada\nJohn Smith\n")
+    expect(parsed.rows).toHaveLength(1)
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-value", value: "John Smith" },
+    ])
+  })
+
+  it("blames the handle shape for a bad bare line under the username override", () => {
+    const parsed = parse("ada\nJohn Smith\n", "username-list")
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-username", value: "John Smith" },
+    ])
   })
 
   it("reads a bare list per line, detecting addresses and handles", () => {
