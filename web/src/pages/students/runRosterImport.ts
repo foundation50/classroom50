@@ -86,7 +86,6 @@ export async function runRosterImport(
     org: string
     classroom: string
     rows: ImportRosterRow[]
-    rolesByUser: Record<string, ClassroomRole>
     // Email-identity rows, each already carrying the role the teacher assigned
     // and any name/section the file supplied. Empty for an account-only file.
     emailInvites?: {
@@ -96,12 +95,9 @@ export async function runRosterImport(
       last_name?: string
       section?: string
     }[]
-    // Accounts whose stored roster row carries a stale username, from confirmed
-    // identity mismatches. Repaired by github_id before the role writeback so
-    // that login-keyed pass finds the row.
-    usernameRepairs?: { github_id: string; username: string }[]
     // The classification computed in the preview, snapshotted so the process
-    // pass matches exactly what the teacher confirmed.
+    // pass matches exactly what the teacher confirmed. Its identityMismatches
+    // are the confirmed stale-username repairs.
     plan: PreflightResult | null
     onProgress: (progress: ImportProgress) => void
     messages: RosterImportMessages
@@ -111,21 +107,15 @@ export async function runRosterImport(
     org,
     classroom,
     rows,
-    rolesByUser,
     emailInvites = [],
-    usernameRepairs = [],
     plan,
     onProgress,
     messages,
   } = params
 
-  // The github_id each row resolved to in the preview, so every write below can
-  // join on the immutable account rather than a login that may be stale.
-  const idByRowLogin = new Map(
-    rows
-      .filter((r) => r.github_id)
-      .map((r) => [r.username.toLowerCase(), r.github_id as string]),
-  )
+  // Every write below joins on the immutable account when the preview resolved
+  // one, rather than a login that may be stale.
+  const rowByLogin = new Map(rows.map((r) => [r.username.toLowerCase(), r]))
 
   onProgress({
     processed: 0,
@@ -156,10 +146,10 @@ export async function runRosterImport(
         onProgress,
       })
     } catch (err) {
-      if (err instanceof NoNewStudentsError) {
-        // All rows already in roster.csv — keep the empty result so the completed
-        // view still renders, then fall through to the invite pass.
-      } else {
+      // NoNewStudentsError means every row already exists in roster.csv. Benign:
+      // keep the empty result so the completed view renders, and fall through to
+      // the invite pass so a previously rate-limited student is re-invited.
+      if (!(err instanceof NoNewStudentsError)) {
         log.error("roster import failed", { err, record: true })
         return {
           ok: false,
@@ -183,6 +173,10 @@ export async function runRosterImport(
   //    writeback below would keep missing the row and the same warning would
   //    reappear on every future upload. Best-effort — a failure only means the
   //    id-keyed writes still land while the stored login stays stale.
+  const usernameRepairs = (plan?.identityMismatches ?? []).map((m) => ({
+    github_id: m.github_id,
+    username: m.username,
+  }))
   if (usernameRepairs.length > 0) {
     try {
       await repairRosterUsernames(client, {
@@ -218,7 +212,7 @@ export async function runRosterImport(
     ]),
   )
   const resolvedIdFor = (username: string): string =>
-    idByRowLogin.get(username.toLowerCase()) ??
+    rowByLogin.get(username.toLowerCase())?.github_id ??
     idByLogin.get(username.toLowerCase()) ??
     ""
   if (rows.length > 0 && !plan?.allAlreadyMembers) {
@@ -234,7 +228,7 @@ export async function runRosterImport(
         students: rows.map((r) => ({
           username: r.username,
           github_id: resolvedIdFor(r.username),
-          role: rolesByUser[r.username.toLowerCase()] ?? "student",
+          role: r.role ?? "student",
         })),
         onProgress,
       })
@@ -268,7 +262,7 @@ export async function runRosterImport(
     .map((r) => ({
       username: r.username,
       github_id: resolvedIdFor(r.username) || undefined,
-      role: rolesByUser[r.username.toLowerCase()] ?? "student",
+      role: r.role ?? "student",
     }))
     .filter((r) => r.username.trim())
   if (roleWriteback.length > 0) {
@@ -304,7 +298,6 @@ export async function runRosterImport(
     ...(plan?.roleChanges ?? []).filter((c) => c.changedFields.length > 0),
     ...(plan?.enroll ?? []).filter((e) => e.changedFields.length > 0),
   ]
-  const rowByLogin = new Map(rows.map((r) => [r.username.toLowerCase(), r]))
   const metadataUpdates = metadataOutcomes
     .map((o) => rowByLogin.get(o.username.toLowerCase()))
     .filter((r): r is ImportRosterRow => Boolean(r))

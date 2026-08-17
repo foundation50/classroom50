@@ -10,7 +10,6 @@ import type { ClassroomRole } from "@/util/teamRoster"
 import type { UploadKind } from "@/pages/students/uploadClassify"
 import {
   IDENTITY_IMPORT_HEADERS,
-  OPTIONAL_IMPORT_HEADERS,
   RECOGNIZED_IMPORT_HEADERS,
   type OptionalImportHeader,
 } from "@/pages/students/rosterImportHeaders"
@@ -256,6 +255,6 @@ export const detectImportHeaderIssue = (
   }
 }
 
-// Re-exported so consumers importing the header vocabulary alongside the parser
-// don't need a second import path.
-export { OPTIONAL_IMPORT_HEADERS, IDENTITY_IMPORT_HEADERS }
+// Re-exported so the modal can advertise the identity columns in its
+// missing-header copy without a second import path.
+export { IDENTITY_IMPORT_HEADERS }

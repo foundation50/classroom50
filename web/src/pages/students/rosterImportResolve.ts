@@ -41,6 +41,20 @@ export type ResolvedImportRow = {
   role?: ClassroomRole
 }
 
+export type AccountIdentity = Extract<ImportIdentity, { kind: "account" }>
+export type AccountImportRow = ResolvedImportRow & { identity: AccountIdentity }
+export type EmailImportRow = ResolvedImportRow & {
+  identity: Extract<ImportIdentity, { kind: "email" }>
+}
+
+// Narrowing predicates, so a caller that filters by identity kind gets the
+// narrowed row type instead of re-asserting it at every use. A cast would
+// silently survive a change to ImportIdentity; these don't.
+export const isAccountRow = (r: ResolvedImportRow): r is AccountImportRow =>
+  r.identity.kind === "account"
+export const isEmailRow = (r: ResolvedImportRow): r is EmailImportRow =>
+  r.identity.kind === "email"
+
 // A row excluded from the import, with enough detail for the preview to say why.
 // `unresolved-id` means the file's github_id is not usable — malformed, or no
 // such account. `id-lookup-failed` means we could not ASK: a rate limit, a 5xx,
@@ -64,20 +78,23 @@ export type ResolvedImportFile = {
 // `username` row naming the same person collapse into one. Email rows key on the
 // normalized address. One helper so the preview table, the role map, and the
 // dedupe pass can never disagree.
+//
+// Deliberately not `studentKey` from util/identity: that keys a STORED row
+// id-first, which would split the two rows this one is meant to collapse.
 export const identityKey = (identity: ImportIdentity): string =>
   identity.kind === "email"
     ? `email:${identity.email}`
     : `login:${identity.username.toLowerCase()}`
 
+// The key a login alone maps to, for a caller holding a username rather than a
+// whole identity. Goes through identityKey so the format lives in one place.
+export const loginIdentityKey = (username: string): string =>
+  identityKey({ kind: "account", username })
+
 // Resolve each parsed row's identity cells into an addressable identity, in
-// precedence order github_id > username > email.
-//
-// An id is traded for its CURRENT login: locally against the org-member map
-// first (free), then over the network for the bounded tail. An id we cannot
-// resolve FAILS CLOSED — the row is reported unusable rather than falling back to
-// its username cell, because that fallback would send the org invite, and its
-// repo access, to whoever holds that login today. inviteRosterStudents already
-// refuses the same substitution for the same reason.
+// precedence order github_id > username > email. An id is traded for its CURRENT
+// login: locally against the org-member map first (free), then over the network
+// for the bounded tail. An id we cannot resolve fails closed — see UnusableRow.
 //
 // Rows are deduped here (not in the parser) because two rows can only be known
 // to name the same person once ids resolve. First occurrence wins, so its
@@ -119,7 +136,7 @@ export async function resolveImportIdentities(
       const user = await getUserById(client, id)
       resolvedLogins.set(id, user.login)
     } catch (err) {
-      if (err instanceof GitHubAPIError && err.status === 404) {
+      if (err instanceof GitHubAPIError && err.isNotFound) {
         missingIds.add(id)
         continue
       }
@@ -146,8 +163,7 @@ export async function resolveImportIdentities(
       role: row.role,
     }
 
-    // A cell that isn't a canonical id at all: unusable on its own terms, and we
-    // don't quietly prefer the username cell instead.
+    // A cell that isn't a canonical id at all — see UnusableRow.
     if (malformedGithubId !== undefined) {
       unusable.push({
         reason: "unresolved-id",
@@ -162,12 +178,11 @@ export async function resolveImportIdentities(
       const login = resolvedLogins.get(githubId)
       if (!login) {
         unusable.push({
-          // A 404 means the file's id is wrong; anything else means we never got
-          // an answer, so don't tell the teacher to fix a file that may be fine.
-          reason:
-            unaskedIds.has(githubId) && !missingIds.has(githubId)
-              ? "id-lookup-failed"
-              : "unresolved-id",
+          // missingIds and unaskedIds are disjoint: each id takes exactly one
+          // path through the loop above.
+          reason: unaskedIds.has(githubId)
+            ? "id-lookup-failed"
+            : "unresolved-id",
           githubId: String(githubId),
           username,
         })

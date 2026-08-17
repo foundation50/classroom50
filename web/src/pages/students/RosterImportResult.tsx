@@ -5,6 +5,7 @@ import type {
   BulkImportResult,
   BulkInviteByEmailResult,
 } from "@/domain/students"
+import { emailInviteSections } from "./EmailInviteFlow"
 import type { InviteOutcome, RoleChangeOutcome } from "./runRosterImport"
 
 export type ImportResultSectionRow = {
@@ -194,49 +195,16 @@ export const RosterImportResult = ({
 
       {/* The email pass's buckets, under titles distinct from the account ones so
           "invited" by address never reads as "invited" by handle. */}
-      {emailResult && emailResult.invited.length > 0 && (
-        <ImportResultSection
-          title={t("students.resultEmailInvited")}
-          rows={emailResult.invited.map(({ email, role }) => ({
-            key: email,
-            label: email,
-            detail: t(ROLE_LABEL_KEY[role]),
-          }))}
-        />
-      )}
-
-      {emailResult && emailResult.skipped.length > 0 && (
-        <ImportResultSection
-          title={t("students.resultEmailSkipped")}
-          rows={emailResult.skipped.map(({ email }) => ({
-            key: email,
-            label: email,
-            detail: t("students.emailInviteSkippedDetail"),
-          }))}
-        />
-      )}
-
-      {emailResult && emailResult.deferred.length > 0 && (
-        <ImportResultSection
-          title={t("students.resultEmailInvitesDeferred")}
-          rows={emailResult.deferred.map((email) => ({
-            key: email,
-            label: email,
-            detail: t("students.inviteDeferredDetail"),
-          }))}
-        />
-      )}
-
-      {emailResult && emailResult.failed.length > 0 && (
-        <ImportResultSection
-          title={t("students.resultEmailInvitesFailed")}
-          rows={emailResult.failed.map((f) => ({
-            key: f.email,
-            label: f.email,
-            detail: f.message,
-          }))}
-        />
-      )}
+      {emailResult
+        ? emailInviteSections(emailResult, t, {
+            invited: t("students.resultEmailInvited"),
+            skipped: t("students.resultEmailSkipped"),
+            deferred: t("students.resultEmailInvitesDeferred"),
+            failed: t("students.resultEmailInvitesFailed"),
+          }).map((section) => (
+            <ImportResultSection key={section.title} {...section} />
+          ))
+        : null}
 
       <div className="modal-action">
         <Button variant="primary" onClick={onDone}>

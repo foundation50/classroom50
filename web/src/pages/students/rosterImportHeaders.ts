@@ -1,10 +1,8 @@
 // The single source of truth for the roster-import header vocabulary, shared by
-// the parser (parseRosterImportFile), the empty-result diagnostic
-// (detectImportHeaderIssue), and the upload classifier (classifyUploadFile).
-// Keeping one exported set is what lets those three agree on whether a first
-// line is a header row and which columns to advertise — a second hand-synced
-// copy would silently drift (a new column added to one and not the others flips
-// classification vs. diagnosis).
+// the parser (parseRosterImportFile) and the empty-result diagnostic
+// (detectImportHeaderIssue). Keeping one exported set is what lets those two
+// agree on whether a first line is a header row and which columns to advertise —
+// a second hand-synced copy would silently drift.
 
 // Columns that can identify a row, in PRECEDENCE order: a `github_id` wins over
 // a `username`, which wins over an `email`. A row needs at least one of them.
@@ -39,5 +37,4 @@ export const RECOGNIZED_IMPORT_HEADERS = [
   ...OPTIONAL_IMPORT_HEADERS,
 ] as const
 
-export type IdentityImportHeader = (typeof IDENTITY_IMPORT_HEADERS)[number]
 export type OptionalImportHeader = (typeof OPTIONAL_IMPORT_HEADERS)[number]

@@ -56,14 +56,16 @@ const messages = {
   invitingEmails: "inviting-emails",
 }
 
-const rows: ImportRosterRow[] = [{ username: "alice" }, { username: "bob" }]
+const rows: ImportRosterRow[] = [
+  { username: "alice", role: "student" },
+  { username: "bob", role: "ta" },
+]
 
 const call = (over: Record<string, unknown> = {}) =>
   runRosterImport(client, {
     org: "acme",
     classroom: "cs101",
     rows,
-    rolesByUser: { alice: "student", bob: "ta" },
     plan: null,
     onProgress: vi.fn(),
     messages,

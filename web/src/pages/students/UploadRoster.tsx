@@ -37,7 +37,11 @@ import {
 } from "@/pages/students/EmailInviteFlow"
 import {
   identityKey,
+  isAccountRow,
+  isEmailRow,
+  loginIdentityKey,
   resolveImportIdentities,
+  type ImportIdentity,
   type ResolvedImportRow,
   type UnusableRow,
 } from "@/pages/students/rosterImportResolve"
@@ -72,6 +76,15 @@ export {
 } from "./rosterImportParse"
 
 const log = logger.scope("students:UploadRoster")
+
+// The unusable-row reasons that get their own alert, with the copy each uses. An
+// unresolvable id is the teacher's file to fix; a lookup we couldn't complete is
+// a retry. `no-identity` is absent deliberately — the parser's `dropped` count
+// already reports those rows.
+const ROW_ISSUE_KEYS = [
+  ["unresolved-id", "students.unresolvedIdRows"],
+  ["id-lookup-failed", "students.idLookupFailedRows"],
+] as const satisfies readonly (readonly [UnusableRow["reason"], string])[]
 
 type UploadRosterProps = {
   org: string
@@ -298,38 +311,35 @@ const UploadRoster = ({
   // below has to count them separately.
   const resolvedRows = useMemo(() => resolved ?? [], [resolved])
   const accountRows = useMemo(
-    () => resolvedRows.filter((r) => r.identity.kind === "account"),
+    () => resolvedRows.filter(isAccountRow),
     [resolvedRows],
   )
   const emailRows = useMemo(
-    () => resolvedRows.filter((r) => r.identity.kind === "email"),
+    () => resolvedRows.filter(isEmailRow),
     [resolvedRows],
   )
+  // The role the teacher assigned a row, defaulting to student.
+  const roleFor = (identity: ImportIdentity): ClassroomRole =>
+    rolesByUser[identityKey(identity)] ?? "student"
 
   // Derive the classification synchronously from the fetched context + current
   // roles, so a role edit re-previews with no loading state. Only trust a
-  // context fetched for the CURRENT rows — a stale context from a just-replaced
+  // context fetched for the CURRENT parse — a stale context from a just-replaced
   // file must not classify the new rows (the fetch effect that nulls it runs
   // after this render).
   const preflight = useMemo<PreflightResult | null>(() => {
     if (!preflightContext || preflightContext.parseId !== parseId) return null
-    const preflightRows = accountRows.map((r) => {
-      const identity = r.identity as Extract<
-        ResolvedImportRow["identity"],
-        { kind: "account" }
-      >
-      return {
-        username: identity.username,
-        github_id: identity.github_id,
-        declaredUsername: identity.declaredUsername,
-        first_name: r.first_name,
-        last_name: r.last_name,
-        email: r.email,
-        section: r.section,
-        role:
-          rolesByUser[identityKey(r.identity)] ?? ("student" as ClassroomRole),
-      }
-    })
+    const preflightRows = accountRows.map((r) => ({
+      username: r.identity.username,
+      github_id: r.identity.github_id,
+      declaredUsername: r.identity.declaredUsername,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      email: r.email,
+      section: r.section,
+      role:
+        rolesByUser[identityKey(r.identity)] ?? ("student" as ClassroomRole),
+    }))
     return classifyRosterUpload(
       preflightRows,
       preflightContext.lookup,
@@ -353,66 +363,52 @@ const UploadRoster = ({
   }, [rolesKey])
 
   const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
-  // The preflight is keyed by username; the table is keyed by identity. One
-  // lookup bridges them so every highlight map below indexes the same way.
-  const rowKeyByUsername = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const r of accountRows) {
-      const identity = r.identity as Extract<
-        ResolvedImportRow["identity"],
-        { kind: "account" }
-      >
-      map[identity.username.toLowerCase()] = identityKey(r.identity)
-    }
-    return map
-  }, [accountRows])
-  const rowKeyFor = (username: string) =>
-    rowKeyByUsername[username.toLowerCase()] ??
-    `login:${username.toLowerCase()}`
 
-  // Per-row metadata changes to highlight in the preview table (from
-  // metadata_update rows and role_change rows that also carry a metadata delta).
-  // The table shows the stored -> CSV transition inline, so the recap no longer
-  // needs a text list of them.
-  const rowChanges = useMemo(() => {
-    const map: RowChanges = {}
-    for (const m of preflight?.metadataUpdate ?? []) {
-      if (m.changes.length > 0) map[rowKeyFor(m.username)] = m.changes
+  // The preflight is keyed by username; the table is keyed by identity. Build all
+  // three highlight maps in one pass so the bridging lookup lives inside the memo
+  // (an honest dep array, no eslint suppression) and can't drift between them.
+  const { rowChanges, roleChangeByUser, identityChangeByUser } = useMemo(() => {
+    const rowKeyByUsername: Record<string, string> = {}
+    for (const r of accountRows) {
+      rowKeyByUsername[r.identity.username.toLowerCase()] = identityKey(
+        r.identity,
+      )
     }
+    const rowKeyFor = (username: string) =>
+      rowKeyByUsername[username.toLowerCase()] ?? loginIdentityKey(username)
+
+    // metadata_update, role_change, and enroll all carry the same `changes` field;
+    // the table shows each stored -> CSV transition inline.
+    const changes: RowChanges = {}
+    for (const o of [
+      ...(preflight?.metadataUpdate ?? []),
+      ...(preflight?.roleChanges ?? []),
+      ...(preflight?.enroll ?? []),
+    ]) {
+      if (o.changes.length > 0) changes[rowKeyFor(o.username)] = o.changes
+    }
+    // A role change lives in the Role column's Select and an identity mismatch in
+    // the username cell, so neither can ride in the metadata map.
+    const roles: RowRoleChanges = {}
     for (const c of preflight?.roleChanges ?? []) {
-      if (c.changes.length > 0) map[rowKeyFor(c.username)] = c.changes
+      roles[rowKeyFor(c.username)] = { from: c.currentRole, to: c.role }
     }
-    for (const e of preflight?.enroll ?? []) {
-      if (e.changes.length > 0) map[rowKeyFor(e.username)] = e.changes
-    }
-    return map
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preflight, rowKeyByUsername])
-  // Per-row role change (current -> CSV role) to highlight the Role cell. Kept
-  // separate from the metadata `changes` map because a role change lives in the
-  // Role column's Select, not a text cell.
-  const roleChangeByUser = useMemo(() => {
-    const map: RowRoleChanges = {}
-    for (const c of preflight?.roleChanges ?? []) {
-      map[rowKeyFor(c.username)] = { from: c.currentRole, to: c.role }
-    }
-    return map
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preflight, rowKeyByUsername])
-  // Per-row identity mismatch, to tint the username cell and show what the file
-  // claimed. The id wins, so the cell shows the resolved login.
-  const identityChangeByUser = useMemo(() => {
-    const map: RowIdentityChanges = {}
+    const identities: RowIdentityChanges = {}
     for (const m of preflight?.identityMismatches ?? []) {
-      map[rowKeyFor(m.username)] = { declaredUsername: m.declaredUsername }
+      identities[rowKeyFor(m.username)] = {
+        declaredUsername: m.declaredUsername,
+      }
     }
-    return map
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preflight, rowKeyByUsername])
+    return {
+      rowChanges: changes,
+      roleChangeByUser: roles,
+      identityChangeByUser: identities,
+    }
+  }, [preflight, accountRows])
   // Enroll rows targeting teacher grant org OWNER on process, so — like a
   // confirmed role change — they must sit behind the confirmation checkbox.
   const teacherEnrolls = useMemo(
-    () => (preflight?.enroll ?? []).filter((e) => e.role === "teacher"),
+    () => (preflight?.enroll ?? []).filter((e) => isTeacherRole(e.role)),
     [preflight],
   )
   // Email rows assigned teacher are an org-OWNER grant too: accepting an admin
@@ -420,10 +416,8 @@ const UploadRoster = ({
   // fold them into the same gate rather than letting a roster CSV do silently
   // what the dedicated email upload requires a checkbox for.
   const teacherEmailRows = useMemo(
-    () =>
-      emailRows.filter((r) =>
-        isTeacherRole(rolesByUser[identityKey(r.identity)] ?? "student"),
-      ),
+    () => emailRows.filter((r) => isTeacherRole(roleFor(r.identity))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [emailRows, rolesByUser],
   )
   const mismatches = useMemo(
@@ -443,13 +437,11 @@ const UploadRoster = ({
     [roleChanges, teacherEnrolls, teacherEmailRows],
   )
   const anyTeacherAssigned = useMemo(
-    () =>
-      confirmGrantsOwner ||
-      Object.values(rolesByUser).some((r) => r === "teacher"),
-    [confirmGrantsOwner, rolesByUser],
+    () => Object.values(rolesByUser).some(isTeacherRole),
+    [rolesByUser],
   )
-  const emailHasTeacher = emails.some(
-    (e) => (emailRoles[e.toLowerCase()] ?? "student") === "teacher",
+  const emailHasTeacher = emails.some((e) =>
+    isTeacherRole(emailRoles[e.toLowerCase()] ?? "student"),
   )
   // Email-identity rows are actionable work in their own right: each one sends an
   // org invitation and lands a pending roster row. Counting only the preflight
@@ -463,22 +455,26 @@ const UploadRoster = ({
       emailRowCount >
     0
   const needsMetadataConfirm = (preflight?.metadataUpdate.length ?? 0) > 0
-  // Show the detailed table when the teacher opened it, when a confirmation is
-  // pending (so the highlighted role/detail changes are visible to confirm), when
-  // any row's identity came from a github_id (the teacher can't eyeball a numeric
-  // id, so the resolved login must be visible before processing), or when the
-  // preflight found NO actionable changes — so the teacher still sees the whole
-  // parsed CSV and can confirm it was read correctly.
-  const anyIdResolved = accountRows.some(
-    (r) => r.identity.kind === "account" && Boolean(r.identity.resolvedFromId),
-  )
-  const showDetails =
-    detailsOpen ||
+  const anyIdResolved = accountRows.some((r) => r.identity.resolvedFromId)
+  const unusableCounts = useMemo(() => {
+    const counts: Partial<Record<UnusableRow["reason"], number>> = {}
+    for (const r of unusableRows) counts[r.reason] = (counts[r.reason] ?? 0) + 1
+    return counts
+  }, [unusableRows])
+  // The table is forced open when a confirmation is pending (so the highlighted
+  // role/detail changes are visible to confirm), when any row's identity came
+  // from a github_id (the teacher can't eyeball a numeric id, so the resolved
+  // login must be visible first), or when the preflight found NO actionable
+  // changes — so the teacher still sees the whole parsed CSV and can confirm it
+  // was read correctly. One expression, because the summary's toggle is exactly
+  // its negation and hand-syncing the two lists is how a term gets missed.
+  const forceDetails =
     needsRoleConfirm ||
     needsMetadataConfirm ||
     needsMismatchConfirm ||
     anyIdResolved ||
     (!!preflight && !hasActionableWork)
+  const showDetails = detailsOpen || forceDetails
   const canProcess =
     uploadKind === "email-list"
       ? emails.length > 0 &&
@@ -498,21 +494,24 @@ const UploadRoster = ({
     (preflight?.needsInvite.length ?? 0) + emailRowCount > 0
   // Metadata-only: no invites, no enrolls, no role changes — just metadata.
   const metadataOnly =
-    !willSendInvites &&
     (preflight?.enroll.length ?? 0) === 0 &&
     (preflight?.roleChanges.length ?? 0) === 0 &&
     (preflight?.metadataUpdate.length ?? 0) > 0
-  const rosterPrimaryLabel = willSendInvites
-    ? t("students.importAndInviteMembers", { count: resolvedRows.length })
-    : preflight
-      ? metadataOnly
-        ? t("students.updateMetadata", {
-            count: preflight.metadataUpdate.length,
-          })
-        : hasActionableWork
-          ? t("students.confirmChanges")
-          : t("students.noChangesToApply")
-      : t("students.importMembers", { count: resolvedRows.length })
+  const rosterPrimaryLabel = (() => {
+    if (willSendInvites)
+      return t("students.importAndInviteMembers", {
+        count: resolvedRows.length,
+      })
+    if (!preflight)
+      return t("students.importMembers", { count: resolvedRows.length })
+    if (metadataOnly)
+      return t("students.updateMetadata", {
+        count: preflight.metadataUpdate.length,
+      })
+    return hasActionableWork
+      ? t("students.confirmChanges")
+      : t("students.noChangesToApply")
+  })()
 
   // Seed the preview state for a given format from the raw text. Used both on
   // initial ingest and when the teacher overrides the format.
@@ -651,59 +650,31 @@ const UploadRoster = ({
     // Account rows go to the domain's username-keyed row shape; email rows carry
     // their own metadata to the invite pass. Both run inside runRosterImport,
     // sequentially, because every step commits to the same roster.csv.
-    const accountImportRows: ImportRosterRow[] = accountRows.map((r) => {
-      const identity = r.identity as Extract<
-        ResolvedImportRow["identity"],
-        { kind: "account" }
-      >
-      return {
-        username: identity.username,
-        github_id: identity.github_id,
-        first_name: r.first_name,
-        last_name: r.last_name,
-        email: r.email,
-        section: r.section,
-        role: rolesByUser[identityKey(r.identity)] ?? "student",
-      }
-    })
-    const emailInvites = emailRows.map((r) => {
-      const identity = r.identity as Extract<
-        ResolvedImportRow["identity"],
-        { kind: "email" }
-      >
-      return {
-        email: identity.email,
-        role:
-          rolesByUser[identityKey(r.identity)] ?? ("student" as ClassroomRole),
-        first_name: r.first_name,
-        last_name: r.last_name,
-        section: r.section,
-      }
-    })
-    // The teacher confirmed these, so repair the stored row's stale login. Keyed
-    // by github_id — the whole point is that the stored username can't be trusted.
-    const usernameRepairs = mismatches.map((m) => ({
-      github_id: m.github_id,
-      username: m.username,
+    const accountImportRows: ImportRosterRow[] = accountRows.map((r) => ({
+      username: r.identity.username,
+      github_id: r.identity.github_id,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      email: r.email,
+      section: r.section,
+      role: roleFor(r.identity),
     }))
-
-    // Roles are keyed by identity in the modal but by login in the domain layer.
-    const rolesByLogin = Object.fromEntries(
-      accountImportRows.map((r) => [
-        r.username.toLowerCase(),
-        r.role ?? "student",
-      ]),
-    )
+    const emailInvites = emailRows.map((r) => ({
+      email: r.identity.email,
+      role: roleFor(r.identity),
+      first_name: r.first_name,
+      last_name: r.last_name,
+      section: r.section,
+    }))
 
     const outcome = await runRosterImport(client, {
       org,
       classroom,
       rows: accountImportRows,
-      rolesByUser: rolesByLogin,
       emailInvites,
-      usernameRepairs,
       // Snapshot the classification computed in the preview so the process pass
-      // matches exactly what the teacher confirmed.
+      // matches exactly what the teacher confirmed. It also carries the identity
+      // mismatches the teacher just confirmed, which drive the username repair.
       plan: preflight,
       onProgress: setProgress,
       messages: {
@@ -874,13 +845,7 @@ const UploadRoster = ({
                   emailInviteCount={emailRowCount}
                   detailsOpen={detailsOpen}
                   onToggleDetails={() => setDetailsOpen((v) => !v)}
-                  canToggle={
-                    hasActionableWork &&
-                    !needsRoleConfirm &&
-                    !needsMetadataConfirm &&
-                    !needsMismatchConfirm &&
-                    !anyIdResolved
-                  }
+                  canToggle={!forceDetails}
                 />
                 <PreflightRecap
                   roleChanges={roleChanges}
@@ -911,30 +876,15 @@ const UploadRoster = ({
 
             {/* Rows we refuse to act on. An unresolvable github_id fails closed
                 rather than falling back to the row's username cell, which would
-                target whoever holds that login today. A lookup we couldn't
-                complete is reported separately — that's a retry, not a bad file. */}
-            {unusableRows.some((r) => r.reason === "unresolved-id") ? (
-              <Alert tone="warning" className="mb-4">
-                <span>
-                  {t("students.unresolvedIdRows", {
-                    count: unusableRows.filter(
-                      (r) => r.reason === "unresolved-id",
-                    ).length,
-                  })}
-                </span>
-              </Alert>
-            ) : null}
-            {unusableRows.some((r) => r.reason === "id-lookup-failed") ? (
-              <Alert tone="warning" className="mb-4">
-                <span>
-                  {t("students.idLookupFailedRows", {
-                    count: unusableRows.filter(
-                      (r) => r.reason === "id-lookup-failed",
-                    ).length,
-                  })}
-                </span>
-              </Alert>
-            ) : null}
+                target whoever holds that login today. `no-identity` isn't listed
+                here — the parser's `dropped` count already covers those. */}
+            {ROW_ISSUE_KEYS.map(([reason, key]) =>
+              (unusableCounts[reason] ?? 0) > 0 ? (
+                <Alert key={reason} tone="warning" className="mb-4">
+                  <span>{t(key, { count: unusableCounts[reason] })}</span>
+                </Alert>
+              ) : null,
+            )}
             {droppedRows.length > 0 ? (
               <Alert tone="warning" className="mb-4">
                 <span>
