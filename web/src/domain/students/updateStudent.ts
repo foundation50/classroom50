@@ -117,9 +117,10 @@ export async function updateStudent(
 
   const nextEmail = patch.email.trim()
 
-  // Every roster row now carries a GitHub identity, so its email is metadata
-  // and freely editable — the row is keyed by github_id/username, never email.
-
+  // A row keyed by github_id/username treats its email as free-form metadata. A
+  // PENDING email invite's row is keyed BY that address instead (studentKey falls
+  // back to it), so its caller sends the stored address back unchanged — see
+  // EditStudentForm's lockEmail. The clash guard below still applies either way.
   // Guard against editing an email into one already held by ANOTHER row
   // (case-insensitive). On an upsert (missing, targetIndex -1) there is no self
   // row, so every match is a genuine clash.

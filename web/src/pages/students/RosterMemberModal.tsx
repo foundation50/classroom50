@@ -188,13 +188,19 @@ const RosterMemberModal = ({
   // "student is the sole role" (hasStudentEnrollment — shared with the bulk gate).
   const staffOnly = !hasStudentEnrollment(row)
   // Profile metadata (name / email / section) is teacher-supplied and editable
-  // for any enrolled member with a roster.csv row — including a staff-only
-  // teacher/TA, since syncRosterFromTeam writes a (blank-metadata) row for
-  // every team member for the teacher to fill in. It only gates out `pending`
-  // rows (no roster row yet — the invite hasn't been accepted) and rows without
-  // a resolvable roster identity. Unenroll stays student-only (see canUnenroll);
-  // editing profile fields is not the same as unenrolling.
-  const canEdit = row.state !== "pending" && Boolean(row.username)
+  // for any member with a roster.csv row — including a staff-only teacher/TA,
+  // since syncRosterFromTeam writes a (blank-metadata) row for every team member
+  // for the teacher to fill in, and including a PENDING email invite: that row is
+  // written at invite time with whatever name/section the teacher supplied, so a
+  // typo there would otherwise be frozen until the student accepts. Only a row
+  // with no resolvable roster identity at all is gated out. Unenroll stays
+  // student-only (see canUnenroll); editing profile fields is not unenrolling.
+  const canEdit = canManage && Boolean(row.username || row.email)
+  // A pending invite's ADDRESS can't be edited in place: it is that row's
+  // identity (studentKey falls back to email) and it is hashed into the invite
+  // team's name, so a rewrite would orphan the row from its own invitation. A
+  // wrong address is fixed by cancelling and re-inviting.
+  const lockEmail = row.state === "pending" && !row.username
   const displayName =
     nameFromParts(row.first_name, row.last_name) || row.username || row.email
   const displayInitials = rosterRowInitials(row)
@@ -886,13 +892,14 @@ const RosterMemberModal = ({
 
           {!canEdit ? (
             <p className="text-sm text-base-content/70">
-              {t("students.pendingNoEdit")}
+              {t("students.noRosterRowNoEdit")}
             </p>
           ) : editingProfile ? (
             <EditStudentForm
               org={org}
               classroom={classroom}
               student={student}
+              lockEmail={lockEmail}
               resetSignal={`${row.key}:${open}:${editingProfile}`}
               onCancel={() => setEditingProfile(false)}
               onSubmittingChange={setSubmitting}

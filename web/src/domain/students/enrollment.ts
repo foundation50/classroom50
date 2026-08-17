@@ -88,6 +88,30 @@ export async function addStudentToClassroom(
     throw new StudentAlreadyEnrolledError(githubUser.login)
   }
 
+  const studentEmailClaim = (input.email ?? "").trim().toLowerCase()
+  // Refuse to write a SECOND row carrying an address another row already holds.
+  // The common way in: email-invite alice@x, then add the same person by username
+  // with that address. Two rows then share it, and updateStudent's clash guard
+  // refuses every later email edit for either of them — a dead end the teacher
+  // can't see the cause of. Naming the pending invitation makes the fix obvious.
+  // (The bulk/CSV path is deliberately not gated here: blocking a whole import on
+  // one collision is worse than the duplicate, and its preview already reports
+  // addresses the roster claims.)
+  if (studentEmailClaim) {
+    const claimant = currentStudents.find(
+      (student) => student.email.trim().toLowerCase() === studentEmailClaim,
+    )
+    if (claimant) {
+      throw new Error(
+        `${input.email?.trim()} is already on this classroom's roster` +
+          (claimant.username
+            ? ` for @${claimant.username}`
+            : ` as a pending email invitation`) +
+          `. Add ${githubUser.login} without an email, or cancel that invitation first.`,
+      )
+    }
+  }
+
   const nameParts = splitName(githubUser.name)
 
   const studentEmail = input.email?.trim() ?? githubUser.email ?? ""
@@ -147,6 +171,12 @@ type AddEmailInviteToClassroomInput = {
   org: string
   classroom: string
   email: string
+  // Written onto the pending row at invite time. The student has no account yet,
+  // so nothing downstream can recover these — the acceptance fold only fills in
+  // identity, and a re-upload of the same address is skipped as already claimed.
+  first_name?: string
+  last_name?: string
+  section?: string
 }
 
 export type InviteByEmailResult = {
@@ -269,11 +299,19 @@ export async function inviteByEmail(
     }
   }
 
-  // Retain the invited email on the roster right away. Best-effort (never
-  // throws); on a miss the accepted invite's reconcile fold appends the row
-  // instead.
+  // Retain the invited email on the roster right away, with whatever name and
+  // section the teacher typed: the student has no account yet, so nothing else can
+  // recover those later (a re-upload of the same address is skipped as already
+  // claimed). Best-effort (never throws); on a miss the accepted invite's
+  // reconcile fold appends the row instead.
   await appendEmailInviteRows(client, { org, classroom }, [
-    { email: normalizedEmail, role: "student" },
+    {
+      email: normalizedEmail,
+      role: "student",
+      first_name: input.first_name,
+      last_name: input.last_name,
+      section: input.section,
+    },
   ])
 
   return {}

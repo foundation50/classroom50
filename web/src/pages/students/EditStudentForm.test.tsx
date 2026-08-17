@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup, waitFor } from "@testing-library/react"
+import {
+  render,
+  screen,
+  cleanup,
+  waitFor,
+  fireEvent,
+} from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { ReactElement } from "react"
@@ -188,5 +194,76 @@ describe("EditStudentForm in-flight Save button", () => {
 
     resolveWrite({ student })
     await waitFor(() => expect(button.disabled).toBe(false))
+  })
+})
+
+// A pending email invite's row is keyed BY its address (studentKey falls back to
+// email) and that address is hashed into the invite team's name, so rewriting it
+// would orphan the row from its own invitation. Name and section are still
+// correctable — they're written at invite time and nothing else can recover them.
+describe("EditStudentForm lockEmail (pending email invite)", () => {
+  const pending: Student = {
+    username: "",
+    first_name: "",
+    last_name: "",
+    email: "ada@uni.edu",
+    section: "",
+    github_id: "",
+    role: "student",
+  }
+
+  const props = {
+    org: "acme",
+    classroom: "cs50",
+    onCancel: () => {},
+    onSaved: () => {},
+  }
+
+  it("shows the address read-only and explains why", () => {
+    renderForm(<EditStudentForm {...props} student={pending} lockEmail />)
+    const email = screen.getByLabelText("students.emailLabel")
+    expect((email as HTMLInputElement).readOnly).toBe(true)
+    expect(screen.getByText("students.inviteEmailLocked")).toBeTruthy()
+  })
+
+  it("sends the STORED address, never an emptied field", async () => {
+    // A disabled/readOnly input still submits. Clear it to prove the patch reads
+    // the stored address rather than the field: an empty address would rewrite
+    // this row's identity and strand its invitation.
+    updateStudentWithConflictRetry.mockResolvedValue({ student: pending })
+    const user = userEvent.setup()
+    renderForm(<EditStudentForm {...props} student={pending} lockEmail />)
+
+    const email = screen.getByLabelText(
+      "students.emailLabel",
+    ) as HTMLInputElement
+    // readOnly blocks typing, so clear the value directly — the same end state a
+    // programmatic reset or an autofill quirk could produce.
+    fireEvent.change(email, { target: { value: "" } })
+
+    await user.type(
+      screen.getByLabelText("students.firstNamePlaceholder"),
+      "Ada",
+    )
+    await user.click(screen.getByRole("button", { name: /saveChanges|saving/ }))
+
+    await waitFor(() =>
+      expect(updateStudentWithConflictRetry).toHaveBeenCalled(),
+    )
+    const call = updateStudentWithConflictRetry.mock.calls[0]![1] as {
+      key: string
+      patch: { email: string; first_name: string }
+    }
+    expect(call.patch.email).toBe("ada@uni.edu")
+    expect(call.patch.first_name).toBe("Ada")
+    // Keyed by the address, which is this row's identity.
+    expect(call.key).toBe("ada@uni.edu")
+  })
+
+  it("leaves the address editable for an ordinary row", () => {
+    renderForm(<EditStudentForm {...props} student={student} />)
+    const email = screen.getByLabelText("students.emailLabel")
+    expect((email as HTMLInputElement).readOnly).toBe(false)
+    expect(screen.queryByText("students.inviteEmailLocked")).toBeNull()
   })
 })
