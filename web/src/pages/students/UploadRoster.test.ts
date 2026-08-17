@@ -176,6 +176,29 @@ describe("parseRosterImportFile", () => {
         { line: 3, reason: "bad-username", value: "-b2-" },
       ])
     })
+
+    it("counts lone-CR line endings", () => {
+      // A legacy Mac / older Excel export. Counting only LF would report every row
+      // as line 1 — and identical line+reason pairs collide as React keys.
+      expect(parse("username\rada\r-bad-\r").dropped).toEqual([
+        { line: 3, reason: "bad-username", value: "-bad-" },
+      ])
+    })
+
+    it("counts lone-CR line endings in a bare list", () => {
+      expect(parse("ada\rJohn Smith\r").dropped).toEqual([
+        { line: 2, reason: "bad-value", value: "John Smith" },
+      ])
+    })
+  })
+
+  it("yields nothing for a headered CSV with no identity column", () => {
+    // A SHAPE problem, not a row-content one. Re-reading such a file one value per
+    // line would blame the header and every data row for not being a username,
+    // burying the one message that helps — which detectImportHeaderIssue provides.
+    const csv = "first_name,last_name\nAda,Lovelace\nGrace,Hopper\n"
+    expect(parse(csv)).toEqual({ rows: [], dropped: [] })
+    expect(detectImportHeaderIssue(csv)?.kind).toBe("missing-identity-header")
   })
 
   it("reports a metadata-only row as incomplete, not as bad content", () => {

@@ -109,9 +109,22 @@ const structuralErrorOf = (
 
 const stripMailto = (value: string) => value.replace(/^mailto:/i, "").trim()
 
-const countNewlines = (s: string) => {
+// Split a flat file into lines on any of the three terminators. A lone CR is a
+// legacy Mac / older Excel export; splitting only on LF would read such a file as
+// one long line.
+const splitLines = (text: string) => text.split(/\r\n|\r|\n/)
+
+// Count line breaks, honouring the terminator Papa detected. A legacy Mac / older
+// Excel export uses a lone CR, where counting only LF would report every row as
+// line 1 — and identical line+reason pairs also collide as React keys in the
+// report. CRLF is counted by its trailing LF, so only a lone CR needs the branch.
+const countLines = (s: string, newline: string) => {
+  const cr = newline === "\r"
   let n = 0
-  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) === 10) n++
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i)
+    if (cr ? c === 13 : c === 10) n++
+  }
   return n
 }
 
@@ -137,21 +150,27 @@ const parseRowsWithLines = (text: string) => {
   // top-level `errors` empty, so collect them here or the malformed-CSV guard
   // would never fire.
   const errors: Papa.ParseError[] = []
-  let consumed = 0
-  let newlines = 0
+  const pending: { raw: Record<string, string>; cursor: number }[] = []
   const parsed = Papa.parse<Record<string, string>>(text, {
     ...PAPA_OPTIONS,
     step: (result: Papa.ParseStepResult<Record<string, string>>) => {
       errors.push(...result.errors)
-      const cursor = result.meta.cursor
-      // Advance from the previous row's end, so the file is scanned once overall
-      // rather than once per row.
-      newlines += countNewlines(text.slice(consumed, cursor))
-      consumed = cursor
-      const unterminated = text.charCodeAt(cursor - 1) !== 10
-      rows.push({ raw: result.data, line: newlines + (unterminated ? 1 : 0) })
+      pending.push({ raw: result.data, cursor: result.meta.cursor })
     },
   })
+  // meta.linebreak is only known once parsing has run, so number the rows after.
+  const newline = parsed.meta.linebreak || "\n"
+  const endCode = newline === "\r" ? 13 : 10
+  let consumed = 0
+  let lines = 0
+  for (const { raw, cursor } of pending) {
+    // Advance from the previous row's end, so the file is scanned once overall
+    // rather than once per row.
+    lines += countLines(text.slice(consumed, cursor), newline)
+    consumed = cursor
+    const unterminated = text.charCodeAt(cursor - 1) !== endCode
+    rows.push({ raw, line: lines + (unterminated ? 1 : 0) })
+  }
   return { rows, fields: parsed.meta.fields ?? [], errors }
 }
 
@@ -204,7 +223,7 @@ const parseAddressList = (text: string): ParsedImportFile => {
   const dropped: DroppedRow[] = []
   // Split the ORIGINAL text, not a trimmed copy: a reported line number is the
   // teacher's only way to find the row, so leading blank lines must still count.
-  text.split(/\r?\n/).forEach((rawLine, index) => {
+  splitLines(text).forEach((rawLine, index) => {
     const line = index + 1
     const value = rawLine.trim()
     if (!value) return
@@ -271,6 +290,15 @@ export const parseRosterImportFile = (
   const rows: ParsedImportRow[] = []
   const dropped: DroppedRow[] = []
 
+  // A file with a header row but no identity column has a SHAPE problem, not a
+  // row-content problem: re-reading it one value per line would blame the header
+  // and every data row for not being a username, burying the one message that
+  // helps ("add a github_id, username, or email column"). Yield nothing and let
+  // detectImportHeaderIssue explain it.
+  if (!hasIdentityColumn && looksLikeHeaderRow(fields)) {
+    return { rows: [], dropped: [] }
+  }
+
   if (hasIdentityColumn) {
     rawRows.forEach(({ raw, line }) => {
       const identity = readIdentity(raw)
@@ -301,7 +329,7 @@ export const parseRosterImportFile = (
 
   // Split the ORIGINAL text, so a reported line number matches what the teacher
   // sees in their editor even when the file opens with blank lines.
-  text.split(/\r?\n/).forEach((rawLine, index) => {
+  splitLines(text).forEach((rawLine, index) => {
     const line = index + 1
     const value = rawLine.trim()
     if (!value) return
@@ -346,6 +374,16 @@ export type ImportHeaderIssue =
   | { kind: "missing-identity-header"; present: string[]; identity: string[] }
   | { kind: "malformed"; detail: string }
 
+// Whether a file's first row is a HEADER row rather than the first of a bare list:
+// more than one column (a delimiter was found), or a single recognized column name.
+// A lone unrecognized token is a bare value list. Shared by the parser and the
+// diagnostic below so the two can't disagree about which shape a file is.
+const looksLikeHeaderRow = (fields: readonly string[]) =>
+  fields.length > 1 ||
+  fields.some((f) =>
+    (RECOGNIZED_IMPORT_HEADERS as readonly string[]).includes(f),
+  )
+
 // Inspect an uploaded file's structure to explain an empty/mis-parsed import.
 // Pure and side-effect-free so it's unit-testable and can run alongside
 // parseRosterImportFile without re-reading the file. Deliberately does NOT flag
@@ -365,16 +403,7 @@ export const detectImportHeaderIssue = (
   if (IDENTITY_IMPORT_HEADERS.some((header) => fields.includes(header))) {
     return null
   }
-
-  // A header row is one with >1 column (a delimiter was found) or a single
-  // recognized column name. A lone unrecognized token is a bare value list, not
-  // a mis-headered CSV — leave it to the one-per-line fallback.
-  const looksLikeHeaderRow =
-    fields.length > 1 ||
-    fields.some((f) =>
-      (RECOGNIZED_IMPORT_HEADERS as readonly string[]).includes(f),
-    )
-  if (!looksLikeHeaderRow) return null
+  if (!looksLikeHeaderRow(fields)) return null
 
   return {
     kind: "missing-identity-header",

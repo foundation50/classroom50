@@ -803,6 +803,27 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
     await waitFor(() => expect(screen.getAllByText("ada").length).toBe(1))
     expect(screen.queryByText("students.noUsableRows")).toBeNull()
   })
+
+  it("explains a missing identity column instead of blaming each line", async () => {
+    const user = userEvent.setup()
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    // A shape problem: the file has a header row but no github_id/username/email.
+    // Reading it one value per line would report the header and every data row as
+    // an unusable value, burying the one message that tells the teacher what to add.
+    await uploadFile(
+      user,
+      file("roster.csv", "first_name,last_name\nAda,Lovelace\nGrace,Hopper\n"),
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText("students.missingIdentityHeader")).toBeTruthy(),
+    )
+    expect(screen.getByText("students.expectedHeaders")).toBeTruthy()
+    expect(screen.queryByText(/students.importBlocked/)).toBeNull()
+  })
 })
 
 describe("UploadRoster identity mismatch gate", () => {
