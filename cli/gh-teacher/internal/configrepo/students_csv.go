@@ -285,8 +285,19 @@ func recordToRow(record []string, canonicalLen int, extraColumns []string, line 
 		Email:     strings.TrimSpace(undefangCSVCell(record[3])),
 		Section:   undefangCSVCell(record[4]),
 	}
-	if row.Username == "" {
-		return RosterRow{}, fmt.Errorf("line %d: username column is empty", line)
+	// A row needs at least ONE identity column. An identity-less row addresses
+	// nobody, so it stays an error (lenient parsing preserves it raw). A row
+	// with only an email is valid and deliberate: the web writes it when a
+	// teacher invites by email, and fills in the account once the student
+	// accepts. Rejecting it would abort the whole file for `roster list` while
+	// any invite is outstanding. Keep-rule mirrors the web's parseRosterCsv
+	// filter (web/src/util/rosterCsv.ts) — non-empty raw cell, not a resolvable
+	// id, so a present-but-unusable github_id (0, or above 2^53) still counts.
+	// Note an UNPARSEABLE github_id still hard-errors just below, for any row:
+	// that predates this rule and is deliberate. Shared cases:
+	// cli/shared/testdata/roster_row_cases.json.
+	if row.Username == "" && row.Email == "" && strings.TrimSpace(record[5]) == "" {
+		return RosterRow{}, fmt.Errorf("line %d: row has no username, github_id, or email — at least one is required to identify a student", line)
 	}
 	if trimmed := strings.TrimSpace(record[5]); trimmed != "" {
 		id, err := parseGitHubID(trimmed)
@@ -390,8 +401,18 @@ func collectExtraColumns(rows []RosterRow) []string {
 	return ordered
 }
 
-// UpsertRosterRow replaces by Username (case-insensitive) or appends. Position
-// preserved on replace. Returns the slice and whether a row was replaced.
+// UpsertRosterRow replaces by Username (case-insensitive), else claims a pending
+// email-invite row with the same email, else appends. Position preserved on
+// replace. Returns the slice and whether a row was replaced.
+//
+// The email fallback finishes what an email invite started: that row carries
+// only the invited address until the student accepts, so adding them by username
+// would otherwise leave a second row for the same person. It is deliberately
+// narrow — only a row with NO username and NO github_id cell at all is
+// claimable, so two students sharing a contact email can never overwrite each
+// other, and a username match always wins. An email claim does NOT inherit the
+// pending row's Role (an email invite may have been for staff; the team is the
+// role authority), whereas a username match does.
 //
 // On replace, the existing row's Extra is carried over UNLESS the incoming row
 // supplies its own — so a CLI `roster add` (canonical fields only) never wipes
@@ -399,20 +420,48 @@ func collectExtraColumns(rows []RosterRow) []string {
 // Role (a caller that doesn't know the team-derived role) preserves the
 // existing recorded role rather than blanking it.
 func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
+	claim := func(i int, keepRole bool) ([]RosterRow, bool) {
+		if row.Extra == nil && rows[i].Extra != nil {
+			row.Extra = rows[i].Extra
+			row.ExtraOrder = rows[i].ExtraOrder
+		}
+		if keepRole && row.Role == "" && rows[i].Role != "" {
+			row.Role = rows[i].Role
+		}
+		rows[i] = row
+		return rows, true
+	}
 	for i := range rows {
 		if rows[i].isRaw() {
 			continue // preserved malformed row: no usable username to match
 		}
-		if strings.EqualFold(rows[i].Username, row.Username) {
-			if row.Extra == nil && rows[i].Extra != nil {
-				row.Extra = rows[i].Extra
-				row.ExtraOrder = rows[i].ExtraOrder
+		// Guard the empty-vs-empty case: an incoming row with no username must
+		// not match an identity-less pending row just because both are blank.
+		if row.Username != "" && strings.EqualFold(rows[i].Username, row.Username) {
+			return claim(i, true)
+		}
+	}
+	// No username match: claim a pending email-invite row for the same address.
+	// Only an identity-less row qualifies (see the doc comment), and a blank
+	// incoming email matches nothing.
+	if row.Email != "" {
+		for i := range rows {
+			if rows[i].isRaw() || rows[i].Username != "" {
+				continue
 			}
-			if row.Role == "" && rows[i].Role != "" {
-				row.Role = rows[i].Role
+			// "Identity-less" here means the same thing the reader means: a
+			// present github_id cell counts even when it didn't resolve, so a
+			// claim can't silently discard what the teacher typed.
+			if rows[i].GitHubID != 0 || rows[i].githubIDRaw != "" {
+				continue
 			}
-			rows[i] = row
-			return rows, true
+			if strings.EqualFold(strings.TrimSpace(rows[i].Email), strings.TrimSpace(row.Email)) {
+				// Do NOT inherit the pending row's Role: an email invite can be
+				// sent for staff, and carrying that role onto whoever the
+				// teacher names here would silently grant it. The team is the
+				// authority for role; a later sync refreshes it.
+				return claim(i, false)
+			}
 		}
 	}
 	return append(rows, row), false

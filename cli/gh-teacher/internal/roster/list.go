@@ -84,7 +84,7 @@ func rosterListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit the full JSON array of {username, first_name, last_name, email, section, github_id, role} objects instead of the table")
-	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Print one username per line (no table, no stderr summary)")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Print one username per line (no table, no stderr summary); students awaiting an email invite are omitted, as they have no username yet")
 	return cmd
 }
 
@@ -126,6 +126,13 @@ func runRosterList(client githubapi.Client, out, errOut io.Writer, org, classroo
 
 	if quiet {
 		for _, r := range rows {
+			// A pending email-invite row has no username yet. --quiet feeds
+			// scripts (xargs, loops), so emitting a blank line would hand the
+			// caller an empty argument; skip until the invite is accepted and
+			// the reconcile fills in the account.
+			if r.Username == "" {
+				continue
+			}
 			_, _ = fmt.Fprintln(out, r.Username)
 		}
 		return nil

@@ -1,0 +1,59 @@
+{
+  "comment": "Cross-language golden cases for the roster.csv row keep-rule. A roster row is kept when it carries at least ONE identity column — username, github_id, or email — and rejected only when all three are blank. Both the Go strict reader (recordToRow in cli/gh-teacher/internal/configrepo/students_csv.go) and the TS reader (parseRosterCsv in web/src/util/rosterCsv.ts) must agree on every case here, because the web WRITES an email-only pending row when a teacher invites a student by email and the CLI must still read that classroom's roster. `record` lists the canonical columns in header order (username,first_name,last_name,email,section,github_id,role). `keep` is whether the row survives the KEEP-RULE specifically. Two scoping notes, so this fixture is not read as a stronger guarantee than it is: (1) the keep decision is shared, but the two readers act differently on a row they don't keep — the web drops it silently, while Go's strict reader errors (aborting the file) and its lenient reader preserves it verbatim for round-tripping; (2) cases here carry only github_id values the id parser accepts, because Go additionally hard-errors on an unparseable github_id (e.g. `nope`) for ANY row, with or without other identity columns — a pre-existing divergence from the web, which keeps such a row. Update both readers in lockstep.",
+  "columns": [
+    "username",
+    "first_name",
+    "last_name",
+    "email",
+    "section",
+    "github_id",
+    "role"
+  ],
+  "cases": [
+    {
+      "why": "fully populated row",
+      "record": ["alice", "Alice", "A", "alice@x.edu", "s1", "1", "student"],
+      "keep": true
+    },
+    {
+      "why": "username only — the classic CLI-authored row",
+      "record": ["alice", "", "", "", "", "", ""],
+      "keep": true
+    },
+    {
+      "why": "email only — the web's pending email-invite row",
+      "record": ["", "", "", "pending@x.edu", "", "", "student"],
+      "keep": true
+    },
+    {
+      "why": "github_id only — identity without a resolved login",
+      "record": ["", "", "", "", "", "4242", "student"],
+      "keep": true
+    },
+    {
+      "why": "unusable but present github_id still counts as identity",
+      "record": ["", "", "", "", "", "0", ""],
+      "keep": true
+    },
+    {
+      "why": "email only, surrounded by whitespace (trimmed before the check)",
+      "record": ["  ", "", "", "  pending@x.edu  ", "", "  ", ""],
+      "keep": true
+    },
+    {
+      "why": "metadata but no identity column — addresses nobody",
+      "record": ["", "Ghost", "G", "", "s1", "", "student"],
+      "keep": false
+    },
+    {
+      "why": "entirely blank row",
+      "record": ["", "", "", "", "", "", ""],
+      "keep": false
+    },
+    {
+      "why": "whitespace-only cells are blank after trimming",
+      "record": ["  ", "", "", "   ", "", "  ", ""],
+      "keep": false
+    }
+  ]
+}

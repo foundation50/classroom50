@@ -7,8 +7,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
@@ -495,6 +497,85 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 			team.Slug, org, live.ID, team.ID)
 	}
 	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(team.Slug))
+	resp, err := client.Request(http.MethodDelete, path, nil)
+	if err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return nil
+		}
+		return fmt.Errorf("DELETE %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return nil
+}
+
+// ListInviteTeams returns the org's per-invite metadata teams — the
+// `invite-<hash>` secret teams the web creates to retain an invited email until
+// the student accepts (schemas/invite-v1.schema.json). The CLI never writes
+// them; it lists them so teardown can sweep what an org leaves behind.
+//
+// Filters on the full hashed shape, not the bare prefix: `invite-` is a generic
+// namespace a human team can land in ("Invite Only" slugs to `invite-only`), and
+// only a `invite-<16 hex>` slug is one this feature owns. Descriptions are not
+// read, so this cannot attribute a team to one classroom — callers must be
+// org-wide. A read failure propagates so a caller can report it rather than
+// silently sweeping nothing.
+func ListInviteTeams(client githubapi.Client, org string) ([]TeamRef, error) {
+	// TeamRef's json tags already match the org-teams payload's id/slug, so it
+	// doubles as the decode target.
+	const perPage, maxPages = 100, 100
+	teams, err := githubapi.PaginateAll[TeamRef](
+		client, perPage, maxPages,
+		func(page int) string {
+			return fmt.Sprintf("orgs/%s/teams?per_page=%d&page=%d",
+				url.PathEscape(org), perPage, page)
+		},
+		func(path string, err error) error {
+			return fmt.Errorf("GET %s: %w", path, err)
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	var refs []TeamRef
+	for _, t := range teams {
+		if IsInviteTeamSlug(t.Slug) {
+			refs = append(refs, t)
+		}
+	}
+	return refs, nil
+}
+
+// inviteTeamSlugRe matches the exact slug shape the web writes:
+// `invite-` plus contract.InviteHashHexLen lowercase hex chars. Anchored so a
+// human-created team that merely starts with `invite-` can never be swept.
+var inviteTeamSlugRe = regexp.MustCompile(
+	`^` + regexp.QuoteMeta(contract.InviteTeamPrefix) +
+		fmt.Sprintf(`[0-9a-f]{%d}$`, contract.InviteHashHexLen))
+
+// IsInviteTeamSlug reports whether a slug is one this feature owns — the
+// fail-closed predicate both the sweep's filter and its delete share, mirroring
+// the web's isInviteTeamSlug.
+func IsInviteTeamSlug(slug string) bool {
+	return inviteTeamSlugRe.MatchString(slug)
+}
+
+// DeleteInviteTeam removes one per-invite metadata team. Fenced to the hashed
+// `invite-<16 hex>` shape so a caller can never steer this into a classroom
+// team, an unrelated team, or a human-created team that merely starts with
+// `invite-`. 404 is success, so a sweep is idempotent.
+//
+// Unlike DeleteClassroomTeam there is no recorded id to verify against — these
+// teams are web-created and referenced nowhere in the config repo — so the slug
+// shape IS the guard.
+func DeleteInviteTeam(client githubapi.Client, org, slug string) error {
+	if slug == "" {
+		return nil
+	}
+	if !IsInviteTeamSlug(slug) {
+		return fmt.Errorf("refusing to delete team %q at %s — not a %s<hash> invite team; remove it by hand if intended", slug, org, contract.InviteTeamPrefix)
+	}
+	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	resp, err := client.Request(http.MethodDelete, path, nil)
 	if err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {

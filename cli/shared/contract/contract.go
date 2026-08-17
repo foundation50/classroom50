@@ -37,6 +37,19 @@ const (
 	// link — keep byte-identical; contract_test.go pins the Go half.
 	TeamSchemaV1 = "classroom50/team/v1"
 
+	// InviteTeamPrefix and InviteHashHexLen describe the per-invite secret teams
+	// the web app creates to retain an invited email address until the student
+	// accepts: `invite-<16 lowercase hex>`, a SHA-256 prefix over the classroom
+	// and address (schemas/invite-v1.schema.json). Only the web writes them; the
+	// CLI knows the shape so teardown can sweep the ones an org leaves behind.
+	// Matching the FULL shape matters — `invite-` alone is a namespace a human
+	// team can land in ("Invite Only" slugs to `invite-only`), which a sweep must
+	// never delete. Mirrored in web/src/util/inviteTeam.ts
+	// (INVITE_TEAM_PREFIX / INVITE_HASH_HEX_LEN) with NO compile-time link — keep
+	// byte-identical; contract_test.go pins the Go half.
+	InviteTeamPrefix = "invite-"
+	InviteHashHexLen = 16
+
 	// DefaultAutograderName is the universal-shim autograder name; resolves to
 	// the shim embedded in gh-student, not a per-classroom override.
 	DefaultAutograderName = "default"

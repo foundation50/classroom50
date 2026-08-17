@@ -2,6 +2,9 @@ package configrepo
 
 import (
 	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -147,6 +150,255 @@ func TestParseRoster_UnusableGitHubIDIsUnresolvedNotFatal(t *testing.T) {
 	}
 }
 
+// A teacher who invites by email gets a pending roster row carrying only that
+// address: the web writes it at invite time and fills in the account identity
+// when the student accepts (web/src/domain/students/rosterSync.ts). The strict
+// reader must keep it, or `roster list` fails for the whole classroom while any
+// invite is outstanding. The keep-rule mirrors the web's parseRosterCsv filter:
+// a row needs at least one of username, github_id, or email.
+// A student invited by email has a pending roster row carrying only that
+// address. When the teacher later adds them by username with the same email,
+// that pending row must be claimed rather than left beside a second row for the
+// same person — mirroring the web reconcile's email-match fold.
+func TestUpsertRosterRow_ClaimsPendingEmailRow(t *testing.T) {
+	rows := []RosterRow{
+		{Username: "alice", Email: "alice@x.edu", GitHubID: 1},
+		{Email: "pending@x.edu", Role: "student"},
+	}
+	incoming := RosterRow{Username: "bob", Email: "Pending@X.edu", GitHubID: 2}
+
+	updated, replaced := UpsertRosterRow(rows, incoming)
+	if !replaced {
+		t.Fatal("replaced = false, want true (the pending row was claimed)")
+	}
+	if len(updated) != 2 {
+		t.Fatalf("rows = %d, want 2 (claimed in place, not appended)", len(updated))
+	}
+	claimed := updated[1]
+	if claimed.Username != "bob" || claimed.GitHubID != 2 {
+		t.Fatalf("identity = %q/%d, want bob/2", claimed.Username, claimed.GitHubID)
+	}
+	// The pending row's Role is NOT inherited: an email invite may have been
+	// sent for staff, and carrying that onto whoever the teacher names here
+	// would silently grant it. The team is the role authority.
+	if claimed.Role != "" {
+		t.Fatalf("Role = %q, want \"\" (not inherited across an email claim)", claimed.Role)
+	}
+}
+
+// A staff email invite's row must not hand its role to the student a teacher
+// later adds under that address.
+func TestUpsertRosterRow_EmailClaimDoesNotGrantStaffRole(t *testing.T) {
+	rows := []RosterRow{{Email: "ta@x.edu", Role: "ta"}}
+	incoming := RosterRow{Username: "student1", Email: "ta@x.edu", GitHubID: 9}
+
+	updated, replaced := UpsertRosterRow(rows, incoming)
+	if !replaced || len(updated) != 1 {
+		t.Fatalf("replaced=%v rows=%d, want true/1", replaced, len(updated))
+	}
+	if updated[0].Role == "ta" {
+		t.Error("the claim granted the pending row's staff role to the added student")
+	}
+}
+
+// A username match still carries the recorded role over, so re-adding an
+// enrolled student doesn't blank the role a sync recorded for them.
+func TestUpsertRosterRow_UsernameMatchStillInheritsRole(t *testing.T) {
+	rows := []RosterRow{{Username: "alice", GitHubID: 1, Role: "ta"}}
+	incoming := RosterRow{Username: "alice", GitHubID: 1}
+
+	updated, _ := UpsertRosterRow(rows, incoming)
+	if updated[0].Role != "ta" {
+		t.Fatalf("Role = %q, want ta preserved on a username match", updated[0].Role)
+	}
+}
+
+// A row whose github_id cell is present but unusable is still identified by it
+// (the reader preserves the raw cell), so an email claim must skip it rather
+// than replace the row and discard what the teacher typed.
+func TestUpsertRosterRow_EmailClaimSkipsPreservedRawID(t *testing.T) {
+	in := "username,first_name,last_name,email,section,github_id,role\n" +
+		",,,pending@x.edu,,0,student\n"
+	rows, err := ParseRoster([]byte(in))
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	if rows[0].githubIDRaw == "" {
+		t.Fatal("fixture precondition: expected the raw github_id cell to be preserved")
+	}
+
+	updated, replaced := UpsertRosterRow(rows, RosterRow{
+		Username: "bob", Email: "pending@x.edu", GitHubID: 2,
+	})
+	if replaced {
+		t.Fatal("replaced = true, want false: a row identified by a raw github_id must not be claimed")
+	}
+	if len(updated) != 2 {
+		t.Fatalf("rows = %d, want 2 (bob appended)", len(updated))
+	}
+}
+
+// The email fallback must never touch a row that already identifies someone:
+// two students can share a contact email (a shared family address), so an
+// email match on an enrolled row would rewrite the wrong person's identity.
+func TestUpsertRosterRow_EmailMatchNeverClaimsAnIdentifiedRow(t *testing.T) {
+	rows := []RosterRow{{Username: "alice", Email: "shared@x.edu", GitHubID: 1}}
+	incoming := RosterRow{Username: "bob", Email: "shared@x.edu", GitHubID: 2}
+
+	updated, replaced := UpsertRosterRow(rows, incoming)
+	if replaced {
+		t.Fatal("replaced = true, want false: an identified row must not be claimed by email")
+	}
+	if len(updated) != 2 {
+		t.Fatalf("rows = %d, want 2 (bob appended as his own row)", len(updated))
+	}
+	if updated[0].Username != "alice" || updated[0].GitHubID != 1 {
+		t.Fatalf("alice's row was modified: %+v", updated[0])
+	}
+}
+
+// A username match wins over an email match, so re-adding an enrolled student
+// updates their own row even when an unrelated pending row shares the email.
+func TestUpsertRosterRow_UsernameMatchWinsOverEmail(t *testing.T) {
+	rows := []RosterRow{
+		{Email: "dup@x.edu", Role: "student"},
+		{Username: "alice", GitHubID: 1},
+	}
+	incoming := RosterRow{Username: "ALICE", Email: "dup@x.edu", GitHubID: 1}
+
+	updated, replaced := UpsertRosterRow(rows, incoming)
+	if !replaced || len(updated) != 2 {
+		t.Fatalf("replaced=%v rows=%d, want true/2", replaced, len(updated))
+	}
+	if updated[0].Username != "" {
+		t.Fatalf("the pending row was claimed instead of alice's own row: %+v", updated[0])
+	}
+	if updated[1].Username != "ALICE" {
+		t.Fatalf("alice's row = %+v, want the incoming row", updated[1])
+	}
+}
+
+// An incoming row with no email must not claim an identity-less row by matching
+// "" == "" — that would hijack an unrelated pending invite.
+func TestUpsertRosterRow_EmptyEmailClaimsNothing(t *testing.T) {
+	rows := []RosterRow{{Email: "pending@x.edu", Role: "student"}}
+	incoming := RosterRow{Username: "bob", GitHubID: 2}
+
+	updated, replaced := UpsertRosterRow(rows, incoming)
+	if replaced {
+		t.Fatal("replaced = true, want false: a blank email matches nothing")
+	}
+	if len(updated) != 2 || updated[0].Email != "pending@x.edu" {
+		t.Fatalf("pending row disturbed: %+v", updated)
+	}
+}
+
+// sharedRosterRowCasesPath locates the cross-language golden fixture for the
+// roster-row keep-rule, also consumed by the TS reader's parity test
+// (web/src/util/rosterCsv.test.ts).
+const sharedRosterRowCasesPath = "../../../shared/testdata/roster_row_cases.json"
+
+// TestParseRoster_SharedKeepRuleParity pins the Go strict reader to the shared
+// keep-rule cases so it can't drift from the web reader. This is load-bearing:
+// the web WRITES an email-only pending row when a teacher invites by email, and
+// a Go side that rejected it would abort `roster list` for the whole classroom
+// until the student accepted (the regression this fixture exists to prevent).
+func TestParseRoster_SharedKeepRuleParity(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Clean(sharedRosterRowCasesPath))
+	if err != nil {
+		t.Fatalf("read shared fixture: %v", err)
+	}
+	var doc struct {
+		Columns []string `json:"columns"`
+		Cases   []struct {
+			Why    string   `json:"why"`
+			Record []string `json:"record"`
+			Keep   bool     `json:"keep"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal shared fixture: %v", err)
+	}
+	if len(doc.Cases) == 0 {
+		t.Fatal("shared fixture has no cases")
+	}
+	// The fixture's column list must be the canonical header, or its records
+	// aren't addressing the columns this reader parses.
+	if strings.Join(doc.Columns, ",") != strings.Join(RosterColumns, ",") {
+		t.Fatalf("fixture columns = %v, want %v", doc.Columns, RosterColumns)
+	}
+
+	for _, tc := range doc.Cases {
+		t.Run(tc.Why, func(t *testing.T) {
+			in := FullRosterHeader + "\n" + strings.Join(quoteCSVCells(tc.Record), ",") + "\n"
+			rows, err := ParseRoster([]byte(in))
+			if tc.Keep {
+				if err != nil {
+					t.Fatalf("ParseRoster rejected a row the keep-rule keeps: %v\ninput: %q", err, in)
+				}
+				if len(rows) != 1 {
+					t.Fatalf("rows = %d, want 1", len(rows))
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("ParseRoster kept a row the keep-rule rejects: %q", in)
+			}
+		})
+	}
+}
+
+// quoteCSVCells wraps each fixture cell in double quotes so whitespace-only
+// cells reach the parser intact and a cell containing a comma can't split the
+// record.
+func quoteCSVCells(cells []string) []string {
+	out := make([]string, len(cells))
+	for i, c := range cells {
+		out[i] = `"` + strings.ReplaceAll(c, `"`, `""`) + `"`
+	}
+	return out
+}
+
+func TestParseRoster_KeepsEmailOnlyPendingRow(t *testing.T) {
+	in := "username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,Alice,A,alice@x.edu,s,1,student\n" +
+		",,,pending@x.edu,,,student\n"
+	rows, err := ParseRoster([]byte(in))
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(rows))
+	}
+	pending := rows[1]
+	if pending.isRaw() {
+		t.Fatal("email-only row must parse, not fall back to a preserved raw row")
+	}
+	if pending.Username != "" || pending.GitHubID != 0 {
+		t.Fatalf("identity = %q/%d, want empty", pending.Username, pending.GitHubID)
+	}
+	if pending.Email != "pending@x.edu" {
+		t.Fatalf("Email = %q, want pending@x.edu", pending.Email)
+	}
+	if pending.Role != "student" {
+		t.Fatalf("Role = %q, want student", pending.Role)
+	}
+}
+
+// A row carrying only a github_id is equally valid under the keep-rule (the web
+// accepts it too), so a username-less id row must not be rejected either.
+func TestParseRoster_KeepsIDOnlyRow(t *testing.T) {
+	in := "username,first_name,last_name,email,section,github_id,role\n" +
+		",,,,,4242,student\n"
+	rows, err := ParseRoster([]byte(in))
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	if len(rows) != 1 || rows[0].GitHubID != 4242 {
+		t.Fatalf("rows = %+v, want one row with GitHubID 4242", rows)
+	}
+}
+
 func TestParseRoster_RejectsBadInputs(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -157,7 +409,7 @@ func TestParseRoster_RejectsBadInputs(t *testing.T) {
 		{"missing github_id column", "username,first_name,last_name,email,section\nalice,A,A,a@x,s\n", "unexpected header"},
 		{"missing email column", "username,first_name,last_name,section,github_id\nalice,A,A,s,1\n", "unexpected header"},
 		{"renamed first column", "user,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,1,student\n", "unexpected header"},
-		{"username empty", "username,first_name,last_name,email,section,github_id,role\n,A,A,,s,1,student\n", "username column is empty"},
+		{"no identity columns", "username,first_name,last_name,email,section,github_id,role\n,A,A,,s,,student\n", "no username, github_id, or email"},
 		{"non-numeric github_id", "username,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,nope,student\n", "invalid github_id"},
 		{"wrong field count", "username,first_name,last_name,email,section,github_id,role\nalice,A,A\n", "wrong number"},
 	}
@@ -850,12 +1102,15 @@ func TestEncodeRoster_DefangsEveryColumnButGitHubID(t *testing.T) {
 // round-trip it.
 func TestParseRosterLenient_PreservesMalformedRow(t *testing.T) {
 	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
-		",Ghost,G,,,,\n" + // empty username: strict ParseRoster rejects this
+		",Ghost,G,,,,\n" + // no identity column at all: strict ParseRoster rejects this
 		"alice,Alice,A,alice@example.edu,s1,12345,student\n")
 
-	// Strict parse still rejects, proving lenient is the behavior change.
+	// Strict parse still rejects, proving lenient is the behavior change. Note
+	// the row is rejected for having NO identity column (no username, no
+	// github_id, no email) — an email-only row is valid and parses (see
+	// TestParseRoster_KeepsEmailOnlyPendingRow).
 	if _, err := ParseRoster(in); err == nil {
-		t.Fatal("strict ParseRoster must still reject an empty-username row")
+		t.Fatal("strict ParseRoster must still reject a row with no identity column")
 	}
 
 	rows, err := ParseRosterLenient(in)
