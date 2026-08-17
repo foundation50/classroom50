@@ -131,6 +131,13 @@ const primaryButton = () =>
     })
     .closest("button") as HTMLButtonElement
 
+// The same button, but absent-tolerant: a blocked file renders no import control at
+// all, and `getByRole` would throw before the assertion could say so.
+const importButton = () =>
+  screen.queryByRole("button", {
+    name: /importAndInviteMembers|importMembers|confirmChanges|noChangesToApply/,
+  }) as HTMLButtonElement | null
+
 // An address-only file now runs through the roster path like any other, so the
 // owner gate under test is PreflightRecap's — the one that also covers a username
 // row promoted to teacher. Before the email-list branch was collapsed this same
@@ -977,8 +984,69 @@ describe("UploadRoster identity mismatch gate", () => {
     // WHICH line and which id is asserted in importProblems.test.ts: the per-line
     // sentences render through <Trans>, which needs a real i18n instance this
     // harness doesn't set up. What matters here is that the row never reached the
-    // table and the preview was replaced, so there is no partial import to press.
+    // table and there is genuinely nothing to press.
     expect(screen.queryByText("someone-else")).toBeNull()
-    expect(screen.queryByText("students.summaryViewDetails")).toBeNull()
+    expect(importButton()).toBeNull()
+    expect(screen.queryByRole("table")).toBeNull()
+  })
+
+  it("blocks a file whose OTHER rows are importable", async () => {
+    const user = userEvent.setup()
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [{ username: "ada" }],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [],
+      identityMismatches: [],
+      allAlreadyMembers: false,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    // The case that matters: one bad line beside good ones. A single-row bad file
+    // would block even if the gate were broken, because there'd be nothing to
+    // import — only a mixed file proves the gate itself holds.
+    await uploadFile(
+      user,
+      file("roster.csv", "username,email\nada,ada@x.edu\nbob,n/a\n"),
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText("students.importBlocked:1")).toBeTruthy(),
+    )
+    expect(importButton()).toBeNull()
+    expect(screen.queryByRole("table")).toBeNull()
+    expect(bulkEnrollStudentsInClassroom).not.toHaveBeenCalled()
+  })
+
+  it("reports an identity-less row but still imports everyone else", async () => {
+    const user = userEvent.setup()
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [{ username: "ada" }],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [],
+      identityMismatches: [],
+      allAlreadyMembers: false,
+    })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    // The one deliberate non-blocking case: a student who hasn't supplied a handle.
+    // There is nothing to fix, so the import must stay available.
+    await uploadFile(
+      user,
+      file("roster.csv", "username,email,first_name\nada,,Ada\n,,Nobody\n"),
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText("students.importSkipped:1")).toBeTruthy(),
+    )
+    expect(screen.queryByText(/students.importBlocked/)).toBeNull()
+    expect(importButton()?.disabled).toBe(false)
   })
 })

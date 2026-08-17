@@ -201,6 +201,27 @@ describe("parseRosterImportFile", () => {
     expect(detectImportHeaderIssue(csv)?.kind).toBe("missing-identity-header")
   })
 
+  it("skips a one-column caption line instead of blocking the file", () => {
+    // A spreadsheet export of a single column starts with its column title. Papa
+    // reads a one-column first line as data and looksLikeHeaderRow can't tell that
+    // token from a handle, so left alone the caption would be reported as unusable
+    // content and block every student behind it.
+    const parsed = parse("GitHub Username\nada\nbob\n")
+    expect(parsed.rows.map((r) => r.identity)).toEqual([
+      { username: "ada" },
+      { username: "bob" },
+    ])
+    expect(parsed.dropped).toEqual([])
+  })
+
+  it("still reports the first line when nothing else parses either", () => {
+    // Without a parsing line below it, the file isn't a captioned list — so the
+    // caption exemption must not silently swallow the only evidence of a bad file.
+    const parsed = parse("Student Name\nAnother Name\n")
+    expect(parsed.rows).toHaveLength(0)
+    expect(parsed.dropped.map((d) => d.line)).toEqual([1, 2])
+  })
+
   it("reports a metadata-only row as incomplete, not as bad content", () => {
     // No identity cell at all: a student who hasn't supplied a handle yet. This
     // is the ONE non-blocking case — there is nothing for the teacher to correct.
@@ -209,11 +230,27 @@ describe("parseRosterImportFile", () => {
     expect(parsed.dropped).toEqual([{ line: 2, reason: "incomplete" }])
   })
 
-  it("prefers the email cell over the username cell when both are unusable", () => {
+  it("reports BOTH unusable cells rather than blaming just one", () => {
+    // The old behavior picked a single cell to blame. Reporting both is what lets
+    // one editing pass fix the row.
     const parsed = parse("username,email\n-bad-,n/a\n")
+    expect(parsed.dropped).toEqual([
+      { line: 2, reason: "bad-username", value: "-bad-" },
+      { line: 2, reason: "bad-email", value: "n/a" },
+    ])
+  })
+
+  it("reports an unusable cell even when a sibling cell resolves", () => {
+    // The shifted-column case: `n/a` in the email column beside a valid username.
+    // Before this was reported the row imported silently AND stored `n/a` as the
+    // student's contact address.
+    const parsed = parse("username,email\nada,n/a\n")
     expect(parsed.dropped).toEqual([
       { line: 2, reason: "bad-email", value: "n/a" },
     ])
+    expect(parsed.rows[0]?.identity).toEqual({ username: "ada" })
+    // And the unusable value never rides into roster.csv as metadata.
+    expect(parsed.rows[0]?.email).toBe("")
   })
 
   it("drops an unreadable bare line as bad-value, naming neither shape", () => {
@@ -256,6 +293,18 @@ describe("parseRosterImportFile", () => {
       // Not a plausible handle (dots and @), so it drops rather than becoming an
       // email identity — the teacher asserted this file is handles.
     ])
+  })
+
+  it("reads a headed CSV as a flat list under the username-list override", () => {
+    // The override is an assertion about EVERY line, so a header row is data too.
+    // Reading it columnar would silently ignore what the teacher asserted.
+    const parsed = parse("username\nada\nbob\n", "username-list")
+    expect(parsed.rows.map((r) => r.identity)).toEqual([
+      { username: "ada" },
+      { username: "bob" },
+    ])
+    // `username` is a recognized column name, so it's treated as the caption it is.
+    expect(parsed.dropped).toEqual([])
   })
 
   it("drops rows whose username is missing or not a valid GitHub handle", () => {

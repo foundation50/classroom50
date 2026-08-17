@@ -20,21 +20,26 @@ const ProblemList = ({ problems }: { problems: readonly ImportProblem[] }) => (
   </ul>
 )
 
-// The blocking report: shown INSTEAD of the preview when any row carries content
-// we couldn't use, so there is no table and no import button to press. The file
-// and the app disagree about what the file says, and importing the remainder
-// would act on that disagreement — see classifyImportProblems. Every problem is
-// listed, including the non-blocking ones, so one pass over the file fixes all of
-// them; re-importing is idempotent, so the round-trip costs only the upload.
+// The blocking report: shown INSTEAD of the preview when any row carries content we
+// couldn't use, so there is no table and no import button to press. Every problem is
+// listed, including the non-blocking ones, so one pass over the file fixes all.
 export const ImportBlockedReport = ({
   problems,
+  onRetry,
   onCancel,
 }: {
   problems: readonly ImportProblem[]
+  onRetry: () => void
   onCancel: () => void
 }) => {
   const { t } = useTranslation()
   const blocking = problems.filter((p) => p.blocking)
+  // A transient GitHub lookup failure blocks a file that is perfectly correct, so
+  // "fix these lines and re-upload" would send the teacher to edit nothing. When
+  // every blocker is that kind, offer the retry that actually resolves it instead.
+  const onlyTransient =
+    blocking.length > 0 &&
+    blocking.every((p) => p.key === "students.dropIdLookupFailed")
   return (
     <>
       <Alert tone="error" className="mb-4">
@@ -43,36 +48,44 @@ export const ImportBlockedReport = ({
             {t("students.importBlocked", { count: blocking.length })}
           </span>
           <ProblemList problems={problems} />
-          <span className="text-sm">{t("students.importBlockedHint")}</span>
+          {onlyTransient ? null : (
+            <span className="text-sm">{t("students.importBlockedHint")}</span>
+          )}
         </div>
       </Alert>
       <div className="modal-action">
         <Button variant="ghost" onClick={onCancel}>
           {t("common.cancel")}
         </Button>
+        {onlyTransient ? (
+          <Button variant="primary" onClick={onRetry}>
+            {t("students.importRetryLookup")}
+          </Button>
+        ) : null}
       </div>
     </>
   )
 }
 
-// The advisory report: every problem is a row with no identity cell at all, which
-// is a student who hasn't supplied a handle rather than a mistake to correct. The
-// import proceeds for everyone who IS addressable, so this only names who was
-// left out.
+// The advisory report: a row with no identity cell at all, which is a student who
+// hasn't supplied a handle rather than a mistake to correct. Filters for itself
+// rather than trusting the caller to pre-split — counting a blocking row as
+// "skipped" would tell the teacher the import continued when it did not.
 export const ImportSkippedReport = ({
   problems,
 }: {
   problems: readonly ImportProblem[]
 }) => {
   const { t } = useTranslation()
-  if (problems.length === 0) return null
+  const skipped = problems.filter((p) => !p.blocking)
+  if (skipped.length === 0) return null
   return (
     <Alert tone="warning" className="mb-4">
       <div className="flex flex-col gap-1">
         <span className="font-medium">
-          {t("students.importSkipped", { count: problems.length })}
+          {t("students.importSkipped", { count: skipped.length })}
         </span>
-        <ProblemList problems={problems} />
+        <ProblemList problems={skipped} />
       </div>
     </Alert>
   )

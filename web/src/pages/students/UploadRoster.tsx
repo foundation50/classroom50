@@ -75,10 +75,9 @@ type UploadRosterProps = {
   classroom: string
   client: GitHubClient
   onSuccess?: (result: BulkImportResult) => void
-  // Fired after any batch that sent email invitations — the dedicated
-  // "Email addresses" upload, or a roster CSV carrying email-identity rows. Each
-  // invited address lands a pending roster.csv row, so the parent refreshes the
-  // pending-invite and team caches; for a mixed batch onSuccess fires too.
+  // Fired after any batch that sent email invitations. Each invited address lands
+  // a pending roster.csv row, so the parent refreshes the pending-invite and team
+  // caches; for a mixed batch onSuccess fires too.
   onEmailSuccess?: (result: BulkInviteByEmailResult) => void
   // When true, render the modal (idle -> drop zone). The drop zone / Choose File
   // button drives file selection from there.
@@ -231,10 +230,18 @@ const UploadRoster = ({
   // never come back and the preview would sit empty with the button disabled.
   const preflightToken = useRef(0)
   useEffect(() => {
-    if (phase !== "preview" || parsedRows.length === 0) return
+    // Invalidate any in-flight run FIRST, so an early return still supersedes it.
+    // Otherwise a resolution started for the previous file keeps a live token and
+    // lands its rows here — and because its context was fetched for the old
+    // parseId, `preflight` stays null, which canProcess reads as "nothing to
+    // classify" and enables the import over rows the teacher never saw.
     const token = ++preflightToken.current
-    const fetchedFor = parseId
     /* eslint-disable react-hooks/set-state-in-effect */
+    if (phase !== "preview" || parsedRows.length === 0) {
+      setResolved(null)
+      return
+    }
+    const fetchedFor = parseId
     setPreflighting(true)
     setPreflightError(null)
     setPreflightContext(null)
@@ -409,9 +416,8 @@ const UploadRoster = ({
     [preflight],
   )
   // Email rows assigned teacher are an org-OWNER grant too: accepting an admin
-  // invitation makes that person an owner. They never reach the preflight, so
-  // fold them into the same gate rather than letting a roster CSV do silently
-  // what the dedicated email upload requires a checkbox for.
+  // invitation makes that person an owner. They never reach the preflight, so fold
+  // them into the same gate — which is now the only confirmation on any owner grant.
   const teacherEmailRows = useMemo(
     () => emailRows.filter((r) => isTeacherRole(roleFor(r.identity))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -484,6 +490,9 @@ const UploadRoster = ({
   const showDetails = detailsOpen || forceDetails
   const canProcess =
     resolvedRows.length > 0 &&
+    // Redundant with the render branch below, which replaces the whole preview
+    // when blocked — kept so the gate doesn't depend on a single render condition
+    // staying correct. Deliberately not separately observable in a test.
     !blocked &&
     !preflighting &&
     !preflightError &&
@@ -747,13 +756,14 @@ const UploadRoster = ({
           </div>
         )}
 
-        {/* A file carrying content we couldn't read replaces the preview
-            entirely: no table, no import button. Importing the remainder would act
-            on a file the teacher and the app disagree about. Resolution still runs
-            underneath, so an unusable github_id joins the list rather than waiting
-            for the teacher's next upload. */}
+        {/* Resolution still runs underneath a blocked file, so an unusable
+            github_id joins the list rather than waiting for the next upload. */}
         {phase === "preview" && blocked && (
-          <ImportBlockedReport problems={problems} onCancel={resetToDropZone} />
+          <ImportBlockedReport
+            problems={problems}
+            onRetry={() => applyKind(fileText, uploadKind)}
+            onCancel={resetToDropZone}
+          />
         )}
 
         {phase === "preview" && !blocked && (
@@ -829,8 +839,12 @@ const UploadRoster = ({
             {/* Rows neither stage could act on. A blocking one replaces the whole
                 preview (below), so what reaches here is only the advisory kind: a
                 row with no identity cell, i.e. a student who hasn't supplied a
-                handle. Everyone addressable still imports. */}
-            <ImportSkippedReport problems={problems} />
+                handle. Withheld when NO row survived — its copy promises that
+                everyone else still imports, and the noUsableRows alert below is
+                the honest message for a file where nobody did. */}
+            {resolvedRows.length > 0 ? (
+              <ImportSkippedReport problems={problems} />
+            ) : null}
 
             {parsedRows.length > 0 ? (
               // While identities resolve, show the table as a skeleton (loading).
@@ -848,7 +862,7 @@ const UploadRoster = ({
                   changes={rowChanges}
                   roleChanges={roleChangeByUser}
                   identityChanges={identityChangeByUser}
-                  noopRowKeys={alreadyOnRosterKeys}
+                  alreadyOnRosterKeys={alreadyOnRosterKeys}
                   loading={preflighting}
                   onRoleChange={(key, role) =>
                     setRolesByUser((prev) => ({ ...prev, [key]: role }))

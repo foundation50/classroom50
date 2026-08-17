@@ -207,8 +207,9 @@ export async function resolveImportIdentities(
       if (!login) {
         unusable.push({
           line: row.line,
-          // missingIds, unaskedIds and cappedIds are disjoint: each id takes
-          // exactly one path through the loop above.
+          // missingIds, unaskedIds and cappedIds are disjoint by construction:
+          // capped ids are sliced out of `askable`, and each askable id lands
+          // in exactly one of resolved / missing / unasked.
           reason: cappedIds.has(githubId)
             ? "id-lookup-capped"
             : unaskedIds.has(githubId)

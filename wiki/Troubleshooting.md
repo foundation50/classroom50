@@ -316,6 +316,10 @@ or `email` at all — commonly a student who hasn't given you a GitHub account y
 There's nothing to correct in that row, so the upload names it and imports everyone
 else.
 
+A leading title line is fine. If the first line of a one-column file is a caption
+your spreadsheet added (`GitHub Username`, `student_email`), it's recognized as a
+heading and skipped rather than treated as a student.
+
 ### A row can't be imported because its `github_id` doesn't match an account
 
 The web app's **Upload** reads a `github_id` column as the row's identity and

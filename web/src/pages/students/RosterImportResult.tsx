@@ -7,7 +7,7 @@ import type {
 } from "@/domain/students"
 import type { InviteOutcome, RoleChangeOutcome } from "./runRosterImport"
 
-export type ImportResultSectionRow = {
+type ImportResultSectionRow = {
   key: string
   label: string
   detail?: string

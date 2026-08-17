@@ -418,10 +418,14 @@ export async function bulkInviteByEmail(
   for (const target of stillDeferred) deferred.push(target.email)
 
   // Retain the invited emails on the roster, one commit for the whole batch
-  // (best-effort; a miss is appended by the acceptance reconcile). Every
-  // successful invite carries its invite team, so `invited` is the row set. The
-  // name/section the caller supplied ride along, since the row is written before
-  // the student has an account and nothing else can fill them in.
+  // (best-effort; appendEmailInviteRows swallows its own failures, and a miss is
+  // appended by the acceptance reconcile). Every successful invite carries its
+  // invite team, so `invited` is the row set — `skipped` deliberately is NOT: a
+  // 422 cannot distinguish already-invited from already-a-member, so appending for
+  // it risks writing a bogus identity-less row for an enrolled student whose row
+  // carries a different address. The name/section the caller supplied ride along,
+  // since the row is written before the student has an account and nothing else
+  // can fill them in.
   const metadataByEmail = new Map(targets.map((t) => [t.email, t]))
   await appendEmailInviteRows(
     client,

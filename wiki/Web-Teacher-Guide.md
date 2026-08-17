@@ -349,9 +349,11 @@ If any row carries a value the upload can't use — an address that isn't valid,
 `github_id` matching no account, a line that's neither a handle nor an address —
 it lists those rows with their line numbers and imports none of them. Fix the
 file and upload it again; re-uploading is safe, because students already in the
-classroom are left alone. The one exception is a row with no identifying column at
-all, usually a student who hasn't given you a GitHub account yet: that row is
-reported and skipped, and everyone else is imported.
+classroom are left alone. That check covers every identity column independently, so
+a shifted column is caught even when the row's other cells look fine. The one
+exception is a row with no identifying column at all, usually a student who hasn't
+given you a GitHub account yet: that row is reported and skipped, and everyone else
+is imported.
 
 ### Roster CSV fields
 

@@ -54,7 +54,8 @@ export type UnresolvedIdentity = {
 export type ParsedImportRow = {
   // The row's 1-based line in the uploaded file, carried so a problem found
   // downstream (an id that resolves to nothing) can be reported against the line
-  // the teacher has to edit, exactly like one found here.
+  // the teacher has to edit, exactly like one found here. A row spanning a quoted
+  // newline reports the line it ENDS on — still inside the record being edited.
   line: number
   identity: UnresolvedIdentity
   first_name?: string
@@ -64,16 +65,12 @@ export type ParsedImportRow = {
   role?: ClassroomRole
 }
 
-// Why a row yielded no usable identity. The distinction drives BOTH the copy and
-// whether the import may proceed, so the two can't drift:
-//   - a bad-* reason means a cell held content we couldn't use. Something is
-//     wrong with the file (a typo, a shifted column, the wrong file entirely),
-//     the teacher can see exactly what, and the import is blocked on it.
-//   - `incomplete` means every identity cell was blank — a student who hasn't
-//     supplied a handle yet. There is nothing to fix, so the row is reported and
-//     skipped rather than blocking the students who ARE addressable.
-// The offending cell rides along on a bad-* reason (and only there: `incomplete`
-// has nothing to show) so the report can name the value instead of just counting.
+// Why a row yielded no usable identity. A bad-* reason means a cell held content we
+// couldn't use; `incomplete` means every identity cell was blank. The distinction
+// drives both the copy and whether the import may proceed — see
+// classifyImportProblems for that rule. A bad-* reason carries the offending cell
+// (and only there: `incomplete` has nothing to show) so the report can name the
+// value instead of just counting.
 export type DroppedRow =
   | { line: number; reason: BlockingDropReason; value: string }
   | { line: number; reason: "incomplete" }
@@ -138,12 +135,11 @@ const countLines = (s: string, newline: string) => {
 // of that row, terminating newline included. Counting the newlines before it is
 // then Papa's own idea of where the row sits, so the two cannot drift.
 //
-// Two details keep that arithmetic exact. `text` must already have any BOM removed
-// (parseRosterImportFile does it), because Papa strips one internally and its
-// cursors would otherwise be one character ahead of the string being sliced. And a
-// final row with no trailing newline ends the file without consuming one, so it
-// takes the +1 that newline would have contributed — otherwise it inherits the
-// previous row's number, which also collides as a React key in the report.
+// `text` must arrive BOM-free (parseRosterImportFile strips it): Papa's cursors are
+// offsets into the text it stripped internally. And a final row with no trailing
+// newline ends the file without consuming one, so it takes the +1 that newline would
+// have contributed — otherwise it inherits the previous row's number, which also
+// collides as a React key in the report.
 const parseRowsWithLines = (text: string) => {
   const rows: { raw: Record<string, string>; line: number }[] = []
   // In `step` mode Papa reports each row's errors to the callback and leaves the
@@ -175,24 +171,42 @@ const parseRowsWithLines = (text: string) => {
 }
 
 // Read a row's identity cells in precedence order. A present-but-unusable
-// github_id is recorded rather than ignored: falling back to the username cell
-// would send the invite to whoever holds that login today, so the caller fails
-// closed on it.
-const readIdentity = (raw: Record<string, string>): UnresolvedIdentity => {
+// Read a row's identity cells in precedence order, reporting any cell whose
+// content we could not use. A present-but-unusable github_id is recorded ON the
+// identity (so resolution reports it as an unresolvable id rather than the parser
+// calling the row empty) — falling back to the username cell would send the invite
+// to whoever holds that login today, so the caller fails closed on it.
+//
+// The other two report through `rejected`, and deliberately do so even when the
+// row is otherwise importable: a shifted column usually leaves ONE cell garbled
+// beside a good one, and silently importing that row would write the garbage as
+// the student's stored address while reporting nothing. See classifyImportProblems.
+const readIdentity = (
+  raw: Record<string, string>,
+  line: number,
+): { identity: UnresolvedIdentity; rejected: DroppedRow[] } => {
   const idCell = (raw.github_id ?? "").trim()
   const identity: UnresolvedIdentity = {}
+  const rejected: DroppedRow[] = []
   if (idCell) {
     const resolved = resolveGitHubId(idCell)
     if (resolved === null) identity.malformedGithubId = idCell
     else identity.githubId = resolved
   }
+  const usernameCell = (raw.username ?? "").trim()
   const username = normalizeGithubUsername(raw.username ?? "")
-  if (username && isLikelyGithubUsername(username)) identity.username = username
+  if (username && isLikelyGithubUsername(username)) {
+    identity.username = username
+  } else if (usernameCell) {
+    rejected.push({ line, reason: "bad-username", value: usernameCell })
+  }
   const emailCell = stripMailto(raw.email ?? "")
   if (emailCell && isValidEmail(emailCell)) {
     identity.email = normalizeEmail(emailCell)
+  } else if (emailCell) {
+    rejected.push({ line, reason: "bad-email", value: emailCell })
   }
-  return identity
+  return { identity, rejected }
 }
 
 const hasAnyIdentity = (identity: UnresolvedIdentity) =>
@@ -201,16 +215,36 @@ const hasAnyIdentity = (identity: UnresolvedIdentity) =>
   identity.username !== undefined ||
   identity.email !== undefined
 
-// Which cell to blame for a row that yielded no identity, in the order a teacher
-// most likely meant the row to be read. A malformed github_id never reaches here:
-// it is recorded ON the identity, so resolution reports it as an unresolvable id
-// rather than the parser calling the row empty.
-const blameFor = (raw: Record<string, string>, line: number): DroppedRow => {
-  const email = stripMailto(raw.email ?? "")
-  if (email) return { line, reason: "bad-email", value: email }
-  const username = (raw.username ?? "").trim()
-  if (username) return { line, reason: "bad-username", value: username }
-  return { line, reason: "incomplete" }
+// The index of a leading caption line to skip, or -1.
+//
+// The first non-blank line of a one-column file is often a caption a spreadsheet
+// added ("GitHub Username", "student_email", or a bare "username"). Papa treats a
+// single-column first line as data and looksLikeHeaderRow cannot recognize it (one
+// unrecognized token is indistinguishable from a handle), so left alone it is
+// either reported as unusable content — BLOCKING the whole file — or, when the
+// caption happens to be handle-shaped, imported as a student named after a column.
+// Two signals mark a caption: the line is a recognized column name, or it parses as
+// nothing while a later line parses. One helper so the address-list and bare-list
+// readers can't diverge on it.
+const captionLineIndex = (
+  lines: readonly string[],
+  parses: (value: string) => boolean,
+): number => {
+  const first = lines.findIndex((l) => l.trim() !== "")
+  if (first < 0) return -1
+  const value = lines[first]!.trim()
+  if (
+    (RECOGNIZED_IMPORT_HEADERS as readonly string[]).includes(
+      value.toLowerCase(),
+    )
+  ) {
+    return first
+  }
+  if (parses(value)) return -1
+  const laterLineParses = lines.some(
+    (l, i) => i > first && l.trim() !== "" && parses(l.trim()),
+  )
+  return laterLineParses ? first : -1
 }
 
 // Read every line of a flat file as an email address, for the email-list
@@ -223,10 +257,13 @@ const parseAddressList = (text: string): ParsedImportFile => {
   const dropped: DroppedRow[] = []
   // Split the ORIGINAL text, not a trimmed copy: a reported line number is the
   // teacher's only way to find the row, so leading blank lines must still count.
-  splitLines(text).forEach((rawLine, index) => {
+  const lines = splitLines(text)
+  const caption = captionLineIndex(lines, (v) => isValidEmail(stripMailto(v)))
+  lines.forEach((rawLine, index) => {
     const line = index + 1
     const value = rawLine.trim()
     if (!value) return
+    if (index === caption) return
     const bare = stripMailto(value)
     if (!isValidEmail(bare)) {
       dropped.push({ line, reason: "bad-email", value })
@@ -235,6 +272,52 @@ const parseAddressList = (text: string): ParsedImportFile => {
     const email = normalizeEmail(bare)
     rows.push({ line, identity: { email }, email })
   })
+  return { rows, dropped }
+}
+
+// Read a header-less file one value per line, detecting each line's shape. Used
+// for the roster-csv default (a bare list, either shape per line) and for the
+// username-list override, where the teacher has asserted every line is a handle so
+// an address-shaped line is reported rather than re-read as an email identity.
+const parseFlatList = (text: string, kind: UploadKind): ParsedImportFile => {
+  const rows: ParsedImportRow[] = []
+  const dropped: DroppedRow[] = []
+  const asHandlesOnly = kind === "username-list"
+  // Split the ORIGINAL text, so a reported line number matches what the teacher
+  // sees in their editor even when the file opens with blank lines.
+  const lines = splitLines(text)
+  const parses = (value: string) => {
+    if (!asHandlesOnly && isValidEmail(stripMailto(value))) return true
+    const username = normalizeGithubUsername(value)
+    return Boolean(username && isLikelyGithubUsername(username))
+  }
+  const caption = captionLineIndex(lines, parses)
+
+  lines.forEach((rawLine, index) => {
+    const line = index + 1
+    const value = rawLine.trim()
+    if (!value) return
+    if (index === caption) return
+    const bare = stripMailto(value)
+    if (!asHandlesOnly && isValidEmail(bare)) {
+      const email = normalizeEmail(bare)
+      rows.push({ line, identity: { email }, email })
+      return
+    }
+    const username = normalizeGithubUsername(value)
+    if (!username || !isLikelyGithubUsername(username)) {
+      // Under the override the teacher named the shape, so blame that shape;
+      // under the default the line could have been either and was neither.
+      dropped.push({
+        line,
+        reason: asHandlesOnly ? "bad-username" : "bad-value",
+        value,
+      })
+      return
+    }
+    rows.push({ line, identity: { username } })
+  })
+
   return { rows, dropped }
 }
 
@@ -253,7 +336,6 @@ const parseAddressList = (text: string): ParsedImportFile => {
 // other shape — silently importing `octocat` as an email row (or vice versa) from
 // a file the teacher told us the shape of would defeat the point of the override.
 // "roster-csv" (the default) detects each bare line instead.
-//
 // Rows are NOT deduped here: two rows can only be known to name the same person
 // after ids resolve, so rosterImportResolve owns dedupe.
 export const parseRosterImportFile = (
@@ -269,11 +351,12 @@ export const parseRosterImportFile = (
   const text = rawText.replace(/^\uFEFF/, "")
   if (!text.trim()) return { rows: [], dropped: [] }
 
-  // Before any CSV reading: under the email override every line is an address, so
-  // a header row is data too. Papa.parse would otherwise consume the first line
-  // as headers and take the columnar branch on a file the teacher explicitly told
-  // us was a flat list.
+  // Before any CSV reading: an override is the teacher asserting what EVERY line
+  // is, so a header row is data too. Papa.parse would otherwise consume the first
+  // line as headers and take the columnar branch on a file they explicitly told us
+  // was a flat list.
   if (kind === "email-list") return parseAddressList(text)
+  if (kind === "username-list") return parseFlatList(text, kind)
 
   // Parse the un-trimmed text, so each row's cursor is an offset into the file the
   // teacher is looking at and a leading blank line still counts.
@@ -301,9 +384,14 @@ export const parseRosterImportFile = (
 
   if (hasIdentityColumn) {
     rawRows.forEach(({ raw, line }) => {
-      const identity = readIdentity(raw)
+      const { identity, rejected } = readIdentity(raw, line)
+      // Every unusable cell is reported, whether or not the row survives.
+      dropped.push(...rejected)
       if (!hasAnyIdentity(identity)) {
-        dropped.push(blameFor(raw, line))
+        // A row with nothing usable AND nothing to blame is merely incomplete —
+        // no identity cell was filled in at all. Anything blameable was already
+        // pushed above, so don't double-report it.
+        if (rejected.length === 0) dropped.push({ line, reason: "incomplete" })
         return
       }
       const cell = (header: OptionalImportHeader): string =>
@@ -319,7 +407,9 @@ export const parseRosterImportFile = (
         // The RAW cell, not the normalized identity address: metadata is compared
         // case-sensitively against the stored roster, so lower-casing here would
         // report a delta on every row whose stored address has a capital letter.
-        email: (raw.email ?? "").trim(),
+        // Dropped when the cell didn't parse as an address, so a value we've
+        // already called unusable can never be stored as someone's contact email.
+        email: identity.email ? (raw.email ?? "").trim() : "",
         section: cell("section"),
         role: coerceImportRole(cell("role")),
       })
@@ -327,38 +417,7 @@ export const parseRosterImportFile = (
     return { rows, dropped }
   }
 
-  // Split the ORIGINAL text, so a reported line number matches what the teacher
-  // sees in their editor even when the file opens with blank lines.
-  splitLines(text).forEach((rawLine, index) => {
-    const line = index + 1
-    const value = rawLine.trim()
-    if (!value) return
-    const bare = stripMailto(value)
-    // Under the roster-csv default an address is an email identity; under the
-    // username-list override the teacher has asserted every line is a handle.
-    if (kind !== "username-list" && isValidEmail(bare)) {
-      rows.push({
-        line,
-        identity: { email: normalizeEmail(bare) },
-        email: normalizeEmail(bare),
-      })
-      return
-    }
-    const username = normalizeGithubUsername(value)
-    if (!username || !isLikelyGithubUsername(username)) {
-      // Under the override the teacher named the shape, so blame that shape;
-      // under the default the line could have been either and was neither.
-      dropped.push({
-        line,
-        reason: kind === "username-list" ? "bad-username" : "bad-value",
-        value,
-      })
-      return
-    }
-    rows.push({ line, identity: { username } })
-  })
-
-  return { rows, dropped }
+  return parseFlatList(text, kind)
 }
 
 // Why an uploaded file yielded no importable rows, when the cause is the file's

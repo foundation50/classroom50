@@ -13,17 +13,26 @@ export type ImportProblem = {
   // The offending cell, verbatim (truncated), so the teacher can find it in the
   // file. Empty for `incomplete`, which has no cell to quote.
   value: string
-  // False for a row that's merely INCOMPLETE — no identity cell at all, i.e. a
-  // student who hasn't supplied a handle yet. Nothing to fix, so it's reported
-  // and skipped; every other problem blocks. See classifyImportProblems.
+  // False for a row that's merely INCOMPLETE — no identity cell at all. See
+  // classifyImportProblems for why that one case doesn't block.
   blocking: boolean
 }
 
 // A pathological cell (a whole pasted paragraph, a mis-quoted CSV field) must not
 // blow out the report, and the teacher only needs enough to locate it.
 const MAX_VALUE_CHARS = 80
-const truncate = (value: string) =>
-  value.length > MAX_VALUE_CHARS ? `${value.slice(0, MAX_VALUE_CHARS)}…` : value
+
+// The report renders each sentence through <Trans>, which parses the interpolated
+// string as markup — so an angle bracket in a cell would swallow the rest of the
+// value, hiding the very thing the teacher needs to find (`Ada <ada@uni.edu>`
+// would display as `Ada`). Strip the brackets rather than escaping them: the value
+// is a locator, and no valid handle, address, or id contains one.
+const displayValue = (value: string) => {
+  const flat = value.replace(/[<>]/g, "")
+  return flat.length > MAX_VALUE_CHARS
+    ? `${flat.slice(0, MAX_VALUE_CHARS)}…`
+    : flat
+}
 
 const DROP_KEYS: Record<DroppedRow["reason"], string> = {
   "bad-email": "students.dropBadEmail",
@@ -59,13 +68,13 @@ export const classifyImportProblems = (
     ...dropped.map((row) => ({
       line: row.line,
       key: DROP_KEYS[row.reason],
-      value: row.reason === "incomplete" ? "" : truncate(row.value),
+      value: row.reason === "incomplete" ? "" : displayValue(row.value),
       blocking: row.reason !== "incomplete",
     })),
     ...unusable.map((row) => ({
       line: row.line,
       key: UNUSABLE_KEYS[row.reason],
-      value: truncate(row.githubId),
+      value: displayValue(row.githubId),
       blocking: true,
     })),
   ]
