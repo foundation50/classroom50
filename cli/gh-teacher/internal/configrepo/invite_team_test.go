@@ -98,6 +98,29 @@ func TestInviteVectors_SharedParity(t *testing.T) {
 	}
 }
 
+// TestMarshalInviteDescription_ControlCharParity is the other half of the byte
+// contract the shared vectors pin: Go's json.Marshal agrees with JSON.stringify
+// on every control character, so the web's Go-parity escaper
+// (web/src/util/goJsonEscape.ts) must escape ONLY <, >, &, U+2028 and U+2029.
+// Asserted here as well because a toolchain that started emitting \u0008/\u000c
+// for \b/\f would silently un-align the two writers.
+func TestMarshalInviteDescription_ControlCharParity(t *testing.T) {
+	out, err := MarshalInviteDescription("cs\b\f\u0001\u007fx", "a@b")
+	if err != nil {
+		t.Fatalf("MarshalInviteDescription: %v", err)
+	}
+	for _, want := range []string{`\b`, `\f`, `\u0001`, "\u007f"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("record %q is missing %q", out, want)
+		}
+	}
+	for _, unwanted := range []string{`\u0008`, `\u000c`} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("record %q uses the long escape %q; the web writer emits the short form", out, unwanted)
+		}
+	}
+}
+
 // A single normalizer feeds both the hash and the stored email, so they can't
 // disagree about which address a team belongs to.
 func TestNormalizeInviteEmail(t *testing.T) {

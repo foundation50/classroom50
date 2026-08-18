@@ -31,8 +31,9 @@ func rosterCancelInviteCmd() *cobra.Command {
 			"student, and cleans up a genuine leftover under its own checks.\n\n" +
 			"For a student already on the roster with a username, use\n" +
 			"`gh teacher roster remove` (and `gh teacher remove` for the org).\n\n" +
-			"Exits 0 when nothing was pending; returns non-zero only if the\n" +
-			"cancellation itself, or the roster write following it, fails.",
+			"Exits 0 when nothing was pending; returns non-zero if the pending\n" +
+			"invitation belongs to another classroom in this org, or if the\n" +
+			"cancellation itself or the roster write following it fails.",
 		Example: "  gh teacher roster cancel-invite cs50-fall-2026 cs-principles ada@example.edu",
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -52,12 +53,14 @@ func rosterCancelInviteCmd() *cobra.Command {
 }
 
 // runRosterCancelInvite revokes the invitation first and retires its artifacts
-// only after a REAL cancellation, mirroring useCancelClassroomInvite. Both gates
-// are load-bearing: without a pending invitation nothing is written at all (an
-// accepted-but-unsynced invitation is indistinguishable from here, and the
-// invite team holds the only email→account mapping), and a 404'd DELETE means a
-// stale id — a live invitation for the same address may still exist, so
-// retiring its artifacts would strip someone who can still accept.
+// only after a REAL cancellation, mirroring useCancelClassroomInvite. Three
+// gates are load-bearing: without a pending invitation nothing is written at all
+// (an accepted-but-unsynced invitation is indistinguishable from here, and the
+// invite team holds the only email→account mapping); a pending invitation this
+// classroom doesn't own belongs to a sibling classroom in the same org
+// (requireClassroomOwnsInvite); and a 404'd DELETE means a stale id — a live
+// invitation for the same address may still exist, so retiring its artifacts
+// would strip someone who can still accept.
 func runRosterCancelInvite(client githubapi.Client, out, errOut io.Writer, org, classroom, email string) error {
 	email = configrepo.NormalizeInviteEmail(email)
 
@@ -71,6 +74,13 @@ func runRosterCancelInvite(client githubapi.Client, out, errOut io.Writer, org, 
 		_, _ = fmt.Fprintf(errOut, "If they already accepted, run `gh teacher roster sync %s %s` to record their username and github_id — it also collects a genuine leftover invite team or pending row under its own checks, which this command deliberately won't do without a pending invitation to revoke.\n",
 			org, classroom)
 		return nil
+	}
+
+	// A read, deliberately before the DELETE: a refusal leaves the invitation
+	// intact.
+	slug, err := requireClassroomOwnsInvite(client, org, classroom, email)
+	if err != nil {
+		return err
 	}
 
 	// Resolve the write target BEFORE cancelling: it's a read, so a config repo
@@ -91,9 +101,6 @@ func runRosterCancelInvite(client githubapi.Client, out, errOut io.Writer, org, 
 	}
 	_, _ = fmt.Fprintf(out, "%s: cancelled the invitation for %s\n", org, email)
 
-	// Recomputed, not read: the slug is a pure function of (classroom, email),
-	// and DeleteInviteTeam is fenced to that hashed shape.
-	slug := configrepo.InviteTeamName(classroom, email)
 	if err := configrepo.DeleteInviteTeam(client, org, slug); err != nil {
 		warnStrandedInviteTeam(errOut, "the invitation was cancelled, but deleting", org, slug, err)
 	} else {
@@ -130,16 +137,52 @@ func runRosterCancelInvite(client githubapi.Client, out, errOut io.Writer, org, 
 	return nil
 }
 
-// pendingEmailInvitationID finds the pending EMAIL invitation for email. Only
-// the Email field is matched: GitHub keys an invitation by login OR email, never
-// both, so a username invitation has no address to cancel this way.
+// requireClassroomOwnsInvite proves the pending invitation belongs to THIS
+// classroom, returning the invite team slug the teardown then deletes (a pure
+// function of (classroom, email), never read back — DeleteInviteTeam is fenced
+// to that hashed shape).
+//
+// Load-bearing because org invitations are org-scoped while everything this
+// command tears down is classroom-scoped: without the gate, cancelling in
+// classroom B revokes the live invitation classroom A sent, deletes none of A's
+// artifacts, and reports success — leaving A's student unable to accept against
+// a row nothing backs. The web needs no equivalent, taking an invitationId
+// picked from the classroom team's own pending list (useCancelClassroomInvite).
+//
+// The per-invite team is the only classroom-scoped record of an email invite, so
+// its presence is the ownership proof; a missing team means this classroom never
+// sent it (ReadInviteTeam propagates every non-404 failure, so a degraded read
+// never reads as absent).
+func requireClassroomOwnsInvite(client githubapi.Client, org, classroom, email string) (string, error) {
+	slug := configrepo.InviteTeamName(classroom, email)
+	state, ok, err := configrepo.ReadInviteTeam(client, org, slug)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("%s: the pending invitation for %s is not %s's — its metadata team %s does not exist, so nothing was cancelled; another classroom in this org sent it (cancel it there), or if the team was already removed run `gh teacher roster sync %s %s` to reconcile",
+			org, email, classroom, slug, org, classroom)
+	}
+	if state.Record != nil && state.Record.Classroom != classroom {
+		return "", fmt.Errorf("%s: the metadata team %s records classroom %s, not %s, so nothing was cancelled; run `gh teacher roster cancel-invite %s %s %s` instead",
+			org, slug, state.Record.Classroom, classroom, org, state.Record.Classroom, email)
+	}
+	return slug, nil
+}
+
+// pendingEmailInvitationID finds the pending EMAIL invitation for email. GitHub
+// keys an invitation by login OR email, never both, so a login-keyed one carries
+// no address to cancel this way — the same filter sync.go's reader applies.
 func pendingEmailInvitationID(pending []membership.PendingOrgInvitation, email string) (int64, bool) {
 	key := configrepo.NormalizeInviteEmail(email)
 	if key == "" {
 		return 0, false
 	}
 	for _, inv := range pending {
-		if inv.ID != 0 && configrepo.NormalizeInviteEmail(inv.Email) == key {
+		if inv.ID == 0 || inv.Login != "" {
+			continue
+		}
+		if configrepo.NormalizeInviteEmail(inv.Email) == key {
 			return inv.ID, true
 		}
 	}

@@ -53,6 +53,12 @@ type syncMock struct {
 	// test can stage a same-email re-invite in the commit→delete window.
 	pendingAfterWrite []map[string]any
 	teamListStatus    int
+	// staffMembers is each recorded staff team's membership, keyed by slug —
+	// the source of an appended row's team-derived role.
+	staffMembers map[string][]map[string]any
+	// classroomJSONStatus fails the classroom.json read, the degraded case that
+	// must make the whole pass read-mostly.
+	classroomJSONStatus int
 
 	calls        []inviteCall
 	deletedTeams []string
@@ -87,6 +93,10 @@ func (m *syncMock) handler(t *testing.T) http.Handler {
 				return
 			}
 			_ = json.NewEncoder(w).Encode(m.classroomMembers)
+			return
+		}
+		if members, ok := m.staffMembers[slug]; ok {
+			_ = json.NewEncoder(w).Encode(members)
 			return
 		}
 		team := m.findTeam(slug)
@@ -132,6 +142,10 @@ func (m *syncMock) handler(t *testing.T) http.Handler {
 	// committed latches on the roster write so a same-email re-invite can be
 	// staged in the commit→delete window.
 	tracked := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if m.classroomJSONStatus != 0 && strings.HasSuffix(r.URL.Path, "/classroom.json") {
+			w.WriteHeader(m.classroomJSONStatus)
+			return
+		}
 		base.ServeHTTP(w, r)
 		if r.Method == http.MethodPost && r.URL.Path == "/repos/o/classroom50/git/trees" {
 			m.committed = true
@@ -611,93 +625,310 @@ func mustSyncErr(t *testing.T, mock *syncMock, write bool) error {
 	return err
 }
 
-// A pending-looking row whose github_id cell is present but unusable is NOT
-// claimable by the configrepo helpers, so planning a fold for it would report a
-// change `--write` can't apply — leaving a polling caller on exit 2 forever.
-// Report it once instead, and converge.
-func TestRunRosterSync_UnresolvedGitHubIDRowIsReportedNotPlanned(t *testing.T) {
+// syncClassroomJSON is inviteTestClassroomJSON plus the keys only the reconcile
+// reads: the staff teams an appended row's role comes from, and the archive flag.
+func syncClassroomJSON(t *testing.T, archived bool, staff map[string]string) string {
+	t.Helper()
+	payload := map[string]any{
+		"name": inviteTestClassroom,
+		"team": map[string]any{"id": inviteTestClassroomTeamID, "slug": syncTestClassroomTeamSlug},
+	}
+	if archived {
+		payload["active"] = false
+	}
+	if len(staff) > 0 {
+		teams := map[string]any{}
+		for role, slug := range staff {
+			teams[role] = map[string]any{"id": 900, "slug": slug}
+		}
+		payload["teams"] = teams
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal classroom.json: %v", err)
+	}
+	return string(b)
+}
+
+// F5: an archived classroom's roster is frozen (the web's syncRosterFromTeam
+// asserts it), so `--write` is refused — but the dry run still runs, so the
+// leftovers stay inspectable.
+func TestRunRosterSync_ArchivedClassroomRefusesWrite(t *testing.T) {
+	roster := storedRosterHeader + ",Ada,Lovelace," + inviteTestEmail + ",section-1,,student\n"
+
+	apply := newSyncMock(t, roster)
+	apply.files[inviteTestClassroom+"/classroom.json"] = syncClassroomJSON(t, true, nil)
+	apply.teams = []syncTeam{acceptedInviteTeam(t)}
+	_, _, err := runSync(t, apply, true)
+	if err == nil || !strings.Contains(err.Error(), "archived") {
+		t.Fatalf("err = %v, want a refusal naming the archived classroom", err)
+	}
+	if len(apply.blobs) != 0 || len(apply.deletedTeams) != 0 {
+		t.Errorf("wrote the roster (%d blob(s)) or deleted %v for an archived classroom", len(apply.blobs), apply.deletedTeams)
+	}
+	if writes := writeCalls(apply.calls); len(writes) != 0 {
+		t.Errorf("issued %d write request(s) for an archived classroom: %#v", len(writes), writes)
+	}
+
+	dry := newSyncMock(t, roster)
+	dry.files[inviteTestClassroom+"/classroom.json"] = syncClassroomJSON(t, true, nil)
+	dry.teams = []syncTeam{acceptedInviteTeam(t)}
+	out, _, dryErr := runSync(t, dry, false)
+	if got := exitCode(dryErr); got != 2 {
+		t.Fatalf("dry-run exit code = %d (err %v), want 2: a dry run stays allowed", got, dryErr)
+	}
+	if !strings.Contains(out, inviteTestEmail) {
+		t.Errorf("the dry run must still report what it found:\n%s", out)
+	}
+}
+
+// F9: the appended row records the role of the classroom team the invitee is
+// actually on — the web writes the team-derived `role`, so a staff invitee must
+// not be filed as a student.
+func TestRunRosterSync_AppendedRowRecordsTheSourceTeamRole(t *testing.T) {
+	const taSlug = syncTestClassroomTeamSlug + "-ta"
+
+	mock := newSyncMock(t, storedRosterHeader)
+	mock.files[inviteTestClassroom+"/classroom.json"] = syncClassroomJSON(t, false, map[string]string{"ta": taSlug})
+	mock.classroomMembers = []map[string]any{}
+	mock.staffMembers = map[string][]map[string]any{
+		taSlug: {{"login": syncTestAcceptedLogin, "id": syncTestAcceptedID}},
+	}
+	mock.teams = []syncTeam{acceptedInviteTeam(t)}
+
+	if _, _, err := runSync(t, mock, true); err != nil {
+		t.Fatalf("runRosterSync: %v", err)
+	}
+	rows := committedRosterRows(t, mock)
+	if len(rows) != 1 {
+		t.Fatalf("committed %d row(s), want the appended one: %#v", len(rows), rows)
+	}
+	if rows[0].Role != "ta" {
+		t.Errorf("appended row role = %q, want the source team's ta", rows[0].Role)
+	}
+}
+
+// A person on both a staff and the student team records the staff role — the
+// web's ROLE_RANK — regardless of which team is read first.
+func TestRunRosterSync_AppendedRowPrefersTheStaffRole(t *testing.T) {
+	const taSlug = syncTestClassroomTeamSlug + "-ta"
+	invitee := map[string]any{"login": syncTestAcceptedLogin, "id": syncTestAcceptedID}
+
+	mock := newSyncMock(t, storedRosterHeader)
+	mock.files[inviteTestClassroom+"/classroom.json"] = syncClassroomJSON(t, false, map[string]string{"ta": taSlug})
+	mock.classroomMembers = []map[string]any{invitee}
+	mock.staffMembers = map[string][]map[string]any{taSlug: {invitee}}
+	mock.teams = []syncTeam{acceptedInviteTeam(t)}
+
+	if _, _, err := runSync(t, mock, true); err != nil {
+		t.Fatalf("runRosterSync: %v", err)
+	}
+	rows := committedRosterRows(t, mock)
+	if len(rows) != 1 || rows[0].Role != "ta" {
+		t.Errorf("committed rows = %#v, want the staff role recorded", rows)
+	}
+}
+
+// F4: a degraded classroom read must clear the trusted flag its own warning
+// promises — otherwise the pass reaps rows and deletes teams while telling the
+// teacher nothing was removed.
+func TestRunRosterSync_DegradedClassroomReadSuppressesRemovals(t *testing.T) {
+	roster := storedRosterHeader + ",,,gone@uni.edu,,,student\n"
+	staleTeam := syncTeam{
+		slug:      configrepo.InviteTeamName(inviteTestClassroom, "stale@uni.edu"),
+		desc:      syncInviteRecord(t, "stale@uni.edu"),
+		createdAt: time.Now().Add(-2 * contract.InviteTeamGCMinAge),
+	}
+
+	for name, degrade := range map[string]func(*syncMock){
+		"classroom.json unreadable":    func(m *syncMock) { m.classroomJSONStatus = http.StatusInternalServerError },
+		"classroom members unreadable": func(m *syncMock) { m.classroomStatus = http.StatusForbidden },
+	} {
+		t.Run(name, func(t *testing.T) {
+			mock := newSyncMock(t, roster)
+			mock.teams = []syncTeam{staleTeam}
+			degrade(mock)
+
+			out, errOut, err := runSync(t, mock, true)
+			if got := exitCode(err); got != 1 {
+				t.Fatalf("exit code = %d (err %v), want 1 for a degraded read", got, err)
+			}
+			if len(mock.blobs) != 0 {
+				t.Errorf("reaped a pending row on a degraded read: %#v", mock.blobs)
+			}
+			if len(mock.deletedTeams) != 0 {
+				t.Errorf("deleted %v on a degraded read", mock.deletedTeams)
+			}
+			if strings.Contains(out, "delete the leftover metadata team") {
+				t.Errorf("reported a delete it will not make:\n%s", out)
+			}
+			if !strings.Contains(errOut, "Warning") {
+				t.Errorf("stderr must warn:\n%s", errOut)
+			}
+		})
+	}
+}
+
+// F7: two rows sharing a username (one already carrying a resolved id) — the
+// backfill helper matches the FIRST such row, so planning against the other
+// would apply nothing and leave every dry run on exit 2 forever.
+func TestRunRosterSync_DuplicateUsernameBackfillConverges(t *testing.T) {
+	roster := storedRosterHeader +
+		syncTestAcceptedLogin + ",Ada,Lovelace,,s1,101,student\n" +
+		syncTestAcceptedLogin + ",Ada,Duplicate,,s2,,student\n"
+
+	apply := newSyncMock(t, roster)
+	_, errOut, err := runSync(t, apply, true)
+	if got := exitCode(err); got != 0 {
+		t.Fatalf("--write exit code = %d (err %v), want 0", got, err)
+	}
+	if len(apply.blobs) != 0 {
+		t.Errorf("committed %d blob(s) for a backfill nothing can apply: %#v", len(apply.blobs), apply.blobs)
+	}
+	if !strings.Contains(errOut, syncTestAcceptedLogin) {
+		t.Errorf("stderr must report the duplicate username:\n%s", errOut)
+	}
+
+	again := newSyncMock(t, roster)
+	if got := exitCode(mustSyncErr(t, again, false)); got != 0 {
+		t.Fatalf("second dry run exit code = %d, want 0: the pass must converge", got)
+	}
+}
+
+// A pending-looking row whose github_id cell addresses no account is claimable —
+// the web's filter reads such a cell as absent (resolveGitHubId returns null),
+// so the CLI must fold onto it too rather than strand it as un-foldable and
+// un-reapable forever.
+func TestRunRosterSync_RowWithAnUnusableGitHubIDFoldsLikeTheWeb(t *testing.T) {
 	// github_id 0 reads as "present but addresses no account" (parseGitHubID).
 	roster := storedRosterHeader + ",Ada,Lovelace," + inviteTestEmail + ",section-1,0,student\n"
+	slug := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
 
 	dry := newSyncMock(t, roster)
 	dry.teams = []syncTeam{acceptedInviteTeam(t)}
-	out, errOut, err := runSync(t, dry, false)
-	if got := exitCode(err); got != 0 {
-		t.Fatalf("dry-run exit code = %d (err %v), want 0: nothing here can be applied", got, err)
+	out, _, err := runSync(t, dry, false)
+	if got := exitCode(err); got != 2 {
+		t.Fatalf("dry-run exit code = %d (err %v), want 2 for a fold pending", got, err)
 	}
-	if strings.Contains(out, "accepted — record as") || strings.Contains(out, "drop the pending row") {
-		t.Errorf("planned a fold/reap the helpers will refuse:\n%s", out)
-	}
-	if !strings.Contains(errOut, inviteTestEmail) || !strings.Contains(errOut, "github_id") {
-		t.Errorf("stderr must name the row and its unusable github_id:\n%s", errOut)
+	if !strings.Contains(out, "accepted — record as") {
+		t.Errorf("dry run must report the fold:\n%s", out)
 	}
 	if writes := writeCalls(dry.calls); len(writes) != 0 {
 		t.Errorf("dry run issued %d write request(s): %#v", len(writes), writes)
 	}
 
-	// --write must make no commit, keep the metadata team (the only record of
-	// the address the teacher needs), and leave the next dry run at the same
-	// exit code — i.e. the pass converges.
 	apply := newSyncMock(t, roster)
 	apply.teams = []syncTeam{acceptedInviteTeam(t)}
-	if _, _, err := runSync(t, apply, true); exitCode(err) != 0 {
-		t.Fatalf("--write exit code = %d (err %v), want 0", exitCode(err), err)
+	if _, _, err := runSync(t, apply, true); err != nil {
+		t.Fatalf("--write: %v", err)
 	}
-	if len(apply.blobs) != 0 {
-		t.Errorf("committed %d blob(s) for a row nothing could change: %#v", len(apply.blobs), apply.blobs)
+	rows := committedRosterRows(t, apply)
+	if len(rows) != 1 || rows[0].Username != syncTestAcceptedLogin || rows[0].GitHubID != syncTestAcceptedID {
+		t.Fatalf("committed rows = %#v, want the row folded and its cell repaired", rows)
 	}
-	if len(apply.deletedTeams) != 0 {
-		t.Errorf("deleted %v; that team holds the only record of the address", apply.deletedTeams)
+	if len(apply.deletedTeams) != 1 || apply.deletedTeams[0] != slug {
+		t.Errorf("deleted teams = %v, want the recovered %s retired", apply.deletedTeams, slug)
 	}
 
-	again := newSyncMock(t, roster)
-	again.teams = []syncTeam{acceptedInviteTeam(t)}
-	if _, _, err := runSync(t, again, false); exitCode(err) != 0 {
+	clean := newSyncMock(t, rosterCSVContent(t, rows...))
+	if _, _, err := runSync(t, clean, false); exitCode(err) != 0 {
 		t.Fatalf("second dry run exit code = %d (err %v), want 0: the pass must converge", exitCode(err), err)
 	}
 }
 
-// Same rule on the reap side: with nothing backing the address, a row carrying
-// an unusable github_id cell is still not the reaper's to drop.
-func TestRunRosterSync_UnresolvedGitHubIDRowIsNotReaped(t *testing.T) {
+// Same rule on the reap side: with no invitation and no metadata team backing
+// the address, a row carrying an unusable github_id cell is a dead pending row
+// like any other — the web removes it, so this must too.
+func TestRunRosterSync_UnresolvedGitHubIDRowIsReaped(t *testing.T) {
 	// Above 2^53: readable, but past what the web app can address exactly, so
-	// parseGitHubID leaves it unresolved and EncodeRoster preserves the cell.
+	// neither reader treats it as identity.
 	mock := newSyncMock(t, storedRosterHeader+",,,gone@uni.edu,,9007199254740992,student\n")
 
+	out, _, err := runSync(t, mock, true)
+	if got := exitCode(err); got != 0 {
+		t.Fatalf("exit code = %d (err %v), want 0", got, err)
+	}
+	if !strings.Contains(out, "drop the pending row") {
+		t.Errorf("the dead row must be reported as dropped:\n%s", out)
+	}
+	rows := committedRosterRows(t, mock)
+	if len(rows) != 0 {
+		t.Errorf("committed rows = %#v, want the dead pending row dropped", rows)
+	}
+}
+
+// F1/F2: a recovery whose account is already named by a row with an EMPTY email
+// column must have its address recorded there — otherwise nothing holds the
+// invited address and retiring the metadata team would destroy the only record
+// of it.
+func TestRunRosterSync_RecordsTheRecoveredAddressOnAnIdentityRow(t *testing.T) {
+	slug := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
+	for name, roster := range map[string]string{
+		"matched by login and id": storedRosterHeader + syncTestAcceptedLogin + ",Ada,Lovelace,,section-1,101,student\n",
+		"matched by github_id":    storedRosterHeader + ",Ada,Lovelace,,section-1,101,student\n",
+		"matched by login only":   storedRosterHeader + syncTestAcceptedLogin + ",Ada,Lovelace,,section-1,,student\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			dry := newSyncMock(t, roster)
+			dry.teams = []syncTeam{acceptedInviteTeam(t)}
+			if got := exitCode(mustSyncErr(t, dry, false)); got != 2 {
+				t.Fatalf("dry-run exit code = %d, want 2: the address is not recorded yet", got)
+			}
+
+			apply := newSyncMock(t, roster)
+			apply.teams = []syncTeam{acceptedInviteTeam(t)}
+			if _, _, err := runSync(t, apply, true); err != nil {
+				t.Fatalf("--write: %v", err)
+			}
+			rows := committedRosterRows(t, apply)
+			if len(rows) != 1 || rows[0].Email != inviteTestEmail {
+				t.Fatalf("committed rows = %#v, want the recovered address recorded", rows)
+			}
+			if rows[0].FirstName != "Ada" || rows[0].Section != "section-1" {
+				t.Errorf("the fill overwrote teacher-owned metadata: %#v", rows[0])
+			}
+			if len(apply.deletedTeams) != 1 || apply.deletedTeams[0] != slug {
+				t.Errorf("deleted teams = %v; the team may retire once its address is recorded", apply.deletedTeams)
+			}
+
+			clean := newSyncMock(t, rosterCSVContent(t, rows...))
+			if got := exitCode(mustSyncErr(t, clean, false)); got != 0 {
+				t.Fatalf("second dry run exit code = %d, want 0: the pass must converge", got)
+			}
+		})
+	}
+}
+
+// F1: the teardown is gated on what the commit APPLIED, not on what the scan
+// recovered. A row that already names the account but records the teacher's own
+// address gets no write (theirs stands), so nothing holds the INVITED address —
+// and the team holding it must survive.
+//
+// This also pins the no-empty-diff rule: a pass with nothing to apply must
+// create no commit at all, so a polling caller can tell progress from churn.
+func TestRunRosterSync_KeepsTheTeamWhenNoRowRecordedTheAddress(t *testing.T) {
+	stored := storedRosterHeader + syncTestAcceptedLogin + ",Ada,Lovelace,ada@personal.example,section-1,101,student\n"
+	slug := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
+
+	mock := newSyncMock(t, stored)
+	mock.teams = []syncTeam{acceptedInviteTeam(t)}
 	out, errOut, err := runSync(t, mock, true)
 	if got := exitCode(err); got != 0 {
 		t.Fatalf("exit code = %d (err %v), want 0", got, err)
 	}
 	if len(mock.blobs) != 0 {
-		t.Errorf("committed %d blob(s); the row is not claimable: %#v", len(mock.blobs), mock.blobs)
-	}
-	if strings.Contains(out, "drop the pending row") {
-		t.Errorf("planned a reap the helpers will refuse:\n%s", out)
-	}
-	if !strings.Contains(errOut, "gone@uni.edu") {
-		t.Errorf("stderr must name the row it left alone:\n%s", errOut)
-	}
-}
-
-// Every planned edit can be refused by the configrepo helpers, whose
-// claimable-row rule is the authority. Re-encoding the untouched rows then lands
-// a real commit with an empty diff, which is worse than doing nothing: it makes
-// the roster history unreadable and a polling caller can't tell progress from
-// churn.
-func TestRunRosterSync_RefusedEditsCommitNoEmptyDiff(t *testing.T) {
-	stored := storedRosterHeader + ",Ada,Lovelace," + inviteTestEmail + ",section-1,0,student\n"
-
-	mock := newSyncMock(t, stored)
-	mock.teams = []syncTeam{acceptedInviteTeam(t)}
-	if _, _, err := runSync(t, mock, true); err != nil {
-		t.Fatalf("runRosterSync: %v", err)
-	}
-	for _, blob := range mock.blobs {
-		if blob == stored {
-			t.Errorf("POSTed a roster blob byte-identical to what is stored:\n%s", blob)
-		}
+		t.Errorf("committed %d blob(s) with nothing to apply: %#v", len(mock.blobs), mock.blobs)
 	}
 	if n := countCalls(mock.calls, http.MethodPost, "/repos/o/classroom50/git/commits"); n != 0 {
 		t.Errorf("created %d commit(s) with nothing applied", n)
+	}
+	if len(mock.deletedTeams) != 0 {
+		t.Fatalf("deleted %v; that team holds the only record of %s", mock.deletedTeams, inviteTestEmail)
+	}
+	if !strings.Contains(errOut, slug) || !strings.Contains(errOut, inviteTestEmail) {
+		t.Errorf("stderr must say which team was kept and whose address it holds:\n%s", errOut)
+	}
+	if strings.Contains(out, "deleted metadata team") {
+		t.Errorf("reported a delete it did not make:\n%s", out)
 	}
 }

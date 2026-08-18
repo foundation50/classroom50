@@ -402,23 +402,21 @@ pending, so it deliberately does nothing. For the full list of what reconciles,
 see
 [What triggers a reconcile](How-Classroom-50-Works#what-triggers-a-reconcile).
 
-### `roster sync` keeps reporting a pending row it won't record
+### A pending row shows a `github_id` that can't be an account
 
-The warning names the row and the value in the way:
+Nothing to fix, and nothing is stuck. A cell that addresses no account — `0`, a
+negative number, or one impossibly large for a GitHub account — isn't an
+identity, so the row still counts as "invited, not yet joined". When the student
+accepts, `roster sync` records their username and real `github_id` over that
+cell, keeping the name and section you'd already typed; and if the invitation is
+gone with nothing backing the address any more, the row is dropped like any other
+dead pending row. The web app reads the cell the same way, so opening the roster
+in a browser reconciles it identically.
 
-```text
-left the pending row for ada@example.edu alone — its github_id cell ("5.83231E+05")
-addresses no account, and a row with a github_id is never treated as merely invited
-```
-
-A row is only treated as "invited, not yet joined" when it carries **no**
-`github_id` at all. A cell that's present but unusable — a spreadsheet turning
-`583231` into `5.83231E+05`, or a hand-edit — counts as an identity, so the
-reconcile can neither fill the row in nor drop it, and reports it instead of
-planning a change `--write` could never make. Clear that cell in the stored
-`roster.csv` (or fill in the student's username by hand with
-`gh teacher roster add`), then re-run the sync. The invite team retaining the
-address is kept until the row is recorded, so nothing is lost in the meantime.
+A row that names an account *and* a `github_id` belonging to a different one is a
+separate case: `gh teacher roster import` fails that line rather than guessing
+which student you meant — see
+[`github_id … is not this account's id`](#github_id--is-not-this-accounts-id-when-importing-a-roster-csv).
 
 ### `gh teacher roster sync` exits 1: "the reconcile was incomplete"
 

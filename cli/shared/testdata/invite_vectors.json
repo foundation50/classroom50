@@ -59,6 +59,13 @@
       "email": "a@b",
       "slug": "invite-80262c1d98bc9dc4",
       "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"a@b\",\"classroom\":\"cs\\u2028x\\u2029y\"}"
+    },
+    {
+      "why": "the C0 control boundary, where the two encoders AGREE: Go emits the same short \\b/\\f as JSON.stringify (not \\u0008/\\u000c), \\u0001 for a control with no short form, and leaves DEL raw — so the web's Go-parity escaper must not touch them. Synthetic input: it pins the escaping contract, not a realistic classroom name.",
+      "classroom": "cs\b\f\u0001\u007fx",
+      "email": "a@b",
+      "slug": "invite-fbe25e434d618ef7",
+      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"a@b\",\"classroom\":\"cs\\b\\f\\u0001\u007fx\"}"
     }
   ]
 }

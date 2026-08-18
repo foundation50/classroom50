@@ -84,23 +84,21 @@ type RosterRow struct {
 // isRaw reports whether the row is a preserved-but-unparsed record.
 func (r RosterRow) isRaw() bool { return r.raw != nil }
 
-// UnresolvedGitHubID returns the github_id cell of a row whose cell was
-// readable but addresses no account (see parseGitHubID), else "". Exported so a
-// caller can name the offending value when reporting a row it must leave alone.
-func (r RosterRow) UnresolvedGitHubID() string { return r.githubIDRaw }
-
 // IsPendingEmailInvite reports whether the row is an email-ONLY invite row: no
-// username, no github_id cell at all (a present-but-unresolved one counts as
-// identity), and an address to key on.
+// username, no github_id that addresses an account, and an address to key on. A
+// present-but-unresolved cell (0, negative, past 2^53 — see parseGitHubID) is
+// NOT identity: it addresses nobody, so treating it as one would strand the row
+// forever, unfoldable and unreapable by either tool.
 //
 // This is the single source of the claimable-row rule the pending-row helpers
 // below enforce (findPendingEmailRow, UpsertRosterRow's email fallback), so a
 // caller deciding what to plan and the helper applying it agree — a planner
 // guessing at the rule plans edits these helpers then refuse, which a --write
-// pass would report and silently skip forever.
+// pass would report and silently skip forever. Mirrors the web's
+// removeEmailInviteRows filter: no username and resolveGitHubId() === null.
 func (r RosterRow) IsPendingEmailInvite() bool {
 	return !r.isRaw() && r.Username == "" &&
-		r.GitHubID == 0 && r.githubIDRaw == "" &&
+		r.GitHubID == 0 &&
 		NormalizeInviteEmail(r.Email) != ""
 }
 
@@ -427,7 +425,7 @@ func collectExtraColumns(rows []RosterRow) []string {
 // The email fallback finishes what an email invite started: that row carries
 // only the invited address until the student accepts, so adding them by username
 // would otherwise leave a second row for the same person. It is deliberately
-// narrow — only a row with NO username and NO github_id cell at all is
+// narrow — only a row with NO username and NO github_id addressing an account is
 // claimable, so two students sharing a contact email can never overwrite each
 // other, and a username match always wins. An email claim does NOT inherit the
 // pending row's Role (an email invite may have been for staff; the team is the
@@ -466,8 +464,8 @@ func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 	if row.Email != "" {
 		for i := range rows {
 			// "Identity-less" here means exactly what the reader means, via the
-			// shared rule: a present github_id cell counts even when it didn't
-			// resolve, so a claim can't silently discard what the teacher typed.
+			// shared rule: a github_id cell that addresses no account is not
+			// identity, so such a row is still the invite's to finish.
 			if !rows[i].IsPendingEmailInvite() {
 				continue
 			}
@@ -542,11 +540,10 @@ func UpdateRosterRow(rows []RosterRow, username string, p RosterPatch) (out []Ro
 // email (normalized: trimmed, case-insensitive), or -1.
 //
 // The claimable set is deliberately NARROW (RosterRow.IsPendingEmailInvite) —
-// no username and no github_id cell at all, so a present-but-unresolved cell
-// still protects a row — because every caller either rewrites or drops the row
-// it finds: a student who already has an account, and a classmate merely
-// sharing a contact address, must never be touched. Mirrors the web's
-// removeEmailInviteRows filter.
+// no username and no github_id addressing an account — because every caller
+// either rewrites or drops the row it finds: a student who already has an
+// account, and a classmate merely sharing a contact address, must never be
+// touched. Mirrors the web's removeEmailInviteRows filter.
 func findPendingEmailRow(rows []RosterRow, email string) int {
 	key := NormalizeInviteEmail(email)
 	if key == "" {
@@ -628,6 +625,46 @@ func ClaimPendingEmailRow(rows []RosterRow, email, login string, githubID int64)
 		rows[i].githubIDRaw = ""
 	}
 	return rows, true
+}
+
+// RecordRosterEmail fills email onto the row this recovery identifies — the
+// first naming login (case-insensitive), else the first carrying githubID — and
+// ONLY when its email cell is blank. Returns the slice and whether a cell was
+// filled.
+//
+// This is the other half of the acceptance fold: a recovery whose row already
+// names the account but records no address has nowhere for the recovered address
+// to land, and the invite team holding it is retired right after. The login-then-
+// id order matches the web's fold. Deliberately fill-only — an address the
+// teacher entered is theirs and is never replaced by the invited one.
+func RecordRosterEmail(rows []RosterRow, login string, githubID int64, email string) (out []RosterRow, recorded bool) {
+	email = strings.TrimSpace(email)
+	login = strings.TrimSpace(login)
+	if email == "" {
+		return rows, false
+	}
+	fill := func(i int) ([]RosterRow, bool) {
+		if strings.TrimSpace(rows[i].Email) != "" {
+			return rows, false
+		}
+		rows[i].Email = email
+		return rows, true
+	}
+	if login != "" {
+		for i := range rows {
+			if !rows[i].isRaw() && strings.EqualFold(strings.TrimSpace(rows[i].Username), login) {
+				return fill(i)
+			}
+		}
+	}
+	if githubID > 0 {
+		for i := range rows {
+			if !rows[i].isRaw() && rows[i].GitHubID == githubID {
+				return fill(i)
+			}
+		}
+	}
+	return rows, false
 }
 
 // BackfillRosterGitHubID records githubID on the row matching username

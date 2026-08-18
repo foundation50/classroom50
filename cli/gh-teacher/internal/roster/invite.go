@@ -106,12 +106,13 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 	if err != nil {
 		return err
 	}
-	if holder, claimed := rosterEmailClaim(rows, email); claimed {
-		if holder == "" {
-			return fmt.Errorf("%s is already invited to %s — run `gh teacher roster sync %s %s` if they accepted, or `gh teacher roster cancel-invite %s %s %s` to revoke it; nothing was sent",
-				email, classroom, org, classroom, org, classroom, email)
-		}
-		return fmt.Errorf("%s is already on the %s roster as %s, so nothing was sent — use `gh teacher roster update %s %s %s` to correct their details",
+	holder, pending := rosterEmailClaim(rows, email)
+	if pending {
+		return fmt.Errorf("%s is already invited to %s — run `gh teacher roster sync %s %s` if they accepted, or `gh teacher roster cancel-invite %s %s %s` to revoke it; nothing was sent",
+			email, classroom, org, classroom, org, classroom, email)
+	}
+	if holder != "" {
+		_, _ = fmt.Fprintf(errOut, "Note: %s already appears on the %s roster on %s's row. An address can be shared (a parent or a lab contact), so the invitation is still being sent and will add a second row for it — if that row is the same person, cancel this invite and run `gh teacher roster update %s %s %s` instead.\n",
 			email, classroom, holder, org, classroom, holder)
 	}
 
@@ -157,8 +158,10 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 			return configwrite.CommitChange{}, err
 		}
 		// Re-check under the rebase: a concurrent writer (the web app, or a
-		// sync) may have claimed the address since the pre-send read.
-		if _, claimed := rosterEmailClaim(current, email); claimed {
+		// sync) may have added the pending row since the pre-send read. Only a
+		// pending row blocks it — an account row merely sharing the address is
+		// someone else, and this send needs its own row.
+		if _, pending := rosterEmailClaim(current, email); pending {
 			return configwrite.CommitChange{}, nil
 		}
 		appended = true
@@ -192,20 +195,29 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 	return nil
 }
 
-// rosterEmailClaim reports whether ANY row already holds this address, and the
-// username holding it ("" for a pending email-only row). Both block a send: a
-// second invitation would either duplicate the pending row or invite someone
-// already enrolled. Mirrors the `claimed` set the web's appendEmailInviteRows
-// builds, which skips a claimed address for the same reason.
-func rosterEmailClaim(rows []configrepo.RosterRow, email string) (holder string, claimed bool) {
+// rosterEmailClaim reports how the stored roster already holds this address:
+// `pending` for an identity-less email-invite row (a second invitation would
+// duplicate it, and RosterRow.IsPendingEmailInvite is the shared rule the write
+// helpers apply), and `holder` for the username of a row that merely carries the
+// address. Only `pending` may block a send: the web is explicit that a claimed
+// address does NOT filter the send list, since an address can belong to someone
+// else's row — a shared family address or a lab contact — and that real person
+// still needs inviting (see UploadRoster's claimedEmails).
+func rosterEmailClaim(rows []configrepo.RosterRow, email string) (holder string, pending bool) {
 	key := configrepo.NormalizeInviteEmail(email)
 	if key == "" {
 		return "", false
 	}
 	for _, row := range rows {
-		if configrepo.NormalizeInviteEmail(row.Email) == key {
-			return row.Username, true
+		if configrepo.NormalizeInviteEmail(row.Email) != key {
+			continue
+		}
+		if row.IsPendingEmailInvite() {
+			return "", true
+		}
+		if holder == "" {
+			holder = row.Username
 		}
 	}
-	return "", false
+	return holder, false
 }

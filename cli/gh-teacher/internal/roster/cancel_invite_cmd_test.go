@@ -27,6 +27,11 @@ type cancelMock struct {
 	cancelStatus int
 	// teamDeleteStatus is the invite-team DELETE status (0 → 204).
 	teamDeleteStatus int
+	// inviteTeamStatus is the invite-team GET status (0 → 200); 404 means this
+	// classroom never sent the invitation the address matched.
+	inviteTeamStatus int
+	// inviteTeamDescription is the description that GET serves.
+	inviteTeamDescription string
 
 	calls           []inviteCall
 	deletedTeamSlug string
@@ -52,6 +57,16 @@ func (m *cancelMock) handler(t *testing.T) http.Handler {
 		w.WriteHeader(status)
 	})
 	base.HandleFunc("/orgs/o/teams/"+inviteTeamSlug, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			if status := m.inviteTeamStatus; status != 0 && status != http.StatusOK {
+				w.WriteHeader(status)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": 7, "slug": inviteTeamSlug, "description": m.inviteTeamDescription,
+			})
+			return
+		}
 		status := m.teamDeleteStatus
 		if status == 0 {
 			status = http.StatusNoContent
@@ -65,9 +80,10 @@ func (m *cancelMock) handler(t *testing.T) http.Handler {
 	return recordCalls(&m.calls, base)
 }
 
-// newCancelMock has one pending EMAIL invitation for inviteTestEmail and a
-// roster holding its pending row.
+// newCancelMock has one pending EMAIL invitation for inviteTestEmail, the
+// classroom's invite team backing it, and a roster holding its pending row.
 func newCancelMock(rosterCSV string) *cancelMock {
+	record, _ := configrepo.MarshalInviteDescription(inviteTestClassroom, inviteTestEmail)
 	return &cancelMock{
 		rosterWriteMock: &rosterWriteMock{files: map[string]string{
 			inviteTestClassroom + "/roster.csv": rosterCSV,
@@ -75,6 +91,7 @@ func newCancelMock(rosterCSV string) *cancelMock {
 		pending: []map[string]any{
 			{"id": cancelTestInvitationID, "email": inviteTestEmail, "role": "direct_member"},
 		},
+		inviteTeamDescription: record,
 	}
 }
 
@@ -106,6 +123,14 @@ func TestRunRosterCancelInvite_HappyPath(t *testing.T) {
 		t.Errorf("DELETEs of invitation 42 = %d, want 1; calls = %#v", n, mock.calls)
 	}
 	wantSlug := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
+	// The ownership read must precede the DELETE, so a refusal (or a degraded
+	// read) leaves the invitation intact.
+	ownerIdx := indexOfCall(mock.calls, http.MethodGet, "/orgs/o/teams/"+wantSlug)
+	cancelIdx := indexOfCall(mock.calls, http.MethodDelete, "/orgs/o/invitations/42")
+	if ownerIdx < 0 || ownerIdx > cancelIdx {
+		t.Errorf("invite-team read at %d must come before the invitation DELETE at %d; calls = %#v",
+			ownerIdx, cancelIdx, mock.calls)
+	}
 	if mock.deletedTeamSlug != wantSlug {
 		t.Errorf("deleted team = %q, want the recomputed slug %q", mock.deletedTeamSlug, wantSlug)
 	}
@@ -121,6 +146,78 @@ func TestRunRosterCancelInvite_HappyPath(t *testing.T) {
 	}
 	if !strings.Contains(out, inviteTestEmail) {
 		t.Errorf("stdout should name the cancelled address:\n%s", out)
+	}
+}
+
+// Org invitations are ORG-scoped, so matching on the address alone would let
+// classroom B's cancel revoke the live invitation classroom A sent — then tear
+// down B's nonexistent artifacts and report success, stranding A's student with
+// a row nothing backs. The invite team for (classroom, email) is the proof of
+// ownership; without it, refuse before the DELETE.
+func TestRunRosterCancelInvite_RefusesAnotherClassroomsInvitation(t *testing.T) {
+	mock := newCancelMock(storedRosterHeader)
+	mock.inviteTeamStatus = http.StatusNotFound
+
+	_, _, err := runCancelInvite(t, mock)
+	if err == nil {
+		t.Fatal("err = nil, want a refusal naming the classroom mismatch")
+	}
+	if !strings.Contains(err.Error(), inviteTestClassroom) {
+		t.Errorf("error should name the classroom that does not own the invitation: %v", err)
+	}
+	if n := countCalls(mock.calls, http.MethodDelete, "/orgs/o/invitations/42"); n != 0 {
+		t.Errorf("DELETEd another classroom's invitation %d time(s); calls = %#v", n, mock.calls)
+	}
+	if mock.deletedTeamSlug != "" {
+		t.Errorf("deleted team %q for an invitation this classroom does not own", mock.deletedTeamSlug)
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("committed %d blob(s) on a refused cancel", len(mock.blobs))
+	}
+}
+
+// A record naming a DIFFERENT classroom is the same ownership failure as a
+// missing team: an adopted-then-rewritten team must not authorize this cancel.
+func TestRunRosterCancelInvite_RefusesInviteTeamRecordForAnotherClassroom(t *testing.T) {
+	mock := newCancelMock(storedRosterHeader)
+	record, err := configrepo.MarshalInviteDescription("other-classroom", inviteTestEmail)
+	if err != nil {
+		t.Fatalf("MarshalInviteDescription: %v", err)
+	}
+	mock.inviteTeamDescription = record
+
+	_, _, err = runCancelInvite(t, mock)
+	if err == nil {
+		t.Fatal("err = nil, want a refusal naming the recorded classroom")
+	}
+	if !strings.Contains(err.Error(), "other-classroom") {
+		t.Errorf("error should name the classroom the record belongs to: %v", err)
+	}
+	if n := countCalls(mock.calls, http.MethodDelete, "/orgs/o/invitations/42"); n != 0 {
+		t.Errorf("DELETEd an invitation recorded against another classroom %d time(s)", n)
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("committed %d blob(s) on a refused cancel", len(mock.blobs))
+	}
+}
+
+// GitHub keys an invitation by login OR email, never both, so a login-keyed
+// invitation for the same person carries no address this command can cancel.
+func TestRunRosterCancelInvite_IgnoresLoginKeyedInvitation(t *testing.T) {
+	mock := newCancelMock(storedRosterHeader + ",,," + inviteTestEmail + ",,,student\n")
+	mock.pending = []map[string]any{
+		{"id": cancelTestInvitationID, "login": "ada", "email": inviteTestEmail, "role": "direct_member"},
+	}
+
+	out, errOut, err := runCancelInvite(t, mock)
+	if err != nil {
+		t.Fatalf("a login-keyed invitation must read as nothing pending: %v", err)
+	}
+	if writes := writeCalls(mock.calls); len(writes) != 0 {
+		t.Errorf("a login-keyed invitation drove %d write(s): %#v", len(writes), writes)
+	}
+	if !strings.Contains(out+errOut, "no pending invitation") {
+		t.Errorf("output should report nothing pending:\n%s%s", out, errOut)
 	}
 }
 

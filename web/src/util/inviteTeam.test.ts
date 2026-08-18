@@ -288,4 +288,22 @@ describe("marshalInviteDescription", () => {
     expect(out).not.toMatch(/[\u2028\u2029]/)
     expect(parseInviteDescription(out)?.classroom).toBe("cs\u2028x\u2029y")
   })
+
+  // The other half of the parity contract: Go's json.Marshal agrees with
+  // JSON.stringify on every control character, so the escaper must leave them
+  // alone. Escaping \b/\f as \u0008/\u000c "for Go parity" would be the bug.
+  it("leaves control characters exactly as JSON.stringify writes them (Go parity)", () => {
+    const out = marshalInviteDescription({
+      email: "a@b",
+      classroom: "cs\b\f\u0001\u007fx",
+    })
+    expect(out).toContain("\\b")
+    expect(out).toContain("\\f")
+    expect(out).not.toContain("\\u0008")
+    expect(out).not.toContain("\\u000c")
+    expect(out).toContain("\\u0001")
+    // DEL is escaped by neither encoder.
+    expect(out).toContain("\u007f")
+    expect(parseInviteDescription(out)?.classroom).toBe("cs\b\f\u0001\u007fx")
+  })
 })

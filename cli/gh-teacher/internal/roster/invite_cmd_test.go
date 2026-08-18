@@ -315,6 +315,38 @@ func TestRunRosterInvite_InvitationFailureKeepsAdoptedTeam(t *testing.T) {
 	}
 }
 
+// An address can legitimately belong to someone else's row — a shared family
+// address, or a lab contact — so a row that already NAMES an account must not
+// block a real person's invitation. The web is explicit about this
+// (UploadRoster's claimedEmails never filters the send list); warn and send.
+func TestRunRosterInvite_AddressOnAnAccountRowWarnsAndSends(t *testing.T) {
+	mock := newInviteMock(t, storedRosterHeader+"sibling,Sib,Ling,"+inviteTestEmail+",,101,student\n")
+
+	_, errOut, err := runInvite(t, mock)
+	if err != nil {
+		t.Fatalf("a shared address must not block the send: %v", err)
+	}
+	if !strings.Contains(errOut, "sibling") {
+		t.Errorf("stderr should name the account already holding the address:\n%s", errOut)
+	}
+	if indexOfCall(mock.calls, http.MethodPost, "/orgs/o/invitations") < 0 {
+		t.Fatalf("the invitation was never sent; calls = %#v", mock.calls)
+	}
+	if len(mock.blobs) != 1 {
+		t.Fatalf("got %d blobs POSTed, want the pending row committed: %#v", len(mock.blobs), mock.blobs)
+	}
+	rows, err := configrepo.ParseRoster([]byte(mock.blobs[0]))
+	if err != nil {
+		t.Fatalf("parse committed roster: %v\n%s", err, mock.blobs[0])
+	}
+	if len(rows) != 2 {
+		t.Fatalf("committed %d rows, want the existing row plus the new pending one:\n%s", len(rows), mock.blobs[0])
+	}
+	if !rows[1].IsPendingEmailInvite() || rows[1].Email != inviteTestEmail {
+		t.Errorf("appended row = %#v, want a pending invite row for %s", rows[1], inviteTestEmail)
+	}
+}
+
 // A pending row already claims this address: re-sending would duplicate the row
 // (or resurrect one sync is about to fold), so refuse before any API write.
 func TestRunRosterInvite_ExistingPendingRowRefusedUpFront(t *testing.T) {
