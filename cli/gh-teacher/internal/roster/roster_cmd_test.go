@@ -427,7 +427,7 @@ func TestRosterUpdateCmd(t *testing.T) {
 	})
 
 	t.Run("invalid --email is rejected before any auth/network", func(t *testing.T) {
-		// Display-name form is rejected by ValidateRosterEmail (before auth).
+		// Display-name form is rejected by CanonicalRosterEmail (before auth).
 		err := run(t, "o", "cs-principles", "alice", "--email", "Alice <a@x.edu>")
 		if err == nil || !strings.Contains(err.Error(), "invalid email") {
 			t.Fatalf("err = %v, want 'invalid email'", err)

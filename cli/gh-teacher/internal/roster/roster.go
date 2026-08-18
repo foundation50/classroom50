@@ -103,8 +103,8 @@ func rosterAddCmd() *cobra.Command {
 			if err := validate.ShortName(classroom, "classroom"); err != nil {
 				return err
 			}
-			emailVal := strings.TrimSpace(email)
-			if err := configrepo.ValidateRosterEmail(emailVal); err != nil {
+			emailVal, err := configrepo.CanonicalRosterEmail(strings.TrimSpace(email))
+			if err != nil {
 				return err
 			}
 			client, err := githubapi.RequireAuthClient(cmd)
@@ -175,8 +175,8 @@ func rosterUpdateCmd() *cobra.Command {
 				patch.LastName = &v
 			}
 			if cmd.Flags().Changed("email") {
-				v := strings.TrimSpace(email)
-				if err := configrepo.ValidateRosterEmail(v); err != nil {
+				v, err := configrepo.CanonicalRosterEmail(strings.TrimSpace(email))
+				if err != nil {
 					return err
 				}
 				patch.Email = &v
@@ -290,8 +290,10 @@ func rosterImportCmd() *cobra.Command {
 
 // parseEmailArgs validates the `<org> <classroom> <email>` shape
 // `roster cancel-invite` uses, BEFORE any auth or network happens so a typo can
-// never reach GitHub. (`roster invite` validates inline because its email arg
-// is optional when --file is given.)
+// never reach GitHub. The returned email is canonical: cancel-invite recomputes
+// the invite-team hash from it, and a raw `<a@b.edu>` would hash to a team that
+// does not exist. (`roster invite` validates inline because its email arg is
+// optional when --file is given.)
 func parseEmailArgs(args []string) (org, classroom, email string, err error) {
 	org = strings.TrimSpace(args[0])
 	classroom = strings.TrimSpace(args[1])
@@ -302,10 +304,11 @@ func parseEmailArgs(args []string) (org, classroom, email string, err error) {
 	if err := validate.ShortName(classroom, "classroom"); err != nil {
 		return "", "", "", err
 	}
-	if err := configrepo.ValidateRosterEmail(email); err != nil {
+	canonical, err := configrepo.CanonicalRosterEmail(email)
+	if err != nil {
 		return "", "", "", err
 	}
-	return org, classroom, email, nil
+	return org, classroom, canonical, nil
 }
 
 // warnStrandedInviteTeam reports a metadata team a teardown couldn't remove.

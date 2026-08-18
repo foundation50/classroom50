@@ -805,22 +805,47 @@ func TestUpdateRosterRow(t *testing.T) {
 	})
 }
 
-// CanonicalRosterEmail accepts exactly what ValidateRosterEmail does, but
-// returns the address mail.ParseAddress parsed rather than the raw input. A
-// caller that goes on to USE the value needs that: `<a@b.edu>` validates, and
-// sending the raw form to GitHub would 422 and read as "already invited".
-func TestCanonicalRosterEmail(t *testing.T) {
+// The accepted/rejected forms are the roster email contract. Every case also
+// asserts what the value CANONICALIZES to, since that parsed form — not the raw
+// input — is what a later invite, roster join, or invite-team hash uses.
+func TestCanonicalRosterEmailForms(t *testing.T) {
 	cases := []struct {
 		in      string
 		want    string
 		wantErr bool
 	}{
-		{"", "", false},
-		{"alice@example.edu", "alice@example.edu", false},
-		{"<alice@example.edu>", "alice@example.edu", false},
-		{"  Alice@Example.EDU  ", "alice@example.edu", false},
-		{"Alice <alice@example.edu>", "", true},
-		{"alice", "", true},
+		// Email is optional per row.
+		{in: "", want: ""},
+
+		// Bare local@domain shapes teachers actually use.
+		{in: "alice@example.edu", want: "alice@example.edu"},
+		{in: "alice.smith@example.com", want: "alice.smith@example.com"},
+		{in: "alice+section1@example.com", want: "alice+section1@example.com"},
+		{in: "12345@example.com", want: "12345@example.com"},
+		{in: "a@b.c", want: "a@b.c"},
+		{in: "alice@school.local", want: "alice@school.local"},
+		{in: "Alice@Example.EDU", want: "alice@example.edu"},
+		{in: "alice@xn--bcher-kva.example", want: "alice@xn--bcher-kva.example"},
+		{in: "alice@[192.0.2.1]", want: "alice@[192.0.2.1]"},
+
+		// Accepted, but the angle brackets are stripped — sending the raw form
+		// to GitHub is the bug this function exists to prevent.
+		{in: "<alice@example.edu>", want: "alice@example.edu"},
+		{in: "  <Alice@Example.EDU>  ", want: "alice@example.edu"},
+
+		// Display-name forms reject — name metadata belongs in
+		// first_name/last_name, not the email column.
+		{in: "Alice <alice@example.edu>", wantErr: true},
+		{in: "alice <alice@example.edu>", wantErr: true},
+		{in: "Alice Andersson <alice@example.edu>", wantErr: true},
+
+		// Malformed.
+		{in: "alice", wantErr: true},
+		{in: "alice@", wantErr: true},
+		{in: "@example.com", wantErr: true},
+		{in: "alice example.com", wantErr: true},
+		{in: "alice@@example.com", wantErr: true},
+		{in: "alice@example.com, bob@example.com", wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {
@@ -832,57 +857,10 @@ func TestCanonicalRosterEmail(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("CanonicalRosterEmail(%q): %v", tc.in, err)
+				t.Fatalf("CanonicalRosterEmail(%q) = %v, want nil", tc.in, err)
 			}
 			if got != tc.want {
 				t.Errorf("CanonicalRosterEmail(%q) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestValidateRosterEmail(t *testing.T) {
-	cases := []struct {
-		in      string
-		wantErr bool
-	}{
-		// Email is optional per row.
-		{"", false},
-
-		// Bare local@domain shapes teachers actually use.
-		{"alice@example.edu", false},
-		{"alice.smith@example.com", false},
-		{"alice+section1@example.com", false},
-		{"12345@example.com", false},
-		{"a@b.c", false},
-		{"alice@school.local", false},
-		{"Alice@Example.EDU", false},
-		{"<alice@example.edu>", false},
-		{"alice@xn--bcher-kva.example", false},
-		{"alice@[192.0.2.1]", false},
-
-		// Display-name forms reject — name metadata belongs in
-		// first_name/last_name, not the email column.
-		{"Alice <alice@example.edu>", true},
-		{"alice <alice@example.edu>", true},
-		{"Alice Andersson <alice@example.edu>", true},
-
-		// Malformed.
-		{"alice", true},
-		{"alice@", true},
-		{"@example.com", true},
-		{"alice example.com", true},
-		{"alice@@example.com", true},
-		{"alice@example.com, bob@example.com", true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.in, func(t *testing.T) {
-			err := ValidateRosterEmail(tc.in)
-			if tc.wantErr && err == nil {
-				t.Fatalf("ValidateRosterEmail(%q) = nil, want error", tc.in)
-			}
-			if !tc.wantErr && err != nil {
-				t.Fatalf("ValidateRosterEmail(%q) = %v, want nil", tc.in, err)
 			}
 		})
 	}

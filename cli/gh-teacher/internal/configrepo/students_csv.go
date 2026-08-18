@@ -285,10 +285,14 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 			rowErrs = append(rowErrs, err)
 			continue
 		}
-		if err := ValidateRosterEmail(row.Email); err != nil {
+		// Canonicalize rather than only validate: the parsed address is what a
+		// later invite, join, or team-name hash uses.
+		canonical, err := CanonicalRosterEmail(row.Email)
+		if err != nil {
 			rowErrs = append(rowErrs, fmt.Errorf("line %d: %w", line, err))
 			continue
 		}
+		row.Email = canonical
 		row.Line = line
 		rows = append(rows, row)
 	}
@@ -696,20 +700,19 @@ func BackfillRosterGitHubID(rows []RosterRow, username string, githubID int64) (
 	return rows, false
 }
 
-// ValidateRosterEmail: empty is valid. Non-empty must parse as bare
-// `local@domain`; the display-name form is rejected so name metadata doesn't
-// sneak into the email column. No TLD requirement, no DNS check.
-func ValidateRosterEmail(email string) error {
-	_, err := CanonicalRosterEmail(email)
-	return err
-}
-
-// CanonicalRosterEmail validates like ValidateRosterEmail and returns the
-// address mail.ParseAddress actually parsed, normalized. Callers that go on to
-// USE the value need this rather than the raw input: `<a@b.edu>` and
-// `a@b.edu <a@b.edu>`-adjacent forms validate but normalize to something GitHub
-// rejects, so a raw-input caller would send an unusable address and read the
-// resulting 422 as "already invited".
+// CanonicalRosterEmail validates a roster email and returns the address
+// mail.ParseAddress actually parsed, normalized (trim + lowercase). Empty is
+// valid and returns empty — the column is optional per row. Non-empty must
+// parse as bare `local@domain`; the display-name form is rejected so name
+// metadata doesn't sneak into the email column. No TLD requirement, no DNS
+// check.
+//
+// It deliberately returns the parsed value rather than only an error, and there
+// is no validate-only variant: a caller that validated and then used its RAW
+// input silently kept forms mail.ParseAddress accepts but GitHub does not
+// (`<a@b.edu>`), which surfaced later as a roster join that never matches or an
+// invitation GitHub 422s — read as "already invited". Returning the canonical
+// form is what forecloses that.
 func CanonicalRosterEmail(email string) (string, error) {
 	if email == "" {
 		return "", nil

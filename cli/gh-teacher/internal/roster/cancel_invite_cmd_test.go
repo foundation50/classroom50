@@ -462,6 +462,23 @@ func TestRosterCancelInviteCmd(t *testing.T) {
 		}
 	})
 
+	// A bracketed address is accepted, and must be CANONICALIZED: cancel-invite
+	// recomputes the invite-team hash from this value, so keeping the raw
+	// `<ada@uni.edu>` would hash to a team that does not exist and silently
+	// tear down nothing.
+	t.Run("bracketed address canonicalizes to the bare address", func(t *testing.T) {
+		_, _, email, err := parseEmailArgs([]string{"o", "cs-principles", "<" + inviteTestEmail + ">"})
+		if err != nil {
+			t.Fatalf("parseEmailArgs: %v", err)
+		}
+		if email != inviteTestEmail {
+			t.Fatalf("email = %q, want the bare %q", email, inviteTestEmail)
+		}
+		if got := configrepo.InviteTeamName(inviteTestClassroom, email); got != configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail) {
+			t.Errorf("invite-team slug %q does not match the address's own team", got)
+		}
+	})
+
 	// No --force: forcing teardown without a pending invitation would delete the
 	// only record of the address (see runRosterCancelInvite).
 	t.Run("has no --force flag", func(t *testing.T) {
