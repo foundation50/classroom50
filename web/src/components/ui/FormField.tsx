@@ -1,4 +1,4 @@
-import { HelpCircle, TriangleAlert } from "lucide-react"
+import { HelpCircle, TriangleAlert, type LucideIcon } from "lucide-react"
 import { useId, type ReactNode } from "react"
 
 import { Button } from "./Button"
@@ -8,17 +8,21 @@ import { cx } from "./cx"
 // forward the same set instead of re-declaring it and drifting.
 export type HelpTooltipPosition = "top" | "bottom" | "left" | "right"
 
-// A question-mark help affordance: a focusable button carrying detailed
-// guidance as its accessible name, wrapped in a theme-aware DaisyUI tooltip.
-// The single source for the help-icon markup + a11y contract. `position`
-// controls which side the tooltip opens on (default bottom); use `right`/`top`
-// inside a narrow container like a modal so the bubble isn't clipped.
+// A help/notice affordance: a focusable button carrying detailed guidance as
+// its accessible name, wrapped in a theme-aware DaisyUI tooltip. The single
+// source for the tooltip-icon markup + a11y contract. `position` controls which
+// side the bubble opens on (default bottom); use `right`/`top` inside a narrow
+// container like a modal so the bubble isn't clipped. `icon` defaults to a
+// question mark (HelpCircle); pass another lucide icon (e.g. CircleAlert) when
+// the tone is a caveat/heads-up rather than help.
 export function HelpTooltip({
   help,
   position = "bottom",
+  icon: Icon = HelpCircle,
 }: {
   help: string
   position?: HelpTooltipPosition
+  icon?: LucideIcon
 }) {
   return (
     <span
@@ -43,7 +47,7 @@ export function HelpTooltip({
         aria-label={help}
         className="text-base-content/50 hover:text-base-content"
       >
-        <HelpCircle aria-hidden="true" className="size-4" />
+        <Icon aria-hidden="true" className="size-4" />
       </Button>
     </span>
   )

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
+import { CircleAlert } from "lucide-react"
 import Papa from "papaparse"
 
 import { useQueryClient } from "@tanstack/react-query"
@@ -1108,7 +1109,10 @@ const SubmissionsPageContent = () => {
         // an inline info tooltip next to Sort rather than a full-width banner.
         sortHint={
           showPendingHiddenHint ? (
-            <HelpTooltip help={t("submissions.filters.pendingHiddenHint")} />
+            <HelpTooltip
+              help={t("submissions.filters.pendingHiddenHint")}
+              icon={CircleAlert}
+            />
           ) : undefined
         }
         // No collect/freshness exists for assignments that skip built-in
