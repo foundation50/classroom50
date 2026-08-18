@@ -71,12 +71,87 @@ func rosterInviteCmd() *cobra.Command {
 	return cmd
 }
 
+// emailInviteOutcome classifies what sendOneEmailInvite did with one address,
+// so both the single and bulk callers can react without re-reading the API
+// result. Exactly one is returned per address.
+type emailInviteOutcome int
+
+const (
+	// outcomeInvited: a fresh invitation was sent; the caller should append a
+	// pending row for the address.
+	outcomeInvited emailInviteOutcome = iota
+	// outcomeSkippedAlready: GitHub's 422 — already a member or already invited.
+	// No row; a team this run created has already been torn down.
+	outcomeSkippedAlready
+	// outcomePendingBlocked: the stored roster already lists this address as a
+	// pending email invite, so nothing was sent (no API call was made).
+	outcomePendingBlocked
+	// outcomeRateLimited: the invitation hit a secondary rate limit. Nothing was
+	// torn down (a retry re-adopts the team); the bulk caller stops issuing new
+	// sends, and the single caller surfaces the error.
+	outcomeRateLimited
+	// outcomeFailed: a hard send or team-prep failure; err is set.
+	outcomeFailed
+)
+
+// sendOneEmailInvite runs the per-address invite sequence shared by the single
+// `roster invite` and the bulk `--file` path: pre-check the stored roster,
+// ensure the per-invite metadata team (record written LAST), send the org
+// invitation carrying the classroom and invite team ids, and classify the
+// result. It never writes roster.csv — the caller owns the commit — so a bulk
+// run can append every invited address in one batched commit.
+//
+// The order is load-bearing (mirrors the web's bulkInviteByEmail inviteOne):
+// every read that could refuse the send happens before the first write; the
+// invite team's record is written before the invitation exists, so an accepted
+// invitation always has an address to recover; and a team created THIS run is
+// deleted only on a doomed send (422 or hard failure), never on a rate limit
+// (the retry re-adopts it) and never for an adopted team (it may hold a prior
+// invite's still-unrecovered record).
+func sendOneEmailInvite(client githubapi.Client, errOut io.Writer, org, classroom, email string, classroomTeam configrepo.TeamRef, actor string, rows []configrepo.RosterRow) (emailInviteOutcome, configrepo.TeamRef, error) {
+	holder, pending := rosterEmailClaim(rows, email)
+	if pending {
+		return outcomePendingBlocked, configrepo.TeamRef{}, nil
+	}
+	if holder != "" {
+		_, _ = fmt.Fprintf(errOut, "Note: %s already appears on the %s roster on %s's row. An address can be shared (a parent or a lab contact), so the invitation is still being sent — but no second row is written for it, matching the web app. If that row is the same person, cancel this invite and run `gh teacher roster update %s %s %s` instead.\n",
+			email, classroom, holder, org, classroom, holder)
+	}
+
+	inviteTeam, created, err := configrepo.EnsureInviteTeam(client, org, classroom, email, actor)
+	if err != nil {
+		return outcomeFailed, configrepo.TeamRef{}, err
+	}
+
+	if err := membership.InviteOrgByEmail(client, org, email, []int64{classroomTeam.ID, inviteTeam.ID}); err != nil {
+		// A doomed invitation must not leave a fresh, member-less metadata team
+		// behind for the GC to reap — but an ADOPTED team may hold an earlier
+		// invite's still-unrecovered record, so only delete what this run made.
+		// A rate limit is not doomed: the team stays so a retry adopts it rather
+		// than re-creating one against the same limit (as the web does).
+		if created && !cliutil.IsRateLimited(err) {
+			if delErr := configrepo.DeleteInviteTeam(client, org, inviteTeam.Slug); delErr != nil {
+				warnStrandedInviteTeam(errOut, "nothing was invited, but cleaning up", org, inviteTeam.Slug, delErr)
+			}
+		}
+		if cliutil.IsRateLimited(err) {
+			return outcomeRateLimited, configrepo.TeamRef{}, err
+		}
+		if errors.Is(err, membership.ErrEmailAlreadyInvitedOrMember) {
+			return outcomeSkippedAlready, configrepo.TeamRef{}, nil
+		}
+		return outcomeFailed, configrepo.TeamRef{}, err
+	}
+	return outcomeInvited, inviteTeam, nil
+}
+
 // runRosterInvite sends the email invitation, then records the pending row.
 // The order mirrors the web's bulkInviteByEmail and is load-bearing throughout:
 // every read that could refuse the send happens before the first write, the
 // invite team's record is written before the invitation exists (so an accepted
 // invitation always has an address to recover), and the roster row is appended
-// only once the invitation is real.
+// only once the invitation is real. The per-address work lives in
+// sendOneEmailInvite, shared with the bulk `--file` path.
 func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classroom, email, firstName, lastName, section string) error {
 	email = configrepo.NormalizeInviteEmail(email)
 
@@ -103,15 +178,6 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 	if err != nil {
 		return err
 	}
-	holder, pending := rosterEmailClaim(rows, email)
-	if pending {
-		return fmt.Errorf("%s is already invited to %s — run `gh teacher roster sync %s %s` if they accepted, or `gh teacher roster cancel-invite %s %s %s` to revoke it; nothing was sent",
-			email, classroom, org, classroom, org, classroom, email)
-	}
-	if holder != "" {
-		_, _ = fmt.Fprintf(errOut, "Note: %s already appears on the %s roster on %s's row. An address can be shared (a parent or a lab contact), so the invitation is still being sent — but no second row is written for it, matching the web app. If that row is the same person, cancel this invite and run `gh teacher roster update %s %s %s` instead.\n",
-			email, classroom, holder, org, classroom, holder)
-	}
 
 	// EnsureInviteTeam drops the creator GitHub silently adds, so it needs to
 	// know who that is.
@@ -120,32 +186,19 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 		return fmt.Errorf("resolving your GitHub login (needed to keep the invite team free of teachers): %w", err)
 	}
 
-	// No cleanup on failure here on purpose: EnsureInviteTeam writes the email
-	// LAST, so anything it strands holds no address and no valid record — a
-	// reconcile skips it and the next invite to this address adopts and heals it.
-	inviteTeam, created, err := configrepo.EnsureInviteTeam(client, org, classroom, email, actor)
-	if err != nil {
-		return err
+	outcome, inviteTeam, sendErr := sendOneEmailInvite(client, errOut, org, classroom, email, classroomTeam, actor, rows)
+	switch outcome {
+	case outcomePendingBlocked:
+		return fmt.Errorf("%s is already invited to %s — run `gh teacher roster sync %s %s` if they accepted, or `gh teacher roster cancel-invite %s %s %s` to revoke it; nothing was sent",
+			email, classroom, org, classroom, org, classroom, email)
+	case outcomeSkippedAlready:
+		_, _ = fmt.Fprintf(out, "%s: skipped %s — already a member of the org or already invited\n", org, email)
+		_, _ = fmt.Fprintf(errOut, "If they accepted an earlier invitation, run `gh teacher roster sync %s %s` to record them on the roster.\n", org, classroom)
+		return nil
+	case outcomeRateLimited, outcomeFailed:
+		return sendErr
 	}
-
-	if err := membership.InviteOrgByEmail(client, org, email, []int64{classroomTeam.ID, inviteTeam.ID}); err != nil {
-		// A doomed invitation must not leave a fresh, member-less metadata team
-		// behind for the GC to reap — but an ADOPTED team may hold an earlier
-		// invite's still-unrecovered record, so only delete what this run made.
-		// A rate limit is not doomed: the team stays so a retry adopts it rather
-		// than re-creating one against the same limit (as the web does).
-		if created && !cliutil.IsRateLimited(err) {
-			if delErr := configrepo.DeleteInviteTeam(client, org, inviteTeam.Slug); delErr != nil {
-				warnStrandedInviteTeam(errOut, "nothing was invited, but cleaning up", org, inviteTeam.Slug, delErr)
-			}
-		}
-		if errors.Is(err, membership.ErrEmailAlreadyInvitedOrMember) {
-			_, _ = fmt.Fprintf(out, "%s: skipped %s — already a member of the org or already invited\n", org, email)
-			_, _ = fmt.Fprintf(errOut, "If they accepted an earlier invitation, run `gh teacher roster sync %s %s` to record them on the roster.\n", org, classroom)
-			return nil
-		}
-		return err
-	}
+	// outcomeInvited: the invitation is real; record the pending row.
 	_, _ = fmt.Fprintf(out, "%s: invited %s as direct_member (teams %s, %s)\n",
 		org, email, classroomTeam.Slug, inviteTeam.Slug)
 
