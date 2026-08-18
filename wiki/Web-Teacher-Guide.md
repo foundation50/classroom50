@@ -9,7 +9,7 @@ create a classroom → create assignments → add students → share accept link
 collect submissions.
 
 > [!TIP]
-> Have feedback, a bug, or an idea? Reach out in our
+> Have feedback, a bug, or an idea? Raise it in the project's
 > [discussions](https://github.com/foundation50/classroom50/discussions).
 
 ## Before you start: GitHub setup
@@ -159,22 +159,23 @@ How each student's repository is created:
 
 - **Start with a template** — **No template** or **Template repository**: a
   [template repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-template-repository)
-  used as each student's starting point. Enter `<owner>/<repo>`, or just
-  `<repo>` if it's in this organization. See
+  used as each student's starting point. Enter `OWNER/REPOSITORY`, or
+  `REPOSITORY` alone if it's in this organization, replacing each with the
+  template's owner and name. See
   [Assignment Templates](Assignment-Templates) for requirements.
 - **Add a README** (no-template assignments) — whether the repository starts
   with an initial commit. With it **off**, what students get depends on the
   built-in autograder choice under [Submission and
   grading](#submission-and-grading):
   - autograder **off** → a **truly bare repository**: no commit,
-    no autograding, and no feedback pull request (permanently — not just until
+    no autograding, and no feedback pull request (permanently, not only until
     the student's first commit). Use it when students build everything from
     scratch, including their own GitHub Actions.
   - autograder **on** → an initialized repository carrying only the control
     files (no README, no starter content) that grades normally.
 - **Include all branches** (templated) — copy **all** of the template's
-  branches into each student repository, not just the default branch. Useful
-  for multi-branch starter repos.
+  branches into each student repository, not only the default branch. Useful
+  for multi-branch template repositories.
 - **Feedback pull request** — automatically opens a pull request per student so
   you can review changes and leave inline feedback.
 
@@ -208,7 +209,7 @@ section — most assignments never need them:
 > retrofitted, so they keep their original starter code and setup. When at least
 > one student has already accepted, the edit form asks you to confirm and warns
 > that you'll need to update the existing repositories yourself. (**Assignment
-> type** — Individual vs. Group — is the exception: it stays locked on edit,
+> type** — Individual or Group — is the exception: it stays locked on edit,
 > because switching it would invalidate every existing submission.)
 
 ### Submission and grading
@@ -231,7 +232,7 @@ section — most assignments never need them:
   branch** (the default) grades each push. **A tagged commit** grades only
   when a student submits (`gh student submit`) or pushes a `submit/*` tag —
   regular pushes cost no Actions minutes, which matters at scale.
-- **Submission tags** (optional) — tag names (e.g. `phase1`, `phase2`,
+- **Submission tags** (optional) — tag names such as `phase1`, `phase2`,
   `complete`) that also trigger grading. A student pushes the tag with plain
   git (`git tag phase1 && git push origin phase1`) and that commit grades; the
   result appears as a normal `submit/*` release titled "via phase1". Prefer
@@ -368,7 +369,7 @@ then `username`, then `email`:
 | Column | Identifies a student | Description |
 | --- | --- | --- |
 | `github_id` | Yes, first choice | The account's immutable numeric id, as written by Classroom 50's own `roster.csv`. Used to look up the account's current username, so a student who renamed their account is still found. |
-| `username` | Yes, if there's no `github_id` | The student's GitHub username, e.g. `octocat`. |
+| `username` | Yes, if there's no `github_id` | The student's GitHub username, such as `octocat`. |
 | `email` | Yes, if there's neither | Invites the student by email. Also stored as their contact email on every row. |
 | `first_name` | No | Given name, for display and score exports. |
 | `last_name` | No | Family name, for display and score exports. |
@@ -493,9 +494,9 @@ last synced (a per-assignment `collected_at` stamp in `scores.json`). Click
 
 The top of the page shows:
 
-- **Submitted** — submissions vs. students enrolled.
+- **Submitted** — submissions against students enrolled.
 - **Classroom average** — average score among students who submitted.
-- **Passing** — how many students are passing vs. failing.
+- **Passing** — how many students are passing and how many are failing.
 - **Accepted** — how many students accepted (one per student).
 
 > [!TIP]
@@ -538,7 +539,7 @@ assignment:
 - **Collect now** — trigger a score collection scoped to this assignment.
 - **Regrade all** — re-run the autograder on every collected submission.
 - **Update student repo access** — bulk-set every student's role on their
-  repository (e.g. drop everyone to read-only for grading, restore write
+  repository (drop everyone to read-only for grading, then restore write
   afterwards).
 - **Update repository features** — re-apply the assignment's Issues / Wiki /
   Projects / Pull-requests settings to every existing student repository
@@ -547,7 +548,7 @@ assignment:
 - **Update autograding triggers** — retrofit existing repositories after a
   submission-type change (see below).
 - **Pause autograding** / **Resume autograding** — disable or re-enable the
-  built-in `autograde.yaml` workflow in every student repository via GitHub's
+  built-in `autograde.yaml` workflow in every student repository with GitHub's
   workflow-disable API. No files are changed, and you can resume anytime;
   other workflows in student repositories keep running. Use it to stop
   autograding for one assignment without touching the rest of the org.
@@ -581,7 +582,7 @@ spreadsheet or external tool. The column-by-column reference is in
   Same form as creating one, pre-filled. Provisioning settings (repository
   source, built-in autograder, grading mode) are editable; a change only affects
   repositories accepted from then on, so the form asks you to confirm when
-  students have already accepted. **Assignment type** (Individual vs. Group)
+  students have already accepted. **Assignment type** (Individual or Group)
   stays locked, since switching it would invalidate existing submissions.
 - **Edit a classroom** — open the classroom, then **Settings**. Same form as
   creating one, pre-filled. The page also offers **Clean up invite data**, which

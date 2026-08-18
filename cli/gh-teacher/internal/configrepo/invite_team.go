@@ -231,12 +231,11 @@ func findTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMe
 //     membership is then READ BACK; a survivor is ErrInviteTeamNotEmpty. This is
 //     what lets a reconcile treat any member of any role as the invitee.
 //   - EMAIL LAST: the create carries only contract.InviteProvisionalDescription.
-//     GitHub
-//     adds the creator during the create itself, so the drop is necessarily a
-//     second request and an interrupted run can always strand a team with a
-//     teacher on it. Writing the email last makes that leftover harmless — it
-//     holds no address and no valid record, so a reconcile skips it and the next
-//     invite to the same address adopts and heals it.
+//     GitHub adds the creator during the create itself, so the drop is
+//     necessarily a second request and an interrupted run can always strand a
+//     team with a teacher on it. Writing the email last makes that leftover
+//     harmless — it holds no address and no valid record, so a reconcile skips it
+//     and the next invite to the same address adopts and heals it.
 func EnsureInviteTeam(client githubapi.Client, org, classroom, email, actor string) (ref TeamRef, created bool, err error) {
 	name := InviteTeamName(classroom, email)
 	record, err := MarshalInviteDescription(classroom, email)

@@ -62,8 +62,9 @@ export function rosterWriteTree(
   ]
 }
 
-// The conflict-safe roster.csv read-modify-write shared by the roster writers
-// (writeClassroomRoles, updateClassroomMetadata). Runs inside withGitConflictRetry:
+// The conflict-safe roster.csv read-modify-write shared by every roster writer
+// (the role/metadata/username writers in roleWrites, plus the email-invite row
+// append/remove below). Runs inside withGitConflictRetry:
 // reads the config branch/ref/commit, reads roster.csv,
 // parses it tolerantly and REFUSES a malformed file with a typed
 // RosterCsvMalformedError (a positional re-serialize would corrupt the bad row),
@@ -495,7 +496,8 @@ export const normalizeGithubUsername = (username: string) => {
 }
 
 export const isLikelyGithubUsername = (username: string) => {
-  // alphanumeric + hyphens, no hyphens at start or end
+  // GitHub's login rule: 1-39 chars, alphanumeric or hyphen, no leading or
+  // trailing hyphen.
   return /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(username)
 }
 
@@ -721,11 +723,11 @@ export async function retryDeferred<T>(opts: {
 }
 
 // Resolve the team id for each role present in the invite batch: student ->
-// classroom team, teacher/ta -> the staff team (created if missing, mirroring
-// the Settings staff flow so a teacher/ta invite lands them on the right
-// team on acceptance). Only ensures a staff team when that role is actually
+// classroom team, each staff role (teacher/hta/ta) -> its staff team (created if
+// missing, mirroring the Settings staff flow so a staff invite lands them on the
+// right team on acceptance). Only ensures a staff team when that role is actually
 // being invited — a students-only upload must not create (and grant config-repo
-// write to) empty teacher/ta teams as a side effect. A failed resolve leaves
+// access to) empty staff teams as a side effect. A failed resolve leaves
 // that role's id undefined — the invite still sends teamless.
 export async function resolveTeamIdByRole(
   client: GitHubClient,

@@ -7,7 +7,7 @@ import {
 
 // The pure roster.csv parse/serialize layer, lifted out of the mutation module
 // so problem detection lives next to the other pure roster helpers (teamRoster)
-// and carries no GitHubClient dependency. `api/mutations/students` re-exports
+// and carries no GitHubClient dependency. `domain/students` re-exports
 // every symbol here, so existing importers are unaffected.
 
 export const STUDENT_CSV_FIELDS = [
@@ -122,8 +122,7 @@ export function parseRosterCsv(csv: string): ParsedRosterCsv {
   return { rows, problems }
 }
 
-// Format roster problems into a single-line message for the throwing wrapper
-// and logs. The view uses the structured `problems` instead.
+// The view uses the structured `problems` instead of this flattened form.
 export function formatRosterProblems(problems: RosterCsvProblem[]): string {
   return problems.map((p) => `line ${p.line}: ${p.message}`).join("; ")
 }

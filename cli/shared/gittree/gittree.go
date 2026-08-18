@@ -13,10 +13,6 @@
 //     *freshly-created* repo whose ref/git-data APIs briefly 404/409 until they
 //     propagate (the teacher's first skeleton land; the student's accept-time
 //     control-file commit).
-//
-// TreeEntry.SHA is a pointer so a nil value marshals to `"sha":null`, which the
-// Trees API treats as "remove this path from base_tree" (see DeletionEntries).
-// Callers that never delete simply never build a nil entry.
 package gittree
 
 import (

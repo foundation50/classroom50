@@ -64,7 +64,7 @@ const MemberDetailModal = ({
   }
 
   if (!row) {
-    // No selected member: render nothing (the modal is closed in this state).
+    // Still mounted (empty) so the close animation can run.
     return <Modal open={open} onClose={handleClose} aria-labelledby={titleId} />
   }
 

@@ -19,7 +19,7 @@ import (
 // rosterListEntry is the `--json` view of one roster.csv row. Field names
 // mirror the CSV columns. github_id is always present; 0 for an unresolved row
 // — consumers branch on `github_id == 0`, not key presence. role is a display
-// snapshot of the account's highest team-derived role ("teacher"/"ta"/
+// snapshot of the account's highest team-derived role ("teacher"/"hta"/"ta"/
 // "student", or "" when unknown); the teams remain the enrollment/role
 // authority. An account holding several roles (dual roles aren't disallowed)
 // reads as its highest one here while still being an enrolled student.
@@ -48,9 +48,10 @@ func rosterListCmd() *cobra.Command {
 			"`<org>/<repo>/<classroom>/roster.csv: N student(s)` summary\n" +
 			"on stderr.\n\n" +
 			"The `role` column is a display snapshot of the account's\n" +
-			"highest team-derived role (teacher/ta/student, or empty when\n" +
-			"unknown) refreshed on sync; the classroom's GitHub teams — not\n" +
-			"this column — remain the enrollment/role authority. An account\n" +
+			"highest team-derived role (teacher/hta/ta/student, or empty\n" +
+			"when unknown), refreshed whenever the web app syncs the\n" +
+			"roster; the classroom's GitHub teams — not this column —\n" +
+			"remain the enrollment/role authority. An account\n" +
 			"holding several roles (dual roles aren't disallowed) reads as\n" +
 			"its highest one here while still being an enrolled student.\n\n" +
 			"Pass --json for the full array of\n" +

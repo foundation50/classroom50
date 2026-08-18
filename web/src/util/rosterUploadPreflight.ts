@@ -27,7 +27,8 @@ import {
 //                 additive team-add onto the CSV role's team (no team to leave,
 //                 so no destructive move and no confirmation needed).
 //  - role_change: an active org member whose current classroom role differs from
-//                 the CSV role (student<->ta<->teacher). Requires explicit
+//                 the CSV role (any of student/ta/hta/teacher to any other).
+//                 Requires explicit
 //                 teacher confirmation because applying it MOVES them between
 //                 teams (and a teacher promotion grants org-owner access).
 //
@@ -137,9 +138,9 @@ export type PreflightResult = {
   allAlreadyMembers: boolean
 }
 
-// The highest-precedence role in a set (teacher > ta > student), or undefined
-// for an account on no classroom team. Uses the canonical sortRolesByRank so the
-// precedence order has a single source (teamRoster.ROLE_RANK).
+// The highest-precedence role in a set (teacher > hta > ta > student), or
+// undefined for an account on no classroom team. Uses the canonical
+// sortRolesByRank so the precedence order has a single source (authz ROLE_RANK).
 function primaryOf(roles: ClassroomRole[]): ClassroomRole | undefined {
   return roles.length === 0 ? undefined : sortRolesByRank(roles)[0]
 }
@@ -235,7 +236,8 @@ export function classifyRosterUpload(
     }
 
     // Active member whose current role differs from the CSV role -> a move that
-    // requires confirmation (student<->ta<->teacher, up or down). Carry the
+    // requires confirmation (any of student/ta/hta/teacher to any other, up or
+    // down). Carry the
     // full current role set so the move drops every non-target team, not just
     // the primary one, plus any metadata delta so the move also updates (and
     // shows) the member's changed details rather than folding them in blindly.

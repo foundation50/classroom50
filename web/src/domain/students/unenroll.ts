@@ -65,7 +65,8 @@ export async function unenrollStudent(
 
   // Read org state and viewer before the commit. State is null on read failure
   // (then we skip the org action). The viewer guards against removing the
-  // signed-in teacher. An email-only row has no username to resolve state for.
+  // signed-in teacher. A row identified only by github_id has no login to
+  // resolve state for.
   const orgStatePromise = normalizedUsername
     ? getOrgMembershipState(client, org, normalizedUsername)
     : Promise.resolve(null)
@@ -123,7 +124,7 @@ export async function unenrollStudent(
   const warnings: string[] = []
 
   // Drop from the classroom team. Idempotent (404 = not a member / team gone);
-  // org membership untouched. Skipped for an email-only row.
+  // org membership untouched. Skipped when the row carries only a github_id.
   if (normalizedUsername) {
     try {
       const teamSlug = await teamSlugPromise
@@ -248,8 +249,6 @@ export async function bulkUnenrollStudents(
 
   log.info("bulk unenroll: started", { org, classroom, total: targets.length })
 
-  // Same per-row match predicate as unenrollStudent (shared matchesRosterRow):
-  // username/github_id.
   const matchesTarget = (row: StudentCsvRow, target: Student): boolean =>
     matchesRosterRow(row, target)
 
@@ -341,8 +340,8 @@ export async function bulkUnenrollStudents(
       message: `Updating team membership for ${username || student.email || "student"}...`,
     })
 
-    // Drop from the classroom team (idempotent). Skipped for an email-only row
-    // and when the slug couldn't be resolved.
+    // Drop from the classroom team (idempotent). Skipped for an id-only row and
+    // when the slug couldn't be resolved.
     if (username && teamSlug) {
       try {
         await removeUserFromTeam(client, { org, teamSlug, username })

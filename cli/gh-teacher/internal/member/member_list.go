@@ -22,10 +22,12 @@ import (
 )
 
 // memberListEntry is one row of `member list` output. Kind separates the
-// surfaces reconciled against the roster (org member, pending invitation, repo
+// surfaces compared against the roster (org member, pending invitation, repo
 // collaborator). Role is the org role or repo permission level; empty when
-// GitHub didn't report it. github_id is 0 for pending invitations (keyed on
-// login/email, not id).
+// GitHub didn't report it. github_id is an ACCOUNT id for a member or
+// collaborator, but for a pending invitation it is GitHub's INVITATION id (the
+// invitations API reports no invitee account id), so it must not be joined
+// against roster.csv's github_id.
 type memberListEntry struct {
 	Login    string `json:"login"`
 	Kind     string `json:"kind"`

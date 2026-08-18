@@ -114,7 +114,7 @@ organization.
 Create a **fine-grained personal access token** at **Settings → Developer
 settings → Personal access tokens → Fine-grained tokens → Generate new token**:
 
-1. **Token name** — e.g., `classroom50-<org>`.
+1. **Token name** — `classroom50-<org>`, for example.
 2. **Resource owner** — select **the organization**. This is critical: the token
    can only reach repos owned by the resource owner you pick.
 3. **Expiration** — up to 1 year. Set a reminder to rotate it.
@@ -133,9 +133,10 @@ settings → Personal access tokens → Fine-grained tokens → Generate new tok
 > token you create is auto-approved even if your org requires approval for
 > fine-grained PATs.
 
-**Supply the token** via the `CLASSROOM50_SERVICE_TOKEN` environment variable or
-the interactive prompt — there is no `--token` flag (command-line tokens leak
-via shell history). `init` validates the token against your organization before
+**Supply the token** through the `CLASSROOM50_SERVICE_TOKEN` environment variable
+or the interactive prompt. There is no `--token` flag, because command-line tokens
+leak through shell history. `init` validates the token against your organization
+before
 storing it. On a re-run, an existing secret is left untouched; to replace it, set
 the variable and re-run, or use `gh teacher rotate-service-token <org>`.
 
@@ -212,7 +213,7 @@ Each classroom is a directory in `<org>/classroom50` holding four files:
 | File | Purpose |
 | --- | --- |
 | `classroom.json` | Name, term, and organization metadata. |
-| `assignments.json` | The assignment manifest (published via Pages; read by `gh student accept` and the autograde runner). |
+| `assignments.json` | The assignment manifest (published through Pages; read by `gh student accept` and the autograde runner). |
 | `roster.csv` | The roster (private). |
 | `scores.json` | Collected scores (private). |
 
@@ -265,7 +266,7 @@ pending invite when they accept their first assignment.
 **Other targets:**
 
 ```sh
-gh teacher invite --admin <org> <username>              # invite as org admin (e.g., a TA)
+gh teacher invite --admin <org> <username>              # invite as org admin (a TA, for example)
 gh teacher invite <org>/<repo> <username>               # invite to one repo (default: push)
 gh teacher invite -p maintain <org>/<repo> <username>   # other permissions
 ```
@@ -273,7 +274,7 @@ gh teacher invite -p maintain <org>/<repo> <username>   # other permissions
 `-p` accepts `pull`, `triage`, `push`, `maintain`, `admin`. Re-running updates
 the collaborator's permission in place.
 
-**Adding staff:** to give a TA or co-teacher a classroom role (not just org
+**Adding staff:** to give a TA or co-teacher a classroom role (not only org
 membership), use `gh teacher staff add <org> <classroom> <username> --role
 teacher|hta|ta`. For the roles and what each can see, see
 [Staff, TAs, and multiple teachers](Staff-TAs-and-Multiple-Teachers).
@@ -322,7 +323,7 @@ gh teacher roster import <org> <classroom> <path-to-csv>
 
 Accepts three header shapes: the stored roster header
 (`username,first_name,last_name,email,section,github_id,role`), the same without
-`role`, and just the first five columns, so a `roster.csv` exported from a
+`role`, and the first five columns alone, so a `roster.csv` exported from a
 web-managed classroom imports verbatim. The column-by-column reference is in
 [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
 
@@ -363,7 +364,7 @@ gh teacher roster remove <org> <classroom> <username>
 > able to revoke a student's access to every repo in the organization.
 
 > [!NOTE]
-> Roster writes use an optimistic-rebase loop, so two teachers editing at once
+> Roster writes retry on top of each other, so two teachers editing at once
 > can't lose each other's work. If you see `lost the rebase race`, retry.
 
 ### Inviting a student by email
@@ -390,7 +391,9 @@ pending invitation, is reported as skipped and the command exits 0.
 
 It refuses to send in two cases: the classroom has no usable team recorded in
 `classroom.json`, or the roster already lists the address as a **pending
-invitation**. An address some *other* row merely carries is a shared address (a
+invitation**. (With `--file` that second case is a skip rather than a refusal, so
+one already-invited address doesn't stop the batch.) An address some *other* row
+merely carries is a shared address (a
 parent, a lab contact), so the real person still gets invited: the invitation is
 sent, a note on stderr names that row, and **no second row is written**. If the
 invitation fails outright, an invite team this run created is cleaned up again,
@@ -414,9 +417,11 @@ the batch. Each address is reported as it resolves, then a summary counts them �
 invited, already members/invited, already on the roster, failed, or deferred —
 and every skipped or failed address is named with its file line. Bulk mode is
 **student-only** and carries no names or sections, so the `--first-name` /
-`--last-name` / `--section` flags are **rejected** with `--file`; fill that
-metadata in afterwards with [`roster import`](#bulk-import-from-a-csv) or
-[`roster sync`](#syncing-the-roster-with-github).
+`--last-name` / `--section` flags are **rejected** with `--file`. Fill that
+metadata in afterwards with [`roster import`](gh-teacher#roster-import), or with
+`roster update` once the student has accepted and has a username. A sync never
+writes a name or a section: those columns are yours, and are never derived from a
+GitHub profile.
 
 Exit codes match [`roster sync`](#syncing-the-roster-with-github) so a script can
 tell a retryable run from a broken one:
@@ -477,8 +482,9 @@ records the role of the classroom team the account was found on, so a staff memb
 who accepted an email invitation is recorded with their staff role rather than as
 a student. A role already recorded is never rewritten.
 
-The web app runs the same sync when a teacher opens the roster; this is the same
-work without a browser. For every trigger, see
+The web app runs this same sync when a teacher opens the roster, and
+additionally refreshes each row's recorded `role` from live team membership; this
+is the rest of that work without a browser. For every trigger, see
 [What triggers a sync](How-Classroom-50-Works#what-triggers-a-sync).
 
 **Dry run unless you pass `--write`**: without it, no write request is issued at
@@ -513,7 +519,7 @@ Wrap the call in `set +e` (or the `case` above) if your script runs under `set
 
 > [!NOTE]
 > `sync` is deliberately conservative. Any degraded read, whether GitHub's
-> pending invitations or one of the invite teams, makes the whole pass read-mostly
+> pending invitations or one of the invite teams, makes the whole pass report-only
 > and exits `1`, because an unreadable team can't prove that a pending row is
 > dead. No row is dropped and no invite team is deleted at all. Warnings about a
 > team it left standing go to stderr; the planned edits go to stdout.
@@ -538,13 +544,13 @@ and the autograding setup). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | --- | --- |
 | `--template <owner>/<repo>[@branch]` | Starter-code repository (must be flagged as a template). Branch defaults to the template's default. |
 | `--description <text>` | Short description. |
-| `--due <ISO-8601>` | Due date, e.g., `2026-09-15T23:59:00-04:00`. Stored as UTC; local timezone assumed if you omit the offset. A bare date with no time is rejected. |
+| `--due <ISO-8601>` | Due date, such as `2026-09-15T23:59:00-04:00`. Stored as UTC; local timezone assumed if you omit the offset. A bare date with no time is rejected. |
 | `--mode individual\|group` | `individual` (default) or `group`. Group requires `--max-group-size`. |
 | `--max-group-size <N>` | Max collaborators on a group repo (2–100). Advisory, not hard-enforced. |
 | `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.14. See [Advanced Autograding](Advanced-Autograding#the-runtime-block). |
 | `--autograder <name>` | Reserved for swapping the whole reusable workflow (rare). Use `--runtime` for language toolchains. |
 | `--submission-mode every-push\|tag` | When the autograder fires. `every-push` (default) grades every push; `tag` grades only on explicit submits (`gh student submit`, or a hand-pushed `submit/*` tag) — regular pushes cost no Actions minutes, the cost lever for large classrooms. |
-| `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading — e.g. `--submission-tag phase1 --submission-tag phase2`. Students grade a milestone with plain git: `git tag phase1 && git push origin phase1`. Works with either mode; the graded record still appears as a `submit/*` release. |
+| `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading, such as `--submission-tag phase1 --submission-tag phase2`. Students grade a milestone with plain git: `git tag phase1 && git push origin phase1`. Works with either mode; the graded record still appears as a `submit/*` release. |
 
 > [!NOTE]
 > **Custom grading isn't registered here.** Drop an `autograder.py` at
@@ -636,13 +642,13 @@ the `schedule:` block in `.github/workflows/collect-scores.yaml`.
 <details>
 <summary>What each collection run does</summary>
 
-1. Iterates each classroom (or just the one you passed).
+1. Iterates each classroom (or only the one you passed).
 2. For each `(member, assignment)` pair — every student team member plus every
    staff team member, narrowed to one assignment when you passed
    `assignment=` — computes the repo name
    `<classroom>-<assignment>-<username>` and walks its `submit/*` releases. No
    releases means the member hasn't accepted or submitted yet (a staff member
-   who never accepted simply drops out here).
+   who never accepted drops out here).
 3. Downloads and schema-validates each `result.json`, checking its identity
    against the source repo (a hostile payload can't land in another student's
    scores). For a group assignment, it reads the repo's collaborators and

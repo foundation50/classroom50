@@ -19,11 +19,12 @@ export type EnrollOrInviteFormValues = {
 }
 
 // Add one student: a username enrolls via GitHub (resolve, team-add, org
-// invite) and stores the email; an email-only value sends a pure org invite
-// carrying the classroom team (no roster.csv write). Hook owns the cache
-// reconcile — invite-query invalidation plus the optimistic seed-and-reconcile
-// of the enrolled roster; toast/success/warning + form reset stay at the call
-// site (see ./README.md).
+// invite) and stores the email; an email-only value sends an org invite carrying
+// the classroom team plus a per-invite metadata team, and retains the address —
+// with the typed name and section — as a pending roster.csv row. Hook owns the
+// cache reconcile — invite-query invalidation plus the optimistic
+// seed-and-reconcile of the enrolled roster; toast/success/warning + form reset
+// stay at the call site (see ./README.md).
 export function useEnrollOrInviteStudent(
   org: string,
   classroom: string,

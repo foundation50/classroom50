@@ -412,8 +412,8 @@ export type ApplyClassroomRoleChangeResult = {
 //     with the member unchanged (still teacher + owner) rather than
 //     half-moved-but-still-owner. If a LATER step fails after this committed,
 //     the error explicitly says the owner was revoked so the caller re-runs.
-//  2) Add to the target team (student -> classroom team; ta/teacher -> the
-//     staff team, created + granted its role's config-repo access — write for
+//  2) Add to the target team (student -> classroom team; a staff role -> its
+//     staff team, created + granted that role's config-repo access — write for
 //     teacher/hta, read-only for ta — if missing), then promote
 //     to org owner when the target is teacher.
 //  3) Remove from EVERY currently-held classroom team that isn't the target

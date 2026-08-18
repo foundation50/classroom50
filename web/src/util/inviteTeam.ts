@@ -74,8 +74,11 @@ export async function inviteTeamName(
   return `${INVITE_TEAM_PREFIX}${hex.slice(0, INVITE_HASH_HEX_LEN)}`
 }
 
-// True when a team slug is one this feature owns (an `invite-` metadata team),
-// so a GC/enumeration pass can filter org teams to only the ones it may touch.
+// True when a slug is in the `invite-` NAMESPACE, so an enumeration pass can
+// narrow the org team list to candidates. Looser than the shape this feature
+// writes (`invite-<16 hex>`) and looser than the CLI's IsInviteTeamSlug, so a
+// caller that DELETES must also require a valid v1 record — a human team named
+// "Invite Only" slugs into this namespace.
 export function isInviteTeamSlug(slug: string): boolean {
   return slug.startsWith(INVITE_TEAM_PREFIX)
 }

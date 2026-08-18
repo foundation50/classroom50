@@ -12,8 +12,8 @@ output, or `--verbose` / `-v` for per-step detail.
 | Command | Description |
 | --- | --- |
 | `whoami` | Print the authenticated GitHub user. |
-| `login` | Log in with the Classroom 50 scopes (`admin:org`, `read:org`, `repo`, `workflow`). Add scopes with `-s` (e.g., `delete_repo`). |
-| `logout` | Log out via `gh auth logout`. |
+| `login` | Log in with the Classroom 50 scopes (`admin:org`, `read:org`, `repo`, `workflow`). Add scopes with `-s`, such as `delete_repo`. |
+| `logout` | Log out with `gh auth logout`. |
 | `init <org>` | Set up `<org>/classroom50` (org lockdown, repository, Pages, branch protection, service token). Idempotent. |
 | `audit <org>` | Read-only audit of the org member-privilege lockdown. |
 | `rotate-service-token <org>` | Replace the `CLASSROOM50_SERVICE_TOKEN` secret. |
@@ -288,7 +288,7 @@ and author grading under `<classroom>/autograders/<slug>/`.
 ## `roster`
 
 Manage student rows in `<org>/classroom50/<classroom>/roster.csv`. All write
-subcommands use an optimistic-rebase loop (up to 5 retries), so concurrent
+subcommands retry on top of each other (up to 5 attempts), so concurrent
 teacher edits don't lose each other's work. Every row for a student who has
 joined carries an immutable numeric `github_id` (CLI-managed — don't hand-edit
 it) so a username change doesn't desynchronize records. A student invited by
@@ -341,9 +341,9 @@ with `gh teacher staff add` once the person has an account.
 
 Once the student accepts, `roster sync` fills in their username and `github_id`.
 
-Non-zero on: a classroom with no usable team recorded in `classroom.json`
-(nothing is sent), an address the roster already lists **as a pending
-invitation**, or a failed invitation. An address that already belongs to an
+A single address is non-zero on: a classroom with no usable team recorded in
+`classroom.json` (nothing is sent), an address the roster already lists **as a
+pending invitation**, or a failed invitation. An address that already belongs to an
 organization member, or that already has a pending invitation, is reported as
 skipped and exits **0**.
 
@@ -371,14 +371,18 @@ in **one** roster commit. Every skipped or failed address is named with its file
 line.
 
 Bulk mode is student-only and carries no name/section metadata, so
-`--first-name`, `--last-name`, and `--section` are rejected with `--file`;
-backfill with `roster import` or `roster sync`.
+`--first-name`, `--last-name`, and `--section` are rejected with `--file`. Fill
+that metadata in afterwards with `roster import`, or with `roster update` once the
+student has accepted and has a username. A sync never writes a name or a section:
+those columns are yours, and are never derived from a GitHub profile.
 
 Exit codes follow [`roster sync`](#roster-sync): **0** all invited or cleanly
 skipped, **2** nothing failed but a rate limit left addresses uninvited, **1** an
-address failed or the roster write failed. On a rate limit the run stops sending,
-waits out `Retry-After` before recording what it already sent, and reports the
-rest; re-running is safe, since already-invited addresses skip.
+address failed or the roster write failed. An address the roster already lists as
+pending is a skip here, not a failure, so it doesn't change the exit code. On a
+rate limit the run stops sending, waits out `Retry-After` before recording what it
+already sent, and reports the rest; re-running is safe, since already-invited
+addresses skip.
 
 ### `roster cancel-invite`
 
@@ -417,8 +421,10 @@ gh teacher roster sync <org> <classroom> --write    # apply
 Catches `roster.csv` up with GitHub: records the students who accepted an email
 invitation, fills in a missing `github_id` from the classroom team's membership,
 drops the pending rows nothing backs, and deletes the invite teams that are done.
-The web app runs the same sync when a teacher opens the roster; here it's
-explicit and script-callable.
+The web app runs this same sync when a teacher opens the roster; here it's
+explicit and script-callable. The web app's pass does two things more: it
+refreshes each row's recorded `role` from live team membership, and it adds a row
+for a classroom-team member the roster is missing.
 
 Its scope is the email-invite lifecycle and `github_id`. It never rewrites a
 `role` already recorded on a row, and it doesn't add rows for organization
@@ -446,7 +452,7 @@ Exit codes follow `terraform plan -detailed-exitcode`:
 | `2` | A dry run found changes pending. |
 
 Conservative by construction. Any degraded read (the pending-invitation list, a
-team) makes the whole pass read-mostly: no row is dropped and **no invite team is
+team) makes the whole pass report-only: no row is dropped and **no invite team is
 deleted at all**, not even one whose address the roster already records. Such a
 pass doesn't report a deletion it won't make. A team whose stored address no
 longer hashes to its name, or that has more than one member, is reported on
@@ -482,7 +488,7 @@ gh teacher roster import <org> <classroom> <path-to-csv>
 
 Bulk upsert. Accepts three header shapes: the stored roster shape
 (`username,first_name,last_name,email,section,github_id,role`), the same without
-`role`, and just the first five columns, so a `roster.csv` exported from a
+`role`, and the first five columns alone, so a `roster.csv` exported from a
 web-managed classroom imports verbatim. The field reference is in
 [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
 
@@ -497,7 +503,8 @@ Each row is routed by what identifies it:
   sends or cancels an invitation, and never creates an identity-less row, so an
   address with no pending row is skipped with a notice. Send the invitation with
   [`roster invite`](#roster-invite) first.
-- **A `github_id` with no `username`.** Round-trip cargo: `import` resolves
+- **A `github_id` with no `username`.** The one shape a round-trip can't
+  preserve: `import` resolves
   students by username and has no id-to-account lookup, so the row is skipped
   with a notice pointing at the web app's **Upload**, and anything stored for
   that student is left untouched. A row whose `github_id` cell is present but
@@ -560,8 +567,8 @@ The CLI-visible effects:
 ## `assignment`
 
 Manage entries in `<org>/classroom50/<classroom>/assignments.json` — the manifest
-the autograde workflow and `gh student accept` both read. Writes use the same
-optimistic-rebase loop as roster commands.
+the autograde workflow and `gh student accept` both read. Writes retry on top of
+each other, the same as roster commands.
 
 ### `assignment add`
 
@@ -584,7 +591,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | --- | --- |
 | `--template <owner>/<repo>[@branch]` | Starter-code repo (must be flagged as a template). Omit for a template-less assignment (an initialized repo: README plus the control files). Branch defaults to the template's default. |
 | `--description <text>` | Short description. |
-| `--due <ISO-8601>` | Due date, e.g. `2026-09-15T23:59:00-04:00`. Stored as UTC; the machine's local timezone is assumed if you omit the offset. |
+| `--due <ISO-8601>` | Due date, such as `2026-09-15T23:59:00-04:00`. Stored as UTC; the machine's local timezone is assumed if you omit the offset. |
 | `--available-from <ISO-8601>` | Release date; stored as UTC (local timezone assumed without an offset). Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Listing-only, not access control: students who already accepted always see it. |
 | `--mode individual\|group` | `individual` (default) or `group` (requires `--max-group-size`). |
 | `--max-group-size <N>` | Max group collaborators (2–100). Advisory. |
@@ -601,7 +608,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 
 **Where grading logic lives** (increasing effort): declarative `--tests` → a
 per-assignment `<classroom>/autograders/<slug>/autograder.py` → a classroom
-default via `gh teacher autograder set-default`. See
+default with `gh teacher autograder set-default`. See
 [Autograding Basics](Autograding-Basics#declarative-tests) and
 [Advanced Autograding](Advanced-Autograding#writing-an-autograderpy).
 
@@ -704,7 +711,7 @@ reach already-accepted repos without the retrofit.
 | Flag | Purpose |
 | --- | --- |
 | `--update-shims` | Retrofit each existing repo's shim (default on). `--update-shims=false` flips only the assignments.json field. |
-| `--user <login>` | Retrofit a single student's repo (e.g., one that failed on a previous run). |
+| `--user <login>` | Retrofit a single student's repo (for instance, one that failed on a previous run). |
 | `--dry-run` | Report the field flip and per-repo changes without writing anything. |
 | `-q, --quiet` | Suppress per-repo and summary lines. |
 
@@ -839,9 +846,14 @@ gh teacher member list <org> --quiet
 ```
 
 Shows *actual* GitHub membership (the roster is the *intended* list), so you can
-spot mismatches — e.g., a student who never accepted their invite. Default is an
+spot mismatches, such as a student who never accepted their invitation. Default is an
 aligned table; `--json` emits `{login, kind, role, github_id}`; `--quiet` prints
 one login per line. Reading org invitations needs `admin:org`. Read-only.
+
+On a `member` or `collaborator` row, `github_id` is the account's id. On a
+`pending invitation` row it is the **invitation's** id instead, since GitHub's
+invitations API reports no account id for an invitee, so don't join it against
+`roster.csv`'s `github_id`.
 
 ## `download`
 

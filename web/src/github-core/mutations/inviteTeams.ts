@@ -226,12 +226,13 @@ export async function readInviteTeam(
   }
 }
 
-// Enumerate the org's invite-<hash> teams (secret teams this feature owns),
-// filtering the org team list by the invite- prefix. STRICT: a failed listing
-// throws rather than degrading to [] — the reconcile uses this list to decide
-// which email-only roster rows are still backed by a live invite, and a
-// degraded read must never masquerade as "no invite teams" (which would wipe
-// every pending email row). Owner/member visibility still applies.
+// Enumerate the org's candidate invite teams, filtering the org team list by the
+// `invite-` prefix. That prefix is a namespace, not proof of ownership, so every
+// caller re-checks the description for a valid v1 record before acting. STRICT:
+// a failed listing throws rather than degrading to [] — the reconcile uses this
+// list to decide which email-only roster rows are still backed by a live invite,
+// and a degraded read must never masquerade as "no invite teams" (which would
+// wipe every pending email row). Owner/member visibility still applies.
 export async function listInviteTeams(
   client: GitHubClient,
   org: string,
@@ -244,9 +245,10 @@ export async function listInviteTeams(
   return teams.filter((t) => t.slug && isInviteTeamSlug(t.slug))
 }
 
-// Delete an invite team by slug. Fail-closed: refuses any slug outside the
-// invite- namespace so a caller can't steer a delete into an unrelated team.
-// 404 = already gone (success), so teardown is idempotent.
+// Delete an invite team by slug. Refuses any slug outside the `invite-`
+// namespace so a caller can't steer a delete into an unrelated team; the
+// namespace alone isn't proof of ownership, so callers establish that from the
+// team's v1 record first. 404 = already gone (success), so teardown is idempotent.
 export async function deleteInviteTeam(
   client: GitHubClient,
   org: string,

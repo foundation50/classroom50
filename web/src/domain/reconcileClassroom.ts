@@ -64,7 +64,8 @@ const NOOP_RESULT: ClassroomReconcileResult = {
 // maintainer of every team it makes, and an owner sitting on those teams is the
 // mixed-role state the roster would miscount. The drop is unconditional (not
 // gated on created-vs-adopted) so a pre-existing stray membership self-heals —
-// mirrors createClassroomFiles' dropCreatorFromNonTeacherTeams.
+// mirrors createClassroomFiles' inline creator drop (and the CLI's
+// dropCreatorFromNonTeacherTeams).
 export async function reconcileClassroom(
   client: GitHubClient,
   org: string,

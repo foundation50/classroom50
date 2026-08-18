@@ -61,6 +61,7 @@ const rowToStudent = (row: OrgMemberRow): Student => ({
 //     widen a removal), so bulkUnenrollStudents drops such a target and it would
 //     otherwise reconcile to "already removed" while both the row AND the live
 //     invitation survived. Cancelling the invitation is the action that retires it.
+//
 // so only removable rows reach the batch writer. Per-row outcomes are
 // reconciled from the batch result (removed / not-found).
 export async function bulkRemoveFromClassroom(

@@ -93,8 +93,8 @@ export type UseTeamRosterResult = {
   refetch: () => void
 }
 
-// The teacher roster, driven by GitHub (team members + pending org invites),
-// with roster.csv joined only as optional display metadata. Resolves the team
+// The teacher roster, driven by GitHub (team members + each role team's pending
+// invitations), with roster.csv joined only as optional display metadata. Resolves the team
 // slug from classroom.json (fallback classroom50-<classroom>) so the grade
 // collector, Go download, and this view agree on the slug.
 export function useTeamRoster(
@@ -215,18 +215,19 @@ export function useTeamRoster(
       buildTeamRoster({
         members: members ?? [],
         // A non-owner can't read invitations; pass none rather than a partial.
-        // (org invitations forbidden => pendingHidden => the whole pending
-        // section collapses to the owners-only note.)
+        // (the team-scoped pending read forbidden => pendingHidden => the whole
+        // pending section collapses to the owners-only note.)
         invitations: pendingHidden ? [] : invitations,
         staffMembers: {
           teacher: teacherMembers ?? [],
           hta: htaMembers ?? [],
           ta: taMembers ?? [],
         },
-        // Each staff team's pending is independent: an owner who can read org
-        // invitations but hits a per-team 403/error still sees the readable
-        // teams' pending — that team's `data` is undefined -> [] (omitted), not
-        // a hide-all. Zeroed wholesale only when pendingHidden (non-owner).
+        // Each staff team's pending is independent: an owner who can read the
+        // student team's pending but hits a per-team 403/error still sees the
+        // readable teams' pending — that team's `data` is undefined -> []
+        // (omitted), not a hide-all. Zeroed wholesale only when pendingHidden
+        // (non-owner).
         staffInvitations: pendingHidden
           ? {}
           : {

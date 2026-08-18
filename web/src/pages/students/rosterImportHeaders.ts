@@ -30,8 +30,9 @@ export const OPTIONAL_IMPORT_HEADERS = [
 ] as const
 
 // Header tokens that mark the first line as a real header row rather than a bare
-// one-value-per-line list, so a file whose only column is `github_id` is
-// diagnosed as a mis-headered CSV instead of treated as a username list.
+// one-value-per-line list, so a file whose only column is `section` is diagnosed
+// as a header row missing an identity column instead of being read as a list of
+// usernames.
 export const RECOGNIZED_IMPORT_HEADERS = [
   ...IDENTITY_IMPORT_HEADERS,
   ...OPTIONAL_IMPORT_HEADERS,
