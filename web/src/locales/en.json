@@ -100,7 +100,6 @@
       "filterAll": "All statuses",
       "filterAria": "Filter by conformance status",
       "empty": "No criteria match this filter.",
-      "clearFilter": "Clear filter",
       "sortBy": "Sort by",
       "sort": {
         "criterion": "Criterion",
@@ -152,6 +151,8 @@
     "cancel": "Cancel",
     "save": "Save",
     "edit": "Edit",
+    "clear": "Clear",
+    "clearFilter": "Clear filter",
     "loading": "Loading...",
     "loadingApp": "Loading Classroom 50",
     "working": "Working...",
@@ -2490,7 +2491,6 @@
       "failing": "Failing",
       "accepted": "Accepted",
       "notAccepted": "Not accepted",
-      "clear": "Clear",
       "sortAria": "Sort submissions",
       "sortRecent": "Newest first",
       "sortOldest": "Oldest first",
@@ -2938,7 +2938,6 @@
       "allSources": "All sources",
       "allTypes": "All types"
     },
-    "clearFilters": "Clear",
     "source": {
       "commit": "Config changes",
       "run": "Workflow runs",

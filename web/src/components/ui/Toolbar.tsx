@@ -50,6 +50,17 @@ export type ToolbarSearchProps = {
   // so a caller `w-full`/`min-w-0` wins over the default.
   className?: string
   iconClassName?: string
+  // The in-search-bar clear affordance: an inline text link at the trailing edge
+  // that resets the active search/filters. Rendered only when `onClear` is set
+  // AND `clearActive` is true, so every search bar clears the same way. Provide
+  // `clearLabel` for the wording (e.g. "Clear filter" vs "Clear"). One recipe —
+  // don't hand-roll a standalone Clear button beside the bar.
+  onClear?: () => void
+  clearActive?: boolean
+  clearLabel?: string
+  // Escape hatch for a fully custom trailing node inside the shell; `onClear`
+  // covers the standard clear affordance and is preferred.
+  trailing?: ReactNode
 }
 
 function ToolbarSearch({
@@ -60,7 +71,21 @@ function ToolbarSearch({
   inputSize = "sm",
   className = "min-w-[12rem] flex-1 sm:max-w-xs",
   iconClassName = "opacity-60",
+  onClear,
+  clearActive = false,
+  clearLabel,
+  trailing,
 }: ToolbarSearchProps) {
+  const clear =
+    onClear && clearActive ? (
+      <button
+        type="button"
+        onClick={onClear}
+        className="link link-hover whitespace-nowrap text-xs text-base-content/60 hover:text-base-content"
+      >
+        {clearLabel}
+      </button>
+    ) : null
   return (
     <Input
       type="search"
@@ -69,6 +94,7 @@ function ToolbarSearch({
       leadingIcon={
         <Search aria-hidden="true" className={cx("size-4", iconClassName)} />
       }
+      trailing={trailing ?? clear}
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}

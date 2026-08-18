@@ -9,7 +9,7 @@ import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
-import { Alert, Badge, Spinner } from "@/components/ui"
+import { Alert, Badge, HelpTooltip, Spinner } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
 import SubmissionsControls from "@/pages/submissions/SubmissionsControls"
@@ -1103,6 +1103,14 @@ const SubmissionsPageContent = () => {
         passingAvailable={passingEnabled}
         sections={sections}
         onShare={() => setAcceptOpen(true)}
+        // A not-yet-collected submitter can't be placed under a time sort or a
+        // grade-implying status filter until the next collect; surface that as
+        // an inline info tooltip next to Sort rather than a full-width banner.
+        sortHint={
+          showPendingHiddenHint ? (
+            <HelpTooltip help={t("submissions.filters.pendingHiddenHint")} />
+          ) : undefined
+        }
         // No collect/freshness exists for assignments that skip built-in
         // grading — the header's grading badge explains why.
         leading={
@@ -1249,11 +1257,6 @@ const SubmissionsPageContent = () => {
           />
         }
       />
-      {showPendingHiddenHint && (
-        <p className="text-sm text-base-content/60" role="status">
-          {t("submissions.filters.pendingHiddenHint")}
-        </p>
-      )}
       <SubmissionsTable
         scores={visibleRows}
         students={students}

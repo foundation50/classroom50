@@ -55,19 +55,24 @@ describe("SubmissionsControls — always-visible sort/status controls", () => {
     ).not.toBeNull()
   })
 
-  it("shows Clear when any axis is non-default and hides it otherwise", () => {
+  it("labels the clear affordance 'Clear filter' for a filter and 'Clear' for a search term, hidden otherwise", () => {
     const { rerender } = render(<SubmissionsControls {...baseProps} />)
-    expect(screen.queryByText("submissions.filters.clear")).toBeNull()
+    expect(screen.queryByText("common.clear")).toBeNull()
+    expect(screen.queryByText("common.clearFilter")).toBeNull()
 
+    // A filter active → "Clear filter".
     rerender(
       <SubmissionsControls
         {...baseProps}
         filters={{ ...DEFAULT_FILTERS, submission: "submitted" }}
       />,
     )
-    expect(screen.queryByText("submissions.filters.clear")).not.toBeNull()
+    expect(screen.queryByText("common.clearFilter")).not.toBeNull()
+    expect(screen.queryByText("common.clear")).toBeNull()
 
+    // Only a search term → "Clear".
     rerender(<SubmissionsControls {...baseProps} query="alice" />)
-    expect(screen.queryByText("submissions.filters.clear")).not.toBeNull()
+    expect(screen.queryByText("common.clear")).not.toBeNull()
+    expect(screen.queryByText("common.clearFilter")).toBeNull()
   })
 })

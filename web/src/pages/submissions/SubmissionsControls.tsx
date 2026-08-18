@@ -35,6 +35,7 @@ const SubmissionsControls = ({
   passingAvailable = false,
   sections = [],
   onShare,
+  sortHint,
   leading,
   trailing,
 }: {
@@ -52,18 +53,26 @@ const SubmissionsControls = ({
   // left of the Actions menu (the most common non-grading action), not buried in
   // Actions.
   onShare?: () => void
+  // Optional affordance rendered right after the Sort select (e.g. a
+  // HelpTooltip that explains a sort/filter caveat) — inline in the bar so it
+  // doesn't take a full row of its own.
+  sortHint?: ReactNode
   // Left-aligned lead content (the DataFreshness widget). Search + filters +
   // sort + actions sit on the right.
   leading?: ReactNode
   trailing?: ReactNode
 }) => {
   const { t } = useTranslation()
-  const hasActiveFilter =
+  // Distinguish an active filter (section/status/passing/accepted) from a plain
+  // search term so the in-search-bar clear affordance can label itself "Clear
+  // filter" vs "Clear". Either makes the clear control appear; clicking it
+  // resets both (query + filters).
+  const hasFilterActive =
     filters.submission !== "all" ||
     filters.passing !== "all" ||
     filters.accepted !== "all" ||
-    filters.section !== "all" ||
-    query.trim() !== ""
+    filters.section !== "all"
+  const hasActiveFilter = hasFilterActive || query.trim() !== ""
 
   const clearAll = () => {
     onQueryChange("")
@@ -93,6 +102,11 @@ const SubmissionsControls = ({
           value={query}
           onChange={onQueryChange}
           ariaLabel={t("submissions.filters.searchAria")}
+          onClear={clearAll}
+          clearActive={hasActiveFilter}
+          clearLabel={
+            hasFilterActive ? t("common.clearFilter") : t("common.clear")
+          }
         />
 
         {sections.length > 0 && (
@@ -183,11 +197,7 @@ const SubmissionsControls = ({
           </option>
         </Toolbar.FilterSelect>
 
-        {hasActiveFilter && (
-          <Button variant="ghost" size="sm" onClick={clearAll}>
-            {t("submissions.filters.clear")}
-          </Button>
-        )}
+        {sortHint}
 
         {onShare && (
           <Button variant="outline" size="sm" onClick={onShare}>

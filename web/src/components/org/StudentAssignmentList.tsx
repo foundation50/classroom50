@@ -11,7 +11,7 @@ import {
   UsersRound,
 } from "lucide-react"
 
-import { Alert, Badge, Button, Card, Toolbar } from "@/components/ui"
+import { Alert, Badge, Card, Toolbar } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import { EnterDiv } from "@/lib/motionComponents"
 import { useGithubAuth } from "@/auth/useGithubAuth"
@@ -238,11 +238,14 @@ function StudentAssignmentsToolbar({
   onViewChange: (mode: "grid" | "list") => void
 }) {
   const { t } = useTranslation()
-  const hasActiveFilter =
-    query.trim() !== "" ||
-    filters.status !== "all" ||
-    filters.type !== "all" ||
-    filters.due !== "all"
+  const hasFilterActive =
+    filters.status !== "all" || filters.type !== "all" || filters.due !== "all"
+  const hasActiveFilter = hasFilterActive || query.trim() !== ""
+
+  const clearAll = () => {
+    onQueryChange("")
+    onFiltersChange({ ...DEFAULT_STUDENT_FILTERS })
+  }
 
   return (
     <Toolbar>
@@ -251,6 +254,11 @@ function StudentAssignmentsToolbar({
         value={query}
         onChange={onQueryChange}
         ariaLabel={t("assignments.discover.toolbar.searchAria")}
+        onClear={clearAll}
+        clearActive={hasActiveFilter}
+        clearLabel={
+          hasFilterActive ? t("common.clearFilter") : t("common.clear")
+        }
       />
 
       <Toolbar.FilterSelect
@@ -311,19 +319,6 @@ function StudentAssignmentsToolbar({
           {t("assignments.discover.toolbar.dueOverdue")}
         </option>
       </Toolbar.FilterSelect>
-
-      {hasActiveFilter && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            onQueryChange("")
-            onFiltersChange({ ...DEFAULT_STUDENT_FILTERS })
-          }}
-        >
-          {t("assignments.discover.toolbar.clear")}
-        </Button>
-      )}
 
       <Toolbar.Trailing>
         <Toolbar.FilterSelect

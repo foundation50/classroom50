@@ -55,8 +55,8 @@ export function ActivityToolbar({
 }) {
   const { t } = useTranslation()
 
-  const hasActiveFilter =
-    query.trim() !== "" || filters.sources.size > 0 || filters.types.size > 0
+  const hasFilterActive = filters.sources.size > 0 || filters.types.size > 0
+  const hasActiveFilter = hasFilterActive || query.trim() !== ""
 
   const clearAll = () => {
     onQueryChange("")
@@ -70,6 +70,11 @@ export function ActivityToolbar({
         ariaLabel={t("orgActivity.searchLabel")}
         value={query}
         onChange={onQueryChange}
+        onClear={clearAll}
+        clearActive={hasActiveFilter}
+        clearLabel={
+          hasFilterActive ? t("common.clearFilter") : t("common.clear")
+        }
       />
 
       <Toolbar.FilterSelect
@@ -103,12 +108,6 @@ export function ActivityToolbar({
           </option>
         ))}
       </Toolbar.FilterSelect>
-
-      {hasActiveFilter && (
-        <Button variant="ghost" size="sm" onClick={clearAll}>
-          {t("orgActivity.clearFilters")}
-        </Button>
-      )}
 
       <Toolbar.Trailing>
         <Button

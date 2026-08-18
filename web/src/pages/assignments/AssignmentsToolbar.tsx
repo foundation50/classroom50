@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowUpDown, ListFilter } from "lucide-react"
 
-import { Button, Toolbar } from "@/components/ui"
+import { Toolbar } from "@/components/ui"
 import {
   DEFAULT_FILTERS,
   type AssignmentFilters,
@@ -36,8 +36,8 @@ const AssignmentsToolbar = ({
   trailing?: ReactNode
 }) => {
   const { t } = useTranslation()
-  const hasActiveFilter =
-    query.trim() !== "" || filters.type !== "all" || filters.due !== "all"
+  const hasFilterActive = filters.type !== "all" || filters.due !== "all"
+  const hasActiveFilter = hasFilterActive || query.trim() !== ""
 
   const clearAll = () => {
     onQueryChange("")
@@ -61,6 +61,11 @@ const AssignmentsToolbar = ({
         value={query}
         onChange={onQueryChange}
         ariaLabel={t("assignments.toolbar.searchAria")}
+        onClear={clearAll}
+        clearActive={hasActiveFilter}
+        clearLabel={
+          hasFilterActive ? t("common.clearFilter") : t("common.clear")
+        }
       />
 
       <Toolbar.FilterSelect
@@ -97,12 +102,6 @@ const AssignmentsToolbar = ({
         <option value="no-due">{t("assignments.toolbar.dueNone")}</option>
         <option value="overdue">{t("assignments.toolbar.dueOverdue")}</option>
       </Toolbar.FilterSelect>
-
-      {hasActiveFilter && (
-        <Button variant="ghost" size="sm" onClick={clearAll}>
-          {t("assignments.toolbar.clear")}
-        </Button>
-      )}
 
       <Toolbar.Trailing>
         <Toolbar.FilterSelect

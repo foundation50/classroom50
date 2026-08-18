@@ -26,6 +26,10 @@ export type InputProps = {
   inputSize?: InputSize
   invalid?: boolean
   leadingIcon?: ReactNode
+  // Rendered inside the bordered shell after the input (e.g. an inline clear
+  // affordance). Only honored alongside `leadingIcon`, which owns the wrapping
+  // `<label class="input">` shell; a bare input has no shell to host it.
+  trailing?: ReactNode
   ref?: Ref<HTMLInputElement>
 } & ComponentPropsWithoutRef<"input">
 
@@ -33,6 +37,7 @@ export function Input({
   inputSize = "md",
   invalid = false,
   leadingIcon,
+  trailing,
   className,
   type,
   ref,
@@ -46,7 +51,8 @@ export function Input({
 
   // With a leading icon, the border lives on the wrapping <label> (daisyUI's
   // documented pattern) and the <input> is a bare grower — a single border
-  // owner, no focus-ring conflict.
+  // owner, no focus-ring conflict. A `trailing` node sits after the input in the
+  // same shell.
   if (leadingIcon) {
     return (
       <label
@@ -67,6 +73,7 @@ export function Input({
           aria-invalid={invalid || undefined}
           {...props}
         />
+        {trailing}
       </label>
     )
   }
