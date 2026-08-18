@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next"
 
 import GitHub from "@/assets/github.svg?react"
-import { getName, getInitials } from "@/util/students"
+import { getName, getDisplayName, getInitials } from "@/util/students"
 import { studentRepoUrl } from "@/util/studentRepo"
 import Avatar from "@/components/avatar"
 import { Badge, Button } from "@/components/ui"
@@ -10,6 +10,7 @@ import { ScoreCell } from "@/pages/submissions/ScoreCell"
 import type { ScoreOverrideCapability } from "@/pages/submissions/ScoreOverrideModal"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import type { Student } from "@/types/classroom"
+import type { StudentSortMode } from "@/util/students"
 
 // Secondary avatar line: the GitHub login plus the section (e.g.
 // "octocat · Period 3"), dropping whichever piece is missing. The login is
@@ -238,6 +239,7 @@ export const NonSubmitterRow = ({
   overrideGrade,
   onEditGrade,
   thresholdFraction = null,
+  nameMode = "first",
 }: {
   student: Student
   students: Student[]
@@ -255,6 +257,9 @@ export const NonSubmitterRow = ({
   // The assignment's pass threshold, so the first saved grade renders with the
   // same tone the submitter row would give it.
   thresholdFraction?: number | null
+  // How to format the display name — "last" ("Last, First") when the table is
+  // ordered by last name, matching the submitter rows.
+  nameMode?: StudentSortMode
 }) => {
   const canGrade =
     overrideGrade?.mode === "manual" &&
@@ -265,7 +270,7 @@ export const NonSubmitterRow = ({
     <tr>
       <td>
         <Avatar
-          name={getName(student.username, students)}
+          name={getDisplayName(student.username, students, nameMode)}
           initials={getInitials(student.username, students)}
           github={student.username || student.email}
           subtitle={identitySubtitle(

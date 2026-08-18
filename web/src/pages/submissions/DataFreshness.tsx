@@ -54,10 +54,11 @@ export function DataFreshness({
 
         {onRefresh && (
           // Stale: a red "Sync now" flags the out-of-date snapshot and
-          // re-collects on click. In sync: a quiet ghost "Refresh".
+          // re-collects on click. In sync: a bordered "Refresh" that matches the
+          // other toolbar buttons' size and background.
           <Button
-            variant={stale ? "error" : "ghost"}
-            size="xs"
+            variant={stale ? "error" : "outline"}
+            size="sm"
             disabled={collecting}
             onClick={onRefresh}
             aria-live="polite"
@@ -69,8 +70,7 @@ export function DataFreshness({
           >
             <RefreshCw
               aria-hidden="true"
-              size={12}
-              className={cx("me-1", collecting && "animate-spin")}
+              className={cx("size-4", collecting && "animate-spin")}
             />
             {collecting
               ? t("submissions.freshness.refreshing")

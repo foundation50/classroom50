@@ -1,6 +1,8 @@
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
+import { ArrowUpDown, ListFilter } from "lucide-react"
 
-import { Button, Toolbar } from "@/components/ui"
+import { Toolbar } from "@/components/ui"
 import {
   DEFAULT_FILTERS,
   type AssignmentFilters,
@@ -9,6 +11,11 @@ import {
 
 // Search + type/due filters + sort for the teacher assignments table.
 // Controlled by TeacherAssignmentsView; emits query/filter/sort changes.
+// `trailing` hosts right-aligned actions (the New assignment split button or the
+// archived badge), mirroring the submissions toolbar so the primary action sits
+// in the bar, not the page header. When `actionsOnly` is set (no assignments
+// exist yet) only the trailing actions render — the search/filter/sort controls
+// would have nothing to act on.
 const AssignmentsToolbar = ({
   query,
   onQueryChange,
@@ -16,6 +23,8 @@ const AssignmentsToolbar = ({
   onFiltersChange,
   sort,
   onSortChange,
+  actionsOnly = false,
+  trailing,
 }: {
   query: string
   onQueryChange: (value: string) => void
@@ -23,14 +32,24 @@ const AssignmentsToolbar = ({
   onFiltersChange: (filters: AssignmentFilters) => void
   sort: AssignmentSort
   onSortChange: (sort: AssignmentSort) => void
+  actionsOnly?: boolean
+  trailing?: ReactNode
 }) => {
   const { t } = useTranslation()
-  const hasActiveFilter =
-    query.trim() !== "" || filters.type !== "all" || filters.due !== "all"
+  const hasFilterActive = filters.type !== "all" || filters.due !== "all"
+  const hasActiveFilter = hasFilterActive || query.trim() !== ""
 
   const clearAll = () => {
     onQueryChange("")
     onFiltersChange({ ...DEFAULT_FILTERS })
+  }
+
+  if (actionsOnly) {
+    return trailing ? (
+      <Toolbar>
+        <Toolbar.Trailing>{trailing}</Toolbar.Trailing>
+      </Toolbar>
+    ) : null
   }
 
   return (
@@ -40,10 +59,14 @@ const AssignmentsToolbar = ({
         value={query}
         onChange={onQueryChange}
         ariaLabel={t("assignments.toolbar.searchAria")}
+        onClear={clearAll}
+        clearActive={hasActiveFilter}
+        hasFilterActive={hasFilterActive}
       />
 
       <Toolbar.FilterSelect
-        label={t("assignments.toolbar.typeLabel")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.type !== "all"}
         value={filters.type}
         onChange={(e) =>
           onFiltersChange({
@@ -61,7 +84,8 @@ const AssignmentsToolbar = ({
       </Toolbar.FilterSelect>
 
       <Toolbar.FilterSelect
-        label={t("assignments.toolbar.dueLabel")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.due !== "all"}
         value={filters.due}
         onChange={(e) =>
           onFiltersChange({
@@ -77,15 +101,9 @@ const AssignmentsToolbar = ({
         <option value="overdue">{t("assignments.toolbar.dueOverdue")}</option>
       </Toolbar.FilterSelect>
 
-      {hasActiveFilter && (
-        <Button variant="ghost" size="sm" onClick={clearAll}>
-          {t("assignments.toolbar.clear")}
-        </Button>
-      )}
-
       <Toolbar.Trailing>
         <Toolbar.FilterSelect
-          label={t("assignments.toolbar.sortLabel")}
+          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
           value={sort}
           onChange={(e) => onSortChange(e.target.value as AssignmentSort)}
           aria-label={t("assignments.toolbar.sortAria")}
@@ -102,6 +120,7 @@ const AssignmentsToolbar = ({
           </option>
           <option value="type">{t("assignments.toolbar.sortType")}</option>
         </Toolbar.FilterSelect>
+        {trailing}
       </Toolbar.Trailing>
     </Toolbar>
   )

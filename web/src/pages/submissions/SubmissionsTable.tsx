@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import {
   getName,
+  getDisplayName,
   getInitials,
   getSection,
   resolveStudent,
@@ -323,6 +324,11 @@ const SubmissionsTable = ({
   const { t } = useTranslation()
   const passBar = thresholdFraction ?? null
 
+  // Format the row identity as "Last, First" only under a last-name sort, so the
+  // label reads in the order it sorts; "First Last" otherwise (name-first and
+  // time sorts). sortNameMode already maps time sorts to "first".
+  const nameDisplayMode = sortNameMode(sort)
+
   // The submission whose type-aware details modal is open, or null. Captured
   // from the row so the modal renders without re-deriving.
   const [detailsContext, setDetailsContext] =
@@ -447,7 +453,7 @@ const SubmissionsTable = ({
             />
           ) : (
             <Avatar
-              name={getName(usernames[0], students)}
+              name={getDisplayName(usernames[0], students, nameDisplayMode)}
               initials={getInitials(usernames[0], students)}
               github={usernames[0]}
               subtitle={identitySubtitle(
@@ -775,6 +781,7 @@ const SubmissionsTable = ({
                         : undefined
                     }
                     thresholdFraction={passBar}
+                    nameMode={nameDisplayMode}
                   />
                 )
               }

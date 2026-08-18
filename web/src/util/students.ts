@@ -57,6 +57,23 @@ export const getName = (key: string, students: Student[]) => {
   return nameFromParts(student.first_name, student.last_name)
 }
 
+// Display name for a username in the given sort mode: "First Last" by default,
+// "Last, First" when the view is ordered by last name so the label reads in the
+// same order it sorts. "" when the login isn't on the roster or has no name
+// (callers fall back to the login). Single source so every by-name surface
+// formats the same way — pass mode from the active sort.
+export const getDisplayName = (
+  key: string,
+  students: Student[],
+  mode: StudentSortMode = DEFAULT_STUDENT_SORT,
+): string => {
+  const student = findByUsername(key, students)
+  if (!student) return ""
+  return mode === "last"
+    ? nameLastFirst(student.first_name, student.last_name)
+    : nameFromParts(student.first_name, student.last_name)
+}
+
 // Display name from a roster row's first/last parts; "" when neither present.
 export const nameFromParts = (
   firstName?: string,
@@ -68,6 +85,22 @@ export const nameFromParts = (
   if (!first) return capitalize(last)
   if (!last) return capitalize(first)
   return `${capitalize(first)} ${capitalize(last)}`
+}
+
+// "Lastname, Firstname" display form, used when a view is ordered by last name
+// so the on-screen name reads in the same order it sorts. Falls back to a single
+// present part (no stray comma), and "" when neither is set — mirroring
+// nameFromParts so callers can swap between the two by mode alone.
+export const nameLastFirst = (
+  firstName?: string,
+  lastName?: string,
+): string => {
+  const first = firstName?.trim() ?? ""
+  const last = lastName?.trim() ?? ""
+  if (!first && !last) return ""
+  if (!last) return capitalize(first)
+  if (!first) return capitalize(last)
+  return `${capitalize(last)}, ${capitalize(first)}`
 }
 
 export const getInitials = (key: string, students: Student[]) => {

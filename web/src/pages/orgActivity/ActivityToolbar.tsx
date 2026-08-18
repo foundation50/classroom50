@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Download } from "lucide-react"
+import { Download, ListFilter } from "lucide-react"
 
 import { Button, Toolbar } from "@/components/ui"
 import type { TimelineSource, TimelineType } from "@/lib/activity/timeline"
@@ -55,8 +55,8 @@ export function ActivityToolbar({
 }) {
   const { t } = useTranslation()
 
-  const hasActiveFilter =
-    query.trim() !== "" || filters.sources.size > 0 || filters.types.size > 0
+  const hasFilterActive = filters.sources.size > 0 || filters.types.size > 0
+  const hasActiveFilter = hasFilterActive || query.trim() !== ""
 
   const clearAll = () => {
     onQueryChange("")
@@ -70,10 +70,14 @@ export function ActivityToolbar({
         ariaLabel={t("orgActivity.searchLabel")}
         value={query}
         onChange={onQueryChange}
+        onClear={clearAll}
+        clearActive={hasActiveFilter}
+        hasFilterActive={hasFilterActive}
       />
 
       <Toolbar.FilterSelect
-        label={t("orgActivity.filters.source")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.sources.size > 0}
         value={selectValue(filters.sources)}
         aria-label={t("orgActivity.filters.source")}
         onChange={(e) =>
@@ -89,7 +93,8 @@ export function ActivityToolbar({
       </Toolbar.FilterSelect>
 
       <Toolbar.FilterSelect
-        label={t("orgActivity.filters.type")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.types.size > 0}
         value={selectValue(filters.types)}
         aria-label={t("orgActivity.filters.type")}
         onChange={(e) =>
@@ -103,12 +108,6 @@ export function ActivityToolbar({
           </option>
         ))}
       </Toolbar.FilterSelect>
-
-      {hasActiveFilter && (
-        <Button variant="ghost" size="sm" onClick={clearAll}>
-          {t("orgActivity.clearFilters")}
-        </Button>
-      )}
 
       <Toolbar.Trailing>
         <Button

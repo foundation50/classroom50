@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CircleDashed } from "lucide-react"
+import { ArrowUpDown, CircleDashed, ListFilter } from "lucide-react"
 
-import { Alert, Badge, Button, Card, Toolbar, cx } from "@/components/ui"
+import { Alert, Badge, Card, Toolbar, cx } from "@/components/ui"
 import {
   CONFORMANCE_TONE,
   hasGenericRemark,
@@ -214,7 +214,12 @@ export function VpatSection() {
     return filtered
   }, [vpat, query, filter, sort])
 
-  const hasActiveFilter = query.trim() !== "" || filter !== "all"
+  const hasFilterActive = filter !== "all"
+  const hasActiveFilter = hasFilterActive || query.trim() !== ""
+  const clearAll = () => {
+    setQuery("")
+    setFilter("all")
+  }
 
   // Clicking a summary chip filters to that status, or clears back to "all" when
   // the already-active chip is clicked again.
@@ -256,9 +261,13 @@ export function VpatSection() {
               value={query}
               onChange={setQuery}
               ariaLabel={t("accessibility.vpat.searchAria")}
+              onClear={clearAll}
+              clearActive={hasActiveFilter}
+              hasFilterActive={hasFilterActive}
             />
             <Toolbar.FilterSelect
-              label={t("accessibility.vpat.filterLabel")}
+              icon={<ListFilter aria-hidden="true" className="size-4" />}
+              active={filter !== "all"}
               value={filter}
               onChange={(e) => setFilter(e.target.value as VpatFilter)}
               aria-label={t("accessibility.vpat.filterAria")}
@@ -270,21 +279,9 @@ export function VpatSection() {
                 </option>
               ))}
             </Toolbar.FilterSelect>
-            {hasActiveFilter && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setQuery("")
-                  setFilter("all")
-                }}
-              >
-                {t("accessibility.vpat.clearFilter")}
-              </Button>
-            )}
             <Toolbar.Trailing>
               <Toolbar.FilterSelect
-                label={t("accessibility.vpat.sortBy")}
+                icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
                 value={sort}
                 onChange={(e) => setSort(e.target.value as VpatSort)}
                 aria-label={t("accessibility.vpat.sortBy")}

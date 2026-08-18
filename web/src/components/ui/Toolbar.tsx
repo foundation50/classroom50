@@ -1,5 +1,6 @@
 import { Search } from "lucide-react"
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 
 import { cx, hasUtility } from "./cx"
 import { Input, type InputSize } from "./Input"
@@ -50,6 +51,16 @@ export type ToolbarSearchProps = {
   // so a caller `w-full`/`min-w-0` wins over the default.
   className?: string
   iconClassName?: string
+  // The in-search-bar clear affordance: an inline text link at the trailing edge,
+  // rendered only when `onClear` is set AND `clearActive` is true. The label is
+  // resolved from one source — "Clear filter" when `hasFilterActive`, else
+  // "Clear" — so callers pass the boolean, not the wording.
+  onClear?: () => void
+  clearActive?: boolean
+  hasFilterActive?: boolean
+  // Escape hatch for a fully custom trailing node inside the shell; `onClear`
+  // covers the standard clear affordance and is preferred.
+  trailing?: ReactNode
 }
 
 function ToolbarSearch({
@@ -60,7 +71,22 @@ function ToolbarSearch({
   inputSize = "sm",
   className = "min-w-[12rem] flex-1 sm:max-w-xs",
   iconClassName = "opacity-60",
+  onClear,
+  clearActive = false,
+  hasFilterActive = false,
+  trailing,
 }: ToolbarSearchProps) {
+  const { t } = useTranslation()
+  const clear =
+    onClear && clearActive ? (
+      <button
+        type="button"
+        onClick={onClear}
+        className="link link-hover whitespace-nowrap text-xs text-base-content/60 hover:text-base-content"
+      >
+        {t(hasFilterActive ? "common.clearFilter" : "common.clear")}
+      </button>
+    ) : null
   return (
     <Input
       type="search"
@@ -69,6 +95,7 @@ function ToolbarSearch({
       leadingIcon={
         <Search aria-hidden="true" className={cx("size-4", iconClassName)} />
       }
+      trailing={trailing ?? clear}
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -81,28 +108,45 @@ export type ToolbarFilterSelectProps = {
   // Optional: with a label the select gets the joined label-prefix recipe; without
   // one it renders a bare sized Select (the inline bars have no visible prefix).
   label?: string
+  // A compact leading-icon prefix (funnel for a filter, up/down for a sort).
+  // Takes precedence over `label`; pass `aria-label` for the category name so the
+  // icon prefix stays purely visual. Prefer this over `label` for a tidy bar.
+  icon?: ReactNode
+  // Warning-toned highlight when the select holds a non-default value (see
+  // LabeledControl.active). Leave false for a sort select — a sort is always set,
+  // not a narrowing filter.
+  active?: boolean
   selectSize?: SelectSize
 } & ComponentPropsWithoutRef<"select">
 
 function ToolbarFilterSelect({
   label,
+  icon,
+  active = false,
   selectSize = "sm",
   className,
   children,
   ...props
 }: ToolbarFilterSelectProps) {
-  if (!label) {
+  // Match the prefix highlight on the select border/text so the whole control
+  // reads as active.
+  const activeSelectClass = active ? "border-warning text-warning" : undefined
+  if (!label && !icon) {
     return (
-      <Select selectSize={selectSize} className={className} {...props}>
+      <Select
+        selectSize={selectSize}
+        className={cx(activeSelectClass, className)}
+        {...props}
+      >
         {children}
       </Select>
     )
   }
   return (
-    <LabeledControl label={label}>
+    <LabeledControl label={label} icon={icon} active={active}>
       <Select
         selectSize={selectSize}
-        className={cx("join-item w-auto min-w-0", className)}
+        className={cx("join-item w-auto min-w-0", activeSelectClass, className)}
         {...props}
       >
         {children}

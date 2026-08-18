@@ -1,11 +1,17 @@
 import { Link } from "@tanstack/react-router"
-import { ChevronDown, Plus, Search } from "lucide-react"
+import {
+  ArrowUpDown,
+  ChevronDown,
+  ListFilter,
+  Plus,
+  Search,
+} from "lucide-react"
 import GitHub from "@/assets/github.svg?react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { NoSearchResults, ViewToggle } from "@/components/list"
-import { Button, Input, LabeledControl, Select } from "@/components/ui"
+import { Button, cx, Input, LabeledControl, Select } from "@/components/ui"
 import useClassroomSummaries, {
   classroomDisplayName,
   type ClassroomSummary,
@@ -190,10 +196,16 @@ const ClassroomList = ({
         </div>
 
         {showTermFilter && (
-          <LabeledControl label={t("classes.toolbar.term")}>
+          <LabeledControl
+            icon={<ListFilter aria-hidden="true" className="size-4" />}
+            active={activeTerm !== "all"}
+          >
             <Select
               selectSize="sm"
-              className="join-item w-auto"
+              className={cx(
+                "join-item w-auto",
+                activeTerm !== "all" && "border-warning text-warning",
+              )}
               aria-label={t("classes.toolbar.termLabel")}
               value={activeTerm}
               onChange={(e) => setTermFilter(e.target.value)}
@@ -208,7 +220,9 @@ const ClassroomList = ({
           </LabeledControl>
         )}
 
-        <LabeledControl label={t("classes.toolbar.sort.label")}>
+        <LabeledControl
+          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
+        >
           <Select
             selectSize="sm"
             className="join-item w-auto"

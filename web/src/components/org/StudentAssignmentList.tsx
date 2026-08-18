@@ -2,14 +2,16 @@ import { Link } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
+  ArrowUpDown,
   CalendarClock,
   CircleAlert,
   FilePlus2,
+  ListFilter,
   UserRound,
   UsersRound,
 } from "lucide-react"
 
-import { Alert, Badge, Button, Card, Toolbar } from "@/components/ui"
+import { Alert, Badge, Card, Toolbar } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import { EnterDiv } from "@/lib/motionComponents"
 import { useGithubAuth } from "@/auth/useGithubAuth"
@@ -236,11 +238,14 @@ function StudentAssignmentsToolbar({
   onViewChange: (mode: "grid" | "list") => void
 }) {
   const { t } = useTranslation()
-  const hasActiveFilter =
-    query.trim() !== "" ||
-    filters.status !== "all" ||
-    filters.type !== "all" ||
-    filters.due !== "all"
+  const hasFilterActive =
+    filters.status !== "all" || filters.type !== "all" || filters.due !== "all"
+  const hasActiveFilter = hasFilterActive || query.trim() !== ""
+
+  const clearAll = () => {
+    onQueryChange("")
+    onFiltersChange({ ...DEFAULT_STUDENT_FILTERS })
+  }
 
   return (
     <Toolbar>
@@ -249,10 +254,14 @@ function StudentAssignmentsToolbar({
         value={query}
         onChange={onQueryChange}
         ariaLabel={t("assignments.discover.toolbar.searchAria")}
+        onClear={clearAll}
+        clearActive={hasActiveFilter}
+        hasFilterActive={hasFilterActive}
       />
 
       <Toolbar.FilterSelect
-        label={t("assignments.discover.toolbar.statusLabel")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.status !== "all"}
         value={filters.status}
         onChange={(e) =>
           onFiltersChange({
@@ -274,7 +283,8 @@ function StudentAssignmentsToolbar({
       </Toolbar.FilterSelect>
 
       <Toolbar.FilterSelect
-        label={t("assignments.discover.toolbar.typeLabel")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.type !== "all"}
         value={filters.type}
         onChange={(e) =>
           onFiltersChange({
@@ -294,7 +304,8 @@ function StudentAssignmentsToolbar({
       </Toolbar.FilterSelect>
 
       <Toolbar.FilterSelect
-        label={t("assignments.discover.toolbar.dueLabel")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.due !== "all"}
         value={filters.due}
         onChange={(e) =>
           onFiltersChange({
@@ -310,22 +321,9 @@ function StudentAssignmentsToolbar({
         </option>
       </Toolbar.FilterSelect>
 
-      {hasActiveFilter && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            onQueryChange("")
-            onFiltersChange({ ...DEFAULT_STUDENT_FILTERS })
-          }}
-        >
-          {t("assignments.discover.toolbar.clear")}
-        </Button>
-      )}
-
       <Toolbar.Trailing>
         <Toolbar.FilterSelect
-          label={t("assignments.discover.toolbar.sortLabel")}
+          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
           value={sort}
           onChange={(e) =>
             onSortChange(e.target.value as StudentAssignmentSort)

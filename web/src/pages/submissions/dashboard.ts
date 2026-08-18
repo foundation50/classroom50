@@ -819,6 +819,27 @@ export function rowMatchesQuery(
   })
 }
 
+// Whether the current sort/filter combination can hide not-yet-collected
+// (live-only pending) submitters from a live-capable viewer. The page-scoped
+// fan-out builds its owner set from the SNAPSHOT spine, so a live-only owner
+// (pushed, not yet collected) can be placed only when the spine walks the whole
+// roster in name order with no grade-implying filter. A time sort, or a status/
+// passing filter that implies a grade, drops that owner from the page's owner
+// set until a collect ingests it. Used to surface an honest hint instead of
+// hiding the sort/status controls. False when the overlay doesn't apply.
+export function pendingMayHide(
+  liveCapable: boolean,
+  sort: SubmissionSort,
+  filters: SubmissionFilters,
+): boolean {
+  if (!liveCapable) return false
+  return (
+    !isNameSort(sort) ||
+    filters.submission !== "all" ||
+    filters.passing !== "all"
+  )
+}
+
 // Search + filters + sort over the submitted rows. "not-submitted" lives in the
 // caller's nonSubmitters list, so that filter hides every submitted row;
 // likewise "not-accepted", since a submitted row always has a repo.
@@ -981,12 +1002,19 @@ export function buildScoresCsvRows(
   scoresInfo: SubmissionRow[],
   nonSubmitters: Student[],
   students: Student[],
+  // The teacher's active sort, so the exported file matches the on-screen order.
+  // Name sorts order the whole set by name (first or last); time sorts put
+  // submitters in submission-time order, then the (timeless) non-submitters.
+  // Defaults to last-name so existing callers/tests keep the gradebook order.
+  sort: SubmissionSort = "name-last",
 ): ScoresCsvRow[] {
   // Carry the resolved student alongside each row so the final ordering can use
   // the shared name comparator (last name, then first, then username) — the
   // same collation and identity tie-break every other roster view uses, so two
   // same-named students order deterministically rather than by input order.
-  type Keyed = { row: ScoresCsvRow; student: Student }
+  // `time` carries the row's submission instant for a time sort (non-submitters
+  // have none and sort last).
+  type Keyed = { row: ScoresCsvRow; student: Student; time: number | null }
 
   // The name columns, escaped against spreadsheet formula injection: self-
   // reported names are as untrusted as the login/URL columns.
@@ -1015,6 +1043,7 @@ export function buildScoresCsvRows(
       // rows are credited to all members; the first is the owner/founder, which
       // is how the dashboard already derives a group's display name).
       const student = studentFor(usernames[0] ?? "")
+      const ms = new Date(datetime).getTime()
       return {
         row: {
           ...nameColumns(student),
@@ -1032,14 +1061,15 @@ export function buildScoresCsvRows(
           submissions: submissionCount,
           // A detection-only row can still be dateless (e.g. a milestone tag
           // whose commit lookup failed) — export a blank rather than crashing
-          // on Invalid Date.
-          submitted_at: isoOrBlank(datetime),
+          // on Invalid Date. Reuse the `ms` parsed above rather than re-parsing.
+          submitted_at: isoOrBlank(ms),
           late: late ? "yes" : "no",
           commit: escapeCsvFormulaInjection(rest.commit),
           review: escapeCsvFormulaInjection(rest.review),
           release: escapeCsvFormulaInjection(rest.release),
         },
         student,
+        time: Number.isFinite(ms) ? ms : null,
       }
     },
   )
@@ -1048,7 +1078,10 @@ export function buildScoresCsvRows(
     row: {
       ...nameColumns(student),
       usernames: escapeCsvFormulaInjection(student.username),
-      score: 0,
+      // No submission means no grade — leave the score cell empty (not 0) so
+      // importing the CSV can't record a graded zero for a student who simply
+      // hasn't been graded. max_score is likewise blank.
+      score: "",
       max_score: "",
       submissions: 0,
       submitted_at: "",
@@ -1058,17 +1091,40 @@ export function buildScoresCsvRows(
       release: "",
     },
     student,
+    time: null,
   }))
 
-  const byLastName = compareStudentsByName("last")
-  return [...submittedRows, ...nonSubmittedRows]
-    .sort((a, b) => byLastName(a.student, b.student))
+  const all = [...submittedRows, ...nonSubmittedRows]
+
+  if (sort === "recent" || sort === "oldest") {
+    // Time order: rows with a submission instant first (newest- or oldest-first),
+    // then the timeless non-submitters, name-ordered among themselves for a
+    // stable tail. Mirrors the table's buildSortedDisplayItems (submitters in
+    // sort order, then non-submitters).
+    const byLastName = compareStudentsByName("last")
+    return all
+      .toSorted((a, b) => {
+        if (a.time !== null && b.time !== null) {
+          return sort === "oldest" ? a.time - b.time : b.time - a.time
+        }
+        if (a.time !== null) return -1
+        if (b.time !== null) return 1
+        return byLastName(a.student, b.student)
+      })
+      .map((keyed) => keyed.row)
+  }
+
+  // Name sort: order the whole set by the chosen name mode.
+  const byName = compareStudentsByName(sortNameMode(sort))
+  return all
+    .toSorted((a, b) => byName(a.student, b.student))
     .map((keyed) => keyed.row)
 }
 
-// The ISO form of a row's submission time, or "" for an absent/unparseable one.
-function isoOrBlank(datetime: string): string {
-  const ms = new Date(datetime).getTime()
+// The ISO form of a parsed epoch-ms instant, or "" for an absent/unparseable
+// one (NaN). Takes ms rather than the raw string so callers that already parsed
+// it don't re-parse.
+function isoOrBlank(ms: number): string {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : ""
 }
 

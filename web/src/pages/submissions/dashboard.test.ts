@@ -33,6 +33,7 @@ import {
   pageBounds,
   paginateDisplayItems,
   paginationRange,
+  pendingMayHide,
   reconcileNonSubmitters,
   rosterScopedRows,
   rowMatchesQuery,
@@ -874,13 +875,14 @@ describe("buildScoresCsvRows", () => {
     // The group row keeps all credited logins but takes the owner's name.
     expect(out[1].usernames).toBe("bob, carol")
     expect(out[1].name).toBe("Bob Brown")
-    // Non-submitter carries a name too, with a 0 score and blank fields.
+    // Non-submitter carries a name too, with an EMPTY score (not 0) and blank
+    // fields — an ungraded student, not a graded zero.
     expect(out[2]).toEqual({
       name: "Dave Clark",
       first_name: "Dave",
       last_name: "Clark",
       usernames: "dave",
-      score: 0,
+      score: "",
       max_score: "",
       submissions: 0,
       submitted_at: "",
@@ -1021,6 +1023,76 @@ describe("buildScoresCsvRows", () => {
     )
     expect(out[0].name).toBe("")
     expect(out[0].usernames).toBe("ghost, carol")
+  })
+
+  it("keeps a real graded zero as 0 but leaves an ungraded non-submitter blank", () => {
+    // A collected score of 0 is a real grade and must round-trip as 0; a
+    // non-submitter has no grade and exports an empty cell.
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["zed"], score: 0, "max-score": 10 })],
+      [student({ username: "abe", first_name: "Abe", last_name: "Ant" })],
+      [
+        student({ username: "abe", first_name: "Abe", last_name: "Ant" }),
+        student({ username: "zed", first_name: "Zed", last_name: "Zoo" }),
+      ],
+    )
+    const abe = out.find((r) => r.usernames === "abe")!
+    const zed = out.find((r) => r.usernames === "zed")!
+    expect(abe.score).toBe("") // ungraded non-submitter
+    expect(zed.score).toBe(0) // real graded zero
+  })
+
+  it("orders by first name under name-first sort", () => {
+    const roster = [
+      student({ username: "z1", first_name: "Alice", last_name: "Zephyr" }),
+      student({ username: "a2", first_name: "Zoe", last_name: "Adams" }),
+    ]
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["z1"] }), row({ usernames: ["a2"] })],
+      [],
+      roster,
+      "name-first",
+    )
+    // By first name: Alice(z1) before Zoe(a2).
+    expect(out.map((r) => r.usernames)).toEqual(["z1", "a2"])
+  })
+
+  it("orders by last name under name-last sort", () => {
+    const roster = [
+      student({ username: "z1", first_name: "Alice", last_name: "Zephyr" }),
+      student({ username: "a2", first_name: "Zoe", last_name: "Adams" }),
+    ]
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["z1"] }), row({ usernames: ["a2"] })],
+      [],
+      roster,
+      "name-last",
+    )
+    // By last name: Adams(a2) before Zephyr(z1).
+    expect(out.map((r) => r.usernames)).toEqual(["a2", "z1"])
+  })
+
+  it("orders submitters by time (then timeless non-submitters) under a time sort", () => {
+    const roster = [
+      student({ username: "early", first_name: "Amy", last_name: "Early" }),
+      student({ username: "late", first_name: "Bea", last_name: "Late" }),
+      student({ username: "none", first_name: "Cid", last_name: "None" }),
+    ]
+    const rows = [
+      row({ usernames: ["early"], datetime: "2026-06-01T10:00:00Z" }),
+      row({ usernames: ["late"], datetime: "2026-06-10T10:00:00Z" }),
+    ]
+    const nonSubmitters = [
+      student({ username: "none", first_name: "Cid", last_name: "None" }),
+    ]
+
+    const recent = buildScoresCsvRows(rows, nonSubmitters, roster, "recent")
+    // Newest first (late, early), then the non-submitter last.
+    expect(recent.map((r) => r.usernames)).toEqual(["late", "early", "none"])
+
+    const oldest = buildScoresCsvRows(rows, nonSubmitters, roster, "oldest")
+    // Oldest first (early, late), then the non-submitter last.
+    expect(oldest.map((r) => r.usernames)).toEqual(["early", "late", "none"])
   })
 })
 
@@ -1813,6 +1885,119 @@ describe("displayPageOwners", () => {
       pageSize: 10,
     })
     expect(owners).toEqual(["alice"])
+  })
+
+  it("orders owners by last name under name-last (interleaving non-submitters)", () => {
+    // Cole/Brown/Adams last-name order is cara, bob, alice — the reverse of the
+    // first-name order. A live-capable owner sorting by last name must fan out
+    // (and render) in that order.
+    const rows = [row({ owner: "bob", usernames: ["bob"] })]
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "name-last",
+      students,
+      rows,
+      nonSubmitters: students, // alice + cara have no row
+      groupRepos: [],
+      page: 0,
+      pageSize: 3,
+    })
+    expect(owners).toEqual(["alice", "bob", "cara"])
+    // Last name Adams < Brown < Cole, so the interleaved spine is alice, bob, cara.
+  })
+
+  it("returns the second page's owners under a name sort", () => {
+    const rows = [row({ owner: "bob", usernames: ["bob"] })]
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "name-first",
+      students,
+      rows,
+      nonSubmitters: students,
+      groupRepos: [],
+      page: 1,
+      pageSize: 2,
+    })
+    // Page 0 (size 2) is alice, bob; page 1 is the remaining cara.
+    expect(owners).toEqual(["cara"])
+  })
+
+  it("groups: name-last orders founders by last name across submitted + unsubmitted repos", () => {
+    // A submitted group row (founder cara) plus an unsubmitted group repo
+    // (founder alice); name-last spans both, ordered Adams before Cole.
+    const rows = [row({ owner: "cara", usernames: ["cara"] })]
+    const owners = displayPageOwners({
+      isGroup: true,
+      sort: "name-last",
+      students,
+      rows,
+      nonSubmitters: [],
+      groupRepos: [{ owner: "alice", repoName: "cs-hw-alice" }],
+      page: 0,
+      pageSize: 10,
+    })
+    expect(owners).toEqual(["alice", "cara"])
+  })
+
+  it("groups: a time sort keeps submitted group rows before unsubmitted repos", () => {
+    const rows = [row({ owner: "cara", usernames: ["cara"] })]
+    const owners = displayPageOwners({
+      isGroup: true,
+      sort: "recent",
+      students,
+      rows,
+      nonSubmitters: [],
+      groupRepos: [{ owner: "alice", repoName: "cs-hw-alice" }],
+      page: 0,
+      pageSize: 10,
+    })
+    // Submitted rows first (cara), then the unsubmitted group repo (alice).
+    expect(owners).toEqual(["cara", "alice"])
+  })
+})
+
+describe("pendingMayHide", () => {
+  it("is false when the overlay does not apply (not live-capable)", () => {
+    expect(pendingMayHide(false, "recent", DEFAULT_FILTERS)).toBe(false)
+    expect(
+      pendingMayHide(false, "name-first", {
+        ...DEFAULT_FILTERS,
+        submission: "submitted",
+      }),
+    ).toBe(false)
+  })
+
+  it("is false for a live name sort with no grade-implying filter", () => {
+    expect(pendingMayHide(true, "name-first", DEFAULT_FILTERS)).toBe(false)
+    expect(pendingMayHide(true, "name-last", DEFAULT_FILTERS)).toBe(false)
+    // Section + query don't reorder the snapshot spine, so a live-only owner is
+    // still placeable — no hint.
+    expect(
+      pendingMayHide(true, "name-first", {
+        ...DEFAULT_FILTERS,
+        section: "A",
+      }),
+    ).toBe(false)
+  })
+
+  it("is true for a live time sort", () => {
+    expect(pendingMayHide(true, "recent", DEFAULT_FILTERS)).toBe(true)
+    expect(pendingMayHide(true, "oldest", DEFAULT_FILTERS)).toBe(true)
+  })
+
+  it("is true for a live name sort with a grade-implying status/passing filter", () => {
+    expect(
+      pendingMayHide(true, "name-first", {
+        ...DEFAULT_FILTERS,
+        submission: "submitted",
+      }),
+    ).toBe(true)
+    expect(
+      pendingMayHide(true, "name-first", {
+        ...DEFAULT_FILTERS,
+        passing: "passing",
+      }),
+    ).toBe(true)
   })
 })
 
