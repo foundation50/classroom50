@@ -819,6 +819,27 @@ export function rowMatchesQuery(
   })
 }
 
+// Whether the current sort/filter combination can hide not-yet-collected
+// (live-only pending) submitters from a live-capable viewer. The page-scoped
+// fan-out builds its owner set from the SNAPSHOT spine, so a live-only owner
+// (pushed, not yet collected) can be placed only when the spine walks the whole
+// roster in name order with no grade-implying filter. A time sort, or a status/
+// passing filter that implies a grade, drops that owner from the page's owner
+// set until a collect ingests it. Used to surface an honest hint instead of
+// hiding the sort/status controls. False when the overlay doesn't apply.
+export function pendingMayHide(
+  liveCapable: boolean,
+  sort: SubmissionSort,
+  filters: SubmissionFilters,
+): boolean {
+  if (!liveCapable) return false
+  return (
+    !isNameSort(sort) ||
+    filters.submission !== "all" ||
+    filters.passing !== "all"
+  )
+}
+
 // Search + filters + sort over the submitted rows. "not-submitted" lives in the
 // caller's nonSubmitters list, so that filter hides every submitted row;
 // likewise "not-accepted", since a submitted row always has a repo.

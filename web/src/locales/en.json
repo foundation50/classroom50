@@ -2508,7 +2508,8 @@
       "sortRecent": "Newest first",
       "sortOldest": "Oldest first",
       "sortNameFirst": "By first name",
-      "sortNameLast": "By last name"
+      "sortNameLast": "By last name",
+      "pendingHiddenHint": "Just-submitted work that hasn't been collected yet may not appear under this sort or filter. Switch to a name sort, or Sync, to see it."
     },
     "table": {
       "captionGroup": "Group submissions",

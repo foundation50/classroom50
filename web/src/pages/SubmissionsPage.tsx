@@ -55,6 +55,7 @@ import {
   mergeDetectedSubmissions,
   mergeLiveRows,
   reconcileNonSubmitters,
+  pendingMayHide,
   rosterScopedRows,
   rowInSection,
   selectActiveWorkflowAction,
@@ -248,10 +249,11 @@ const SubmissionsPageContent = () => {
     return set
   }, [teamRows, orgRepos, isGroupAssignment, classroom, assignment])
   const [sort, setSort] = useState<SubmissionSort>("name-first")
-  // The roster spine's name order. When live, the view is pinned to the plain
-  // name-ordered fan-out (see effectiveSort below), so the spine follows the
-  // user's first/last choice only off-live; live always uses first-name order.
-  const rosterSortMode = isOwner && !skipsGrading ? "first" : sortNameMode(sort)
+  // The roster spine's name order follows the user's first/last choice in every
+  // mode. `sortNameMode` maps a time sort to first-name order, so a non-name
+  // sort is unaffected; the spine, the table display list, and the page-scoped
+  // fan-out all stay keyed on the same name mode.
+  const rosterSortMode = sortNameMode(sort)
   const students: Student[] = useMemo(
     () =>
       sortStudentsByName(
@@ -319,13 +321,12 @@ const SubmissionsPageContent = () => {
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   // Reset to the first page whenever the visible set changes (new search,
-  // filter, sort, page size, a different assignment, or live-capability
-  // resolving — which re-pins the effective sort/status and reshapes the rows).
-  // Done render-purely via a stored view signature (setState-during-render, not
-  // an effect) so the reset lands in the same commit as the change — no extra
-  // render, and no setState-in-effect. React bails out of the re-render once the
-  // signature matches.
-  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}|${isOwner && !skipsGrading}`
+  // filter, sort, page size, or a different assignment). Done render-purely via
+  // a stored view signature (setState-during-render, not an effect) so the reset
+  // lands in the same commit as the change — no extra render, and no
+  // setState-in-effect. React bails out of the re-render once the signature
+  // matches.
+  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}`
   const [lastViewSignature, setLastViewSignature] = useState(viewSignature)
   if (viewSignature !== lastViewSignature) {
     setLastViewSignature(viewSignature)
@@ -356,54 +357,53 @@ const SubmissionsPageContent = () => {
   // from the collected snapshot.
   const liveCapable = isOwner && !skipsGrading
 
-  // When live, the toolbar hides Sort + Status (they can't be reconciled with a
-  // page-scoped live fan-out), so the effective order/status are pinned to the
-  // plain name-ordered, unfiltered view the fan-out aligns to — even if a prior
-  // session left non-default state. Search + section still apply (they don't
-  // reorder the spine). Non-live viewers keep full sort/status.
-  const effectiveSort: SubmissionSort = liveCapable ? "name-first" : sort
-  const effectiveStatusFilters: SubmissionFilters = useMemo(
-    () =>
-      liveCapable
-        ? { ...filters, submission: "all", passing: "all", accepted: "all" }
-        : filters,
-    [liveCapable, filters],
-  )
-
-  // Live submission presence for THIS assignment, read directly from student
-  // repos' submit/* releases — so a student who pushed but hasn't been collected
-  // yet still shows as submitted (issue #347). PAGE-SCOPED: the fan-out reads
-  // only the repos on the CURRENT table page (#359's burst mitigation), so a
-  // large class is read a page at a time. The fanned owner set is the rendered
-  // page under the (pinned name-asc) live order, derived from the SNAPSHOT
-  // display list so it never loops on its own live results. Owner-only, off for
-  // empty_repo.
+  // The page-scoped live/detection fan-out reads the owners of the page the
+  // teacher is actually viewing, under their chosen sort + filters — the fan-out
+  // spine is always built from the SNAPSHOT display list (never the live-merged
+  // rows), so honoring the real sort/filters can't loop the fan-out's output
+  // back into its input. Search + section + status + sort all apply in every
+  // mode; the only inherent limit is that a not-yet-collected (live-only)
+  // submitter can't be placed under a time sort or a grade-implying status
+  // filter until a collect ingests it — surfaced by pendingMayHide below rather
+  // than by hiding the controls.
+  //
+  // Live submission presence for THIS assignment comes from student repos'
+  // submit/* releases, so a student who pushed but hasn't been collected yet
+  // still shows as submitted (issue #347). PAGE-SCOPED: the fan-out reads only
+  // the repos on the CURRENT table page (#359's burst mitigation), so a large
+  // class is read a page at a time. Owner-only, off for empty_repo.
   const snapshotScoped = useMemo(
     () =>
       rosterReady ? rosterScopedRows(snapshotRows, students) : snapshotRows,
     [rosterReady, snapshotRows, students],
   )
   // Non-submitter pool for the fan-out's display list, filtered by the SAME
-  // query + section the rendered table applies (status/passing are neutralized
-  // when live, and accept-availability doesn't gate the fan-out) — so the fanned
-  // page lines up with the visible page under an active search, not just an
-  // empty one. Snapshot-independent (no acceptedSet), so it can't loop on live
-  // results. `filterNonSubmitters` with an empty accepted set + accepted:"all"
-  // matches only on query + section.
+  // query + section + submission axes the rendered table applies — so the
+  // fanned page lines up with the visible page. The ACCEPTED axis is neutralized
+  // here: this pool is deliberately snapshot-independent (empty accepted set) so
+  // it can't loop on live results, and `filterNonSubmitters` would otherwise
+  // test acceptance against that empty set and wrongly drop every owner. The
+  // rendered non-submitter list (visibleNonSubmitters) applies the real
+  // acceptedSet.
   const liveNonSubmitterPool = useMemo(
     () =>
-      filterNonSubmitters(students, query, effectiveStatusFilters, EMPTY_SET),
-    [students, query, effectiveStatusFilters],
+      filterNonSubmitters(
+        students,
+        query,
+        { ...filters, accepted: "all" },
+        EMPTY_SET,
+      ),
+    [students, query, filters],
   )
   const liveOwnerArgs = useMemo(
     () => ({
       isGroup: isGroupAssignment,
-      sort: effectiveSort,
+      sort,
       students,
       rows: filterAndSortRows(snapshotScoped, {
         query,
-        filters: effectiveStatusFilters,
-        sort: effectiveSort,
+        filters,
+        sort,
         students,
         sectionByUsername,
         thresholdFraction: null,
@@ -413,11 +413,11 @@ const SubmissionsPageContent = () => {
     }),
     [
       isGroupAssignment,
-      effectiveSort,
+      sort,
       students,
       snapshotScoped,
       query,
-      effectiveStatusFilters,
+      filters,
       sectionByUsername,
       groupRepoList,
       liveNonSubmitterPool,
@@ -561,6 +561,12 @@ const SubmissionsPageContent = () => {
     setFilters({ ...DEFAULT_FILTERS })
   }
 
+  // Honest note for a live-capable viewer whose sort/filter can hide a
+  // not-yet-collected (live-only) submitter from the page-scoped fan-out (a time
+  // sort, or a grade-implying status/passing filter). We keep every control live
+  // and surface this instead of hiding Sort + Status.
+  const showPendingHiddenHint = pendingMayHide(liveCapable, sort, filters)
+
   // Deterministic acceptance from the org repo list (see acceptedUsernames);
   // individual assignments only, so gated on acceptedAvailable.
   const acceptedSet = useMemo(
@@ -687,21 +693,19 @@ const SubmissionsPageContent = () => {
 
   // Rows actually rendered. When acceptance data isn't loaded, neutralize the
   // accepted axis so a transient empty repo list can't flip the visible set.
-  // Built on effectiveStatusFilters so live mode's pinned (hidden) status/
-  // passing/accepted axes are already applied.
+  // This acceptance neutralization is independent of live mode — the sort and
+  // status/passing axes always reflect the user's real selection.
   const effectiveFilters = useMemo(
     () =>
-      acceptedAvailable
-        ? effectiveStatusFilters
-        : { ...effectiveStatusFilters, accepted: "all" as const },
-    [acceptedAvailable, effectiveStatusFilters],
+      acceptedAvailable ? filters : { ...filters, accepted: "all" as const },
+    [acceptedAvailable, filters],
   )
   const visibleRows = useMemo(
     () =>
       filterAndSortRows(scoresInfo, {
         query,
         filters: effectiveFilters,
-        sort: effectiveSort,
+        sort,
         students,
         sectionByUsername,
         thresholdFraction,
@@ -710,7 +714,7 @@ const SubmissionsPageContent = () => {
       scoresInfo,
       query,
       effectiveFilters,
-      effectiveSort,
+      sort,
       students,
       sectionByUsername,
       thresholdFraction,
@@ -1098,9 +1102,6 @@ const SubmissionsPageContent = () => {
         acceptedAvailable={acceptedAvailable}
         passingAvailable={passingEnabled}
         sections={sections}
-        // Live shows a page-scoped fan-out that can only align to the plain
-        // name-ordered, unfiltered view, so hide Sort + Status while live.
-        hideSortAndStatus={liveCapable}
         onShare={() => setAcceptOpen(true)}
         // No collect/freshness exists for assignments that skip built-in
         // grading — the header's grading badge explains why.
@@ -1248,6 +1249,11 @@ const SubmissionsPageContent = () => {
           />
         }
       />
+      {showPendingHiddenHint && (
+        <p className="text-sm text-base-content/60" role="status">
+          {t("submissions.filters.pendingHiddenHint")}
+        </p>
+      )}
       <SubmissionsTable
         scores={visibleRows}
         students={students}
@@ -1339,7 +1345,7 @@ const SubmissionsPageContent = () => {
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        sort={effectiveSort}
+        sort={sort}
       />
       <ConfirmModal
         open={regradeConfirmOpen}

@@ -33,6 +33,7 @@ import {
   pageBounds,
   paginateDisplayItems,
   paginationRange,
+  pendingMayHide,
   reconcileNonSubmitters,
   rosterScopedRows,
   rowMatchesQuery,
@@ -1813,6 +1814,119 @@ describe("displayPageOwners", () => {
       pageSize: 10,
     })
     expect(owners).toEqual(["alice"])
+  })
+
+  it("orders owners by last name under name-last (interleaving non-submitters)", () => {
+    // Cole/Brown/Adams last-name order is cara, bob, alice — the reverse of the
+    // first-name order. A live-capable owner sorting by last name must fan out
+    // (and render) in that order.
+    const rows = [row({ owner: "bob", usernames: ["bob"] })]
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "name-last",
+      students,
+      rows,
+      nonSubmitters: students, // alice + cara have no row
+      groupRepos: [],
+      page: 0,
+      pageSize: 3,
+    })
+    expect(owners).toEqual(["alice", "bob", "cara"])
+    // Last name Adams < Brown < Cole, so the interleaved spine is alice, bob, cara.
+  })
+
+  it("returns the second page's owners under a name sort", () => {
+    const rows = [row({ owner: "bob", usernames: ["bob"] })]
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "name-first",
+      students,
+      rows,
+      nonSubmitters: students,
+      groupRepos: [],
+      page: 1,
+      pageSize: 2,
+    })
+    // Page 0 (size 2) is alice, bob; page 1 is the remaining cara.
+    expect(owners).toEqual(["cara"])
+  })
+
+  it("groups: name-last orders founders by last name across submitted + unsubmitted repos", () => {
+    // A submitted group row (founder cara) plus an unsubmitted group repo
+    // (founder alice); name-last spans both, ordered Adams before Cole.
+    const rows = [row({ owner: "cara", usernames: ["cara"] })]
+    const owners = displayPageOwners({
+      isGroup: true,
+      sort: "name-last",
+      students,
+      rows,
+      nonSubmitters: [],
+      groupRepos: [{ owner: "alice", repoName: "cs-hw-alice" }],
+      page: 0,
+      pageSize: 10,
+    })
+    expect(owners).toEqual(["alice", "cara"])
+  })
+
+  it("groups: a time sort keeps submitted group rows before unsubmitted repos", () => {
+    const rows = [row({ owner: "cara", usernames: ["cara"] })]
+    const owners = displayPageOwners({
+      isGroup: true,
+      sort: "recent",
+      students,
+      rows,
+      nonSubmitters: [],
+      groupRepos: [{ owner: "alice", repoName: "cs-hw-alice" }],
+      page: 0,
+      pageSize: 10,
+    })
+    // Submitted rows first (cara), then the unsubmitted group repo (alice).
+    expect(owners).toEqual(["cara", "alice"])
+  })
+})
+
+describe("pendingMayHide", () => {
+  it("is false when the overlay does not apply (not live-capable)", () => {
+    expect(pendingMayHide(false, "recent", DEFAULT_FILTERS)).toBe(false)
+    expect(
+      pendingMayHide(false, "name-first", {
+        ...DEFAULT_FILTERS,
+        submission: "submitted",
+      }),
+    ).toBe(false)
+  })
+
+  it("is false for a live name sort with no grade-implying filter", () => {
+    expect(pendingMayHide(true, "name-first", DEFAULT_FILTERS)).toBe(false)
+    expect(pendingMayHide(true, "name-last", DEFAULT_FILTERS)).toBe(false)
+    // Section + query don't reorder the snapshot spine, so a live-only owner is
+    // still placeable — no hint.
+    expect(
+      pendingMayHide(true, "name-first", {
+        ...DEFAULT_FILTERS,
+        section: "A",
+      }),
+    ).toBe(false)
+  })
+
+  it("is true for a live time sort", () => {
+    expect(pendingMayHide(true, "recent", DEFAULT_FILTERS)).toBe(true)
+    expect(pendingMayHide(true, "oldest", DEFAULT_FILTERS)).toBe(true)
+  })
+
+  it("is true for a live name sort with a grade-implying status/passing filter", () => {
+    expect(
+      pendingMayHide(true, "name-first", {
+        ...DEFAULT_FILTERS,
+        submission: "submitted",
+      }),
+    ).toBe(true)
+    expect(
+      pendingMayHide(true, "name-first", {
+        ...DEFAULT_FILTERS,
+        passing: "passing",
+      }),
+    ).toBe(true)
   })
 })
 
