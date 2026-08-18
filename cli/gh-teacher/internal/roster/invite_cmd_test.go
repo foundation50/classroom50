@@ -2,9 +2,7 @@ package roster
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,23 +23,12 @@ const (
 	inviteTestInviteTeamID    = 7
 )
 
-// inviteCall is one recorded request. Order is the contract under test: the
-// email record is the LAST team write, the invitation follows it, and the
-// roster commit follows the invitation.
-type inviteCall struct {
-	Method      string
-	Path        string
-	Description string
-}
-
 // inviteMock is the roster-write mock plus every endpoint `roster invite`
-// touches: /user (the acting teacher), classroom.json (the classroom team), the
-// invite team create/patch/membership/members/delete, and the org invitation.
+// touches: /user (the acting teacher), the invite team
+// create/patch/membership/members/delete, and the org invitation. classroom.json
+// is served from rosterWriteMock.files.
 type inviteMock struct {
 	*rosterWriteMock
-	// classroomJSON is served as the classroom's classroom.json; empty means the
-	// file is absent, so ResolveClassroomTeam yields ok=false.
-	classroomJSON string
 	// createStatus is the invite-team create status; 422 drives the adopt path
 	// (a pre-existing team a failed run must NOT delete).
 	createStatus int
@@ -66,18 +53,6 @@ func (m *inviteMock) handler(t *testing.T) http.Handler {
 	base.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"login": inviteTestActor, "id": 1})
 	})
-
-	base.HandleFunc("/repos/o/classroom50/contents/"+inviteTestClassroom+"/classroom.json",
-		func(w http.ResponseWriter, r *http.Request) {
-			if m.classroomJSON == "" {
-				http.NotFound(w, r)
-				return
-			}
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"content":  base64.StdEncoding.EncodeToString([]byte(m.classroomJSON)),
-				"encoding": "base64",
-			})
-		})
 
 	base.HandleFunc("/orgs/o/teams", func(w http.ResponseWriter, r *http.Request) {
 		if m.createStatus != 0 && m.createStatus != http.StatusCreated {
@@ -122,52 +97,18 @@ func (m *inviteMock) handler(t *testing.T) http.Handler {
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": 1})
 	})
 
-	return m.recording(base)
-}
-
-// recording wraps the mux so every request lands in calls in order (the mux's
-// own handlers can still read the body, which is restored) and drives the
-// commitFails switch.
-func (m *inviteMock) recording(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var raw []byte
-		if r.Body != nil {
-			raw, _ = io.ReadAll(r.Body)
-			r.Body = io.NopCloser(bytes.NewReader(raw))
-		}
-		var body struct {
-			Description string `json:"description"`
-		}
-		_ = json.Unmarshal(raw, &body)
-		m.calls = append(m.calls, inviteCall{
-			Method: r.Method, Path: r.URL.Path, Description: body.Description,
+	// commitFails intercepts before the mux so the tree POST never reaches it.
+	failing := http.Handler(base)
+	if m.commitFails {
+		failing = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost && r.URL.Path == "/repos/o/classroom50/git/trees" {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			base.ServeHTTP(w, r)
 		})
-		if m.commitFails && r.Method == http.MethodPost && r.URL.Path == "/repos/o/classroom50/git/trees" {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// indexOfCall is the position of the first recorded method+path match, or -1.
-func (m *inviteMock) indexOfCall(method, path string) int {
-	for i, c := range m.calls {
-		if c.Method == method && c.Path == path {
-			return i
-		}
 	}
-	return -1
-}
-
-func (m *inviteMock) countCalls(method, path string) int {
-	n := 0
-	for _, c := range m.calls {
-		if c.Method == method && c.Path == path {
-			n++
-		}
-	}
-	return n
+	return recordCalls(&m.calls, failing)
 }
 
 // inviteTestClassroomJSON records the classroom team the invitation must carry.
@@ -201,9 +142,9 @@ func newInviteMock(t *testing.T, rosterCSV string) *inviteMock {
 	t.Helper()
 	return &inviteMock{
 		rosterWriteMock: &rosterWriteMock{files: map[string]string{
-			inviteTestClassroom + "/roster.csv": rosterCSV,
+			inviteTestClassroom + "/roster.csv":     rosterCSV,
+			inviteTestClassroom + "/classroom.json": inviteTestClassroomJSON(t),
 		}},
-		classroomJSON: inviteTestClassroomJSON(t),
 	}
 }
 
@@ -220,12 +161,12 @@ func TestRunRosterInvite_HappyPath(t *testing.T) {
 
 	slug := mock.inviteTeamSlug
 	teamPath := "/orgs/o/teams/" + slug
-	createIdx := mock.indexOfCall(http.MethodPost, "/orgs/o/teams")
-	dropIdx := mock.indexOfCall(http.MethodDelete, teamPath+"/memberships/"+inviteTestActor)
-	membersIdx := mock.indexOfCall(http.MethodGet, teamPath+"/members")
-	recordIdx := mock.indexOfCall(http.MethodPatch, teamPath)
-	inviteIdx := mock.indexOfCall(http.MethodPost, "/orgs/o/invitations")
-	treeIdx := mock.indexOfCall(http.MethodPost, "/repos/o/classroom50/git/trees")
+	createIdx := indexOfCall(mock.calls, http.MethodPost, "/orgs/o/teams")
+	dropIdx := indexOfCall(mock.calls, http.MethodDelete, teamPath+"/memberships/"+inviteTestActor)
+	membersIdx := indexOfCall(mock.calls, http.MethodGet, teamPath+"/members")
+	recordIdx := indexOfCall(mock.calls, http.MethodPatch, teamPath)
+	inviteIdx := indexOfCall(mock.calls, http.MethodPost, "/orgs/o/invitations")
+	treeIdx := indexOfCall(mock.calls, http.MethodPost, "/repos/o/classroom50/git/trees")
 	sequence := []struct {
 		name string
 		idx  int
@@ -297,7 +238,7 @@ func TestRunRosterInvite_HappyPath(t *testing.T) {
 // a team-less email invite lands the student in the org attached to nothing.
 func TestRunRosterInvite_ClassroomTeamMissing(t *testing.T) {
 	mock := newInviteMock(t, storedRosterHeader)
-	mock.classroomJSON = "" // no classroom.json → ResolveClassroomTeam ok=false
+	delete(mock.files, inviteTestClassroom+"/classroom.json") // → ResolveClassroomTeam ok=false
 
 	_, _, err := runInvite(t, mock)
 	if err == nil {
@@ -306,10 +247,10 @@ func TestRunRosterInvite_ClassroomTeamMissing(t *testing.T) {
 	if !strings.Contains(err.Error(), "classroom add") {
 		t.Errorf("error should point at `classroom add`: %v", err)
 	}
-	if n := mock.countCalls(http.MethodPost, "/orgs/o/teams"); n != 0 {
+	if n := countCalls(mock.calls, http.MethodPost, "/orgs/o/teams"); n != 0 {
 		t.Errorf("created %d invite team(s) with no classroom team to attach", n)
 	}
-	if n := mock.countCalls(http.MethodPost, "/orgs/o/invitations"); n != 0 {
+	if n := countCalls(mock.calls, http.MethodPost, "/orgs/o/invitations"); n != 0 {
 		t.Errorf("sent %d invitation(s) with no classroom team", n)
 	}
 	if len(mock.blobs) != 0 {
@@ -410,7 +351,7 @@ func TestRunRosterInvite_RosterWriteFailureWarnsAndFails(t *testing.T) {
 	if !strings.Contains(errOut, "roster sync") {
 		t.Errorf("stderr must name `roster sync` as the repair:\n%s", errOut)
 	}
-	if mock.indexOfCall(http.MethodPost, "/orgs/o/invitations") < 0 {
+	if indexOfCall(mock.calls, http.MethodPost, "/orgs/o/invitations") < 0 {
 		t.Fatal("the invitation should have been sent before the roster write")
 	}
 	if mock.deletedTeamSlug != "" {
@@ -423,13 +364,7 @@ func TestRunRosterInvite_RosterWriteFailureWarnsAndFails(t *testing.T) {
 func TestRosterInviteCmd(t *testing.T) {
 	run := func(t *testing.T, args ...string) error {
 		t.Helper()
-		cmd := rosterInviteCmd()
-		cmd.SilenceErrors = true
-		cmd.SilenceUsage = true
-		cmd.SetArgs(args)
-		cmd.SetOut(io.Discard)
-		cmd.SetErr(io.Discard)
-		return cmd.Execute()
+		return runRosterSubcommand(t, rosterInviteCmd(), args...)
 	}
 
 	t.Run("blank email is rejected before any auth/network", func(t *testing.T) {
@@ -461,17 +396,23 @@ func TestRosterInviteCmd(t *testing.T) {
 	})
 }
 
-func TestRosterCmdRegistersInvite(t *testing.T) {
-	var found bool
-	for _, sub := range NewCmd().Commands() {
-		if sub.Name() == "invite" {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("`roster invite` is not registered on the roster command")
-	}
-	if !strings.Contains(NewCmd().Long, "invite") {
-		t.Error("the roster subcommand summary should list invite")
+// The three email-lifecycle subcommands must be reachable and discoverable: a
+// registration miss is invisible without this, since the package compiles fine.
+func TestRosterCmdRegistersInviteLifecycleSubcommands(t *testing.T) {
+	for _, name := range []string{"invite", "cancel-invite", "sync"} {
+		t.Run(name, func(t *testing.T) {
+			var found bool
+			for _, sub := range NewCmd().Commands() {
+				if sub.Name() == name {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("`roster %s` is not registered on the roster command", name)
+			}
+			if !strings.Contains(NewCmd().Long, name) {
+				t.Errorf("the roster subcommand summary should list %s", name)
+			}
+		})
 	}
 }

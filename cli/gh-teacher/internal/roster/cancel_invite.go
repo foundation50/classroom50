@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/foundation50/gh-teacher/internal/configwrite"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 	"github.com/foundation50/gh-teacher/internal/membership"
-	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
 func rosterCancelInviteCmd() *cobra.Command {
@@ -39,16 +37,8 @@ func rosterCancelInviteCmd() *cobra.Command {
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
-			org := strings.TrimSpace(args[0])
-			classroom := strings.TrimSpace(args[1])
-			email := strings.TrimSpace(args[2])
-			if org == "" || classroom == "" || email == "" {
-				return errors.New("org, classroom, and email must all be non-empty")
-			}
-			if err := validate.ShortName(classroom, "classroom"); err != nil {
-				return err
-			}
-			if err := configrepo.ValidateRosterEmail(email); err != nil {
+			org, classroom, email, err := parseEmailArgs(args)
+			if err != nil {
 				return err
 			}
 			client, err := githubapi.RequireAuthClient(cmd)
@@ -105,10 +95,7 @@ func runRosterCancelInvite(client githubapi.Client, out, errOut io.Writer, org, 
 	// and DeleteInviteTeam is fenced to that hashed shape.
 	slug := configrepo.InviteTeamName(classroom, email)
 	if err := configrepo.DeleteInviteTeam(client, org, slug); err != nil {
-		// Warn, don't fail: the cancellation has landed, so a stranded team must
-		// not read as a failed cancel — `roster sync`'s GC is the backstop.
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: the invitation was cancelled, but deleting the metadata team %s failed (%v); delete it by hand or let `gh teacher roster sync` collect it.\n",
-			org, slug, err)
+		warnStrandedInviteTeam(errOut, "the invitation was cancelled, but deleting", org, slug, err)
 	} else {
 		_, _ = fmt.Fprintf(out, "%s: deleted metadata team %s\n", org, slug)
 	}

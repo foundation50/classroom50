@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/mail"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -35,12 +36,7 @@ var FullRosterHeader = strings.Join(RosterColumns, ",")
 // isCanonicalColumn reports whether name is a CLI-managed RosterColumn (the
 // rest are carried through RosterRow.Extra).
 func isCanonicalColumn(name string) bool {
-	for _, c := range RosterColumns {
-		if c == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(RosterColumns, name)
 }
 
 // maxFieldBytes caps each cell at RFC 5321's email max so a hand-edit can't
@@ -128,13 +124,13 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 	// column carried through verbatim.
 	var canonicalLen int
 	switch {
-	case len(header) >= len(RosterColumns) && equalSlices(header[:len(RosterColumns)], RosterColumns):
+	case len(header) >= len(RosterColumns) && slices.Equal(header[:len(RosterColumns)], RosterColumns):
 		canonicalLen = len(RosterColumns)
-	case len(header) == len(legacyRequiredColumns) && equalSlices(header, legacyRequiredColumns):
+	case len(header) == len(legacyRequiredColumns) && slices.Equal(header, legacyRequiredColumns):
 		// Pre-role file: exactly the canonical columns through github_id, no
 		// trailing columns. role reads as "".
 		canonicalLen = len(legacyRequiredColumns)
-	case len(header) < len(RosterColumns) || !equalSlices(header[:len(legacyRequiredColumns)], legacyRequiredColumns):
+	case len(header) < len(RosterColumns) || !slices.Equal(header[:len(legacyRequiredColumns)], legacyRequiredColumns):
 		return nil, fmt.Errorf("unexpected header: got %v, want %v followed by any optional columns", header, RosterColumns)
 	default:
 		// Header begins with the legacy prefix but the 7th column is not `role`
@@ -224,9 +220,9 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 
 	importShort := legacyRequiredColumns[:5] // username..section
 	switch {
-	case equalSlices(header, RosterColumns),
-		equalSlices(header, legacyRequiredColumns),
-		equalSlices(header, importShort):
+	case slices.Equal(header, RosterColumns),
+		slices.Equal(header, legacyRequiredColumns),
+		slices.Equal(header, importShort):
 	default:
 		return nil, fmt.Errorf("unexpected header: got %v, want %v optionally followed by github_id (%v) or by github_id,role (%v); no other columns are import input",
 			header, importShort, legacyRequiredColumns, RosterColumns)
@@ -525,115 +521,98 @@ func UpdateRosterRow(rows []RosterRow, username string, p RosterPatch) (out []Ro
 	return rows, false, false
 }
 
+// findPendingEmailRow returns the index of the pending email-invite row for
+// email (normalized: trimmed, case-insensitive), or -1.
+//
+// The claimable set is deliberately NARROW — no username and no github_id cell
+// at all, so a present-but-unresolved cell still protects a row — because every
+// caller either rewrites or drops the row it finds: a student who already has an
+// account, and a classmate merely sharing a contact address, must never be
+// touched. Mirrors the web's removeEmailInviteRows filter.
+func findPendingEmailRow(rows []RosterRow, email string) int {
+	key := NormalizeInviteEmail(email)
+	if key == "" {
+		return -1
+	}
+	for i := range rows {
+		if rows[i].isRaw() || rows[i].Username != "" {
+			continue
+		}
+		if rows[i].GitHubID != 0 || rows[i].githubIDRaw != "" {
+			continue
+		}
+		if NormalizeInviteEmail(rows[i].Email) == key {
+			return i
+		}
+	}
+	return -1
+}
+
 // UpdatePendingEmailRow patches metadata onto the pending email-invite row for
-// email (normalized: trimmed, case-insensitive), leaving the address itself and
-// role alone. Returns the slice and whether a row matched.
+// email, leaving the address itself and role alone (RosterPatch.Email is
+// ignored). Returns the slice and whether a row matched.
 //
 // It deliberately never appends: the caller (`roster import`) may only correct
 // a row an invitation already created, since creating an identity-less row
-// without sending the invitation would strand it. Claimable rows are the same
-// narrow set UpsertRosterRow's email fallback accepts — no username and no
-// github_id cell at all — so a present-but-unresolved id still protects a row.
+// without sending the invitation would strand it.
 func UpdatePendingEmailRow(rows []RosterRow, email string, p RosterPatch) (out []RosterRow, found bool) {
-	key := strings.ToLower(strings.TrimSpace(email))
-	if key == "" {
+	i := findPendingEmailRow(rows, email)
+	if i < 0 {
 		return rows, false
 	}
-	for i := range rows {
-		if rows[i].isRaw() || rows[i].Username != "" {
-			continue
-		}
-		if rows[i].GitHubID != 0 || rows[i].githubIDRaw != "" {
-			continue
-		}
-		if strings.ToLower(strings.TrimSpace(rows[i].Email)) != key {
-			continue
-		}
-		if p.FirstName != nil {
-			rows[i].FirstName = *p.FirstName
-		}
-		if p.LastName != nil {
-			rows[i].LastName = *p.LastName
-		}
-		if p.Section != nil {
-			rows[i].Section = *p.Section
-		}
-		return rows, true
+	if p.FirstName != nil {
+		rows[i].FirstName = *p.FirstName
 	}
-	return rows, false
+	if p.LastName != nil {
+		rows[i].LastName = *p.LastName
+	}
+	if p.Section != nil {
+		rows[i].Section = *p.Section
+	}
+	return rows, true
 }
 
-// RemovePendingEmailRow drops the pending email-invite row for email
-// (normalized: trimmed, case-insensitive). Returns the slice and whether a row
-// was removed.
+// RemovePendingEmailRow drops the pending email-invite row for email. Returns
+// the slice and whether a row was removed.
 //
-// Claimable rows are exactly the narrow set UpdatePendingEmailRow and
-// UpsertRosterRow's email fallback accept — no username and no github_id cell at
-// all — because a cancel must never drop a student who already accepted, nor a
-// classmate who merely shares a contact address. Mirrors the web's
-// removeEmailInviteRows filter.
+// The narrow claimable set (see findPendingEmailRow) is what keeps a cancel from
+// dropping a student who already accepted, or a classmate who merely shares a
+// contact address.
 func RemovePendingEmailRow(rows []RosterRow, email string) (out []RosterRow, removed bool) {
-	key := strings.ToLower(strings.TrimSpace(email))
-	if key == "" {
+	i := findPendingEmailRow(rows, email)
+	if i < 0 {
 		return rows, false
 	}
-	for i := range rows {
-		if rows[i].isRaw() || rows[i].Username != "" {
-			continue
-		}
-		if rows[i].GitHubID != 0 || rows[i].githubIDRaw != "" {
-			continue
-		}
-		if strings.ToLower(strings.TrimSpace(rows[i].Email)) != key {
-			continue
-		}
-		return append(rows[:i], rows[i+1:]...), true
-	}
-	return rows, false
+	return append(rows[:i], rows[i+1:]...), true
 }
 
 // ClaimPendingEmailRow fills a recovered identity onto the pending email-invite
-// row for email (normalized: trimmed, case-insensitive) IN PLACE, leaving every
-// other cell — the teacher's name/section, the address, the recorded role, and
-// any web-written extra column — exactly as it was. Returns the slice and
-// whether a row matched.
+// row for email IN PLACE, leaving every other cell — the teacher's
+// name/section, the address, the recorded role, and any web-written extra
+// column — exactly as it was. Returns the slice and whether a row matched.
 //
 // This is the acceptance half of the email-invite lifecycle: the row carried
 // only the address until the student accepted, and the invite team's record is
 // what maps that address to their new account. Borrow-only on purpose (unlike
 // UpsertRosterRow, which replaces the whole row): a recovery contributes
 // identity, never metadata, so a re-run can't clobber teacher-owned fields.
-//
-// Claimable rows are the same narrow set UpdatePendingEmailRow and
-// RemovePendingEmailRow accept — no username and no github_id cell at all — so
-// a student who already has an account, and a classmate merely sharing a
-// contact address, are never rewritten. Never appends: a recovery with no row
-// is the caller's decision (see UpsertRosterRow).
+// Never appends: a recovery with no row is the caller's decision.
 func ClaimPendingEmailRow(rows []RosterRow, email, login string, githubID int64) (out []RosterRow, claimed bool) {
-	key := strings.ToLower(strings.TrimSpace(email))
-	if key == "" || strings.TrimSpace(login) == "" {
+	if strings.TrimSpace(login) == "" {
 		return rows, false
 	}
-	for i := range rows {
-		if rows[i].isRaw() || rows[i].Username != "" {
-			continue
-		}
-		if rows[i].GitHubID != 0 || rows[i].githubIDRaw != "" {
-			continue
-		}
-		if strings.ToLower(strings.TrimSpace(rows[i].Email)) != key {
-			continue
-		}
-		rows[i].Username = strings.TrimSpace(login)
-		if githubID > 0 {
-			rows[i].GitHubID = githubID
-			// The recovered id supersedes an unusable cell, which by the filter
-			// above is the only kind that can be here.
-			rows[i].githubIDRaw = ""
-		}
-		return rows, true
+	i := findPendingEmailRow(rows, email)
+	if i < 0 {
+		return rows, false
 	}
-	return rows, false
+	rows[i].Username = strings.TrimSpace(login)
+	if githubID > 0 {
+		rows[i].GitHubID = githubID
+		// The recovered id supersedes an unusable cell, which by the claimable
+		// filter is the only kind that can be here.
+		rows[i].githubIDRaw = ""
+	}
+	return rows, true
 }
 
 // BackfillRosterGitHubID records githubID on the row matching username
@@ -678,18 +657,6 @@ func ValidateRosterEmail(email string) error {
 		return fmt.Errorf("invalid email %q: include only the address (e.g., alice@example.edu), not a display name", email)
 	}
 	return nil
-}
-
-func equalSlices(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // checkFieldLengths rejects cells over maxFieldBytes. Errors name the column

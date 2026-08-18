@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -169,12 +168,11 @@ func ReadInviteTeam(client githubapi.Client, org, slug string) (InviteTeamState,
 // A 404 (team already deleted) yields no members, so the invite simply looks
 // pending; any other failure propagates.
 func ListTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMemberRef, error) {
-	const perPage, maxPages = 100, 100
 	members, err := githubapi.PaginateAll[TeamMemberRef](
-		client, perPage, maxPages,
+		client, teamListPerPage, teamListMaxPages,
 		func(page int) string {
 			return fmt.Sprintf("orgs/%s/teams/%s/members?per_page=%d&page=%d",
-				url.PathEscape(org), url.PathEscape(slug), perPage, page)
+				url.PathEscape(org), url.PathEscape(slug), teamListPerPage, page)
 		},
 		func(path string, err error) error {
 			if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
@@ -359,7 +357,6 @@ func patchInviteTeam(client githubapi.Client, org, slug string, patch map[string
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return inviteTeamPayload{}, fmt.Errorf("decode PATCH %s response: %w", path, err)
 	}
-	_, _ = io.Copy(io.Discard, resp.Body)
 	if payload.Slug == "" {
 		payload.Slug = slug
 	}

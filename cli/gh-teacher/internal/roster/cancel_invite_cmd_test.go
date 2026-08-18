@@ -3,7 +3,6 @@ package roster
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -63,33 +62,7 @@ func (m *cancelMock) handler(t *testing.T) http.Handler {
 		w.WriteHeader(status)
 	})
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		m.calls = append(m.calls, inviteCall{Method: r.Method, Path: r.URL.Path})
-		base.ServeHTTP(w, r)
-	})
-}
-
-func (m *cancelMock) countCalls(method, path string) int {
-	n := 0
-	for _, c := range m.calls {
-		if c.Method == method && c.Path == path {
-			n++
-		}
-	}
-	return n
-}
-
-// writeCalls returns every recorded request that mutates server state, so a
-// report-only path can be asserted to have made none.
-func (m *cancelMock) writeCalls() []inviteCall {
-	var out []inviteCall
-	for _, c := range m.calls {
-		switch c.Method {
-		case http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete:
-			out = append(out, c)
-		}
-	}
-	return out
+	return recordCalls(&m.calls, base)
 }
 
 // newCancelMock has one pending EMAIL invitation for inviteTestEmail and a
@@ -129,7 +102,7 @@ func TestRunRosterCancelInvite_HappyPath(t *testing.T) {
 		t.Fatalf("runRosterCancelInvite: %v", err)
 	}
 
-	if n := mock.countCalls(http.MethodDelete, "/orgs/o/invitations/42"); n != 1 {
+	if n := countCalls(mock.calls, http.MethodDelete, "/orgs/o/invitations/42"); n != 1 {
 		t.Errorf("DELETEs of invitation 42 = %d, want 1; calls = %#v", n, mock.calls)
 	}
 	wantSlug := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
@@ -162,7 +135,7 @@ func TestRunRosterCancelInvite_NoPendingInvitationIsReportOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a missing invitation must not be an error: %v", err)
 	}
-	if writes := mock.writeCalls(); len(writes) != 0 {
+	if writes := writeCalls(mock.calls); len(writes) != 0 {
 		t.Errorf("report-only path issued %d write(s): %#v", len(writes), writes)
 	}
 	if len(mock.blobs) != 0 {
@@ -210,7 +183,7 @@ func TestRunRosterCancelInvite_KeepsRowsThatIdentifySomeone(t *testing.T) {
 	if len(mock.blobs) != 0 {
 		t.Errorf("rewrote the roster with no pending row to drop: %#v", mock.blobs)
 	}
-	if n := mock.countCalls(http.MethodDelete, "/orgs/o/invitations/42"); n != 1 {
+	if n := countCalls(mock.calls, http.MethodDelete, "/orgs/o/invitations/42"); n != 1 {
 		t.Errorf("DELETEs of invitation 42 = %d, want 1 (the cancel is independent of the row)", n)
 	}
 	if !strings.Contains(out, "roster unchanged") {
@@ -246,13 +219,7 @@ func TestRunRosterCancelInvite_TeamDeleteFailureStillCommitsRowRemoval(t *testin
 func TestRosterCancelInviteCmd(t *testing.T) {
 	run := func(t *testing.T, args ...string) error {
 		t.Helper()
-		cmd := rosterCancelInviteCmd()
-		cmd.SilenceErrors = true
-		cmd.SilenceUsage = true
-		cmd.SetArgs(args)
-		cmd.SetOut(io.Discard)
-		cmd.SetErr(io.Discard)
-		return cmd.Execute()
+		return runRosterSubcommand(t, rosterCancelInviteCmd(), args...)
 	}
 
 	t.Run("blank email is rejected before any auth/network", func(t *testing.T) {
@@ -276,19 +243,4 @@ func TestRosterCancelInviteCmd(t *testing.T) {
 			t.Error("--force must not exist on `roster cancel-invite`")
 		}
 	})
-}
-
-func TestRosterCmdRegistersCancelInvite(t *testing.T) {
-	var found bool
-	for _, sub := range NewCmd().Commands() {
-		if sub.Name() == "cancel-invite" {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("`roster cancel-invite` is not registered on the roster command")
-	}
-	if !strings.Contains(NewCmd().Long, "cancel-invite") {
-		t.Error("the roster subcommand summary should list cancel-invite")
-	}
 }

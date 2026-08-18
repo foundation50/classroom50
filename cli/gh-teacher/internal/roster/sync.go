@@ -57,10 +57,9 @@ type inviteScan struct {
 	// team is deleted while it is false — an unreadable team can't prove its row
 	// is dead.
 	trusted bool
-	// pendingEmails/liveSlugs are the invitation-derived liveness signals, nil
-	// when the invitation read failed (which also clears trusted).
+	// pendingEmails is the invitation-derived liveness signal, nil when the
+	// invitation read failed (which also clears trusted).
 	pendingEmails map[string]bool
-	liveSlugs     map[string]bool
 }
 
 func rosterSyncCmd() *cobra.Command {
@@ -164,7 +163,7 @@ func loadClassroomIndex(client githubapi.Client, org, classroom, branch string) 
 				continue
 			}
 			idx.enrolled[m.ID] = true
-			key := strings.ToLower(strings.TrimSpace(m.Login))
+			key := loginKey(m.Login)
 			counts[key]++
 			idx.idByLogin[key] = m.ID
 		}
@@ -186,21 +185,11 @@ func scanInviteTeams(client githubapi.Client, errOut io.Writer, org, classroom s
 	// Read the invitation list once, up front: it is both the GC guard's
 	// liveness signal and the confirmation the row reaper needs. A failure is
 	// the degraded case the whole contract turns on.
-	if pending, err := membership.ListPendingOrgInvitations(client, org); err != nil {
+	if pending, err := pendingEmailInvitations(client, org); err != nil {
 		scan.trusted = false
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: reading the pending invitations failed (%v); nothing will be removed this pass — a pending row can't be proven dead without them.\n", org, err)
 	} else {
-		scan.pendingEmails, scan.liveSlugs = map[string]bool{}, map[string]bool{}
-		for _, inv := range pending {
-			// GitHub keys an invitation by login OR email; only an email one has
-			// an address (and a metadata team) to reconcile.
-			if inv.Login != "" || inv.Email == "" {
-				continue
-			}
-			email := configrepo.NormalizeInviteEmail(inv.Email)
-			scan.pendingEmails[email] = true
-			scan.liveSlugs[configrepo.InviteTeamName(classroom, email)] = true
-		}
+		scan.pendingEmails = pending
 	}
 
 	teams, err := configrepo.ListInviteTeams(client, org)
@@ -251,8 +240,10 @@ func scanInviteTeams(client githubapi.Client, errOut io.Writer, org, classroom s
 		switch {
 		case len(members) == 0:
 			// Pending — or abandoned. Reap only when a mid-creation race is
-			// impossible AND no pending invitation still maps to the slug.
-			if scan.liveSlugs != nil && !scan.liveSlugs[team.Slug] && pastGCAge(state.CreatedAt) {
+			// impossible AND no pending invitation still maps to the slug. The
+			// hash-back gate above proved this team's slug is this email's, so
+			// the address IS the slug's liveness signal.
+			if scan.pendingEmails != nil && !scan.pendingEmails[email] && pastGCAge(state.CreatedAt) {
 				scan.staleSlugs = append(scan.staleSlugs, team.Slug)
 				continue
 			}
@@ -322,9 +313,26 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 		recoveredByEmail[r.Email] = r
 	}
 
+	// The id/login/email sets every row already identifies — the same join the
+	// roster view uses, so a fold and an append can't both fire for one
+	// recovery. Mirrors the web's recById/recByLogin/recByEmail match.
+	var (
+		rowIDs    = map[int64]bool{}
+		rowLogins = map[string]bool{}
+		rowEmails = map[string]bool{}
+	)
 	claimed := map[string]bool{}
 	for _, row := range rows {
+		if row.GitHubID != 0 {
+			rowIDs[row.GitHubID] = true
+		}
+		if key := loginKey(row.Username); key != "" {
+			rowLogins[key] = true
+		}
 		email := configrepo.NormalizeInviteEmail(row.Email)
+		if email != "" {
+			rowEmails[email] = true
+		}
 		if isPendingRosterRow(row) && email != "" {
 			if rec, ok := recoveredByEmail[email]; ok && !claimed[email] {
 				claimed[email] = true
@@ -350,7 +358,7 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 		// classroom's own team membership. A login on no classroom team is left
 		// alone rather than resolved globally.
 		if row.Username != "" && row.GitHubID == 0 {
-			if _, ok := idx.idByLogin[strings.ToLower(strings.TrimSpace(row.Username))]; ok {
+			if _, ok := idx.idByLogin[loginKey(row.Username)]; ok {
 				plan.backfills = append(plan.backfills, row.Username)
 			}
 		}
@@ -359,30 +367,14 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 	// A recovery no row claims — by address, by id, or by login — needs one, or
 	// retiring its team would lose the only record of the invited address.
 	for _, rec := range scan.recovered {
-		if !claimed[rec.Email] && !rosterClaims(rows, rec) {
-			plan.appends = append(plan.appends, rec)
+		recLogin := loginKey(rec.Login)
+		if claimed[rec.Email] || rowIDs[rec.ID] ||
+			(recLogin != "" && rowLogins[recLogin]) || rowEmails[rec.Email] {
+			continue
 		}
+		plan.appends = append(plan.appends, rec)
 	}
 	return plan
-}
-
-// rosterClaims reports whether any row already identifies this recovery, by the
-// same id → login → email join the roster view uses. Mirrors the web's
-// recById/recByLogin/recByEmail match, so a fold and an append can't both fire.
-func rosterClaims(rows []configrepo.RosterRow, rec inviteRecovery) bool {
-	login := strings.ToLower(strings.TrimSpace(rec.Login))
-	for _, row := range rows {
-		if row.GitHubID != 0 && row.GitHubID == rec.ID {
-			return true
-		}
-		if login != "" && strings.EqualFold(strings.TrimSpace(row.Username), login) {
-			return true
-		}
-		if rec.Email != "" && configrepo.NormalizeInviteEmail(row.Email) == rec.Email {
-			return true
-		}
-	}
-	return false
 }
 
 // isPendingRosterRow reports whether a row is an email-ONLY invite row — the
@@ -390,6 +382,13 @@ func rosterClaims(rows []configrepo.RosterRow, rec inviteRecovery) bool {
 // own filter (no username, no github_id cell at all).
 func isPendingRosterRow(row configrepo.RosterRow) bool {
 	return row.Username == "" && row.GitHubID == 0 && row.Email != ""
+}
+
+// loginKey is the case-insensitive key classroomIndex.idByLogin is both built
+// and read with; the two must derive it identically or a backfill silently
+// never matches.
+func loginKey(login string) string {
+	return strings.ToLower(strings.TrimSpace(login))
 }
 
 // runRosterSync is the three-phase reconcile: classify the invite teams
@@ -418,14 +417,13 @@ func runRosterSync(client githubapi.Client, out, errOut io.Writer, org, classroo
 
 	// A degraded pass proves nothing about a team either, so it deletes nothing
 	// — and must not report a delete it won't make.
-	deletable := scan.staleSlugs
 	if !scan.trusted {
-		deletable = nil
+		scan.staleSlugs = nil
 	}
-	reportSyncPlan(out, errOut, org, classroom, deletable, scan.anomalies, plan)
+	reportSyncPlan(out, errOut, org, classroom, scan, plan)
 
 	if !write {
-		if plan.empty() && len(deletable) == 0 {
+		if plan.empty() && len(scan.staleSlugs) == 0 {
 			if !scan.trusted {
 				return syncDegradedError(org, classroom)
 			}
@@ -444,7 +442,7 @@ func runRosterSync(client githubapi.Client, out, errOut io.Writer, org, classroo
 	if err := applyRosterSync(client, out, errOut, org, classroom, branch, scan, idx); err != nil {
 		return err
 	}
-	deleteRetiredInviteTeams(client, out, errOut, org, classroom, scan.recovered, deletable)
+	deleteRetiredInviteTeams(client, out, errOut, org, classroom, scan)
 	if !scan.trusted {
 		return syncDegradedError(org, classroom)
 	}
@@ -460,9 +458,9 @@ func syncDegradedError(org, classroom string) error {
 
 // reportSyncPlan prints the planned edits on stdout (the result a script reads)
 // and the anomalies needing a human on stderr.
-func reportSyncPlan(out, errOut io.Writer, org, classroom string, staleSlugs, anomalies []string, plan rosterPlan) {
+func reportSyncPlan(out, errOut io.Writer, org, classroom string, scan inviteScan, plan rosterPlan) {
 	path := fmt.Sprintf("%s/%s/%s", org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom))
-	if plan.empty() && len(staleSlugs) == 0 {
+	if plan.empty() && len(scan.staleSlugs) == 0 {
 		_, _ = fmt.Fprintf(out, "%s: up to date (no invites to record, no rows to drop, no ids to fill)\n", path)
 	}
 	for _, rec := range plan.folds {
@@ -477,10 +475,10 @@ func reportSyncPlan(out, errOut io.Writer, org, classroom string, staleSlugs, an
 	for _, username := range plan.backfills {
 		_, _ = fmt.Fprintf(out, "%s: fill in %s's github_id from the classroom team\n", path, username)
 	}
-	for _, slug := range staleSlugs {
+	for _, slug := range scan.staleSlugs {
 		_, _ = fmt.Fprintf(out, "%s: delete the leftover metadata team %s\n", org, slug)
 	}
-	for _, anomaly := range anomalies {
+	for _, anomaly := range scan.anomalies {
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: kept %s\n", org, anomaly)
 	}
 }
@@ -503,18 +501,12 @@ func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classr
 		if scan.trusted {
 			// Re-confirm liveness against GitHub's CURRENT invitations; a failed
 			// read fails closed (nothing is reaped this attempt).
-			confirmed, err := membership.ListPendingOrgInvitations(client, org)
+			confirmed, err := pendingEmailInvitations(client, org)
 			if err != nil {
 				_, _ = fmt.Fprintf(errOut, "Warning: %s: re-checking the pending invitations before the write failed (%v); no pending row was dropped.\n", org, err)
 				fresh.trusted = false
 			} else {
-				fresh.pendingEmails = map[string]bool{}
-				for _, inv := range confirmed {
-					if inv.Login != "" || inv.Email == "" {
-						continue
-					}
-					fresh.pendingEmails[configrepo.NormalizeInviteEmail(inv.Email)] = true
-				}
+				fresh.pendingEmails = confirmed
 			}
 		}
 
@@ -537,7 +529,7 @@ func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classr
 			}
 		}
 		for _, username := range plan.backfills {
-			id := idx.idByLogin[strings.ToLower(strings.TrimSpace(username))]
+			id := idx.idByLogin[loginKey(username)]
 			if next, ok := configrepo.BackfillRosterGitHubID(rows, username, id); ok {
 				rows = next
 				applied.backfills = append(applied.backfills, username)
@@ -575,12 +567,12 @@ func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classr
 // deterministic hash, so a same-email RE-INVITE in the window since the scan
 // adopts this very team, and deleting it would strip the metadata team off a
 // brand-new live invitation. An unreadable invitation list keeps every team.
-func deleteRetiredInviteTeams(client githubapi.Client, out, errOut io.Writer, org, classroom string, recovered []inviteRecovery, stale []string) {
-	slugs := make([]string, 0, len(recovered)+len(stale))
-	for _, rec := range recovered {
+func deleteRetiredInviteTeams(client githubapi.Client, out, errOut io.Writer, org, classroom string, scan inviteScan) {
+	slugs := make([]string, 0, len(scan.recovered)+len(scan.staleSlugs))
+	for _, rec := range scan.recovered {
 		slugs = append(slugs, rec.Slug)
 	}
-	slugs = append(slugs, stale...)
+	slugs = append(slugs, scan.staleSlugs...)
 	if len(slugs) == 0 {
 		return
 	}
@@ -608,16 +600,31 @@ func deleteRetiredInviteTeams(client githubapi.Client, out, errOut io.Writer, or
 // maps to. Strict: a failed read propagates so the caller fails closed rather
 // than reading it as "nothing is live".
 func liveInviteSlugs(client githubapi.Client, org, classroom string) (map[string]bool, error) {
+	emails, err := pendingEmailInvitations(client, org)
+	if err != nil {
+		return nil, err
+	}
+	slugs := make(map[string]bool, len(emails))
+	for email := range emails {
+		slugs[configrepo.InviteTeamName(classroom, email)] = true
+	}
+	return slugs, nil
+}
+
+// pendingEmailInvitations is the org's pending EMAIL invitations as a set of
+// normalized addresses. GitHub keys an invitation by login OR email; only an
+// email one has an address (and a metadata team) to reconcile.
+func pendingEmailInvitations(client githubapi.Client, org string) (map[string]bool, error) {
 	pending, err := membership.ListPendingOrgInvitations(client, org)
 	if err != nil {
 		return nil, err
 	}
-	slugs := map[string]bool{}
+	emails := map[string]bool{}
 	for _, inv := range pending {
 		if inv.Login != "" || inv.Email == "" {
 			continue
 		}
-		slugs[configrepo.InviteTeamName(classroom, inv.Email)] = true
+		emails[configrepo.NormalizeInviteEmail(inv.Email)] = true
 	}
-	return slugs, nil
+	return emails, nil
 }

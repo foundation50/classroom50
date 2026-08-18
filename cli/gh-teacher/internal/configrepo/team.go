@@ -524,12 +524,11 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 func ListInviteTeams(client githubapi.Client, org string) ([]TeamRef, error) {
 	// TeamRef's json tags already match the org-teams payload's id/slug, so it
 	// doubles as the decode target.
-	const perPage, maxPages = 100, 100
 	teams, err := githubapi.PaginateAll[TeamRef](
-		client, perPage, maxPages,
+		client, teamListPerPage, teamListMaxPages,
 		func(page int) string {
 			return fmt.Sprintf("orgs/%s/teams?per_page=%d&page=%d",
-				url.PathEscape(org), perPage, page)
+				url.PathEscape(org), teamListPerPage, page)
 		},
 		func(path string, err error) error {
 			return fmt.Errorf("GET %s: %w", path, err)
@@ -823,6 +822,13 @@ type TeamMemberRef struct {
 	Login string `json:"login"`
 	ID    int64  `json:"id"`
 }
+
+// teamListPerPage / teamListMaxPages bound the paginated team walks here.
+// 100×100 = 10k, far beyond any classroom org.
+const (
+	teamListPerPage  = 100
+	teamListMaxPages = 100
+)
 
 // ListTeamMembers returns the logins of every member of the classroom team
 // addressed by `slug`, walking pagination. The classroom GitHub team is

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
@@ -122,6 +124,81 @@ func rosterCSVContent(t *testing.T, rows ...configrepo.RosterRow) string {
 		t.Fatalf("encode roster: %v", err)
 	}
 	return string(b)
+}
+
+// inviteCall is one recorded request. Order is the contract several of the
+// invite-lifecycle tests assert on (e.g. the email record is the LAST team
+// write, and the roster commit follows the invitation).
+type inviteCall struct {
+	Method      string
+	Path        string
+	Description string
+}
+
+// recordCalls appends every request to dst before the mux sees it. The body is
+// restored so the mux's own handlers can still read it, and a `description`
+// field is decoded eagerly for the record-ordering assertions.
+func recordCalls(dst *[]inviteCall, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var raw []byte
+		if r.Body != nil {
+			raw, _ = io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+		}
+		var body struct {
+			Description string `json:"description"`
+		}
+		_ = json.Unmarshal(raw, &body)
+		*dst = append(*dst, inviteCall{
+			Method: r.Method, Path: r.URL.Path, Description: body.Description,
+		})
+		next.ServeHTTP(w, r)
+	})
+}
+
+// indexOfCall is the position of the first method+path match, or -1.
+func indexOfCall(calls []inviteCall, method, path string) int {
+	for i, c := range calls {
+		if c.Method == method && c.Path == path {
+			return i
+		}
+	}
+	return -1
+}
+
+func countCalls(calls []inviteCall, method, path string) int {
+	n := 0
+	for _, c := range calls {
+		if c.Method == method && c.Path == path {
+			n++
+		}
+	}
+	return n
+}
+
+// writeCalls returns every recorded request that mutates server state, so a
+// report-only path can be asserted to have made none.
+func writeCalls(calls []inviteCall) []inviteCall {
+	var out []inviteCall
+	for _, c := range calls {
+		switch c.Method {
+		case http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete:
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// runRosterSubcommand drives a subcommand as the CLI does (flag parse + RunE),
+// for the guards that must reject before any auth or network happens.
+func runRosterSubcommand(t *testing.T, cmd *cobra.Command, args ...string) error {
+	t.Helper()
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.SetArgs(args)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	return cmd.Execute()
 }
 
 func TestRunRosterUpdate(t *testing.T) {
@@ -337,16 +414,9 @@ func TestRunRosterRemove(t *testing.T) {
 // auth/network, so these cases need no server (a stray HTTP call would be a
 // bug — RequireAuthClient is only reached after the guard).
 func TestRosterUpdateCmd(t *testing.T) {
-	// run drives the command as the CLI does (flag parse + RunE).
 	run := func(t *testing.T, args ...string) error {
 		t.Helper()
-		cmd := rosterUpdateCmd()
-		cmd.SilenceErrors = true
-		cmd.SilenceUsage = true
-		cmd.SetArgs(args)
-		cmd.SetOut(io.Discard)
-		cmd.SetErr(io.Discard)
-		return cmd.Execute()
+		return runRosterSubcommand(t, rosterUpdateCmd(), args...)
 	}
 
 	t.Run("no data flags errors with 'nothing to update' before any auth/network", func(t *testing.T) {

@@ -4,11 +4,10 @@ import "errors"
 
 // ExitCodeError carries a specific process exit code out of a cobra RunE, for
 // the few commands whose exit status is a machine-readable RESULT rather than
-// just success/failure — `roster sync`'s `terraform plan -detailed-exitcode`
-// contract (0 clean, 1 error, 2 changes pending).
+// just success/failure (`roster sync` defines the one such contract today).
 //
-// Err still carries the message cobra prints, so a non-failure code like 2 must
-// wrap a sentence that reads as a report rather than a fault.
+// Err still carries the message cobra prints, so a non-failure code must wrap a
+// sentence that reads as a report rather than a fault.
 type ExitCodeError struct {
 	Code int
 	Err  error

@@ -867,7 +867,7 @@ func TestValidateRosterEmail(t *testing.T) {
 func TestParseRoster_StripsUTF8BOM(t *testing.T) {
 	// Excel's "CSV UTF-8" prepends 0xEF 0xBB 0xBF. encoding/csv
 	// does not strip it, so without the trim the first header
-	// field would be `\ufeffusername` — equalSlices would reject
+	// field would be `\ufeffusername` — slices.Equal would reject
 	// the file with a misleading "unexpected header" error.
 	in := append([]byte{0xEF, 0xBB, 0xBF}, []byte("username,first_name,last_name,email,section,github_id\nalice,Alice,A,,s,1\n")...)
 	rows, err := ParseRoster(in)

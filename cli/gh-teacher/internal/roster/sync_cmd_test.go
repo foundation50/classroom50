@@ -2,9 +2,7 @@ package roster
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -42,8 +40,7 @@ type syncTeam struct {
 // list, and classroom.json (for the authoritative classroom team slug).
 type syncMock struct {
 	*rosterWriteMock
-	classroomJSON string
-	teams         []syncTeam
+	teams []syncTeam
 	// classroomMembers is the classroom team's membership — the ONLY source of
 	// enrollment and of a backfilled github_id.
 	classroomMembers []map[string]any
@@ -65,18 +62,6 @@ type syncMock struct {
 func (m *syncMock) handler(t *testing.T) http.Handler {
 	t.Helper()
 	base := m.rosterWriteMock.handler(t).(*http.ServeMux)
-
-	base.HandleFunc("/repos/o/classroom50/contents/"+inviteTestClassroom+"/classroom.json",
-		func(w http.ResponseWriter, r *http.Request) {
-			if m.classroomJSON == "" {
-				http.NotFound(w, r)
-				return
-			}
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"content":  base64.StdEncoding.EncodeToString([]byte(m.classroomJSON)),
-				"encoding": "base64",
-			})
-		})
 
 	base.HandleFunc("/orgs/o/teams", func(w http.ResponseWriter, r *http.Request) {
 		if m.teamListStatus != 0 {
@@ -144,13 +129,15 @@ func (m *syncMock) handler(t *testing.T) http.Handler {
 		_ = json.NewEncoder(w).Encode(pending)
 	})
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		m.calls = append(m.calls, inviteCall{Method: r.Method, Path: r.URL.Path})
+	// committed latches on the roster write so a same-email re-invite can be
+	// staged in the commit→delete window.
+	tracked := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		base.ServeHTTP(w, r)
 		if r.Method == http.MethodPost && r.URL.Path == "/repos/o/classroom50/git/trees" {
 			m.committed = true
 		}
 	})
+	return recordCalls(&m.calls, tracked)
 }
 
 func (m *syncMock) findTeam(slug string) *syncTeam {
@@ -160,19 +147,6 @@ func (m *syncMock) findTeam(slug string) *syncTeam {
 		}
 	}
 	return nil
-}
-
-// writeCalls returns every state-mutating request, so a dry run can be asserted
-// to have made none.
-func (m *syncMock) writeCalls() []inviteCall {
-	var out []inviteCall
-	for _, c := range m.calls {
-		switch c.Method {
-		case http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete:
-			out = append(out, c)
-		}
-	}
-	return out
 }
 
 // syncInviteRecord is the valid v1 record for (classroom, email).
@@ -191,9 +165,9 @@ func newSyncMock(t *testing.T, rosterCSV string) *syncMock {
 	t.Helper()
 	return &syncMock{
 		rosterWriteMock: &rosterWriteMock{files: map[string]string{
-			inviteTestClassroom + "/roster.csv": rosterCSV,
+			inviteTestClassroom + "/roster.csv":     rosterCSV,
+			inviteTestClassroom + "/classroom.json": inviteTestClassroomJSON(t),
 		}},
-		classroomJSON: inviteTestClassroomJSON(t),
 		classroomMembers: []map[string]any{
 			{"login": syncTestAcceptedLogin, "id": syncTestAcceptedID},
 		},
@@ -244,7 +218,7 @@ func TestRunRosterSync_AcceptedInviteRecoveredThenClean(t *testing.T) {
 	if !strings.Contains(out, inviteTestEmail) || !strings.Contains(out, syncTestAcceptedLogin) {
 		t.Errorf("dry run must report the recovery it found:\n%s", out)
 	}
-	if writes := dry.writeCalls(); len(writes) != 0 {
+	if writes := writeCalls(dry.calls); len(writes) != 0 {
 		t.Errorf("dry run issued %d write request(s): %#v", len(writes), writes)
 	}
 
@@ -444,7 +418,7 @@ func TestRunRosterSync_MemberlessTeamGCGuard(t *testing.T) {
 		if got := exitCode(mustSyncErr(t, dry, false)); got != 2 {
 			t.Fatalf("dry-run exit code = %d, want 2", got)
 		}
-		if writes := dry.writeCalls(); len(writes) != 0 {
+		if writes := writeCalls(dry.calls); len(writes) != 0 {
 			t.Errorf("dry run issued %d write(s): %#v", len(writes), writes)
 		}
 
@@ -512,7 +486,7 @@ func TestRunRosterSync_BackfillsIDsFromClassroomTeamOnly(t *testing.T) {
 	if left.GitHubID != 0 {
 		t.Errorf("backfilled %q, who is on no classroom team: %#v", left.Username, left)
 	}
-	if n := countSyncCalls(mock, http.MethodGet, "/users/outsider"); n != 0 {
+	if n := countCalls(mock.calls, http.MethodGet, "/users/outsider"); n != 0 {
 		t.Errorf("resolved a login through a global user lookup %d time(s)", n)
 	}
 }
@@ -586,13 +560,7 @@ func TestRunRosterSync_DegradedTeamListingDegradesThePass(t *testing.T) {
 func TestRosterSyncCmd(t *testing.T) {
 	run := func(t *testing.T, args ...string) error {
 		t.Helper()
-		cmd := rosterSyncCmd()
-		cmd.SilenceErrors = true
-		cmd.SilenceUsage = true
-		cmd.SetArgs(args)
-		cmd.SetOut(io.Discard)
-		cmd.SetErr(io.Discard)
-		return cmd.Execute()
+		return runRosterSubcommand(t, rosterSyncCmd(), args...)
 	}
 
 	t.Run("blank classroom is rejected before any auth/network", func(t *testing.T) {
@@ -611,21 +579,6 @@ func TestRosterSyncCmd(t *testing.T) {
 			t.Errorf("--write default = %q, want false (report-only by default)", flag.DefValue)
 		}
 	})
-}
-
-func TestRosterCmdRegistersSync(t *testing.T) {
-	var found bool
-	for _, sub := range NewCmd().Commands() {
-		if sub.Name() == "sync" {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("`roster sync` is not registered on the roster command")
-	}
-	if !strings.Contains(NewCmd().Long, "sync") {
-		t.Error("the roster subcommand summary should list sync")
-	}
 }
 
 // A recovery whose invite-time row is gone (an interrupted `roster invite`, or a
@@ -656,14 +609,4 @@ func mustSyncErr(t *testing.T, mock *syncMock, write bool) error {
 	t.Helper()
 	_, _, err := runSync(t, mock, write)
 	return err
-}
-
-func countSyncCalls(mock *syncMock, method, path string) int {
-	n := 0
-	for _, c := range mock.calls {
-		if c.Method == method && c.Path == path {
-			n++
-		}
-	}
-	return n
 }

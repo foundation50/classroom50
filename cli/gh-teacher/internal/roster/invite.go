@@ -13,7 +13,6 @@ import (
 	"github.com/foundation50/gh-teacher/internal/configwrite"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 	"github.com/foundation50/gh-teacher/internal/membership"
-	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
 // invitedRosterRole is the role an email invitation's pending row records.
@@ -56,16 +55,8 @@ func rosterInviteCmd() *cobra.Command {
 		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
-			org := strings.TrimSpace(args[0])
-			classroom := strings.TrimSpace(args[1])
-			email := strings.TrimSpace(args[2])
-			if org == "" || classroom == "" || email == "" {
-				return errors.New("org, classroom, and email must all be non-empty")
-			}
-			if err := validate.ShortName(classroom, "classroom"); err != nil {
-				return err
-			}
-			if err := configrepo.ValidateRosterEmail(email); err != nil {
+			org, classroom, email, err := parseEmailArgs(args)
+			if err != nil {
 				return err
 			}
 			client, err := githubapi.RequireAuthClient(cmd)
@@ -145,8 +136,7 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 		// invite's still-unrecovered record, so only delete what this run made.
 		if created {
 			if delErr := configrepo.DeleteInviteTeam(client, org, inviteTeam.Slug); delErr != nil {
-				_, _ = fmt.Fprintf(errOut, "Warning: %s: nothing was invited, but cleaning up the metadata team %s failed (%v); delete it by hand or let `gh teacher roster sync` collect it.\n",
-					org, inviteTeam.Slug, delErr)
+				warnStrandedInviteTeam(errOut, "nothing was invited, but cleaning up", org, inviteTeam.Slug, delErr)
 			}
 		}
 		if errors.Is(err, membership.ErrEmailAlreadyInvitedOrMember) {

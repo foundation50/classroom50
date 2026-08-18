@@ -289,6 +289,34 @@ func rosterImportCmd() *cobra.Command {
 	return cmd
 }
 
+// parseEmailArgs validates the `<org> <classroom> <email>` shape `roster invite`
+// and `roster cancel-invite` share, BEFORE any auth or network happens so a
+// typo can never reach GitHub.
+func parseEmailArgs(args []string) (org, classroom, email string, err error) {
+	org = strings.TrimSpace(args[0])
+	classroom = strings.TrimSpace(args[1])
+	email = strings.TrimSpace(args[2])
+	if org == "" || classroom == "" || email == "" {
+		return "", "", "", errors.New("org, classroom, and email must all be non-empty")
+	}
+	if err := validate.ShortName(classroom, "classroom"); err != nil {
+		return "", "", "", err
+	}
+	if err := configrepo.ValidateRosterEmail(email); err != nil {
+		return "", "", "", err
+	}
+	return org, classroom, email, nil
+}
+
+// warnStrandedInviteTeam reports a metadata team a teardown couldn't remove.
+// Always a warning, never a failure: the action it followed has already landed,
+// so a stranded team must not read as that action failing — `roster sync`'s GC
+// is the backstop.
+func warnStrandedInviteTeam(errOut io.Writer, lead, org, slug string, err error) {
+	_, _ = fmt.Fprintf(errOut, "Warning: %s: %s the metadata team %s failed (%v); delete it by hand or let `gh teacher roster sync` collect it.\n",
+		org, lead, slug, err)
+}
+
 // inviteIfNotMember invites <username> when not already active/pending, and
 // returns the membership state at decision time. The pre-resolved userID avoids
 // redundant lookups during a bulk import. A 422 "already member/pending" is
@@ -407,8 +435,8 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 // or any read error yields ("", false) so the caller silently skips the
 // advisory note rather than failing an add that already succeeded.
 func staffRoleForLogin(client githubapi.Client, org, classroom, branch, login string) (configrepo.StaffRole, bool) {
-	loginKey := strings.ToLower(strings.TrimSpace(login))
-	if loginKey == "" {
+	key := loginKey(login)
+	if key == "" {
 		return "", false
 	}
 	c, ok, err := configrepo.LoadClassroom(client, org, classroom, branch)
@@ -425,7 +453,7 @@ func staffRoleForLogin(client githubapi.Client, org, classroom, branch, login st
 			continue
 		}
 		for _, m := range members {
-			if strings.ToLower(strings.TrimSpace(m)) == loginKey {
+			if loginKey(m) == key {
 				return role, true
 			}
 		}
@@ -596,7 +624,7 @@ func dedupePendingByEmail(rows []importedPendingRow) []importedPendingRow {
 	latest := make(map[string]importedPendingRow, len(rows))
 	order := make([]string, 0, len(rows))
 	for _, row := range rows {
-		key := strings.ToLower(strings.TrimSpace(row.row.Email))
+		key := configrepo.NormalizeInviteEmail(row.row.Email)
 		if _, seen := latest[key]; !seen {
 			order = append(order, key)
 		}
