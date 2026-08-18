@@ -40,6 +40,13 @@ func TestContractLiterals(t *testing.T) {
 		// INVITE_TEAM_PREFIX / INVITE_HASH_HEX_LEN, pinned there by
 		// inviteTeam.test.ts). Update every copy in lockstep on change.
 		{"InviteTeamPrefix", InviteTeamPrefix, "invite-"},
+		// InviteSchemaV1 is mirrored, with NO compile-time link, in
+		// schemas/invite-v1.schema.json (`schema` const) and the web writer
+		// (INVITE_DESCRIPTION_SCHEMA). Both the web and `gh teacher roster
+		// invite` write records carrying this sentinel, and each reader rejects a
+		// record whose sentinel differs — so a one-sided bump would make one
+		// writer's invites invisible to the other's reconcile.
+		{"InviteSchemaV1", InviteSchemaV1, "classroom50/invite/v1"},
 		{"DefaultAutograderName", DefaultAutograderName, "default"},
 		{"ModeIndividual", ModeIndividual, "individual"},
 		{"ModeGroup", ModeGroup, "group"},
@@ -119,6 +126,23 @@ func TestContractLiterals(t *testing.T) {
 func TestInviteHashHexLen(t *testing.T) {
 	if InviteHashHexLen != 16 {
 		t.Errorf("InviteHashHexLen = %d, want 16", InviteHashHexLen)
+	}
+}
+
+// TestInviteTeamGCMinAge pins the age a member-less invite team must reach
+// before either writer's reconcile may reap it. Mirrored, with NO compile-time
+// link, in web/src/domain/students/inviteRecoveries.ts
+// (INVITE_TEAM_GC_MIN_AGE_MS, pinned there too). Two independent reconcilers now
+// share this gate, so a one-sided shortening would let one tool reap invites the
+// other had just created.
+func TestInviteTeamGCMinAge(t *testing.T) {
+	if InviteTeamGCMinAge != 24*time.Hour {
+		t.Errorf("InviteTeamGCMinAge = %v, want 24h", InviteTeamGCMinAge)
+	}
+	// The web mirror is expressed in milliseconds; pin the converted value so a
+	// unit mix-up (seconds vs ms) can't pass.
+	if got := InviteTeamGCMinAge.Milliseconds(); got != 24*60*60*1000 {
+		t.Errorf("InviteTeamGCMinAge = %d ms, want %d (web INVITE_TEAM_GC_MIN_AGE_MS)", got, 24*60*60*1000)
 	}
 }
 

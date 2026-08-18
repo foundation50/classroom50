@@ -16,16 +16,62 @@ import {
 // module hand-mirrors, with no compile-time link between them. Assert the two
 // agree so a schema edit that isn't mirrored here (or vice versa) fails CI
 // instead of silently drifting — same lockstep guard as submissionTags.test.ts.
-// The teacher CLI's `teardown` sweep matches these teams by name shape
-// (cli/shared/contract InviteTeamPrefix / InviteHashHexLen, pinned there by
+// The teacher CLI writes and reads these teams too (cli/shared/contract
+// InviteTeamPrefix / InviteHashHexLen / InviteSchemaV1, pinned there by
 // contract_test.go). There is no compile-time link, so pin the web half too:
 // renaming or resizing on this side alone would leave the CLI matching nothing
 // and silently stranding invited emails in the org.
 describe("invite team name shape — cross-tool contract", () => {
-  it("pins the prefix and hash length the CLI sweep expects", () => {
+  it("pins the prefix and hash length the CLI expects", () => {
     expect(INVITE_TEAM_PREFIX).toBe("invite-")
     expect(INVITE_HASH_HEX_LEN).toBe(16)
   })
+})
+
+describe("classroom50/invite/v1 — shared vector parity with the teacher CLI", () => {
+  // Both the web and `gh teacher roster invite` create these teams and each
+  // reads the other's, with no compile-time link between the two writers. These
+  // vectors are the shared oracle (the Go suite asserts the same file), so a
+  // one-sided change to the hash input or the record bytes fails here: it would
+  // make every already-created invite team unlocatable and leave the two
+  // writers overwriting each other's description forever.
+  const fixtureUrl = new URL(
+    "../../../cli/shared/testdata/invite_vectors.json",
+    import.meta.url,
+  )
+  const doc = JSON.parse(readFileSync(fileURLToPath(fixtureUrl), "utf8")) as {
+    prefix: string
+    hash_hex_len: number
+    schema: string
+    cases: {
+      why: string
+      classroom: string
+      email: string
+      slug: string
+      record: string
+    }[]
+  }
+
+  it("addresses the pinned name shape and schema sentinel", () => {
+    expect(doc.prefix).toBe(INVITE_TEAM_PREFIX)
+    expect(doc.hash_hex_len).toBe(INVITE_HASH_HEX_LEN)
+    expect(doc.schema).toBe(INVITE_DESCRIPTION_SCHEMA)
+    expect(doc.cases.length).toBeGreaterThan(0)
+  })
+
+  for (const c of doc.cases) {
+    it(c.why, async () => {
+      expect(await inviteTeamName(c.classroom, c.email)).toBe(c.slug)
+      // Exact bytes, not a parsed-equal check: a reconcile compares
+      // descriptions for string equality.
+      expect(marshalInviteDescription(c)).toBe(c.record)
+      expect(parseInviteDescription(c.record)).toEqual({
+        schema: INVITE_DESCRIPTION_SCHEMA,
+        email: normalizeInviteEmail(c.email),
+        classroom: c.classroom,
+      })
+    })
+  }
 })
 
 describe("classroom50/invite/v1 — schema/mirror parity", () => {

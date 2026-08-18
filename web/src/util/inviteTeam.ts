@@ -3,11 +3,13 @@ import { escapeForGoJsonParity } from "./goJsonEscape"
 
 // Schema sentinel for the classroom50/invite/v1 record stored in a per-invite
 // secret team's description. Byte-mirror of schemas/invite-v1.schema.json.
-// The web is the only WRITER (email invites exist only here), but the teacher
-// CLI knows the team-name shape so `teardown` can sweep leftover invite teams —
-// so INVITE_TEAM_PREFIX and INVITE_HASH_HEX_LEN below are a cross-tool contract
-// mirrored in cli/shared/contract (InviteTeamPrefix / InviteHashHexLen) with no
-// compile-time link. Keep them in lockstep; both sides pin their own half.
+// TWO tools write this record and each reads the other's — the web app and
+// `gh teacher roster invite` — so INVITE_DESCRIPTION_SCHEMA, INVITE_TEAM_PREFIX
+// and INVITE_HASH_HEX_LEN below are a cross-tool contract mirrored in
+// cli/shared/contract (InviteSchemaV1 / InviteTeamPrefix / InviteHashHexLen)
+// with no compile-time link. Keep them in lockstep; both sides pin their own
+// half, and the shared vectors in cli/shared/testdata/invite_vectors.json pin
+// that both writers emit the same bytes.
 export const INVITE_DESCRIPTION_SCHEMA = "classroom50/invite/v1"
 
 // Team-name prefix for a per-invite metadata team. GitHub derives a team's slug
@@ -21,8 +23,8 @@ export const INVITE_TEAM_PREFIX = "invite-"
 // ample collision resistance for a class-sized roster; total name length is
 // `invite-` (7) + 16 = 23 chars, well within GitHub's limit. Exported because
 // the prefix alone is too loose to identify one of these teams — a human team
-// named "Invite Only" also slugs to `invite-…` — so the CLI's teardown sweep
-// matches the full `invite-<16 hex>` shape and pins this length.
+// named "Invite Only" also slugs to `invite-…` — so the CLI's sweep matches the
+// full `invite-<16 hex>` shape and pins this length.
 export const INVITE_HASH_HEX_LEN = 16
 
 // The email-only record stays far under GitHub's ~250-char team-description
@@ -100,8 +102,8 @@ export function parseInviteDescription(
 
 // marshalInviteDescription encodes the classroom50/invite/v1 record for a team
 // description — the inverse of parseInviteDescription. Compact JSON with the
-// same escaping as marshalTeamDescription so the bytes would match a Go
-// json.Marshal writer if one is ever added.
+// same escaping as marshalTeamDescription so the bytes match the Go
+// json.Marshal writer in the teacher CLI (which writes this same record).
 export function marshalInviteDescription(input: InviteMetadata): string {
   return escapeForGoJsonParity(
     JSON.stringify({
