@@ -256,9 +256,7 @@ function StudentAssignmentsToolbar({
         ariaLabel={t("assignments.discover.toolbar.searchAria")}
         onClear={clearAll}
         clearActive={hasActiveFilter}
-        clearLabel={
-          hasFilterActive ? t("common.clearFilter") : t("common.clear")
-        }
+        hasFilterActive={hasFilterActive}
       />
 
       <Toolbar.FilterSelect

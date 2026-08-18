@@ -263,9 +263,7 @@ export function VpatSection() {
               ariaLabel={t("accessibility.vpat.searchAria")}
               onClear={clearAll}
               clearActive={hasActiveFilter}
-              clearLabel={
-                hasFilterActive ? t("common.clearFilter") : t("common.clear")
-              }
+              hasFilterActive={hasFilterActive}
             />
             <Toolbar.FilterSelect
               icon={<ListFilter aria-hidden="true" className="size-4" />}

@@ -1,5 +1,6 @@
 import { Search } from "lucide-react"
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 
 import { cx, hasUtility } from "./cx"
 import { Input, type InputSize } from "./Input"
@@ -52,12 +53,14 @@ export type ToolbarSearchProps = {
   iconClassName?: string
   // The in-search-bar clear affordance: an inline text link at the trailing edge
   // that resets the active search/filters. Rendered only when `onClear` is set
-  // AND `clearActive` is true, so every search bar clears the same way. Provide
-  // `clearLabel` for the wording (e.g. "Clear filter" vs "Clear"). One recipe —
-  // don't hand-roll a standalone Clear button beside the bar.
+  // AND `clearActive` is true, so every search bar clears the same way. The label
+  // is resolved here from one source: "Clear filter" when a filter axis is active
+  // (`hasFilterActive`), else "Clear" — pass the boolean the caller already
+  // computes rather than the wording. One recipe — don't hand-roll a standalone
+  // Clear button beside the bar.
   onClear?: () => void
   clearActive?: boolean
-  clearLabel?: string
+  hasFilterActive?: boolean
   // Escape hatch for a fully custom trailing node inside the shell; `onClear`
   // covers the standard clear affordance and is preferred.
   trailing?: ReactNode
@@ -73,9 +76,10 @@ function ToolbarSearch({
   iconClassName = "opacity-60",
   onClear,
   clearActive = false,
-  clearLabel,
+  hasFilterActive = false,
   trailing,
 }: ToolbarSearchProps) {
+  const { t } = useTranslation()
   const clear =
     onClear && clearActive ? (
       <button
@@ -83,7 +87,7 @@ function ToolbarSearch({
         onClick={onClear}
         className="link link-hover whitespace-nowrap text-xs text-base-content/60 hover:text-base-content"
       >
-        {clearLabel}
+        {t(hasFilterActive ? "common.clearFilter" : "common.clear")}
       </button>
     ) : null
   return (

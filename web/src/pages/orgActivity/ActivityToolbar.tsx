@@ -72,9 +72,7 @@ export function ActivityToolbar({
         onChange={onQueryChange}
         onClear={clearAll}
         clearActive={hasActiveFilter}
-        clearLabel={
-          hasFilterActive ? t("common.clearFilter") : t("common.clear")
-        }
+        hasFilterActive={hasFilterActive}
       />
 
       <Toolbar.FilterSelect

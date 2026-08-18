@@ -104,9 +104,7 @@ const SubmissionsControls = ({
           ariaLabel={t("submissions.filters.searchAria")}
           onClear={clearAll}
           clearActive={hasActiveFilter}
-          clearLabel={
-            hasFilterActive ? t("common.clearFilter") : t("common.clear")
-          }
+          hasFilterActive={hasFilterActive}
         />
 
         {sections.length > 0 && (
