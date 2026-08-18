@@ -261,6 +261,7 @@ function StudentAssignmentsToolbar({
 
       <Toolbar.FilterSelect
         icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.status !== "all"}
         value={filters.status}
         onChange={(e) =>
           onFiltersChange({
@@ -283,6 +284,7 @@ function StudentAssignmentsToolbar({
 
       <Toolbar.FilterSelect
         icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.type !== "all"}
         value={filters.type}
         onChange={(e) =>
           onFiltersChange({
@@ -303,6 +305,7 @@ function StudentAssignmentsToolbar({
 
       <Toolbar.FilterSelect
         icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.due !== "all"}
         value={filters.due}
         onChange={(e) =>
           onFiltersChange({

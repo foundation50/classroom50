@@ -572,6 +572,7 @@ const EnrolledStudents = ({
           <Toolbar.FilterSelect
             selectSize="md"
             className="w-full sm:w-auto"
+            active={statusFilter !== "all"}
             aria-label={t("students.filterByStatusLabel")}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
@@ -586,6 +587,7 @@ const EnrolledStudents = ({
             <Toolbar.FilterSelect
               selectSize="md"
               className="w-full sm:w-auto"
+              active={effectiveRole !== "all"}
               aria-label={t("students.filterByRoleLabel")}
               value={effectiveRole}
               onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
@@ -602,6 +604,7 @@ const EnrolledStudents = ({
             <Toolbar.FilterSelect
               selectSize="md"
               className="w-full sm:w-auto"
+              active={effectiveSection !== "all"}
               aria-label={t("students.filterBySectionLabel")}
               value={effectiveSection}
               onChange={(e) => setSectionFilter(e.target.value)}

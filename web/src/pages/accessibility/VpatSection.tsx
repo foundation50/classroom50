@@ -267,6 +267,7 @@ export function VpatSection() {
             />
             <Toolbar.FilterSelect
               icon={<ListFilter aria-hidden="true" className="size-4" />}
+              active={filter !== "all"}
               value={filter}
               onChange={(e) => setFilter(e.target.value as VpatFilter)}
               aria-label={t("accessibility.vpat.filterAria")}

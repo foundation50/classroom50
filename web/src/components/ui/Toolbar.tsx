@@ -115,29 +115,42 @@ export type ToolbarFilterSelectProps = {
   // Takes precedence over `label`; pass `aria-label` for the category name so the
   // icon prefix stays purely visual. Prefer this over `label` for a tidy bar.
   icon?: ReactNode
+  // Warning-toned (yellow) highlight when the select holds a non-default value,
+  // so an active filter is visible at a glance. Highlights both the icon/label
+  // prefix and the select border. Leave false for a sort select (a sort is always
+  // "set" and not a narrowing filter).
+  active?: boolean
   selectSize?: SelectSize
 } & ComponentPropsWithoutRef<"select">
 
 function ToolbarFilterSelect({
   label,
   icon,
+  active = false,
   selectSize = "sm",
   className,
   children,
   ...props
 }: ToolbarFilterSelectProps) {
+  // Match the prefix highlight on the select border/text so the whole control
+  // reads as active.
+  const activeSelectClass = active ? "border-warning text-warning" : undefined
   if (!label && !icon) {
     return (
-      <Select selectSize={selectSize} className={className} {...props}>
+      <Select
+        selectSize={selectSize}
+        className={cx(activeSelectClass, className)}
+        {...props}
+      >
         {children}
       </Select>
     )
   }
   return (
-    <LabeledControl label={label} icon={icon}>
+    <LabeledControl label={label} icon={icon} active={active}>
       <Select
         selectSize={selectSize}
-        className={cx("join-item w-auto min-w-0", className)}
+        className={cx("join-item w-auto min-w-0", activeSelectClass, className)}
         {...props}
       >
         {children}

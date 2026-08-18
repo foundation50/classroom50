@@ -77,6 +77,7 @@ export function ActivityToolbar({
 
       <Toolbar.FilterSelect
         icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.sources.size > 0}
         value={selectValue(filters.sources)}
         aria-label={t("orgActivity.filters.source")}
         onChange={(e) =>
@@ -93,6 +94,7 @@ export function ActivityToolbar({
 
       <Toolbar.FilterSelect
         icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.types.size > 0}
         value={selectValue(filters.types)}
         aria-label={t("orgActivity.filters.type")}
         onChange={(e) =>

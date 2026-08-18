@@ -18,6 +18,11 @@ export type LabeledControlProps = {
   label?: ReactNode
   // Compact leading-icon prefix; when set it replaces the text `label`.
   icon?: ReactNode
+  // Warning-toned (yellow) highlight on the prefix, signalling the control holds
+  // a non-default value — a caller sets this when its filter/select is "active"
+  // so a narrowed view is visible at a glance. Pair it with the same highlight on
+  // the child control (Toolbar.FilterSelect does this via its own `active` prop).
+  active?: boolean
   className?: string
   children: ReactNode
 }
@@ -25,6 +30,7 @@ export type LabeledControlProps = {
 export function LabeledControl({
   label,
   icon,
+  active = false,
   className,
   children,
 }: LabeledControlProps) {
@@ -33,7 +39,10 @@ export function LabeledControl({
     <div className={cx("join", className)}>
       <span
         className={cx(
-          "join-item flex items-center whitespace-nowrap border border-base-300 bg-base-200 text-sm text-base-content/70",
+          "join-item flex items-center whitespace-nowrap border text-sm",
+          active
+            ? "border-warning bg-warning/20 text-warning"
+            : "border-base-300 bg-base-200 text-base-content/70",
           // An icon prefix is a tight square; a text prefix keeps the wider pad.
           icon ? "px-2" : "px-3",
         )}

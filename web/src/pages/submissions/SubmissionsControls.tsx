@@ -110,6 +110,7 @@ const SubmissionsControls = ({
         {sections.length > 0 && (
           <Toolbar.FilterSelect
             icon={<ListFilter aria-hidden="true" className="size-4" />}
+            active={filters.section !== "all"}
             className="max-w-[10rem]"
             value={filters.section}
             onChange={(e) =>
@@ -128,6 +129,7 @@ const SubmissionsControls = ({
 
         <Toolbar.FilterSelect
           icon={<ListFilter aria-hidden="true" className="size-4" />}
+          active={statusValue !== "all"}
           value={statusValue}
           onChange={(e) => onStatusChange(e.target.value as StatusSelectValue)}
           aria-label={t("submissions.filters.submissionAria")}
@@ -161,6 +163,7 @@ const SubmissionsControls = ({
         {passingAvailable && (
           <Toolbar.FilterSelect
             icon={<ListFilter aria-hidden="true" className="size-4" />}
+            active={filters.passing !== "all"}
             value={filters.passing}
             // Disabled when filtering to non-submitters: they have no grade, so
             // a passing/failing filter would always yield an empty table.

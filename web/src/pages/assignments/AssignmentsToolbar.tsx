@@ -68,6 +68,7 @@ const AssignmentsToolbar = ({
 
       <Toolbar.FilterSelect
         icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.type !== "all"}
         value={filters.type}
         onChange={(e) =>
           onFiltersChange({
@@ -86,6 +87,7 @@ const AssignmentsToolbar = ({
 
       <Toolbar.FilterSelect
         icon={<ListFilter aria-hidden="true" className="size-4" />}
+        active={filters.due !== "all"}
         value={filters.due}
         onChange={(e) =>
           onFiltersChange({
