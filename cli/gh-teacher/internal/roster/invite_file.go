@@ -5,9 +5,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
+	"github.com/foundation50/gh-teacher/internal/configwrite"
+	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
 
 // addressEntry is one address parsed from a --file list: the normalized email
@@ -73,4 +77,150 @@ func joinInviteFileFailures(failures []error) error {
 		return nil
 	}
 	return fmt.Errorf("%d line(s) can't be invited, so nothing was sent:\n%w", len(failures), errors.Join(failures...))
+}
+
+// runRosterInviteFile sends an email invitation to every address in a plaintext
+// list and retains the whole invited batch as pending rows in ONE commit.
+//
+// The lifecycle mirrors the web's bulkInviteByEmail: resolve the classroom team
+// once (a missing team aborts the batch before anything is sent), send each
+// address through the shared sendOneEmailInvite (so the load-bearing order and
+// created-team teardown match the single invite), stop issuing NEW sends once a
+// rate limit appears (hammering a throttled endpoint only extends the window),
+// and append every successfully-invited address in one CommitTreeChange whose
+// closure re-checks the roster under the rebase. A rate-limited or failed run is
+// safe to re-run: an already-invited address 422-skips and an already-rowed one
+// appends nothing.
+func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, classroom string, data []byte) error {
+	entries, failures := parseInviteFile(data)
+	if err := joinInviteFileFailures(failures); err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("no email addresses to invite — the file has only blank or # comment lines")
+	}
+
+	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
+	if err != nil {
+		return err
+	}
+
+	// A team-less email invitation is broken, not degraded (see runRosterInvite):
+	// refuse the whole batch before sending anything.
+	classroomTeam, ok, err := configrepo.ResolveClassroomTeam(client, org, classroom, branch)
+	if err != nil {
+		return err
+	}
+	if !ok || classroomTeam.ID <= 0 {
+		return fmt.Errorf("%s: classroom %s has no usable team recorded in classroom.json, so an invitation would enroll nobody — nothing was sent; run `gh teacher classroom add %s %s` to create the team, then retry",
+			org, classroom, org, classroom)
+	}
+
+	rows, err := configrepo.LoadRosterLenient(client, org, classroom, branch)
+	if err != nil {
+		return err
+	}
+
+	actor, _, err := githubapi.CurrentUser(client)
+	if err != nil {
+		return fmt.Errorf("resolving your GitHub login (needed to keep the invite team free of teachers): %w", err)
+	}
+
+	var (
+		invited        []string
+		skipped        []string
+		pendingBlocked []string
+		deferredList   []string
+		failedList     []string
+		rateLimited    bool
+	)
+	for _, entry := range entries {
+		if rateLimited {
+			// Once throttled, every remaining address is deferred without a call.
+			deferredList = append(deferredList, entry.email)
+			continue
+		}
+		outcome, _, sendErr := sendOneEmailInvite(client, errOut, org, classroom, entry.email, classroomTeam, actor, rows)
+		switch outcome {
+		case outcomeInvited:
+			invited = append(invited, entry.email)
+		case outcomeSkippedAlready:
+			skipped = append(skipped, entry.email)
+		case outcomePendingBlocked:
+			pendingBlocked = append(pendingBlocked, entry.email)
+		case outcomeRateLimited:
+			rateLimited = true
+			deferredList = append(deferredList, entry.email)
+		case outcomeFailed:
+			failedList = append(failedList, fmt.Sprintf("%s (%v)", entry.email, sendErr))
+		}
+	}
+
+	appended, commitErr := commitInvitedRows(client, org, classroom, branch, invited)
+
+	// Report before deciding the exit status so a teacher sees the whole picture.
+	_, _ = fmt.Fprintf(out, "%s/%s/%s: %d invited, %d appended as pending rows, %d already member/invited, %d already on the roster, %d failed, %d deferred (rate limit)\n",
+		org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom),
+		len(invited), appended, len(skipped), len(pendingBlocked), len(failedList), len(deferredList))
+	for _, addr := range pendingBlocked {
+		_, _ = fmt.Fprintf(errOut, "Skipped %s: already a pending invitation on the roster — run `gh teacher roster sync %s %s` if they accepted.\n", addr, org, classroom)
+	}
+	for _, f := range failedList {
+		_, _ = fmt.Fprintf(errOut, "Failed %s\n", f)
+	}
+	if len(deferredList) > 0 {
+		_, _ = fmt.Fprintf(errOut, "Deferred (GitHub rate limit hit): %s\nRe-run the same command once the limit clears; already-invited addresses are skipped automatically.\n",
+			strings.Join(deferredList, ", "))
+	}
+	if len(invited) > 0 {
+		_, _ = fmt.Fprintf(errOut, "Advise the newly-invited students to accept the emailed invitation, then run `gh teacher roster sync %s %s` to record their username and github_id.\n", org, classroom)
+	}
+
+	if commitErr != nil {
+		// Never a rollback: the invitations are the source of truth and each
+		// metadata team retains its address, so `roster sync` heals the rows.
+		_, _ = fmt.Fprintf(errOut, "Warning: %d invitation(s) were sent, but recording them in %s failed; run `gh teacher roster sync %s %s` to add the pending rows (the invitations are unaffected).\n",
+			len(invited), configrepo.RosterFilePath(classroom), org, classroom)
+		return fmt.Errorf("invitations sent, but the roster rows were not written: %w", commitErr)
+	}
+	if len(failedList) > 0 || len(deferredList) > 0 {
+		return fmt.Errorf("%d address(es) were not invited (%d failed, %d deferred); see the report above",
+			len(failedList)+len(deferredList), len(failedList), len(deferredList))
+	}
+	return nil
+}
+
+// commitInvitedRows appends the invited addresses as email-only pending rows in
+// one Tree commit, dropping under the rebase any address a concurrent writer
+// already put on a row (rosterHoldsEmail) — matching the web's single batched
+// appendEmailInviteRows. Returns how many rows were actually appended. An empty
+// invited set writes nothing.
+func commitInvitedRows(client githubapi.Client, org, classroom, branch string, invited []string) (int, error) {
+	if len(invited) == 0 {
+		return 0, nil
+	}
+	var appended int
+	build := func(parentSHA string) (configwrite.CommitChange, error) {
+		appended = 0
+		current, err := configrepo.LoadRosterLenient(client, org, classroom, parentSHA)
+		if err != nil {
+			return configwrite.CommitChange{}, err
+		}
+		for _, email := range invited {
+			if rosterHoldsEmail(current, email) {
+				continue
+			}
+			current = append(current, configrepo.RosterRow{Email: email, Role: rosterRoleStudent})
+			appended++
+		}
+		if appended == 0 {
+			return configwrite.CommitChange{}, nil // every address already held → nothing to write
+		}
+		return configrepo.RosterWriteChange(classroom, current)
+	}
+	message := contract.PrefixCommit(fmt.Sprintf("roster: add %d invited email(s) to %s (gh teacher roster invite --file)", len(invited), classroom))
+	if _, err := configwrite.CommitTreeChange(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
+		return 0, err
+	}
+	return appended, nil
 }
