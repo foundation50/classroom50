@@ -196,15 +196,19 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 	return rows, nil
 }
 
-// ParseImportCSV decodes a teacher-supplied import CSV: the identity/metadata
-// columns through github_id (github_id ignored; re-resolved) or the 5-column
-// hand-edit shape without github_id. `role` is NOT an import column — it is
-// team-derived metadata written by sync, never hand-imported.
+// ParseImportCSV decodes a teacher-supplied import CSV. It accepts the full
+// stored roster shape (RosterColumns), the pre-role 6-column form, or the
+// 5-column hand-edit form without github_id — so a roster.csv the web wrote
+// (including pending email-only invite rows) imports as-is. Rows follow the
+// stored-file identity rule: at least one of username, github_id, or email.
+// github_id and role are parsed onto the returned rows so the import command
+// can cross-check the id against the resolved account and round-trip role;
+// neither is applied here. Extra trailing columns are rejected: import
+// carries no extra-column state, so a wider file would silently drop the tail.
 //
-// Unlike ParseRoster, import rejects a wider file with extra trailing columns
-// (including a stray role): it re-resolves github_id and carries no extra
-// state, so a wider file would silently drop the tail. The error points at the
-// canonical shape.
+// Row errors are collected across the whole file and returned joined (one
+// `line %d: ...` per bad row), so the caller can print a full report before
+// refusing the file.
 func ParseImportCSV(data []byte) ([]RosterRow, error) {
 	data = bytes.TrimPrefix(data, utf8BOM)
 	r := csv.NewReader(bytes.NewReader(data))
@@ -218,49 +222,48 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 		return nil, fmt.Errorf("read header: %w", err)
 	}
 
-	// Import accepts the identity columns through github_id, or the 5-column
-	// form without it. role and any other trailing column are not import input.
-	importFull := legacyRequiredColumns      // username..github_id (6)
-	importShort := legacyRequiredColumns[:5] // username..section  (5)
-	if !equalSlices(header, importFull) && !equalSlices(header, importShort) {
-		// Common mistake: feeding a wider roster CSV (with role and/or legacy
-		// extra columns) straight into import.
-		if len(header) > len(importFull) && equalSlices(header[:len(importFull)], importFull) {
-			return nil, fmt.Errorf("unexpected header: got %v — import takes only the canonical %v (or its 5-column form without github_id). "+
-				"This looks like a roster with extra columns appended; drop the columns after github_id before importing "+
-				"(roster add/update preserve those columns, import does not)", header, importShort)
-		}
-		return nil, fmt.Errorf("unexpected header: got %v, want %v (with optional trailing github_id; github_id ignored on input — the CLI re-resolves it)", header, importShort)
+	importShort := legacyRequiredColumns[:5] // username..section
+	switch {
+	case equalSlices(header, RosterColumns),
+		equalSlices(header, legacyRequiredColumns),
+		equalSlices(header, importShort):
+	default:
+		return nil, fmt.Errorf("unexpected header: got %v, want %v optionally followed by github_id (%v) or by github_id,role (%v); no other columns are import input",
+			header, importShort, legacyRequiredColumns, RosterColumns)
 	}
 	r.FieldsPerRecord = len(header)
 
-	var rows []RosterRow
+	var (
+		rows    []RosterRow
+		rowErrs []error
+	)
 	for line := 2; ; line++ {
 		record, err := r.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", line, err)
+			rowErrs = append(rowErrs, fmt.Errorf("line %d: %w", line, err))
+			continue
 		}
-		if err := checkFieldLengths(line, record); err != nil {
-			return nil, err
+		// Pad the 5/6-column forms to the full width so recordToRow stays the
+		// single source of the identity rule and github_id/role parsing.
+		for len(record) < len(RosterColumns) {
+			record = append(record, "")
 		}
-		row := RosterRow{
-			Username:  strings.TrimSpace(undefangCSVCell(record[0])),
-			FirstName: undefangCSVCell(record[1]),
-			LastName:  undefangCSVCell(record[2]),
-			Email:     strings.TrimSpace(undefangCSVCell(record[3])),
-			Section:   undefangCSVCell(record[4]),
-		}
-		if row.Username == "" {
-			return nil, fmt.Errorf("line %d: username column is empty", line)
+		row, err := recordToRow(record, len(RosterColumns), nil, line)
+		if err != nil {
+			rowErrs = append(rowErrs, err)
+			continue
 		}
 		if err := ValidateRosterEmail(row.Email); err != nil {
-			return nil, fmt.Errorf("line %d: %w", line, err)
+			rowErrs = append(rowErrs, fmt.Errorf("line %d: %w", line, err))
+			continue
 		}
-		// record[5] (github_id) ignored; the CLI re-resolves it.
 		rows = append(rows, row)
+	}
+	if len(rowErrs) > 0 {
+		return nil, errors.Join(rowErrs...)
 	}
 	return rows, nil
 }

@@ -447,7 +447,7 @@ func TestParseImportCSV_BothHeaderShapes(t *testing.T) {
 		}
 	})
 
-	t.Run("6-column header ignores github_id", func(t *testing.T) {
+	t.Run("6-column header surfaces github_id for cross-check", func(t *testing.T) {
 		in := []byte("username,first_name,last_name,email,section,github_id\nalice,Alice,A,a@x,s,99999\n")
 		rows, err := ParseImportCSV(in)
 		if err != nil {
@@ -456,13 +456,36 @@ func TestParseImportCSV_BothHeaderShapes(t *testing.T) {
 		if len(rows) != 1 {
 			t.Fatalf("got %d rows, want 1", len(rows))
 		}
-		// ParseImportCSV ignores any incoming github_id; the CLI
-		// re-resolves from GitHub at import time.
-		if rows[0].GitHubID != 0 {
-			t.Errorf("import should ignore github_id column, got %d", rows[0].GitHubID)
+		// The parsed row carries the github_id cell so the import command can
+		// cross-check it against the account it resolves for the username.
+		if rows[0].GitHubID != 99999 {
+			t.Errorf("import should surface github_id to the caller, got %d", rows[0].GitHubID)
 		}
 		if rows[0].Email != "a@x" {
 			t.Errorf("expected email to round-trip, got %q", rows[0].Email)
+		}
+	})
+
+	t.Run("7-column stored roster with a pending email-only row", func(t *testing.T) {
+		in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+			"alice,Alice,A,alice@x.edu,s-1,12345,student\n" +
+			",,,pending@x.edu,,,student\n")
+		rows, err := ParseImportCSV(in)
+		if err != nil {
+			t.Fatalf("ParseImportCSV: %v", err)
+		}
+		if len(rows) != 2 {
+			t.Fatalf("got %d rows, want 2", len(rows))
+		}
+		if rows[0].GitHubID != 12345 || rows[0].Role != "student" {
+			t.Errorf("account row should carry github_id and role, got id=%d role=%q", rows[0].GitHubID, rows[0].Role)
+		}
+		pending := rows[1]
+		if pending.Username != "" || pending.GitHubID != 0 {
+			t.Errorf("pending row identity = %q/%d, want empty", pending.Username, pending.GitHubID)
+		}
+		if pending.Email != "pending@x.edu" || pending.Role != "student" {
+			t.Errorf("pending row = email %q role %q, want pending@x.edu/student", pending.Email, pending.Role)
 		}
 	})
 }
@@ -476,7 +499,10 @@ func TestParseImportCSV_Rejects(t *testing.T) {
 		{"empty input", "", "empty"},
 		{"wrong header", "user,first,last,section\nalice,A,A,s\n", "unexpected header"},
 		{"4-column without email", "username,first_name,last_name,section\nalice,A,A,s\n", "unexpected header"},
-		{"empty username", "username,first_name,last_name,email,section\n,A,A,,s\n", "username column is empty"},
+		{"no identity columns", "username,first_name,last_name,email,section\n,A,A,,s\n", "no username, github_id, or email"},
+		{"no identity columns 7-wide", "username,first_name,last_name,email,section,github_id,role\n,A,A,,s,,student\n", "no username, github_id, or email"},
+		{"non-numeric github_id", "username,first_name,last_name,email,section,github_id\nalice,A,A,,s,nope\n", "invalid github_id"},
+		{"invalid email on pending row", "username,first_name,last_name,email,section,github_id,role\n,,,not-an-email,,,\n", "invalid email"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -488,6 +514,26 @@ func TestParseImportCSV_Rejects(t *testing.T) {
 				t.Fatalf("error = %q, want substring %q", err.Error(), tc.wantErrPart)
 			}
 		})
+	}
+}
+
+// Import reports every bad line in one parse, so a teacher fixes the whole
+// file at once instead of replaying import per error.
+func TestParseImportCSV_ReportsAllRowErrors(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section\n" +
+		"alice,A,A,bad email,s\n" +
+		"bob,B,B,ok@x.edu,s\n" +
+		",C,C,,s\n")
+	_, err := ParseImportCSV(in)
+	if err == nil {
+		t.Fatal("expected an error for two bad rows, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "line 2:") || !strings.Contains(msg, "invalid email") {
+		t.Errorf("error should report line 2's bad email, got: %v", err)
+	}
+	if !strings.Contains(msg, "line 4:") || !strings.Contains(msg, "no username, github_id, or email") {
+		t.Errorf("error should report line 4's missing identity, got: %v", err)
 	}
 }
 
@@ -725,19 +771,24 @@ func TestParseImportCSV_StripsUTF8BOM(t *testing.T) {
 }
 
 func TestParseImportCSV_RejectsWidenedExportWithGuidance(t *testing.T) {
-	// Feeding a wider roster CSV (canonical six + extra trailing columns)
-	// straight into import is rejected with a message that names the cause and
-	// the fix, rather than the generic header error — import is canonical-only
-	// by design (it re-resolves github_id and carries no extra column state).
-	in := []byte("username,first_name,last_name,email,section,github_id," +
+	// A roster CSV widened past the canonical role column (legacy web exports
+	// carried enrollment bookkeeping columns) is still rejected: import
+	// carries no extra-column state, so the tail would be silently dropped.
+	// The error must name the accepted header forms.
+	in := []byte("username,first_name,last_name,email,section,github_id,role," +
 		"enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at\n" +
-		"alice,Alice,A,a@x.edu,s1,123,enrolled,github,abcd,,2026-01-01T00:00:00Z,\n")
+		"alice,Alice,A,a@x.edu,s1,123,student,enrolled,github,abcd,,2026-01-01T00:00:00Z,\n")
 	_, err := ParseImportCSV(in)
 	if err == nil {
 		t.Fatal("expected ParseImportCSV to reject a widened export")
 	}
-	if !strings.Contains(err.Error(), "extra columns") || !strings.Contains(err.Error(), "import does not") {
-		t.Fatalf("expected guidance about extra columns / import, got %v", err)
+	msg := err.Error()
+	if !strings.Contains(msg, "unexpected header") {
+		t.Fatalf("expected a header error, got %v", err)
+	}
+	// The accepted forms are named so the teacher knows which shapes work.
+	if !strings.Contains(msg, "role") || !strings.Contains(msg, "github_id") || !strings.Contains(msg, "section") {
+		t.Fatalf("error should name the accepted header forms, got %v", err)
 	}
 }
 
