@@ -31,7 +31,7 @@ func NewCmd() *cobra.Command {
 			"Subcommands:\n" +
 			"  list     print the roster (table, --json, or --quiet username-only)\n" +
 			"  add      append or upsert one student (resolves github_id, invites to org)\n" +
-			"  invite   invite one student by email address (no GitHub account needed yet)\n" +
+			"  invite   invite one student by email address, or a whole list with --file (no GitHub account needed yet)\n" +
 			"  cancel-invite  revoke a pending email invitation and clear what it left behind\n" +
 			"  sync     sync the roster with GitHub (dry run; --write applies)\n" +
 			"  update   correct fields on an existing student (roster-only; never invites)\n" +
@@ -290,9 +290,10 @@ func rosterImportCmd() *cobra.Command {
 	return cmd
 }
 
-// parseEmailArgs validates the `<org> <classroom> <email>` shape `roster invite`
-// and `roster cancel-invite` share, BEFORE any auth or network happens so a
-// typo can never reach GitHub.
+// parseEmailArgs validates the `<org> <classroom> <email>` shape
+// `roster cancel-invite` uses, BEFORE any auth or network happens so a typo can
+// never reach GitHub. (`roster invite` validates inline because its email arg
+// is optional when --file is given.)
 func parseEmailArgs(args []string) (org, classroom, email string, err error) {
 	org = strings.TrimSpace(args[0])
 	classroom = strings.TrimSpace(args[1])

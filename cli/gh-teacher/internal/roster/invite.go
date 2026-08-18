@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,6 +16,7 @@ import (
 	"github.com/foundation50/gh-teacher/internal/configwrite"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 	"github.com/foundation50/gh-teacher/internal/membership"
+	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
 func rosterInviteCmd() *cobra.Command {
@@ -21,11 +24,12 @@ func rosterInviteCmd() *cobra.Command {
 		firstName string
 		lastName  string
 		section   string
+		file      string
 	)
 
 	cmd := &cobra.Command{
-		Use:   "invite <org> <classroom> <email>",
-		Short: "Invite one student to the classroom by email address",
+		Use:   "invite <org> <classroom> [email]",
+		Short: "Invite one student (or a whole list with --file) by email address",
 		Long: "Send a GitHub organization invitation to <email> and record it as a\n" +
 			"pending row in <org>/classroom50/<classroom>/roster.csv — the same\n" +
 			"three artifacts the web app's email invite creates, so either tool\n" +
@@ -42,33 +46,98 @@ func rosterInviteCmd() *cobra.Command {
 			"can never grant org ownership from a mistyped address.\n\n" +
 			"Once the student accepts, run `gh teacher roster sync` to fill in\n" +
 			"their username and github_id (the web app does this on its own).\n\n" +
+			"Bulk mode: pass --file <path> instead of an email to invite a whole\n" +
+			"list. The file is plaintext, one address per line; blank lines and\n" +
+			"lines starting with `#` are ignored. Every address is validated first,\n" +
+			"and if any line is unusable nothing is sent. Successful invitations are\n" +
+			"retained as pending rows in one commit. --file carries no names or\n" +
+			"sections (fill those later with `roster import` or `roster sync`), and\n" +
+			"the --first-name/--last-name/--section flags apply only to a single\n" +
+			"invite. A run interrupted by a GitHub rate limit reports the remaining\n" +
+			"addresses; re-running is safe (already-invited addresses are skipped).\n\n" +
 			"Returns non-zero on: classroom missing a GitHub team, an address the\n" +
 			"roster already lists as invited, or a failed invitation. An address\n" +
 			"that already belongs to a member (or already has a pending\n" +
 			"invitation) is reported as skipped and exits 0. An address some other\n" +
 			"row already carries is still invited, but gets no second row.",
 		Example: "  gh teacher roster invite cs50-fall-2026 cs-principles ada@example.edu\n" +
-			"  gh teacher roster invite cs50-fall-2026 cs-principles ada@example.edu --first-name Ada --last-name Lovelace --section section-1",
-		Args: cobra.ExactArgs(3),
+			"  gh teacher roster invite cs50-fall-2026 cs-principles ada@example.edu --first-name Ada --last-name Lovelace --section section-1\n" +
+			"  gh teacher roster invite cs50-fall-2026 cs-principles --file ./section-1-emails.txt",
+		Args: func(cmd *cobra.Command, args []string) error {
+			// --file replaces the positional email: <org> <classroom> only.
+			// Without it, the classic <org> <classroom> <email> triple stands.
+			if strings.TrimSpace(file) != "" {
+				if len(args) != 2 {
+					return errors.New("with --file, pass only <org> <classroom> (the addresses come from the file, not the command line)")
+				}
+				return nil
+			}
+			if len(args) != 3 {
+				return errors.New("pass <org> <classroom> <email>, or <org> <classroom> --file <path> to invite a list")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
-			org, classroom, email, err := parseEmailArgs(args)
-			if err != nil {
+			org := strings.TrimSpace(args[0])
+			classroom := strings.TrimSpace(args[1])
+			if org == "" || classroom == "" {
+				return errors.New("org and classroom must both be non-empty")
+			}
+			if err := validate.ShortName(classroom, "classroom"); err != nil {
 				return err
+			}
+			// Validate the input BEFORE any auth or network so a typo or an
+			// unreadable file can never reach GitHub.
+			path := strings.TrimSpace(file)
+			var email string
+			if path == "" {
+				email = strings.TrimSpace(args[2])
+				if email == "" {
+					return errors.New("email must be non-empty")
+				}
+				if err := configrepo.ValidateRosterEmail(email); err != nil {
+					return err
+				}
+			}
+			var data []byte
+			if path != "" {
+				var err error
+				if data, err = readInviteFile(path); err != nil {
+					return err
+				}
 			}
 			client, err := githubapi.RequireAuthClient(cmd)
 			if err != nil {
 				return err
+			}
+			if path != "" {
+				return runRosterInviteFile(client, cmd.OutOrStdout(), cmd.ErrOrStderr(), org, classroom, data)
 			}
 			return runRosterInvite(client, cmd.OutOrStdout(), cmd.ErrOrStderr(),
 				org, classroom, email,
 				strings.TrimSpace(firstName), strings.TrimSpace(lastName), strings.TrimSpace(section))
 		},
 	}
-	cmd.Flags().StringVar(&firstName, "first-name", "", "Student's first name (written into the first_name column)")
-	cmd.Flags().StringVar(&lastName, "last-name", "", "Student's last name (written into the last_name column)")
-	cmd.Flags().StringVar(&section, "section", "", "Section identifier (free-form text, written into the section column)")
+	cmd.Flags().StringVar(&firstName, "first-name", "", "Student's first name (single invite only; written into the first_name column)")
+	cmd.Flags().StringVar(&lastName, "last-name", "", "Student's last name (single invite only; written into the last_name column)")
+	cmd.Flags().StringVar(&section, "section", "", "Section identifier (single invite only; free-form text, written into the section column)")
+	cmd.Flags().StringVar(&file, "file", "", "Path to a plaintext list of email addresses (one per line; # comments and blank lines ignored) to invite in bulk")
 	return cmd
+}
+
+// readInviteFile reads the --file address list, resolving the path and turning
+// a read failure into a clear error before any network call.
+func readInviteFile(path string) ([]byte, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve --file path: %w", err)
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", abs, err)
+	}
+	return data, nil
 }
 
 // emailInviteOutcome classifies what sendOneEmailInvite did with one address,
