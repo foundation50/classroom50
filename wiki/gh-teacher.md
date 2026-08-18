@@ -25,7 +25,7 @@ output, or `--verbose` / `-v` for per-step detail.
 | `classroom migrate --source <id-or-org> --target <org>` | Import a GitHub Classroom. |
 | `roster list <org> <classroom>` | List roster rows. Flags: `--json`, `--quiet`. |
 | `roster add <org> <classroom> <username>` | Add/upsert a student; invites them. |
-| `roster invite <org> <classroom> <email>` | Invite one student by email. Flags: `--first-name`, `--last-name`, `--section`. |
+| `roster invite <org> <classroom> <email>` | Invite one student by email, or a whole list with `--file <path>`. Flags: `--first-name`, `--last-name`, `--section` (single invite only). |
 | `roster cancel-invite <org> <classroom> <email>` | Revoke a pending email invitation and clear what it left behind. |
 | `roster sync <org> <classroom>` | Sync the roster with GitHub. Dry run; `--write` applies. |
 | `roster update <org> <classroom> <username>` | Correct fields on an existing row (roster-only). |
@@ -355,6 +355,30 @@ If the invitation fails, an invite team this run created is deleted again. A rat
 limit is the exception: the team is kept so a retry adopts it. If the invitation
 is sent but the roster write fails, the command exits non-zero and rolls nothing
 back; run `roster sync` to add the row.
+
+**Invite a list with `--file`.**
+
+```sh
+gh teacher roster invite <org> <classroom> --file <path>
+```
+
+Pass `--file` in place of the positional `<email>` to invite a whole list.
+The file is plaintext, one address per line; blank lines and `#` comment lines
+are ignored. Every address is validated up front — one unusable line refuses the
+whole run and nothing is sent. Each address takes the same path as a single
+invite, is reported as it resolves, and the successfully-invited batch is retained
+in **one** roster commit. Every skipped or failed address is named with its file
+line.
+
+Bulk mode is student-only and carries no name/section metadata, so
+`--first-name`, `--last-name`, and `--section` are rejected with `--file`;
+backfill with `roster import` or `roster sync`.
+
+Exit codes follow [`roster sync`](#roster-sync): **0** all invited or cleanly
+skipped, **2** nothing failed but a rate limit left addresses uninvited, **1** an
+address failed or the roster write failed. On a rate limit the run stops sending,
+waits out `Retry-After` before recording what it already sent, and reports the
+rest; re-running is safe, since already-invited addresses skip.
 
 ### `roster cancel-invite`
 

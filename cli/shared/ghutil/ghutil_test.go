@@ -290,6 +290,39 @@ func TestResolveSettledDefaultBranch(t *testing.T) {
 	})
 }
 
+// TestRetryAfter pins the wait a throttled caller sleeps: only the seconds form
+// of `Retry-After` is honored (the epoch reset describes the hourly window,
+// which no CLI should sleep through) and the cap bounds a hostile value.
+func TestRetryAfter(t *testing.T) {
+	httpErr := func(headers map[string]string) error {
+		h := http.Header{}
+		for k, v := range headers {
+			h.Set(k, v)
+		}
+		return &api.HTTPError{StatusCode: http.StatusTooManyRequests, Headers: h}
+	}
+	cases := []struct {
+		name string
+		err  error
+		want time.Duration
+	}{
+		{"seconds honored", httpErr(map[string]string{"Retry-After": "45"}), 45 * time.Second},
+		{"capped", httpErr(map[string]string{"Retry-After": "99999"}), RetryAfterCap},
+		{"absent header", httpErr(nil), 0},
+		{"epoch reset ignored", httpErr(map[string]string{"X-RateLimit-Reset": "1900000000"}), 0},
+		{"garbage header", httpErr(map[string]string{"Retry-After": "soon"}), 0},
+		{"zero", httpErr(map[string]string{"Retry-After": "0"}), 0},
+		{"non-HTTPError", io.EOF, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RetryAfter(tc.err); got != tc.want {
+				t.Errorf("RetryAfter() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestIsRateLimited pins the fatal-vs-benign 403 split callers rely on: a plain
 // authz 403 is benign (false), but every rate-limit shape stays fatal (true),
 // including the header-less secondary limit whose only signal is the body

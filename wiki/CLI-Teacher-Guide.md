@@ -279,7 +279,8 @@ teacher|hta|ta`. For the roles and what each can see, see
 [Staff, TAs, and multiple teachers](Staff-TAs-and-Multiple-Teachers).
 
 **Inviting by email:** `gh teacher roster invite <org> <classroom> <email>`
-invites a student by address and records them on the roster until they accept. See
+invites a student by address and records them on the roster until they accept.
+Invite a whole list at once with `--file <path>` (one address per line). See
 [Inviting a student by email](#inviting-a-student-by-email).
 
 ## 6. Track students in the roster
@@ -394,6 +395,43 @@ parent, a lab contact), so the real person still gets invited: the invitation is
 sent, a note on stderr names that row, and **no second row is written**. If the
 invitation fails outright, an invite team this run created is cleaned up again,
 except after a rate limit, where it's kept for a retry to adopt.
+
+**Invite a whole list by email:**
+
+```sh
+gh teacher roster invite <org> <classroom> --file <path>
+gh teacher roster invite cs50-fall-2026 cs-principles --file ./section-1-emails.txt
+```
+
+Pass `--file` instead of a single address to invite a whole section at once. The
+file is plaintext, **one address per line**; blank lines and lines starting with
+`#` are ignored, so you can annotate the list. Every address is validated first —
+if any line is unusable, the command reports every bad line and **sends nothing**.
+
+Each address goes through the same invite path as a single `roster invite`, and
+every successful invitation is retained as a pending row in **one commit** for
+the batch. Each address is reported as it resolves, then a summary counts them —
+invited, already members/invited, already on the roster, failed, or deferred —
+and every skipped or failed address is named with its file line. Bulk mode is
+**student-only** and carries no names or sections, so the `--first-name` /
+`--last-name` / `--section` flags are **rejected** with `--file`; fill that
+metadata in afterwards with [`roster import`](#bulk-import-from-a-csv) or
+[`roster sync`](#syncing-the-roster-with-github).
+
+Exit codes match [`roster sync`](#syncing-the-roster-with-github) so a script can
+tell a retryable run from a broken one:
+
+| Code | Meaning |
+| ---- | ------------------------------------------------------------------ |
+| 0 | Every address was invited or cleanly skipped |
+| 2 | Nothing failed, but a GitHub rate limit left addresses uninvited |
+| 1 | An address genuinely failed, or the roster write failed |
+
+On a rate limit the command stops sending, waits out GitHub's `Retry-After`
+before recording the invitations already sent, then reports the remaining
+addresses and exits 2. **Re-running the same command is safe**: addresses already
+invited are skipped automatically, and addresses already on the roster get no
+second row.
 
 **Call an invitation off:**
 

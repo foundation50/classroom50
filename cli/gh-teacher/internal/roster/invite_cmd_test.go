@@ -447,6 +447,38 @@ func TestRosterInviteCmd(t *testing.T) {
 			t.Error("--role must not exist on `roster invite`")
 		}
 	})
+
+	t.Run("has a --file flag for bulk invites", func(t *testing.T) {
+		if rosterInviteCmd().Flags().Lookup("file") == nil {
+			t.Error("missing --file")
+		}
+	})
+
+	// --file with a positional email is rejected before any network call.
+	t.Run("both a positional email and --file is an arg error", func(t *testing.T) {
+		err := run(t, "o", "cs-principles", "ada@uni.edu", "--file", "list.txt")
+		if err == nil || !strings.Contains(err.Error(), "--file") {
+			t.Fatalf("err = %v, want an arg error naming --file", err)
+		}
+	})
+
+	t.Run("--file at a nonexistent path errors before network", func(t *testing.T) {
+		err := run(t, "o", "cs-principles", "--file", "/no/such/list-file.txt")
+		if err == nil || !strings.Contains(err.Error(), "read") {
+			t.Fatalf("err = %v, want a read error", err)
+		}
+	})
+
+	// A per-student flag can't apply to a list; silently dropping it would lose
+	// metadata the teacher believes they set.
+	t.Run("metadata flags are rejected with --file", func(t *testing.T) {
+		for _, flag := range []string{"--first-name", "--last-name", "--section"} {
+			err := run(t, "o", "cs-principles", "--file", "list.txt", flag, "x")
+			if err == nil || !strings.Contains(err.Error(), flag) {
+				t.Errorf("%s with --file: err = %v, want it rejected by name", flag, err)
+			}
+		}
+	})
 }
 
 // The three email-lifecycle subcommands must be reachable and discoverable: a
