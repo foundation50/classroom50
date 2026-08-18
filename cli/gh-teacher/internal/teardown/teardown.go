@@ -179,12 +179,13 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 		_, _ = fmt.Fprintf(out, "%s: deleted team %s\n", org, t.Slug)
 	}
 
-	// Sweep the web's per-invite metadata teams too. They hold an invited
-	// student's email address, are recorded nowhere in the config repo (so the
-	// snapshot above can't see them), and nothing else ever reaps them — leaving
-	// them behind would strand that email in the org after teardown. Org-wide by
-	// nature: the slug is a hash, so a sweep can't be scoped to one classroom
-	// without reading each description. Best-effort, like the classroom sweep.
+	// Sweep the per-invite metadata teams too — either writer (the web app or
+	// `roster invite`) may have created one. They hold an invited student's email
+	// address and are recorded nowhere in the config repo, so the snapshot above
+	// can't see them; `roster sync`'s GC collects them per classroom, but a
+	// teardown deletes the classrooms it would read from. Org-wide by nature: the
+	// slug is a hash, so a sweep can't be scoped to one classroom without reading
+	// each description. Best-effort, like the classroom sweep.
 	sweepInviteTeams(client, org, out, errOut)
 
 	if failed > 0 {

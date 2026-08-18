@@ -1,8 +1,10 @@
 // Package ghutil holds small, proven-duplicated helpers for talking to the
 // GitHub API via go-gh, shared by the gh-teacher and gh-student CLIs. Not a
-// client wrapper — go-gh's *api.RESTClient already is that; this only collects
-// the primitives both modules had copied: HTTP-status classification and the
-// retry backoff schedule.
+// client wrapper — go-gh's *api.RESTClient already is that; this collects the
+// primitives both modules had copied: HTTP-status and rate-limit
+// classification, the retry backoff and Retry-After schedules, the
+// pagination-termination predicate, fresh-repo branch settling, and a few
+// shared reads.
 package ghutil
 
 import (
@@ -174,15 +176,6 @@ func WaitForStableBranch(client *api.RESTClient, owner, repo, branch string) err
 	return fmt.Errorf("branch %s/%s:%s did not stabilize", owner, repo, branch)
 }
 
-// ResolveSettledDefaultBranch waits out GitHub's async template-copy lag and
-// returns the branch that actually materialized. Right after POST .../generate,
-// GET /repos reports a transient default_branch (the org default, e.g., `main`)
-// while the real branch (copied from the template, e.g., `master`) hasn't been
-// created yet — so trusting default_branch, or an immediate confirming GET,
-// can pin a `heads/main` that never exists. This polls the repo's branch list
-// until at least one ref exists, then returns the live default_branch when it
-// names a real branch, else the sole/first materialized branch. Falls back to
-// `fallback` if nothing materializes within the window.
 // ResolveSettledDefaultBranch waits out GitHub's async template-copy lag and
 // returns the branch that actually materialized. Right after POST .../generate,
 // GET /repos reports a transient default_branch (the org default, e.g., `main`)

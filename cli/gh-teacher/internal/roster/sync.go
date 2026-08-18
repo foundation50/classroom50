@@ -90,8 +90,9 @@ func rosterSyncCmd() *cobra.Command {
 		Long: "Sync <org>/classroom50/<classroom>/roster.csv with GitHub:\n" +
 			"record the students who accepted an email invitation, drop the\n" +
 			"pending rows whose invitation is gone, and fill in any missing\n" +
-			"github_id. The web app runs the same sync when a teacher opens\n" +
-			"the roster — here it is explicit and script-callable.\n\n" +
+			"github_id. The web app runs this same sync when a teacher opens\n" +
+			"the roster (and additionally refreshes recorded roles) — here\n" +
+			"it is explicit and script-callable.\n\n" +
 			"Reports by default and changes nothing: a dry run issues no write\n" +
 			"request at all. Pass --write to apply what it found.\n\n" +
 			"An accepted email invitation is the case that needs this: GitHub\n" +

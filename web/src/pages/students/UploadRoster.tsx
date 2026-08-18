@@ -705,8 +705,8 @@ const UploadRoster = ({
         {phase === "idle" && (
           <div className="mt-6">
             {/* Drop zone + click-to-pick. One entry for all three formats; the
-                file is auto-classified on receipt and shown in the preview with
-                an override. */}
+                file always opens as Roster CSV — its parser reads all three
+                shapes — with an explicit override in the preview. */}
             <div
               role="button"
               tabIndex={0}

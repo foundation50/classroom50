@@ -482,8 +482,9 @@ records the role of the classroom team the account was found on, so a staff memb
 who accepted an email invitation is recorded with their staff role rather than as
 a student. A role already recorded is never rewritten.
 
-The web app runs the same sync when a teacher opens the roster; this is the same
-work without a browser. For every trigger, see
+The web app runs this same sync when a teacher opens the roster, and
+additionally refreshes each row's recorded `role` from live team membership; this
+is the rest of that work without a browser. For every trigger, see
 [What triggers a sync](How-Classroom-50-Works#what-triggers-a-sync).
 
 **Dry run unless you pass `--write`**: without it, no write request is issued at

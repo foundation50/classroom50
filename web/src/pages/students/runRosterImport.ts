@@ -146,9 +146,6 @@ export async function runRosterImport(
         onProgress,
       })
     } catch (err) {
-      // NoNewStudentsError means every row already exists in roster.csv. Benign:
-      // keep the empty result so the completed view renders, and fall through to
-      // the invite pass so a previously rate-limited student is re-invited.
       if (!(err instanceof NoNewStudentsError)) {
         log.error("roster import failed", { err, record: true })
         return {

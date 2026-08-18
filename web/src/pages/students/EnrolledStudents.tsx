@@ -190,23 +190,22 @@ const EnrolledStudents = ({
   // student enrollment) isn't selectable either: bulk-unenroll drops the CSV row
   // + student-team membership, so it only applies to rows with a student
   // enrollment. A student who is ALSO staff IS selectable — unenroll drops only
-  // their student side and leaves the staff role intact — matching the row
-  // modal's unenroll gate (both use hasStudentEnrollment AND
-  // canTargetForUnenroll) so the two never diverge (previously a
-  // student+teacher was removable in the modal but silently skipped by
-  // select-all).
+  // their student side and leaves the staff role intact — matching the row modal
+  // in requiring hasStudentEnrollment, so a student+teacher is never silently
+  // skipped by select-all.
   const isSelf = (row: TeamRosterRow) =>
     isSameGitHubUser(viewer ?? null, {
       github_id: row.github_id,
       username: row.username,
     })
-  // Selectable for the bulk actions bar. The bar offers THREE actions (unenroll,
-  // role change, cancel invite), so eligibility is per-action rather than one
-  // unenroll-shaped gate: a pending email invite can't be unenrolled (the roster
-  // matcher keys on username/github_id, so it would report "already removed"
-  // while the row and the live invitation survive) but cancelling its invitation
-  // is exactly the right bulk action. Gating selection on unenroll alone made
-  // that path unreachable — and a class-sized email invite un-bulk-cancellable.
+  // Selectable for the bulk actions bar. The bar offers THREE actions (resend
+  // invite, cancel invite, unenroll), so eligibility is per-action rather than
+  // one unenroll-shaped gate: a pending email invite can't be unenrolled (the
+  // roster matcher keys on username/github_id, so it would report "already
+  // removed" while the row and the live invitation survive) but cancelling its
+  // invitation is exactly the right bulk action. Gating selection on unenroll
+  // alone made that path unreachable — and a class-sized email invite
+  // un-bulk-cancellable.
   const isSelectable = (row: TeamRosterRow) =>
     !isSelf(row) &&
     hasStudentEnrollment(row) &&

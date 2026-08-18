@@ -22,11 +22,12 @@ export async function getOrgFailedInvitations(
 }
 
 // PENDING org invitations across all pages (GET /orgs/{org}/invitations).
-// Owner-only. The liveness source for the invite-team GC: a member-less
-// invite team whose (classroom, email) no longer matches any pending
-// invitation is stale (cancelled/expired). NOT error-tolerated — a degraded
-// read must fail the GC pass closed rather than read as "no live invites"
-// and delete every pending team.
+// Owner-only. The liveness source for the invite lifecycle: the invite-team GC
+// (a member-less invite team whose (classroom, email) matches no pending
+// invitation is stale — cancelled or expired) and the roster sync's dead
+// email-row confirmation. NOT error-tolerated — a degraded read must fail
+// closed rather than read as "no live invites" and delete every pending team or
+// drop every pending row.
 export async function listOrgInvitations(
   client: GitHubClient,
   org: string,

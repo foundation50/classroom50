@@ -421,8 +421,10 @@ gh teacher roster sync <org> <classroom> --write    # apply
 Catches `roster.csv` up with GitHub: records the students who accepted an email
 invitation, fills in a missing `github_id` from the classroom team's membership,
 drops the pending rows nothing backs, and deletes the invite teams that are done.
-The web app runs the same sync when a teacher opens the roster; here it's
-explicit and script-callable.
+The web app runs this same sync when a teacher opens the roster; here it's
+explicit and script-callable. The web app's pass does two things more: it
+refreshes each row's recorded `role` from live team membership, and it adds a row
+for a classroom-team member the roster is missing.
 
 Its scope is the email-invite lifecycle and `github_id`. It never rewrites a
 `role` already recorded on a row, and it doesn't add rows for organization
@@ -847,6 +849,11 @@ Shows *actual* GitHub membership (the roster is the *intended* list), so you can
 spot mismatches, such as a student who never accepted their invitation. Default is an
 aligned table; `--json` emits `{login, kind, role, github_id}`; `--quiet` prints
 one login per line. Reading org invitations needs `admin:org`. Read-only.
+
+On a `member` or `collaborator` row, `github_id` is the account's id. On a
+`pending invitation` row it is the **invitation's** id instead, since GitHub's
+invitations API reports no account id for an invitee, so don't join it against
+`roster.csv`'s `github_id`.
 
 ## `download`
 

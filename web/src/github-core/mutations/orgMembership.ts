@@ -42,7 +42,9 @@ export function createOrgInvitation(
 // invitation, or { cancelled: false } on a 404 — the invite was already gone
 // (e.g., a resend replaced it, or it was cancelled elsewhere). A 404 stays
 // non-throwing so resend's cancel-then-recreate and best-effort dismiss still
-// proceed, but the boolean lets a caller avoid reporting a phantom cancel.
+// proceed, but the boolean lets a caller avoid reporting a phantom cancel — and
+// tells a caller retiring an email invite's stored details apart from one whose
+// invitee can still accept a live invitation for the same address.
 export async function cancelOrgInvitation(
   client: GitHubClient,
   input: { org: string; invitationId: number },

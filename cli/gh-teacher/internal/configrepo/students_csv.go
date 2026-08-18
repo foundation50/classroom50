@@ -12,12 +12,14 @@ import (
 	"strings"
 )
 
-// RosterColumns: canonical required column order. github_id is CLI-managed
-// (from `GET /users/{username}`); the immutable numeric ID defends against
-// mid-class username changes. Email may be empty. role is best-effort recorded
-// metadata (teacher/ta/student, or "") refreshed from the classroom's GitHub
-// teams on sync — the teams, not this column, remain the enrollment/role
-// authority; nothing reads it for logic.
+// RosterColumns: canonical required column order. github_id is tool-managed —
+// `GET /users/{username}` on add/import, else the classroom team's own
+// membership on sync; the immutable numeric ID defends against mid-class
+// username changes. Email may be empty. role is best-effort recorded metadata
+// (teacher/hta/ta/student, or ""), refreshed from the classroom's GitHub teams
+// by the web's sync and recorded here only on a row `roster sync` appends — the
+// teams, not this column, remain the enrollment/role authority; nothing reads it
+// for logic.
 var RosterColumns = []string{"username", "first_name", "last_name", "email", "section", "github_id", "role"}
 
 // legacyRequiredColumns is the canonical prefix a pre-role roster.csv carries.
@@ -59,8 +61,9 @@ func TrimUTF8BOM(data []byte) []byte {
 	return bytes.TrimPrefix(data, utf8BOM)
 }
 
-// RosterRow is one student in the roster. GitHubID == 0 means unresolved (a
-// 5-column import row before GET /users/{username}, or a cell we couldn't use).
+// RosterRow is one student in the roster. GitHubID == 0 means unresolved — a
+// pending email-invite row, a 5-column import row before
+// GET /users/{username}, or a cell we couldn't use.
 type RosterRow struct {
 	Username  string
 	FirstName string
@@ -71,9 +74,9 @@ type RosterRow struct {
 	// githubIDRaw holds a github_id cell that read as unresolved, so a rewrite
 	// preserves the teacher's value instead of silently clearing it.
 	githubIDRaw string
-	// Role is best-effort recorded metadata: "teacher", "ta", "student", or
-	// "" (unknown / a pre-role file). Refreshed from team membership on sync;
-	// never consulted for enrollment decisions.
+	// Role is best-effort recorded metadata: "teacher", "hta", "ta", "student",
+	// or "" (unknown / a pre-role file). Never consulted for enrollment
+	// decisions — the classroom's teams are the authority.
 	Role string
 	// Line is the 1-based CSV line this row was read from, recorded only by
 	// ParseImportCSV: an import reports failures per line, and a file with a

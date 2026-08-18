@@ -26,11 +26,8 @@ export function useDismissFailedInvite(org: string, classroom: string) {
         org,
         invitationId: input.invitationId,
       })
-      // Only retire on a real cancellation: a stale id 404s (cancelled: false)
-      // while a live invitation for the same address may still exist —
-      // resendOrgInvitation recreates before cancelling — and dropping the row
-      // there would delete the invite-time details of someone who can still
-      // accept.
+      // Only retire on a real cancellation (see cancelOrgInvitation's
+      // `cancelled` flag).
       if (result.cancelled && input.inviteEmail) {
         await retireEmailInvite(client, {
           org,

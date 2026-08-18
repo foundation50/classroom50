@@ -10,8 +10,9 @@ import { ClickableRow } from "@/lib/motionComponents"
 import type { TeamRosterRow } from "@/util/teamRoster"
 
 // One roster row: avatar + identity, role/section/state badges, and the
-// selection checkbox (disabled for the signed-in teacher's own row). Clicking
-// the row opens the detail modal; the checkbox is selection-only.
+// selection checkbox (disabled for the viewer's own row and for rows the bulk
+// bar can't act on). Clicking the row opens the detail modal; the checkbox is
+// selection-only.
 export const RosterRow = ({
   row,
   selfRow,

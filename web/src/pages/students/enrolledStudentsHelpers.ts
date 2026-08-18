@@ -42,9 +42,9 @@ export function groupStudentsBySection<T extends { section?: string }>(
 }
 
 // After a metadata save, where should the open detail modal's selection point?
-// An edit can't change an editable row's identity (rows key on
-// github_id/username; the form edits only name/email/section), so this is
-// normally a no-op — but if the key ever moves, follow it so the modal stays on
+// Rows key on github_id || username || email, and the one field that can be a
+// key — the address of a pending invite — is locked in the form, so this is
+// normally a no-op. If the key ever moves, follow it so the modal stays on
 // the same person instead of snapping shut. Only re-points the row that was
 // saved; any other selection is left alone.
 export function nextSelectedKeyAfterSave(

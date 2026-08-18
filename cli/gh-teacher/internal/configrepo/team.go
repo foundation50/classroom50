@@ -23,9 +23,8 @@ func classroomTeamName(shortName string) string {
 	return "classroom50-" + shortName
 }
 
-// classroomTeamSlug is the URL slug GitHub assigns the team. Since
-// classroomTeamName is already lowercase-with-hyphens, the slug equals the
-// name; deriving it directly avoids reading the team back.
+// classroomTeamSlug: slug == name (see classroomTeamName), so deriving it
+// directly avoids reading the team back.
 func classroomTeamSlug(shortName string) string {
 	return classroomTeamName(shortName)
 }

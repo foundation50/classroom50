@@ -86,8 +86,6 @@ export async function syncRosterFromTeam(
   const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
 
   return withGitConflictRetry(async () => {
-    // Re-read teams + CSV on every attempt so the diff is always against the
-    // latest state (a concurrent add/edit can't be clobbered or duplicated).
     const [{ members, fullyRead, pendingRoleKeys }, configBranch] =
       await Promise.all([
         listClassroomMembersWithRoles(client, org, slugs),

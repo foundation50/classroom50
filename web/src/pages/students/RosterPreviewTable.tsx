@@ -13,10 +13,10 @@ import {
 } from "@/pages/students/rosterImportResolve"
 import { coerceImportRole } from "./rosterImportParse"
 
-// Per-row metadata changes the preflight detected (from metadata_update or
-// role_change outcomes), keyed by identityKey. Drives the cell highlighting +
-// hover tooltips in the preview so the teacher sees exactly which values the
-// import will overwrite, in place, rather than in a separate list.
+// Per-row metadata changes the preflight detected (from metadata_update,
+// role_change, or enroll outcomes), keyed by identityKey. Drives the cell
+// highlighting + hover tooltips in the preview so the teacher sees exactly which
+// values the import will overwrite, in place, rather than in a separate list.
 export type RowChanges = Record<string, MetadataChange[]>
 
 // Per-row role change (current -> CSV role), keyed by identityKey, so the Role
@@ -88,11 +88,11 @@ const PreviewCell = ({
 }
 
 // The identity column. An account row shows its login, tinted with an inline
-// "was <username>" hint when a github_id corrected it — the same treatment the
-// Role column uses for a role change, rather than a hover tooltip a keyboard or
-// touch user can't reach. An email row shows an explicit badge instead of a blank
-// cell, which would otherwise read as missing data (and announce as nothing at
-// all to a screen reader).
+// "file said <username>" hint when a github_id corrected it — the same treatment
+// the Role column uses for a role change, rather than a hover tooltip a keyboard
+// or touch user can't reach. An email row shows an explicit badge instead of a
+// blank cell, which would otherwise read as missing data (and announce as nothing
+// at all to a screen reader).
 const IdentityCell = ({
   row,
   declaredUsername,
@@ -192,7 +192,6 @@ export const RosterPreviewTable = ({
         <tbody>
           {loading
             ? skeletonRows.map((_, index) => (
-                // Decorative loading placeholder — hidden from assistive tech.
                 <tr key={`skeleton-${index}`} aria-hidden="true">
                   <td>{index + 1}</td>
                   <SkeletonCell bar="h-4 w-24" />

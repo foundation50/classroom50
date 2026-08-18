@@ -38,9 +38,12 @@ func NewCmd() *cobra.Command {
 			"All writes use a single Tree commit on <org>/classroom50's\n" +
 			"default branch and retry with an optimistic rebase loop\n" +
 			"(up to 5 attempts) so concurrent edits don't silently lose\n" +
-			"each other's work. Each row stores the student's immutable\n" +
-			"numeric github_id (resolved via GET /users/{username}) so a\n" +
-			"username change mid-class doesn't desynchronize records.",
+			"each other's work. Each row that names an account stores the\n" +
+			"student's immutable numeric github_id — resolved from\n" +
+			"GET /users/{username} on add/import, or from the classroom team\n" +
+			"on sync — so a username change mid-class doesn't desynchronize\n" +
+			"records. A row awaiting an email invitation carries only the\n" +
+			"address until a sync records the account.",
 	}
 	cmd.AddCommand(rosterListCmd())
 	cmd.AddCommand(rosterAddCmd())
@@ -73,9 +76,10 @@ func rosterAddCmd() *cobra.Command {
 			"If no username matches and --email is given, an existing row\n" +
 			"holding only that address is completed in place instead of a\n" +
 			"second row being added: that is the pending row an email\n" +
-			"invitation created in the web app. Only a row with no username\n" +
-			"and no github_id can be completed this way, and it does not\n" +
-			"carry over that row's recorded role.\n\n" +
+			"invitation created, from `gh teacher roster invite` or the\n" +
+			"web app. Only a row with no username and no github_id can be\n" +
+			"completed this way, and it does not carry over that row's\n" +
+			"recorded role.\n\n" +
 			"After the roster write lands, if the student isn't already a\n" +
 			"member of <org> (and doesn't already have a pending invite),\n" +
 			"this command sends an org invitation (same path `gh teacher\n" +

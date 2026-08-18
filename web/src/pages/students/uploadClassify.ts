@@ -2,8 +2,8 @@
 // unified upload modal's routing:
 //   - roster-csv:     the DEFAULT and the smart one — a structured CSV with a
 //                     header row (github_id/username/email + optional
-//                     name/section/role), or a bare list whose lines are each
-//                     read as a handle or an address.
+//                     first_name/last_name/name/section/role), or a bare list
+//                     whose lines are each read as a handle or an address.
 //   - username-list:  a manual override forcing every bare line to a GitHub
 //                     handle, even one shaped like an address.
 //   - email-list:     a manual override routing every line to an email

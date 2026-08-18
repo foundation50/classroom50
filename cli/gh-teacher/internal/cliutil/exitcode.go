@@ -4,7 +4,8 @@ import "errors"
 
 // ExitCodeError carries a specific process exit code out of a cobra RunE, for
 // the few commands whose exit status is a machine-readable RESULT rather than
-// just success/failure (`roster sync` defines the one such contract today).
+// just success/failure — `roster sync` defines the contract (0/1/2) and
+// `roster invite --file` reuses its codes.
 //
 // Err still carries the message cobra prints, so a non-failure code must wrap a
 // sentence that reads as a report rather than a fault.
