@@ -1393,6 +1393,36 @@ func TestClaimPendingEmailRow(t *testing.T) {
 	})
 }
 
+// IsPendingEmailInvite is what a caller plans against, so it must answer exactly
+// what the helpers then do — a caller whose predicate is looser plans edits they
+// refuse, which no --write pass can ever converge.
+func TestIsPendingEmailInvite_AgreesWithTheHelpers(t *testing.T) {
+	cases := map[string]RosterRow{
+		"claimable":                        {Email: "ada@uni.edu"},
+		"has a username":                   {Username: "ada", Email: "ada@uni.edu"},
+		"has a resolved github_id":         {Email: "ada@uni.edu", GitHubID: 101},
+		"has an unresolved github_id cell": {Email: "ada@uni.edu", githubIDRaw: "0"},
+		"has no address":                   {githubIDRaw: ""},
+		"is a preserved malformed row":     {raw: []string{"junk"}},
+	}
+	for name, row := range cases {
+		t.Run(name, func(t *testing.T) {
+			want := row.IsPendingEmailInvite()
+			if got := findPendingEmailRow([]RosterRow{row}, row.Email) >= 0; got != want {
+				t.Errorf("findPendingEmailRow matched = %v, IsPendingEmailInvite = %v", got, want)
+			}
+			_, removed := RemovePendingEmailRow([]RosterRow{row}, row.Email)
+			if removed != want {
+				t.Errorf("RemovePendingEmailRow removed = %v, IsPendingEmailInvite = %v", removed, want)
+			}
+			_, claimed := ClaimPendingEmailRow([]RosterRow{row}, row.Email, "ada", 101)
+			if claimed != want {
+				t.Errorf("ClaimPendingEmailRow claimed = %v, IsPendingEmailInvite = %v", claimed, want)
+			}
+		})
+	}
+}
+
 // TestBackfillRosterGitHubID: an id that already resolves is never repointed —
 // a recycled login must not silently move a row onto a different account.
 func TestBackfillRosterGitHubID(t *testing.T) {

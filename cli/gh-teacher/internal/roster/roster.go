@@ -705,6 +705,12 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 			}
 			pendingMissing = append(pendingMissing, fmt.Sprintf("line %d (%s): no pending email-invite row with this address — skipped; import never sends an invitation, so it can't create one.", p.line, p.row.Email))
 		}
+		// Reachable with a file of nothing but cargo and unmatched addresses:
+		// the rows come back untouched, and committing their re-encoding lands a
+		// real commit with an empty diff. Nothing applied → nothing to write.
+		if added == 0 && updated == 0 && pendingUpdated == 0 {
+			return configwrite.CommitChange{}, nil
+		}
 		return configrepo.RosterWriteChange(classroom, rows)
 	}
 

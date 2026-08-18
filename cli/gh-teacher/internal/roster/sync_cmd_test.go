@@ -610,3 +610,94 @@ func mustSyncErr(t *testing.T, mock *syncMock, write bool) error {
 	_, _, err := runSync(t, mock, write)
 	return err
 }
+
+// A pending-looking row whose github_id cell is present but unusable is NOT
+// claimable by the configrepo helpers, so planning a fold for it would report a
+// change `--write` can't apply — leaving a polling caller on exit 2 forever.
+// Report it once instead, and converge.
+func TestRunRosterSync_UnresolvedGitHubIDRowIsReportedNotPlanned(t *testing.T) {
+	// github_id 0 reads as "present but addresses no account" (parseGitHubID).
+	roster := storedRosterHeader + ",Ada,Lovelace," + inviteTestEmail + ",section-1,0,student\n"
+
+	dry := newSyncMock(t, roster)
+	dry.teams = []syncTeam{acceptedInviteTeam(t)}
+	out, errOut, err := runSync(t, dry, false)
+	if got := exitCode(err); got != 0 {
+		t.Fatalf("dry-run exit code = %d (err %v), want 0: nothing here can be applied", got, err)
+	}
+	if strings.Contains(out, "accepted — record as") || strings.Contains(out, "drop the pending row") {
+		t.Errorf("planned a fold/reap the helpers will refuse:\n%s", out)
+	}
+	if !strings.Contains(errOut, inviteTestEmail) || !strings.Contains(errOut, "github_id") {
+		t.Errorf("stderr must name the row and its unusable github_id:\n%s", errOut)
+	}
+	if writes := writeCalls(dry.calls); len(writes) != 0 {
+		t.Errorf("dry run issued %d write request(s): %#v", len(writes), writes)
+	}
+
+	// --write must make no commit, keep the metadata team (the only record of
+	// the address the teacher needs), and leave the next dry run at the same
+	// exit code — i.e. the pass converges.
+	apply := newSyncMock(t, roster)
+	apply.teams = []syncTeam{acceptedInviteTeam(t)}
+	if _, _, err := runSync(t, apply, true); exitCode(err) != 0 {
+		t.Fatalf("--write exit code = %d (err %v), want 0", exitCode(err), err)
+	}
+	if len(apply.blobs) != 0 {
+		t.Errorf("committed %d blob(s) for a row nothing could change: %#v", len(apply.blobs), apply.blobs)
+	}
+	if len(apply.deletedTeams) != 0 {
+		t.Errorf("deleted %v; that team holds the only record of the address", apply.deletedTeams)
+	}
+
+	again := newSyncMock(t, roster)
+	again.teams = []syncTeam{acceptedInviteTeam(t)}
+	if _, _, err := runSync(t, again, false); exitCode(err) != 0 {
+		t.Fatalf("second dry run exit code = %d (err %v), want 0: the pass must converge", exitCode(err), err)
+	}
+}
+
+// Same rule on the reap side: with nothing backing the address, a row carrying
+// an unusable github_id cell is still not the reaper's to drop.
+func TestRunRosterSync_UnresolvedGitHubIDRowIsNotReaped(t *testing.T) {
+	// Above 2^53: readable, but past what the web app can address exactly, so
+	// parseGitHubID leaves it unresolved and EncodeRoster preserves the cell.
+	mock := newSyncMock(t, storedRosterHeader+",,,gone@uni.edu,,9007199254740992,student\n")
+
+	out, errOut, err := runSync(t, mock, true)
+	if got := exitCode(err); got != 0 {
+		t.Fatalf("exit code = %d (err %v), want 0", got, err)
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("committed %d blob(s); the row is not claimable: %#v", len(mock.blobs), mock.blobs)
+	}
+	if strings.Contains(out, "drop the pending row") {
+		t.Errorf("planned a reap the helpers will refuse:\n%s", out)
+	}
+	if !strings.Contains(errOut, "gone@uni.edu") {
+		t.Errorf("stderr must name the row it left alone:\n%s", errOut)
+	}
+}
+
+// Every planned edit can be refused by the configrepo helpers, whose
+// claimable-row rule is the authority. Re-encoding the untouched rows then lands
+// a real commit with an empty diff, which is worse than doing nothing: it makes
+// the roster history unreadable and a polling caller can't tell progress from
+// churn.
+func TestRunRosterSync_RefusedEditsCommitNoEmptyDiff(t *testing.T) {
+	stored := storedRosterHeader + ",Ada,Lovelace," + inviteTestEmail + ",section-1,0,student\n"
+
+	mock := newSyncMock(t, stored)
+	mock.teams = []syncTeam{acceptedInviteTeam(t)}
+	if _, _, err := runSync(t, mock, true); err != nil {
+		t.Fatalf("runRosterSync: %v", err)
+	}
+	for _, blob := range mock.blobs {
+		if blob == stored {
+			t.Errorf("POSTed a roster blob byte-identical to what is stored:\n%s", blob)
+		}
+	}
+	if n := countCalls(mock.calls, http.MethodPost, "/repos/o/classroom50/git/commits"); n != 0 {
+		t.Errorf("created %d commit(s) with nothing applied", n)
+	}
+}

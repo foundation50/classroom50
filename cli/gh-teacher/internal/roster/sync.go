@@ -298,6 +298,19 @@ type rosterPlan struct {
 	// deleted (or never written, e.g. `roster invite`'s commit failed). Without
 	// this the address would be lost when the team is retired below.
 	appends []inviteRecovery
+	// blocked are email-only-looking rows whose github_id cell is present but
+	// addresses no account: the claimable-row rule counts that as identity, so
+	// neither a fold nor a reap may touch them. Reported for a hand-fix instead
+	// of planned, so a --write pass can't leave a dry run reporting the same
+	// change forever.
+	blocked []blockedRosterRow
+}
+
+// blockedRosterRow is one such row: the address it carries and the unusable
+// github_id cell the teacher has to correct.
+type blockedRosterRow struct {
+	Email     string
+	RawGitHub string
 }
 
 func (p rosterPlan) empty() bool {
@@ -333,7 +346,7 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 		if email != "" {
 			rowEmails[email] = true
 		}
-		if isPendingRosterRow(row) && email != "" {
+		if row.IsPendingEmailInvite() {
 			if rec, ok := recoveredByEmail[email]; ok && !claimed[email] {
 				claimed[email] = true
 				plan.folds = append(plan.folds, rec)
@@ -352,6 +365,15 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 					plan.reapEmails = append(plan.reapEmails, email)
 				}
 			}
+			continue
+		}
+		// Looks pending but isn't claimable: the github_id cell is present and
+		// unusable (a hand-edit, or Excel mangling the number), which the
+		// claimable-row rule counts as identity. Neither fold nor reap would
+		// apply, so report it instead of planning a change --write can't make —
+		// otherwise every dry run exits 2 on the same row forever.
+		if row.Username == "" && row.GitHubID == 0 && email != "" && row.UnresolvedGitHubID() != "" {
+			plan.blocked = append(plan.blocked, blockedRosterRow{Email: email, RawGitHub: row.UnresolvedGitHubID()})
 			continue
 		}
 		// A row carrying a username but no usable id: fill it from the
@@ -375,13 +397,6 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 		plan.appends = append(plan.appends, rec)
 	}
 	return plan
-}
-
-// isPendingRosterRow reports whether a row is an email-ONLY invite row — the
-// narrow set the fold and the reap may touch, matching the configrepo helpers'
-// own filter (no username, no github_id cell at all).
-func isPendingRosterRow(row configrepo.RosterRow) bool {
-	return row.Username == "" && row.GitHubID == 0 && row.Email != ""
 }
 
 // loginKey is the case-insensitive key classroomIndex.idByLogin is both built
@@ -442,7 +457,7 @@ func runRosterSync(client githubapi.Client, out, errOut io.Writer, org, classroo
 	if err := applyRosterSync(client, out, errOut, org, classroom, branch, scan, idx); err != nil {
 		return err
 	}
-	deleteRetiredInviteTeams(client, out, errOut, org, classroom, scan)
+	deleteRetiredInviteTeams(client, out, errOut, org, classroom, scan, plan.blocked)
 	if !scan.trusted {
 		return syncDegradedError(org, classroom)
 	}
@@ -477,6 +492,10 @@ func reportSyncPlan(out, errOut io.Writer, org, classroom string, scan inviteSca
 	}
 	for _, slug := range scan.staleSlugs {
 		_, _ = fmt.Fprintf(out, "%s: delete the leftover metadata team %s\n", org, slug)
+	}
+	for _, row := range plan.blocked {
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: left the pending row for %s alone — its github_id cell (%q) addresses no account, and a row with a github_id is never treated as merely invited. Clear that cell to let this reconcile record them, or fill in their username by hand.\n",
+			path, row.Email, row.RawGitHub)
 	}
 	for _, anomaly := range scan.anomalies {
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: kept %s\n", org, anomaly)
@@ -543,6 +562,13 @@ func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classr
 			})
 			applied.appends = append(applied.appends, rec)
 		}
+		// Every planned edit can still be refused by the helpers (their
+		// claimable-row rule is stricter than any planner-side match can prove
+		// under a rebase), and committing the re-encoded rows then lands a real
+		// commit with no diff. Nothing applied → nothing to write.
+		if applied.empty() {
+			return configwrite.CommitChange{}, nil
+		}
 		return configrepo.RosterWriteChange(classroom, rows)
 	}
 
@@ -567,9 +593,21 @@ func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classr
 // deterministic hash, so a same-email RE-INVITE in the window since the scan
 // adopts this very team, and deleting it would strip the metadata team off a
 // brand-new live invitation. An unreadable invitation list keeps every team.
-func deleteRetiredInviteTeams(client githubapi.Client, out, errOut io.Writer, org, classroom string, scan inviteScan) {
+//
+// A recovery whose row is blocked is skipped too: nothing recorded its mapping,
+// and that team holds the only record of which address the account came from —
+// the very thing the teacher needs to finish the row by hand.
+func deleteRetiredInviteTeams(client githubapi.Client, out, errOut io.Writer, org, classroom string, scan inviteScan, blocked []blockedRosterRow) {
+	blockedEmails := make(map[string]bool, len(blocked))
+	for _, row := range blocked {
+		blockedEmails[row.Email] = true
+	}
 	slugs := make([]string, 0, len(scan.recovered)+len(scan.staleSlugs))
 	for _, rec := range scan.recovered {
+		if blockedEmails[rec.Email] {
+			_, _ = fmt.Fprintf(errOut, "Note: %s: kept metadata team %s — %s's roster row could not be recorded, so this team is still the only record of their address.\n", org, rec.Slug, rec.Email)
+			continue
+		}
 		slugs = append(slugs, rec.Slug)
 	}
 	slugs = append(slugs, scan.staleSlugs...)

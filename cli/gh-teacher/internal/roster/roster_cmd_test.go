@@ -884,6 +884,28 @@ func TestRunRosterImport(t *testing.T) {
 			t.Errorf("want the stored id kept and the section updated: %#v", alice)
 		}
 	})
+
+	// A file whose only rows are addresses import may not create leaves the
+	// stored rows exactly as read, so committing the re-encoding would land a
+	// real commit with an empty diff.
+	t.Run("a file that changes nothing commits nothing", func(t *testing.T) {
+		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n"
+		file := storedRosterHeader + ",New,N,nobody@x.edu,s3,,student\n"
+
+		mock, out, errOut, err := runImport(t, stored, file, map[string]int64{"alice": 1})
+		if err != nil {
+			t.Fatalf("runRosterImport: %v", err)
+		}
+		if len(mock.blobs) != 0 {
+			t.Errorf("POSTed %d blob(s) for a commit with no diff: %#v", len(mock.blobs), mock.blobs)
+		}
+		if !strings.Contains(errOut, "nobody@x.edu") {
+			t.Errorf("stderr should still notice the unmatched address:\n%s", errOut)
+		}
+		if !strings.Contains(out, "1 skipped") {
+			t.Errorf("stdout should still count the skipped row:\n%s", out)
+		}
+	})
 }
 
 // classroomJSONWithStaffTeams builds a classroom.json carrying the student team

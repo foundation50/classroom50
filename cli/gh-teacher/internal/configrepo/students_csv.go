@@ -84,6 +84,26 @@ type RosterRow struct {
 // isRaw reports whether the row is a preserved-but-unparsed record.
 func (r RosterRow) isRaw() bool { return r.raw != nil }
 
+// UnresolvedGitHubID returns the github_id cell of a row whose cell was
+// readable but addresses no account (see parseGitHubID), else "". Exported so a
+// caller can name the offending value when reporting a row it must leave alone.
+func (r RosterRow) UnresolvedGitHubID() string { return r.githubIDRaw }
+
+// IsPendingEmailInvite reports whether the row is an email-ONLY invite row: no
+// username, no github_id cell at all (a present-but-unresolved one counts as
+// identity), and an address to key on.
+//
+// This is the single source of the claimable-row rule the pending-row helpers
+// below enforce (findPendingEmailRow, UpsertRosterRow's email fallback), so a
+// caller deciding what to plan and the helper applying it agree — a planner
+// guessing at the rule plans edits these helpers then refuse, which a --write
+// pass would report and silently skip forever.
+func (r RosterRow) IsPendingEmailInvite() bool {
+	return !r.isRaw() && r.Username == "" &&
+		r.GitHubID == 0 && r.githubIDRaw == "" &&
+		NormalizeInviteEmail(r.Email) != ""
+}
+
 // ParseRoster decodes the roster CSV. The header MUST begin with the canonical
 // RosterColumns in order; a file written before the trailing `role` column was
 // added (ending at github_id) is still accepted (role reads as ""). Additional
@@ -445,13 +465,10 @@ func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 	// incoming email matches nothing.
 	if row.Email != "" {
 		for i := range rows {
-			if rows[i].isRaw() || rows[i].Username != "" {
-				continue
-			}
-			// "Identity-less" here means the same thing the reader means: a
-			// present github_id cell counts even when it didn't resolve, so a
-			// claim can't silently discard what the teacher typed.
-			if rows[i].GitHubID != 0 || rows[i].githubIDRaw != "" {
+			// "Identity-less" here means exactly what the reader means, via the
+			// shared rule: a present github_id cell counts even when it didn't
+			// resolve, so a claim can't silently discard what the teacher typed.
+			if !rows[i].IsPendingEmailInvite() {
 				continue
 			}
 			if strings.EqualFold(strings.TrimSpace(rows[i].Email), strings.TrimSpace(row.Email)) {
@@ -524,21 +541,19 @@ func UpdateRosterRow(rows []RosterRow, username string, p RosterPatch) (out []Ro
 // findPendingEmailRow returns the index of the pending email-invite row for
 // email (normalized: trimmed, case-insensitive), or -1.
 //
-// The claimable set is deliberately NARROW — no username and no github_id cell
-// at all, so a present-but-unresolved cell still protects a row — because every
-// caller either rewrites or drops the row it finds: a student who already has an
-// account, and a classmate merely sharing a contact address, must never be
-// touched. Mirrors the web's removeEmailInviteRows filter.
+// The claimable set is deliberately NARROW (RosterRow.IsPendingEmailInvite) —
+// no username and no github_id cell at all, so a present-but-unresolved cell
+// still protects a row — because every caller either rewrites or drops the row
+// it finds: a student who already has an account, and a classmate merely
+// sharing a contact address, must never be touched. Mirrors the web's
+// removeEmailInviteRows filter.
 func findPendingEmailRow(rows []RosterRow, email string) int {
 	key := NormalizeInviteEmail(email)
 	if key == "" {
 		return -1
 	}
 	for i := range rows {
-		if rows[i].isRaw() || rows[i].Username != "" {
-			continue
-		}
-		if rows[i].GitHubID != 0 || rows[i].githubIDRaw != "" {
+		if !rows[i].IsPendingEmailInvite() {
 			continue
 		}
 		if NormalizeInviteEmail(rows[i].Email) == key {
