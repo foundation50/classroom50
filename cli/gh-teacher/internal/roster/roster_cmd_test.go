@@ -900,6 +900,36 @@ func TestRunRosterImport(t *testing.T) {
 		}
 	})
 
+	t.Run("unusable-github_id row is skipped as cargo without failing the import", func(t *testing.T) {
+		// The other cargo branch: a github_id cell present but addressing no
+		// account (0 here; a negative or >2^53 reads the same). ParseImportCSV
+		// keeps such a row — the cell is non-empty, so it satisfies the
+		// identity rule — but leaves GitHubID at 0, so import can neither
+		// resolve it nor treat it as a pending invitation.
+		storedCargo := ",Cargo,C,,,0,student\n"
+		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n" + storedCargo
+		file := storedRosterHeader +
+			"alice,Alice,Anderson,a@x.edu,s1,1,student\n" +
+			",Changed,X,,,0,teacher\n"
+
+		mock, out, errOut, err := runImport(t, stored, file, map[string]int64{"alice": 1})
+		if err != nil {
+			t.Fatalf("an unusable-github_id row must not fail the import: %v", err)
+		}
+		if !strings.Contains(errOut, "no usable github_id") {
+			t.Errorf("stderr should notice the row as having no usable github_id:\n%s", errOut)
+		}
+		if !strings.Contains(out, "1 skipped") {
+			t.Errorf("stdout should count the skipped row:\n%s", out)
+		}
+		if !strings.Contains(mock.blobs[0], storedCargo) {
+			t.Errorf("the stored row must round-trip byte-identical:\n%s", mock.blobs[0])
+		}
+		if alice := committedRow(t, mock, "alice", ""); alice.LastName != "Anderson" {
+			t.Errorf("the rest of the import must still apply: %#v", alice)
+		}
+	})
+
 	t.Run("stored role wins over the import file's role cell", func(t *testing.T) {
 		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n"
 		file := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,teacher\n"

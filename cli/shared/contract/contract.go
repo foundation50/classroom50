@@ -65,8 +65,8 @@ const (
 	// tool's reconcile skip such a team instead of reaping it. Both the web app
 	// and `gh teacher roster invite` create these teams and read the other's,
 	// so the exact bytes are a two-way contract: mirrored in
-	// web/src/util/inviteTeam.ts (PROVISIONAL_DESCRIPTION) with NO compile-time
-	// link — keep byte-identical; contract_test.go pins the Go half.
+	// web/src/github-core/mutations/inviteTeams.ts (PROVISIONAL_DESCRIPTION) with
+	// NO compile-time link — keep byte-identical; contract_test.go pins the Go half.
 	InviteProvisionalDescription = "classroom50: preparing invite"
 
 	// InviteTeamGCMinAge is how old a MEMBER-LESS invite team must be before a
