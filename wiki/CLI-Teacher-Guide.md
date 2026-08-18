@@ -279,7 +279,8 @@ teacher|hta|ta`. For the roles and what each can see, see
 [Staff, TAs, and multiple teachers](Staff-TAs-and-Multiple-Teachers).
 
 **Inviting by email:** `gh teacher roster invite <org> <classroom> <email>`
-invites a student by address and records them on the roster until they accept. See
+invites a student by address and records them on the roster until they accept.
+Invite a whole list at once with `--file <path>` (one address per line). See
 [Inviting a student by email](#inviting-a-student-by-email).
 
 ## 6. Track students in the roster
@@ -394,6 +395,32 @@ parent, a lab contact), so the real person still gets invited: the invitation is
 sent, a note on stderr names that row, and **no second row is written**. If the
 invitation fails outright, an invite team this run created is cleaned up again,
 except after a rate limit, where it's kept for a retry to adopt.
+
+**Invite a whole list by email:**
+
+```sh
+gh teacher roster invite <org> <classroom> --file <path>
+gh teacher roster invite cs50-fall-2026 cs-principles --file ./section-1-emails.txt
+```
+
+Pass `--file` instead of a single address to invite a whole section at once. The
+file is plaintext, **one address per line**; blank lines and lines starting with
+`#` are ignored, so you can annotate the list. Every address is validated first —
+if any line is unusable, the command reports every bad line and **sends nothing**.
+
+Each address goes through the same invite path as a single `roster invite`, and
+every successful invitation is retained as a pending row in **one commit** for
+the batch. The command prints a summary — how many were invited, already
+members/invited, already on the roster, failed, or deferred. Bulk mode is
+**student-only** and carries no names or sections (the `--first-name` /
+`--last-name` / `--section` flags apply to a single invite only); fill that
+metadata in later with [`roster import`](#bulk-import-from-a-csv) or
+[`roster sync`](#syncing-the-roster-with-github).
+
+If a GitHub rate limit is hit part-way, the command stops sending, reports the
+remaining addresses, and exits non-zero. **Re-running the same command is safe**:
+addresses already invited are skipped automatically, and addresses already on the
+roster get no second row.
 
 **Call an invitation off:**
 
