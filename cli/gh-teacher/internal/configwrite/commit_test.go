@@ -267,6 +267,69 @@ func TestCommitTree_NoOpOnEmptyMap(t *testing.T) {
 	}
 }
 
+// TestCommitTree_NoOpWhenTreeMatchesParent pins the second no-op path: build
+// returns a real change, but its upserts re-encode to the bytes already stored,
+// so CreateTree hands back the parent's own tree. Committing that would land an
+// empty commit on every idempotent re-run (a re-import, a reconcile with nothing
+// to do), churning the history of a repo teachers read.
+func TestCommitTree_NoOpWhenTreeMatchesParent(t *testing.T) {
+	var (
+		mu          sync.Mutex
+		commitPosts int
+		patchCalls  int
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/r/git/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch {
+			mu.Lock()
+			patchCalls++
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": map[string]string{"sha": "parent-sha"},
+		})
+	})
+	mux.HandleFunc("/repos/o/r/git/commits/parent-sha", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"tree": map[string]string{"sha": "parent-tree"},
+		})
+	})
+	mux.HandleFunc("/repos/o/r/git/blobs", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"sha": "blob-sha"})
+	})
+	// Unchanged content ⇒ git dedupes to the parent's tree.
+	mux.HandleFunc("/repos/o/r/git/trees", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"sha": "parent-tree"})
+	})
+	mux.HandleFunc("/repos/o/r/git/commits", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		commitPosts++
+		mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]string{"sha": "new-commit"})
+	})
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	gotSHA, err := CommitTree(client, "o", "r", "main", "unchanged", func(string) (map[string]string, error) {
+		return map[string]string{"c/roster.csv": "username,role\nada,student\n"}, nil
+	})
+	if err != nil {
+		t.Fatalf("CommitTree returned error: %v", err)
+	}
+	if gotSHA != "" {
+		t.Errorf(`CommitTree returned %q, want "" (no commit when the tree matches the parent)`, gotSHA)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if commitPosts != 0 || patchCalls != 0 {
+		t.Errorf("expected no commit to land, got commits=%d patches=%d", commitPosts, patchCalls)
+	}
+}
+
 // builtError gives build-callback errors a distinct test identity
 // so assertions can be type-specific.
 type builtError struct{ msg string }
