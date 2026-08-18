@@ -1,0 +1,71 @@
+{
+  "comment": "Cross-language golden vectors for the per-invite team name and the classroom50/invite/v1 record stored in its description. Both writers of this contract must produce these bytes for these inputs: the web (inviteTeamName / marshalInviteDescription in web/src/util/inviteTeam.ts, asserted by web/src/util/inviteTeam.test.ts) and the teacher CLI (InviteTeamName / MarshalInviteDescription in cli/gh-teacher/internal/configrepo/invite_team.go, asserted by invite_team_test.go). `slug` is `invite-` + the first 16 hex chars of SHA-256 over `<classroom>\\u0000<normalized email>`; normalization is trim + lowercase, applied before BOTH the hash and the stored `email` so a roster row can always relocate its team. `record` is the EXACT description bytes — compact JSON in schema/email/classroom order with Go json.Marshal's HTML and U+2028/U+2029 escaping — because a reconcile compares descriptions for string equality, so a byte difference would make the two writers overwrite each other forever. Update both writers in lockstep; regenerating a vector means the wire contract changed and every already-created invite team becomes unlocatable.",
+  "prefix": "invite-",
+  "hash_hex_len": 16,
+  "schema": "classroom50/invite/v1",
+  "cases": [
+    {
+      "why": "the canonical invite: an already-normalized email and a simple classroom",
+      "classroom": "cs101",
+      "email": "alice@example.com",
+      "slug": "invite-30623b6198ef9544",
+      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"alice@example.com\",\"classroom\":\"cs101\"}"
+    },
+    {
+      "why": "mixed case and surrounding whitespace normalize FIRST, so this is the same team and record as the canonical case",
+      "classroom": "cs101",
+      "email": "  ALICE@Example.com  ",
+      "slug": "invite-30623b6198ef9544",
+      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"alice@example.com\",\"classroom\":\"cs101\"}"
+    },
+    {
+      "why": "the same email in a second classroom hashes to a distinct team, so one org can invite it twice",
+      "classroom": "cs102",
+      "email": "alice@example.com",
+      "slug": "invite-d96a9c930ec97372",
+      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"alice@example.com\",\"classroom\":\"cs102\"}"
+    },
+    {
+      "why": "boundary pair A: without the \\u0000 separator (\"ab\",\"c@x\") and (\"a\",\"bc@x\") would hash the same bytes",
+      "classroom": "ab",
+      "email": "c@x",
+      "slug": "invite-cf6630a5ae591187",
+      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"c@x\",\"classroom\":\"ab\"}"
+    },
+    {
+      "why": "boundary pair B: must not equal pair A's slug",
+      "classroom": "a",
+      "email": "bc@x",
+      "slug": "invite-12cdc631e5b339e8",
+      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"bc@x\",\"classroom\":\"a\"}"
+    },
+    {
+      "why": "a hyphenated classroom short-name and a plus-tagged address",
+      "classroom": "cs-principles",
+      "email": "ada.lovelace+spring@uni.example.edu",
+      "slug": "invite-dd622319858e6cbf",
+      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"ada.lovelace+spring@uni.example.edu\",\"classroom\":\"cs-principles\"}"
+    },
+    {
+      "why": "Go json.Marshal HTML-escapes <, >, and & — the record bytes carry \\u003c/\\u003e/\\u0026, never the raw chars",
+      "classroom": "cs",
+      "email": "a&b<c>@x",
+      "slug": "invite-588beadb1a18db11",
+      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"a\\u0026b\\u003cc\\u003e@x\",\"classroom\":\"cs\"}"
+    },
+    {
+      "why": "Go json.Marshal escapes the U+2028/U+2029 line and paragraph separators too",
+      "classroom": "cs\u2028x\u2029y",
+      "email": "a@b",
+      "slug": "invite-80262c1d98bc9dc4",
+      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"a@b\",\"classroom\":\"cs\\u2028x\\u2029y\"}"
+    },
+    {
+      "why": "the WHOLE C0 range plus DEL, where the two encoders AGREE code point for code point: U+0008/U+0009/U+000A/U+000C/U+000D take the same short \\b/\\t/\\n/\\f/\\r JSON.stringify emits (never \\u0008/\\u000c), every other C0 control takes the same lowercase \\u00xx, and DEL is left raw by both — so the web's Go-parity escaper must touch none of them. Exhaustive on purpose: the escaper's claim is that <, >, & and U+2028/U+2029 are the ONLY divergences, and a range checked in part is a claim pinned in part. Synthetic input: it pins the escaping contract, not a realistic classroom name.",
+      "classroom": "cs\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fx",
+      "email": "a@b",
+      "slug": "invite-73aa6ff310254955",
+      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"a@b\",\"classroom\":\"cs\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000b\\f\\r\\u000e\\u000f\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f\u007fx\"}"
+    }
+  ]
+}

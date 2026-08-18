@@ -9,6 +9,14 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/ghutil"
 )
 
+// ListPerPage / ListMaxPages are the shared bounds for a capped PaginateAll
+// walk: 100×100 = 10k, far beyond any classroom org. Exported so each caller
+// stops re-declaring the same pair.
+const (
+	ListPerPage  = 100
+	ListMaxPages = 100
+)
+
 // PaginateAll walks a GitHub `page`/`per_page` list endpoint, returning every
 // element across pages. The shared core for the teacher CLI's capped list
 // walks, replacing hand-rolled loops.

@@ -38,17 +38,45 @@ const (
 	TeamSchemaV1 = "classroom50/team/v1"
 
 	// InviteTeamPrefix and InviteHashHexLen describe the per-invite secret teams
-	// the web app creates to retain an invited email address until the student
-	// accepts: `invite-<16 lowercase hex>`, a SHA-256 prefix over the classroom
-	// and address (schemas/invite-v1.schema.json). Only the web writes them; the
-	// CLI knows the shape so teardown can sweep the ones an org leaves behind.
+	// that retain an invited email address until the student accepts:
+	// `invite-<16 lowercase hex>`, a SHA-256 prefix over the classroom and
+	// address (schemas/invite-v1.schema.json). The web app and `gh teacher
+	// roster invite` are both writers, and both read the other's teams, so the
+	// name derivation is a two-way contract.
 	// Matching the FULL shape matters — `invite-` alone is a namespace a human
 	// team can land in ("Invite Only" slugs to `invite-only`), which a sweep must
 	// never delete. Mirrored in web/src/util/inviteTeam.ts
 	// (INVITE_TEAM_PREFIX / INVITE_HASH_HEX_LEN) with NO compile-time link — keep
-	// byte-identical; contract_test.go pins the Go half.
+	// byte-identical; contract_test.go pins the Go half and the shared vectors in
+	// cli/shared/testdata/invite_vectors.json pin both writers' output.
 	InviteTeamPrefix = "invite-"
 	InviteHashHexLen = 16
+
+	// InviteSchemaV1 is the schema sentinel for the invite record stored in a
+	// per-invite secret team's description. Mirrored in
+	// schemas/invite-v1.schema.json and the web writer
+	// (web/src/util/inviteTeam.ts INVITE_DESCRIPTION_SCHEMA) with NO
+	// compile-time link — keep byte-identical; contract_test.go pins the Go half.
+	InviteSchemaV1 = "classroom50/invite/v1"
+
+	// InviteProvisionalDescription is what an invite team is CREATED with, so a
+	// run that dies before dropping its creator leaves a team holding no email.
+	// It deliberately does not parse as a v1 record, which is what makes either
+	// tool's reconcile skip such a team instead of reaping it. Both the web app
+	// and `gh teacher roster invite` create these teams and read the other's,
+	// so the exact bytes are a two-way contract: mirrored in
+	// web/src/github-core/mutations/inviteTeams.ts (PROVISIONAL_DESCRIPTION) with
+	// NO compile-time link — keep byte-identical; contract_test.go pins the Go half.
+	InviteProvisionalDescription = "classroom50: preparing invite"
+
+	// InviteTeamGCMinAge is how old a MEMBER-LESS invite team must be before a
+	// reconcile may reap it, so a team created moments before its org invitation
+	// lands (or read mid-creation by the other writer) is never mistaken for a
+	// cancelled invite. Both writers reconcile, so the gate must be identical on
+	// both sides or one would reap the other's fresh invites: mirrored in
+	// web/src/domain/students/inviteRecoveries.ts (INVITE_TEAM_GC_MIN_AGE_MS)
+	// with NO compile-time link, pinned on each side.
+	InviteTeamGCMinAge = 24 * time.Hour
 
 	// DefaultAutograderName is the universal-shim autograder name; resolves to
 	// the shim embedded in gh-student, not a per-classroom override.

@@ -74,9 +74,12 @@ read it:
 - **Scores** refresh only when collection runs: nightly, or on demand with
   **Sync now** / `collect-scores.yaml`.
 
-There is no separate force-sync command. Opening the classroom in the web app
-while signed in as an owner is the closest equivalent, and **Sync now** covers
-scores.
+`gh teacher roster sync <org> <classroom> --write` is the one CLI command that
+syncs rather than reading or writing a single thing: it catches the roster up with
+the classroom's GitHub state, chiefly the email invitations students have accepted.
+Opening the classroom in the web app as an owner does the same on its own. Without
+`--write`, `roster sync` reports and changes nothing. **Sync now** covers scores.
+See [What triggers a sync](#what-triggers-a-sync).
 
 ## Interactive vs. background work
 
@@ -154,17 +157,35 @@ account. Classroom 50 bridges that gap with an **invite team**.
 3. The address is written to `roster.csv` as a **pending row**, with a role but no
    username yet.
 4. Accepting adds the student to both teams. Because the invite team holds exactly
-   one person, whoever is on it is the student who accepted, so the next roster
-   sync fills their account into the pending row and then deletes the invite team.
+   one person, whoever is on it is the student who accepted, so a sync fills their
+   account into the pending row and then deletes the invite team. If the invited
+   person turns out to be staff on the classroom, the row a sync *creates* for them
+   records that staff role rather than `student`.
+
+The web app and the teacher CLI both invite this way, and each reads the other's
+invite teams, so an invitation sent from one can be completed or revoked from the
+other. In the app, invite from the classroom's **Roster** page; from the CLI, use
+`gh teacher roster invite`, one address per run. Two things only the web app does:
+inviting a list of addresses in one upload, and inviting someone by email as a
+teacher, head TA, or TA. A `gh teacher roster invite` is always a student
+invitation, so it can never hand out organization ownership from a mistyped
+address.
 
 An outstanding invitation keeps its team and its pending row, so a teacher can see
-who was invited. Cancelling one deletes its invite team and its pending row right
-away; if either write fails, the next roster sync clears whatever is left. A team
-left by an expired invitation is cleaned up the same way, once it is more than 24
-hours old and GitHub no longer lists the invitation as pending; a still-pending
-invitation is never touched.
-To clear stored addresses early, use **Clean up invite data** on the classroom's
-**Settings** page; deleting a classroom removes its invite teams too.
+who was invited. Cancelling one, from the app's roster or with
+`gh teacher roster cancel-invite`, deletes its invite team and its pending row
+right away; if either write fails, the next sync clears whatever is left. From the
+CLI, cancelling first proves the invitation belongs to *this* classroom: its
+metadata team must name the classroom, and the invitation must carry one of the
+classroom's teams. Otherwise `cancel-invite` refuses rather than revoke a sibling
+classroom's invitation. A team left by an expired invitation is cleaned up the same
+way, once it is more than 24 hours old and GitHub no longer lists the invitation as
+pending; a still-pending invitation is never touched.
+
+Inviting an address some other row already carries is allowed, and deliberately
+so: an address can be shared (a parent, a lab contact), and the real person still
+needs inviting. The invitation is sent, but no second row is written for the
+address: one row per address, whichever tool wrote it.
 
 > [!NOTE]
 > Invite teams are the one place Classroom 50 stores an address that GitHub
@@ -174,6 +195,27 @@ To clear stored addresses early, use **Clean up invite data** on the classroom's
 > members at all, and afterwards only that student and the organization's owners
 > can read it. The address on a pending row is the one **you invited**, which is
 > not necessarily the email on the student's GitHub account.
+
+### What triggers a sync
+
+Step 4 needs something to run. GitHub doesn't notify Classroom 50 when a student
+accepts, so nothing happens while nobody is looking. Four things sync the invite
+record, and all of them are idempotent, so running one that has nothing to do is
+free.
+
+| Trigger | Where |
+| --- | --- |
+| Opening the classroom's roster in the web app, or its refresh control | The web app, automatic on open and then on demand |
+| Entering a classroom as a teacher or owner | The web app, automatic; it also repairs missing teams |
+| **Clean up invite data** | The classroom's **Settings** page, to clear stored addresses early |
+| `gh teacher roster sync <org> <classroom> --write` | The CLI, so a script or a scheduled job can run it with no browser |
+
+A sync is deliberately conservative on both sides. If a read is degraded, it
+reports and removes nothing: no row is dropped and no invite team is deleted,
+because an invite team it couldn't read can't prove that a pending row is dead.
+`gh teacher roster sync` reports by default and changes nothing until you pass
+`--write`. See [`roster sync`](gh-teacher#roster-sync) for its exit codes.
+Deleting a classroom removes its invite teams too.
 
 ### Who sees what
 

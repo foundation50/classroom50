@@ -226,7 +226,12 @@ Check under `https://github.com/orgs/<org>/people` — you should show **Owner**
 The desired state already exists, but the commands react differently:
 
 - `gh teacher roster add` and `roster import` report it and exit 0, so they're
-  safe to re-run in scripts.
+  safe to re-run in scripts. So does `gh teacher roster invite` when GitHub
+  already lists the address as a member or as invited: it prints a `skipped` line
+  and points you at `roster sync`, in case they accepted an earlier invitation.
+  An address the classroom's own roster already carries as a pending row is
+  different, and exits non-zero, since a second invitation would duplicate that
+  row.
 - Repository invitations (`gh teacher invite <org>/<repo> <username>`) are
   idempotent: re-running updates the collaborator's permission in place.
 - Organization invitations (`gh teacher invite <org> <username>`) fail with a
@@ -279,23 +284,47 @@ web app, use **Configure SSO** on
 [Classroom 50's OAuth settings](https://github.com/settings/connections/applications/Ov23liDFFyDtm0pO5NN5)).
 Then retry the invitation or the accept link.
 
-### `line N: username column is empty` when importing a roster CSV
+### `line N: row has no username, github_id, or email` when importing a roster CSV
 
-Every row in a CSV you import with `gh teacher roster import` must carry a
-`username`. The line number points at the row in your file whose username cell
-is blank, commonly a student who hasn't created or reported a GitHub account
-yet, or a leftover row from another export. Fill in the username or remove the
-row, then re-run. For the accepted columns, see
+Every row in a CSV you import with `gh teacher roster import` must carry at least
+one column that identifies a student. The line number points at the row where all
+three cells are blank, commonly a row of empty cells or a leftover row from
+another export. Fill one in or delete the row, then re-run. Every unusable line is
+reported in one pass and nothing is committed, so one editing pass fixes the whole
+file. For the accepted columns, see
 [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
 
-Importing a copy of the stored `roster.csv` needs two things trimmed. Import
-accepts the `username` through `github_id` columns, so a stored roster's trailing
-`role` column is rejected first, with an `unexpected header` error naming the
-columns to drop. And a student invited by email sits on the roster as a pending
-row with no username until they accept, which is valid in the stored file but not
-on import. Remove those rows, or wait until the students have joined. The web
-app's **Upload** reads the same file without either edit: it accepts a `role`
-column and identifies a pending row by its email address.
+A `github_id` cell counts as present here even when it can't address an account,
+so a row carrying only an unusable id passes this check and is skipped with a
+notice instead. A usable id is a plain run of digits, positive, and no larger than
+9007199254740991 (the largest whole number the web app holds exactly). Leading
+zeros are tolerated and rewritten without them. Any other spelling, including a
+leading `+` or a minus sign, stays unresolved, so that both tools read the row the
+same way. Only a cell the CLI can't read as a number fails the line outright.
+
+A copy of the stored `roster.csv` needs no trimming. `import` accepts the full
+stored header (`username,first_name,last_name,email,section,github_id,role`), the
+same header without `role`, and the first five columns alone, so a roster exported
+from a web-managed classroom imports verbatim. A pending row for a student invited
+by email is read too: its name and section are updated, matched by address, and
+the invitation itself is never sent or cancelled. A row identified **solely** by
+`github_id` is skipped, because `import` resolves students by username and has no
+way to look up an account from an id. Its notice points at the web app's
+**Upload**, and nothing stored for that student is touched.
+
+### `github_id … is not this account's id` when importing a roster CSV
+
+The row names an account *and* an id that belongs to a different account, so it
+addresses two students and `gh teacher roster import` refuses the line rather
+than guessing which one you meant. The message names both ids: the one in the
+file, and the one the username resolves to.
+
+Usually the id was mangled by a spreadsheet: opening `roster.csv` in Excel can
+turn `583231` into `5.83231E+05`. It can also mean the columns are shifted by one,
+or that the student renamed their account and you re-typed a username by hand.
+Fix the username, or clear that `github_id` cell and let the username identify the
+row, since the CLI re-resolves every id from GitHub anyway. Nothing was committed,
+so correcting the file and re-running is safe.
 
 ### The upload says a row can't be imported
 
@@ -359,7 +388,88 @@ If it repeats, the setup is refusing on purpose, and retrying won't help. Two
 causes: a same-named team already exists and can't be made `secret`, or one still
 has a member from an interrupted run. Both name the team in the message. Delete
 that team on github.com, then invite again. A bulk email upload reports the same
-failure per address in its **failed** list rather than with this wording.
+failure per address in its **failed** list rather than with this wording, and
+`gh teacher roster invite` refuses for the same two reasons, naming the team and
+sending nothing.
+
+### A student accepted an email invitation but the roster still shows the address
+
+Expected until a sync runs. GitHub doesn't notify Classroom 50 when an invitation
+is accepted, and it stops reporting the invited address at that moment, so
+matching the new account to its pending row is a separate pass. Opening the
+classroom's roster in the web app runs one; from a terminal:
+
+```sh
+gh teacher roster sync <org> <classroom>            # what it would change
+gh teacher roster sync <org> <classroom> --write    # apply it
+```
+
+The sync records the username and `github_id` onto the pending row, keeps the name
+and section you'd already typed, and then deletes the invite team that retained
+the address. It's idempotent, so re-running costs nothing. Don't reach for
+`gh teacher roster cancel-invite` here: an accepted invitation is no longer
+pending, so it reports that and changes nothing. For everything that runs a sync,
+see [What triggers a sync](How-Classroom-50-Works#what-triggers-a-sync).
+
+### `gh teacher roster cancel-invite` refuses and cancels nothing
+
+An organization invitation is org-wide, but everything `cancel-invite` tears down
+belongs to one classroom, so it proves the invitation is *this* classroom's before
+it deletes anything. Nothing is cancelled and the invitation stays intact. Four
+refusals exit non-zero:
+
+- **No metadata team for the address.** This classroom never sent it (another one
+  in the organization may have), or the team was already deleted by hand.
+- **A metadata team with no invite record.** An interrupted send leaves exactly
+  that: the record is written last, so a team without one proves nothing.
+- **A metadata team naming a different classroom.** Re-run naming that classroom;
+  the message tells you which.
+- **An invitation carrying none of this classroom's teams.** Two classrooms
+  invited the same address, and the org-wide lookup found the sibling's
+  invitation. Cancel it in that classroom.
+
+For the first two, revoke the invitation from the web app's roster or from
+`https://github.com/orgs/<org>/people/pending_invitations`, then delete any
+leftover `invite-…` team by hand. `gh teacher roster sync` won't collect a
+record-less team for you: it skips one for the same reason.
+
+A fifth outcome isn't a refusal. With no pending invitation for the address at all,
+`cancel-invite` reports that and exits 0, because a student who already accepted
+looks identical from here. Run `gh teacher roster sync <org> <classroom> --write`
+in that case.
+
+### A pending row shows a `github_id` that can't be an account
+
+Nothing to fix, and nothing is stuck. A cell that addresses no account isn't an
+identity, so the row still counts as "invited, not yet joined". Unusable means
+`0`, a negative number, one larger than 9007199254740991, or one written with a
+leading `+`.
+
+When the student accepts, a sync records their username and real `github_id` over
+that cell, keeping the name and section you'd already typed. If the invitation is
+gone and nothing else backs the address, the row is dropped like any other dead
+pending row. The web app reads the cell by the same rule, down to the leading `+`,
+so opening the roster in a browser and running
+`gh teacher roster sync <org> <classroom> --write` reach the same result.
+
+A row that names an account *and* a `github_id` belonging to a different one is a
+separate case: `gh teacher roster import` fails that line rather than guessing
+which student you meant. See
+[`github_id … is not this account's id`](#github_id--is-not-this-accounts-id-when-importing-a-roster-csv).
+
+### `gh teacher roster sync` exits 1: "sync was incomplete"
+
+A read was degraded, either GitHub's pending-invitation list or one of the invite
+teams, so the pass reported what it could and **removed nothing**: no pending row
+was dropped and no invite team was deleted, not even one whose address the roster
+already records. An invite team it couldn't read can't prove that a pending row is
+dead, and a wrong removal loses the only record of a student's invited address. The
+warnings on stderr name what it couldn't read.
+
+Nothing destructive happened, so re-run once GitHub is healthy (check
+[GitHub status](https://www.githubstatus.com/)); if it was a rate limit, wait for
+the window to reset. In a script, treat `1` as "try again later" and `2` as "a dry
+run found changes pending". See [`roster sync`](gh-teacher#roster-sync).
 
 ### `invite-…` teams you didn't create
 
@@ -367,24 +477,51 @@ Each email invitation gets a `secret` team named `invite-` plus a short hash,
 which holds the invited address until that person joins. Seeing one is expected
 while an invitation is outstanding. Classroom 50 deletes it once the invitation
 has been accepted or cancelled, and clears one left by an expired invitation on a
-later roster sync.
+later sync.
 
 To clear them early, use **Clean up invite data** on the classroom's
 **Settings** page, which writes anything still recoverable onto the roster
-first. `gh teacher teardown <org>` removes every invite team in the
-organization. A team whose description reads `classroom50: preparing invite` is
-the leftover of an interrupted invitation: it holds no address, and deleting it
-on github.com is safe.
+first. `gh teacher roster sync <org> <classroom> --write` collects a narrower set
+from a terminal: it records the invitations that were accepted, then deletes a team
+that is more than 24 hours old, has no member, and has no invitation GitHub still
+lists as pending. It also deletes a team whose sole member is no longer on any of
+the classroom's teams, because that student was removed and the mapping must not
+resurrect their row. `gh teacher teardown <org>` removes every invite team in the
+organization. A team whose description reads `classroom50: preparing invite` is the
+leftover of an interrupted invitation: it holds no address, and deleting it on
+github.com is safe.
+
+A sync leaves three kinds of team standing and names each one on stderr, because
+none can be resolved without guessing:
+
+- **A stored address that no longer hashes to the team name.** The invitee can
+  edit their own team's description after accepting.
+- **More than one member.** No single invitee can be identified.
+- **A description that is no longer a readable invite record.** The
+  `classroom50: preparing invite` form above is the exception: that send is still
+  in flight and holds nothing to lose.
+
+Any pending row such a team might back is kept too. Check what happened, then
+delete the team on github.com by hand.
+
+> [!WARNING]
+> An invite team is the only thing that can match the account that accepts back to
+> the address you invited. Deleting one by hand while its invitation is still
+> pending breaks that link for good: the student joins the organization, no sync
+> can complete their roster row, and the pending row is dropped once GitHub stops
+> listing the invitation.
 
 ### A student's `role` flipped to `teacher` after `roster add`
 
 Expected when the account is on **both** a staff team and the student team.
 Classroom 50 doesn't currently disallow dual roles (usually a teacher adding
 themselves as a student), and the classroom's GitHub teams — not the `role`
-column — are the enrollment authority. The automatic sync refreshes that column
-to the account's **highest** role (`teacher > hta > ta > student`), so you'll
-see a commit like `[Classroom 50] Sync 0 members into roster: <classroom>`
-rewrite an empty/`""` role to `teacher`.
+column — are the enrollment authority. The automatic sync in the web app refreshes
+that column to the account's **highest** role (`teacher > hta > ta > student`), so
+you'll see a commit like `[Classroom 50] Sync roster from teams: <classroom>`
+rewrite an empty/`""` role to `teacher`. `gh teacher roster sync` doesn't refresh
+that column; it records a role only on a row it adds for a student who accepted an
+email invitation.
 
 The student enrollment is unchanged: the account still shows a student badge
 (alongside the staff one), is graded as a student, and can be unenrolled from

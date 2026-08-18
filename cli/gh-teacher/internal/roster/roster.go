@@ -1,7 +1,7 @@
 // Package roster implements the `gh teacher roster` command: managing the
 // classroom roster in <org>/classroom50/<classroom>/roster.csv (list, add,
-// update, remove, import), including resolving each student's GitHub
-// id and inviting them to the org. Only NewCmd is exported.
+// invite, cancel-invite, sync, update, remove, import), including resolving each
+// student's GitHub id and inviting them to the org. Only NewCmd is exported.
 package roster
 
 import (
@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -30,9 +31,12 @@ func NewCmd() *cobra.Command {
 			"Subcommands:\n" +
 			"  list     print the roster (table, --json, or --quiet username-only)\n" +
 			"  add      append or upsert one student (resolves github_id, invites to org)\n" +
+			"  invite   invite one student by email address (no GitHub account needed yet)\n" +
+			"  cancel-invite  revoke a pending email invitation and clear what it left behind\n" +
+			"  sync     sync the roster with GitHub (dry run; --write applies)\n" +
 			"  update   correct fields on an existing student (roster-only; never invites)\n" +
 			"  remove   remove one student from the roster (does NOT touch org membership)\n" +
-			"  import   bulk upsert from a local CSV (5-column input accepted; github_id auto-filled)\n\n" +
+			"  import   bulk upsert from a local CSV (the stored 7-column roster.csv, or 6/5-column forms)\n\n" +
 			"All writes use a single Tree commit on <org>/classroom50's\n" +
 			"default branch and retry with an optimistic rebase loop\n" +
 			"(up to 5 attempts) so concurrent edits don't silently lose\n" +
@@ -42,6 +46,9 @@ func NewCmd() *cobra.Command {
 	}
 	cmd.AddCommand(rosterListCmd())
 	cmd.AddCommand(rosterAddCmd())
+	cmd.AddCommand(rosterInviteCmd())
+	cmd.AddCommand(rosterCancelInviteCmd())
+	cmd.AddCommand(rosterSyncCmd())
 	cmd.AddCommand(rosterUpdateCmd())
 	cmd.AddCommand(rosterRemoveCmd())
 	cmd.AddCommand(rosterImportCmd())
@@ -238,16 +245,26 @@ func rosterImportCmd() *cobra.Command {
 		Use:   "import <org> <classroom> <path-to-csv>",
 		Short: "Bulk upsert roster.csv from a local CSV",
 		Long: "Read <path-to-csv> and upsert every row into\n" +
-			"<org>/classroom50/<classroom>/roster.csv. The local CSV\n" +
-			"header must be `username,first_name,last_name,email,section`\n" +
-			"(the canonical 5 columns). A trailing `github_id` column\n" +
-			"is accepted but its value is ignored — the CLI re-resolves\n" +
-			"github_id from `GET /users/{username}` at import time so\n" +
-			"the on-disk roster always carries the GitHub-authoritative\n" +
-			"ID. The `email` column may have empty values per row.\n\n" +
-			"The whole file is written in one Tree commit, not one PUT\n" +
-			"per row, so partial-import states can't appear on the repo.\n" +
-			"After the commit lands, any student who isn't already in\n" +
+			"<org>/classroom50/<classroom>/roster.csv. The header may be\n" +
+			"the stored roster shape\n" +
+			"`username,first_name,last_name,email,section,github_id,role`,\n" +
+			"the same without `role`, or just the first five columns — so\n" +
+			"a roster.csv exported from the web app imports as-is. The\n" +
+			"`email` column may be empty per row.\n\n" +
+			"github_id is re-resolved from `GET /users/{username}` so the\n" +
+			"on-disk roster always carries the GitHub-authoritative ID; a\n" +
+			"github_id cell that names a different account than the\n" +
+			"username fails that line. `role` is carried, never applied:\n" +
+			"import grants no role beyond the student invite below, and an\n" +
+			"already-recorded role is never overwritten.\n\n" +
+			"A row with only an email is a pending email invitation: it\n" +
+			"updates that invitation's stored name/section and nothing\n" +
+			"else — import never sends or cancels an invitation. A row with\n" +
+			"a github_id but no username is skipped with a notice.\n\n" +
+			"Every unusable line is reported in one pass and nothing is\n" +
+			"committed. The whole file is written in one Tree commit, not\n" +
+			"one PUT per row, so partial-import states can't appear on the\n" +
+			"repo. After the commit lands, any student who isn't already in\n" +
 			"the org (and doesn't have a pending invite) is invited.",
 		Example: "  gh teacher roster import cs50-fall-2026 cs-principles ./section-1.csv",
 		Args:    cobra.ExactArgs(3),
@@ -271,6 +288,34 @@ func rosterImportCmd() *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+// parseEmailArgs validates the `<org> <classroom> <email>` shape `roster invite`
+// and `roster cancel-invite` share, BEFORE any auth or network happens so a
+// typo can never reach GitHub.
+func parseEmailArgs(args []string) (org, classroom, email string, err error) {
+	org = strings.TrimSpace(args[0])
+	classroom = strings.TrimSpace(args[1])
+	email = strings.TrimSpace(args[2])
+	if org == "" || classroom == "" || email == "" {
+		return "", "", "", errors.New("org, classroom, and email must all be non-empty")
+	}
+	if err := validate.ShortName(classroom, "classroom"); err != nil {
+		return "", "", "", err
+	}
+	if err := configrepo.ValidateRosterEmail(email); err != nil {
+		return "", "", "", err
+	}
+	return org, classroom, email, nil
+}
+
+// warnStrandedInviteTeam reports a metadata team a teardown couldn't remove.
+// Always a warning, never a failure: the action it followed has already landed,
+// so a stranded team must not read as that action failing — `roster sync`'s GC
+// is the backstop.
+func warnStrandedInviteTeam(errOut io.Writer, lead, org, slug string, err error) {
+	_, _ = fmt.Fprintf(errOut, "Warning: %s: %s the metadata team %s failed (%v); delete it by hand or let `gh teacher roster sync` collect it.\n",
+		org, lead, slug, err)
 }
 
 // inviteIfNotMember invites <username> when not already active/pending, and
@@ -391,8 +436,8 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 // or any read error yields ("", false) so the caller silently skips the
 // advisory note rather than failing an add that already succeeded.
 func staffRoleForLogin(client githubapi.Client, org, classroom, branch, login string) (configrepo.StaffRole, bool) {
-	loginKey := strings.ToLower(strings.TrimSpace(login))
-	if loginKey == "" {
+	key := loginKey(login)
+	if key == "" {
 		return "", false
 	}
 	c, ok, err := configrepo.LoadClassroom(client, org, classroom, branch)
@@ -409,7 +454,7 @@ func staffRoleForLogin(client githubapi.Client, org, classroom, branch, login st
 			continue
 		}
 		for _, m := range members {
-			if strings.ToLower(strings.TrimSpace(m)) == loginKey {
+			if loginKey(m) == key {
 				return role, true
 			}
 		}
@@ -511,6 +556,92 @@ func runRosterRemove(client githubapi.Client, out io.Writer, org, classroom, use
 	return nil
 }
 
+// importedPendingRow is an email-only import row: metadata for a pending
+// invite row an invitation already created, matched by address. line is kept so
+// a no-match notice names the file line the teacher would edit.
+type importedPendingRow struct {
+	line int
+	row  configrepo.RosterRow
+}
+
+// planRosterImport resolves every account row up front so rebase retries don't
+// repeat API lookups — only the file write is retried. It routes each row to
+// the one thing import may do with it, and collects ALL line failures on top of
+// parseFailures so the teacher sees every unusable line before the refusal
+// (nothing is committed). Line numbers come from RosterRow.Line, not the slice
+// index, since a file with a bad line has no row for it.
+func planRosterImport(client githubapi.Client, imported []configrepo.RosterRow, parseFailures []error) (accounts []configrepo.RosterRow, pending []importedPendingRow, cargoNotices []string, err error) {
+	// Parse-level failures lead: those lines never reached resolution, so there
+	// is no line number to interleave them by. Cloned because the caller's slice
+	// is the joined error's own.
+	failures := slices.Clone(parseFailures)
+	for _, row := range imported {
+		line := row.Line
+		switch {
+		case row.Username != "":
+			login, userID, err := membership.LookupUser(client, row.Username)
+			if err != nil {
+				failures = append(failures, fmt.Errorf("line %d (%s): %w", line, row.Username, err))
+				continue
+			}
+			// Username-primary resolution with a fail-closed cross-check: a row
+			// naming an account AND a different id addresses two students, so
+			// guessing which one the teacher meant is worse than refusing.
+			if row.GitHubID != 0 && row.GitHubID != userID {
+				failures = append(failures, fmt.Errorf("line %d (%s): github_id %d in the file is not this account's id (%s is github_id %d) — fix the username or clear the github_id cell",
+					line, row.Username, row.GitHubID, login, userID))
+				continue
+			}
+			accounts = append(accounts, configrepo.RosterRow{
+				Username:  login,
+				FirstName: row.FirstName,
+				LastName:  row.LastName,
+				Email:     row.Email,
+				Section:   row.Section,
+				GitHubID:  userID,
+				// Role stays empty on purpose: an imported role is cargo, never a
+				// grant, so the stored role (preserved by UpsertRosterRow for an
+				// empty incoming Role) or the next sync decides it.
+			})
+		case row.GitHubID != 0:
+			// Round-trip cargo: import resolves students by username and has no
+			// id→account lookup, so acting on an id alone would guess. Skipping
+			// leaves any stored row for that id exactly as it is.
+			cargoNotices = append(cargoNotices, fmt.Sprintf("line %d: row has a github_id but no username — skipped; `roster import` resolves students by username, so import id-keyed rows with the web app's roster Upload instead. Any stored row for that id is untouched.", line))
+		case row.Email != "":
+			pending = append(pending, importedPendingRow{line: line, row: row})
+		default:
+			// ParseImportCSV enforces one identity column, so this is a row whose
+			// only identity is an unusable github_id cell — cargo as well.
+			cargoNotices = append(cargoNotices, fmt.Sprintf("line %d: row has no username and no usable github_id — skipped; nothing stored was changed.", line))
+		}
+	}
+	if len(failures) > 0 {
+		return nil, nil, nil, fmt.Errorf("%d row(s) can't be imported, so nothing was committed:\n%w", len(failures), errors.Join(failures...))
+	}
+	// Case-insensitive dedup within the batch; last occurrence wins.
+	return configrepo.DedupeByUsername(accounts), dedupePendingByEmail(pending), cargoNotices, nil
+}
+
+// dedupePendingByEmail collapses repeated addresses (last wins, mirroring
+// DedupeByUsername) so one stored row isn't patched twice from one file.
+func dedupePendingByEmail(rows []importedPendingRow) []importedPendingRow {
+	latest := make(map[string]importedPendingRow, len(rows))
+	order := make([]string, 0, len(rows))
+	for _, row := range rows {
+		key := configrepo.NormalizeInviteEmail(row.row.Email)
+		if _, seen := latest[key]; !seen {
+			order = append(order, key)
+		}
+		latest[key] = row
+	}
+	out := make([]importedPendingRow, 0, len(order))
+	for _, key := range order {
+		out = append(out, latest[key])
+	}
+	return out
+}
+
 func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classroom, csvPath string) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -525,48 +656,46 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 	if err != nil {
 		return fmt.Errorf("read %s: %w", abs, err)
 	}
-	imported, err := configrepo.ParseImportCSV(data)
-	if err != nil {
-		return fmt.Errorf("%s: %w", abs, err)
+	imported, parseErr := configrepo.ParseImportCSV(data)
+	// A row-level parse failure must not short-circuit resolution: fixing the
+	// one line it named would only reveal the next. The joined row errors seed
+	// the plan's failure list instead, so both classes report in one pass. A
+	// header/empty-file error is not per-row and has nothing to join.
+	var parseFailures []error
+	if parseErr != nil {
+		var joined interface{ Unwrap() []error }
+		if !errors.As(parseErr, &joined) {
+			return fmt.Errorf("%s: %w", abs, parseErr)
+		}
+		parseFailures = joined.Unwrap()
 	}
-	if len(imported) == 0 {
+	if len(imported) == 0 && len(parseFailures) == 0 {
 		return fmt.Errorf("%s: contains a header but no student rows", abs)
 	}
 
-	// Resolve every username up front so rebase retries don't repeat API
-	// lookups — only the file write is retried. CSV lines are 1-based (header =
-	// line 1) to match parseImportCSV.
-	resolved := make([]configrepo.RosterRow, 0, len(imported))
-	for i, row := range imported {
-		line := i + 2
-		login, userID, err := membership.LookupUser(client, row.Username)
-		if err != nil {
-			return fmt.Errorf("line %d (%s): %w", line, row.Username, err)
-		}
-		resolved = append(resolved, configrepo.RosterRow{
-			Username:  login,
-			FirstName: row.FirstName,
-			LastName:  row.LastName,
-			Email:     row.Email,
-			Section:   row.Section,
-			GitHubID:  userID,
-		})
+	accounts, pending, cargoNotices, err := planRosterImport(client, imported, parseFailures)
+	if err != nil {
+		return fmt.Errorf("%s: %w", abs, err)
 	}
-	// Case-insensitive dedup within the batch; last occurrence wins.
-	resolved = configrepo.DedupeByUsername(resolved)
+	for _, notice := range cargoNotices {
+		_, _ = fmt.Fprintf(errOut, "Notice: %s\n", notice)
+	}
 
 	var (
-		added   int
-		updated int
+		added          int
+		updated        int
+		pendingUpdated int
+		pendingMissing []string
 	)
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
 		rows, err := configrepo.LoadRosterLenient(client, org, classroom, parentSHA)
 		if err != nil {
 			return configwrite.CommitChange{}, err
 		}
-		// Reset counters per attempt — rebase may split new/replaced differently.
-		added, updated = 0, 0
-		for _, row := range resolved {
+		// Reset accumulators per attempt — rebase may split new/replaced (and
+		// pending matches) differently.
+		added, updated, pendingUpdated, pendingMissing = 0, 0, 0, nil
+		for _, row := range accounts {
 			var replaced bool
 			rows, replaced = configrepo.UpsertRosterRow(rows, row)
 			if replaced {
@@ -575,16 +704,42 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 				added++
 			}
 		}
+		for _, p := range pending {
+			// Name/section come wholesale from the file, like an account row's;
+			// the address and role stay as the invitation recorded them.
+			var found bool
+			rows, found = configrepo.UpdatePendingEmailRow(rows, p.row.Email, configrepo.RosterPatch{
+				FirstName: &p.row.FirstName,
+				LastName:  &p.row.LastName,
+				Section:   &p.row.Section,
+			})
+			if found {
+				pendingUpdated++
+				continue
+			}
+			pendingMissing = append(pendingMissing, fmt.Sprintf("line %d (%s): no pending email-invite row with this address — skipped; import never sends an invitation, so it can't create one.", p.line, p.row.Email))
+		}
+		// Reachable with a file of nothing but cargo and unmatched addresses:
+		// the rows come back untouched, and committing their re-encoding lands a
+		// real commit with an empty diff. Nothing applied → nothing to write.
+		if added == 0 && updated == 0 && pendingUpdated == 0 {
+			return configwrite.CommitChange{}, nil
+		}
 		return configrepo.RosterWriteChange(classroom, rows)
 	}
 
-	message := contract.PrefixCommit(fmt.Sprintf("roster: import %d row(s) into %s (gh teacher roster import)", len(resolved), classroom))
+	message := contract.PrefixCommit(fmt.Sprintf("roster: import %d row(s) into %s (gh teacher roster import)", len(accounts)+len(pending), classroom))
 	if _, err := configwrite.CommitTreeChange(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
 		return err
 	}
 
-	_, _ = fmt.Fprintf(out, "%s/%s/%s: imported %d row(s) (%d new, %d updated)\n",
-		org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom), len(resolved), added, updated)
+	skipped := len(cargoNotices) + len(pendingMissing)
+	_, _ = fmt.Fprintf(out, "%s/%s/%s: imported %d row(s) (%d new, %d updated, %d pending metadata updated, %d skipped)\n",
+		org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom),
+		len(accounts)+len(pending), added, updated, pendingUpdated, skipped)
+	for _, notice := range pendingMissing {
+		_, _ = fmt.Fprintf(errOut, "Notice: %s\n", notice)
+	}
 
 	// Resolve the classroom team once (slug from classroom.json). No team →
 	// warn-and-skip the membership step.
@@ -597,9 +752,11 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 			org, classroom, org, classroom)
 	}
 
+	// Only account rows are onboarded: an email-only row's invitation was
+	// already sent (import never sends one), and a cargo row names nobody.
 	invited, alreadyActive, alreadyPending := 0, 0, 0
 	var failures []string
-	for _, row := range resolved {
+	for _, row := range accounts {
 		state, err := inviteIfNotMember(client, org, row.Username, row.GitHubID)
 		if err != nil {
 			// Warn-and-continue (not hard-fail): the commit already landed and

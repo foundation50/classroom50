@@ -44,14 +44,21 @@ gh teacher staff add cs50-fall-2026 cs-principles octocat --role ta
 (`gh teacher staff remove`, or the web app's staff list) takes away the role
 but doesn't touch their organization membership.
 
-Staff can also be invited by email. On the classroom's **Roster** page, use
-**Upload** with a file of addresses (one per line, or a roster CSV with an `email`
-column), then set each person's role in the preview's **Role** column — or supply
-a `role` column in the CSV. Choosing **Teacher** requires a separate
-confirmation, because the teacher role makes that person an organization owner.
-As with a student, the address goes onto the roster as a pending row and is
-matched to their GitHub account when they accept. See
+Staff can also be invited by email, from the web app only. On the classroom's
+**Roster** page, use **Upload** with a file of addresses (one per line, or a
+roster CSV with an `email` column), then set each person's role in the preview's
+**Role** column, or supply a `role` column in the CSV. Choosing **Teacher**
+requires a separate confirmation, because the teacher role makes that person an
+organization owner. As with a student, the address goes onto the roster as a
+pending row and is matched to their GitHub account when they accept. See
 [Invitations by email](How-Classroom-50-Works#invitations-by-email).
+
+`gh teacher roster invite` has no `--role` flag: it sends student invitations
+only, so a mistyped address can never be handed organization ownership. From the
+CLI, grant a role with `gh teacher staff add` once you know the person's
+username. If you only have their address, invite them by email as a student
+first, then grant the role once they've joined; they stay enrolled as a student
+until you unenroll them.
 
 > [!NOTE]
 > Granting the **teacher** role makes that person an organization owner, with
@@ -99,8 +106,8 @@ GitHub teams are the authority for enrollment and role; the `role` column in
 - **In-app access** follows the highest role (`teacher > hta > ta >
   student`), so a teacher-who-is-also-a-student keeps teacher-level access.
   "View as" only changes the preview locally; it never grants access.
-- **`roster list` and the `role` column** record the single highest role. An
-  automatic sync may rewrite the column shortly after `roster add`; that's
+- **`roster list` and the `role` column** record the single highest role. The web
+  app's automatic sync can rewrite the column shortly after `roster add`; that's
   the snapshot updating, not a change to enrollment.
 - **Submissions** list any account with a student enrollment as a student. A
   pure-staff account appears in submissions only once it has accepted an

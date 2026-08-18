@@ -46,7 +46,11 @@ const emptyState = (): InviteReconcileState => ({
 // created moments before its org invitation lands (or read mid-creation) can
 // never be reaped by a racing reconcile. Cancelled invites are usually torn
 // down immediately by the cancel path; this pass is the backstop.
-const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
+//
+// Exported to be pinned: the teacher CLI reconciles the same teams and mirrors
+// this gate as contract.InviteTeamGCMinAge with NO compile-time link, so a
+// one-sided shortening would let one tool reap invites the other just created.
+export const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
 
 // Read-only-on-CSV half of the invite reconcile: enumerate this classroom's
 // invite-<hash> teams and classify each one, WITHOUT writing roster.csv (the

@@ -77,12 +77,17 @@ assignment accept links work without any further action from you.
 
 ### Can I add students in bulk, or by email?
 
-Yes. Upload a roster CSV or a plain text list (web app: **Upload**; CLI:
-`gh teacher roster import`). In the web app a CSV row can identify a student by
-`github_id`, GitHub username, or **email address**, so one file can mix students
-whose handle you know with ones you only have an address for. Each address goes
-onto the roster right away as a pending row, and is matched to the student's
-GitHub account when they accept. See
+Yes. In the web app, use **Upload** with a roster CSV or a plain text list. A
+row can identify a student by `github_id`, GitHub username, or **email
+address**, so one file can mix students whose handle you know with ones you
+only have an address for. Each address goes onto the roster right away as a
+pending row, and is matched to the student's GitHub account when they accept.
+
+Bulk email invitations are web-app-only. From the CLI, invite one address per run
+with `gh teacher roster invite <org> <classroom> <email>`.
+`gh teacher roster import` adds and invites every student a stored `roster.csv`
+identifies by username, but it never sends an email invitation: on an email-only
+row it updates only the name and section, leaving the invitation alone. See
 [Invitations by email](How-Classroom-50-Works#invitations-by-email) and
 [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
 

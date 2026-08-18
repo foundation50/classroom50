@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -20,13 +19,6 @@ import (
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 	"github.com/foundation50/gh-teacher/internal/membership"
 	"github.com/foundation50/gh-teacher/internal/output"
-)
-
-// memberAPIPerPage / memberPagesMax bound the paginated membership walks.
-// 100×100 = 10k, far beyond any classroom org.
-const (
-	memberAPIPerPage = 100
-	memberPagesMax   = 100
 )
 
 // memberListEntry is one row of `member list` output. Kind separates the
@@ -170,17 +162,9 @@ func collectOrgMembers(client githubapi.Client, org string) ([]memberListEntry, 
 	return entries, nil
 }
 
-// collectOrgInvitations walks pending org invitations. A 403 (no admin:org
-// scope) is a clear error rather than silently dropping the set, since "no
-// pending invites" and "can't read invites" are very different signals.
+// collectOrgInvitations maps the shared pending-invitation read onto list rows.
 func collectOrgInvitations(client githubapi.Client, org string) ([]memberListEntry, error) {
-	base := fmt.Sprintf("orgs/%s/invitations", url.PathEscape(org))
-	subject := fmt.Sprintf("%s pending invitations", org)
-	invites, err := githubapi.PaginateAll[orgInvitation](client, memberAPIPerPage, memberPagesMax,
-		func(page int) string {
-			return fmt.Sprintf("%s?per_page=%d&page=%d", base, memberAPIPerPage, page)
-		},
-		func(path string, err error) error { return classifyMembershipReadError(path, subject, err) })
+	invites, err := membership.ListPendingOrgInvitations(client, org)
 	if err != nil {
 		return nil, err
 	}
@@ -215,11 +199,13 @@ func normalizeInviteRole(role string) string {
 func runMemberListRepo(client githubapi.Client, out, errOut io.Writer, owner, repo string, asJSON, quiet bool) error {
 	base := fmt.Sprintf("repos/%s/%s/collaborators", url.PathEscape(owner), url.PathEscape(repo))
 	subject := owner + "/" + repo
-	collabs, err := githubapi.PaginateAll[repoCollaborator](client, memberAPIPerPage, memberPagesMax,
+	collabs, err := githubapi.PaginateAll[repoCollaborator](client, githubapi.ListPerPage, githubapi.ListMaxPages,
 		func(page int) string {
-			return fmt.Sprintf("%s?per_page=%d&page=%d", base, memberAPIPerPage, page)
+			return fmt.Sprintf("%s?per_page=%d&page=%d", base, githubapi.ListPerPage, page)
 		},
-		func(path string, err error) error { return classifyMembershipReadError(path, subject, err) })
+		func(path string, err error) error {
+			return membership.ClassifyMembershipReadError(path, subject, err)
+		})
 	if err != nil {
 		return err
 	}
@@ -244,13 +230,6 @@ type memberAccount struct {
 	ID    int64  `json:"id"`
 }
 
-// orgInvitation is one GET /orgs/{org}/invitations element.
-type orgInvitation struct {
-	Login string `json:"login"`
-	ID    int64  `json:"id"`
-	Role  string `json:"role"`
-}
-
 // repoCollaborator is one GET /repos/{o}/{r}/collaborators element.
 type repoCollaborator struct {
 	Login    string `json:"login"`
@@ -265,36 +244,13 @@ func paginateMembers(client githubapi.Client, base, subject string) ([]memberAcc
 	if strings.Contains(base, "?") {
 		sep = "&"
 	}
-	return githubapi.PaginateAll[memberAccount](client, memberAPIPerPage, memberPagesMax,
+	return githubapi.PaginateAll[memberAccount](client, githubapi.ListPerPage, githubapi.ListMaxPages,
 		func(page int) string {
-			return fmt.Sprintf("%s%sper_page=%d&page=%d", base, sep, memberAPIPerPage, page)
+			return fmt.Sprintf("%s%sper_page=%d&page=%d", base, sep, githubapi.ListPerPage, page)
 		},
-		func(path string, err error) error { return classifyMembershipReadError(path, subject, err) })
-}
-
-// classifyMembershipReadError maps the common failure statuses of the
-// read-only membership endpoints to actionable messages, mirroring
-// ClassifyOrgInviteError's 403/404 handling. `subject` is a human label for the
-// thing being read. Other statuses return the wrapped error.
-func classifyMembershipReadError(path, subject string, err error) error {
-	httpErr, ok := errors.AsType[*githubapi.HTTPError](err)
-	if !ok {
-		return fmt.Errorf("GET %s: %w", path, err)
-	}
-	switch httpErr.StatusCode {
-	case http.StatusNotFound:
-		return fmt.Errorf("%s: not found or not accessible", subject)
-	case http.StatusForbidden:
-		switch membership.ClassifyOrgForbidden(httpErr) {
-		case membership.OrgForbiddenScopeMissing:
-			return membership.ErrMissingOrgAdminScope
-		case membership.OrgForbiddenNotAdmin:
-			return fmt.Errorf("%s: forbidden — you may not have admin access to read it", subject)
-		default:
-			return fmt.Errorf("%s: forbidden — ensure your token has the admin:org scope (`gh teacher login`) and that you have access", subject)
-		}
-	}
-	return fmt.Errorf("GET %s: %w", path, err)
+		func(path string, err error) error {
+			return membership.ClassifyMembershipReadError(path, subject, err)
+		})
 }
 
 func renderMemberList(out, errOut io.Writer, target string, entries []memberListEntry, asJSON, quiet bool) error {

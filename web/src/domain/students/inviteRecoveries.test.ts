@@ -26,6 +26,7 @@ vi.mock("./rosterPrimitives", () => ({
 import {
   collectInviteRecoveries,
   finalizeInviteRecoveries,
+  INVITE_TEAM_GC_MIN_AGE_MS,
 } from "./inviteRecoveries"
 import { inviteTeamName } from "@/util/inviteTeam"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
@@ -95,6 +96,16 @@ beforeEach(() => {
     { id: 2, login: "member2" },
     { id: 3, login: "member3" },
   ])
+})
+
+describe("INVITE_TEAM_GC_MIN_AGE_MS — cross-tool contract", () => {
+  // The teacher CLI reconciles the same invite teams and mirrors this gate as
+  // contract.InviteTeamGCMinAge (pinned there by TestInviteTeamGCMinAge), with
+  // no compile-time link. Pin the web half: shortening it here alone would let
+  // this pass reap a team the CLI created moments earlier.
+  it("is 24h, matching the CLI's contract.InviteTeamGCMinAge", () => {
+    expect(INVITE_TEAM_GC_MIN_AGE_MS).toBe(24 * 60 * 60 * 1000)
+  })
 })
 
 describe("collectInviteRecoveries", () => {

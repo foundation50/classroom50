@@ -16,16 +16,62 @@ import {
 // module hand-mirrors, with no compile-time link between them. Assert the two
 // agree so a schema edit that isn't mirrored here (or vice versa) fails CI
 // instead of silently drifting — same lockstep guard as submissionTags.test.ts.
-// The teacher CLI's `teardown` sweep matches these teams by name shape
-// (cli/shared/contract InviteTeamPrefix / InviteHashHexLen, pinned there by
+// The teacher CLI writes and reads these teams too (cli/shared/contract
+// InviteTeamPrefix / InviteHashHexLen / InviteSchemaV1, pinned there by
 // contract_test.go). There is no compile-time link, so pin the web half too:
 // renaming or resizing on this side alone would leave the CLI matching nothing
 // and silently stranding invited emails in the org.
 describe("invite team name shape — cross-tool contract", () => {
-  it("pins the prefix and hash length the CLI sweep expects", () => {
+  it("pins the prefix and hash length the CLI expects", () => {
     expect(INVITE_TEAM_PREFIX).toBe("invite-")
     expect(INVITE_HASH_HEX_LEN).toBe(16)
   })
+})
+
+describe("classroom50/invite/v1 — shared vector parity with the teacher CLI", () => {
+  // Both the web and `gh teacher roster invite` create these teams and each
+  // reads the other's, with no compile-time link between the two writers. These
+  // vectors are the shared oracle (the Go suite asserts the same file), so a
+  // one-sided change to the hash input or the record bytes fails here: it would
+  // make every already-created invite team unlocatable and leave the two
+  // writers overwriting each other's description forever.
+  const fixtureUrl = new URL(
+    "../../../cli/shared/testdata/invite_vectors.json",
+    import.meta.url,
+  )
+  const doc = JSON.parse(readFileSync(fileURLToPath(fixtureUrl), "utf8")) as {
+    prefix: string
+    hash_hex_len: number
+    schema: string
+    cases: {
+      why: string
+      classroom: string
+      email: string
+      slug: string
+      record: string
+    }[]
+  }
+
+  it("addresses the pinned name shape and schema sentinel", () => {
+    expect(doc.prefix).toBe(INVITE_TEAM_PREFIX)
+    expect(doc.hash_hex_len).toBe(INVITE_HASH_HEX_LEN)
+    expect(doc.schema).toBe(INVITE_DESCRIPTION_SCHEMA)
+    expect(doc.cases.length).toBeGreaterThan(0)
+  })
+
+  for (const c of doc.cases) {
+    it(c.why, async () => {
+      expect(await inviteTeamName(c.classroom, c.email)).toBe(c.slug)
+      // Exact bytes, not a parsed-equal check: a reconcile compares
+      // descriptions for string equality.
+      expect(marshalInviteDescription(c)).toBe(c.record)
+      expect(parseInviteDescription(c.record)).toEqual({
+        schema: INVITE_DESCRIPTION_SCHEMA,
+        email: normalizeInviteEmail(c.email),
+        classroom: c.classroom,
+      })
+    })
+  }
 })
 
 describe("classroom50/invite/v1 — schema/mirror parity", () => {
@@ -241,5 +287,40 @@ describe("marshalInviteDescription", () => {
     expect(out).toContain("\\u2029")
     expect(out).not.toMatch(/[\u2028\u2029]/)
     expect(parseInviteDescription(out)?.classroom).toBe("cs\u2028x\u2029y")
+  })
+
+  // The other half of the parity contract: Go's json.Marshal agrees with
+  // JSON.stringify on EVERY C0 control and DEL, so the escaper must leave them
+  // all alone. Escaping \b/\f as \u0008/\u000c "for Go parity" would be the bug.
+  // Exhaustive over U+0000–U+001F rather than a sample, because the escaper's
+  // claim is that <, >, & and U+2028/U+2029 are the ONLY divergences.
+  it("leaves every C0 control and DEL exactly as JSON.stringify writes them (Go parity)", () => {
+    // The five controls JSON.stringify gives a short escape; every other C0
+    // control takes the lowercase \u00xx form.
+    const shortEscapes = new Map([
+      [0x08, "\\b"],
+      [0x09, "\\t"],
+      [0x0a, "\\n"],
+      [0x0c, "\\f"],
+      [0x0d, "\\r"],
+    ])
+    for (let cp = 0; cp <= 0x1f; cp++) {
+      const classroom = `cs${String.fromCharCode(cp)}x`
+      const out = marshalInviteDescription({ email: "a@b", classroom })
+      const long = `\\u${cp.toString(16).padStart(4, "0")}`
+      const short = shortEscapes.get(cp)
+      expect(out, `U+${cp.toString(16)}`).toContain(short ?? long)
+      if (short) expect(out, `U+${cp.toString(16)}`).not.toContain(long)
+      // An uppercase-hex escape would be a byte difference on its own.
+      expect(out).not.toContain(long.toUpperCase())
+      expect(parseInviteDescription(out)?.classroom).toBe(classroom)
+    }
+    // DEL is escaped by neither encoder.
+    const del = marshalInviteDescription({
+      email: "a@b",
+      classroom: "cs\u007fx",
+    })
+    expect(del).toContain("\u007f")
+    expect(del).not.toContain("\\u007f")
   })
 })

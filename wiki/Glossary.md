@@ -35,16 +35,26 @@ self-linking.
 **Pending row** — A `roster.csv` row for someone invited by email who hasn't
 accepted yet. It holds the invited address and role, with no username or
 `github_id`, because GitHub offers no way to look up an account from an email
-address. Accepting fills in the account on the next roster sync; cancelling the
+address. A sync fills in the account once they accept; cancelling the
 invitation removes the row immediately, and an expired one is cleared by the next
-sync.
+sync, from either tool.
 
 **Invite team** — A `secret` GitHub team, named `invite-<hash>`, that holds one
 invited address until that person joins. It is how an email invitation is
 matched to the GitHub account that accepts it. Classroom 50 creates one per
 email invitation and removes it once the invitation has been accepted, cancelled,
-or expired. For more information, see
+or expired. Both the web app and the teacher CLI create and read them, so an
+invitation sent from one can be completed or revoked from the other. For more
+information, see
 [Invitations by email](How-Classroom-50-Works#invitations-by-email).
+
+**Sync** — A pass that catches `roster.csv` up with the classroom's GitHub state:
+it records the students who accepted an email invitation, fills in a missing
+`github_id`, drops the pending rows nothing backs, and retires the invite teams
+that are done. Nothing runs on its own: the web app runs a sync when a teacher
+opens a classroom or its roster, and `gh teacher roster sync` runs one on demand.
+This is not **Sync now**, which collects scores. See
+[What triggers a sync](How-Classroom-50-Works#what-triggers-a-sync).
 
 **Organization (org)** — The GitHub organization that hosts a Classroom 50
 setup. Requires the Team or Enterprise plan.

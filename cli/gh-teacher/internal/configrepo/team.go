@@ -510,9 +510,10 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 }
 
 // ListInviteTeams returns the org's per-invite metadata teams — the
-// `invite-<hash>` secret teams the web creates to retain an invited email until
-// the student accepts (schemas/invite-v1.schema.json). The CLI never writes
-// them; it lists them so teardown can sweep what an org leaves behind.
+// `invite-<hash>` secret teams that retain an invited email until the student
+// accepts (schemas/invite-v1.schema.json). Both this CLI (`roster invite`) and
+// the web app create them, and this enumeration backs both the teardown sweep
+// and the acceptance reconcile.
 //
 // Filters on the full hashed shape, not the bare prefix: `invite-` is a generic
 // namespace a human team can land in ("Invite Only" slugs to `invite-only`), and
@@ -523,12 +524,11 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 func ListInviteTeams(client githubapi.Client, org string) ([]TeamRef, error) {
 	// TeamRef's json tags already match the org-teams payload's id/slug, so it
 	// doubles as the decode target.
-	const perPage, maxPages = 100, 100
 	teams, err := githubapi.PaginateAll[TeamRef](
-		client, perPage, maxPages,
+		client, githubapi.ListPerPage, githubapi.ListMaxPages,
 		func(page int) string {
 			return fmt.Sprintf("orgs/%s/teams?per_page=%d&page=%d",
-				url.PathEscape(org), perPage, page)
+				url.PathEscape(org), githubapi.ListPerPage, page)
 		},
 		func(path string, err error) error {
 			return fmt.Errorf("GET %s: %w", path, err)
@@ -546,7 +546,7 @@ func ListInviteTeams(client githubapi.Client, org string) ([]TeamRef, error) {
 	return refs, nil
 }
 
-// inviteTeamSlugRe matches the exact slug shape the web writes:
+// inviteTeamSlugRe matches the exact slug shape both writers produce:
 // `invite-` plus contract.InviteHashHexLen lowercase hex chars. Anchored so a
 // human-created team that merely starts with `invite-` can never be swept.
 var inviteTeamSlugRe = regexp.MustCompile(
@@ -566,8 +566,8 @@ func IsInviteTeamSlug(slug string) bool {
 // `invite-`. 404 is success, so a sweep is idempotent.
 //
 // Unlike DeleteClassroomTeam there is no recorded id to verify against — these
-// teams are web-created and referenced nowhere in the config repo — so the slug
-// shape IS the guard.
+// teams are referenced nowhere in the config repo (either writer may have
+// created one) — so the slug shape IS the guard.
 func DeleteInviteTeam(client githubapi.Client, org, slug string) error {
 	if slug == "" {
 		return nil
@@ -815,8 +815,10 @@ func ResolveClassroomTeamSlug(client githubapi.Client, org, shortName, ref strin
 	return classroomTeamSlug(shortName), nil
 }
 
-// teamMember is the minimal shape decoded from GET .../teams/{slug}/members.
-type teamMember struct {
+// TeamMemberRef is a team member's login paired with the numeric GitHub id the
+// roster's github_id column records. Doubles as the decode target for
+// GET .../teams/{slug}/members.
+type TeamMemberRef struct {
 	Login string `json:"login"`
 	ID    int64  `json:"id"`
 }
@@ -826,28 +828,13 @@ type teamMember struct {
 // authoritative for enrollment (roster.csv is optional display metadata). A
 // 404 (team doesn't exist yet) returns an empty slice rather than erroring.
 func ListTeamMembers(client githubapi.Client, org, slug string) ([]string, error) {
-	const perPage, maxPages = 100, 100
-	members, err := githubapi.PaginateAll[teamMember](
-		client, perPage, maxPages,
-		func(page int) string {
-			return fmt.Sprintf("orgs/%s/teams/%s/members?per_page=%d&page=%d",
-				url.PathEscape(org), url.PathEscape(slug), perPage, page)
-		},
-		func(path string, err error) error {
-			if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-				return nil // 404 sentinel: caller handles the empty result
-			}
-			return fmt.Errorf("GET %s: %w", path, err)
-		},
-	)
+	members, err := ListTeamMembersWithIDs(client, org, slug)
 	if err != nil {
 		return nil, err
 	}
 	logins := make([]string, 0, len(members))
 	for _, m := range members {
-		if strings.TrimSpace(m.Login) != "" {
-			logins = append(logins, m.Login)
-		}
+		logins = append(logins, m.Login)
 	}
 	return logins, nil
 }

@@ -427,19 +427,22 @@ Here `octocat` is found by id (even after a rename), `hubot` by username, and
 > added to the roster. A row identified only by an email address is invited by
 > email, and the address is recorded as a pending roster row. That row is matched
 > to the student's GitHub account when they accept; if you cancel the invitation
-> the row is removed with it, and an expired one is cleared by the next roster
-> sync. Keep in
-> mind the recorded address is the one **you invited** — not necessarily the email
-> on the student's GitHub account. A name and section supplied in the CSV are kept
-> on the pending row, so they're already there when the student joins — and you
-> can correct them from the row while the invitation is still pending. The address
-> itself can't be changed there, because it identifies the invitation: to use a
-> different one, cancel and invite the new address.
+> the row is removed with it, and an expired one is cleared by the next sync,
+> from either tool. The recorded address is the one **you invited**, not
+> necessarily the email on the student's GitHub account. A name and section
+> supplied in the CSV are kept on the pending row, so they're already there when
+> the student joins, and you can correct them from the row while the invitation
+> is still pending. The address itself can't be changed there, because it
+> identifies the invitation: to use a different one, cancel and invite the new
+> address.
 
 A pending row is why the stored `roster.csv` can hold a row with no `username`
-or `github_id`. Re-uploading such a file to **Upload** is fine — it reads those
-rows by email — but `gh teacher roster import` rejects them, since the CLI still
-requires a username. For more information, see
+or `github_id`. Either tool reads that file back: **Upload** matches those rows
+by email, and `gh teacher roster import` corrects a pending row's name and
+section by address without touching the invitation. A row identified only by
+`github_id` is the exception, since `import` resolves students by username: it
+skips that row with a notice and leaves whatever is stored for it alone. For
+more information, see
 [Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
 > [!TIP]

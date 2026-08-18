@@ -80,39 +80,33 @@ func TestParseRoster_GitHubIDShapeMatchesWeb(t *testing.T) {
 	}
 }
 
-// A signed cell resolves to the same account and is rewritten canonically, so the
-// two readers converge rather than diverge: Go normalizes "+42" to "42", which the
-// web reader then accepts. Same for a zero-padded cell, which the web deliberately
-// rejects (its id joins compare the raw string) and a CLI rewrite repairs.
-func TestParseRoster_NonCanonicalGitHubIDNormalizes(t *testing.T) {
-	for _, tc := range []struct{ cell, want string }{
-		{"+42", ",42,"},
-		{"0000583231", ",583231,"},
-	} {
-		t.Run(tc.cell, func(t *testing.T) {
-			in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
-				"alice,A,A,,s," + tc.cell + ",student\n")
-			rows, err := ParseRoster(in)
-			if err != nil {
-				t.Fatalf("ParseRoster: %v", err)
-			}
-			encoded, err := EncodeRoster(rows)
-			if err != nil {
-				t.Fatalf("EncodeRoster: %v", err)
-			}
-			if !strings.Contains(string(encoded), tc.want) {
-				t.Errorf("want a canonical %s on rewrite, got:\n%s", tc.want, encoded)
-			}
-		})
+// A zero-padded cell addresses the same account unambiguously, so Go resolves it
+// and rewrites it canonically — repairing a cell the web's join deliberately
+// rejects (it compares the raw string) so the two readers converge.
+func TestParseRoster_ZeroPaddedGitHubIDNormalizes(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,A,A,,s,0000583231,student\n")
+	rows, err := ParseRoster(in)
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	encoded, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	if !strings.Contains(string(encoded), ",583231,") {
+		t.Errorf("want a canonical ,583231, on rewrite, got:\n%s", encoded)
 	}
 }
 
 // A cell the web reader won't use as an id must not fail the roster: it reads as
 // unresolved (GitHubID 0) so the CLI re-resolves it, and the original value is
 // preserved on rewrite rather than silently cleared. "0" in particular is what
-// this type has always used to MEAN unresolved, so older rosters carry it.
+// this type has always used to MEAN unresolved, so older rosters carry it, and
+// "+42" is a spelling the web's regex rejects — resolving it here would make the
+// same row identity to one tool and a claimable pending invite to the other.
 func TestParseRoster_UnusableGitHubIDIsUnresolvedNotFatal(t *testing.T) {
-	for _, cell := range []string{"0", "-5", "9007199254740993", " "} {
+	for _, cell := range []string{"0", "-5", "+42", "9007199254740993", " "} {
 		t.Run(cell, func(t *testing.T) {
 			in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
 				"alice,A,A,,s," + cell + ",student\n")
@@ -213,10 +207,10 @@ func TestUpsertRosterRow_UsernameMatchStillInheritsRole(t *testing.T) {
 	}
 }
 
-// A row whose github_id cell is present but unusable is still identified by it
-// (the reader preserves the raw cell), so an email claim must skip it rather
-// than replace the row and discard what the teacher typed.
-func TestUpsertRosterRow_EmailClaimSkipsPreservedRawID(t *testing.T) {
+// A github_id cell that addresses no account is not identity (the web's
+// resolveGitHubId rejects it too), so an email claim adopts the row — and
+// repairs the cell — instead of leaving a second row for the same person.
+func TestUpsertRosterRow_EmailClaimAdoptsAnUnusableIDCell(t *testing.T) {
 	in := "username,first_name,last_name,email,section,github_id,role\n" +
 		",,,pending@x.edu,,0,student\n"
 	rows, err := ParseRoster([]byte(in))
@@ -230,11 +224,11 @@ func TestUpsertRosterRow_EmailClaimSkipsPreservedRawID(t *testing.T) {
 	updated, replaced := UpsertRosterRow(rows, RosterRow{
 		Username: "bob", Email: "pending@x.edu", GitHubID: 2,
 	})
-	if replaced {
-		t.Fatal("replaced = true, want false: a row identified by a raw github_id must not be claimed")
+	if !replaced {
+		t.Fatal("replaced = false: a cell addressing no account must not block the claim")
 	}
-	if len(updated) != 2 {
-		t.Fatalf("rows = %d, want 2 (bob appended)", len(updated))
+	if len(updated) != 1 || updated[0].Username != "bob" || updated[0].GitHubID != 2 {
+		t.Fatalf("rows = %#v, want the pending row claimed in place", updated)
 	}
 }
 
@@ -447,7 +441,7 @@ func TestParseImportCSV_BothHeaderShapes(t *testing.T) {
 		}
 	})
 
-	t.Run("6-column header ignores github_id", func(t *testing.T) {
+	t.Run("6-column header surfaces github_id for cross-check", func(t *testing.T) {
 		in := []byte("username,first_name,last_name,email,section,github_id\nalice,Alice,A,a@x,s,99999\n")
 		rows, err := ParseImportCSV(in)
 		if err != nil {
@@ -456,13 +450,36 @@ func TestParseImportCSV_BothHeaderShapes(t *testing.T) {
 		if len(rows) != 1 {
 			t.Fatalf("got %d rows, want 1", len(rows))
 		}
-		// ParseImportCSV ignores any incoming github_id; the CLI
-		// re-resolves from GitHub at import time.
-		if rows[0].GitHubID != 0 {
-			t.Errorf("import should ignore github_id column, got %d", rows[0].GitHubID)
+		// The parsed row carries the github_id cell so the import command can
+		// cross-check it against the account it resolves for the username.
+		if rows[0].GitHubID != 99999 {
+			t.Errorf("import should surface github_id to the caller, got %d", rows[0].GitHubID)
 		}
 		if rows[0].Email != "a@x" {
 			t.Errorf("expected email to round-trip, got %q", rows[0].Email)
+		}
+	})
+
+	t.Run("7-column stored roster with a pending email-only row", func(t *testing.T) {
+		in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+			"alice,Alice,A,alice@x.edu,s-1,12345,student\n" +
+			",,,pending@x.edu,,,student\n")
+		rows, err := ParseImportCSV(in)
+		if err != nil {
+			t.Fatalf("ParseImportCSV: %v", err)
+		}
+		if len(rows) != 2 {
+			t.Fatalf("got %d rows, want 2", len(rows))
+		}
+		if rows[0].GitHubID != 12345 || rows[0].Role != "student" {
+			t.Errorf("account row should carry github_id and role, got id=%d role=%q", rows[0].GitHubID, rows[0].Role)
+		}
+		pending := rows[1]
+		if pending.Username != "" || pending.GitHubID != 0 {
+			t.Errorf("pending row identity = %q/%d, want empty", pending.Username, pending.GitHubID)
+		}
+		if pending.Email != "pending@x.edu" || pending.Role != "student" {
+			t.Errorf("pending row = email %q role %q, want pending@x.edu/student", pending.Email, pending.Role)
 		}
 	})
 }
@@ -476,7 +493,10 @@ func TestParseImportCSV_Rejects(t *testing.T) {
 		{"empty input", "", "empty"},
 		{"wrong header", "user,first,last,section\nalice,A,A,s\n", "unexpected header"},
 		{"4-column without email", "username,first_name,last_name,section\nalice,A,A,s\n", "unexpected header"},
-		{"empty username", "username,first_name,last_name,email,section\n,A,A,,s\n", "username column is empty"},
+		{"no identity columns", "username,first_name,last_name,email,section\n,A,A,,s\n", "no username, github_id, or email"},
+		{"no identity columns 7-wide", "username,first_name,last_name,email,section,github_id,role\n,A,A,,s,,student\n", "no username, github_id, or email"},
+		{"non-numeric github_id", "username,first_name,last_name,email,section,github_id\nalice,A,A,,s,nope\n", "invalid github_id"},
+		{"invalid email on pending row", "username,first_name,last_name,email,section,github_id,role\n,,,not-an-email,,,\n", "invalid email"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -488,6 +508,26 @@ func TestParseImportCSV_Rejects(t *testing.T) {
 				t.Fatalf("error = %q, want substring %q", err.Error(), tc.wantErrPart)
 			}
 		})
+	}
+}
+
+// Import reports every bad line in one parse, so a teacher fixes the whole
+// file at once instead of replaying import per error.
+func TestParseImportCSV_ReportsAllRowErrors(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section\n" +
+		"alice,A,A,bad email,s\n" +
+		"bob,B,B,ok@x.edu,s\n" +
+		",C,C,,s\n")
+	_, err := ParseImportCSV(in)
+	if err == nil {
+		t.Fatal("expected an error for two bad rows, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "line 2:") || !strings.Contains(msg, "invalid email") {
+		t.Errorf("error should report line 2's bad email, got: %v", err)
+	}
+	if !strings.Contains(msg, "line 4:") || !strings.Contains(msg, "no username, github_id, or email") {
+		t.Errorf("error should report line 4's missing identity, got: %v", err)
 	}
 }
 
@@ -530,6 +570,120 @@ func TestEncodeRoster_EmptyGitHubID(t *testing.T) {
 	if !strings.Contains(string(encoded), "alice,A,A,a@x,s,,student\n") {
 		t.Errorf("GitHubID == 0 should encode as empty column, got:\n%s", encoded)
 	}
+}
+
+// UpdatePendingEmailRow is import's only write to a pending invite row: it
+// corrects metadata by address, and must never create a row (import doesn't
+// send invitations) nor disturb the address/role the invitation recorded.
+func TestUpdatePendingEmailRow(t *testing.T) {
+	s := func(v string) *string { return &v }
+
+	t.Run("patches name and section, matched case-insensitively", func(t *testing.T) {
+		rows := []RosterRow{
+			{Username: "alice", Email: "a@x.edu", GitHubID: 1, Role: "student"},
+			{Email: "Pending@X.edu", Role: "teacher"},
+		}
+		updated, found := UpdatePendingEmailRow(rows, "  pending@x.edu ", RosterPatch{
+			FirstName: s("Bob"), LastName: s("B"), Section: s("s2"),
+		})
+		if !found {
+			t.Fatal("found = false, want the pending row matched on a normalized address")
+		}
+		got := updated[1]
+		if got.FirstName != "Bob" || got.LastName != "B" || got.Section != "s2" {
+			t.Errorf("metadata not applied: %+v", got)
+		}
+		if got.Email != "Pending@X.edu" || got.Role != "teacher" {
+			t.Errorf("the invitation's own address/role must not change: %+v", got)
+		}
+		if updated[0].FirstName != "" || updated[0].Username != "alice" {
+			t.Errorf("the account row was touched: %+v", updated[0])
+		}
+	})
+
+	t.Run("never creates a row when no pending row matches", func(t *testing.T) {
+		rows := []RosterRow{{Username: "alice", Email: "a@x.edu", GitHubID: 1}}
+		updated, found := UpdatePendingEmailRow(rows, "nobody@x.edu", RosterPatch{FirstName: s("N")})
+		if found {
+			t.Fatal("found = true, want false")
+		}
+		if len(updated) != 1 {
+			t.Fatalf("rows = %d, want 1 (no row appended)", len(updated))
+		}
+	})
+
+	t.Run("skips rows that already identify someone", func(t *testing.T) {
+		// Same narrow claim rule as UpsertRosterRow's email fallback: a shared
+		// contact address must not let a metadata patch rewrite an enrolled row.
+		rows := []RosterRow{
+			{Username: "alice", Email: "shared@x.edu", GitHubID: 1},
+			{Email: "shared@x.edu", GitHubID: 7},
+		}
+
+		updated, found := UpdatePendingEmailRow(rows, "shared@x.edu", RosterPatch{FirstName: s("Nope")})
+		if found {
+			t.Fatal("found = true, want false: a row naming an account is not claimable")
+		}
+		for _, r := range updated {
+			if r.FirstName == "Nope" {
+				t.Fatalf("a protected row was patched: %+v", r)
+			}
+		}
+	})
+
+	t.Run("an empty address matches nothing", func(t *testing.T) {
+		rows := []RosterRow{{FirstName: "Ghost"}}
+		if _, found := UpdatePendingEmailRow(rows, "  ", RosterPatch{FirstName: s("X")}); found {
+			t.Fatal("found = true, want false for a blank address")
+		}
+	})
+}
+
+// RemovePendingEmailRow drops the row a cancelled invitation left behind. The
+// claim rule is the load-bearing part: anything that identifies an account must
+// survive, so a cancel can never drop an enrolled student.
+func TestRemovePendingEmailRow(t *testing.T) {
+	t.Run("removes the pending row, matched on a normalized address", func(t *testing.T) {
+		rows := []RosterRow{
+			{Username: "alice", Email: "a@x.edu", GitHubID: 1},
+			{Email: "Pending@X.edu", Role: "student"},
+			{Email: "other@x.edu", Role: "student"},
+		}
+		updated, removed := RemovePendingEmailRow(rows, "  pending@x.edu ")
+		if !removed {
+			t.Fatal("removed = false, want the pending row dropped")
+		}
+		if len(updated) != 2 {
+			t.Fatalf("rows = %d, want 2: %+v", len(updated), updated)
+		}
+		if updated[0].Username != "alice" || updated[1].Email != "other@x.edu" {
+			t.Errorf("the wrong row was dropped: %+v", updated)
+		}
+	})
+
+	t.Run("never drops a row that identifies someone", func(t *testing.T) {
+		// Two students may share a contact address — same narrow claim rule as
+		// UpsertRosterRow's email fallback.
+		rows := []RosterRow{
+			{Username: "alice", Email: "shared@x.edu", GitHubID: 1},
+			{Email: "shared@x.edu", GitHubID: 7},
+		}
+
+		updated, removed := RemovePendingEmailRow(rows, "shared@x.edu")
+		if removed {
+			t.Fatal("removed = true, want false: a row naming an account is not claimable")
+		}
+		if len(updated) != 2 {
+			t.Fatalf("rows = %d, want 2 (nothing dropped)", len(updated))
+		}
+	})
+
+	t.Run("an empty address matches nothing", func(t *testing.T) {
+		rows := []RosterRow{{Email: ""}}
+		if _, removed := RemovePendingEmailRow(rows, "  "); removed {
+			t.Fatal("removed = true, want false for a blank address")
+		}
+	})
 }
 
 func TestUpsertRosterRow_AppendAndReplace(t *testing.T) {
@@ -701,7 +855,7 @@ func TestValidateRosterEmail(t *testing.T) {
 func TestParseRoster_StripsUTF8BOM(t *testing.T) {
 	// Excel's "CSV UTF-8" prepends 0xEF 0xBB 0xBF. encoding/csv
 	// does not strip it, so without the trim the first header
-	// field would be `\ufeffusername` — equalSlices would reject
+	// field would be `\ufeffusername` — slices.Equal would reject
 	// the file with a misleading "unexpected header" error.
 	in := append([]byte{0xEF, 0xBB, 0xBF}, []byte("username,first_name,last_name,email,section,github_id\nalice,Alice,A,,s,1\n")...)
 	rows, err := ParseRoster(in)
@@ -725,19 +879,24 @@ func TestParseImportCSV_StripsUTF8BOM(t *testing.T) {
 }
 
 func TestParseImportCSV_RejectsWidenedExportWithGuidance(t *testing.T) {
-	// Feeding a wider roster CSV (canonical six + extra trailing columns)
-	// straight into import is rejected with a message that names the cause and
-	// the fix, rather than the generic header error — import is canonical-only
-	// by design (it re-resolves github_id and carries no extra column state).
-	in := []byte("username,first_name,last_name,email,section,github_id," +
+	// A roster CSV widened past the canonical role column (legacy web exports
+	// carried enrollment bookkeeping columns) is still rejected: import
+	// carries no extra-column state, so the tail would be silently dropped.
+	// The error must name the accepted header forms.
+	in := []byte("username,first_name,last_name,email,section,github_id,role," +
 		"enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at\n" +
-		"alice,Alice,A,a@x.edu,s1,123,enrolled,github,abcd,,2026-01-01T00:00:00Z,\n")
+		"alice,Alice,A,a@x.edu,s1,123,student,enrolled,github,abcd,,2026-01-01T00:00:00Z,\n")
 	_, err := ParseImportCSV(in)
 	if err == nil {
 		t.Fatal("expected ParseImportCSV to reject a widened export")
 	}
-	if !strings.Contains(err.Error(), "extra columns") || !strings.Contains(err.Error(), "import does not") {
-		t.Fatalf("expected guidance about extra columns / import, got %v", err)
+	msg := err.Error()
+	if !strings.Contains(msg, "unexpected header") {
+		t.Fatalf("expected a header error, got %v", err)
+	}
+	// The accepted forms are named so the teacher knows which shapes work.
+	if !strings.Contains(msg, "role") || !strings.Contains(msg, "github_id") || !strings.Contains(msg, "section") {
+		t.Fatalf("error should name the accepted header forms, got %v", err)
 	}
 }
 
@@ -1176,4 +1335,224 @@ func TestParseRosterLenient_PreservesWrongFieldCount(t *testing.T) {
 	if len(rows) != 2 || !rows[0].isRaw() || rows[1].Username != "bob" {
 		t.Fatalf("want a preserved raw row + bob, got %#v", rows)
 	}
+}
+
+// TestClaimPendingEmailRow: the acceptance fold is borrow-only — it contributes
+// identity and touches nothing a teacher owns.
+func TestClaimPendingEmailRow(t *testing.T) {
+	pending := func() []RosterRow {
+		return []RosterRow{
+			{FirstName: "Ada", LastName: "Lovelace", Email: "Ada@Uni.edu", Section: "s1", Role: "student",
+				Extra: map[string]string{"cohort": "a"}, ExtraOrder: []string{"cohort"}},
+			{Username: "bob", Email: "bob@uni.edu", GitHubID: 2},
+		}
+	}
+
+	t.Run("fills identity and keeps every other cell", func(t *testing.T) {
+		rows, ok := ClaimPendingEmailRow(pending(), "ada@uni.edu", "ada", 101)
+		if !ok {
+			t.Fatal("claimed = false, want the pending row matched case-insensitively")
+		}
+		got := rows[0]
+		if got.Username != "ada" || got.GitHubID != 101 {
+			t.Errorf("identity not folded: %#v", got)
+		}
+		if got.FirstName != "Ada" || got.LastName != "Lovelace" || got.Section != "s1" ||
+			got.Email != "Ada@Uni.edu" || got.Role != "student" || got.Extra["cohort"] != "a" {
+			t.Errorf("fold overwrote a teacher-owned cell: %#v", got)
+		}
+	})
+
+	t.Run("never rewrites a row that already identifies someone", func(t *testing.T) {
+		rows, ok := ClaimPendingEmailRow(pending(), "bob@uni.edu", "impostor", 999)
+		if ok {
+			t.Fatal("claimed a row that already has a username")
+		}
+		if rows[1].Username != "bob" || rows[1].GitHubID != 2 {
+			t.Errorf("row mutated anyway: %#v", rows[1])
+		}
+	})
+
+	t.Run("supersedes a github_id cell that addresses no account", func(t *testing.T) {
+		rows, ok := ClaimPendingEmailRow([]RosterRow{{Email: "ada@uni.edu", githubIDRaw: "0"}},
+			"ada@uni.edu", "ada", 101)
+		if !ok {
+			t.Fatal("claimed = false; a cell addressing no account is not identity")
+		}
+		if rows[0].GitHubID != 101 || rows[0].githubIDRaw != "" {
+			t.Errorf("recovered id did not replace the unusable cell: %#v", rows[0])
+		}
+	})
+}
+
+// The claimable-row rule is the web's removeEmailInviteRows filter
+// (rosterPrimitives.ts): no username, and no github_id cell that RESOLVES to an
+// account. A cell the web's resolveGitHubId rejects (0, negative, past 2^53) is
+// not identity there, so treating it as identity here would strand the row —
+// unfoldable, unreapable, and re-reported by every reconcile.
+func TestIsPendingEmailInvite_MatchesTheWebResolveRule(t *testing.T) {
+	for _, cell := range []string{"0", "-1", "9007199254740992", "0000101"} {
+		csv := FullRosterHeader + "\n,Ada,Lovelace,ada@uni.edu,s1," + cell + ",student\n"
+		rows, err := ParseRoster([]byte(csv))
+		if err != nil {
+			t.Fatalf("github_id %q: ParseRoster: %v", cell, err)
+		}
+		// A zero-padded id resolves for Go (EncodeRoster rewrites it
+		// canonically), so it is genuine identity — the one spelling difference.
+		want := cell != "0000101"
+		if got := rows[0].IsPendingEmailInvite(); got != want {
+			t.Errorf("github_id %q: IsPendingEmailInvite = %v, want %v", cell, got, want)
+		}
+	}
+}
+
+// RecordRosterEmail is the fold for a recovery whose row already names the
+// account but carries no address: without it the recovered address has nowhere
+// to land and retiring the metadata team would lose it.
+func TestRecordRosterEmail(t *testing.T) {
+	t.Run("fills a blank cell, matching the login case-insensitively", func(t *testing.T) {
+		rows, ok := RecordRosterEmail([]RosterRow{{Username: "Ada", GitHubID: 101}}, "ada", 101, "ada@uni.edu")
+		if !ok || rows[0].Email != "ada@uni.edu" {
+			t.Fatalf("recorded = %v, row = %#v", ok, rows[0])
+		}
+	})
+
+	t.Run("falls back to the github_id when no row names the login", func(t *testing.T) {
+		rows, ok := RecordRosterEmail([]RosterRow{{GitHubID: 101}}, "ada", 101, "ada@uni.edu")
+		if !ok || rows[0].Email != "ada@uni.edu" {
+			t.Fatalf("recorded = %v, row = %#v", ok, rows[0])
+		}
+	})
+
+	t.Run("never overwrites an address the teacher entered", func(t *testing.T) {
+		rows, ok := RecordRosterEmail([]RosterRow{{Username: "ada", Email: "ada@personal.com"}}, "ada", 101, "ada@uni.edu")
+		if ok || rows[0].Email != "ada@personal.com" {
+			t.Fatalf("recorded = %v, row = %#v", ok, rows[0])
+		}
+	})
+
+	t.Run("a whitespace-only cell counts as blank", func(t *testing.T) {
+		rows, ok := RecordRosterEmail([]RosterRow{{Username: "ada", Email: "   "}}, "ada", 101, "ada@uni.edu")
+		if !ok || rows[0].Email != "ada@uni.edu" {
+			t.Fatalf("recorded = %v, row = %#v", ok, rows[0])
+		}
+	})
+
+	t.Run("the login wins over a different row carrying the id", func(t *testing.T) {
+		rows := []RosterRow{{GitHubID: 101}, {Username: "ada"}}
+		if _, ok := RecordRosterEmail(rows, "ada", 101, "ada@uni.edu"); !ok {
+			t.Fatal("recorded = false")
+		}
+		if rows[0].Email != "" || rows[1].Email != "ada@uni.edu" {
+			t.Errorf("filled the wrong row: %#v", rows)
+		}
+	})
+
+	t.Run("no match or a blank address is a no-op", func(t *testing.T) {
+		rows := []RosterRow{{Username: "bob"}}
+		if _, ok := RecordRosterEmail(rows, "ada", 0, "ada@uni.edu"); ok {
+			t.Error("recorded onto a different student's row")
+		}
+		if _, ok := RecordRosterEmail(rows, "bob", 0, "  "); ok {
+			t.Error("recorded a blank address")
+		}
+	})
+
+	t.Run("skips a preserved malformed row", func(t *testing.T) {
+		if _, ok := RecordRosterEmail([]RosterRow{{raw: []string{"ada"}}}, "ada", 101, "ada@uni.edu"); ok {
+			t.Error("mutated a row preserved verbatim for round-tripping")
+		}
+	})
+}
+
+// IsPendingEmailInvite is what a caller plans against, so it must answer exactly
+// what the helpers then do — a caller whose predicate is looser plans edits they
+// refuse, which no --write pass can ever converge.
+//
+// `want` is spelled out per case: deriving it from the predicate under test
+// would make every assertion vacuous.
+func TestIsPendingEmailInvite_AgreesWithTheHelpers(t *testing.T) {
+	cases := map[string]struct {
+		row  RosterRow
+		want bool
+	}{
+		"claimable":                        {row: RosterRow{Email: "ada@uni.edu"}, want: true},
+		"has a username":                   {row: RosterRow{Username: "ada", Email: "ada@uni.edu"}},
+		"has a resolved github_id":         {row: RosterRow{Email: "ada@uni.edu", GitHubID: 101}},
+		"has an unresolved github_id cell": {row: RosterRow{Email: "ada@uni.edu", githubIDRaw: "0"}, want: true},
+		"has no address":                   {row: RosterRow{githubIDRaw: ""}},
+		"is a preserved malformed row":     {row: RosterRow{raw: []string{"junk"}}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := tc.row.IsPendingEmailInvite(); got != tc.want {
+				t.Fatalf("IsPendingEmailInvite = %v, want %v", got, tc.want)
+			}
+			if got := findPendingEmailRow([]RosterRow{tc.row}, tc.row.Email) >= 0; got != tc.want {
+				t.Errorf("findPendingEmailRow matched = %v, want %v", got, tc.want)
+			}
+			_, removed := RemovePendingEmailRow([]RosterRow{tc.row}, tc.row.Email)
+			if removed != tc.want {
+				t.Errorf("RemovePendingEmailRow removed = %v, want %v", removed, tc.want)
+			}
+			_, claimed := ClaimPendingEmailRow([]RosterRow{tc.row}, tc.row.Email, "ada", 101)
+			if claimed != tc.want {
+				t.Errorf("ClaimPendingEmailRow claimed = %v, want %v", claimed, tc.want)
+			}
+		})
+	}
+}
+
+// #27: the two readers must agree on which spellings ADDRESS an account, or the
+// same row is identity to one and a claimable pending invite to the other. Only
+// leading zeros are tolerated (the web's resolveGitHubId strips exactly those,
+// and EncodeRoster rewrites the cell canonically).
+func TestParseGitHubID_AcceptsOnlyTheWebsResolvableSpellings(t *testing.T) {
+	for cell, want := range map[string]int64{
+		"101":                  101,
+		" 101 ":                101,
+		"0000101":              101, // the one tolerated non-canonical spelling
+		"+101":                 0,   // resolveGitHubId's regex rejects the sign
+		"-101":                 0,
+		"0":                    0,
+		"9007199254740992":     0, // past 2^53-1
+		"00000000000000000000": 0,
+		"1_01":                 0,
+		"0x65":                 0,
+	} {
+		id, err := parseGitHubID(cell)
+		if want == 0 {
+			if id != 0 {
+				t.Errorf("parseGitHubID(%q) = %d, want 0 (the web addresses no account with it)", cell, id)
+			}
+			continue
+		}
+		if err != nil || id != want {
+			t.Errorf("parseGitHubID(%q) = (%d, %v), want %d", cell, id, err, want)
+		}
+	}
+}
+
+// TestBackfillRosterGitHubID: an id that already resolves is never repointed —
+// a recycled login must not silently move a row onto a different account.
+func TestBackfillRosterGitHubID(t *testing.T) {
+	t.Run("fills an unresolved cell", func(t *testing.T) {
+		rows, ok := BackfillRosterGitHubID([]RosterRow{{Username: "Ada", githubIDRaw: "0"}}, "ada", 101)
+		if !ok || rows[0].GitHubID != 101 {
+			t.Fatalf("filled = %v, row = %#v", ok, rows[0])
+		}
+	})
+
+	t.Run("leaves a resolved cell alone", func(t *testing.T) {
+		rows, ok := BackfillRosterGitHubID([]RosterRow{{Username: "ada", GitHubID: 7}}, "ada", 101)
+		if ok || rows[0].GitHubID != 7 {
+			t.Fatalf("filled = %v, row = %#v", ok, rows[0])
+		}
+	})
+
+	t.Run("no match is a no-op", func(t *testing.T) {
+		if _, ok := BackfillRosterGitHubID([]RosterRow{{Username: "bob"}}, "ada", 101); ok {
+			t.Error("filled a row for a different student")
+		}
+	})
 }

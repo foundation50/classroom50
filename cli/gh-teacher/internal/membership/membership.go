@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -40,6 +41,126 @@ func InviteOrgByID(client githubapi.Client, org, username string, userID int64, 
 		return ClassifyOrgInviteError(client, org, username, path, err)
 	}
 	return nil
+}
+
+// ErrEmailAlreadyInvitedOrMember is the 422 GitHub returns when the address is
+// already a member or already has a pending invitation. The username path
+// confirms which via a membership lookup; an email has no
+// `/orgs/{org}/memberships/{user}` to read, so the 422 itself is the answer —
+// callers treat it as a skip, not a failed invite.
+var ErrEmailAlreadyInvitedOrMember = errors.New("already a member of the organization or already invited")
+
+// InviteOrgByEmail posts an org invitation to an email address (the invitee has
+// no GitHub account to look up yet). teamIDs auto-add the invitee to those teams
+// on acceptance, so one accepted invitation lands them in the classroom without
+// a separate team invite that could leave them org-active but team-pending.
+// Mirrors the web's createOrgInvitation: exactly one of invitee_id / email.
+func InviteOrgByEmail(client githubapi.Client, org, email string, teamIDs []int64) error {
+	payload := map[string]any{
+		"email": email,
+		"role":  "direct_member",
+	}
+	if len(teamIDs) > 0 {
+		payload["team_ids"] = teamIDs
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode body: %w", err)
+	}
+	path := fmt.Sprintf("orgs/%s/invitations", url.PathEscape(org))
+	if err := client.Post(path, bytes.NewReader(body), nil); err != nil {
+		// Intercepted before ClassifyOrgInviteError, whose 422 branch issues a
+		// username-keyed membership GET this path has no username for.
+		if cliutil.IsHTTPStatus(err, http.StatusUnprocessableEntity) {
+			return fmt.Errorf("%s: %w", email, ErrEmailAlreadyInvitedOrMember)
+		}
+		return ClassifyOrgInviteError(client, org, "", path, err)
+	}
+	return nil
+}
+
+// ErrInvitationAlreadyGone means the DELETE 404'd: the invitation was cancelled
+// elsewhere or replaced by a resend. Distinguishable from success because a
+// cancel's teardown (deleting the invite team, dropping the pending roster row)
+// must only run on a real cancellation — a stale id can 404 while a live
+// invitation for the same address still exists. Mirrors the web's
+// `cancelled: false`.
+var ErrInvitationAlreadyGone = errors.New("invitation no longer exists")
+
+// CancelOrgInvitation revokes a pending org invitation by id.
+func CancelOrgInvitation(client githubapi.Client, org string, invitationID int64) error {
+	path := fmt.Sprintf("orgs/%s/invitations/%d", url.PathEscape(org), invitationID)
+	resp, err := client.Request(http.MethodDelete, path, nil)
+	if err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return fmt.Errorf("%w (%s)", ErrInvitationAlreadyGone, path)
+		}
+		return fmt.Errorf("DELETE %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("DELETE %s: unexpected status %d", path, resp.StatusCode)
+	}
+	return nil
+}
+
+// PendingOrgInvitation is one GET /orgs/{org}/invitations element. GitHub keys
+// an invitation by `login` (invited by id) or by `email` (invited by address) —
+// never both — so a caller matching an invitation checks the field its own key
+// lives in. Role is the raw API role; display normalization is the caller's.
+type PendingOrgInvitation struct {
+	ID    int64  `json:"id"`
+	Login string `json:"login"`
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+// IsEmailKeyed reports an invitation addressed by EMAIL — the one filter every
+// email-invite path shares (the cancel's address lookup and the roster sync's
+// liveness check), so the two can't drift into disagreeing on what an email
+// invitation is.
+func (inv PendingOrgInvitation) IsEmailKeyed() bool {
+	return inv.Login == "" && inv.Email != ""
+}
+
+// ListPendingOrgInvitations walks every pending org invitation. Shared by
+// `member list`, the cancel path (find an invitation by email) and the roster
+// sync liveness check, so all three agree on what "pending" means. A 403 (no
+// admin:org scope) is a hard error rather than an empty set, since "no pending
+// invites" and "can't read invites" are very different signals.
+func ListPendingOrgInvitations(client githubapi.Client, org string) ([]PendingOrgInvitation, error) {
+	base := fmt.Sprintf("orgs/%s/invitations", url.PathEscape(org))
+	subject := fmt.Sprintf("%s pending invitations", org)
+	return githubapi.PaginateAll[PendingOrgInvitation](client, githubapi.ListPerPage, githubapi.ListMaxPages,
+		func(page int) string {
+			return fmt.Sprintf("%s?per_page=%d&page=%d", base, githubapi.ListPerPage, page)
+		},
+		func(path string, err error) error { return ClassifyMembershipReadError(path, subject, err) })
+}
+
+// InvitationTeamRef is one element of GET /orgs/{org}/invitations/{id}/teams:
+// the teams an invitation will add its invitee to on acceptance.
+type InvitationTeamRef struct {
+	ID   int64  `json:"id"`
+	Slug string `json:"slug"`
+}
+
+// ListInvitationTeams reads the teams a pending invitation carries. An org
+// invitation is org-scoped, so this list is the only thing that binds one to a
+// classroom: a caller about to revoke an invitation it found by ADDRESS checks
+// that one of its own classroom's teams is here, or it may revoke a sibling
+// classroom's live invitation to the same address. A failed read is an error,
+// never an empty set — an empty set reads as "not ours" and would refuse, but a
+// caller must be able to tell a refusal from a degraded read.
+func ListInvitationTeams(client githubapi.Client, org string, invitationID int64) ([]InvitationTeamRef, error) {
+	base := fmt.Sprintf("orgs/%s/invitations/%d/teams", url.PathEscape(org), invitationID)
+	subject := fmt.Sprintf("the teams on %s invitation %d", org, invitationID)
+	return githubapi.PaginateAll[InvitationTeamRef](client, githubapi.ListPerPage, githubapi.ListMaxPages,
+		func(page int) string {
+			return fmt.Sprintf("%s?per_page=%d&page=%d", base, githubapi.ListPerPage, page)
+		},
+		func(path string, err error) error { return ClassifyMembershipReadError(path, subject, err) })
 }
 
 // LookupUser → (canonical login, immutable numeric ID). 404 → "user not found".
@@ -142,6 +263,31 @@ func ClassifyOrgForbidden(httpErr *githubapi.HTTPError) OrgForbiddenKind {
 // ErrMissingOrgAdminScope is the shared message for the scope-missing
 // case (identical across invite and read paths).
 var ErrMissingOrgAdminScope = errors.New("missing admin:org OAuth scope; run `gh teacher login` to grant it")
+
+// ClassifyMembershipReadError maps the common failure statuses of the read-only
+// membership endpoints to actionable messages, mirroring ClassifyOrgInviteError's
+// 403/404 handling. `subject` is a human label for the thing being read. Other
+// statuses return the wrapped error.
+func ClassifyMembershipReadError(path, subject string, err error) error {
+	httpErr, ok := errors.AsType[*githubapi.HTTPError](err)
+	if !ok {
+		return fmt.Errorf("GET %s: %w", path, err)
+	}
+	switch httpErr.StatusCode {
+	case http.StatusNotFound:
+		return fmt.Errorf("%s: not found or not accessible", subject)
+	case http.StatusForbidden:
+		switch ClassifyOrgForbidden(httpErr) {
+		case OrgForbiddenScopeMissing:
+			return ErrMissingOrgAdminScope
+		case OrgForbiddenNotAdmin:
+			return fmt.Errorf("%s: forbidden — you may not have admin access to read it", subject)
+		default:
+			return fmt.Errorf("%s: forbidden — ensure your token has the admin:org scope (`gh teacher login`) and that you have access", subject)
+		}
+	}
+	return fmt.Errorf("GET %s: %w", path, err)
+}
 
 // HasOrgAdminScope: X-OAuth-Scopes contains admin:org.
 func HasOrgAdminScope(scopes string) bool {

@@ -277,7 +277,9 @@ func isNonFastForwardMessage(message string) bool {
 //
 // Return shape:
 //   - ("<sha>", nil) — commit landed.
-//   - ("", nil)      — build returned an empty change; no-op.
+//   - ("", nil)      — nothing to do: build returned an empty change, or the
+//     rebuilt tree matched the parent's, so every upsert re-encoded to the bytes
+//     already stored.
 //   - ("", err)      — failure (build can signal one via (_, err)).
 //
 // Reset any per-attempt accumulators at the top of each build call so a retry
@@ -311,6 +313,13 @@ func CommitWithRebase(
 		treeSHA, err := CreateTree(client, owner, repo, parentTreeSHA, entries, classify404)
 		if err != nil {
 			return "", err
+		}
+		// A change whose upserts re-encode to the bytes already stored yields the
+		// parent's own tree. Committing it would land an empty commit, so an
+		// idempotent re-run (a re-import, a reconcile with nothing to do) would
+		// still churn the history.
+		if treeSHA == parentTreeSHA {
+			return "", nil
 		}
 		commitSHA, err := CreateCommit(client, owner, repo, treeSHA, parentSHA, message)
 		if err != nil {

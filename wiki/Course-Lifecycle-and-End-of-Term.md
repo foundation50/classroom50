@@ -84,11 +84,16 @@ Wrap up a finished course in this order:
    repositories are untouched, and `unarchive` reverses it. See
    [`gh teacher classroom archive`](gh-teacher#classroom-archive--unarchive).
 
-   If you invited students by email, also use **Clean up invite data** on the
-   classroom's Settings page. Email invitations store each invited address in
-   a hidden GitHub team until the student joins; the cleanup writes anything
-   still recoverable onto the roster and removes the rest, so no invited
-   address lingers in an archived classroom.
+   If you invited students by email, clear the stored addresses before you
+   archive: an archived classroom's roster is frozen, so nothing can be
+   recorded onto it afterwards. Each invitation holds the address in a hidden
+   invite team until the student joins. **Clean up invite data**, on the
+   classroom's Settings page, writes anything still recoverable onto the
+   roster and deletes every remaining team. From a terminal,
+   `gh teacher roster sync <org> <classroom> --write` does less: it records the
+   invitations that were accepted and retires the teams that are done, but
+   keeps a team whose invitation is still pending. It is refused once the
+   classroom is archived.
 4. Optionally, archive the student repositories on GitHub. Archiving a
    repository makes it read-only for everyone while preserving it. Classroom
    50 has no bulk action for this yet, but the GitHub CLI handles it. List

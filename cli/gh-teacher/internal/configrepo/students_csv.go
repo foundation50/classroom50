@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/mail"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -35,12 +36,7 @@ var FullRosterHeader = strings.Join(RosterColumns, ",")
 // isCanonicalColumn reports whether name is a CLI-managed RosterColumn (the
 // rest are carried through RosterRow.Extra).
 func isCanonicalColumn(name string) bool {
-	for _, c := range RosterColumns {
-		if c == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(RosterColumns, name)
 }
 
 // maxFieldBytes caps each cell at RFC 5321's email max so a hand-edit can't
@@ -72,6 +68,10 @@ type RosterRow struct {
 	// "" (unknown / a pre-role file). Refreshed from team membership on sync;
 	// never consulted for enrollment decisions.
 	Role string
+	// Line is the 1-based CSV line this row was read from, recorded only by
+	// ParseImportCSV: an import reports failures per line, and a file with a
+	// bad line has no row for it, so position can't stand in for line number.
+	Line int
 	// Extra carries non-canonical columns keyed by header name, so a
 	// read/modify/write round-trips them. nil for a plain canonical file.
 	Extra map[string]string
@@ -87,6 +87,27 @@ type RosterRow struct {
 
 // isRaw reports whether the row is a preserved-but-unparsed record.
 func (r RosterRow) isRaw() bool { return r.raw != nil }
+
+// IsPendingEmailInvite reports whether the row is an email-ONLY invite row: no
+// username, no github_id that addresses an account, and an address to key on. A
+// present-but-unresolved cell (0, negative, past 2^53 — see parseGitHubID) is
+// NOT identity: it addresses nobody, so treating it as one would strand the row
+// forever, unfoldable and unreapable by either tool.
+//
+// This is the single source of the claimable-row rule every pending-row helper
+// below enforces (findPendingEmailRow, UpsertRosterRow's email fallback), so a
+// caller deciding what to plan and the helper applying it agree — a planner
+// guessing at the rule plans edits these helpers then refuse, which a --write
+// pass would report and silently skip forever. The set is deliberately NARROW
+// because every caller either rewrites or drops the row it matches: a student
+// who already has an account, and a classmate merely sharing a contact address,
+// must never be touched. Mirrors the web's removeEmailInviteRows filter: no
+// username and resolveGitHubId() === null.
+func (r RosterRow) IsPendingEmailInvite() bool {
+	return !r.isRaw() && r.Username == "" &&
+		r.GitHubID == 0 &&
+		NormalizeInviteEmail(r.Email) != ""
+}
 
 // ParseRoster decodes the roster CSV. The header MUST begin with the canonical
 // RosterColumns in order; a file written before the trailing `role` column was
@@ -128,13 +149,13 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 	// column carried through verbatim.
 	var canonicalLen int
 	switch {
-	case len(header) >= len(RosterColumns) && equalSlices(header[:len(RosterColumns)], RosterColumns):
+	case len(header) >= len(RosterColumns) && slices.Equal(header[:len(RosterColumns)], RosterColumns):
 		canonicalLen = len(RosterColumns)
-	case len(header) == len(legacyRequiredColumns) && equalSlices(header, legacyRequiredColumns):
+	case len(header) == len(legacyRequiredColumns) && slices.Equal(header, legacyRequiredColumns):
 		// Pre-role file: exactly the canonical columns through github_id, no
 		// trailing columns. role reads as "".
 		canonicalLen = len(legacyRequiredColumns)
-	case len(header) < len(RosterColumns) || !equalSlices(header[:len(legacyRequiredColumns)], legacyRequiredColumns):
+	case len(header) < len(RosterColumns) || !slices.Equal(header[:len(legacyRequiredColumns)], legacyRequiredColumns):
 		return nil, fmt.Errorf("unexpected header: got %v, want %v followed by any optional columns", header, RosterColumns)
 	default:
 		// Header begins with the legacy prefix but the 7th column is not `role`
@@ -196,15 +217,20 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 	return rows, nil
 }
 
-// ParseImportCSV decodes a teacher-supplied import CSV: the identity/metadata
-// columns through github_id (github_id ignored; re-resolved) or the 5-column
-// hand-edit shape without github_id. `role` is NOT an import column — it is
-// team-derived metadata written by sync, never hand-imported.
+// ParseImportCSV decodes a teacher-supplied import CSV. It accepts the full
+// stored roster shape (RosterColumns), the pre-role 6-column form, or the
+// 5-column hand-edit form without github_id — so a roster.csv the web wrote
+// (including pending email-only invite rows) imports as-is. Rows follow the
+// stored-file identity rule: at least one of username, github_id, or email.
+// github_id and role are parsed onto the returned rows so the import command
+// can cross-check the id against the resolved account and round-trip role;
+// neither is applied here. Extra trailing columns are rejected: import
+// carries no extra-column state, so a wider file would silently drop the tail.
 //
-// Unlike ParseRoster, import rejects a wider file with extra trailing columns
-// (including a stray role): it re-resolves github_id and carries no extra
-// state, so a wider file would silently drop the tail. The error points at the
-// canonical shape.
+// Row errors are collected across the whole file and returned joined (one
+// `line %d: ...` per bad row), ALONGSIDE the rows that did parse, so the caller
+// can add its own per-row failures (a username that resolves to no account) to
+// them and refuse once with every unusable line named.
 func ParseImportCSV(data []byte) ([]RosterRow, error) {
 	data = bytes.TrimPrefix(data, utf8BOM)
 	r := csv.NewReader(bytes.NewReader(data))
@@ -218,49 +244,49 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 		return nil, fmt.Errorf("read header: %w", err)
 	}
 
-	// Import accepts the identity columns through github_id, or the 5-column
-	// form without it. role and any other trailing column are not import input.
-	importFull := legacyRequiredColumns      // username..github_id (6)
-	importShort := legacyRequiredColumns[:5] // username..section  (5)
-	if !equalSlices(header, importFull) && !equalSlices(header, importShort) {
-		// Common mistake: feeding a wider roster CSV (with role and/or legacy
-		// extra columns) straight into import.
-		if len(header) > len(importFull) && equalSlices(header[:len(importFull)], importFull) {
-			return nil, fmt.Errorf("unexpected header: got %v — import takes only the canonical %v (or its 5-column form without github_id). "+
-				"This looks like a roster with extra columns appended; drop the columns after github_id before importing "+
-				"(roster add/update preserve those columns, import does not)", header, importShort)
-		}
-		return nil, fmt.Errorf("unexpected header: got %v, want %v (with optional trailing github_id; github_id ignored on input — the CLI re-resolves it)", header, importShort)
+	importShort := legacyRequiredColumns[:5] // username..section
+	switch {
+	case slices.Equal(header, RosterColumns),
+		slices.Equal(header, legacyRequiredColumns),
+		slices.Equal(header, importShort):
+	default:
+		return nil, fmt.Errorf("unexpected header: got %v, want %v optionally followed by github_id (%v) or by github_id,role (%v); no other columns are import input",
+			header, importShort, legacyRequiredColumns, RosterColumns)
 	}
 	r.FieldsPerRecord = len(header)
 
-	var rows []RosterRow
+	var (
+		rows    []RosterRow
+		rowErrs []error
+	)
 	for line := 2; ; line++ {
 		record, err := r.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", line, err)
+			rowErrs = append(rowErrs, fmt.Errorf("line %d: %w", line, err))
+			continue
 		}
-		if err := checkFieldLengths(line, record); err != nil {
-			return nil, err
+		// Pad the 5/6-column forms to the full width so recordToRow stays the
+		// single source of the identity rule and github_id/role parsing.
+		for len(record) < len(RosterColumns) {
+			record = append(record, "")
 		}
-		row := RosterRow{
-			Username:  strings.TrimSpace(undefangCSVCell(record[0])),
-			FirstName: undefangCSVCell(record[1]),
-			LastName:  undefangCSVCell(record[2]),
-			Email:     strings.TrimSpace(undefangCSVCell(record[3])),
-			Section:   undefangCSVCell(record[4]),
-		}
-		if row.Username == "" {
-			return nil, fmt.Errorf("line %d: username column is empty", line)
+		row, err := recordToRow(record, len(RosterColumns), nil, line)
+		if err != nil {
+			rowErrs = append(rowErrs, err)
+			continue
 		}
 		if err := ValidateRosterEmail(row.Email); err != nil {
-			return nil, fmt.Errorf("line %d: %w", line, err)
+			rowErrs = append(rowErrs, fmt.Errorf("line %d: %w", line, err))
+			continue
 		}
-		// record[5] (github_id) ignored; the CLI re-resolves it.
+		row.Line = line
 		rows = append(rows, row)
+	}
+	if len(rowErrs) > 0 {
+		return rows, errors.Join(rowErrs...)
 	}
 	return rows, nil
 }
@@ -407,12 +433,11 @@ func collectExtraColumns(rows []RosterRow) []string {
 //
 // The email fallback finishes what an email invite started: that row carries
 // only the invited address until the student accepts, so adding them by username
-// would otherwise leave a second row for the same person. It is deliberately
-// narrow — only a row with NO username and NO github_id cell at all is
-// claimable, so two students sharing a contact email can never overwrite each
-// other, and a username match always wins. An email claim does NOT inherit the
-// pending row's Role (an email invite may have been for staff; the team is the
-// role authority), whereas a username match does.
+// would otherwise leave a second row for the same person. Claimable means
+// exactly RosterRow.IsPendingEmailInvite, and a username match always wins. An
+// email claim does NOT inherit the pending row's Role (an email invite may have
+// been for staff; the team is the role authority), whereas a username match
+// does.
 //
 // On replace, the existing row's Extra is carried over UNLESS the incoming row
 // supplies its own — so a CLI `roster add` (canonical fields only) never wipes
@@ -442,17 +467,10 @@ func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 		}
 	}
 	// No username match: claim a pending email-invite row for the same address.
-	// Only an identity-less row qualifies (see the doc comment), and a blank
-	// incoming email matches nothing.
+	// A blank incoming email matches nothing.
 	if row.Email != "" {
 		for i := range rows {
-			if rows[i].isRaw() || rows[i].Username != "" {
-				continue
-			}
-			// "Identity-less" here means the same thing the reader means: a
-			// present github_id cell counts even when it didn't resolve, so a
-			// claim can't silently discard what the teacher typed.
-			if rows[i].GitHubID != 0 || rows[i].githubIDRaw != "" {
+			if !rows[i].IsPendingEmailInvite() {
 				continue
 			}
 			if strings.EqualFold(strings.TrimSpace(rows[i].Email), strings.TrimSpace(row.Email)) {
@@ -522,6 +540,155 @@ func UpdateRosterRow(rows []RosterRow, username string, p RosterPatch) (out []Ro
 	return rows, false, false
 }
 
+// findPendingEmailRow returns the index of the pending email-invite row for
+// email (normalized: trimmed, case-insensitive), or -1. Claimable is
+// RosterRow.IsPendingEmailInvite — see there for why the set is this narrow.
+func findPendingEmailRow(rows []RosterRow, email string) int {
+	key := NormalizeInviteEmail(email)
+	if key == "" {
+		return -1
+	}
+	for i := range rows {
+		if !rows[i].IsPendingEmailInvite() {
+			continue
+		}
+		if NormalizeInviteEmail(rows[i].Email) == key {
+			return i
+		}
+	}
+	return -1
+}
+
+// UpdatePendingEmailRow patches metadata onto the pending email-invite row for
+// email, leaving the address itself and role alone (RosterPatch.Email is
+// ignored). Returns the slice and whether a row matched.
+//
+// It deliberately never appends: the caller (`roster import`) may only correct
+// a row an invitation already created, since creating an identity-less row
+// without sending the invitation would strand it.
+func UpdatePendingEmailRow(rows []RosterRow, email string, p RosterPatch) (out []RosterRow, found bool) {
+	i := findPendingEmailRow(rows, email)
+	if i < 0 {
+		return rows, false
+	}
+	if p.FirstName != nil {
+		rows[i].FirstName = *p.FirstName
+	}
+	if p.LastName != nil {
+		rows[i].LastName = *p.LastName
+	}
+	if p.Section != nil {
+		rows[i].Section = *p.Section
+	}
+	return rows, true
+}
+
+// RemovePendingEmailRow drops the pending email-invite row for email. Returns
+// the slice and whether a row was removed.
+func RemovePendingEmailRow(rows []RosterRow, email string) (out []RosterRow, removed bool) {
+	i := findPendingEmailRow(rows, email)
+	if i < 0 {
+		return rows, false
+	}
+	return append(rows[:i], rows[i+1:]...), true
+}
+
+// ClaimPendingEmailRow fills a recovered identity onto the pending email-invite
+// row for email IN PLACE, leaving every other cell — the teacher's
+// name/section, the address, the recorded role, and any web-written extra
+// column — exactly as it was. Returns the slice and whether a row matched.
+//
+// This is the acceptance half of the email-invite lifecycle: the row carried
+// only the address until the student accepted, and the invite team's record is
+// what maps that address to their new account. Borrow-only on purpose (unlike
+// UpsertRosterRow, which replaces the whole row): a recovery contributes
+// identity, never metadata, so a re-run can't clobber teacher-owned fields.
+// Never appends: a recovery with no row is the caller's decision.
+func ClaimPendingEmailRow(rows []RosterRow, email, login string, githubID int64) (out []RosterRow, claimed bool) {
+	if strings.TrimSpace(login) == "" {
+		return rows, false
+	}
+	i := findPendingEmailRow(rows, email)
+	if i < 0 {
+		return rows, false
+	}
+	rows[i].Username = strings.TrimSpace(login)
+	if githubID > 0 {
+		rows[i].GitHubID = githubID
+		// The recovered id supersedes an unusable cell, which by the claimable
+		// filter is the only kind that can be here.
+		rows[i].githubIDRaw = ""
+	}
+	return rows, true
+}
+
+// RecordRosterEmail fills email onto the row this recovery identifies — the
+// first naming login (case-insensitive), else the first carrying githubID — and
+// ONLY when its email cell is blank. Returns the slice and whether a cell was
+// filled.
+//
+// This is the other half of the acceptance fold: a recovery whose row already
+// names the account but records no address has nowhere for the recovered address
+// to land, and the invite team holding it is retired right after. The login-then-
+// id order matches the web's fold. Deliberately fill-only — an address the
+// teacher entered is theirs and is never replaced by the invited one.
+func RecordRosterEmail(rows []RosterRow, login string, githubID int64, email string) (out []RosterRow, recorded bool) {
+	email = strings.TrimSpace(email)
+	login = strings.TrimSpace(login)
+	if email == "" {
+		return rows, false
+	}
+	fill := func(i int) ([]RosterRow, bool) {
+		if strings.TrimSpace(rows[i].Email) != "" {
+			return rows, false
+		}
+		rows[i].Email = email
+		return rows, true
+	}
+	if login != "" {
+		for i := range rows {
+			if !rows[i].isRaw() && strings.EqualFold(strings.TrimSpace(rows[i].Username), login) {
+				return fill(i)
+			}
+		}
+	}
+	if githubID > 0 {
+		for i := range rows {
+			if !rows[i].isRaw() && rows[i].GitHubID == githubID {
+				return fill(i)
+			}
+		}
+	}
+	return rows, false
+}
+
+// BackfillRosterGitHubID records githubID on the row matching username
+// (case-insensitive) when its github_id cell addresses no account. Returns the
+// slice and whether a cell was filled.
+//
+// A cell that already resolves is NEVER overwritten: a login GitHub let someone
+// else recycle would otherwise repoint the row onto a different person. An
+// unusable cell is safe to replace, since repointing it can't hijack an
+// account. The caller must source githubID from the classroom's own team
+// membership, never a global user lookup, for the same reason.
+func BackfillRosterGitHubID(rows []RosterRow, username string, githubID int64) (out []RosterRow, filled bool) {
+	if strings.TrimSpace(username) == "" || githubID <= 0 {
+		return rows, false
+	}
+	for i := range rows {
+		if rows[i].isRaw() || !strings.EqualFold(rows[i].Username, username) {
+			continue
+		}
+		if rows[i].GitHubID != 0 {
+			return rows, false
+		}
+		rows[i].GitHubID = githubID
+		rows[i].githubIDRaw = ""
+		return rows, true
+	}
+	return rows, false
+}
+
 // ValidateRosterEmail: empty is valid. Non-empty must parse as bare
 // `local@domain`; the display-name form is rejected so name metadata doesn't
 // sneak into the email column. No TLD requirement, no DNS check.
@@ -537,18 +704,6 @@ func ValidateRosterEmail(email string) error {
 		return fmt.Errorf("invalid email %q: include only the address (e.g., alice@example.edu), not a display name", email)
 	}
 	return nil
-}
-
-func equalSlices(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // checkFieldLengths rejects cells over maxFieldBytes. Errors name the column
@@ -573,21 +728,38 @@ func checkFieldLengths(line int, record []string) error {
 // this type has always used to mean unresolved). A hard error is reserved for a
 // cell strconv itself rejects, which was fatal before this change too.
 //
-// The usable set mirrors the web app's parseGitHubId (web/src/util/identity.ts):
-// positive, and <= 2^53-1, past which the web side can no longer represent an id
-// exactly. A zero-padded cell is the one deliberate difference: the web rejects
-// it (its id-keyed joins compare the raw string, which padding breaks) while Go
-// resolves it and EncodeRoster writes it back canonically — so a rewrite repairs
-// the cell instead of stranding it, and the two readers converge.
+// The usable set mirrors the web app's resolveGitHubId
+// (web/src/util/identity.ts): a run of digits, positive, and <= 2^53-1, past
+// which the web side can no longer represent an id exactly. Leading zeros are
+// the one tolerated non-canonical spelling — the web strips exactly those, and
+// EncodeRoster writes the cell back canonically, so a rewrite repairs it. Any
+// other spelling strconv would happily read (a leading `+`, a sign) must stay
+// UNRESOLVED here: the web's join reads such a row as a pending email invite,
+// and resolving it would make the same row identity to one tool and claimable
+// to the other.
 func parseGitHubID(s string) (int64, error) {
-	id, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	trimmed := strings.TrimSpace(s)
+	id, err := strconv.ParseInt(trimmed, 10, 64)
 	if err != nil {
 		return 0, err
 	}
-	if id <= 0 || id > maxSafeGitHubID {
+	if id <= 0 || id > maxSafeGitHubID || !isDigits(trimmed) {
 		return 0, nil
 	}
 	return id, nil
+}
+
+// isDigits reports whether s is a non-empty run of ASCII digits.
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // isFormulaTrigger reports whether `b` would be parsed as a formula prefix by
