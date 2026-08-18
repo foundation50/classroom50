@@ -33,7 +33,7 @@ func NewCmd() *cobra.Command {
 			"  add      append or upsert one student (resolves github_id, invites to org)\n" +
 			"  invite   invite one student by email address (no GitHub account needed yet)\n" +
 			"  cancel-invite  revoke a pending email invitation and clear what it left behind\n" +
-			"  sync     reconcile the roster with GitHub (dry run; --write applies)\n" +
+			"  sync     sync the roster with GitHub (dry run; --write applies)\n" +
 			"  update   correct fields on an existing student (roster-only; never invites)\n" +
 			"  remove   remove one student from the roster (does NOT touch org membership)\n" +
 			"  import   bulk upsert from a local CSV (the stored 7-column roster.csv, or 6/5-column forms)\n\n" +

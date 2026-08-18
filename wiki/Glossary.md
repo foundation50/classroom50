@@ -35,9 +35,9 @@ self-linking.
 **Pending row** — A `roster.csv` row for someone invited by email who hasn't
 accepted yet. It holds the invited address and role, with no username or
 `github_id`, because GitHub offers no way to look up an account from an email
-address. A reconcile fills in the account once they accept; cancelling the
+address. A sync fills in the account once they accept; cancelling the
 invitation removes the row immediately, and an expired one is cleared by the next
-reconcile.
+sync, from either tool.
 
 **Invite team** — A `secret` GitHub team, named `invite-<hash>`, that holds one
 invited address until that person joins. It is how an email invitation is
@@ -48,13 +48,13 @@ invitation sent from one can be completed or revoked from the other. For more
 information, see
 [Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
-**Reconcile** — A pass that catches `roster.csv` up with the classroom's GitHub
-state: it records the students who accepted an email invitation, fills in a
-missing `github_id`, drops the pending rows nothing backs, and retires the invite
-teams that are done. Nothing runs on its own, so the web app reconciles when a
-teacher opens a classroom or its roster, and `gh teacher roster sync` does it on
-demand. See
-[What triggers a reconcile](How-Classroom-50-Works#what-triggers-a-reconcile).
+**Sync** — A pass that catches `roster.csv` up with the classroom's GitHub state:
+it records the students who accepted an email invitation, fills in a missing
+`github_id`, drops the pending rows nothing backs, and retires the invite teams
+that are done. Nothing runs on its own: the web app runs a sync when a teacher
+opens a classroom or its roster, and `gh teacher roster sync` runs one on demand.
+This is not **Sync now**, which collects scores. See
+[What triggers a sync](How-Classroom-50-Works#what-triggers-a-sync).
 
 **Organization (org)** — The GitHub organization that hosts a Classroom 50
 setup. Requires the Team or Enterprise plan.

@@ -86,12 +86,12 @@ func rosterSyncCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "sync <org> <classroom>",
-		Short: "Reconcile roster.csv with the classroom's GitHub state",
-		Long: "Reconcile <org>/classroom50/<classroom>/roster.csv against GitHub:\n" +
+		Short: "Sync roster.csv with the classroom's GitHub state",
+		Long: "Sync <org>/classroom50/<classroom>/roster.csv with GitHub:\n" +
 			"record the students who accepted an email invitation, drop the\n" +
 			"pending rows whose invitation is gone, and fill in any missing\n" +
-			"github_id. The same reconciliation the web app runs when a teacher\n" +
-			"opens the roster — here it is explicit and script-callable.\n\n" +
+			"github_id. The web app runs the same sync when a teacher opens\n" +
+			"the roster — here it is explicit and script-callable.\n\n" +
 			"Reports by default and changes nothing: a dry run issues no write\n" +
 			"request at all. Pass --write to apply what it found.\n\n" +
 			"An accepted email invitation is the case that needs this: GitHub\n" +
@@ -130,7 +130,7 @@ func rosterSyncCmd() *cobra.Command {
 			return runRosterSync(client, cmd.OutOrStdout(), cmd.ErrOrStderr(), org, classroom, write)
 		},
 	}
-	cmd.Flags().BoolVar(&write, "write", false, "Apply the reconciliation (default: report only, making no write request)")
+	cmd.Flags().BoolVar(&write, "write", false, "Apply the sync (default: report only, making no write request)")
 	return cmd
 }
 
@@ -207,7 +207,7 @@ func loadClassroomIndex(client githubapi.Client, org, classroom, branch string) 
 		}
 		if !found {
 			idx.ok = false
-			return idx, fmt.Errorf("team %s is recorded for classroom %s but GitHub has no such team — it was renamed or deleted, so who is enrolled cannot be read; restore the team (or correct %s in the config repo) before reconciling",
+			return idx, fmt.Errorf("team %s is recorded for classroom %s but GitHub has no such team — it was renamed or deleted, so who is enrolled cannot be read; restore the team (or correct %s in the config repo) before syncing",
 				team.slug, classroom, configrepo.ClassroomFilePath(classroom))
 		}
 		for _, m := range members {
@@ -330,7 +330,7 @@ func scanInviteTeams(client githubapi.Client, errOut io.Writer, org, classroom s
 				// team, so an empty enrollment set means the read was degraded,
 				// not that they were removed. Prove neither: keep the team.
 				scan.trusted = false
-				_, _ = fmt.Fprintf(errOut, "Warning: %s: no classroom members are visible, so %s can't be reconciled; leaving it alone.\n", org, team.Slug)
+				_, _ = fmt.Fprintf(errOut, "Warning: %s: no classroom members are visible, so %s can't be synced; leaving it alone.\n", org, team.Slug)
 				continue
 			}
 			if !idx.enrolled[invitee.ID] {
@@ -661,7 +661,7 @@ func retirableSlugs(rows []configrepo.RosterRow, scan inviteScan) []string {
 func syncDegradedError(org, classroom string) error {
 	return &cliutil.ExitCodeError{
 		Code: syncExitDegraded,
-		Err:  fmt.Errorf("%s: the %s reconcile was incomplete — a read was degraded, so nothing was removed; re-run once GitHub is healthy", org, classroom),
+		Err:  fmt.Errorf("%s: the %s sync was incomplete — a read was degraded, so nothing was removed; re-run once GitHub is healthy", org, classroom),
 	}
 }
 
@@ -696,7 +696,7 @@ func reportSyncPlan(out, errOut io.Writer, org, classroom string, scan inviteSca
 		_, _ = fmt.Fprintf(out, "%s: retire the metadata team %s — the roster already records its address\n", org, slug)
 	}
 	for _, username := range plan.findings.dupLogins {
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: left a second row for %q alone — more than one row carries that username, and only the first can be filled in, so which student the id belongs to is not this pass's guess. Remove the duplicate row (or give it its own username) to let the reconcile finish it.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: left a second row for %q alone — more than one row carries that username, and only the first can be filled in, so which student the id belongs to is not this pass's guess. Remove the duplicate row (or give it its own username) to let the sync finish it.\n",
 			path, username)
 	}
 	for _, anomaly := range scan.anomalies {
@@ -793,7 +793,7 @@ func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classr
 
 	message := contract.PrefixCommit(fmt.Sprintf("roster: sync %s with GitHub (gh teacher roster sync)", classroom))
 	if _, err := configwrite.CommitTreeChange(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
-		return nil, degraded, fmt.Errorf("reconciling %s: %w", configrepo.RosterFilePath(classroom), err)
+		return nil, degraded, fmt.Errorf("syncing %s: %w", configrepo.RosterFilePath(classroom), err)
 	}
 	if applied.empty() {
 		return retired, degraded, nil

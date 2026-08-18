@@ -106,7 +106,7 @@ func runRosterCancelInvite(client githubapi.Client, out, errOut io.Writer, org, 
 	if err := membership.CancelOrgInvitation(client, org, invitationID); err != nil {
 		if errors.Is(err, membership.ErrInvitationAlreadyGone) {
 			_, _ = fmt.Fprintf(out, "%s: the invitation for %s was already gone, nothing was cancelled\n", org, email)
-			_, _ = fmt.Fprintf(errOut, "Nothing else was touched: another invitation for %s may have replaced this one. Run `gh teacher roster sync %s %s` to reconcile.\n",
+			_, _ = fmt.Fprintf(errOut, "Nothing else was touched: another invitation for %s may have replaced this one. Run `gh teacher roster sync %s %s` to refresh the roster.\n",
 				email, org, classroom)
 			return nil
 		}
@@ -136,7 +136,7 @@ func runRosterCancelInvite(client githubapi.Client, out, errOut io.Writer, org, 
 
 	message := contract.PrefixCommit(fmt.Sprintf("roster: remove cancelled invite from %s (gh teacher roster cancel-invite)", classroom))
 	if _, err := configwrite.CommitTreeChange(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
-		_, _ = fmt.Fprintf(errOut, "Warning: the invitation to %s was cancelled, but dropping its pending row from %s failed; run `gh teacher roster sync %s %s` to reconcile.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: the invitation to %s was cancelled, but dropping its pending row from %s failed; run `gh teacher roster sync %s %s` to refresh the roster.\n",
 			email, configrepo.RosterFilePath(classroom), org, classroom)
 		return fmt.Errorf("invitation cancelled, but the pending roster row was not removed: %w", err)
 	}

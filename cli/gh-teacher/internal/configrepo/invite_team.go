@@ -345,7 +345,7 @@ func requireTeacherFreeInviteTeam(client githubapi.Client, org, slug, actor stri
 		return err
 	}
 	if len(members) > 0 {
-		return fmt.Errorf("%w: %q at %s still has %d member(s) after dropping %s — a reconcile would misread them as the invitee; remove them from the team and retry",
+		return fmt.Errorf("%w: %q at %s still has %d member(s) after dropping %s — a sync would misread them as the invitee; remove them from the team and retry",
 			ErrInviteTeamNotEmpty, slug, org, len(members), actor)
 	}
 	return nil
