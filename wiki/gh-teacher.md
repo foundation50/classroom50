@@ -25,6 +25,9 @@ output, or `--verbose` / `-v` for per-step detail.
 | `classroom migrate --source <id-or-org> --target <org>` | Import a GitHub Classroom. |
 | `roster list <org> <classroom>` | List roster rows. Flags: `--json`, `--quiet`. |
 | `roster add <org> <classroom> <username>` | Add/upsert a student; invites them. |
+| `roster invite <org> <classroom> <email>` | Invite one student by email. Flags: `--first-name`, `--last-name`, `--section`. |
+| `roster cancel-invite <org> <classroom> <email>` | Revoke a pending email invitation and clear what it left behind. |
+| `roster sync <org> <classroom>` | Reconcile the roster with GitHub. Dry run; `--write` applies. |
 | `roster update <org> <classroom> <username>` | Correct fields on an existing row (roster-only). |
 | `roster remove <org> <classroom> <username>` | Remove a roster row (not org membership). |
 | `roster import <org> <classroom> <csv>` | Bulk upsert from a CSV. |
@@ -289,7 +292,8 @@ subcommands use an optimistic-rebase loop (up to 5 retries), so concurrent
 teacher edits don't lose each other's work. Every row for a student who has
 joined carries an immutable numeric `github_id` (CLI-managed — don't hand-edit
 it) so a username change doesn't desynchronize records. A student invited by
-email has neither a username nor a `github_id` until they accept.
+email has neither a username nor a `github_id` until they accept: `roster invite`
+creates that pending row, and `roster sync` completes it once they've joined.
 
 ### `roster list`
 
@@ -317,6 +321,86 @@ no row matches the username and `--email` matches a pending row's address, that
 row is filled in rather than duplicated; the pending row's `role` is deliberately
 not inherited, since the team is the authority for role.
 
+### `roster invite`
+
+```sh
+gh teacher roster invite <org> <classroom> <email> [--first-name <n>] [--last-name <n>] [--section <s>]
+```
+
+Invites one student who has no GitHub account yet (or whose username you don't
+know). It sends an organization invitation carrying two teams — the classroom
+team and a per-invite `secret` metadata team retaining the address — and appends
+a pending row to `roster.csv`. The same three artifacts the web app's email
+invite creates, so either tool can complete the invitation. For a student whose
+username you already know, use `roster add`, which resolves their `github_id`
+immediately.
+
+**Student role only.** Unlike the web app, this can't invite staff, so a
+mistyped address can never be handed organization ownership. Grant a staff role
+with `gh teacher staff add` once the person has an account.
+
+Once the student accepts, `roster sync` fills in their username and `github_id`.
+
+Non-zero on: a classroom with no usable team recorded in `classroom.json`
+(nothing is sent), an address the roster already lists, or a failed invitation.
+An address that already belongs to an organization member — or already has a
+pending invitation — is reported as skipped and exits **0**.
+
+### `roster cancel-invite`
+
+```sh
+gh teacher roster cancel-invite <org> <classroom> <email>
+```
+
+Revokes the pending invitation and clears the two records it left behind: the
+metadata team and the pending roster row. The same teardown the web app
+performs, so either tool can revoke either tool's invitation.
+
+Acts only on a **pending** invitation. With none for the address it reports and
+changes nothing, exiting 0 — an invitation the student already accepted looks
+identical from here, and the metadata team holds the only record of which
+address their account came from. Run `roster sync` in that case: it records the
+student, and collects a genuine leftover under its own checks. For a student
+already on the roster with a username, use `roster remove` (and `gh teacher
+remove` for the organization).
+
+### `roster sync`
+
+```sh
+gh teacher roster sync <org> <classroom>            # dry run: report only
+gh teacher roster sync <org> <classroom> --write    # apply
+```
+
+Reconciles `roster.csv` against GitHub: records the students who accepted an
+email invitation, fills in a missing `github_id` from the classroom team's
+membership, drops the pending rows nothing backs, and deletes the metadata teams
+that are done. The same reconciliation the web app runs when a teacher opens the
+roster — here it's explicit and script-callable.
+
+Its scope is the email-invite lifecycle and `github_id`: it doesn't rewrite a
+recorded `role` (a row it adds for an accepted invitation records `student`), and
+it doesn't add rows for organization members who were never invited through
+Classroom 50 — see
+[Already an org member, but not on the roster](Troubleshooting#already-an-org-member-but-not-on-the-roster).
+
+**Dry-run by default**: without `--write` it issues no write request at all.
+
+Exit codes follow `terraform plan -detailed-exitcode`:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Nothing to do — or `--write` applied everything. |
+| `1` | An error, or a degraded read left the pass incomplete (nothing was removed). |
+| `2` | A dry run found changes pending. |
+
+Conservative by construction. Any degraded read (the pending-invitation list, a
+team) makes the whole pass read-mostly: nothing is removed and no metadata team
+is deleted, because an unreadable team can't prove its row is dead. A team whose
+stored address no longer hashes to its name, or that has more than one member, is
+reported on stderr and left standing. A member-less team is collected only past
+24 hours old with no pending invitation for its address, and a recovered team is
+deleted only after the roster commit carrying its address has landed.
+
 ### `roster update`
 
 ```sh
@@ -343,13 +427,36 @@ Drops the row (idempotent). Does **not** remove organization membership — use
 gh teacher roster import <org> <classroom> <path-to-csv>
 ```
 
-Bulk upsert. Accepts a 5-column header
-(`username,first_name,last_name,email,section`) or 6-column with a trailing
-`github_id` (which is ignored and re-resolved). The field reference is in
-[Roster CSV fields](Web-Teacher-Guide#roster-csv-fields). Every username is
-resolved up front — one typo aborts before any commit. New students are
-invited. Every row must carry a `username`: unlike the web app's **Upload**, this
-command can't identify a student by `github_id` or by email alone.
+Bulk upsert. The header may be the stored roster shape
+(`username,first_name,last_name,email,section,github_id,role`), the same without
+`role`, or just the first five columns — so a `roster.csv` exported from a
+web-managed classroom imports verbatim, with no hand-trimming. The field
+reference is in [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
+
+Each row is routed by what identifies it:
+
+- **A `username`** is resolved through `GET /users/{username}`, so the stored
+  `github_id` is always GitHub-authoritative. A `github_id` cell naming a
+  different account than the username **fails that line**, naming both ids —
+  a row that addresses two students isn't something to guess at.
+- **An email address alone** is a pending email invitation: import updates that
+  row's name and section, matched by address, and nothing else. It never sends or
+  cancels an invitation, and never creates an identity-less row, so an address
+  with no pending row is skipped with a notice. Send the invitation with
+  [`roster invite`](#roster-invite) first.
+- **A `github_id` with no `username`** is round-trip cargo: `import` resolves
+  students by username and has no id→account lookup, so the row is skipped with a
+  notice pointing at the web app's **Upload**, and anything stored for that
+  student is left untouched.
+
+`role` is carried, never applied: import grants no role beyond the organization
+invitation and classroom-team membership every imported student gets, and never
+overwrites a role already recorded.
+
+Every unusable line is reported in one pass and **nothing is committed**, so one
+editing pass fixes the whole file. The roster is written in a single commit, so a
+partial-import state can't appear on the repository. After it lands, any student
+who isn't already in the organization is invited.
 
 **Errors common to roster commands:** missing `classroom50` repository → `run gh teacher init
 <org> first`; missing `roster.csv` → points at `classroom add`; bad header →
@@ -382,10 +489,10 @@ dual-role account behaves in the app is covered in
 The CLI-visible effects:
 
 - **`roster list` and the `role` column** record the single **highest** role
-  (`teacher > hta > ta > student`). The automatic sync refreshes the column,
-  so you may see a commit rewrite an empty role to `teacher` shortly after
-  `roster add` — the snapshot updating, not a change to enrollment; nothing
-  reads this column to decide access.
+  (`teacher > hta > ta > student`). The web app's automatic sync refreshes the
+  column, so you may see a commit rewrite an empty role to `teacher` shortly
+  after `roster add` — the snapshot updating, not a change to enrollment; nothing
+  reads this column to decide access. `roster sync` leaves the column alone.
 - **`roster add` prints a note** when the target is already staff, so the
   later `role`-column rewrite isn't a surprise.
 - **`roster remove` (unenroll) drops only the student side** — the roster row

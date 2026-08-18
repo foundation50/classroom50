@@ -11,9 +11,11 @@ workaround where one exists.
 **Students can't be looked up by email.** GitHub's API provides no way to
 find an account from an email address, so an emailed invitation can't be
 matched to a student until they accept it. Classroom 50 records the address
-on the roster as a pending row and fills in the account when they join. To
-have usernames from the start, collect them up front; a signup form works
-well. See [Add students](Web-Teacher-Guide#add-students).
+on the roster as a pending row and fills in the account when they join — on the
+next reconcile, which the web app runs when you open the roster and
+`gh teacher roster sync` runs on demand. To have usernames from the start,
+collect them up front; a signup form works well. See
+[Add students](Web-Teacher-Guide#add-students).
 
 **A retained address is the one you invited.** When you invite by email, the
 address stored on the roster is what you typed, which is not necessarily the

@@ -82,7 +82,13 @@ Yes. Upload a roster CSV or a plain text list (web app: **Upload**; CLI:
 `github_id`, GitHub username, or **email address**, so one file can mix students
 whose handle you know with ones you only have an address for. Each address goes
 onto the roster right away as a pending row, and is matched to the student's
-GitHub account when they accept. See
+GitHub account when they accept.
+
+From the CLI, invite one address at a time with
+`gh teacher roster invite <org> <classroom> <email>`. `roster import` reads a
+stored `roster.csv` verbatim — including the pending rows for students invited by
+email, whose name and section it updates — but it never sends an invitation, so
+it can't invite a new address in bulk. See
 [Invitations by email](How-Classroom-50-Works#invitations-by-email) and
 [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
 
