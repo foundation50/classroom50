@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router"
-import { BookOpen, GraduationCap, Search } from "lucide-react"
+import { ArrowUpDown, BookOpen, GraduationCap, Search } from "lucide-react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -198,7 +198,9 @@ export function StudentClassroomList({
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        <LabeledControl label={t("classes.toolbar.sort.label")}>
+        <LabeledControl
+          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
+        >
           <Select
             selectSize="sm"
             className="w-auto"

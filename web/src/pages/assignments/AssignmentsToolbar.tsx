@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next"
+import { ArrowUpDown, ListFilter } from "lucide-react"
 
 import { Button, Toolbar } from "@/components/ui"
 import {
@@ -43,7 +44,7 @@ const AssignmentsToolbar = ({
       />
 
       <Toolbar.FilterSelect
-        label={t("assignments.toolbar.typeLabel")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
         value={filters.type}
         onChange={(e) =>
           onFiltersChange({
@@ -61,7 +62,7 @@ const AssignmentsToolbar = ({
       </Toolbar.FilterSelect>
 
       <Toolbar.FilterSelect
-        label={t("assignments.toolbar.dueLabel")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
         value={filters.due}
         onChange={(e) =>
           onFiltersChange({
@@ -85,7 +86,7 @@ const AssignmentsToolbar = ({
 
       <Toolbar.Trailing>
         <Toolbar.FilterSelect
-          label={t("assignments.toolbar.sortLabel")}
+          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
           value={sort}
           onChange={(e) => onSortChange(e.target.value as AssignmentSort)}
           aria-label={t("assignments.toolbar.sortAria")}

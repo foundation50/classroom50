@@ -2,9 +2,11 @@ import { Link } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
+  ArrowUpDown,
   CalendarClock,
   CircleAlert,
   FilePlus2,
+  ListFilter,
   UserRound,
   UsersRound,
 } from "lucide-react"
@@ -252,7 +254,7 @@ function StudentAssignmentsToolbar({
       />
 
       <Toolbar.FilterSelect
-        label={t("assignments.discover.toolbar.statusLabel")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
         value={filters.status}
         onChange={(e) =>
           onFiltersChange({
@@ -274,7 +276,7 @@ function StudentAssignmentsToolbar({
       </Toolbar.FilterSelect>
 
       <Toolbar.FilterSelect
-        label={t("assignments.discover.toolbar.typeLabel")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
         value={filters.type}
         onChange={(e) =>
           onFiltersChange({
@@ -294,7 +296,7 @@ function StudentAssignmentsToolbar({
       </Toolbar.FilterSelect>
 
       <Toolbar.FilterSelect
-        label={t("assignments.discover.toolbar.dueLabel")}
+        icon={<ListFilter aria-hidden="true" className="size-4" />}
         value={filters.due}
         onChange={(e) =>
           onFiltersChange({
@@ -325,7 +327,7 @@ function StudentAssignmentsToolbar({
 
       <Toolbar.Trailing>
         <Toolbar.FilterSelect
-          label={t("assignments.discover.toolbar.sortLabel")}
+          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
           value={sort}
           onChange={(e) =>
             onSortChange(e.target.value as StudentAssignmentSort)

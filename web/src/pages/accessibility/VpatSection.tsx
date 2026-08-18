@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CircleDashed } from "lucide-react"
+import { ArrowUpDown, CircleDashed, ListFilter } from "lucide-react"
 
 import { Alert, Badge, Button, Card, Toolbar, cx } from "@/components/ui"
 import {
@@ -258,7 +258,7 @@ export function VpatSection() {
               ariaLabel={t("accessibility.vpat.searchAria")}
             />
             <Toolbar.FilterSelect
-              label={t("accessibility.vpat.filterLabel")}
+              icon={<ListFilter aria-hidden="true" className="size-4" />}
               value={filter}
               onChange={(e) => setFilter(e.target.value as VpatFilter)}
               aria-label={t("accessibility.vpat.filterAria")}
@@ -284,7 +284,7 @@ export function VpatSection() {
             )}
             <Toolbar.Trailing>
               <Toolbar.FilterSelect
-                label={t("accessibility.vpat.sortBy")}
+                icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
                 value={sort}
                 onChange={(e) => setSort(e.target.value as VpatSort)}
                 aria-label={t("accessibility.vpat.sortBy")}

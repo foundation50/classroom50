@@ -1,5 +1,11 @@
 import { Link } from "@tanstack/react-router"
-import { ChevronDown, Plus, Search } from "lucide-react"
+import {
+  ArrowUpDown,
+  ChevronDown,
+  ListFilter,
+  Plus,
+  Search,
+} from "lucide-react"
 import GitHub from "@/assets/github.svg?react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -190,7 +196,9 @@ const ClassroomList = ({
         </div>
 
         {showTermFilter && (
-          <LabeledControl label={t("classes.toolbar.term")}>
+          <LabeledControl
+            icon={<ListFilter aria-hidden="true" className="size-4" />}
+          >
             <Select
               selectSize="sm"
               className="join-item w-auto"
@@ -208,7 +216,9 @@ const ClassroomList = ({
           </LabeledControl>
         )}
 
-        <LabeledControl label={t("classes.toolbar.sort.label")}>
+        <LabeledControl
+          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
+        >
           <Select
             selectSize="sm"
             className="join-item w-auto"

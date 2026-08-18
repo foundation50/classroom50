@@ -81,17 +81,22 @@ export type ToolbarFilterSelectProps = {
   // Optional: with a label the select gets the joined label-prefix recipe; without
   // one it renders a bare sized Select (the inline bars have no visible prefix).
   label?: string
+  // A compact leading-icon prefix (funnel for a filter, up/down for a sort).
+  // Takes precedence over `label`; pass `aria-label` for the category name so the
+  // icon prefix stays purely visual. Prefer this over `label` for a tidy bar.
+  icon?: ReactNode
   selectSize?: SelectSize
 } & ComponentPropsWithoutRef<"select">
 
 function ToolbarFilterSelect({
   label,
+  icon,
   selectSize = "sm",
   className,
   children,
   ...props
 }: ToolbarFilterSelectProps) {
-  if (!label) {
+  if (!label && !icon) {
     return (
       <Select selectSize={selectSize} className={className} {...props}>
         {children}
@@ -99,7 +104,7 @@ function ToolbarFilterSelect({
     )
   }
   return (
-    <LabeledControl label={label}>
+    <LabeledControl label={label} icon={icon}>
       <Select
         selectSize={selectSize}
         className={cx("join-item w-auto min-w-0", className)}
