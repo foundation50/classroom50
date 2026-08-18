@@ -525,6 +525,44 @@ func UpdateRosterRow(rows []RosterRow, username string, p RosterPatch) (out []Ro
 	return rows, false, false
 }
 
+// UpdatePendingEmailRow patches metadata onto the pending email-invite row for
+// email (normalized: trimmed, case-insensitive), leaving the address itself and
+// role alone. Returns the slice and whether a row matched.
+//
+// It deliberately never appends: the caller (`roster import`) may only correct
+// a row an invitation already created, since creating an identity-less row
+// without sending the invitation would strand it. Claimable rows are the same
+// narrow set UpsertRosterRow's email fallback accepts — no username and no
+// github_id cell at all — so a present-but-unresolved id still protects a row.
+func UpdatePendingEmailRow(rows []RosterRow, email string, p RosterPatch) (out []RosterRow, found bool) {
+	key := strings.ToLower(strings.TrimSpace(email))
+	if key == "" {
+		return rows, false
+	}
+	for i := range rows {
+		if rows[i].isRaw() || rows[i].Username != "" {
+			continue
+		}
+		if rows[i].GitHubID != 0 || rows[i].githubIDRaw != "" {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(rows[i].Email)) != key {
+			continue
+		}
+		if p.FirstName != nil {
+			rows[i].FirstName = *p.FirstName
+		}
+		if p.LastName != nil {
+			rows[i].LastName = *p.LastName
+		}
+		if p.Section != nil {
+			rows[i].Section = *p.Section
+		}
+		return rows, true
+	}
+	return rows, false
+}
+
 // ValidateRosterEmail: empty is valid. Non-empty must parse as bare
 // `local@domain`; the display-name form is rejected so name metadata doesn't
 // sneak into the email column. No TLD requirement, no DNS check.

@@ -578,6 +578,76 @@ func TestEncodeRoster_EmptyGitHubID(t *testing.T) {
 	}
 }
 
+// UpdatePendingEmailRow is import's only write to a pending invite row: it
+// corrects metadata by address, and must never create a row (import doesn't
+// send invitations) nor disturb the address/role the invitation recorded.
+func TestUpdatePendingEmailRow(t *testing.T) {
+	s := func(v string) *string { return &v }
+
+	t.Run("patches name and section, matched case-insensitively", func(t *testing.T) {
+		rows := []RosterRow{
+			{Username: "alice", Email: "a@x.edu", GitHubID: 1, Role: "student"},
+			{Email: "Pending@X.edu", Role: "teacher"},
+		}
+		updated, found := UpdatePendingEmailRow(rows, "  pending@x.edu ", RosterPatch{
+			FirstName: s("Bob"), LastName: s("B"), Section: s("s2"),
+		})
+		if !found {
+			t.Fatal("found = false, want the pending row matched on a normalized address")
+		}
+		got := updated[1]
+		if got.FirstName != "Bob" || got.LastName != "B" || got.Section != "s2" {
+			t.Errorf("metadata not applied: %+v", got)
+		}
+		if got.Email != "Pending@X.edu" || got.Role != "teacher" {
+			t.Errorf("the invitation's own address/role must not change: %+v", got)
+		}
+		if updated[0].FirstName != "" || updated[0].Username != "alice" {
+			t.Errorf("the account row was touched: %+v", updated[0])
+		}
+	})
+
+	t.Run("never creates a row when no pending row matches", func(t *testing.T) {
+		rows := []RosterRow{{Username: "alice", Email: "a@x.edu", GitHubID: 1}}
+		updated, found := UpdatePendingEmailRow(rows, "nobody@x.edu", RosterPatch{FirstName: s("N")})
+		if found {
+			t.Fatal("found = true, want false")
+		}
+		if len(updated) != 1 {
+			t.Fatalf("rows = %d, want 1 (no row appended)", len(updated))
+		}
+	})
+
+	t.Run("skips rows that already identify someone", func(t *testing.T) {
+		// Same narrow claim rule as UpsertRosterRow's email fallback: a shared
+		// contact address must not let a metadata patch rewrite an enrolled row,
+		// and a preserved-but-unresolved github_id cell still protects its row.
+		raw, err := ParseRoster([]byte("username,first_name,last_name,email,section,github_id,role\n" +
+			",,,shared@x.edu,,0,student\n"))
+		if err != nil {
+			t.Fatalf("ParseRoster: %v", err)
+		}
+		rows := append([]RosterRow{{Username: "alice", Email: "shared@x.edu", GitHubID: 1}}, raw...)
+
+		updated, found := UpdatePendingEmailRow(rows, "shared@x.edu", RosterPatch{FirstName: s("Nope")})
+		if found {
+			t.Fatal("found = true, want false: neither an enrolled row nor a raw-id row is claimable")
+		}
+		for _, r := range updated {
+			if r.FirstName == "Nope" {
+				t.Fatalf("a protected row was patched: %+v", r)
+			}
+		}
+	})
+
+	t.Run("an empty address matches nothing", func(t *testing.T) {
+		rows := []RosterRow{{FirstName: "Ghost"}}
+		if _, found := UpdatePendingEmailRow(rows, "  ", RosterPatch{FirstName: s("X")}); found {
+			t.Fatal("found = true, want false for a blank address")
+		}
+	})
+}
+
 func TestUpsertRosterRow_AppendAndReplace(t *testing.T) {
 	rows := []RosterRow{
 		{Username: "alice", GitHubID: 1},

@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -586,6 +588,232 @@ func (m *dualRoleAddMock) handler(t *testing.T) http.Handler {
 		_ = json.NewEncoder(w).Encode(members)
 	})
 	return base
+}
+
+// rosterImportMock extends the write mock with the user-lookup and org-invite
+// endpoints the import path calls. userIDs maps login -> id; a username absent
+// from it 404s, which is how the unknown-username failures are driven. No
+// classroom.json is served, so the team step warns and skips.
+type rosterImportMock struct {
+	*rosterWriteMock
+	userIDs map[string]int64
+}
+
+func (m *rosterImportMock) handler(t *testing.T) http.Handler {
+	t.Helper()
+	base := m.rosterWriteMock.handler(t).(*http.ServeMux)
+	base.HandleFunc("/users/", func(w http.ResponseWriter, r *http.Request) {
+		login := strings.TrimPrefix(r.URL.Path, "/users/")
+		id, ok := m.userIDs[login]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"login": login, "id": id})
+	})
+	base.HandleFunc("/orgs/o/invitations", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": 1})
+	})
+	return base
+}
+
+// runImport drives `roster import` end-to-end against a mocked config repo:
+// stored is the committed roster.csv, file the teacher's import CSV.
+func runImport(t *testing.T, stored, file string, userIDs map[string]int64) (*rosterImportMock, string, string, error) {
+	t.Helper()
+	mock := &rosterImportMock{
+		rosterWriteMock: &rosterWriteMock{files: map[string]string{"cs-principles/roster.csv": stored}},
+		userIDs:         userIDs,
+	}
+	server := httptest.NewServer(mock.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	path := filepath.Join(t.TempDir(), "import.csv")
+	if err := os.WriteFile(path, []byte(file), 0o600); err != nil {
+		t.Fatalf("write import csv: %v", err)
+	}
+	var out, errOut bytes.Buffer
+	err := runRosterImport(client, &out, &errOut, "o", "cs-principles", path)
+	return mock, out.String(), errOut.String(), err
+}
+
+// committedRow finds a row in the single POSTed blob, keyed by username (or by
+// email for a pending email-invite row, which has no username).
+func committedRow(t *testing.T, mock *rosterImportMock, username, email string) configrepo.RosterRow {
+	t.Helper()
+	if len(mock.blobs) != 1 {
+		t.Fatalf("got %d blobs POSTed, want 1: %#v", len(mock.blobs), mock.blobs)
+	}
+	rows, err := configrepo.ParseRoster([]byte(mock.blobs[0]))
+	if err != nil {
+		t.Fatalf("parse committed roster: %v\n%s", err, mock.blobs[0])
+	}
+	for _, r := range rows {
+		if username != "" && r.Username == username {
+			return r
+		}
+		if username == "" && r.Username == "" && strings.EqualFold(r.Email, email) {
+			return r
+		}
+	}
+	t.Fatalf("no committed row for username=%q email=%q:\n%s", username, email, mock.blobs[0])
+	return configrepo.RosterRow{}
+}
+
+const storedRosterHeader = "username,first_name,last_name,email,section,github_id,role\n"
+
+// TestRunRosterImport covers the stored-roster-shape import: account rows keep
+// the resolve/upsert path, email-only rows patch a pending row's metadata, and
+// anything the CLI can't act on is a notice, not a silent write.
+func TestRunRosterImport(t *testing.T) {
+	t.Run("stored 7-column export imports cleanly", func(t *testing.T) {
+		stored := storedRosterHeader +
+			"alice,Alice,A,a@x.edu,s1,1,student\n" +
+			",,,pending@x.edu,,,student\n"
+		file := storedRosterHeader +
+			"alice,Alice,A,a@x.edu,s1,1,student\n" +
+			",Bob,B,pending@x.edu,s2,,student\n"
+
+		mock, out, _, err := runImport(t, stored, file, map[string]int64{"alice": 1})
+		if err != nil {
+			t.Fatalf("runRosterImport: %v", err)
+		}
+		pending := committedRow(t, mock, "", "pending@x.edu")
+		if pending.FirstName != "Bob" || pending.LastName != "B" || pending.Section != "s2" {
+			t.Errorf("pending row did not gain name/section: %#v", pending)
+		}
+		if pending.Email != "pending@x.edu" || pending.Role != "student" || pending.GitHubID != 0 {
+			t.Errorf("pending row lost its email/role or gained an id: %#v", pending)
+		}
+		if alice := committedRow(t, mock, "alice", ""); alice.GitHubID != 1 {
+			t.Errorf("account row missing or unresolved: %#v", alice)
+		}
+		if !strings.Contains(out, "1 pending metadata updated") {
+			t.Errorf("stdout should count the pending metadata update:\n%s", out)
+		}
+	})
+
+	t.Run("reports every unusable line in one error and commits nothing", func(t *testing.T) {
+		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n"
+		file := storedRosterHeader +
+			"ghost,G,G,,,,\n" +
+			"phantom,P,P,,,,\n"
+
+		mock, _, _, err := runImport(t, stored, file, map[string]int64{"alice": 1})
+		if err == nil {
+			t.Fatal("err = nil, want a report naming both unusable lines")
+		}
+		for _, want := range []string{"line 2", "ghost", "line 3", "phantom"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error must name %q:\n%v", want, err)
+			}
+		}
+		if len(mock.blobs) != 0 {
+			t.Errorf("nothing may be committed when a line fails, got %d blobs", len(mock.blobs))
+		}
+	})
+
+	t.Run("github_id disagreeing with the resolved account fails the line", func(t *testing.T) {
+		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n"
+		file := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,777,student\n"
+
+		mock, _, _, err := runImport(t, stored, file, map[string]int64{"alice": 1})
+		if err == nil {
+			t.Fatal("err = nil, want a github_id mismatch failure")
+		}
+		if !strings.Contains(err.Error(), "777") || !strings.Contains(err.Error(), "1") {
+			t.Errorf("error must name both ids:\n%v", err)
+		}
+		if len(mock.blobs) != 0 {
+			t.Errorf("a mismatch must commit nothing, got %d blobs", len(mock.blobs))
+		}
+	})
+
+	t.Run("github_id matching the resolved account imports fine", func(t *testing.T) {
+		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n"
+		file := storedRosterHeader + "alice,Alice,Anderson,a@x.edu,s1,1,student\n"
+
+		mock, _, _, err := runImport(t, stored, file, map[string]int64{"alice": 1})
+		if err != nil {
+			t.Fatalf("runRosterImport: %v", err)
+		}
+		alice := committedRow(t, mock, "alice", "")
+		if alice.LastName != "Anderson" || alice.GitHubID != 1 {
+			t.Errorf("account row not upserted: %#v", alice)
+		}
+	})
+
+	t.Run("email-only row with no stored counterpart notices and continues", func(t *testing.T) {
+		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n"
+		file := storedRosterHeader +
+			"alice,Alice,Anderson,a@x.edu,s1,,student\n" +
+			",New,N,nobody@x.edu,s3,,student\n"
+
+		mock, _, errOut, err := runImport(t, stored, file, map[string]int64{"alice": 1})
+		if err != nil {
+			t.Fatalf("an unmatched email-only row must not fail the import: %v", err)
+		}
+		if !strings.Contains(errOut, "nobody@x.edu") {
+			t.Errorf("stderr should notice the unmatched address:\n%s", errOut)
+		}
+		if strings.Contains(mock.blobs[0], "nobody@x.edu") {
+			t.Errorf("import must not create an email-only row:\n%s", mock.blobs[0])
+		}
+		if alice := committedRow(t, mock, "alice", ""); alice.LastName != "Anderson" {
+			t.Errorf("the rest of the import must still apply: %#v", alice)
+		}
+	})
+
+	t.Run("github_id-only row is skipped as cargo and its stored row untouched", func(t *testing.T) {
+		storedCargo := ",Cargo,C,,,555,student\n"
+		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n" + storedCargo
+		file := storedRosterHeader +
+			"alice,Alice,Anderson,a@x.edu,s1,1,student\n" +
+			",Changed,X,,,555,teacher\n"
+
+		mock, out, errOut, err := runImport(t, stored, file, map[string]int64{"alice": 1})
+		if err != nil {
+			t.Fatalf("a github_id-only row must not fail the import: %v", err)
+		}
+		if !strings.Contains(errOut, "github_id") || !strings.Contains(errOut, "Upload") {
+			t.Errorf("stderr should notice the cargo row and name the web Upload:\n%s", errOut)
+		}
+		if !strings.Contains(out, "1 skipped") {
+			t.Errorf("stdout should count the skipped row:\n%s", out)
+		}
+		if !strings.Contains(mock.blobs[0], storedCargo) {
+			t.Errorf("the stored github_id-only row must round-trip byte-identical:\n%s", mock.blobs[0])
+		}
+	})
+
+	t.Run("stored role wins over the import file's role cell", func(t *testing.T) {
+		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n"
+		file := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,teacher\n"
+
+		mock, _, _, err := runImport(t, stored, file, map[string]int64{"alice": 1})
+		if err != nil {
+			t.Fatalf("runRosterImport: %v", err)
+		}
+		if alice := committedRow(t, mock, "alice", ""); alice.Role != "student" {
+			t.Errorf("import must not apply a role cell, got %q", alice.Role)
+		}
+	})
+
+	t.Run("stored github_id survives an import row that omits it", func(t *testing.T) {
+		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n"
+		file := storedRosterHeader + "alice,Alice,A,a@x.edu,s2,,student\n"
+
+		mock, _, _, err := runImport(t, stored, file, map[string]int64{"alice": 1})
+		if err != nil {
+			t.Fatalf("runRosterImport: %v", err)
+		}
+		alice := committedRow(t, mock, "alice", "")
+		if alice.GitHubID != 1 || alice.Section != "s2" {
+			t.Errorf("want the stored id kept and the section updated: %#v", alice)
+		}
+	})
 }
 
 // classroomJSONWithStaffTeams builds a classroom.json carrying the student team
