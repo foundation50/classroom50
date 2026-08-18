@@ -119,7 +119,7 @@ func rosterInviteCmd() *cobra.Command {
 			var data []byte
 			if path != "" {
 				var err error
-				if data, err = readInviteFile(path); err != nil {
+				if _, data, err = readTeacherFile(path, "--file path"); err != nil {
 					return err
 				}
 			}
@@ -142,18 +142,20 @@ func rosterInviteCmd() *cobra.Command {
 	return cmd
 }
 
-// readInviteFile reads the --file address list, resolving the path and turning
-// a read failure into a clear error before any network call.
-func readInviteFile(path string) ([]byte, error) {
+// readTeacherFile reads a local file a teacher passed on the command line,
+// returning the resolved absolute path alongside the bytes so callers name the
+// file they actually opened. `what` labels the argument in a resolve error
+// (e.g. "--file path", "import path").
+func readTeacherFile(path, what string) (string, []byte, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return nil, fmt.Errorf("resolve --file path: %w", err)
+		return "", nil, fmt.Errorf("resolve %s: %w", what, err)
 	}
 	data, err := os.ReadFile(abs)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", abs, err)
+		return "", nil, fmt.Errorf("read %s: %w", abs, err)
 	}
-	return data, nil
+	return abs, data, nil
 }
 
 // errClassroomTeamUnusable refuses a send when classroom.json records no usable
@@ -274,8 +276,9 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 	if err != nil {
 		return err
 	}
-	// Refuse before resolving the actor so an already-invited address still
-	// costs zero API calls, as it did before the send was extracted.
+	// Refuse here rather than off outcomePendingBlocked so this path's error can
+	// name the sync/cancel-invite remedies; the helper's own check stays
+	// authoritative for the bulk path.
 	if _, pending := rosterEmailClaim(rows, email); pending {
 		return fmt.Errorf("%s is already invited to %s — run `gh teacher roster sync %s %s` if they accepted, or `gh teacher roster cancel-invite %s %s %s` to revoke it; nothing was sent",
 			email, classroom, org, classroom, org, classroom, email)
@@ -293,10 +296,6 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 	case outcomeInvited:
 		_, _ = fmt.Fprintf(out, "%s: invited %s as direct_member (teams %s, %s)\n",
 			org, email, classroomTeam.Slug, inviteTeam.Slug)
-	case outcomePendingBlocked:
-		// Unreachable: the pre-check above already refused. Kept so the switch
-		// stays exhaustive.
-		return fmt.Errorf("%s is already invited to %s; nothing was sent", email, classroom)
 	case outcomeSkippedAlready:
 		_, _ = fmt.Fprintf(out, "%s: skipped %s — already a member of the org or already invited\n", org, email)
 		_, _ = fmt.Fprintf(errOut, "If they accepted an earlier invitation, run `gh teacher roster sync %s %s` to record them on the roster.\n", org, classroom)
@@ -304,6 +303,8 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 	case outcomeRateLimited, outcomeFailed:
 		return sendErr
 	default:
+		// Includes outcomePendingBlocked, which the pre-check above already
+		// refused with a better message, and the unset zero value.
 		return fmt.Errorf("internal error: unhandled invite outcome %d for %s (nothing was recorded)", outcome, email)
 	}
 

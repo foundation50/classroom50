@@ -115,6 +115,19 @@ func TestParseInviteFile(t *testing.T) {
 			t.Errorf("want the line number retained: %q", msg)
 		}
 	})
+
+	// Excel and Notepad prepend a BOM when saving UTF-8. Without trimming it the
+	// first address fails and the fail-closed run sends nothing — so a teacher's
+	// spreadsheet-saved list would be refused wholesale.
+	t.Run("UTF-8 BOM is trimmed", func(t *testing.T) {
+		entries, failures := parseInviteFile([]byte("\ufeffada@uni.edu\nbea@uni.edu\n"))
+		if len(failures) != 0 {
+			t.Fatalf("failures = %v, want none", failures)
+		}
+		if len(entries) != 2 || entries[0].email != "ada@uni.edu" {
+			t.Fatalf("entries = %+v, want both addresses with the BOM stripped", entries)
+		}
+	})
 }
 
 func TestJoinInviteFileFailures(t *testing.T) {

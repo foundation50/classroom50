@@ -52,6 +52,13 @@ const maxSafeGitHubID = 1<<53 - 1
 // and the header check fails on two identical-looking slices.
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
+// TrimUTF8BOM drops the byte-order mark Excel and Notepad prepend when saving
+// UTF-8. Every reader of a teacher-supplied file needs it: the BOM is invisible
+// in an editor but makes the first line of the file unparseable.
+func TrimUTF8BOM(data []byte) []byte {
+	return bytes.TrimPrefix(data, utf8BOM)
+}
+
 // RosterRow is one student in the roster. GitHubID == 0 means unresolved (a
 // 5-column import row before GET /users/{username}, or a cell we couldn't use).
 type RosterRow struct {
@@ -130,7 +137,7 @@ func ParseRosterLenient(data []byte) ([]RosterRow, error) {
 // parseRoster is the shared core; lenient preserves a bad row as raw rather
 // than erroring (see ParseRoster / ParseRosterLenient).
 func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
-	data = bytes.TrimPrefix(data, utf8BOM)
+	data = TrimUTF8BOM(data)
 	r := csv.NewReader(bytes.NewReader(data))
 	// Read header without field-count enforcement so a renamed/short header
 	// gets our message, not csv's generic "wrong number of fields".
@@ -232,7 +239,7 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 // can add its own per-row failures (a username that resolves to no account) to
 // them and refuse once with every unusable line named.
 func ParseImportCSV(data []byte) ([]RosterRow, error) {
-	data = bytes.TrimPrefix(data, utf8BOM)
+	data = TrimUTF8BOM(data)
 	r := csv.NewReader(bytes.NewReader(data))
 	r.FieldsPerRecord = -1
 

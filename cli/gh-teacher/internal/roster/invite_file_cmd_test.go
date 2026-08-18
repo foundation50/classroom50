@@ -62,7 +62,7 @@ func (m *bulkInviteMock) handler(t *testing.T) http.Handler {
 			Name string `json:"name"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if m.emailForSlug(body.Name, m.teamCreate500) {
+		if m.slugMatchesAny(body.Name, m.teamCreate500) {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte(`{"message":"boom"}`))
 			return
@@ -148,9 +148,9 @@ func (m *bulkInviteMock) handler(t *testing.T) http.Handler {
 	return recordCalls(&m.calls, failing)
 }
 
-// emailForSlug reports whether the given team name (== slug) corresponds to any
-// email in the set, by recomputing each email's deterministic slug.
-func (m *bulkInviteMock) emailForSlug(slug string, set map[string]bool) bool {
+// slugMatchesAny reports whether the given team name (== slug) corresponds to
+// any email in the set, by recomputing each email's deterministic slug.
+func (m *bulkInviteMock) slugMatchesAny(slug string, set map[string]bool) bool {
 	for email := range set {
 		if configrepo.InviteTeamName(inviteTestClassroom, email) == slug {
 			return true
@@ -190,16 +190,6 @@ func runInviteFile(t *testing.T, mock *bulkInviteMock, data []byte) (string, str
 	return out.String(), errOut.String(), err
 }
 
-func countInvitationPOSTs(calls []inviteCall) int {
-	n := 0
-	for _, c := range calls {
-		if c.Method == http.MethodPost && c.Path == "/orgs/o/invitations" {
-			n++
-		}
-	}
-	return n
-}
-
 // Five fresh addresses -> five invitations, one commit, five rows, and the
 // commit must follow every send.
 func TestRunRosterInviteFile_HappyPath(t *testing.T) {
@@ -210,7 +200,7 @@ func TestRunRosterInviteFile_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runRosterInviteFile: %v", err)
 	}
-	if got := countInvitationPOSTs(mock.calls); got != 5 {
+	if got := countCalls(mock.calls, http.MethodPost, "/orgs/o/invitations"); got != 5 {
 		t.Errorf("invitation POSTs = %d, want 5", got)
 	}
 	if len(mock.blobs) != 1 {
@@ -278,7 +268,7 @@ func TestRunRosterInviteFile_PendingSkippedSecondInvited(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runRosterInviteFile: %v", err)
 	}
-	if got := countInvitationPOSTs(mock.calls); got != 1 {
+	if got := countCalls(mock.calls, http.MethodPost, "/orgs/o/invitations"); got != 1 {
 		t.Errorf("invitation POSTs = %d, want 1 (ada is already pending)", got)
 	}
 	if len(mock.invitedEmails) != 1 || mock.invitedEmails[0] != "bea@uni.edu" {
@@ -354,7 +344,7 @@ func TestRunRosterInviteFile_RateLimitDefersRest(t *testing.T) {
 	}
 	// ada sent (1) + bea attempted then rate-limited (1) = 2 POSTs; cam & dan
 	// never attempted.
-	if got := countInvitationPOSTs(mock.calls); got != 2 {
+	if got := countCalls(mock.calls, http.MethodPost, "/orgs/o/invitations"); got != 2 {
 		t.Errorf("invitation POSTs = %d, want 2 (no sends after the rate limit)", got)
 	}
 	if len(mock.invitedEmails) != 1 || mock.invitedEmails[0] != "ada@uni.edu" {
@@ -429,7 +419,7 @@ func TestRunRosterInviteFile_ClassroomTeamMissingAbortsBatch(t *testing.T) {
 	if indexOfCall(mock.calls, http.MethodPost, "/orgs/o/teams") >= 0 {
 		t.Error("created an invite team despite the abort")
 	}
-	if countInvitationPOSTs(mock.calls) != 0 {
+	if countCalls(mock.calls, http.MethodPost, "/orgs/o/invitations") != 0 {
 		t.Error("sent an invitation despite the abort")
 	}
 	if len(mock.blobs) != 0 {
@@ -451,13 +441,7 @@ func TestRunRosterInviteFile_TeamPrepRateLimitDefersRest(t *testing.T) {
 		t.Errorf("invited = %v, want only ada", mock.invitedEmails)
 	}
 	// bea tripped the limit during team prep; cam must never be attempted.
-	teamPOSTs := 0
-	for _, c := range mock.calls {
-		if c.Method == http.MethodPost && c.Path == "/orgs/o/teams" {
-			teamPOSTs++
-		}
-	}
-	if teamPOSTs != 2 {
+	if teamPOSTs := countCalls(mock.calls, http.MethodPost, "/orgs/o/teams"); teamPOSTs != 2 {
 		t.Errorf("team POSTs = %d, want 2 (no team prep after the limit)", teamPOSTs)
 	}
 	for _, addr := range []string{"bea@uni.edu", "cam@uni.edu"} {
@@ -508,7 +492,7 @@ func TestRunRosterInviteFile_AllInvalidSendsNothing(t *testing.T) {
 	if err == nil {
 		t.Fatal("invalid lines must refuse the whole run")
 	}
-	if countInvitationPOSTs(mock.calls) != 0 {
+	if countCalls(mock.calls, http.MethodPost, "/orgs/o/invitations") != 0 {
 		t.Errorf("nothing should be sent when the file has invalid lines")
 	}
 	if len(mock.blobs) != 0 {

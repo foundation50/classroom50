@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -649,13 +647,9 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 		return err
 	}
 
-	abs, err := filepath.Abs(csvPath)
+	abs, data, err := readTeacherFile(csvPath, "import path")
 	if err != nil {
-		return fmt.Errorf("resolve import path: %w", err)
-	}
-	data, err := os.ReadFile(abs)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", abs, err)
+		return err
 	}
 	imported, parseErr := configrepo.ParseImportCSV(data)
 	// A row-level parse failure must not short-circuit resolution: fixing the

@@ -1,7 +1,6 @@
 package roster
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -30,36 +29,28 @@ type addressEntry struct {
 // failure list means the caller must send nothing — the same fail-closed
 // posture as `roster import`.
 //
-// One address per line. A blank line, or a line whose first non-space rune is
-// `#`, is a comment and ignored, so a teacher can annotate the list. Surviving
-// lines are validated with ValidateRosterEmail (bare local@domain, no display
-// name), normalized (trim + lowercase), and deduped case-insensitively keeping
-// the first occurrence — mirroring dedupePendingByEmail so one file can't queue
-// two invites to the same address.
+// One address per line; a blank line or a `#` line is skipped so a teacher can
+// annotate the list. Each surviving line goes through CanonicalRosterEmail and
+// is deduped case-insensitively, keeping the FIRST occurrence so the reported
+// line number is the one a teacher would edit.
 func parseInviteFile(data []byte) ([]addressEntry, []error) {
 	var (
 		entries  []addressEntry
 		failures []error
 		seen     = map[string]bool{}
 	)
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	// A pathological single line could exceed bufio's default 64KiB token cap;
-	// raise it so a long (if unusual) address file still parses rather than
-	// silently truncating.
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	line := 0
-	for scanner.Scan() {
+	// bytes.Lines rather than bufio.Scanner: no token-size cap to tune, and the
+	// TrimSpace below already absorbs the terminator (including CRLF).
+	for raw := range bytes.Lines(configrepo.TrimUTF8BOM(data)) {
 		line++
-		raw := strings.TrimSpace(scanner.Text())
-		if raw == "" || strings.HasPrefix(raw, "#") {
+		value := strings.TrimSpace(string(raw))
+		if value == "" || strings.HasPrefix(value, "#") {
 			continue
 		}
-		// The CANONICAL address is what gets invited: an address that merely
-		// validates (`<ada@uni.edu>` unwraps) must be sent in its parsed form, or
-		// GitHub 422s it and the report misreads that as already-invited.
-		email, err := configrepo.CanonicalRosterEmail(raw)
+		email, err := configrepo.CanonicalRosterEmail(value)
 		if err != nil {
-			failures = append(failures, inviteLineError(line, raw, err))
+			failures = append(failures, inviteLineError(line, value, err))
 			continue
 		}
 		if seen[email] {
@@ -67,9 +58,6 @@ func parseInviteFile(data []byte) ([]addressEntry, []error) {
 		}
 		seen[email] = true
 		entries = append(entries, addressEntry{email: email, line: line})
-	}
-	if err := scanner.Err(); err != nil {
-		failures = append(failures, fmt.Errorf("reading address list: %w", err))
 	}
 	return entries, failures
 }
@@ -156,7 +144,6 @@ func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, cl
 		skipped        []addressEntry
 		pendingBlocked []addressEntry
 		deferredList   []addressEntry
-		failedList     []addressEntry
 		failedErrs     []error
 		rateLimitErr   error
 	)
@@ -186,7 +173,6 @@ func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, cl
 		default:
 			// outcomeFailed, plus any outcome a future change forgets to handle:
 			// both mean "not invited", which must never read as success.
-			failedList = append(failedList, entry)
 			failedErrs = append(failedErrs, fmt.Errorf("line %d (%s): %w", entry.line, entry.email, sendErr))
 			_, _ = fmt.Fprintf(out, "  failed %s (line %d)\n", entry.email, entry.line)
 		}
@@ -207,7 +193,7 @@ func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, cl
 
 	_, _ = fmt.Fprintf(out, "%s/%s/%s: %d invited, %d appended as pending rows, %d already member/invited, %d already on the roster, %d failed, %d deferred (rate limit)\n",
 		org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom),
-		len(invited), appended, len(skipped), len(pendingBlocked), len(failedList), len(deferredList))
+		len(invited), appended, len(skipped), len(pendingBlocked), len(failedErrs), len(deferredList))
 
 	for _, entry := range skipped {
 		_, _ = fmt.Fprintf(errOut, "Skipped %s (line %d): already a member of the org or already invited — run `gh teacher roster sync %s %s` if they accepted an earlier invitation.\n",
@@ -239,13 +225,13 @@ func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, cl
 			len(invited), configrepo.RosterFilePath(classroom), org, classroom)
 		return fmt.Errorf("invitations sent, but the roster rows were not written: %w", commitErr)
 	}
-	if len(failedList) > 0 {
-		return fmt.Errorf("%d address(es) could not be invited; see the report above", len(failedList))
+	if len(failedErrs) > 0 {
+		return fmt.Errorf("%d address(es) could not be invited; see the report above", len(failedErrs))
 	}
 	if len(deferredList) > 0 {
 		// Nothing is broken — GitHub is throttling — so this is the "changes
-		// remain" code, not a failure.
-		return &cliutil.ExitCodeError{Code: 2, Err: fmt.Errorf("%d address(es) not yet invited (GitHub rate limit); re-run to continue", len(deferredList))}
+		// remain" code `roster sync` already defines, not a failure.
+		return &cliutil.ExitCodeError{Code: syncExitChangesPending, Err: fmt.Errorf("%d address(es) not yet invited (GitHub rate limit); re-run to continue", len(deferredList))}
 	}
 	return nil
 }
