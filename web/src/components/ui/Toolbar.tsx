@@ -51,13 +51,10 @@ export type ToolbarSearchProps = {
   // so a caller `w-full`/`min-w-0` wins over the default.
   className?: string
   iconClassName?: string
-  // The in-search-bar clear affordance: an inline text link at the trailing edge
-  // that resets the active search/filters. Rendered only when `onClear` is set
-  // AND `clearActive` is true, so every search bar clears the same way. The label
-  // is resolved here from one source: "Clear filter" when a filter axis is active
-  // (`hasFilterActive`), else "Clear" — pass the boolean the caller already
-  // computes rather than the wording. One recipe — don't hand-roll a standalone
-  // Clear button beside the bar.
+  // The in-search-bar clear affordance: an inline text link at the trailing edge,
+  // rendered only when `onClear` is set AND `clearActive` is true. The label is
+  // resolved from one source — "Clear filter" when `hasFilterActive`, else
+  // "Clear" — so callers pass the boolean, not the wording.
   onClear?: () => void
   clearActive?: boolean
   hasFilterActive?: boolean
@@ -115,10 +112,9 @@ export type ToolbarFilterSelectProps = {
   // Takes precedence over `label`; pass `aria-label` for the category name so the
   // icon prefix stays purely visual. Prefer this over `label` for a tidy bar.
   icon?: ReactNode
-  // Warning-toned (yellow) highlight when the select holds a non-default value,
-  // so an active filter is visible at a glance. Highlights both the icon/label
-  // prefix and the select border. Leave false for a sort select (a sort is always
-  // "set" and not a narrowing filter).
+  // Warning-toned highlight when the select holds a non-default value (see
+  // LabeledControl.active). Leave false for a sort select — a sort is always set,
+  // not a narrowing filter.
   active?: boolean
   selectSize?: SelectSize
 } & ComponentPropsWithoutRef<"select">

@@ -44,8 +44,6 @@ const AssignmentsToolbar = ({
     onFiltersChange({ ...DEFAULT_FILTERS })
   }
 
-  // With no assignments to filter, render only the trailing actions (e.g. New
-  // assignment) so the primary action still lives in the bar.
   if (actionsOnly) {
     return trailing ? (
       <Toolbar>

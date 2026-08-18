@@ -1061,8 +1061,8 @@ export function buildScoresCsvRows(
           submissions: submissionCount,
           // A detection-only row can still be dateless (e.g. a milestone tag
           // whose commit lookup failed) — export a blank rather than crashing
-          // on Invalid Date.
-          submitted_at: isoOrBlank(datetime),
+          // on Invalid Date. Reuse the `ms` parsed above rather than re-parsing.
+          submitted_at: isoOrBlank(ms),
           late: late ? "yes" : "no",
           commit: escapeCsvFormulaInjection(rest.commit),
           review: escapeCsvFormulaInjection(rest.review),
@@ -1121,9 +1121,10 @@ export function buildScoresCsvRows(
     .map((keyed) => keyed.row)
 }
 
-// The ISO form of a row's submission time, or "" for an absent/unparseable one.
-function isoOrBlank(datetime: string): string {
-  const ms = new Date(datetime).getTime()
+// The ISO form of a parsed epoch-ms instant, or "" for an absent/unparseable
+// one (NaN). Takes ms rather than the raw string so callers that already parsed
+// it don't re-parse.
+function isoOrBlank(ms: number): string {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : ""
 }
 

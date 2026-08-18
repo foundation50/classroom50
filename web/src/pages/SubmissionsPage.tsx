@@ -358,21 +358,13 @@ const SubmissionsPageContent = () => {
   // from the collected snapshot.
   const liveCapable = isOwner && !skipsGrading
 
-  // The page-scoped live/detection fan-out reads the owners of the page the
-  // teacher is actually viewing, under their chosen sort + filters — the fan-out
-  // spine is always built from the SNAPSHOT display list (never the live-merged
-  // rows), so honoring the real sort/filters can't loop the fan-out's output
-  // back into its input. Search + section + status + sort all apply in every
-  // mode; the only inherent limit is that a not-yet-collected (live-only)
-  // submitter can't be placed under a time sort or a grade-implying status
-  // filter until a collect ingests it — surfaced by pendingMayHide below rather
-  // than by hiding the controls.
-  //
   // Live submission presence for THIS assignment comes from student repos'
   // submit/* releases, so a student who pushed but hasn't been collected yet
-  // still shows as submitted (issue #347). PAGE-SCOPED: the fan-out reads only
-  // the repos on the CURRENT table page (#359's burst mitigation), so a large
-  // class is read a page at a time. Owner-only, off for empty_repo.
+  // still shows as submitted (issue #347). The fan-out spine is always built
+  // from the SNAPSHOT display list (never the live-merged rows), so honoring the
+  // real sort/filters can't loop the fan-out's output back into its input.
+  // PAGE-SCOPED: it reads only the repos on the CURRENT table page (#359's burst
+  // mitigation). Owner-only, off for empty_repo.
   const snapshotScoped = useMemo(
     () =>
       rosterReady ? rosterScopedRows(snapshotRows, students) : snapshotRows,
@@ -1109,9 +1101,6 @@ const SubmissionsPageContent = () => {
         passingAvailable={passingEnabled}
         sections={sections}
         onShare={() => setAcceptOpen(true)}
-        // A not-yet-collected submitter can't be placed under a time sort or a
-        // grade-implying status filter until the next collect; surface that as
-        // an inline info tooltip next to Sort rather than a full-width banner.
         sortHint={
           showPendingHiddenHint ? (
             <HelpTooltip
