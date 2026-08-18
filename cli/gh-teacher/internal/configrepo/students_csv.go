@@ -563,6 +563,35 @@ func UpdatePendingEmailRow(rows []RosterRow, email string, p RosterPatch) (out [
 	return rows, false
 }
 
+// RemovePendingEmailRow drops the pending email-invite row for email
+// (normalized: trimmed, case-insensitive). Returns the slice and whether a row
+// was removed.
+//
+// Claimable rows are exactly the narrow set UpdatePendingEmailRow and
+// UpsertRosterRow's email fallback accept — no username and no github_id cell at
+// all — because a cancel must never drop a student who already accepted, nor a
+// classmate who merely shares a contact address. Mirrors the web's
+// removeEmailInviteRows filter.
+func RemovePendingEmailRow(rows []RosterRow, email string) (out []RosterRow, removed bool) {
+	key := strings.ToLower(strings.TrimSpace(email))
+	if key == "" {
+		return rows, false
+	}
+	for i := range rows {
+		if rows[i].isRaw() || rows[i].Username != "" {
+			continue
+		}
+		if rows[i].GitHubID != 0 || rows[i].githubIDRaw != "" {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(rows[i].Email)) != key {
+			continue
+		}
+		return append(rows[:i], rows[i+1:]...), true
+	}
+	return rows, false
+}
+
 // ValidateRosterEmail: empty is valid. Non-empty must parse as bare
 // `local@domain`; the display-name form is rejected so name metadata doesn't
 // sneak into the email column. No TLD requirement, no DNS check.

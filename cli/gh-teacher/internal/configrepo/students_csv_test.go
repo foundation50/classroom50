@@ -648,6 +648,56 @@ func TestUpdatePendingEmailRow(t *testing.T) {
 	})
 }
 
+// RemovePendingEmailRow drops the row a cancelled invitation left behind. The
+// claim rule is the load-bearing part: anything that identifies an account must
+// survive, so a cancel can never drop an enrolled student.
+func TestRemovePendingEmailRow(t *testing.T) {
+	t.Run("removes the pending row, matched on a normalized address", func(t *testing.T) {
+		rows := []RosterRow{
+			{Username: "alice", Email: "a@x.edu", GitHubID: 1},
+			{Email: "Pending@X.edu", Role: "student"},
+			{Email: "other@x.edu", Role: "student"},
+		}
+		updated, removed := RemovePendingEmailRow(rows, "  pending@x.edu ")
+		if !removed {
+			t.Fatal("removed = false, want the pending row dropped")
+		}
+		if len(updated) != 2 {
+			t.Fatalf("rows = %d, want 2: %+v", len(updated), updated)
+		}
+		if updated[0].Username != "alice" || updated[1].Email != "other@x.edu" {
+			t.Errorf("the wrong row was dropped: %+v", updated)
+		}
+	})
+
+	t.Run("never drops a row that identifies someone", func(t *testing.T) {
+		// Two students may share a contact address, and a preserved-but-unusable
+		// github_id cell still names an account — same narrow claim rule as
+		// UpsertRosterRow's email fallback.
+		raw, err := ParseRoster([]byte("username,first_name,last_name,email,section,github_id,role\n" +
+			",,,shared@x.edu,,0,student\n"))
+		if err != nil {
+			t.Fatalf("ParseRoster: %v", err)
+		}
+		rows := append([]RosterRow{{Username: "alice", Email: "shared@x.edu", GitHubID: 1}}, raw...)
+
+		updated, removed := RemovePendingEmailRow(rows, "shared@x.edu")
+		if removed {
+			t.Fatal("removed = true, want false: neither an enrolled row nor a raw-id row is claimable")
+		}
+		if len(updated) != 2 {
+			t.Fatalf("rows = %d, want 2 (nothing dropped)", len(updated))
+		}
+	})
+
+	t.Run("an empty address matches nothing", func(t *testing.T) {
+		rows := []RosterRow{{Email: ""}}
+		if _, removed := RemovePendingEmailRow(rows, "  "); removed {
+			t.Fatal("removed = true, want false for a blank address")
+		}
+	})
+}
+
 func TestUpsertRosterRow_AppendAndReplace(t *testing.T) {
 	rows := []RosterRow{
 		{Username: "alice", GitHubID: 1},

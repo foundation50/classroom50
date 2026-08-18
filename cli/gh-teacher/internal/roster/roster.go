@@ -1,7 +1,7 @@
 // Package roster implements the `gh teacher roster` command: managing the
 // classroom roster in <org>/classroom50/<classroom>/roster.csv (list, add,
-// invite, update, remove, import), including resolving each student's GitHub
-// id and inviting them to the org. Only NewCmd is exported.
+// invite, cancel-invite, update, remove, import), including resolving each
+// student's GitHub id and inviting them to the org. Only NewCmd is exported.
 package roster
 
 import (
@@ -31,6 +31,7 @@ func NewCmd() *cobra.Command {
 			"  list     print the roster (table, --json, or --quiet username-only)\n" +
 			"  add      append or upsert one student (resolves github_id, invites to org)\n" +
 			"  invite   invite one student by email address (no GitHub account needed yet)\n" +
+			"  cancel-invite  revoke a pending email invitation and clear what it left behind\n" +
 			"  update   correct fields on an existing student (roster-only; never invites)\n" +
 			"  remove   remove one student from the roster (does NOT touch org membership)\n" +
 			"  import   bulk upsert from a local CSV (the stored 7-column roster.csv, or 6/5-column forms)\n\n" +
@@ -44,6 +45,7 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(rosterListCmd())
 	cmd.AddCommand(rosterAddCmd())
 	cmd.AddCommand(rosterInviteCmd())
+	cmd.AddCommand(rosterCancelInviteCmd())
 	cmd.AddCommand(rosterUpdateCmd())
 	cmd.AddCommand(rosterRemoveCmd())
 	cmd.AddCommand(rosterImportCmd())
