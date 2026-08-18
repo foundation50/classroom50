@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowUpDown, ListFilter } from "lucide-react"
 
@@ -10,6 +11,11 @@ import {
 
 // Search + type/due filters + sort for the teacher assignments table.
 // Controlled by TeacherAssignmentsView; emits query/filter/sort changes.
+// `trailing` hosts right-aligned actions (the New assignment split button or the
+// archived badge), mirroring the submissions toolbar so the primary action sits
+// in the bar, not the page header. When `actionsOnly` is set (no assignments
+// exist yet) only the trailing actions render — the search/filter/sort controls
+// would have nothing to act on.
 const AssignmentsToolbar = ({
   query,
   onQueryChange,
@@ -17,6 +23,8 @@ const AssignmentsToolbar = ({
   onFiltersChange,
   sort,
   onSortChange,
+  actionsOnly = false,
+  trailing,
 }: {
   query: string
   onQueryChange: (value: string) => void
@@ -24,6 +32,8 @@ const AssignmentsToolbar = ({
   onFiltersChange: (filters: AssignmentFilters) => void
   sort: AssignmentSort
   onSortChange: (sort: AssignmentSort) => void
+  actionsOnly?: boolean
+  trailing?: ReactNode
 }) => {
   const { t } = useTranslation()
   const hasActiveFilter =
@@ -32,6 +42,16 @@ const AssignmentsToolbar = ({
   const clearAll = () => {
     onQueryChange("")
     onFiltersChange({ ...DEFAULT_FILTERS })
+  }
+
+  // With no assignments to filter, render only the trailing actions (e.g. New
+  // assignment) so the primary action still lives in the bar.
+  if (actionsOnly) {
+    return trailing ? (
+      <Toolbar>
+        <Toolbar.Trailing>{trailing}</Toolbar.Trailing>
+      </Toolbar>
+    ) : null
   }
 
   return (
@@ -103,6 +123,7 @@ const AssignmentsToolbar = ({
           </option>
           <option value="type">{t("assignments.toolbar.sortType")}</option>
         </Toolbar.FilterSelect>
+        {trailing}
       </Toolbar.Trailing>
     </Toolbar>
   )

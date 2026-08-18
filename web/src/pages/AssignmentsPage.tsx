@@ -50,7 +50,7 @@ const NewAssignmentButton = ({
         <Link
           to="/$org/$classroom/assignments/new"
           params={{ org, classroom }}
-          className="btn btn-primary join-item"
+          className="btn btn-primary btn-sm join-item"
         >
           <Plus aria-hidden="true" className="size-4" />{" "}
           {t("assignments.newButton.assignment")}
@@ -58,6 +58,7 @@ const NewAssignmentButton = ({
         <div className="dropdown dropdown-end join-item">
           <Button
             variant="primary"
+            size="sm"
             tabIndex={0}
             className="join-item h-full border-s border-primary-content/20 px-2"
             aria-label={t("assignments.newButton.moreOptions")}
@@ -145,8 +146,22 @@ export const TeacherAssignmentsView = ({
   )
 
   const hasAssignments = (sourceAssignments?.length ?? 0) > 0
-  const showToolbar = !assignmentsLoading && hasAssignments
-  const showNoResults = showToolbar && visible.length === 0
+  // The toolbar owns the primary action now (New assignment / archived badge),
+  // so it renders whenever the list has loaded — with only the trailing action
+  // when there are no assignments yet (actionsOnly), and the full search/filter/
+  // sort bar once there are.
+  const showToolbar = !assignmentsLoading
+  const showNoResults = hasAssignments && visible.length === 0
+
+  // Right-aligned toolbar action: the New assignment split button for an author,
+  // or the archived badge; null for a read-only viewer (TA).
+  const toolbarAction = archived ? (
+    <Badge tone="neutral" size="md">
+      {t("assignments.archived")}
+    </Badge>
+  ) : canAuthor ? (
+    <NewAssignmentButton org={org} classroom={classroom} />
+  ) : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -169,15 +184,6 @@ export const TeacherAssignmentsView = ({
               ? "…"
               : t("assignments.studentCount", { count: studentCount ?? 0 })}
           </>
-        }
-        action={
-          archived ? (
-            <Badge tone="neutral" size="md">
-              {t("assignments.archived")}
-            </Badge>
-          ) : canAuthor ? (
-            <NewAssignmentButton org={org} classroom={classroom} />
-          ) : null
         }
       />
       {archived ? (
@@ -214,6 +220,8 @@ export const TeacherAssignmentsView = ({
           onFiltersChange={setFilters}
           sort={sort}
           onSortChange={setSort}
+          actionsOnly={!hasAssignments}
+          trailing={toolbarAction}
         />
       )}
       {showNoResults ? (
