@@ -17,6 +17,33 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.31.0](https://github.com/foundation50/classroom50/compare/web-v1.30.0...web-v1.31.0) (2026-08-18)
+
+
+### Features
+
+* **cli:** give the teacher CLI the full email-invite lifecycle ([#651](https://github.com/foundation50/classroom50/issues/651)) ([a6809bd](https://github.com/foundation50/classroom50/commit/a6809bdc77fef08788a0982efb292b191dea8577))
+* **web:** accept github_id and email-only rows in a roster CSV import ([#639](https://github.com/foundation50/classroom50/issues/639)) ([54810cd](https://github.com/foundation50/classroom50/commit/54810cd66702313dd2f1acf9008db73c8282ce31))
+* **web:** retain invited emails and recover them on acceptance ([#631](https://github.com/foundation50/classroom50/issues/631)) ([12bc7fc](https://github.com/foundation50/classroom50/commit/12bc7fcc03e578b41fb310e6c8e43f632599e48a))
+
+
+### Bug Fixes
+
+* align copy with behavior and drop the init_shim auto_init README ([#628](https://github.com/foundation50/classroom50/issues/628)) ([17f28b5](https://github.com/foundation50/classroom50/commit/17f28b5476b417fe2c3a8ae99121c051d19a1e24))
+* **cli:** read the roster's email-only invite rows and sweep invite teams ([#632](https://github.com/foundation50/classroom50/issues/632)) ([9772e6c](https://github.com/foundation50/classroom50/commit/9772e6cd734c1ad838f05b35d7a81255e53b90f9))
+* correct email-invite docs, comments, and two contract defects ([#658](https://github.com/foundation50/classroom50/issues/658)) ([7076432](https://github.com/foundation50/classroom50/commit/7076432e805ac6f399e5af52fc57b76d1482ea3d))
+* **web:** align user-facing terms with classroom vocabulary ([#615](https://github.com/foundation50/classroom50/issues/615)) ([7fab9fa](https://github.com/foundation50/classroom50/commit/7fab9faa48bf505074214e2735638bb0affba124))
+* **web:** block a roster import that carries an unusable row ([#643](https://github.com/foundation50/classroom50/issues/643)) ([d67191e](https://github.com/foundation50/classroom50/commit/d67191e4ac587eb3c8c27a1681c4177343579986))
+* **web:** clarify the onboarding link needs an existing invite ([#637](https://github.com/foundation50/classroom50/issues/637)) ([852690c](https://github.com/foundation50/classroom50/commit/852690c240f81be70e9abb06a52cd57b1f992369))
+* **web:** let a pending email invite's name and section be corrected ([#648](https://github.com/foundation50/classroom50/issues/648)) ([e786991](https://github.com/foundation50/classroom50/commit/e786991e3ddd47d74ccd5591d293db124bbd7aad))
+* **web:** make a pending email invite's row and bulk actions work ([#646](https://github.com/foundation50/classroom50/issues/646)) ([52114da](https://github.com/foundation50/classroom50/commit/52114daa8e87feba48493a0519d93e640e9437b2))
+* **web:** purge invite teams on classroom delete and retire a dead action ([#634](https://github.com/foundation50/classroom50/issues/634)) ([aac95f0](https://github.com/foundation50/classroom50/commit/aac95f0f6ed1b40bf8037247dcd8c3d75faef21c))
+* **web:** recover an invited email even when an org owner accepts it ([#636](https://github.com/foundation50/classroom50/issues/636)) ([425cb59](https://github.com/foundation50/classroom50/commit/425cb59d9fc986a3bccbd1945431ad0a92858d25))
+* **web:** report what a roster sync did and align the invite copy ([#638](https://github.com/foundation50/classroom50/issues/638)) ([37bd3d0](https://github.com/foundation50/classroom50/commit/37bd3d014d4665b1a58919728d26396ded1a542b))
+* **web:** retire a pending roster row when its invitation is cancelled ([#640](https://github.com/foundation50/classroom50/issues/640)) ([1ebc560](https://github.com/foundation50/classroom50/commit/1ebc5600a4290d5483fe2f6ff784d4b272012c19))
+* **web:** stop reporting a pending email invite as an org discrepancy ([#645](https://github.com/foundation50/classroom50/issues/645)) ([e1af48e](https://github.com/foundation50/classroom50/commit/e1af48e1ebc9e2edc9b09107b59f1ae36d10eed7))
+* **web:** sweep engineering jargon from user-facing copy ([#624](https://github.com/foundation50/classroom50/issues/624)) ([858272e](https://github.com/foundation50/classroom50/commit/858272ed1d5392d2825fc1a7589be5ea744e7158))
+
 ## [1.30.0](https://github.com/foundation50/classroom50/compare/web-v1.29.0...web-v1.30.0) (2026-08-14)
 
 

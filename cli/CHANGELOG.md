@@ -17,6 +17,23 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.31.0](https://github.com/foundation50/classroom50/compare/cli-v1.30.0...cli-v1.31.0) (2026-08-18)
+
+
+### Features
+
+* **cli:** add roster invite --file for bulk email invites ([#656](https://github.com/foundation50/classroom50/issues/656)) ([f083618](https://github.com/foundation50/classroom50/commit/f08361815b84d3c0c4d909209b18779854db4134))
+* **cli:** give the teacher CLI the full email-invite lifecycle ([#651](https://github.com/foundation50/classroom50/issues/651)) ([a6809bd](https://github.com/foundation50/classroom50/commit/a6809bdc77fef08788a0982efb292b191dea8577))
+
+
+### Bug Fixes
+
+* align copy with behavior and drop the init_shim auto_init README ([#628](https://github.com/foundation50/classroom50/issues/628)) ([17f28b5](https://github.com/foundation50/classroom50/commit/17f28b5476b417fe2c3a8ae99121c051d19a1e24))
+* **cli:** correct scores.csv shape in download help text ([#616](https://github.com/foundation50/classroom50/issues/616)) ([bcc4022](https://github.com/foundation50/classroom50/commit/bcc402205d231f48f36f093343b3577a32664184))
+* **cli:** read the roster's email-only invite rows and sweep invite teams ([#632](https://github.com/foundation50/classroom50/issues/632)) ([9772e6c](https://github.com/foundation50/classroom50/commit/9772e6cd734c1ad838f05b35d7a81255e53b90f9))
+* **cli:** sweep engineering jargon from help text and output ([#625](https://github.com/foundation50/classroom50/issues/625)) ([954c423](https://github.com/foundation50/classroom50/commit/954c423328d174d6e7e27c386cb1396c8ba6f453))
+* correct email-invite docs, comments, and two contract defects ([#658](https://github.com/foundation50/classroom50/issues/658)) ([7076432](https://github.com/foundation50/classroom50/commit/7076432e805ac6f399e5af52fc57b76d1482ea3d))
+
 ## [1.30.0](https://github.com/foundation50/classroom50/compare/cli-v1.29.0...cli-v1.30.0) (2026-08-14)
 
 
