@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  getDisplayName,
   initialsFromParts,
   nameFromParts,
+  nameLastFirst,
   sortStudentsByName,
   studentSortKeyByLastName,
 } from "@/util/students"
@@ -37,6 +39,50 @@ describe("nameFromParts — display name from self-reported names", () => {
     expect(nameFromParts("", "")).toBe("")
     expect(nameFromParts(undefined, undefined)).toBe("")
     expect(nameFromParts("   ", "   ")).toBe("")
+  })
+})
+
+describe("nameLastFirst — 'Last, First' display form", () => {
+  it("joins last and first with a comma, capitalized", () => {
+    expect(nameLastFirst("rongxin", "liu")).toBe("Liu, Rongxin")
+    expect(nameLastFirst("ada", "lovelace")).toBe("Lovelace, Ada")
+  })
+
+  it("drops the comma when only one part is present", () => {
+    expect(nameLastFirst("mona", "")).toBe("Mona")
+    expect(nameLastFirst("", "lisa")).toBe("Lisa")
+  })
+
+  it("trims and returns '' when neither part is present", () => {
+    expect(nameLastFirst("  ada ", " lovelace ")).toBe("Lovelace, Ada")
+    expect(nameLastFirst("", "")).toBe("")
+    expect(nameLastFirst(undefined, undefined)).toBe("")
+    expect(nameLastFirst("   ", "   ")).toBe("")
+  })
+})
+
+describe("getDisplayName — sort-mode-aware roster display name", () => {
+  const roster = [
+    mkStudent({ username: "alice", first_name: "Alice", last_name: "Zephyr" }),
+    mkStudent({ username: "noname" }),
+  ]
+
+  it("shows 'First Last' in first-name mode (and by default)", () => {
+    expect(getDisplayName("alice", roster, "first")).toBe("Alice Zephyr")
+    expect(getDisplayName("alice", roster)).toBe("Alice Zephyr")
+  })
+
+  it("shows 'Last, First' in last-name mode", () => {
+    expect(getDisplayName("alice", roster, "last")).toBe("Zephyr, Alice")
+  })
+
+  it("matches case-insensitively on username", () => {
+    expect(getDisplayName("ALICE", roster, "last")).toBe("Zephyr, Alice")
+  })
+
+  it("returns '' when the login is off-roster or nameless (caller falls back)", () => {
+    expect(getDisplayName("ghost", roster, "last")).toBe("")
+    expect(getDisplayName("noname", roster, "last")).toBe("")
   })
 })
 
