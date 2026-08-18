@@ -3,6 +3,7 @@ package roster
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,6 +33,11 @@ type cancelMock struct {
 	inviteTeamStatus int
 	// inviteTeamDescription is the description that GET serves.
 	inviteTeamDescription string
+	// invitationTeams is served as GET /orgs/o/invitations/{id}/teams — the teams
+	// the invitation itself carries, i.e. which classroom actually sent it.
+	invitationTeams []map[string]any
+	// invitationTeamsStatus is that read's status (0 → 200).
+	invitationTeamsStatus int
 
 	calls           []inviteCall
 	deletedTeamSlug string
@@ -48,6 +54,17 @@ func (m *cancelMock) handler(t *testing.T) http.Handler {
 			pending = []map[string]any{}
 		}
 		_ = json.NewEncoder(w).Encode(pending)
+	})
+	base.HandleFunc(fmt.Sprintf("/orgs/o/invitations/%d/teams", cancelTestInvitationID), func(w http.ResponseWriter, r *http.Request) {
+		if status := m.invitationTeamsStatus; status != 0 && status != http.StatusOK {
+			http.Error(w, "boom", status)
+			return
+		}
+		teams := m.invitationTeams
+		if teams == nil {
+			teams = []map[string]any{}
+		}
+		_ = json.NewEncoder(w).Encode(teams)
 	})
 	base.HandleFunc("/orgs/o/invitations/", func(w http.ResponseWriter, r *http.Request) {
 		status := m.cancelStatus
@@ -81,7 +98,8 @@ func (m *cancelMock) handler(t *testing.T) http.Handler {
 }
 
 // newCancelMock has one pending EMAIL invitation for inviteTestEmail, the
-// classroom's invite team backing it, and a roster holding its pending row.
+// classroom's invite team backing it (attached to the invitation, as every send
+// attaches it), and a roster holding its pending row.
 func newCancelMock(rosterCSV string) *cancelMock {
 	record, _ := configrepo.MarshalInviteDescription(inviteTestClassroom, inviteTestEmail)
 	return &cancelMock{
@@ -92,6 +110,9 @@ func newCancelMock(rosterCSV string) *cancelMock {
 			{"id": cancelTestInvitationID, "email": inviteTestEmail, "role": "direct_member"},
 		},
 		inviteTeamDescription: record,
+		invitationTeams: []map[string]any{
+			{"id": 7, "slug": configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)},
+		},
 	}
 }
 
@@ -165,6 +186,11 @@ func TestRunRosterCancelInvite_RefusesAnotherClassroomsInvitation(t *testing.T) 
 	if !strings.Contains(err.Error(), inviteTestClassroom) {
 		t.Errorf("error should name the classroom that does not own the invitation: %v", err)
 	}
+	// `roster sync` cannot revoke anything, so a teacher whose metadata team is
+	// already gone must be pointed somewhere that can (see #17).
+	if !strings.Contains(err.Error(), "pending_invitations") {
+		t.Errorf("error should point at GitHub's pending invitations page: %v", err)
+	}
 	if n := countCalls(mock.calls, http.MethodDelete, "/orgs/o/invitations/42"); n != 0 {
 		t.Errorf("DELETEd another classroom's invitation %d time(s); calls = %#v", n, mock.calls)
 	}
@@ -173,6 +199,109 @@ func TestRunRosterCancelInvite_RefusesAnotherClassroomsInvitation(t *testing.T) 
 	}
 	if len(mock.blobs) != 0 {
 		t.Errorf("committed %d blob(s) on a refused cancel", len(mock.blobs))
+	}
+}
+
+// A team whose description holds no parseable record proves nothing: an
+// interrupted send leaves exactly that (the record is written last), and a
+// blanked description would otherwise authorize the cancel.
+func TestRunRosterCancelInvite_RefusesInviteTeamWithNoRecord(t *testing.T) {
+	mock := newCancelMock(storedRosterHeader + ",,," + inviteTestEmail + ",,,student\n")
+	mock.inviteTeamDescription = "classroom50: preparing invite"
+
+	_, _, err := runCancelInvite(t, mock)
+	if err == nil {
+		t.Fatal("err = nil, want a refusal: a record-less team cannot prove ownership")
+	}
+	if !strings.Contains(err.Error(), "no invite record") {
+		t.Errorf("error should name the missing record, distinctly from a foreign classroom: %v", err)
+	}
+	if writes := writeCalls(mock.calls); len(writes) != 0 {
+		t.Errorf("a record-less team drove %d write(s): %#v", len(writes), writes)
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("committed %d blob(s) on a refused cancel", len(mock.blobs))
+	}
+}
+
+// The metadata team only proves this classroom invited the ADDRESS. When two
+// classrooms invited it, both have a team, and the org-wide lookup can still
+// return the sibling's live invitation — so the invitation's own team list is
+// what must bind the id being DELETEd to this classroom.
+func TestRunRosterCancelInvite_RefusesInvitationCarryingAnotherClassroomsTeams(t *testing.T) {
+	mock := newCancelMock(storedRosterHeader + ",,," + inviteTestEmail + ",,,student\n")
+	mock.invitationTeams = []map[string]any{
+		{"id": 9, "slug": configrepo.InviteTeamName("other-classroom", inviteTestEmail)},
+		{"id": 10, "slug": "classroom50-other-classroom"},
+	}
+
+	_, _, err := runCancelInvite(t, mock)
+	if err == nil {
+		t.Fatal("err = nil, want a refusal: the invitation carries none of this classroom's teams")
+	}
+	for _, want := range []string{inviteTestClassroom, "42"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should name the mismatch (%q): %v", want, err)
+		}
+	}
+	if n := countCalls(mock.calls, http.MethodDelete, "/orgs/o/invitations/42"); n != 0 {
+		t.Errorf("revoked a sibling classroom's live invitation %d time(s); calls = %#v", n, mock.calls)
+	}
+	if mock.deletedTeamSlug != "" {
+		t.Errorf("deleted team %q for an invitation bound to another classroom", mock.deletedTeamSlug)
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("committed %d blob(s) on a refused cancel", len(mock.blobs))
+	}
+}
+
+// The invitation-teams read runs BEFORE the DELETE, and the classroom team is an
+// equally classroom-scoped binding — an invitation carrying it is this
+// classroom's even if the invite team was never attached.
+func TestRunRosterCancelInvite_ClassroomTeamBindsTheInvitation(t *testing.T) {
+	mock := newCancelMock(storedRosterHeader + ",,," + inviteTestEmail + ",,,student\n")
+	mock.invitationTeams = []map[string]any{
+		{"id": 5, "slug": "classroom50-" + inviteTestClassroom},
+	}
+
+	_, _, err := runCancelInvite(t, mock)
+	if err != nil {
+		t.Fatalf("the classroom team binds the invitation to this classroom: %v", err)
+	}
+	teamsIdx := indexOfCall(mock.calls, http.MethodGet, "/orgs/o/invitations/42/teams")
+	cancelIdx := indexOfCall(mock.calls, http.MethodDelete, "/orgs/o/invitations/42")
+	if teamsIdx < 0 || teamsIdx > cancelIdx {
+		t.Errorf("invitation-teams read at %d must precede the DELETE at %d; calls = %#v",
+			teamsIdx, cancelIdx, mock.calls)
+	}
+}
+
+// A degraded ownership read must never authorize the DELETE: a non-404 failure
+// propagates rather than reading as "no team", so the invitation stays intact.
+func TestRunRosterCancelInvite_DegradedReadsRefuseAndTouchNothing(t *testing.T) {
+	cases := []struct {
+		name  string
+		apply func(*cancelMock)
+	}{
+		{"invite team read fails", func(m *cancelMock) { m.inviteTeamStatus = http.StatusInternalServerError }},
+		{"invitation teams read fails", func(m *cancelMock) { m.invitationTeamsStatus = http.StatusInternalServerError }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := newCancelMock(storedRosterHeader + ",,," + inviteTestEmail + ",,,student\n")
+			tc.apply(mock)
+
+			_, _, err := runCancelInvite(t, mock)
+			if err == nil {
+				t.Fatal("err = nil, want the degraded read to propagate")
+			}
+			if writes := writeCalls(mock.calls); len(writes) != 0 {
+				t.Errorf("a degraded read drove %d write(s): %#v", len(writes), writes)
+			}
+			if len(mock.blobs) != 0 {
+				t.Errorf("committed %d blob(s) after a degraded read", len(mock.blobs))
+			}
+		})
 	}
 }
 

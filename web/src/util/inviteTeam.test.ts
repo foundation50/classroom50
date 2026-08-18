@@ -290,20 +290,37 @@ describe("marshalInviteDescription", () => {
   })
 
   // The other half of the parity contract: Go's json.Marshal agrees with
-  // JSON.stringify on every control character, so the escaper must leave them
-  // alone. Escaping \b/\f as \u0008/\u000c "for Go parity" would be the bug.
-  it("leaves control characters exactly as JSON.stringify writes them (Go parity)", () => {
-    const out = marshalInviteDescription({
-      email: "a@b",
-      classroom: "cs\b\f\u0001\u007fx",
-    })
-    expect(out).toContain("\\b")
-    expect(out).toContain("\\f")
-    expect(out).not.toContain("\\u0008")
-    expect(out).not.toContain("\\u000c")
-    expect(out).toContain("\\u0001")
+  // JSON.stringify on EVERY C0 control and DEL, so the escaper must leave them
+  // all alone. Escaping \b/\f as \u0008/\u000c "for Go parity" would be the bug.
+  // Exhaustive over U+0000–U+001F rather than a sample, because the escaper's
+  // claim is that <, >, & and U+2028/U+2029 are the ONLY divergences.
+  it("leaves every C0 control and DEL exactly as JSON.stringify writes them (Go parity)", () => {
+    // The five controls JSON.stringify gives a short escape; every other C0
+    // control takes the lowercase \u00xx form.
+    const shortEscapes = new Map([
+      [0x08, "\\b"],
+      [0x09, "\\t"],
+      [0x0a, "\\n"],
+      [0x0c, "\\f"],
+      [0x0d, "\\r"],
+    ])
+    for (let cp = 0; cp <= 0x1f; cp++) {
+      const classroom = `cs${String.fromCharCode(cp)}x`
+      const out = marshalInviteDescription({ email: "a@b", classroom })
+      const long = `\\u${cp.toString(16).padStart(4, "0")}`
+      const short = shortEscapes.get(cp)
+      expect(out, `U+${cp.toString(16)}`).toContain(short ?? long)
+      if (short) expect(out, `U+${cp.toString(16)}`).not.toContain(long)
+      // An uppercase-hex escape would be a byte difference on its own.
+      expect(out).not.toContain(long.toUpperCase())
+      expect(parseInviteDescription(out)?.classroom).toBe(classroom)
+    }
     // DEL is escaped by neither encoder.
-    expect(out).toContain("\u007f")
-    expect(parseInviteDescription(out)?.classroom).toBe("cs\b\f\u0001\u007fx")
+    const del = marshalInviteDescription({
+      email: "a@b",
+      classroom: "cs\u007fx",
+    })
+    expect(del).toContain("\u007f")
+    expect(del).not.toContain("\\u007f")
   })
 })

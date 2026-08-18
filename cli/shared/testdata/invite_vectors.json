@@ -61,11 +61,11 @@
       "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"a@b\",\"classroom\":\"cs\\u2028x\\u2029y\"}"
     },
     {
-      "why": "the C0 control boundary, where the two encoders AGREE: Go emits the same short \\b/\\f as JSON.stringify (not \\u0008/\\u000c), \\u0001 for a control with no short form, and leaves DEL raw — so the web's Go-parity escaper must not touch them. Synthetic input: it pins the escaping contract, not a realistic classroom name.",
-      "classroom": "cs\b\f\u0001\u007fx",
+      "why": "the WHOLE C0 range plus DEL, where the two encoders AGREE code point for code point: U+0008/U+0009/U+000A/U+000C/U+000D take the same short \\b/\\t/\\n/\\f/\\r JSON.stringify emits (never \\u0008/\\u000c), every other C0 control takes the same lowercase \\u00xx, and DEL is left raw by both — so the web's Go-parity escaper must touch none of them. Exhaustive on purpose: the escaper's claim is that <, >, & and U+2028/U+2029 are the ONLY divergences, and a range checked in part is a claim pinned in part. Synthetic input: it pins the escaping contract, not a realistic classroom name.",
+      "classroom": "cs\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fx",
       "email": "a@b",
-      "slug": "invite-fbe25e434d618ef7",
-      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"a@b\",\"classroom\":\"cs\\b\\f\\u0001\u007fx\"}"
+      "slug": "invite-73aa6ff310254955",
+      "record": "{\"schema\":\"classroom50/invite/v1\",\"email\":\"a@b\",\"classroom\":\"cs\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000b\\f\\r\\u000e\\u000f\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f\u007fx\"}"
     }
   ]
 }

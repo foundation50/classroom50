@@ -59,6 +59,16 @@ const (
 	// compile-time link — keep byte-identical; contract_test.go pins the Go half.
 	InviteSchemaV1 = "classroom50/invite/v1"
 
+	// InviteProvisionalDescription is what an invite team is CREATED with, so a
+	// run that dies before dropping its creator leaves a team holding no email.
+	// It deliberately does not parse as a v1 record, which is what makes either
+	// tool's reconcile skip such a team instead of reaping it. Both the web app
+	// and `gh teacher roster invite` create these teams and read the other's,
+	// so the exact bytes are a two-way contract: mirrored in
+	// web/src/util/inviteTeam.ts (PROVISIONAL_DESCRIPTION) with NO compile-time
+	// link — keep byte-identical; contract_test.go pins the Go half.
+	InviteProvisionalDescription = "classroom50: preparing invite"
+
 	// InviteTeamGCMinAge is how old a MEMBER-LESS invite team must be before a
 	// reconcile may reap it, so a team created moments before its org invitation
 	// lands (or read mid-creation by the other writer) is never mistaken for a

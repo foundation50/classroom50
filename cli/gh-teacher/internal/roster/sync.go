@@ -28,9 +28,12 @@ const (
 	syncExitDegraded       = 1
 )
 
-// rosterRoleStudent is the role the classroom's student team implies. Staff
-// roles come from configrepo.StaffRoles, which has no student member (the
-// student team isn't a staff team).
+// rosterRoleStudent is the `role` value a student's roster row records, and the
+// role the classroom's student team implies. The exact string is a cross-tool
+// contract: the web writes the same cell, so a row must be byte-identical either
+// way or every pass would rewrite the other's rows forever. Staff roles come
+// from configrepo.StaffRoles, which has no student member (the student team
+// isn't a staff team).
 const rosterRoleStudent = "student"
 
 // roleRank mirrors the web's ROLE_RANK: a person on both a staff and the student
@@ -193,10 +196,19 @@ func loadClassroomIndex(client githubapi.Client, org, classroom, branch string) 
 
 	counts := map[string]int{}
 	for _, team := range teams {
-		members, err := configrepo.ListTeamMembersWithIDs(client, org, team.slug)
+		// Strict read: a classroom or staff team is RECORDED, so its absence is a
+		// broken classroom (renamed, deleted, mistyped), not an empty roster.
+		// Reading it as no members would make every accepted invitee look
+		// unenrolled and authorize deleting the only record of their address.
+		members, found, err := configrepo.FindTeamMembersWithIDs(client, org, team.slug)
 		if err != nil {
 			idx.ok = false
 			return idx, err
+		}
+		if !found {
+			idx.ok = false
+			return idx, fmt.Errorf("team %s is recorded for classroom %s but GitHub has no such team — it was renamed or deleted, so who is enrolled cannot be read; restore the team (or correct %s in the config repo) before reconciling",
+				team.slug, classroom, configrepo.ClassroomFilePath(classroom))
 		}
 		for _, m := range members {
 			if m.ID <= 0 {
@@ -260,9 +272,23 @@ func scanInviteTeams(client githubapi.Client, errOut io.Writer, org, classroom s
 		if !ok {
 			continue // already deleted
 		}
-		// Not a v1 record, or another classroom's invite: leave it for that
-		// classroom's own reconcile.
-		if state.Record == nil || state.Record.Classroom != classroom {
+		if state.Record == nil {
+			// The invitee owns their own team's description after accepting, so a
+			// record that no longer parses is the same trust failure as a hash
+			// mismatch: it must not authorize reaping the row it might back. A
+			// PROVISIONAL description is the exception — that is a run of either
+			// tool still in flight, and its team holds no address to lose.
+			if !state.Provisional {
+				scan.anomalies = append(scan.anomalies, fmt.Sprintf("%s: description is no longer a readable invite record — left alone, and any pending row it might back was kept; delete it by hand once you've checked it", team.Slug))
+				// The address it held is unknowable, so no liveEmails entry can
+				// be made for it. Failing the whole pass closed is the only way
+				// to keep the row it backed from looking unbacked.
+				scan.trusted = false
+			}
+			continue
+		}
+		// Another classroom's invite: leave it for that classroom's own reconcile.
+		if state.Record.Classroom != classroom {
 			continue
 		}
 		email := configrepo.NormalizeInviteEmail(state.Record.Email)
@@ -332,6 +358,9 @@ func pastGCAge(createdAt time.Time) bool {
 
 // rosterPlan is the roster-side work phase 2 derives from the scan and the
 // current file — what a dry run prints and what the commit closure applies.
+// Report-only findings live in rosterFindings, so `empty()` answers exactly
+// "would --write change anything?" and the summary can't disagree with the exit
+// code.
 type rosterPlan struct {
 	// folds are recoveries with a pending row to claim.
 	folds []inviteRecovery
@@ -348,6 +377,14 @@ type rosterPlan struct {
 	// deleted (or never written, e.g. `roster invite`'s commit failed). Without
 	// this the address would be lost when the team is retired below.
 	appends []inviteRecovery
+	// findings is what this pass will only REPORT. Never consulted by empty().
+	findings rosterFindings
+}
+
+// rosterFindings are the report-only outcomes of a pass: nothing --write would
+// change, so they must not make a dry run claim changes are pending (or a clean
+// pass claim it is up to date while stderr warns).
+type rosterFindings struct {
 	// dupLogins are usernames on more than one row whose backfill therefore
 	// can't apply: BackfillRosterGitHubID matches the FIRST row with a username,
 	// so a later duplicate is reported for a hand-fix rather than planned — a
@@ -369,117 +406,132 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 		recoveredByEmail[r.Email] = r
 	}
 
-	// The id/login/email sets every row already identifies — the same join the
-	// roster view uses, so a fold and an append can't both fire for one
-	// recovery. Mirrors the web's recById/recByLogin/recByEmail match.
-	//
-	// firstByID/firstByLogin record WHICH row that is, because every helper
-	// keyed on a username or an id touches the FIRST match: planning against a
-	// later duplicate plans an edit that then applies to nothing.
-	var (
-		rowIDs       = map[int64]bool{}
-		rowLogins    = map[string]bool{}
-		rowEmails    = map[string]bool{}
-		firstByID    = map[int64]int{}
-		firstByLogin = map[string]int{}
-	)
-	for i, row := range rows {
-		if row.GitHubID != 0 {
-			rowIDs[row.GitHubID] = true
-			if _, seen := firstByID[row.GitHubID]; !seen {
-				firstByID[row.GitHubID] = i
-			}
+	claimed := map[string]bool{}
+	for _, row := range rows {
+		email := configrepo.NormalizeInviteEmail(row.Email)
+		if !row.IsPendingEmailInvite() {
+			continue
 		}
-		if key := loginKey(row.Username); key != "" {
-			rowLogins[key] = true
-			if _, seen := firstByLogin[key]; !seen {
-				firstByLogin[key] = i
-			}
+		if rec, ok := recoveredByEmail[email]; ok && !claimed[email] {
+			claimed[email] = true
+			plan.folds = append(plan.folds, rec)
+			continue
 		}
-		if email := configrepo.NormalizeInviteEmail(row.Email); email != "" {
-			rowEmails[email] = true
+		// A pending row lives only while something backs it. Three gates keep
+		// that from eating a legitimate row: the pass must be trusted, no live
+		// team may hold the address, and it must be absent from GitHub's CURRENT
+		// pending invitations (re-read inside the commit closure, since an invite
+		// sent after the team snapshot has a row but no team entry). A recovered
+		// address is never a candidate — a duplicate row for it is the fold's
+		// business, not the reaper's.
+		if scan.trusted && !scan.liveEmails[email] &&
+			scan.pendingEmails != nil && !scan.pendingEmails[email] {
+			if _, recovered := recoveredByEmail[email]; !recovered {
+				plan.reapEmails = append(plan.reapEmails, email)
+			}
 		}
 	}
 
-	claimed := map[string]bool{}
-	for i, row := range rows {
-		email := configrepo.NormalizeInviteEmail(row.Email)
-		if row.IsPendingEmailInvite() {
-			if rec, ok := recoveredByEmail[email]; ok && !claimed[email] {
-				claimed[email] = true
-				plan.folds = append(plan.folds, rec)
-				continue
-			}
-			// A pending row lives only while something backs it. Three gates keep
-			// that from eating a legitimate row: the pass must be trusted, no
-			// live team may hold the address, and it must be absent from
-			// GitHub's CURRENT pending invitations (re-read inside the commit
-			// closure, since an invite sent after the team snapshot has a row but
-			// no team entry). A recovered address is never a candidate — a
-			// duplicate row for it is the fold's business, not the reaper's.
-			if scan.trusted && !scan.liveEmails[email] &&
-				scan.pendingEmails != nil && !scan.pendingEmails[email] {
-				if _, recovered := recoveredByEmail[email]; !recovered {
-					plan.reapEmails = append(plan.reapEmails, email)
-				}
-			}
-			continue
-		}
+	// The remaining steps are planned against the rows AS THE FOLDS LEAVE THEM:
+	// a fold gives a row an identity, so an index built before it would place a
+	// recovery on a row that no longer needs it (and an append that then
+	// duplicates). Applying the folds to a copy costs one pass and removes the
+	// whole class of stale-index bug.
+	folded := applyPlannedFolds(rows, plan.folds)
+	rowIdx := indexRosterRows(folded)
+
+	for i, row := range folded {
 		// A row carrying a username but no usable id: fill it from the
 		// classroom's own team membership. A login on no classroom team is left
 		// alone rather than resolved globally.
-		if row.Username != "" && row.GitHubID == 0 {
-			key := loginKey(row.Username)
-			if _, ok := idx.idByLogin[key]; !ok {
-				continue
-			}
-			if firstByLogin[key] != i {
-				plan.dupLogins = append(plan.dupLogins, row.Username)
-				continue
-			}
-			plan.backfills = append(plan.backfills, row.Username)
+		if row.IsPendingEmailInvite() || row.Username == "" || row.GitHubID != 0 {
+			continue
 		}
+		key := loginKey(row.Username)
+		if _, ok := idx.idByLogin[key]; !ok {
+			continue
+		}
+		if rowIdx.firstByLogin[key] != i {
+			plan.findings.dupLogins = append(plan.findings.dupLogins, row.Username)
+			continue
+		}
+		plan.backfills = append(plan.backfills, row.Username)
 	}
 
-	// A recovery already on a row by id or login, but with no address recorded
-	// there: the invited address has nowhere to land, and the team holding it is
-	// retired right after. Fill the blank cell — never a teacher-entered one.
+	// The two remaining steps join on IDENTITY (id or login), as the web's fold
+	// does. A shared contact address on someone else's row proves nothing about
+	// this account and must not decide either one.
 	for _, rec := range scan.recovered {
-		if claimed[rec.Email] || rowEmails[rec.Email] {
+		if claimed[rec.Email] {
 			continue
 		}
-		i, ok := recoveryRowIndex(rec, firstByID, firstByLogin)
+		i, ok := rowIdx.rowFor(rec)
 		if !ok {
+			// No row names this account at all: it needs one, or retiring the
+			// team would lose the only record of the invited address.
+			plan.appends = append(plan.appends, rec)
 			continue
 		}
-		if configrepo.NormalizeInviteEmail(rows[i].Email) == "" {
+		// The row names the account but records no address: the recovered one has
+		// nowhere to land, and the team holding it is retired right after. Fill
+		// the blank cell — never a teacher-entered one.
+		if configrepo.NormalizeInviteEmail(folded[i].Email) == "" {
 			plan.emailFills = append(plan.emailFills, rec)
 		}
-	}
-
-	// A recovery no row claims — by address, by id, or by login — needs one, or
-	// retiring its team would lose the only record of the invited address.
-	for _, rec := range scan.recovered {
-		recLogin := loginKey(rec.Login)
-		if claimed[rec.Email] || rowIDs[rec.ID] ||
-			(recLogin != "" && rowLogins[recLogin]) || rowEmails[rec.Email] {
-			continue
-		}
-		plan.appends = append(plan.appends, rec)
 	}
 	return plan
 }
 
-// recoveryRowIndex is the row RecordRosterEmail will touch for rec: the first
-// one naming its login, else the first one carrying its id. The two must agree
-// or the plan describes a row the helper never edits.
-func recoveryRowIndex(rec inviteRecovery, firstByID map[int64]int, firstByLogin map[string]int) (int, bool) {
+// applyPlannedFolds returns rows with each planned fold applied to a COPY, so
+// the later steps plan against the shape the commit will produce without
+// mutating the caller's slice.
+func applyPlannedFolds(rows []configrepo.RosterRow, folds []inviteRecovery) []configrepo.RosterRow {
+	if len(folds) == 0 {
+		return rows
+	}
+	folded := append([]configrepo.RosterRow(nil), rows...)
+	for _, rec := range folds {
+		folded, _ = configrepo.ClaimPendingEmailRow(folded, rec.Email, rec.Login, rec.ID)
+	}
+	return folded
+}
+
+// rosterRowIndex is the identity join the plan is built against. firstByID /
+// firstByLogin record WHICH row each identity is on, because every helper keyed
+// on a username or an id touches the FIRST match: planning against a later
+// duplicate plans an edit that then applies to nothing.
+type rosterRowIndex struct {
+	firstByID    map[int64]int
+	firstByLogin map[string]int
+}
+
+func indexRosterRows(rows []configrepo.RosterRow) rosterRowIndex {
+	out := rosterRowIndex{firstByID: map[int64]int{}, firstByLogin: map[string]int{}}
+	for i, row := range rows {
+		if row.GitHubID != 0 {
+			if _, seen := out.firstByID[row.GitHubID]; !seen {
+				out.firstByID[row.GitHubID] = i
+			}
+		}
+		if key := loginKey(row.Username); key != "" {
+			if _, seen := out.firstByLogin[key]; !seen {
+				out.firstByLogin[key] = i
+			}
+		}
+	}
+	return out
+}
+
+// rowFor is the row RecordRosterEmail will touch for rec: the first one naming
+// its login, else the first one carrying its id. The two must agree or the plan
+// describes a row the helper never edits.
+func (idx rosterRowIndex) rowFor(rec inviteRecovery) (int, bool) {
 	if key := loginKey(rec.Login); key != "" {
-		if i, ok := firstByLogin[key]; ok {
+		if i, ok := idx.firstByLogin[key]; ok {
 			return i, true
 		}
 	}
-	i, ok := firstByID[rec.ID]
+	i, ok := idx.firstByID[rec.ID]
 	return i, ok
 }
 
@@ -522,55 +574,88 @@ func runRosterSync(client githubapi.Client, out, errOut io.Writer, org, classroo
 	plan := planRosterSync(rows, scan, idx)
 
 	// A degraded pass proves nothing about a team either, so it deletes nothing
-	// — and must not report a delete it won't make.
+	// — and must not report a delete it won't make. That covers the RECOVERED
+	// teardown as well as the stale sweep: the exit-1 message promises nothing
+	// was removed, and fail-closed is the only way to keep that true.
+	retirable := retirableSlugs(rows, scan)
 	if !scan.trusted {
 		scan.staleSlugs = nil
+		retirable = nil
 	}
-	reportSyncPlan(out, errOut, org, classroom, scan, plan)
+	reportSyncPlan(out, errOut, org, classroom, scan, plan, retirable)
 
+	pending := !plan.empty() || len(scan.staleSlugs) > 0 || len(retirable) > 0
 	if !write {
-		if plan.empty() && len(scan.staleSlugs) == 0 {
-			if !scan.trusted {
-				return syncDegradedError(org, classroom)
-			}
-			return nil
+		if pending {
+			_, _ = fmt.Fprintf(errOut, "Nothing was changed. Re-run with --write to apply this.\n")
 		}
-		_, _ = fmt.Fprintf(errOut, "Nothing was changed. Re-run with --write to apply this.\n")
 		if !scan.trusted {
 			return syncDegradedError(org, classroom)
 		}
-		return &cliutil.ExitCodeError{
-			Code: syncExitChangesPending,
-			Err:  fmt.Errorf("%s: %s has changes pending; re-run with --write to apply them", org, classroom),
+		if pending {
+			return &cliutil.ExitCodeError{
+				Code: syncExitChangesPending,
+				Err:  fmt.Errorf("%s: %s has changes pending; re-run with --write to apply them", org, classroom),
+			}
 		}
+		return nil
 	}
 
-	recorded, err := applyRosterSync(client, out, errOut, org, classroom, branch, scan, idx)
+	retired, degraded, err := applyRosterSync(client, out, errOut, org, classroom, branch, scan, idx)
 	if err != nil {
 		return err
 	}
-	deleteRetiredInviteTeams(client, out, errOut, org, classroom, scan, recorded)
-	if !scan.trusted {
+	if !scan.trusted || degraded {
+		// A degrade discovered inside the write closure (a failed invitation
+		// re-read) suppressed a removal there; the teardown must fail closed the
+		// same way, and the exit code must still reach the caller.
+		_, _ = fmt.Fprintf(errOut, "Note: %s: no metadata team was deleted — this pass could not read enough to prove one is redundant.\n", org)
+		return syncDegradedError(org, classroom)
+	}
+	if !deleteRetiredInviteTeams(client, out, errOut, org, classroom, scan, retired) {
 		return syncDegradedError(org, classroom)
 	}
 	return nil
 }
 
-// recordedInviteEmails is the addresses `rows` provably holds: those on a row
-// that also identifies an account. A pending row does NOT count — its address is
-// exactly what the invite team is still the sole record of. The teardown deletes
-// only teams inside this set, so a mapping nothing recorded survives.
-func recordedInviteEmails(rows []configrepo.RosterRow) map[string]bool {
-	recorded := map[string]bool{}
+// recordsRecovery reports whether rows provably hold rec's invited address: the
+// row carrying it must ALSO identify rec's account. A row that merely shares the
+// address (a classmate's department contact) proves nothing — deleting the team
+// on its word would destroy the only record of where THIS account came from. A
+// pending row never counts either: its address is exactly what the invite team
+// is still the sole record of.
+//
+// The teardown deletes only teams that pass this, so a mapping nothing recorded
+// survives for the teacher to finish by hand.
+func recordsRecovery(rows []configrepo.RosterRow, rec inviteRecovery) bool {
+	recLogin := loginKey(rec.Login)
 	for _, row := range rows {
 		if row.IsPendingEmailInvite() {
 			continue
 		}
-		if email := configrepo.NormalizeInviteEmail(row.Email); email != "" {
-			recorded[email] = true
+		if configrepo.NormalizeInviteEmail(row.Email) != rec.Email {
+			continue
+		}
+		if row.GitHubID == rec.ID || (recLogin != "" && loginKey(row.Username) == recLogin) {
+			return true
 		}
 	}
-	return recorded
+	return false
+}
+
+// retirableSlugs is the invite teams a --write pass would delete given `rows`:
+// every recovery the roster already records, in the same order the teardown
+// walks. Computed in the read-only phase too, so a dry run whose plan is empty
+// (nothing to fold — the address is already recorded) still reports the delete
+// and exits 2 instead of claiming the classroom is up to date.
+func retirableSlugs(rows []configrepo.RosterRow, scan inviteScan) []string {
+	var slugs []string
+	for _, rec := range scan.recovered {
+		if recordsRecovery(rows, rec) {
+			slugs = append(slugs, rec.Slug)
+		}
+	}
+	return slugs
 }
 
 func syncDegradedError(org, classroom string) error {
@@ -581,10 +666,12 @@ func syncDegradedError(org, classroom string) error {
 }
 
 // reportSyncPlan prints the planned edits on stdout (the result a script reads)
-// and the anomalies needing a human on stderr.
-func reportSyncPlan(out, errOut io.Writer, org, classroom string, scan inviteScan, plan rosterPlan) {
+// and the report-only findings needing a human on stderr. `retirable` is the
+// recovered metadata teams a --write pass would delete: reported here so a dry
+// run whose roster plan is empty still says so rather than "up to date".
+func reportSyncPlan(out, errOut io.Writer, org, classroom string, scan inviteScan, plan rosterPlan, retirable []string) {
 	path := fmt.Sprintf("%s/%s/%s", org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom))
-	if plan.empty() && len(scan.staleSlugs) == 0 {
+	if plan.empty() && len(scan.staleSlugs) == 0 && len(retirable) == 0 {
 		_, _ = fmt.Fprintf(out, "%s: up to date (no invites to record, no rows to drop, no ids to fill)\n", path)
 	}
 	for _, rec := range plan.folds {
@@ -605,7 +692,10 @@ func reportSyncPlan(out, errOut io.Writer, org, classroom string, scan inviteSca
 	for _, slug := range scan.staleSlugs {
 		_, _ = fmt.Fprintf(out, "%s: delete the leftover metadata team %s\n", org, slug)
 	}
-	for _, username := range plan.dupLogins {
+	for _, slug := range retirable {
+		_, _ = fmt.Fprintf(out, "%s: retire the metadata team %s — the roster already records its address\n", org, slug)
+	}
+	for _, username := range plan.findings.dupLogins {
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: left a second row for %q alone — more than one row carries that username, and only the first can be filled in, so which student the id belongs to is not this pass's guess. Remove the duplicate row (or give it its own username) to let the reconcile finish it.\n",
 			path, username)
 	}
@@ -619,16 +709,16 @@ func reportSyncPlan(out, errOut io.Writer, org, classroom string, scan inviteSca
 // classification is redone inside the closure — including a FRESH invitation
 // read — because the scan snapshotted teams before this roster read, so an
 // invite sent in between has a row but no snapshot entry.
-func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classroom, branch string, scan inviteScan, idx classroomIndex) (map[string]bool, error) {
-	var (
-		applied rosterPlan
-		// recorded is rebuilt from the rows this attempt produced, so the
-		// teardown is gated on the file as committed rather than on an earlier
-		// read (see recordedInviteEmails).
-		recorded map[string]bool
-	)
+//
+// It reports the slugs the commit made redundant plus whether anything inside
+// the closure degraded, since a degrade discovered here lives on a struct COPY
+// and only the returned flag can reach the exit code.
+func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classroom, branch string, scan inviteScan, idx classroomIndex) (retired []string, degraded bool, err error) {
+	var applied rosterPlan
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
-		applied = rosterPlan{} // rebase may retry this closure
+		// A rebase retries this closure, so every per-attempt result is reset:
+		// the teardown must be gated on the attempt that actually landed.
+		applied, retired, degraded = rosterPlan{}, nil, false
 		rows, err := configrepo.LoadRosterLenient(client, org, classroom, parentSHA)
 		if err != nil {
 			return configwrite.CommitChange{}, err
@@ -642,6 +732,7 @@ func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classr
 			if err != nil {
 				_, _ = fmt.Fprintf(errOut, "Warning: %s: re-checking the pending invitations before the write failed (%v); no pending row was dropped.\n", org, err)
 				fresh.trusted = false
+				degraded = true
 			} else {
 				fresh.pendingEmails = confirmed
 			}
@@ -649,7 +740,7 @@ func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classr
 
 		plan := planRosterSync(rows, fresh, idx)
 		if plan.empty() {
-			recorded = recordedInviteEmails(rows)
+			retired = retirableSlugs(rows, fresh)
 			return configwrite.CommitChange{}, nil // empty → skips the commit
 		}
 		// Mutate through the exported helpers so a row's raw/Extra round-trip
@@ -693,7 +784,7 @@ func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classr
 		// claimable-row rule is stricter than any planner-side match can prove
 		// under a rebase), and committing the re-encoded rows then lands a real
 		// commit with no diff. Nothing applied → nothing to write.
-		recorded = recordedInviteEmails(rows)
+		retired = retirableSlugs(rows, fresh)
 		if applied.empty() {
 			return configwrite.CommitChange{}, nil
 		}
@@ -702,35 +793,41 @@ func applyRosterSync(client githubapi.Client, out, errOut io.Writer, org, classr
 
 	message := contract.PrefixCommit(fmt.Sprintf("roster: sync %s with GitHub (gh teacher roster sync)", classroom))
 	if _, err := configwrite.CommitTreeChange(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
-		return nil, fmt.Errorf("reconciling %s: %w", configrepo.RosterFilePath(classroom), err)
+		return nil, degraded, fmt.Errorf("reconciling %s: %w", configrepo.RosterFilePath(classroom), err)
 	}
 	if applied.empty() {
-		return recorded, nil
+		return retired, degraded, nil
 	}
 	_, _ = fmt.Fprintf(out, "%s/%s/%s: recorded %d accepted invite(s), added %d row(s), dropped %d pending row(s), filled %d github_id(s)\n",
 		org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom),
 		len(applied.folds)+len(applied.emailFills), len(applied.appends), len(applied.reapEmails), len(applied.backfills))
-	return recorded, nil
+	return retired, degraded, nil
 }
 
 // deleteRetiredInviteTeams is the post-commit teardown: a recovered mapping's
 // team is deleted only now that the commit carrying its address has landed, so a
-// failed delete just means the next pass re-recovers idempotently.
+// failed delete just means the next pass re-recovers idempotently. It reports
+// whether every delete it intended succeeded, so a failure reaches the exit code
+// rather than only stderr.
 //
 // Any slug a pending invitation now maps to is skipped: the slug is a
 // deterministic hash, so a same-email RE-INVITE in the window since the scan
 // adopts this very team, and deleting it would strip the metadata team off a
 // brand-new live invitation. An unreadable invitation list keeps every team.
 //
-// `recorded` is the addresses the roster provably holds after this pass (see
-// recordedInviteEmails). A recovery outside it is skipped: nothing wrote its
-// mapping, so that team is still the only record of which address the account
-// came from — the very thing the teacher needs to finish the row by hand.
-func deleteRetiredInviteTeams(client githubapi.Client, out, errOut io.Writer, org, classroom string, scan inviteScan, recorded map[string]bool) {
-	slugs := make([]string, 0, len(scan.recovered)+len(scan.staleSlugs))
+// `retired` is the recovered slugs the committed roster provably records (see
+// recordsRecovery). A recovery outside it is skipped: nothing wrote its mapping,
+// so that team is still the only record of which address the account came from —
+// the very thing the teacher needs to finish the row by hand.
+func deleteRetiredInviteTeams(client githubapi.Client, out, errOut io.Writer, org, classroom string, scan inviteScan, retired []string) bool {
+	recordedSlug := make(map[string]bool, len(retired))
+	for _, slug := range retired {
+		recordedSlug[slug] = true
+	}
+	slugs := make([]string, 0, len(retired)+len(scan.staleSlugs))
 	for _, rec := range scan.recovered {
-		if !recorded[rec.Email] {
-			_, _ = fmt.Fprintf(errOut, "Note: %s: kept metadata team %s — nothing on the roster records %s, so this team is still the only record of that address. Add it to %s's row (or clear the address they carry) and re-run.\n",
+		if !recordedSlug[rec.Slug] {
+			_, _ = fmt.Fprintf(errOut, "Note: %s: kept metadata team %s — no row records %s against %s's account, so this team is still the only record of that address. Add it to their row (or clear the address they carry) and re-run.\n",
 				org, rec.Slug, rec.Email, rec.Login)
 			continue
 		}
@@ -738,15 +835,16 @@ func deleteRetiredInviteTeams(client githubapi.Client, out, errOut io.Writer, or
 	}
 	slugs = append(slugs, scan.staleSlugs...)
 	if len(slugs) == 0 {
-		return
+		return true
 	}
 	sort.Strings(slugs)
 
 	live, err := liveInviteSlugs(client, org, classroom)
 	if err != nil {
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: re-checking the pending invitations failed (%v); every metadata team was left in place — a leftover is collected next pass, whereas a wrong delete loses the address for good.\n", org, err)
-		return
+		return false
 	}
+	ok := true
 	for _, slug := range slugs {
 		if live[slug] {
 			_, _ = fmt.Fprintf(errOut, "Note: %s: kept metadata team %s — a same-email re-invite now maps to it, so deleting it would strip a live invitation.\n", org, slug)
@@ -754,10 +852,12 @@ func deleteRetiredInviteTeams(client githubapi.Client, out, errOut io.Writer, or
 		}
 		if err := configrepo.DeleteInviteTeam(client, org, slug); err != nil {
 			_, _ = fmt.Fprintf(errOut, "Warning: %s: deleting the metadata team %s failed (%v); re-run `gh teacher roster sync %s %s --write` to collect it.\n", org, slug, err, org, classroom)
+			ok = false
 			continue
 		}
 		_, _ = fmt.Fprintf(out, "%s: deleted metadata team %s\n", org, slug)
 	}
+	return ok
 }
 
 // liveInviteSlugs is the invite-team slug set a pending EMAIL invitation still
@@ -785,7 +885,7 @@ func pendingEmailInvitations(client githubapi.Client, org string) (map[string]bo
 	}
 	emails := map[string]bool{}
 	for _, inv := range pending {
-		if inv.Login != "" || inv.Email == "" {
+		if !inv.IsEmailKeyed() {
 			continue
 		}
 		emails[configrepo.NormalizeInviteEmail(inv.Email)] = true

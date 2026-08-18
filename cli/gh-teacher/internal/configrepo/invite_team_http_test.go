@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
 
@@ -141,8 +142,8 @@ func TestEnsureInviteTeam_FreshCreateWritesEmailLast(t *testing.T) {
 		t.Errorf("ref = %+v, want id 7 / %s", ref, slug)
 	}
 	assertMethods(t, *calls, "POST", "DELETE", "GET", "PATCH")
-	if got := (*calls)[0].Description; got != inviteProvisionalDescription {
-		t.Errorf("create description = %q, want the provisional %q", got, inviteProvisionalDescription)
+	if got := (*calls)[0].Description; got != contract.InviteProvisionalDescription {
+		t.Errorf("create description = %q, want the provisional %q", got, contract.InviteProvisionalDescription)
 	}
 	if strings.Contains((*calls)[0].Description, testInviteEmail) {
 		t.Error("the create carried the invited email; an interrupted run would strand it on a team holding a teacher")
@@ -366,6 +367,65 @@ func TestListTeamMembersWithIDs_404IsEmptyAndErrorsPropagate(t *testing.T) {
 	t.Cleanup(broken.Close)
 	if _, err := ListTeamMembersWithIDs(githubtest.NewTestClient(t, broken), testInviteOrg, "invite-0123456789abcdef"); err == nil {
 		t.Error("err = nil for a 403; a degraded membership read must not look empty")
+	}
+}
+
+// The strict variant reports a 404 as absence DISTINCTLY, so a caller reading a
+// team that must exist (a classroom or staff team) can tell "no members" from
+// "no team" — reading the latter as an empty roster is what would make every
+// accepted invitee look unenrolled.
+func TestFindTeamMembersWithIDs_ReportsAbsenceDistinctly(t *testing.T) {
+	gone := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.NotFound(w, nil)
+	}))
+	t.Cleanup(gone.Close)
+	members, found, err := FindTeamMembersWithIDs(githubtest.NewTestClient(t, gone), testInviteOrg, "classroom50-cs101")
+	if err != nil || found || len(members) != 0 {
+		t.Errorf("404: members=%+v found=%v err=%v, want (empty, false, nil)", members, found, err)
+	}
+
+	empty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	t.Cleanup(empty.Close)
+	if _, found, err := FindTeamMembersWithIDs(githubtest.NewTestClient(t, empty), testInviteOrg, "classroom50-cs101"); err != nil || !found {
+		t.Errorf("a member-less but EXISTING team: found=%v err=%v, want (true, nil)", found, err)
+	}
+
+	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(broken.Close)
+	if _, _, err := FindTeamMembersWithIDs(githubtest.NewTestClient(t, broken), testInviteOrg, "classroom50-cs101"); err == nil {
+		t.Error("err = nil for a 403; a degraded read must not look like an absent team")
+	}
+}
+
+// A classroom team can hold more members than one page, and a truncated read
+// would report an enrolled student as unenrolled — which is what authorizes
+// deleting their metadata team.
+func TestListTeamMembersWithIDs_WalksEveryPage(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.RequestURI())
+		if r.URL.Query().Get("page") == "1" {
+			w.Header().Set("Link", `<`+"/orgs/"+testInviteOrg+`/teams/t/members?page=2>; rel="next"`)
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"login": "ada", "id": 42}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"login": "grace", "id": 44}})
+	}))
+	t.Cleanup(server.Close)
+
+	members, err := ListTeamMembersWithIDs(githubtest.NewTestClient(t, server), testInviteOrg, "t")
+	if err != nil {
+		t.Fatalf("ListTeamMembersWithIDs: %v", err)
+	}
+	if len(members) != 2 || members[1].Login != "grace" {
+		t.Errorf("members = %+v, want both pages walked", members)
+	}
+	if len(paths) != 2 {
+		t.Errorf("requested %v, want a second page followed from the Link header", paths)
 	}
 }
 

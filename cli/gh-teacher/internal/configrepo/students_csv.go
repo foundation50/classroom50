@@ -68,6 +68,10 @@ type RosterRow struct {
 	// "" (unknown / a pre-role file). Refreshed from team membership on sync;
 	// never consulted for enrollment decisions.
 	Role string
+	// Line is the 1-based CSV line this row was read from, recorded only by
+	// ParseImportCSV: an import reports failures per line, and a file with a
+	// bad line has no row for it, so position can't stand in for line number.
+	Line int
 	// Extra carries non-canonical columns keyed by header name, so a
 	// read/modify/write round-trips them. nil for a plain canonical file.
 	Extra map[string]string
@@ -90,12 +94,15 @@ func (r RosterRow) isRaw() bool { return r.raw != nil }
 // NOT identity: it addresses nobody, so treating it as one would strand the row
 // forever, unfoldable and unreapable by either tool.
 //
-// This is the single source of the claimable-row rule the pending-row helpers
-// below enforce (findPendingEmailRow, UpsertRosterRow's email fallback), so a
+// This is the single source of the claimable-row rule every pending-row helper
+// below enforces (findPendingEmailRow, UpsertRosterRow's email fallback), so a
 // caller deciding what to plan and the helper applying it agree — a planner
 // guessing at the rule plans edits these helpers then refuse, which a --write
-// pass would report and silently skip forever. Mirrors the web's
-// removeEmailInviteRows filter: no username and resolveGitHubId() === null.
+// pass would report and silently skip forever. The set is deliberately NARROW
+// because every caller either rewrites or drops the row it matches: a student
+// who already has an account, and a classmate merely sharing a contact address,
+// must never be touched. Mirrors the web's removeEmailInviteRows filter: no
+// username and resolveGitHubId() === null.
 func (r RosterRow) IsPendingEmailInvite() bool {
 	return !r.isRaw() && r.Username == "" &&
 		r.GitHubID == 0 &&
@@ -221,8 +228,9 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 // carries no extra-column state, so a wider file would silently drop the tail.
 //
 // Row errors are collected across the whole file and returned joined (one
-// `line %d: ...` per bad row), so the caller can print a full report before
-// refusing the file.
+// `line %d: ...` per bad row), ALONGSIDE the rows that did parse, so the caller
+// can add its own per-row failures (a username that resolves to no account) to
+// them and refuse once with every unusable line named.
 func ParseImportCSV(data []byte) ([]RosterRow, error) {
 	data = bytes.TrimPrefix(data, utf8BOM)
 	r := csv.NewReader(bytes.NewReader(data))
@@ -274,10 +282,11 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 			rowErrs = append(rowErrs, fmt.Errorf("line %d: %w", line, err))
 			continue
 		}
+		row.Line = line
 		rows = append(rows, row)
 	}
 	if len(rowErrs) > 0 {
-		return nil, errors.Join(rowErrs...)
+		return rows, errors.Join(rowErrs...)
 	}
 	return rows, nil
 }
@@ -424,12 +433,11 @@ func collectExtraColumns(rows []RosterRow) []string {
 //
 // The email fallback finishes what an email invite started: that row carries
 // only the invited address until the student accepts, so adding them by username
-// would otherwise leave a second row for the same person. It is deliberately
-// narrow — only a row with NO username and NO github_id addressing an account is
-// claimable, so two students sharing a contact email can never overwrite each
-// other, and a username match always wins. An email claim does NOT inherit the
-// pending row's Role (an email invite may have been for staff; the team is the
-// role authority), whereas a username match does.
+// would otherwise leave a second row for the same person. Claimable means
+// exactly RosterRow.IsPendingEmailInvite, and a username match always wins. An
+// email claim does NOT inherit the pending row's Role (an email invite may have
+// been for staff; the team is the role authority), whereas a username match
+// does.
 //
 // On replace, the existing row's Extra is carried over UNLESS the incoming row
 // supplies its own — so a CLI `roster add` (canonical fields only) never wipes
@@ -459,13 +467,9 @@ func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 		}
 	}
 	// No username match: claim a pending email-invite row for the same address.
-	// Only an identity-less row qualifies (see the doc comment), and a blank
-	// incoming email matches nothing.
+	// A blank incoming email matches nothing.
 	if row.Email != "" {
 		for i := range rows {
-			// "Identity-less" here means exactly what the reader means, via the
-			// shared rule: a github_id cell that addresses no account is not
-			// identity, so such a row is still the invite's to finish.
 			if !rows[i].IsPendingEmailInvite() {
 				continue
 			}
@@ -537,13 +541,8 @@ func UpdateRosterRow(rows []RosterRow, username string, p RosterPatch) (out []Ro
 }
 
 // findPendingEmailRow returns the index of the pending email-invite row for
-// email (normalized: trimmed, case-insensitive), or -1.
-//
-// The claimable set is deliberately NARROW (RosterRow.IsPendingEmailInvite) —
-// no username and no github_id addressing an account — because every caller
-// either rewrites or drops the row it finds: a student who already has an
-// account, and a classmate merely sharing a contact address, must never be
-// touched. Mirrors the web's removeEmailInviteRows filter.
+// email (normalized: trimmed, case-insensitive), or -1. Claimable is
+// RosterRow.IsPendingEmailInvite — see there for why the set is this narrow.
 func findPendingEmailRow(rows []RosterRow, email string) int {
 	key := NormalizeInviteEmail(email)
 	if key == "" {
@@ -586,10 +585,6 @@ func UpdatePendingEmailRow(rows []RosterRow, email string, p RosterPatch) (out [
 
 // RemovePendingEmailRow drops the pending email-invite row for email. Returns
 // the slice and whether a row was removed.
-//
-// The narrow claimable set (see findPendingEmailRow) is what keeps a cancel from
-// dropping a student who already accepted, or a classmate who merely shares a
-// contact address.
 func RemovePendingEmailRow(rows []RosterRow, email string) (out []RosterRow, removed bool) {
 	i := findPendingEmailRow(rows, email)
 	if i < 0 {
@@ -733,21 +728,38 @@ func checkFieldLengths(line int, record []string) error {
 // this type has always used to mean unresolved). A hard error is reserved for a
 // cell strconv itself rejects, which was fatal before this change too.
 //
-// The usable set mirrors the web app's parseGitHubId (web/src/util/identity.ts):
-// positive, and <= 2^53-1, past which the web side can no longer represent an id
-// exactly. A zero-padded cell is the one deliberate difference: the web rejects
-// it (its id-keyed joins compare the raw string, which padding breaks) while Go
-// resolves it and EncodeRoster writes it back canonically — so a rewrite repairs
-// the cell instead of stranding it, and the two readers converge.
+// The usable set mirrors the web app's resolveGitHubId
+// (web/src/util/identity.ts): a run of digits, positive, and <= 2^53-1, past
+// which the web side can no longer represent an id exactly. Leading zeros are
+// the one tolerated non-canonical spelling — the web strips exactly those, and
+// EncodeRoster writes the cell back canonically, so a rewrite repairs it. Any
+// other spelling strconv would happily read (a leading `+`, a sign) must stay
+// UNRESOLVED here: the web's join reads such a row as a pending email invite,
+// and resolving it would make the same row identity to one tool and claimable
+// to the other.
 func parseGitHubID(s string) (int64, error) {
-	id, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	trimmed := strings.TrimSpace(s)
+	id, err := strconv.ParseInt(trimmed, 10, 64)
 	if err != nil {
 		return 0, err
 	}
-	if id <= 0 || id > maxSafeGitHubID {
+	if id <= 0 || id > maxSafeGitHubID || !isDigits(trimmed) {
 		return 0, nil
 	}
 	return id, nil
+}
+
+// isDigits reports whether s is a non-empty run of ASCII digits.
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // isFormulaTrigger reports whether `b` would be parsed as a formula prefix by

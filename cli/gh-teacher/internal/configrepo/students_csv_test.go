@@ -80,39 +80,33 @@ func TestParseRoster_GitHubIDShapeMatchesWeb(t *testing.T) {
 	}
 }
 
-// A signed cell resolves to the same account and is rewritten canonically, so the
-// two readers converge rather than diverge: Go normalizes "+42" to "42", which the
-// web reader then accepts. Same for a zero-padded cell, which the web deliberately
-// rejects (its id joins compare the raw string) and a CLI rewrite repairs.
-func TestParseRoster_NonCanonicalGitHubIDNormalizes(t *testing.T) {
-	for _, tc := range []struct{ cell, want string }{
-		{"+42", ",42,"},
-		{"0000583231", ",583231,"},
-	} {
-		t.Run(tc.cell, func(t *testing.T) {
-			in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
-				"alice,A,A,,s," + tc.cell + ",student\n")
-			rows, err := ParseRoster(in)
-			if err != nil {
-				t.Fatalf("ParseRoster: %v", err)
-			}
-			encoded, err := EncodeRoster(rows)
-			if err != nil {
-				t.Fatalf("EncodeRoster: %v", err)
-			}
-			if !strings.Contains(string(encoded), tc.want) {
-				t.Errorf("want a canonical %s on rewrite, got:\n%s", tc.want, encoded)
-			}
-		})
+// A zero-padded cell addresses the same account unambiguously, so Go resolves it
+// and rewrites it canonically — repairing a cell the web's join deliberately
+// rejects (it compares the raw string) so the two readers converge.
+func TestParseRoster_ZeroPaddedGitHubIDNormalizes(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,A,A,,s,0000583231,student\n")
+	rows, err := ParseRoster(in)
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	encoded, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	if !strings.Contains(string(encoded), ",583231,") {
+		t.Errorf("want a canonical ,583231, on rewrite, got:\n%s", encoded)
 	}
 }
 
 // A cell the web reader won't use as an id must not fail the roster: it reads as
 // unresolved (GitHubID 0) so the CLI re-resolves it, and the original value is
 // preserved on rewrite rather than silently cleared. "0" in particular is what
-// this type has always used to MEAN unresolved, so older rosters carry it.
+// this type has always used to MEAN unresolved, so older rosters carry it, and
+// "+42" is a spelling the web's regex rejects — resolving it here would make the
+// same row identity to one tool and a claimable pending invite to the other.
 func TestParseRoster_UnusableGitHubIDIsUnresolvedNotFatal(t *testing.T) {
-	for _, cell := range []string{"0", "-5", "9007199254740993", " "} {
+	for _, cell := range []string{"0", "-5", "+42", "9007199254740993", " "} {
 		t.Run(cell, func(t *testing.T) {
 			in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
 				"alice,A,A,,s," + cell + ",student\n")
@@ -1474,30 +1468,68 @@ func TestRecordRosterEmail(t *testing.T) {
 // IsPendingEmailInvite is what a caller plans against, so it must answer exactly
 // what the helpers then do — a caller whose predicate is looser plans edits they
 // refuse, which no --write pass can ever converge.
+//
+// `want` is spelled out per case: deriving it from the predicate under test
+// would make every assertion vacuous.
 func TestIsPendingEmailInvite_AgreesWithTheHelpers(t *testing.T) {
-	cases := map[string]RosterRow{
-		"claimable":                        {Email: "ada@uni.edu"},
-		"has a username":                   {Username: "ada", Email: "ada@uni.edu"},
-		"has a resolved github_id":         {Email: "ada@uni.edu", GitHubID: 101},
-		"has an unresolved github_id cell": {Email: "ada@uni.edu", githubIDRaw: "0"},
-		"has no address":                   {githubIDRaw: ""},
-		"is a preserved malformed row":     {raw: []string{"junk"}},
+	cases := map[string]struct {
+		row  RosterRow
+		want bool
+	}{
+		"claimable":                        {row: RosterRow{Email: "ada@uni.edu"}, want: true},
+		"has a username":                   {row: RosterRow{Username: "ada", Email: "ada@uni.edu"}},
+		"has a resolved github_id":         {row: RosterRow{Email: "ada@uni.edu", GitHubID: 101}},
+		"has an unresolved github_id cell": {row: RosterRow{Email: "ada@uni.edu", githubIDRaw: "0"}, want: true},
+		"has no address":                   {row: RosterRow{githubIDRaw: ""}},
+		"is a preserved malformed row":     {row: RosterRow{raw: []string{"junk"}}},
 	}
-	for name, row := range cases {
+	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			want := row.IsPendingEmailInvite()
-			if got := findPendingEmailRow([]RosterRow{row}, row.Email) >= 0; got != want {
-				t.Errorf("findPendingEmailRow matched = %v, IsPendingEmailInvite = %v", got, want)
+			if got := tc.row.IsPendingEmailInvite(); got != tc.want {
+				t.Fatalf("IsPendingEmailInvite = %v, want %v", got, tc.want)
 			}
-			_, removed := RemovePendingEmailRow([]RosterRow{row}, row.Email)
-			if removed != want {
-				t.Errorf("RemovePendingEmailRow removed = %v, IsPendingEmailInvite = %v", removed, want)
+			if got := findPendingEmailRow([]RosterRow{tc.row}, tc.row.Email) >= 0; got != tc.want {
+				t.Errorf("findPendingEmailRow matched = %v, want %v", got, tc.want)
 			}
-			_, claimed := ClaimPendingEmailRow([]RosterRow{row}, row.Email, "ada", 101)
-			if claimed != want {
-				t.Errorf("ClaimPendingEmailRow claimed = %v, IsPendingEmailInvite = %v", claimed, want)
+			_, removed := RemovePendingEmailRow([]RosterRow{tc.row}, tc.row.Email)
+			if removed != tc.want {
+				t.Errorf("RemovePendingEmailRow removed = %v, want %v", removed, tc.want)
+			}
+			_, claimed := ClaimPendingEmailRow([]RosterRow{tc.row}, tc.row.Email, "ada", 101)
+			if claimed != tc.want {
+				t.Errorf("ClaimPendingEmailRow claimed = %v, want %v", claimed, tc.want)
 			}
 		})
+	}
+}
+
+// #27: the two readers must agree on which spellings ADDRESS an account, or the
+// same row is identity to one and a claimable pending invite to the other. Only
+// leading zeros are tolerated (the web's resolveGitHubId strips exactly those,
+// and EncodeRoster rewrites the cell canonically).
+func TestParseGitHubID_AcceptsOnlyTheWebsResolvableSpellings(t *testing.T) {
+	for cell, want := range map[string]int64{
+		"101":                  101,
+		" 101 ":                101,
+		"0000101":              101, // the one tolerated non-canonical spelling
+		"+101":                 0,   // resolveGitHubId's regex rejects the sign
+		"-101":                 0,
+		"0":                    0,
+		"9007199254740992":     0, // past 2^53-1
+		"00000000000000000000": 0,
+		"1_01":                 0,
+		"0x65":                 0,
+	} {
+		id, err := parseGitHubID(cell)
+		if want == 0 {
+			if id != 0 {
+				t.Errorf("parseGitHubID(%q) = %d, want 0 (the web addresses no account with it)", cell, id)
+			}
+			continue
+		}
+		if err != nil || id != want {
+			t.Errorf("parseGitHubID(%q) = (%d, %v), want %d", cell, id, err, want)
+		}
 	}
 }
 

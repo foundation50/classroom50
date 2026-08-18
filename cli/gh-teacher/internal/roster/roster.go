@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -565,13 +566,17 @@ type importedPendingRow struct {
 
 // planRosterImport resolves every account row up front so rebase retries don't
 // repeat API lookups — only the file write is retried. It routes each row to
-// the one thing import may do with it, and collects ALL line failures so the
-// teacher sees every unusable line before the refusal (nothing is committed).
-// CSV lines are 1-based (header = line 1) to match ParseImportCSV's errors.
-func planRosterImport(client githubapi.Client, imported []configrepo.RosterRow) (accounts []configrepo.RosterRow, pending []importedPendingRow, cargoNotices []string, err error) {
-	var failures []error
-	for i, row := range imported {
-		line := i + 2
+// the one thing import may do with it, and collects ALL line failures on top of
+// parseFailures so the teacher sees every unusable line before the refusal
+// (nothing is committed). Line numbers come from RosterRow.Line, not the slice
+// index, since a file with a bad line has no row for it.
+func planRosterImport(client githubapi.Client, imported []configrepo.RosterRow, parseFailures []error) (accounts []configrepo.RosterRow, pending []importedPendingRow, cargoNotices []string, err error) {
+	// Parse-level failures lead: those lines never reached resolution, so there
+	// is no line number to interleave them by. Cloned because the caller's slice
+	// is the joined error's own.
+	failures := slices.Clone(parseFailures)
+	for _, row := range imported {
+		line := row.Line
 		switch {
 		case row.Username != "":
 			login, userID, err := membership.LookupUser(client, row.Username)
@@ -651,15 +656,24 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 	if err != nil {
 		return fmt.Errorf("read %s: %w", abs, err)
 	}
-	imported, err := configrepo.ParseImportCSV(data)
-	if err != nil {
-		return fmt.Errorf("%s: %w", abs, err)
+	imported, parseErr := configrepo.ParseImportCSV(data)
+	// A row-level parse failure must not short-circuit resolution: fixing the
+	// one line it named would only reveal the next. The joined row errors seed
+	// the plan's failure list instead, so both classes report in one pass. A
+	// header/empty-file error is not per-row and has nothing to join.
+	var parseFailures []error
+	if parseErr != nil {
+		var joined interface{ Unwrap() []error }
+		if !errors.As(parseErr, &joined) {
+			return fmt.Errorf("%s: %w", abs, parseErr)
+		}
+		parseFailures = joined.Unwrap()
 	}
-	if len(imported) == 0 {
+	if len(imported) == 0 && len(parseFailures) == 0 {
 		return fmt.Errorf("%s: contains a header but no student rows", abs)
 	}
 
-	accounts, pending, cargoNotices, err := planRosterImport(client, imported)
+	accounts, pending, cargoNotices, err := planRosterImport(client, imported, parseFailures)
 	if err != nil {
 		return fmt.Errorf("%s: %w", abs, err)
 	}

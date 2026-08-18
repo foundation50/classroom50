@@ -785,6 +785,48 @@ func TestRunRosterImport(t *testing.T) {
 		}
 	})
 
+	// A parse-level failure and a resolution-level one are found by two
+	// different passes, so a file carrying one of each must still report BOTH
+	// before refusing — otherwise fixing the reported line only reveals the
+	// next, one round-trip per bad row. The resolution failure sits AFTER the
+	// parse failures on purpose: its line number must be the file's, which no
+	// position in the surviving-row slice can stand in for.
+	t.Run("a parse-level and a resolution-level bad line report together", func(t *testing.T) {
+		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n"
+		file := storedRosterHeader +
+			"alice,Alice,A,not-an-email,s1,,student\n" + // line 2: unparseable email
+			"bob,B,B,also-not-an-email,s1,,student\n" + // line 3: same
+			"ghost,G,G,,,,\n" // line 4: no such account
+
+		mock, _, _, err := runImport(t, stored, file, map[string]int64{"alice": 1})
+		if err == nil {
+			t.Fatal("err = nil, want a report naming every unusable line")
+		}
+		for _, want := range []string{
+			"3 row(s) can't be imported, so nothing was committed",
+			"line 2", "not-an-email", "line 3", "line 4 (ghost)",
+		} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error must name %q:\n%v", want, err)
+			}
+		}
+		if len(mock.blobs) != 0 {
+			t.Errorf("nothing may be committed when a line fails, got %d blobs", len(mock.blobs))
+		}
+	})
+
+	// A header error is not per-row, so it has no failure list to join and must
+	// still surface on its own.
+	t.Run("a bad header still fails on its own", func(t *testing.T) {
+		mock, _, _, err := runImport(t, storedRosterHeader, "nope,wrong\nx,y\n", nil)
+		if err == nil || !strings.Contains(err.Error(), "unexpected header") {
+			t.Fatalf("err = %v, want an 'unexpected header' error", err)
+		}
+		if len(mock.blobs) != 0 {
+			t.Errorf("a bad header must commit nothing, got %d blobs", len(mock.blobs))
+		}
+	})
+
 	t.Run("github_id disagreeing with the resolved account fails the line", func(t *testing.T) {
 		stored := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,1,student\n"
 		file := storedRosterHeader + "alice,Alice,A,a@x.edu,s1,777,student\n"

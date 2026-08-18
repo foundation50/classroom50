@@ -337,7 +337,8 @@ invited.
 > `import` resolves students by username and the web app's **Upload** is what
 > reads id-keyed rows. A `role` column is carried but never applied — grant roles
 > with `gh teacher staff add`. Every unusable line is reported in one pass and
-> nothing is committed, so one editing pass fixes the file.
+> nothing is committed — a malformed line and a `username` that names no GitHub
+> account come back together — so one editing pass fixes the file.
 
 **View the roster:**
 
@@ -388,6 +389,15 @@ grant a classroom role with `gh teacher staff add` once the person has an
 account. An address that's already an organization member, or already has a
 pending invitation, is reported as skipped and the command still exits 0.
 
+It refuses only when the roster already lists the address as a **pending
+invitation** — a second one would just duplicate that row. An address some *other*
+row merely carries is a shared address (a parent, a lab contact), so the real
+person still gets invited: you get a note on stderr naming that row, the
+invitation is sent, and **no second row is written**. If the invitation fails
+outright, a metadata team this run created is cleaned up again — except after a
+rate limit, where the team is deliberately kept so a retry adopts it instead of
+racing the same limit with a second create.
+
 **Call an invitation off:**
 
 ```sh
@@ -400,6 +410,15 @@ with none for the address it reports and changes nothing, because an invitation
 the student already accepted looks exactly the same from outside. Run `roster
 sync` in that case — it records the student instead of discarding the one record
 of which address their account came from.
+
+Because an organization invitation is org-wide while the team and row it removes
+belong to one classroom, it first proves the invitation is *this* classroom's: the
+metadata team for the address must exist, carry a readable invite record, and name
+this classroom, and the invitation must carry one of this classroom's teams.
+Otherwise it refuses with the invitation intact — revoke that one from the web
+app's roster or from
+`https://github.com/orgs/<org>/people/pending_invitations`, or re-run naming the
+classroom that actually sent it.
 
 How the lifecycle works end to end is in
 [Invitations by email](How-Classroom-50-Works#invitations-by-email).
@@ -419,13 +438,20 @@ gh teacher roster sync <org> <classroom> --write    # apply it
 It records the students who accepted an email invitation (username and
 `github_id`, onto their own pending row), fills in a missing `github_id` from the
 classroom team's membership, drops the pending rows nothing backs any more, and
-deletes the per-invite teams that are done. The web app runs the same
-reconciliation when a teacher opens the roster; this is the same thing without
-opening a browser. For every trigger, see
+deletes the per-invite teams that are done. A row it *adds* for an accepted
+invitation records the role of the classroom team the account was found on — so a
+staff member who accepted an email invitation is recorded with their staff role,
+not as a student — and a role already recorded is never rewritten. The web app
+runs the same reconciliation when a teacher opens the roster; this is the same
+thing without opening a browser. For every trigger, see
 [What triggers a reconcile](How-Classroom-50-Works#what-triggers-a-reconcile).
 
 **It's a dry run unless you pass `--write`** — without it, no write request is
-issued at all.
+issued at all. A dry run also flags a per-invite team whose address the roster
+*already* records: `--write` would retire it, so it counts as changes pending and
+the run exits `2` rather than reporting the classroom up to date. On an
+**archived** classroom `--write` is refused (the roster is frozen), while a dry run
+still reports what's outstanding.
 
 **Exit codes** follow `terraform plan -detailed-exitcode`, so a script can branch
 on state without parsing output:
@@ -433,7 +459,7 @@ on state without parsing output:
 | Code | Meaning |
 | --- | --- |
 | `0` | Nothing to do — or `--write` applied everything. |
-| `1` | An error, or a degraded read left the pass incomplete. Nothing was removed; re-run once GitHub is healthy. |
+| `1` | An error, or a degraded read left the pass incomplete. Nothing was removed and no invite team was deleted; re-run once GitHub is healthy. |
 | `2` | A dry run found changes pending. |
 
 A nightly check that only reports drift:
@@ -453,9 +479,10 @@ Use `set +e` around the call (or the `case` above) if your script runs under `se
 > [!NOTE]
 > `sync` is deliberately conservative: any degraded read — GitHub's pending
 > invitations, or one of the invite teams — makes the whole pass read-mostly and
-> exits `1`, because an unreadable team can't prove that a pending row is dead.
-> Warnings about a team it left standing go to stderr; the planned edits go to
-> stdout.
+> exits `1`, because an unreadable team can't prove that a pending row is dead. No
+> row is dropped and no invite team is deleted at all, so the exit-1 promise holds
+> without exception. Warnings about a team it left standing go to stderr; the
+> planned edits go to stdout.
 
 ## 7. Add assignments
 

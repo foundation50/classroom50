@@ -2,6 +2,7 @@ package configrepo
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,24 +101,41 @@ func TestInviteVectors_SharedParity(t *testing.T) {
 
 // TestMarshalInviteDescription_ControlCharParity is the other half of the byte
 // contract the shared vectors pin: Go's json.Marshal agrees with JSON.stringify
-// on every control character, so the web's Go-parity escaper
+// on EVERY C0 control and DEL, so the web's Go-parity escaper
 // (web/src/util/goJsonEscape.ts) must escape ONLY <, >, &, U+2028 and U+2029.
-// Asserted here as well because a toolchain that started emitting \u0008/\u000c
-// for \b/\f would silently un-align the two writers.
+// Exhaustive over U+0000–U+001F rather than a sample, because the escaper's
+// claim is about the whole range: a toolchain that started emitting \u0008 for
+// \b — or a long escape for any other control — would silently un-align the two
+// writers, and a range checked in part is a claim pinned in part.
 func TestMarshalInviteDescription_ControlCharParity(t *testing.T) {
-	out, err := MarshalInviteDescription("cs\b\f\u0001\u007fx", "a@b")
-	if err != nil {
-		t.Fatalf("MarshalInviteDescription: %v", err)
-	}
-	for _, want := range []string{`\b`, `\f`, `\u0001`, "\u007f"} {
+	// The five controls JSON.stringify gives a short escape; every other C0
+	// control takes the lowercase \u00xx form, and DEL stays raw.
+	shortEscapes := map[rune]string{'\b': `\b`, '\t': `\t`, '\n': `\n`, '\f': `\f`, '\r': `\r`}
+	for cp := rune(0); cp <= 0x1F; cp++ {
+		out, err := MarshalInviteDescription(fmt.Sprintf("cs%cx", cp), "a@b")
+		if err != nil {
+			t.Fatalf("MarshalInviteDescription(U+%04X): %v", cp, err)
+		}
+		want, long := shortEscapes[cp], fmt.Sprintf(`\u%04x`, cp)
+		if want == "" {
+			want = long
+		} else if strings.Contains(out, long) {
+			t.Errorf("U+%04X: record %q uses the long escape %q; JSON.stringify emits %q", cp, out, long, want)
+		}
 		if !strings.Contains(out, want) {
-			t.Errorf("record %q is missing %q", out, want)
+			t.Errorf("U+%04X: record %q is missing %q", cp, out, want)
+		}
+		// An uppercase-hex escape would be a byte difference on its own.
+		if upper := strings.ToUpper(long); upper != long && strings.Contains(out, upper) {
+			t.Errorf("U+%04X: record %q uses uppercase hex; JSON.stringify emits lowercase", cp, out)
 		}
 	}
-	for _, unwanted := range []string{`\u0008`, `\u000c`} {
-		if strings.Contains(out, unwanted) {
-			t.Errorf("record %q uses the long escape %q; the web writer emits the short form", out, unwanted)
-		}
+	out, err := MarshalInviteDescription("cs\u007fx", "a@b")
+	if err != nil {
+		t.Fatalf("MarshalInviteDescription(DEL): %v", err)
+	}
+	if !strings.Contains(out, "\u007f") {
+		t.Errorf("record %q should carry DEL raw; neither encoder escapes it", out)
 	}
 }
 

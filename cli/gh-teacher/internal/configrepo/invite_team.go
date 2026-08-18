@@ -35,12 +35,6 @@ type InviteDescription struct {
 	Classroom string `json:"classroom"`
 }
 
-// inviteProvisionalDescription is what an invite team is created with, so a run
-// that dies before the membership drop leaves a team holding NO email. It
-// deliberately does not parse as a v1 record, which is what makes a reconcile
-// skip such a team. Byte-identical with the web's PROVISIONAL_DESCRIPTION.
-const inviteProvisionalDescription = "classroom50: preparing invite"
-
 // ErrInviteTeamNotSecret means the invite team is not `secret` and could not be
 // made secret. The record holds a plaintext email, so a closed/visible team
 // would expose it to every org member — fail closed rather than write PII where
@@ -123,8 +117,14 @@ func ParseInviteDescription(description string) (InviteDescription, bool) {
 // GC age gate (contract.InviteTeamGCMinAge) needs. Members are read separately
 // via ListTeamMembersWithIDs so a caller can order the two reads itself.
 type InviteTeamState struct {
-	Ref    TeamRef
 	Record *InviteDescription
+	// Provisional is true when the description is exactly
+	// contract.InviteProvisionalDescription: a team either tool created whose
+	// invite is still mid-flight. Distinguishing it from any OTHER record-less
+	// description matters — the latter is a hand edit (the accepted invitee owns
+	// their own team) and needs a teacher's eyes, while this one is just a run in
+	// progress.
+	Provisional bool
 	// Zero when GitHub omits or malforms created_at — a team whose age can't be
 	// judged must never be reaped.
 	CreatedAt time.Time
@@ -138,8 +138,6 @@ type InviteTeamState struct {
 func ReadInviteTeam(client githubapi.Client, org, slug string) (InviteTeamState, bool, error) {
 	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	var payload struct {
-		ID          int64  `json:"id"`
-		Slug        string `json:"slug"`
 		Description string `json:"description"`
 		CreatedAt   string `json:"created_at"`
 	}
@@ -149,9 +147,11 @@ func ReadInviteTeam(client githubapi.Client, org, slug string) (InviteTeamState,
 		}
 		return InviteTeamState{}, false, fmt.Errorf("GET %s (read invite team): %w", path, err)
 	}
-	state := InviteTeamState{Ref: TeamRef{ID: payload.ID, Slug: payload.Slug}}
+	var state InviteTeamState
 	if record, ok := ParseInviteDescription(payload.Description); ok {
 		state.Record = &record
+	} else {
+		state.Provisional = strings.TrimSpace(payload.Description) == contract.InviteProvisionalDescription
 	}
 	// An unparseable timestamp stays zero, so the age gate reads "too young".
 	if created, err := time.Parse(time.RFC3339, payload.CreatedAt); err == nil {
@@ -166,23 +166,41 @@ func ReadInviteTeam(client githubapi.Client, org, slug string) (InviteTeamState,
 // invite team, so whoever is on it accepted — including an org owner, whom
 // GitHub auto-promotes to maintainer and a role=member filter would hide.
 // A 404 (team already deleted) yields no members, so the invite simply looks
-// pending; any other failure propagates.
+// pending; any other failure propagates. A caller reading a team that MUST
+// exist wants FindTeamMembersWithIDs instead.
 func ListTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMemberRef, error) {
+	members, _, err := findTeamMembersWithIDs(client, org, slug)
+	return members, err
+}
+
+// FindTeamMembersWithIDs is ListTeamMembersWithIDs with the 404 reported
+// distinctly: found=false means GitHub has no such team. A classroom or staff
+// team is expected to exist, and reading its absence (renamed, deleted, or a
+// mistyped slug) as an empty membership would make every accepted invitee look
+// unenrolled — which is what authorizes deleting the metadata team holding the
+// only record of their invited address.
+func FindTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMemberRef, bool, error) {
+	return findTeamMembersWithIDs(client, org, slug)
+}
+
+func findTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMemberRef, bool, error) {
+	found := true
 	members, err := githubapi.PaginateAll[TeamMemberRef](
-		client, teamListPerPage, teamListMaxPages,
+		client, githubapi.ListPerPage, githubapi.ListMaxPages,
 		func(page int) string {
 			return fmt.Sprintf("orgs/%s/teams/%s/members?per_page=%d&page=%d",
-				url.PathEscape(org), url.PathEscape(slug), teamListPerPage, page)
+				url.PathEscape(org), url.PathEscape(slug), githubapi.ListPerPage, page)
 		},
 		func(path string, err error) error {
 			if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+				found = false
 				return nil // 404 sentinel: caller handles the empty result
 			}
 			return fmt.Errorf("GET %s: %w", path, err)
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	out := make([]TeamMemberRef, 0, len(members))
 	for _, m := range members {
@@ -191,7 +209,7 @@ func ListTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMe
 		}
 		out = append(out, m)
 	}
-	return out, nil
+	return out, found, nil
 }
 
 // EnsureInviteTeam creates (or adopts) the per-invite SECRET team for
@@ -212,7 +230,8 @@ func ListTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMe
 //     unconditionally (an adopted team may carry one from an earlier run) and the
 //     membership is then READ BACK; a survivor is ErrInviteTeamNotEmpty. This is
 //     what lets a reconcile treat any member of any role as the invitee.
-//   - EMAIL LAST: the create carries only inviteProvisionalDescription. GitHub
+//   - EMAIL LAST: the create carries only contract.InviteProvisionalDescription.
+//     GitHub
 //     adds the creator during the create itself, so the drop is necessarily a
 //     second request and an interrupted run can always strand a team with a
 //     teacher on it. Writing the email last makes that leftover harmless — it
@@ -273,7 +292,7 @@ func createOrAdoptInviteTeam(client githubapi.Client, org, name string) (inviteT
 	body, err := json.Marshal(map[string]any{
 		"name":                 name,
 		"privacy":              "secret",
-		"description":          inviteProvisionalDescription,
+		"description":          contract.InviteProvisionalDescription,
 		"notification_setting": notificationsDisabled,
 	})
 	if err != nil {

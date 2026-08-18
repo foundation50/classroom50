@@ -21,13 +21,6 @@ import (
 	"github.com/foundation50/gh-teacher/internal/output"
 )
 
-// memberAPIPerPage / memberPagesMax bound the paginated membership walks.
-// 100×100 = 10k, far beyond any classroom org.
-const (
-	memberAPIPerPage = 100
-	memberPagesMax   = 100
-)
-
 // memberListEntry is one row of `member list` output. Kind separates the
 // surfaces reconciled against the roster (org member, pending invitation, repo
 // collaborator). Role is the org role or repo permission level; empty when
@@ -206,9 +199,9 @@ func normalizeInviteRole(role string) string {
 func runMemberListRepo(client githubapi.Client, out, errOut io.Writer, owner, repo string, asJSON, quiet bool) error {
 	base := fmt.Sprintf("repos/%s/%s/collaborators", url.PathEscape(owner), url.PathEscape(repo))
 	subject := owner + "/" + repo
-	collabs, err := githubapi.PaginateAll[repoCollaborator](client, memberAPIPerPage, memberPagesMax,
+	collabs, err := githubapi.PaginateAll[repoCollaborator](client, githubapi.ListPerPage, githubapi.ListMaxPages,
 		func(page int) string {
-			return fmt.Sprintf("%s?per_page=%d&page=%d", base, memberAPIPerPage, page)
+			return fmt.Sprintf("%s?per_page=%d&page=%d", base, githubapi.ListPerPage, page)
 		},
 		func(path string, err error) error {
 			return membership.ClassifyMembershipReadError(path, subject, err)
@@ -251,9 +244,9 @@ func paginateMembers(client githubapi.Client, base, subject string) ([]memberAcc
 	if strings.Contains(base, "?") {
 		sep = "&"
 	}
-	return githubapi.PaginateAll[memberAccount](client, memberAPIPerPage, memberPagesMax,
+	return githubapi.PaginateAll[memberAccount](client, githubapi.ListPerPage, githubapi.ListMaxPages,
 		func(page int) string {
-			return fmt.Sprintf("%s%sper_page=%d&page=%d", base, sep, memberAPIPerPage, page)
+			return fmt.Sprintf("%s%sper_page=%d&page=%d", base, sep, githubapi.ListPerPage, page)
 		},
 		func(path string, err error) error {
 			return membership.ClassifyMembershipReadError(path, subject, err)

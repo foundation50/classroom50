@@ -158,7 +158,9 @@ account. Classroom 50 bridges that gap with an **invite team**.
    username yet.
 4. Accepting adds the student to both teams. Because the invite team holds exactly
    one person, whoever is on it is the student who accepted, so a reconcile fills
-   their account into the pending row and then deletes the invite team.
+   their account into the pending row and then deletes the invite team. If the
+   invited person turns out to be staff on the classroom, the row a reconcile
+   *creates* for them records that staff role rather than `student`.
 
 The web app and the teacher CLI both invite this way, and each reads the other's
 invite teams, so an invitation sent from one can be completed or revoked from the
@@ -172,10 +174,18 @@ address.
 An outstanding invitation keeps its team and its pending row, so a teacher can see
 who was invited. Cancelling one (the app's roster, or `gh teacher roster
 cancel-invite`) deletes its invite team and its pending row right away; if either
-write fails, the next reconcile clears whatever is left. A team left by an expired
-invitation is cleaned up the same way, once it is more than 24 hours old and
-GitHub no longer lists the invitation as pending; a still-pending invitation is
-never touched.
+write fails, the next reconcile clears whatever is left. From the CLI, cancelling
+first proves the invitation belongs to *this* classroom — its metadata team must
+name the classroom, and the invitation must carry one of the classroom's teams —
+and otherwise refuses rather than revoke a sibling classroom's invitation. A team
+left by an expired invitation is cleaned up the same way, once it is more than 24
+hours old and GitHub no longer lists the invitation as pending; a still-pending
+invitation is never touched.
+
+Inviting an address some other row already carries is allowed, and deliberately
+so: an address can be shared (a parent, a lab contact), and the real person still
+needs inviting. The invitation is sent, but no second row is written for the
+address — one row per address, whichever tool wrote it.
 
 > [!NOTE]
 > Invite teams are the one place Classroom 50 stores an address that GitHub
@@ -201,11 +211,11 @@ nothing to do is free:
 | `gh teacher roster sync <org> <classroom> --write` | The CLI, so a script or a scheduled job can do it with no browser |
 
 A reconcile is deliberately conservative on both sides: if a read is degraded it
-reports and removes nothing, since an invite team it couldn't read can't prove
-that a pending row is dead. `gh teacher roster sync` reports by default and
-changes nothing until you pass `--write`; see
-[`roster sync`](gh-teacher#roster-sync) for its exit codes. Deleting a classroom
-removes its invite teams too.
+reports and removes nothing — no row is dropped and no invite team is deleted at
+all — since an invite team it couldn't read can't prove that a pending row is
+dead. `gh teacher roster sync` reports by default and changes nothing until you
+pass `--write`; see [`roster sync`](gh-teacher#roster-sync) for its exit codes.
+Deleting a classroom removes its invite teams too.
 
 ### Who sees what
 

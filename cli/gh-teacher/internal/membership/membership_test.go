@@ -344,6 +344,120 @@ func TestListPendingOrgInvitations(t *testing.T) {
 	})
 }
 
+func TestPendingOrgInvitationIsEmailKeyed(t *testing.T) {
+	cases := []struct {
+		name string
+		inv  PendingOrgInvitation
+		want bool
+	}{
+		{"email only", PendingOrgInvitation{ID: 1, Email: "ada@uni.edu"}, true},
+		{"login only", PendingOrgInvitation{ID: 2, Login: "ada"}, false},
+		// GitHub keys by one or the other; a payload carrying both is not an
+		// address-keyed invitation and must not be cancelled as one.
+		{"both", PendingOrgInvitation{ID: 3, Login: "ada", Email: "ada@uni.edu"}, false},
+		{"neither", PendingOrgInvitation{ID: 4}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.inv.IsEmailKeyed(); got != tc.want {
+				t.Errorf("IsEmailKeyed() = %v, want %v for %#v", got, tc.want, tc.inv)
+			}
+		})
+	}
+}
+
+func TestListInvitationTeams(t *testing.T) {
+	t.Run("returns the teams the invitation carries", func(t *testing.T) {
+		var gotPath string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			if r.URL.Query().Get("page") != "1" {
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[
+				{"id":5,"slug":"classroom50-cs-principles"},
+				{"id":7,"slug":"invite-abc123"}
+			]`))
+		}))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		teams, err := ListInvitationTeams(client, "o", 42)
+		if err != nil {
+			t.Fatalf("ListInvitationTeams: %v", err)
+		}
+		if gotPath != "/orgs/o/invitations/42/teams" {
+			t.Errorf("path = %q, want /orgs/o/invitations/42/teams", gotPath)
+		}
+		if len(teams) != 2 || teams[0].Slug != "classroom50-cs-principles" || teams[1].ID != 7 {
+			t.Errorf("teams = %#v, want both the classroom and invite teams", teams)
+		}
+	})
+
+	t.Run("paginates past the first page", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			page := 1
+			if v := r.URL.Query().Get("page"); v != "" {
+				_, _ = fmt.Sscanf(v, "%d", &page)
+			}
+			var batch []map[string]any
+			for i := (page-1)*100 + 1; i <= 105 && i <= page*100; i++ {
+				batch = append(batch, map[string]any{"id": i, "slug": fmt.Sprintf("t%03d", i)})
+			}
+			if batch == nil {
+				batch = []map[string]any{}
+			}
+			_ = json.NewEncoder(w).Encode(batch)
+		}))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		teams, err := ListInvitationTeams(client, "o", 42)
+		if err != nil {
+			t.Fatalf("ListInvitationTeams: %v", err)
+		}
+		if len(teams) != 105 {
+			t.Errorf("got %d teams, want 105 (pagination across 2 pages)", len(teams))
+		}
+	})
+
+	// A caller uses this list to authorize a DELETE, so a degraded read must be
+	// an error: an empty set would read as "another classroom's invitation".
+	t.Run("failures are errors, never an empty set", func(t *testing.T) {
+		cases := []struct {
+			name   string
+			status int
+			scopes string
+			want   string
+		}{
+			{"403 scope missing", http.StatusForbidden, "repo, read:org", "missing admin:org OAuth scope"},
+			{"404", http.StatusNotFound, "", "not found or not accessible"},
+			{"500", http.StatusInternalServerError, "", "GET orgs/o/invitations/42/teams"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					if tc.scopes != "" {
+						w.Header().Set("X-OAuth-Scopes", tc.scopes)
+					}
+					http.Error(w, "boom", tc.status)
+				}))
+				t.Cleanup(server.Close)
+				client := githubtest.NewTestClient(t, server)
+
+				teams, err := ListInvitationTeams(client, "o", 42)
+				if err == nil {
+					t.Fatalf("err = nil (teams = %#v), want a hard failure", teams)
+				}
+				if !strings.Contains(err.Error(), tc.want) {
+					t.Errorf("err = %v, want substring %q", err, tc.want)
+				}
+			})
+		}
+	})
+}
+
 func TestLookupUser(t *testing.T) {
 	t.Run("success returns login + id", func(t *testing.T) {
 		mux := http.NewServeMux()

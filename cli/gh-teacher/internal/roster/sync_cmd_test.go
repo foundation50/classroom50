@@ -49,16 +49,32 @@ type syncMock struct {
 
 	pending       []map[string]any
 	pendingStatus int
+	// pendingFailAfterScan fails the invitation read only AFTER the scan's, so
+	// the degrade happens inside the write closure — on a copy of the scan
+	// struct, which is exactly why it must be reported back.
+	pendingFailAfterScan bool
+	pendingReads         int
 	// pendingAfterWrite replaces pending once the roster tree POST lands, so a
 	// test can stage a same-email re-invite in the commit→delete window.
 	pendingAfterWrite []map[string]any
 	teamListStatus    int
+	// deleteStatus fails every invite-team DELETE, the case whose exit code must
+	// still tell a script the pass did not finish.
+	deleteStatus int
+	// refConflicts is how many times the ref PATCH answers non-fast-forward,
+	// driving the rebase retry. rosterAfterConflict then replaces roster.csv, so
+	// the retried closure genuinely re-reads a changed file.
+	refConflicts        int
+	rosterAfterConflict string
 	// staffMembers is each recorded staff team's membership, keyed by slug —
 	// the source of an appended row's team-derived role.
 	staffMembers map[string][]map[string]any
 	// classroomJSONStatus fails the classroom.json read, the degraded case that
 	// must make the whole pass read-mostly.
 	classroomJSONStatus int
+	// rawCreatedAt overrides a team's created_at with a literal, so a test can
+	// serve one GitHub omitted or malformed.
+	rawCreatedAt map[string]string
 
 	calls        []inviteCall
 	deletedTeams []string
@@ -105,6 +121,10 @@ func (m *syncMock) handler(t *testing.T) http.Handler {
 			return
 		}
 		if r.Method == http.MethodDelete {
+			if m.deleteStatus != 0 {
+				w.WriteHeader(m.deleteStatus)
+				return
+			}
 			m.deletedTeams = append(m.deletedTeams, slug)
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -118,15 +138,24 @@ func (m *syncMock) handler(t *testing.T) http.Handler {
 			return
 		}
 		payload := map[string]any{"id": 100, "slug": slug, "description": team.desc}
-		if !team.createdAt.IsZero() {
+		if raw, ok := m.rawCreatedAt[slug]; ok {
+			if raw != "" {
+				payload["created_at"] = raw
+			}
+		} else if !team.createdAt.IsZero() {
 			payload["created_at"] = team.createdAt.UTC().Format(time.RFC3339)
 		}
 		_ = json.NewEncoder(w).Encode(payload)
 	})
 
 	base.HandleFunc("/orgs/o/invitations", func(w http.ResponseWriter, r *http.Request) {
-		if m.pendingStatus != 0 {
-			w.WriteHeader(m.pendingStatus)
+		m.pendingReads++
+		if m.pendingStatus != 0 || (m.pendingFailAfterScan && m.pendingReads > 1) {
+			status := m.pendingStatus
+			if status == 0 {
+				status = http.StatusInternalServerError
+			}
+			w.WriteHeader(status)
 			return
 		}
 		pending := m.pending
@@ -144,6 +173,19 @@ func (m *syncMock) handler(t *testing.T) http.Handler {
 	tracked := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if m.classroomJSONStatus != 0 && strings.HasSuffix(r.URL.Path, "/classroom.json") {
 			w.WriteHeader(m.classroomJSONStatus)
+			return
+		}
+		// A non-fast-forward ref PATCH is how GitHub reports a concurrent writer;
+		// the rebase loop then re-runs the whole build closure against the file as
+		// it now stands.
+		if m.refConflicts > 0 && r.Method == http.MethodPatch && r.URL.Path == "/repos/o/classroom50/git/refs/heads/main" {
+			m.refConflicts--
+			if m.rosterAfterConflict != "" {
+				m.files[inviteTestClassroom+"/roster.csv"] = m.rosterAfterConflict
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"Update is not a fast forward"}`))
 			return
 		}
 		base.ServeHTTP(w, r)
@@ -445,6 +487,31 @@ func TestRunRosterSync_MemberlessTeamGCGuard(t *testing.T) {
 			t.Errorf("deleted teams = %v, want just the stale %s", apply.deletedTeams, slug)
 		}
 	})
+
+	// An age that can't be read is not an age past the gate: a team GitHub
+	// reports with no created_at, or one it malforms, must never be reaped —
+	// otherwise a single API quirk collects every live invite in the org.
+	for name, createdAt := range map[string]string{
+		"created_at absent":   "",
+		"created_at malforms": "yesterday",
+	} {
+		t.Run(name+" is never reaped", func(t *testing.T) {
+			mock := newSyncMock(t, storedRosterHeader)
+			mock.teams = []syncTeam{{slug: slug, desc: syncInviteRecord(t, inviteTestEmail)}}
+			mock.rawCreatedAt = map[string]string{slug: createdAt}
+
+			out, _, err := runSync(t, mock, true)
+			if len(mock.deletedTeams) != 0 {
+				t.Errorf("deleted %v; an unreadable created_at cannot prove the team is past the GC age", mock.deletedTeams)
+			}
+			if got := exitCode(err); got != 0 {
+				t.Errorf("exit code = %d (err %v), want 0: an unaged team is simply left alone", got, err)
+			}
+			if !strings.Contains(out, "up to date") {
+				t.Errorf("nothing is pending, so the pass should say so:\n%s", out)
+			}
+		})
+	}
 }
 
 // A pending row nothing backs is dead — but only when the pass can prove it.
@@ -568,6 +635,345 @@ func TestRunRosterSync_DegradedTeamListingDegradesThePass(t *testing.T) {
 	}
 	if !strings.Contains(errOut, "Warning") {
 		t.Errorf("stderr must warn:\n%s", errOut)
+	}
+}
+
+// #1: a 404 on the classroom team is ABSENCE, not an empty roster. A renamed,
+// deleted, or mistyped classroom/staff team would otherwise make every accepted
+// invitee look unenrolled, and the unenrolled branch deletes the metadata team
+// holding the only record of their invited address.
+func TestRunRosterSync_MissingClassroomTeamDeletesNothing(t *testing.T) {
+	roster := storedRosterHeader + ",Ada,Lovelace," + inviteTestEmail + ",section-1,,student\n"
+
+	t.Run("the classroom team 404s", func(t *testing.T) {
+		// A readable staff team keeps the enrollment set non-empty, so the
+		// "no members visible" guard never fires: the invitee is simply absent
+		// from a set that was never fully read, and the unenrolled branch would
+		// delete the only record of their address.
+		const taSlug = syncTestClassroomTeamSlug + "-ta"
+		mock := newSyncMock(t, roster)
+		mock.files[inviteTestClassroom+"/classroom.json"] = syncClassroomJSON(t, false, map[string]string{"ta": taSlug})
+		mock.teams = []syncTeam{acceptedInviteTeam(t)}
+		mock.classroomStatus = http.StatusNotFound
+		mock.staffMembers = map[string][]map[string]any{
+			taSlug: {{"login": "ms-frizzle", "id": 900}},
+		}
+
+		out, errOut, err := runSync(t, mock, true)
+		if len(mock.deletedTeams) != 0 {
+			t.Errorf("deleted %v; a 404 on the classroom team proves nobody was unenrolled", mock.deletedTeams)
+		}
+		if got := exitCode(err); got != 1 {
+			t.Errorf("exit code = %d (err %v), want 1: a missing classroom team is a degraded read", got, err)
+		}
+		if strings.Contains(out, "delete the leftover metadata team") {
+			t.Errorf("reported a delete it must not make:\n%s", out)
+		}
+		if !strings.Contains(errOut, "Warning") {
+			t.Errorf("stderr must warn about the unreadable classroom team:\n%s", errOut)
+		}
+	})
+
+	t.Run("a recorded staff team 404s", func(t *testing.T) {
+		const taSlug = syncTestClassroomTeamSlug + "-ta"
+		mock := newSyncMock(t, roster)
+		mock.files[inviteTestClassroom+"/classroom.json"] = syncClassroomJSON(t, false, map[string]string{"ta": taSlug})
+		mock.teams = []syncTeam{acceptedInviteTeam(t)}
+		// staffMembers has no entry for taSlug, so the mock 404s that read.
+
+		_, _, err := runSync(t, mock, true)
+		if got := exitCode(err); got != 1 {
+			t.Fatalf("exit code = %d (err %v), want 1: a recorded staff team that is gone is degraded", got, err)
+		}
+		if len(mock.deletedTeams) != 0 {
+			t.Errorf("deleted %v with a staff team unread", mock.deletedTeams)
+		}
+	})
+}
+
+// #6/#22: a classmate's row carrying a shared contact address must not decide
+// anything about a DIFFERENT student's invite. The teardown gate is per
+// recovery, and the appends gate joins on identity — as the web's fold does.
+func TestRunRosterSync_ASharedAddressOnAnotherRowDecidesNothing(t *testing.T) {
+	slug := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
+
+	// #6: ada's own row already carries her personal address, so the invited one
+	// gets no write (hers stands) — while bob's row holds the invited address as
+	// a shared department contact. Nothing records where ADA's account came from,
+	// so the team holding that is the only record and must survive.
+	t.Run("it does not authorize retiring the team", func(t *testing.T) {
+		roster := storedRosterHeader +
+			syncTestAcceptedLogin + ",Ada,L,ada@personal.example,s1,101,student\n" +
+			"bob,Bob,B," + inviteTestEmail + ",s1,202,student\n"
+
+		mock := newSyncMock(t, roster)
+		mock.teams = []syncTeam{acceptedInviteTeam(t)}
+		mock.classroomMembers = []map[string]any{
+			{"login": syncTestAcceptedLogin, "id": syncTestAcceptedID},
+			{"login": "bob", "id": 202},
+		}
+
+		_, errOut, err := runSync(t, mock, true)
+		if err != nil {
+			t.Fatalf("runRosterSync: %v", err)
+		}
+		if len(mock.deletedTeams) != 0 {
+			t.Errorf("deleted %v; only a classmate's row holds %s, so nothing records where %s's account came from",
+				mock.deletedTeams, inviteTestEmail, syncTestAcceptedLogin)
+		}
+		if !strings.Contains(errOut, slug) {
+			t.Errorf("stderr must say which team was kept and why:\n%s", errOut)
+		}
+	})
+
+	// #22: the appends gate joins on identity too, so an accepted invitee whose
+	// address happens to sit on a classmate's row still gets a row of their own
+	// instead of being left off the roster entirely.
+	t.Run("it does not leave the invitee off the roster", func(t *testing.T) {
+		roster := storedRosterHeader + "bob,Bob,B," + inviteTestEmail + ",s1,202,student\n"
+
+		mock := newSyncMock(t, roster)
+		mock.teams = []syncTeam{acceptedInviteTeam(t)}
+		mock.classroomMembers = []map[string]any{
+			{"login": syncTestAcceptedLogin, "id": syncTestAcceptedID},
+			{"login": "bob", "id": 202},
+		}
+
+		if _, _, err := runSync(t, mock, true); err != nil {
+			t.Fatalf("runRosterSync: %v", err)
+		}
+		rows := committedRosterRows(t, mock)
+		var appended bool
+		for _, row := range rows {
+			if row.Username == syncTestAcceptedLogin {
+				appended = true
+				if row.GitHubID != syncTestAcceptedID || row.Email != inviteTestEmail {
+					t.Errorf("appended row lost identity or the recovered address: %#v", row)
+				}
+			}
+		}
+		if !appended {
+			t.Errorf("the accepted invitee was left off the roster because a classmate shares the address: %#v", rows)
+		}
+		// Their own row now records it against their account, so the team may go.
+		if len(mock.deletedTeams) != 1 || mock.deletedTeams[0] != slug {
+			t.Errorf("deleted teams = %v, want the now-redundant %s retired", mock.deletedTeams, slug)
+		}
+	})
+}
+
+// #13: a dry run must not report "up to date" and exit 0 when --write would
+// still delete a metadata team. The address is already recorded here, so the
+// roster plan is empty — but the team is redundant and --write retires it.
+func TestRunRosterSync_DryRunReportsARetirableTeam(t *testing.T) {
+	stored := storedRosterHeader +
+		syncTestAcceptedLogin + ",Ada,L," + inviteTestEmail + ",s1,101,student\n"
+	slug := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
+
+	dry := newSyncMock(t, stored)
+	dry.teams = []syncTeam{acceptedInviteTeam(t)}
+	out, _, err := runSync(t, dry, false)
+	if got := exitCode(err); got != 2 {
+		t.Fatalf("dry-run exit code = %d (err %v), want 2: --write would delete %s", got, err, slug)
+	}
+	if strings.Contains(out, "up to date") {
+		t.Errorf("claimed up to date while a delete is pending:\n%s", out)
+	}
+	if !strings.Contains(out, slug) {
+		t.Errorf("the dry run must name the team it would retire:\n%s", out)
+	}
+	if writes := writeCalls(dry.calls); len(writes) != 0 {
+		t.Errorf("dry run issued %d write request(s): %#v", len(writes), writes)
+	}
+
+	apply := newSyncMock(t, stored)
+	apply.teams = []syncTeam{acceptedInviteTeam(t)}
+	if _, _, err := runSync(t, apply, true); err != nil {
+		t.Fatalf("--write: %v", err)
+	}
+	if len(apply.deletedTeams) != 1 || apply.deletedTeams[0] != slug {
+		t.Fatalf("deleted teams = %v, want %s — the dry run promised this", apply.deletedTeams, slug)
+	}
+	// And the pass converges: with the team gone there is nothing left to do.
+	clean := newSyncMock(t, stored)
+	if got := exitCode(mustSyncErr(t, clean, false)); got != 0 {
+		t.Errorf("second dry run exit code = %d, want 0: the pass must converge", got)
+	}
+}
+
+// #14: a degraded pass promises nothing was removed, so it must not retire a
+// recovered team either — fail closed and keep the message true.
+func TestRunRosterSync_DegradedPassRetiresNoRecoveredTeam(t *testing.T) {
+	stored := storedRosterHeader +
+		syncTestAcceptedLogin + ",Ada,L," + inviteTestEmail + ",s1,101,student\n"
+	slug := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
+
+	// A second, unreadable invite team degrades the pass while leaving the
+	// recovery above intact.
+	mock := newSyncMock(t, stored)
+	mock.teams = []syncTeam{acceptedInviteTeam(t), {
+		slug:       configrepo.InviteTeamName(inviteTestClassroom, "other@uni.edu"),
+		readStatus: http.StatusInternalServerError,
+	}}
+
+	out, errOut, err := runSync(t, mock, true)
+	if len(mock.deletedTeams) != 0 {
+		t.Errorf("deleted %v on a degraded pass, while the exit-1 message promises nothing was removed", mock.deletedTeams)
+	}
+	if got := exitCode(err); got != 1 {
+		t.Errorf("exit code = %d (err %v), want 1", got, err)
+	}
+	if strings.Contains(out, slug) {
+		t.Errorf("reported a retirement it will not make:\n%s", out)
+	}
+	if !strings.Contains(errOut, "Warning") {
+		t.Errorf("stderr must warn about the unreadable team:\n%s", errOut)
+	}
+}
+
+// A degraded PER-TEAM read is the same fail-closed rule at team granularity: the
+// unreadable team can't prove the row it might back is dead, so no row is reaped
+// and no other team is swept.
+func TestRunRosterSync_DegradedInviteTeamReadSuppressesRemovals(t *testing.T) {
+	roster := storedRosterHeader + ",,,gone@uni.edu,,,student\n"
+
+	mock := newSyncMock(t, roster)
+	mock.teams = []syncTeam{
+		{slug: configrepo.InviteTeamName(inviteTestClassroom, "other@uni.edu"), readStatus: http.StatusInternalServerError},
+		{
+			slug:      configrepo.InviteTeamName(inviteTestClassroom, "stale@uni.edu"),
+			desc:      syncInviteRecord(t, "stale@uni.edu"),
+			createdAt: time.Now().Add(-2 * contract.InviteTeamGCMinAge),
+		},
+	}
+
+	_, errOut, err := runSync(t, mock, true)
+	if got := exitCode(err); got != 1 {
+		t.Fatalf("exit code = %d (err %v), want 1 for a degraded per-team read", got, err)
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("reaped a pending row with a team unread: %#v", mock.blobs)
+	}
+	if len(mock.deletedTeams) != 0 {
+		t.Errorf("deleted %v with a team unread", mock.deletedTeams)
+	}
+	if !strings.Contains(errOut, "leaving it alone") {
+		t.Errorf("stderr must say the unreadable team was left alone:\n%s", errOut)
+	}
+}
+
+// #20: the accepted invitee owns their own team's description, so blanking it
+// must not become a way to delete themselves from roster.csv. A record-less team
+// is an anomaly like a hash mismatch — reported, and the row it might back kept.
+func TestRunRosterSync_UnreadableRecordCannotReapItsOwnRow(t *testing.T) {
+	roster := storedRosterHeader + ",,," + inviteTestEmail + ",,,student\n"
+	blanked := acceptedInviteTeam(t)
+	blanked.desc = ""
+	blanked.members = nil
+
+	mock := newSyncMock(t, roster)
+	mock.teams = []syncTeam{blanked}
+
+	out, errOut, err := runSync(t, mock, true)
+	if len(mock.blobs) != 0 {
+		t.Errorf("dropped a row on the word of a team whose record the invitee blanked: %#v", mock.blobs)
+	}
+	if len(mock.deletedTeams) != 0 {
+		t.Errorf("deleted %v; a record-less team is an anomaly to inspect, not to reap", mock.deletedTeams)
+	}
+	if got := exitCode(err); got != 1 {
+		t.Errorf("exit code = %d (err %v), want 1: the pass could not prove the row dead", got, err)
+	}
+	if !strings.Contains(out+errOut, blanked.slug) {
+		t.Errorf("the anomaly must name the team:\n%s%s", out, errOut)
+	}
+}
+
+// A team still carrying the PROVISIONAL description is a run of either tool
+// still in flight, not a tampered one: it holds no address, so it is skipped
+// silently rather than reported as an anomaly.
+func TestRunRosterSync_ProvisionalTeamIsSkippedQuietly(t *testing.T) {
+	provisional := acceptedInviteTeam(t)
+	provisional.desc = contract.InviteProvisionalDescription
+	provisional.members = nil
+
+	mock := newSyncMock(t, storedRosterHeader)
+	mock.teams = []syncTeam{provisional}
+
+	out, errOut, err := runSync(t, mock, false)
+	if got := exitCode(err); got != 0 {
+		t.Fatalf("exit code = %d (err %v), want 0: a mid-flight invite is not a finding", got, err)
+	}
+	if strings.Contains(out+errOut, provisional.slug) {
+		t.Errorf("reported a team whose invite is still being created:\n%s%s", out, errOut)
+	}
+}
+
+// #23: a delete the teardown could not make must reach the exit code, not just
+// stderr — a script that reads 0 would believe the classroom is settled.
+func TestRunRosterSync_FailedTeamDeleteExitsNonZero(t *testing.T) {
+	mock := newSyncMock(t, storedRosterHeader+",Ada,L,"+inviteTestEmail+",s1,,student\n")
+	mock.teams = []syncTeam{acceptedInviteTeam(t)}
+	mock.deleteStatus = http.StatusInternalServerError
+
+	_, errOut, err := runSync(t, mock, true)
+	if got := exitCode(err); got != 1 {
+		t.Fatalf("exit code = %d (err %v), want 1: the teardown did not finish", got, err)
+	}
+	if len(mock.blobs) != 1 {
+		t.Errorf("the fold should still have committed, got %d blob(s)", len(mock.blobs))
+	}
+	if !strings.Contains(errOut, "re-run") {
+		t.Errorf("stderr must tell the teacher how to collect the leftover:\n%s", errOut)
+	}
+}
+
+// #23 (other half): a degrade discovered INSIDE the write closure lives on a
+// struct copy, so only a returned flag can reach the exit code. The invitation
+// re-read fails here after the scan succeeded.
+func TestRunRosterSync_DegradeInsideTheWriteClosureExitsNonZero(t *testing.T) {
+	mock := newSyncMock(t, storedRosterHeader+",,,gone@uni.edu,,,student\n"+
+		",Ada,L,"+inviteTestEmail+",s1,,student\n")
+	mock.teams = []syncTeam{acceptedInviteTeam(t)}
+	mock.pendingFailAfterScan = true
+
+	_, errOut, err := runSync(t, mock, true)
+	if got := exitCode(err); got != 1 {
+		t.Fatalf("exit code = %d (err %v), want 1: the pre-write re-check failed", got, err)
+	}
+	if !strings.Contains(errOut, "re-checking the pending invitations") {
+		t.Errorf("stderr must name the failed re-check:\n%s", errOut)
+	}
+	for _, row := range committedRosterRows(t, mock) {
+		if configrepo.NormalizeInviteEmail(row.Email) == "gone@uni.edu" {
+			return // kept, as fail-closed requires
+		}
+	}
+	t.Error("the dead pending row was dropped even though the confirmation read failed")
+}
+
+// A rebase retry re-runs the whole build closure, so the teardown's premise —
+// "the roster as COMMITTED records this address" — must be rebuilt from the
+// attempt that landed, not the one that lost the race.
+func TestRunRosterSync_RebaseRetryRebuildsTheTeardownPremise(t *testing.T) {
+	slug := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
+
+	mock := newSyncMock(t, storedRosterHeader+",Ada,L,"+inviteTestEmail+",s1,,student\n")
+	mock.teams = []syncTeam{acceptedInviteTeam(t)}
+	mock.refConflicts = 1
+	// The concurrent writer already gave ada an identity row carrying HER OWN
+	// address, so the retried attempt has nothing to fold and nothing to fill
+	// (a teacher-entered address stands) — the invited address is recorded
+	// nowhere, and the team holding it must survive.
+	mock.rosterAfterConflict = storedRosterHeader +
+		syncTestAcceptedLogin + ",Ada,L,ada@personal.example,s1,101,student\n"
+
+	if _, _, err := runSync(t, mock, true); err != nil {
+		t.Fatalf("runRosterSync: %v", err)
+	}
+	if len(mock.deletedTeams) != 0 {
+		t.Errorf("deleted %v using the premise of the attempt that lost the rebase; %s is still the only record of %s",
+			mock.deletedTeams, slug, inviteTestEmail)
 	}
 }
 
@@ -778,12 +1184,17 @@ func TestRunRosterSync_DuplicateUsernameBackfillConverges(t *testing.T) {
 		syncTestAcceptedLogin + ",Ada,Duplicate,,s2,,student\n"
 
 	apply := newSyncMock(t, roster)
-	_, errOut, err := runSync(t, apply, true)
+	out, errOut, err := runSync(t, apply, true)
 	if got := exitCode(err); got != 0 {
 		t.Fatalf("--write exit code = %d (err %v), want 0", got, err)
 	}
 	if len(apply.blobs) != 0 {
 		t.Errorf("committed %d blob(s) for a backfill nothing can apply: %#v", len(apply.blobs), apply.blobs)
+	}
+	// A duplicate username is a report-only FINDING, not an applicable step, so
+	// the summary and the exit code must agree that nothing is pending.
+	if !strings.Contains(out, "up to date") {
+		t.Errorf("stdout must agree with the exit-0 verdict:\n%s", out)
 	}
 	if !strings.Contains(errOut, syncTestAcceptedLogin) {
 		t.Errorf("stderr must report the duplicate username:\n%s", errOut)

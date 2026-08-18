@@ -116,12 +116,13 @@ type PendingOrgInvitation struct {
 	Role  string `json:"role"`
 }
 
-// orgListPerPage / orgListMaxPages bound the paginated org walks here.
-// 100×100 = 10k, far beyond any classroom org.
-const (
-	orgListPerPage  = 100
-	orgListMaxPages = 100
-)
+// IsEmailKeyed reports an invitation addressed by EMAIL — the one filter every
+// email-invite path shares (the cancel's address lookup and the roster sync's
+// liveness check), so the two can't drift into disagreeing on what an email
+// invitation is.
+func (inv PendingOrgInvitation) IsEmailKeyed() bool {
+	return inv.Login == "" && inv.Email != ""
+}
 
 // ListPendingOrgInvitations walks every pending org invitation. Shared by
 // `member list`, the cancel path (find an invitation by email) and the roster
@@ -131,9 +132,33 @@ const (
 func ListPendingOrgInvitations(client githubapi.Client, org string) ([]PendingOrgInvitation, error) {
 	base := fmt.Sprintf("orgs/%s/invitations", url.PathEscape(org))
 	subject := fmt.Sprintf("%s pending invitations", org)
-	return githubapi.PaginateAll[PendingOrgInvitation](client, orgListPerPage, orgListMaxPages,
+	return githubapi.PaginateAll[PendingOrgInvitation](client, githubapi.ListPerPage, githubapi.ListMaxPages,
 		func(page int) string {
-			return fmt.Sprintf("%s?per_page=%d&page=%d", base, orgListPerPage, page)
+			return fmt.Sprintf("%s?per_page=%d&page=%d", base, githubapi.ListPerPage, page)
+		},
+		func(path string, err error) error { return ClassifyMembershipReadError(path, subject, err) })
+}
+
+// InvitationTeamRef is one element of GET /orgs/{org}/invitations/{id}/teams:
+// the teams an invitation will add its invitee to on acceptance.
+type InvitationTeamRef struct {
+	ID   int64  `json:"id"`
+	Slug string `json:"slug"`
+}
+
+// ListInvitationTeams reads the teams a pending invitation carries. An org
+// invitation is org-scoped, so this list is the only thing that binds one to a
+// classroom: a caller about to revoke an invitation it found by ADDRESS checks
+// that one of its own classroom's teams is here, or it may revoke a sibling
+// classroom's live invitation to the same address. A failed read is an error,
+// never an empty set — an empty set reads as "not ours" and would refuse, but a
+// caller must be able to tell a refusal from a degraded read.
+func ListInvitationTeams(client githubapi.Client, org string, invitationID int64) ([]InvitationTeamRef, error) {
+	base := fmt.Sprintf("orgs/%s/invitations/%d/teams", url.PathEscape(org), invitationID)
+	subject := fmt.Sprintf("the teams on %s invitation %d", org, invitationID)
+	return githubapi.PaginateAll[InvitationTeamRef](client, githubapi.ListPerPage, githubapi.ListMaxPages,
+		func(page int) string {
+			return fmt.Sprintf("%s?per_page=%d&page=%d", base, githubapi.ListPerPage, page)
 		},
 		func(path string, err error) error { return ClassifyMembershipReadError(path, subject, err) })
 }

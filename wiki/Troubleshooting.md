@@ -288,9 +288,19 @@ Every row in a CSV you import with `gh teacher roster import` must carry at leas
 one column that identifies a student. The line number points at the row in your
 file where all three are blank — commonly a row of empty cells, or a leftover row
 from another export. Fill one in or delete the row, then re-run. Every unusable
-line in the file is reported in one pass and nothing is committed, so one editing
-pass fixes the whole file. For the accepted columns, see
+line in the file is reported in one pass and nothing is committed — including a
+line whose username names no GitHub account, so one editing pass fixes the whole
+file. For the accepted columns, see
 [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
+
+A `github_id` cell counts as present here even when it can't address an account,
+so a row carrying only an unusable id passes this check and is skipped with a
+notice instead. What counts as usable matches the web app exactly: a plain run of
+digits, positive, and no larger than a JavaScript-safe integer. Leading zeros are
+tolerated and rewritten canonically, but any other spelling `strconv` would read
+— a leading `+`, or a sign — stays **unresolved**, because the web app reads such
+a row as a pending email invitation and the two tools must agree. Only a cell
+neither tool can read at all fails the line outright.
 
 A copy of the stored `roster.csv` needs no trimming. `import` accepts the full
 stored header (`username,first_name,last_name,email,section,github_id,role`), the
@@ -402,16 +412,39 @@ pending, so it deliberately does nothing. For the full list of what reconciles,
 see
 [What triggers a reconcile](How-Classroom-50-Works#what-triggers-a-reconcile).
 
+### `gh teacher roster cancel-invite` refuses and cancels nothing
+
+An organization invitation is org-wide, but everything `cancel-invite` tears down
+belongs to one classroom — so it proves the invitation is *this* classroom's
+before it deletes anything, and refuses rather than guess. Nothing is cancelled
+and the invitation stays intact. Four refusals:
+
+- **No metadata team for the address.** This classroom never sent it (another one
+  in the organization may have), or the team was already deleted by hand.
+- **The metadata team holds no invite record.** An interrupted send leaves exactly
+  that: the record is written last, so a team without one proves nothing.
+- **The team records a different classroom.** Re-run naming that classroom; the
+  message tells you which.
+- **The pending invitation carries none of this classroom's teams.** Two
+  classrooms invited the same address and the org-wide lookup found the sibling's
+  invitation. Cancel it in that classroom.
+
+For the first two, revoke the invitation from the web app's roster or from
+`https://github.com/orgs/<org>/people/pending_invitations`, then delete any
+leftover `invite-…` team by hand. A `roster sync` won't do it for you: it
+deliberately skips a record-less team too.
+
 ### A pending row shows a `github_id` that can't be an account
 
 Nothing to fix, and nothing is stuck. A cell that addresses no account — `0`, a
-negative number, or one impossibly large for a GitHub account — isn't an
-identity, so the row still counts as "invited, not yet joined". When the student
-accepts, `roster sync` records their username and real `github_id` over that
-cell, keeping the name and section you'd already typed; and if the invitation is
-gone with nothing backing the address any more, the row is dropped like any other
-dead pending row. The web app reads the cell the same way, so opening the roster
-in a browser reconciles it identically.
+negative number, one impossibly large for a GitHub account, or one spelled with a
+leading `+` — isn't an identity, so the row still counts as "invited, not yet
+joined". When the student accepts, `roster sync` records their username and real
+`github_id` over that cell, keeping the name and section you'd already typed; and
+if the invitation is gone with nothing backing the address any more, the row is
+dropped like any other dead pending row. The web app reads the cell the same way
+— that's why the rule is exactly the web's, down to the leading `+` — so opening
+the roster in a browser reconciles it identically.
 
 A row that names an account *and* a `github_id` belonging to a different one is a
 separate case: `gh teacher roster import` fails that line rather than guessing
@@ -423,8 +456,12 @@ which student you meant — see
 A read was degraded — GitHub's pending-invitation list, or one of the invite teams
 — so the pass reported what it could and **removed nothing**. That's deliberate:
 an invite team it couldn't read can't prove that a pending row is dead, and a
-wrong removal loses the only record of a student's invited address. The warnings
-on stderr name what it couldn't read.
+wrong removal loses the only record of a student's invited address. No pending row
+is dropped and **no invite team is deleted at all** — not even one whose address
+the roster already records, which a healthy pass would retire — so the exit-1
+promise that nothing was removed holds without exception. Such a pass also
+doesn't report a deletion it isn't going to make. The warnings on stderr name what
+it couldn't read.
 
 Nothing destructive happened, so re-run once GitHub is healthy (check
 [GitHub status](https://www.githubstatus.com/)); if it was a rate limit, wait for
@@ -445,16 +482,21 @@ To clear them early, use **Clean up invite data** on the classroom's
 first. `gh teacher roster sync <org> <classroom> --write` does the equivalent from
 a terminal: it records the invitations that were accepted and then collects a
 team that is more than 24 hours old, has no member, and has no invitation GitHub
-still lists as pending. `gh teacher teardown <org>` removes every invite team in
+still lists as pending. It also collects a team whose sole member is no longer on
+any of the classroom's teams — that student was removed, so the mapping must not
+resurrect their row. `gh teacher teardown <org>` removes every invite team in
 the organization. A team whose description reads `classroom50: preparing invite`
 is the leftover of an interrupted invitation: it holds no address, and deleting it
 on github.com is safe.
 
-A reconcile deliberately leaves two kinds of team standing and names them on
-stderr, because neither can be resolved without guessing: one whose stored
+A reconcile deliberately leaves three kinds of team standing and names them on
+stderr, because none can be resolved without guessing: one whose stored
 address no longer hashes to its team name (the invitee can edit their own team's
-description after accepting), and one with more than one member, where no single
-invitee can be identified. Check what happened, then delete that team on
+description after accepting), one with more than one member, where no single
+invitee can be identified, and one whose description is no longer a readable
+invite record at all — other than the `classroom50: preparing invite` form above,
+which is a send still in flight and holds nothing to lose. Any pending row such a
+team might back is kept too. Check what happened, then delete that team on
 github.com by hand.
 
 ### A student's `role` flipped to `teacher` after `roster add`

@@ -34,6 +34,9 @@ type inviteMock struct {
 	createStatus int
 	// invitationStatus is the org-invitation POST status (0 → 201).
 	invitationStatus int
+	// invitationRateLimited makes the POST fail as a secondary rate limit, which
+	// the web deliberately treats differently from a hard failure.
+	invitationRateLimited bool
 	// commitFails fails the tree POST, simulating a roster write failure after a
 	// successful send.
 	commitFails bool
@@ -89,6 +92,13 @@ func (m *inviteMock) handler(t *testing.T) http.Handler {
 
 	base.HandleFunc("/orgs/o/invitations", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&m.invitationBody)
+		if m.invitationRateLimited {
+			w.Header().Set("Retry-After", "60")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"message":"You have exceeded a secondary rate limit"}`))
+			return
+		}
 		status := m.invitationStatus
 		if status == 0 {
 			status = http.StatusCreated
@@ -315,14 +325,32 @@ func TestRunRosterInvite_InvitationFailureKeepsAdoptedTeam(t *testing.T) {
 	}
 }
 
-// An address can legitimately belong to someone else's row — a shared family
-// address, or a lab contact — so a row that already NAMES an account must not
-// block a real person's invitation. The web is explicit about this
-// (UploadRoster's claimedEmails never filters the send list); warn and send.
+// A rate-limited send keeps the metadata team so a retry adopts it, matching the
+// web's bulkInviteByEmail (`if (!rateLimited && inviteTeam.created)`). Deleting
+// it would make every retry re-create the team, feeding the same limit.
+func TestRunRosterInvite_RateLimitedSendKeepsCreatedTeam(t *testing.T) {
+	mock := newInviteMock(t, storedRosterHeader)
+	mock.invitationRateLimited = true
+
+	_, _, err := runInvite(t, mock)
+	if err == nil {
+		t.Fatal("err = nil, want the rate limit to propagate")
+	}
+	if mock.deletedTeamSlug != "" {
+		t.Errorf("deleted team %q on a rate limit; a retry must be able to adopt it", mock.deletedTeamSlug)
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("a rate-limited send must write no roster row, got %d blob(s)", len(mock.blobs))
+	}
+}
+
+// An address an account row already carries still gets its invitation (the web
+// sends too), but NOT a second row: appendEmailInviteRows skips any claimed
+// address, so appending one here would leave a duplicate for the reconcile.
 func TestRunRosterInvite_AddressOnAnAccountRowWarnsAndSends(t *testing.T) {
 	mock := newInviteMock(t, storedRosterHeader+"sibling,Sib,Ling,"+inviteTestEmail+",,101,student\n")
 
-	_, errOut, err := runInvite(t, mock)
+	out, errOut, err := runInvite(t, mock)
 	if err != nil {
 		t.Fatalf("a shared address must not block the send: %v", err)
 	}
@@ -332,18 +360,11 @@ func TestRunRosterInvite_AddressOnAnAccountRowWarnsAndSends(t *testing.T) {
 	if indexOfCall(mock.calls, http.MethodPost, "/orgs/o/invitations") < 0 {
 		t.Fatalf("the invitation was never sent; calls = %#v", mock.calls)
 	}
-	if len(mock.blobs) != 1 {
-		t.Fatalf("got %d blobs POSTed, want the pending row committed: %#v", len(mock.blobs), mock.blobs)
+	if len(mock.blobs) != 0 {
+		t.Fatalf("appended a second row for an already-claimed address: %#v", mock.blobs)
 	}
-	rows, err := configrepo.ParseRoster([]byte(mock.blobs[0]))
-	if err != nil {
-		t.Fatalf("parse committed roster: %v\n%s", err, mock.blobs[0])
-	}
-	if len(rows) != 2 {
-		t.Fatalf("committed %d rows, want the existing row plus the new pending one:\n%s", len(rows), mock.blobs[0])
-	}
-	if !rows[1].IsPendingEmailInvite() || rows[1].Email != inviteTestEmail {
-		t.Errorf("appended row = %#v, want a pending invite row for %s", rows[1], inviteTestEmail)
+	if !strings.Contains(out, "roster unchanged") {
+		t.Errorf("stdout should report the row was skipped:\n%s", out)
 	}
 }
 

@@ -342,9 +342,20 @@ with `gh teacher staff add` once the person has an account.
 Once the student accepts, `roster sync` fills in their username and `github_id`.
 
 Non-zero on: a classroom with no usable team recorded in `classroom.json`
-(nothing is sent), an address the roster already lists, or a failed invitation.
-An address that already belongs to an organization member — or already has a
-pending invitation — is reported as skipped and exits **0**.
+(nothing is sent), an address the roster already lists **as a pending
+invitation**, or a failed invitation. An address that already belongs to an
+organization member — or already has a pending invitation — is reported as
+skipped and exits **0**. An address that some *other* row merely carries is a
+shared address (a parent, a lab contact), so the invitation is still sent and
+the command exits **0**: you get a note on stderr naming that row, and no second
+row is written for it.
+
+If the invitation itself fails, a metadata team this run created is deleted
+again — unless the failure was a rate limit, in which case the team is kept so a
+retry adopts it instead of creating a second one against the same limit. If the
+invitation is sent but the roster write fails, nothing is rolled back (the
+invitation is the source of truth and the metadata team retains the address):
+the command exits non-zero and `roster sync` adds the row.
 
 ### `roster cancel-invite`
 
@@ -364,6 +375,18 @@ student, and collects a genuine leftover under its own checks. For a student
 already on the roster with a username, use `roster remove` (and `gh teacher
 remove` for the organization).
 
+Because an organization invitation is org-wide while everything it tears down is
+classroom-scoped, it first **proves the invitation is this classroom's**: the
+metadata team for the address must exist, hold a readable invite record, and name
+this classroom, and the invitation itself must carry one of this classroom's
+teams. It refuses — changing nothing, with the invitation intact — when any of
+those fails: a missing or record-less metadata team (an interrupted send leaves
+exactly that) or an invitation that belongs to a sibling classroom. Revoke such
+an invitation from the web app's roster or from GitHub's
+`https://github.com/orgs/<org>/people/pending_invitations` page; a sibling
+classroom's is cancelled by naming that classroom instead. It is also non-zero if
+the cancellation or the roster write following it fails.
+
 ### `roster sync`
 
 ```sh
@@ -377,29 +400,42 @@ membership, drops the pending rows nothing backs, and deletes the metadata teams
 that are done. The same reconciliation the web app runs when a teacher opens the
 roster — here it's explicit and script-callable.
 
-Its scope is the email-invite lifecycle and `github_id`: it doesn't rewrite a
-recorded `role` (a row it adds for an accepted invitation records `student`), and
-it doesn't add rows for organization members who were never invited through
-Classroom 50 — see
+Its scope is the email-invite lifecycle and `github_id`: it never rewrites a
+`role` already recorded on a row, and it doesn't add rows for organization
+members who were never invited through Classroom 50 — see
 [Already an org member, but not on the roster](Troubleshooting#already-an-org-member-but-not-on-the-roster).
+A row it *adds* for an accepted invitation records the role of the classroom team
+the account was found on, highest rank first (`teacher > hta > ta > student`), so
+a staff member who accepted an email invitation is recorded with their staff role
+rather than as a student; if no team names them, whatever role is already stored
+is left as it is.
 
-**Dry-run by default**: without `--write` it issues no write request at all.
+**Dry-run by default**: without `--write` it issues no write request at all. A dry
+run also reports a metadata team whose address the roster *already* records —
+that team is redundant and `--write` would retire it — and counts it as changes
+pending, so a pass with nothing to fold exits `2` rather than claiming the
+classroom is up to date. `--write` is refused outright on an **archived**
+classroom (`active: false` in `classroom.json`), whose roster is frozen; a dry run
+still works, so the leftovers stay inspectable.
 
 Exit codes follow `terraform plan -detailed-exitcode`:
 
 | Code | Meaning |
 | --- | --- |
 | `0` | Nothing to do — or `--write` applied everything. |
-| `1` | An error, or a degraded read left the pass incomplete (nothing was removed). |
+| `1` | An error, or a degraded read left the pass incomplete (nothing was removed and no metadata team was deleted). |
 | `2` | A dry run found changes pending. |
 
 Conservative by construction. Any degraded read (the pending-invitation list, a
-team) makes the whole pass read-mostly: nothing is removed and no metadata team
-is deleted, because an unreadable team can't prove its row is dead. A team whose
-stored address no longer hashes to its name, or that has more than one member, is
-reported on stderr and left standing. A member-less team is collected only past
-24 hours old with no pending invitation for its address, and a recovered team is
-deleted only after the roster commit carrying its address has landed.
+team) makes the whole pass read-mostly: no row is dropped and **no metadata team
+is deleted at all** — not even one whose address the roster already records —
+because an unreadable team can't prove its row is dead, and the exit-1 message
+promises nothing was removed. Such a pass doesn't report a deletion it won't
+make. A team whose stored address no longer hashes to its name, or that has more
+than one member, is reported on stderr and left standing. A member-less team is
+collected only past 24 hours old with no pending invitation for its address, and a
+recovered team is deleted only after the roster commit carrying its address has
+landed.
 
 ### `roster update`
 
@@ -454,9 +490,11 @@ invitation and classroom-team membership every imported student gets, and never
 overwrites a role already recorded.
 
 Every unusable line is reported in one pass and **nothing is committed**, so one
-editing pass fixes the whole file. The roster is written in a single commit, so a
-partial-import state can't appear on the repository. After it lands, any student
-who isn't already in the organization is invited.
+editing pass fixes the whole file — a malformed line and a `username` that names
+no GitHub account are reported together, not one round-trip each. The roster is
+written in a single commit, so a partial-import state can't appear on the
+repository. After it lands, any student who isn't already in the organization is
+invited.
 
 **Errors common to roster commands:** missing `classroom50` repository → `run gh teacher init
 <org> first`; missing `roster.csv` → points at `classroom add`; bad header →
@@ -492,7 +530,10 @@ The CLI-visible effects:
   (`teacher > hta > ta > student`). The web app's automatic sync refreshes the
   column, so you may see a commit rewrite an empty role to `teacher` shortly
   after `roster add` — the snapshot updating, not a change to enrollment; nothing
-  reads this column to decide access. `roster sync` leaves the column alone.
+  reads this column to decide access. `roster sync` never rewrites a role
+  already recorded; a row it *adds* for an accepted email invitation records the
+  role of the classroom team the account was found on, so a staffer who accepted
+  one is recorded with their staff role.
 - **`roster add` prints a note** when the target is already staff, so the
   later `role`-column rewrite isn't a surprise.
 - **`roster remove` (unenroll) drops only the student side** — the roster row

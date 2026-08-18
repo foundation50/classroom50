@@ -47,6 +47,12 @@ func TestContractLiterals(t *testing.T) {
 		// record whose sentinel differs — so a one-sided bump would make one
 		// writer's invites invisible to the other's reconcile.
 		{"InviteSchemaV1", InviteSchemaV1, "classroom50/invite/v1"},
+		// InviteProvisionalDescription is mirrored, with NO compile-time link, in
+		// the web writer (web/src/util/inviteTeam.ts PROVISIONAL_DESCRIPTION).
+		// Both tools create invite teams with it and each reconcile skips a team
+		// carrying it, so a one-sided edit would make one tool's half-created
+		// teams look like reapable junk to the other.
+		{"InviteProvisionalDescription", InviteProvisionalDescription, "classroom50: preparing invite"},
 		{"DefaultAutograderName", DefaultAutograderName, "default"},
 		{"ModeIndividual", ModeIndividual, "individual"},
 		{"ModeGroup", ModeGroup, "group"},

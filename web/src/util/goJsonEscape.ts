@@ -6,11 +6,12 @@
 // equality). One source for every description marshaller.
 //
 // These five are the ONLY divergences, verified against Go 1.26 (the toolchain
-// both cli go.mod files require): Go emits the same short \b \f \n \r \t escapes
-// JSON.stringify does, the same lowercase \u00xx for every other C0 control, and
-// leaves DEL and well-formed non-ASCII raw. So do NOT "also escape" a control
-// character here — that would CREATE the byte difference this guards against.
-// Pinned by the control-character case in cli/shared/testdata/invite_vectors.json.
+// both cli go.mod files require) across every C0 code point: Go emits the same
+// short \b \f \n \r \t escapes JSON.stringify does, the same lowercase \u00xx for
+// every other C0 control, and leaves DEL and well-formed non-ASCII raw. So do
+// NOT "also escape" a control character here — that would CREATE the byte
+// difference this guards against. Pinned exhaustively by the control-character
+// case in cli/shared/testdata/invite_vectors.json and both writers' suites.
 export function escapeForGoJsonParity(json: string): string {
   return json
     .replaceAll("<", "\\u003c")
