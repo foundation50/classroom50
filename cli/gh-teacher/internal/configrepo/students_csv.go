@@ -592,6 +592,77 @@ func RemovePendingEmailRow(rows []RosterRow, email string) (out []RosterRow, rem
 	return rows, false
 }
 
+// ClaimPendingEmailRow fills a recovered identity onto the pending email-invite
+// row for email (normalized: trimmed, case-insensitive) IN PLACE, leaving every
+// other cell — the teacher's name/section, the address, the recorded role, and
+// any web-written extra column — exactly as it was. Returns the slice and
+// whether a row matched.
+//
+// This is the acceptance half of the email-invite lifecycle: the row carried
+// only the address until the student accepted, and the invite team's record is
+// what maps that address to their new account. Borrow-only on purpose (unlike
+// UpsertRosterRow, which replaces the whole row): a recovery contributes
+// identity, never metadata, so a re-run can't clobber teacher-owned fields.
+//
+// Claimable rows are the same narrow set UpdatePendingEmailRow and
+// RemovePendingEmailRow accept — no username and no github_id cell at all — so
+// a student who already has an account, and a classmate merely sharing a
+// contact address, are never rewritten. Never appends: a recovery with no row
+// is the caller's decision (see UpsertRosterRow).
+func ClaimPendingEmailRow(rows []RosterRow, email, login string, githubID int64) (out []RosterRow, claimed bool) {
+	key := strings.ToLower(strings.TrimSpace(email))
+	if key == "" || strings.TrimSpace(login) == "" {
+		return rows, false
+	}
+	for i := range rows {
+		if rows[i].isRaw() || rows[i].Username != "" {
+			continue
+		}
+		if rows[i].GitHubID != 0 || rows[i].githubIDRaw != "" {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(rows[i].Email)) != key {
+			continue
+		}
+		rows[i].Username = strings.TrimSpace(login)
+		if githubID > 0 {
+			rows[i].GitHubID = githubID
+			// The recovered id supersedes an unusable cell, which by the filter
+			// above is the only kind that can be here.
+			rows[i].githubIDRaw = ""
+		}
+		return rows, true
+	}
+	return rows, false
+}
+
+// BackfillRosterGitHubID records githubID on the row matching username
+// (case-insensitive) when its github_id cell addresses no account. Returns the
+// slice and whether a cell was filled.
+//
+// A cell that already resolves is NEVER overwritten: a login GitHub let someone
+// else recycle would otherwise repoint the row onto a different person. An
+// unusable cell is safe to replace, since repointing it can't hijack an
+// account. The caller must source githubID from the classroom's own team
+// membership, never a global user lookup, for the same reason.
+func BackfillRosterGitHubID(rows []RosterRow, username string, githubID int64) (out []RosterRow, filled bool) {
+	if strings.TrimSpace(username) == "" || githubID <= 0 {
+		return rows, false
+	}
+	for i := range rows {
+		if rows[i].isRaw() || !strings.EqualFold(rows[i].Username, username) {
+			continue
+		}
+		if rows[i].GitHubID != 0 {
+			return rows, false
+		}
+		rows[i].GitHubID = githubID
+		rows[i].githubIDRaw = ""
+		return rows, true
+	}
+	return rows, false
+}
+
 // ValidateRosterEmail: empty is valid. Non-empty must parse as bare
 // `local@domain`; the display-name form is rejected so name metadata doesn't
 // sneak into the email column. No TLD requirement, no DNS check.

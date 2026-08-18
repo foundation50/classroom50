@@ -18,6 +18,7 @@ import (
 	"github.com/foundation50/gh-teacher/internal/audit"
 	"github.com/foundation50/gh-teacher/internal/auth"
 	"github.com/foundation50/gh-teacher/internal/classroom"
+	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/download"
 	"github.com/foundation50/gh-teacher/internal/invite"
 	"github.com/foundation50/gh-teacher/internal/member"
@@ -71,8 +72,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Most failures exit 1; a command that reports STATE through its exit code
+	// (`roster sync`'s 0/1/2 contract) rides out on a cliutil.ExitCodeError.
 	if err := root.ExecuteContext(ctx); err != nil {
-		os.Exit(1)
+		os.Exit(cliutil.ExitCodeFor(err))
 	}
 }
 

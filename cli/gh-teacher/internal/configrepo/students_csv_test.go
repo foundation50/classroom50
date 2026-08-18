@@ -1348,3 +1348,71 @@ func TestParseRosterLenient_PreservesWrongFieldCount(t *testing.T) {
 		t.Fatalf("want a preserved raw row + bob, got %#v", rows)
 	}
 }
+
+// TestClaimPendingEmailRow: the acceptance fold is borrow-only — it contributes
+// identity and touches nothing a teacher owns.
+func TestClaimPendingEmailRow(t *testing.T) {
+	pending := func() []RosterRow {
+		return []RosterRow{
+			{FirstName: "Ada", LastName: "Lovelace", Email: "Ada@Uni.edu", Section: "s1", Role: "student",
+				Extra: map[string]string{"cohort": "a"}, ExtraOrder: []string{"cohort"}},
+			{Username: "bob", Email: "bob@uni.edu", GitHubID: 2},
+		}
+	}
+
+	t.Run("fills identity and keeps every other cell", func(t *testing.T) {
+		rows, ok := ClaimPendingEmailRow(pending(), "ada@uni.edu", "ada", 101)
+		if !ok {
+			t.Fatal("claimed = false, want the pending row matched case-insensitively")
+		}
+		got := rows[0]
+		if got.Username != "ada" || got.GitHubID != 101 {
+			t.Errorf("identity not folded: %#v", got)
+		}
+		if got.FirstName != "Ada" || got.LastName != "Lovelace" || got.Section != "s1" ||
+			got.Email != "Ada@Uni.edu" || got.Role != "student" || got.Extra["cohort"] != "a" {
+			t.Errorf("fold overwrote a teacher-owned cell: %#v", got)
+		}
+	})
+
+	t.Run("never rewrites a row that already identifies someone", func(t *testing.T) {
+		rows, ok := ClaimPendingEmailRow(pending(), "bob@uni.edu", "impostor", 999)
+		if ok {
+			t.Fatal("claimed a row that already has a username")
+		}
+		if rows[1].Username != "bob" || rows[1].GitHubID != 2 {
+			t.Errorf("row mutated anyway: %#v", rows[1])
+		}
+	})
+
+	t.Run("protects a row carrying an unusable github_id cell", func(t *testing.T) {
+		rows := []RosterRow{{Email: "ada@uni.edu", githubIDRaw: "0"}}
+		if _, ok := ClaimPendingEmailRow(rows, "ada@uni.edu", "ada", 101); ok {
+			t.Error("claimed a row whose github_id cell the teacher typed")
+		}
+	})
+}
+
+// TestBackfillRosterGitHubID: an id that already resolves is never repointed —
+// a recycled login must not silently move a row onto a different account.
+func TestBackfillRosterGitHubID(t *testing.T) {
+	t.Run("fills an unresolved cell", func(t *testing.T) {
+		rows, ok := BackfillRosterGitHubID([]RosterRow{{Username: "Ada", githubIDRaw: "0"}}, "ada", 101)
+		if !ok || rows[0].GitHubID != 101 {
+			t.Fatalf("filled = %v, row = %#v", ok, rows[0])
+		}
+	})
+
+	t.Run("leaves a resolved cell alone", func(t *testing.T) {
+		rows, ok := BackfillRosterGitHubID([]RosterRow{{Username: "ada", GitHubID: 7}}, "ada", 101)
+		if ok || rows[0].GitHubID != 7 {
+			t.Fatalf("filled = %v, row = %#v", ok, rows[0])
+		}
+	})
+
+	t.Run("no match is a no-op", func(t *testing.T) {
+		if _, ok := BackfillRosterGitHubID([]RosterRow{{Username: "bob"}}, "ada", 101); ok {
+			t.Error("filled a row for a different student")
+		}
+	})
+}
