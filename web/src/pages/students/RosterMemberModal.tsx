@@ -43,7 +43,10 @@ import { Badge, Button, EmphasisLtr, Modal, Select } from "@/components/ui"
 // roster row. Shares the identity header with the Org Members modal; everything
 // below is classroom-scoped and gated by row.state:
 //   enrolled -> edit metadata + unenroll
-//   pending  -> resend invite + unenroll (cancels the invite); no edit
+//   pending  -> resend invite + cancel invite, and edit name/section. The
+//               address is locked: it keys the row and hashes into the invite
+//               team name. An email-only pending row can't be unenrolled (it
+//               names no account), so cancelling is the action.
 //   needs_attention_in_org -> assign a role (adds to the chosen team)
 //   needs_attention_not_in_org -> invite to the organization
 //

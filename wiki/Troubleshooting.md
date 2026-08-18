@@ -29,20 +29,20 @@ Commands with informational output also accept `--quiet` / `-q`.
 ### classroom50.org won't load, or is flagged as unsafe
 
 A few ISPs and school web filters have blocked `classroom50.org` (a relatively
-new domain) as a suspected phishing site — the symptom is a timeout, a
-DNS failure, or an ISP warning page (Safari may just time out without showing
-the warning). Classroom 50 is not compromised; we file unblock requests with
-ISPs and security vendors as reports come in.
+new domain) as a suspected phishing site. The symptom is a timeout, a
+DNS failure, or an ISP warning page (Safari can time out without showing
+the warning). Classroom 50 is not compromised; unblock requests go to ISPs and
+security vendors as reports come in.
 
 Workarounds:
 
-- **Add an exception.** On a home connection, add `classroom50.org` to the
-  ISP's security-feature exception list (e.g. AT&T ActiveArmor) or switch the
-  device's DNS resolver (e.g. `1.1.1.1` or `8.8.8.8`).
-- **School/district filters:** ask IT to allow the domains in
+- **Home connections.** Add `classroom50.org` to the ISP's security-feature
+  exception list (AT&T ActiveArmor, for example) or switch the device's DNS
+  resolver to `1.1.1.1` or `8.8.8.8`.
+- **School and district filters.** Ask IT to allow the domains in
   [Network and allowed domains](GitHub-Integration#network-and-allowed-domains).
-- Please still [report it](https://github.com/foundation50/classroom50/issues)
-  with the ISP's name so we can request an unblock.
+- **Reporting a block.** [Open an issue](https://github.com/foundation50/classroom50/issues)
+  with the ISP's name, which is what an unblock request needs.
 
 ### "Network error reaching the Cloudflare Worker proxy"
 
@@ -116,7 +116,7 @@ still leaves the browser grant to do.
 Setup creates a **$0 GitHub Actions spending cap** so a runaway workflow can't
 run up a bill — but only when your organization has no Actions cap yet; a cap
 you set yourself is never modified. It then verifies the cap, and that
-verification can fail with an advisory warning (e.g. `read failed (400)`) when
+verification can fail with an advisory warning (for example, `read failed (400)`) when
 billing isn't readable by your token — typically **enterprise-managed
 billing**, a plan that doesn't expose organization budgets, or a token without
 Organization Administration read.
@@ -152,7 +152,7 @@ token, which makes you a member of each, then removes you from all but the
 
 ### `git/trees: HTTP 404` on `gh teacher init`
 
-`init` commits workflow files via the Git Data API, which GitHub gates behind
+`init` commits workflow files with the Git Data API, which GitHub gates behind
 the `workflow` scope. A token without it is rejected with a misleading 404,
 leaving `classroom50` with only a README. Re-authenticate:
 
@@ -194,7 +194,7 @@ gh auth refresh -h github.com -s admin:org,read:org,repo,workflow   # widen in p
 export GH_TOKEN=<a PAT with those scopes>                           # or bring your own
 ```
 
-So if `gh` is already set up, you usually don't need `login` at all — just run
+So if `gh` is already set up, you usually don't need `login` at all — run
 the command you want and let it add any missing scope in place.
 
 With **multiple `gh` accounts**, the CLIs use whichever account is active for
@@ -537,7 +537,7 @@ Students generate their repositories from the template, and GitHub can't
 generate from an empty repository. The CLI refuses with:
 
 ```text
-template `<owner>/<repo>` has no commits — add at least one commit (e.g. a README) so students can generate from it, then re-run
+template `<owner>/<repo>` has no commits — add at least one commit (a README, for example) so students can generate from it, then re-run
 ```
 
 Push at least one commit (a README is enough) and re-run. If the template does
@@ -684,7 +684,7 @@ instead — a not-graded commit never shows green there). To be graded, submit e
 - `gh student submit` (it pushes the `submit/…` tag that triggers grading), or
 - tag a commit yourself: `git tag submit/final && git push origin
   submit/final` — any tag under `submit/` grades, plus any milestone tag
-  your teacher named (e.g. `git tag phase1 && git push origin phase1`).
+  your teacher named, such as `git tag phase1 && git push origin phase1`.
 
 If a push shows NO workflow run at all, that's normal for tag mode too: the
 repo's workflow only fires on submission tags.

@@ -254,10 +254,10 @@ export type BulkInviteByEmailResult = {
 // in ONE commit for the batch (see appendEmailInviteRows); each row lives exactly
 // as long as its invite team does. A target whose metadata team can't be
 // prepared is reported as FAILED rather than invited without email retention.
-// The invite also surfaces as a `pending` row via the org pending-invitations
-// list. Mirrors inviteRosterStudents' rate-limit handling (stop issuing new
-// invites once throttled; defer the rest), and the same team resolution
-// (resolveTeamIdByRole ensures the staff team for a teacher/ta invite,
+// The invite also surfaces as a `pending` row via the role team's own
+// pending-invitation list. Mirrors inviteRosterStudents' rate-limit handling
+// (stop issuing new invites once throttled; defer the rest), and the same team
+// resolution (resolveTeamIdByRole ensures the staff team for a teacher/ta invite,
 // students-only never creates empty staff teams).
 export async function bulkInviteByEmail(
   client: GitHubClient,
@@ -298,11 +298,11 @@ export async function bulkInviteByEmail(
 
   // Block the whole batch if any role's team couldn't be resolved, mirroring the
   // single inviteByEmail guard: a team-less email invite is broken — the invitee
-  // accepts into the org attached to no team and, since we write no roster.csv
-  // row, is silently uncollected. Fail loudly BEFORE sending anything rather than
-  // send a batch of orphaning invites. (The username bulk path can tolerate a
-  // teamless invite because its CSV row still surfaces the person; an email
-  // invite has no such fallback.)
+  // accepts into the org attached to no team and, since the pending row carries
+  // no identity until acceptance, no collectable roster row either. Fail loudly
+  // BEFORE sending anything rather than send a batch of orphaning invites. (The
+  // username bulk path can tolerate a teamless invite because its CSV row names
+  // an account; a pending email row names none until the student accepts.)
   const rolesMissingTeam = [...new Set(targets.map((t) => t.role))].filter(
     (role) => teamIdByRole[role] === undefined,
   )

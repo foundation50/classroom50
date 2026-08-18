@@ -38,7 +38,8 @@ export {
 //
 // Row states:
 //  - enrolled: an active classroom-team / staff-team member.
-//  - pending:  a pending org / staff-team invitation (no active membership yet).
+//  - pending:  a pending invitation on the classroom or a staff team (no active
+//    membership yet).
 //  - needs_attention_in_org: on roster.csv, an active org member, but on none of
 //    this classroom's teams — the teacher assigns them a team/role.
 //  - needs_attention_not_in_org: on roster.csv, NOT an org member and no pending
@@ -134,8 +135,9 @@ const metadataFrom = (
 export type BuildTeamRosterInput = {
   // Active classroom-team / org members (the enrolled source of truth).
   members: GitHubUser[]
-  // Pending org invitations. May be empty for a non-owner who can't read them
-  // (owner-only endpoint) — enrolled rows still render.
+  // Pending invitations on the classroom student team (team-scoped, so they're
+  // already narrowed to this classroom). May be empty for a non-owner who can't
+  // read them (owner-only endpoint) — enrolled rows still render.
   invitations?: GitHubOrgInvitation[]
   // Active members of the per-classroom staff teams, keyed by role. Merged into
   // the same rows as `members` (a person on both the student and teacher
@@ -211,8 +213,8 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   // Logins of ACTIVE members only. A pending invite for one of these is stale
   // (already enrolled) and skipped — distinct from a login already claimed by
   // another PENDING invite, which must instead union its role onto that pending
-  // row. Adding a not-yet-org-member to a staff team lists the same person in
-  // BOTH the org-level invitations (tagged student) and the team invitations
+  // row. Adding a not-yet-org-member to a staff team lists the same person under
+  // BOTH the student team's invitations (tagged student) and the staff team's
   // (tagged ta/teacher); keying only on member logins would drop the second.
   const memberLogins = new Set<string>()
   // Enrolled rows already emitted, keyed by member id, so a person on several
@@ -258,10 +260,11 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
 
   // Pending, tagged by role. Staff-team invitations are AUTHORITATIVE for a
   // staff role and are processed FIRST: adding a not-yet-org-member to a staff
-  // team lists them in BOTH the team invitations (tagged ta/teacher) AND the
-  // org-level invitations (which we can only blanket-tag "student"). Ordering
-  // staff first lets the org-level "student" invite recognize the person as an
-  // already-tagged pending staffer and NOT add a spurious "student" role.
+  // team lists them under BOTH that team's invitations (tagged ta/teacher) AND
+  // the student team's (which we can only blanket-tag "student", since a
+  // team-scoped invite carries no role). Ordering staff first lets the student
+  // invite recognize the person as an already-tagged pending staffer and NOT add
+  // a spurious "student" role.
   const roleInvites: Array<{
     role: ClassroomRole
     invite: GitHubOrgInvitation

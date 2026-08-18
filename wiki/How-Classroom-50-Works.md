@@ -81,7 +81,7 @@ Opening the classroom in the web app as an owner does the same on its own. Witho
 `--write`, `roster sync` reports and changes nothing. **Sync now** covers scores.
 See [What triggers a sync](#what-triggers-a-sync).
 
-## Interactive vs. background work
+## Interactive and background work
 
 Work happens in one of two ways. Knowing which applies explains most questions
 about why a change did or did not take effect:
@@ -165,11 +165,10 @@ account. Classroom 50 bridges that gap with an **invite team**.
 The web app and the teacher CLI both invite this way, and each reads the other's
 invite teams, so an invitation sent from one can be completed or revoked from the
 other. In the app, invite from the classroom's **Roster** page; from the CLI, use
-`gh teacher roster invite`, one address per run. Two things only the web app does:
-inviting a list of addresses in one upload, and inviting someone by email as a
-teacher, head TA, or TA. A `gh teacher roster invite` is always a student
-invitation, so it can never hand out organization ownership from a mistyped
-address.
+`gh teacher roster invite`, one address at a time or a whole list with `--file`.
+One thing only the web app does: inviting someone by email as a teacher, head TA,
+or TA. A `gh teacher roster invite` is always a student invitation, so it can
+never hand out organization ownership from a mistyped address.
 
 An outstanding invitation keeps its team and its pending row, so a teacher can see
 who was invited. Cancelling one, from the app's roster or with
@@ -321,7 +320,7 @@ tool (or an org/enterprise policy) is changing it back.
 
 ## How grading flows
 
-1. A student pushes to their repository (via `gh student submit` or a plain
+1. A student pushes to their repository (with `gh student submit` or a plain
    `git push`).
 2. A small workflow in their repo calls the shared **autograde runner** in your
    `classroom50` repository, which fetches the grading logic from Pages and runs it.

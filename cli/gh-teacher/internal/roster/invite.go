@@ -51,15 +51,18 @@ func rosterInviteCmd() *cobra.Command {
 			"lines starting with `#` are ignored. Every address is validated first,\n" +
 			"and if any line is unusable nothing is sent. Successful invitations are\n" +
 			"retained as pending rows in one commit. --file carries no names or\n" +
-			"sections (fill those later with `roster import` or `roster sync`), so\n" +
-			"the --first-name/--last-name/--section flags are rejected with it.\n" +
+			"sections (fill those later with `roster import`, or `roster update`\n" +
+			"once the student has accepted; a sync never writes either), so the\n" +
+			"--first-name/--last-name/--section flags are rejected with it.\n" +
 			"Each address is reported as it resolves, then a summary counts them.\n\n" +
 			"Bulk exit codes follow `roster sync`: 0 every address was invited or\n" +
 			"cleanly skipped, 2 nothing failed but a GitHub rate limit left\n" +
 			"addresses uninvited (re-run to continue — already-invited addresses are\n" +
 			"skipped), 1 an address genuinely failed or the roster write failed.\n\n" +
-			"Returns non-zero on: classroom missing a GitHub team, an address the\n" +
-			"roster already lists as invited, or a failed invitation. An address\n" +
+			"A single address returns non-zero on: classroom missing a GitHub team,\n" +
+			"an address the roster already lists as invited, or a failed\n" +
+			"invitation. With --file that same already-listed address is reported\n" +
+			"as skipped instead, and does not affect the exit code. An address\n" +
 			"that already belongs to a member (or already has a pending\n" +
 			"invitation) is reported as skipped and exits 0. An address some other\n" +
 			"row already carries is still invited, but gets no second row.",

@@ -102,4 +102,19 @@ export const useUpdateRosterCache = (
   }
 }
 
+// Drop the cached roster so the next read comes from GitHub. For a write whose
+// post-commit rows the caller doesn't compute (a bulk email invite appends its
+// pending rows inside the domain call), where useUpdateRosterCache's optimistic
+// patch has nothing to write.
+export const useInvalidateRosterCache = (
+  org: string | undefined,
+  classroom: string | undefined,
+) => {
+  const queryClient = useQueryClient()
+  return () => {
+    if (!org || !classroom) return
+    void queryClient.invalidateQueries({ queryKey: rosterKey(org, classroom) })
+  }
+}
+
 export default useGetStudents

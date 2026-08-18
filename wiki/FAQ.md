@@ -83,17 +83,20 @@ address**, so one file can mix students whose handle you know with ones you
 only have an address for. Each address goes onto the roster right away as a
 pending row, and is matched to the student's GitHub account when they accept.
 
-Bulk email invitations are web-app-only. From the CLI, invite one address per run
-with `gh teacher roster invite <org> <classroom> <email>`.
-`gh teacher roster import` adds and invites every student a stored `roster.csv`
-identifies by username, but it never sends an email invitation: on an email-only
-row it updates only the name and section, leaving the invitation alone. See
+From the CLI, invite one address with
+`gh teacher roster invite cs50-fall-2026 cs-principles ada@example.edu`, or a
+whole list with `--file`, a plaintext file holding one address per line. Only the
+web app can invite **staff** by email; `gh teacher roster invite` always sends a
+student invitation. `gh teacher roster import` adds and invites every student a
+stored `roster.csv` identifies by username, but it never sends an email
+invitation: on an email-only row it updates only the name and section, leaving the
+invitation alone. See
 [Invitations by email](How-Classroom-50-Works#invitations-by-email) and
 [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
 
 ### Can I see the whole roster, including students who haven't accepted?
 
-Yes. The submissions view lists every rostered student, not just those who
+Yes. The submissions view lists every rostered student, not only those who
 accepted, with their status — so you can see at a glance who hasn't started.
 Students you invited by email appear too, listed by address until they accept,
 though only organization owners see them: GitHub keeps pending invitations
@@ -171,7 +174,7 @@ Both start from no template; the difference is what (if anything) is committed:
 only affects repositories accepted from then on** — repositories students
 already accepted aren't retrofitted, so they keep their original shape. The web
 edit form asks you to confirm when students have already accepted. (**Assignment
-type** — Individual vs. Group — is the exception and stays locked, since
+type** — Individual or Group — is the exception and stays locked, since
 switching it would invalidate existing submissions.) For every shape in one
 table, see [Repository shapes](Assignment-Templates#repository-shapes).
 
@@ -218,7 +221,7 @@ what your assignments need in the runner image. See
 ### Can the autograder show students *why* a test failed?
 
 Yes. Each submission's Release and the Actions run summary include a per-test
-breakdown (expected vs. actual output for I/O tests, captured stderr). A custom
+breakdown (expected against actual output for I/O tests, captured stderr). A custom
 `autograder.py` can add its own diagnostic messages to `result.json`.
 
 ### Can students use GitHub Codespaces?
@@ -273,7 +276,7 @@ Overridden scores show a **Manual** badge and aren't changed by autograding
 until you clear the override. Use **Clear override** in the dialog to revert.
 
 This editor appears only for organization owners (writing a score writes the
-`classroom50` repository). Under the hood, an override is just an entry in the classroom's
+`classroom50` repository). Under the hood, an override is an entry in the classroom's
 `scores.json` with `"override": true`, which collection leaves untouched on
 future runs — so you can still edit it by hand if you prefer (see
 [Collect scores](CLI-Teacher-Guide#9-collect-scores)).
@@ -283,8 +286,8 @@ future runs — so you can still edit it by hand if you prefer (see
 Download scores as a CSV from the submissions page
 (**Download scores (CSV)**). For the work itself, **Download all submissions**
 in the same **Actions** menu bundles every repository's latest submission into
-a single zip (built in your browser). For real clones — e.g. to run your own
-tooling locally — `gh teacher download` clones every submission repo and also
+a single zip (built in your browser). For real clones, to run your own
+tooling locally, `gh teacher download` clones every submission repository and also
 writes a `scores.csv` summary at the destination root. The raw score data also
 lives in `scores.json` in your `classroom50` repository, so you can build your own
 automations against it. The column-by-column reference for both CSVs is in

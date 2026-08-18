@@ -86,10 +86,10 @@ const buildUnenrollResult = (
 }
 
 // Roster multi-select toolbar: select-all header + count label, and — once a
-// selection exists — Resend (pending subset only) / Unenroll / Clear. Owns its
-// progress -> results <dialog> for the unenroll run. Resend routes its per-row
-// outcomes into the same results modal. On completion it calls onDone so the
-// page can refresh its roster/invite caches.
+// selection exists — Resend / Cancel invite / Unenroll / Clear, each acting on
+// the subset of the selection it can target. Owns one progress -> results
+// <dialog> shared by all three runs. On completion it calls onDone so the page
+// can refresh its roster/invite caches.
 const RosterBulkActionsBar = ({
   org,
   classroom,

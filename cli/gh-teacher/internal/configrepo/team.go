@@ -554,8 +554,9 @@ var inviteTeamSlugRe = regexp.MustCompile(
 		fmt.Sprintf(`[0-9a-f]{%d}$`, contract.InviteHashHexLen))
 
 // IsInviteTeamSlug reports whether a slug is one this feature owns — the
-// fail-closed predicate both the sweep's filter and its delete share, mirroring
-// the web's isInviteTeamSlug.
+// fail-closed predicate both the sweep's filter and its delete share.
+// Deliberately STRICTER than the web's isInviteTeamSlug, which tests the bare
+// prefix: a sweep that deletes must never match a human team like "Invite Only".
 func IsInviteTeamSlug(slug string) bool {
 	return inviteTeamSlugRe.MatchString(slug)
 }

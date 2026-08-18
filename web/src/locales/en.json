@@ -498,7 +498,7 @@
   },
   "students": {
     "addTitle": "Add member",
-    "addHint": "Enter a GitHub username to add a student with their details, or an email to send an organization invite. Email invites capture no name or section — add those later by username or by uploading a roster.",
+    "addHint": "Enter a GitHub username to add a student with their details, or an email to send an organization invite. An email invite keeps the name and section you enter on a pending roster row until the student accepts.",
     "addRoleLabel": "Role",
     "addStaffHint": "Teachers, head TAs, and TAs are added by GitHub username. Teachers and head TAs get write access to the classroom50 repository; TAs get read-only. A teacher is granted organization owner.",
     "namePlaceholder": "Name (optional)",

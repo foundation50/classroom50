@@ -170,7 +170,6 @@ const parseRowsWithLines = (text: string) => {
   return { rows, fields: parsed.meta.fields ?? [], errors }
 }
 
-// Read a row's identity cells in precedence order. A present-but-unusable
 // Read a row's identity cells in precedence order, reporting any cell whose
 // content we could not use. A present-but-unusable github_id is recorded ON the
 // identity (so resolution reports it as an unresolvable id rather than the parser

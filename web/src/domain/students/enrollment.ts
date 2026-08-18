@@ -196,8 +196,9 @@ export type InviteByEmailResult = {
 // On acceptance the invitee lands on both teams; a later reconcile pass recovers
 // the email <-> account mapping from the metadata team and folds it into
 // roster.csv. The invite also shows up in the roster's `pending` section via the
-// org pending-invitations list. The invite is BLOCKED (throws) unless BOTH teams
-// are ready: an invite that can't carry the classroom team would land the
+// classroom team's own pending-invitation list — it carries that team, which is
+// what scopes it to this classroom. The invite is BLOCKED (throws) unless BOTH
+// teams are ready: an invite that can't carry the classroom team would land the
 // student in the org with nothing to collect them, and one without its metadata
 // team would silently lose the address it was sent to. Nothing has been sent at
 // that point, so the teacher just retries.

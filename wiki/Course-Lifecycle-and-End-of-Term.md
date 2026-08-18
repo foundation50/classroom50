@@ -86,14 +86,14 @@ Wrap up a finished course in this order:
 
    If you invited students by email, clear the stored addresses before you
    archive: an archived classroom's roster is frozen, so nothing can be
-   recorded onto it afterwards. Each invitation holds the address in a hidden
+   recorded onto it afterwards. Each invitation holds the address in a `secret`
    invite team until the student joins. **Clean up invite data**, on the
    classroom's Settings page, writes anything still recoverable onto the
    roster and deletes every remaining team. From a terminal,
-   `gh teacher roster sync <org> <classroom> --write` does less: it records the
-   invitations that were accepted and retires the teams that are done, but
-   keeps a team whose invitation is still pending. It is refused once the
-   classroom is archived.
+   `gh teacher roster sync cs50-fall-2026 cs-principles --write` does less: it
+   records the invitations that were accepted and retires the teams that are
+   done, but keeps a team whose invitation is still pending. `roster sync
+   --write` is refused once the classroom is archived.
 4. Optionally, archive the student repositories on GitHub. Archiving a
    repository makes it read-only for everyone while preserving it. Classroom
    50 has no bulk action for this yet, but the GitHub CLI handles it. List
