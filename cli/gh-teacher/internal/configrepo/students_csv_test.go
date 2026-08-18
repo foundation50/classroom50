@@ -805,6 +805,42 @@ func TestUpdateRosterRow(t *testing.T) {
 	})
 }
 
+// CanonicalRosterEmail accepts exactly what ValidateRosterEmail does, but
+// returns the address mail.ParseAddress parsed rather than the raw input. A
+// caller that goes on to USE the value needs that: `<a@b.edu>` validates, and
+// sending the raw form to GitHub would 422 and read as "already invited".
+func TestCanonicalRosterEmail(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{"", "", false},
+		{"alice@example.edu", "alice@example.edu", false},
+		{"<alice@example.edu>", "alice@example.edu", false},
+		{"  Alice@Example.EDU  ", "alice@example.edu", false},
+		{"Alice <alice@example.edu>", "", true},
+		{"alice", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			got, err := CanonicalRosterEmail(tc.in)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("CanonicalRosterEmail(%q) = %q, want an error", tc.in, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("CanonicalRosterEmail(%q): %v", tc.in, err)
+			}
+			if got != tc.want {
+				t.Errorf("CanonicalRosterEmail(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestValidateRosterEmail(t *testing.T) {
 	cases := []struct {
 		in      string

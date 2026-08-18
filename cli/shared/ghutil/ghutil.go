@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -107,6 +108,26 @@ func IsRateLimited(err error) bool {
 	msg := strings.ToLower(httpErr.Message)
 	return strings.Contains(msg, "secondary rate limit") ||
 		strings.Contains(msg, "abuse")
+}
+
+// RetryAfterCap bounds the wait RetryAfter reports, so a hostile or mistaken
+// header can't park a CLI run for hours.
+const RetryAfterCap = 90 * time.Second
+
+// RetryAfter reports how long GitHub asked a rate-limited caller to wait, capped
+// at RetryAfterCap, or 0 when err carries no usable hint. Only the `Retry-After`
+// seconds form is read: the epoch-based `x-ratelimit-reset` describes the
+// PRIMARY hourly window, which is far too long to sleep through in a CLI.
+func RetryAfter(err error) time.Duration {
+	httpErr, ok := errors.AsType[*api.HTTPError](err)
+	if !ok {
+		return 0
+	}
+	secs, convErr := strconv.Atoi(strings.TrimSpace(httpErr.Headers.Get("Retry-After")))
+	if convErr != nil || secs <= 0 {
+		return 0
+	}
+	return min(time.Duration(secs)*time.Second, RetryAfterCap)
 }
 
 // BackoffDelay is the exponential backoff for optimistic-retry loops:

@@ -16,7 +16,7 @@ func TestParseInviteFile(t *testing.T) {
 		}
 	})
 
-	// Covers AE2: an invalid line is reported by line number and raw content.
+	// An invalid line is reported by line number and raw content.
 	t.Run("invalid line reported by line and raw", func(t *testing.T) {
 		entries, failures := parseInviteFile([]byte("ada@uni.edu\nnot-an-email\ncam@uni.edu\n"))
 		if len(entries) != 2 {
@@ -31,8 +31,8 @@ func TestParseInviteFile(t *testing.T) {
 		}
 	})
 
-	// Covers AE4: comments, blanks, and a repeat collapse; kept entry keeps the
-	// first occurrence's line.
+	// Comments, blanks, and a repeat collapse; the kept entry keeps the first
+	// occurrence's line.
 	t.Run("comments blanks and duplicates collapse", func(t *testing.T) {
 		data := "# section 1 list\n\nada@uni.edu\n  # trailing note\nada@uni.edu\n"
 		entries, failures := parseInviteFile([]byte(data))
@@ -81,6 +81,38 @@ func TestParseInviteFile(t *testing.T) {
 		}
 		if len(entries) != 1 || entries[0].email != "ada@uni.edu" {
 			t.Fatalf("entries = %+v, want one normalized entry", entries)
+		}
+	})
+
+	// A bracketed address validates but must be UNWRAPPED before it is sent:
+	// GitHub rejects `<ada@uni.edu>`, and that 422 would read as already-invited.
+	t.Run("bracketed address is canonicalized, not sent raw", func(t *testing.T) {
+		entries, failures := parseInviteFile([]byte("<ada@uni.edu>\n"))
+		if len(failures) != 0 {
+			t.Fatalf("failures = %v, want none", failures)
+		}
+		if len(entries) != 1 || entries[0].email != "ada@uni.edu" {
+			t.Fatalf("entries = %+v, want the unwrapped address", entries)
+		}
+	})
+
+	// An unusable line is echoed only far enough to locate it: a file pointed at
+	// --file by mistake must not spill its contents into the report.
+	t.Run("long unusable line is truncated in the report", func(t *testing.T) {
+		long := strings.Repeat("z", 4000)
+		_, failures := parseInviteFile([]byte(long + "\n"))
+		if len(failures) != 1 {
+			t.Fatalf("failures = %v, want one", failures)
+		}
+		msg := failures[0].Error()
+		if strings.Contains(msg, long) {
+			t.Error("the full line was echoed; want it truncated")
+		}
+		if !strings.Contains(msg, "truncated") {
+			t.Errorf("want a truncation marker: %q", msg)
+		}
+		if !strings.Contains(msg, "line 1") {
+			t.Errorf("want the line number retained: %q", msg)
 		}
 	})
 }

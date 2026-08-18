@@ -693,17 +693,28 @@ func BackfillRosterGitHubID(rows []RosterRow, username string, githubID int64) (
 // `local@domain`; the display-name form is rejected so name metadata doesn't
 // sneak into the email column. No TLD requirement, no DNS check.
 func ValidateRosterEmail(email string) error {
+	_, err := CanonicalRosterEmail(email)
+	return err
+}
+
+// CanonicalRosterEmail validates like ValidateRosterEmail and returns the
+// address mail.ParseAddress actually parsed, normalized. Callers that go on to
+// USE the value need this rather than the raw input: `<a@b.edu>` and
+// `a@b.edu <a@b.edu>`-adjacent forms validate but normalize to something GitHub
+// rejects, so a raw-input caller would send an unusable address and read the
+// resulting 422 as "already invited".
+func CanonicalRosterEmail(email string) (string, error) {
 	if email == "" {
-		return nil
+		return "", nil
 	}
 	parsed, err := mail.ParseAddress(email)
 	if err != nil {
-		return fmt.Errorf("invalid email %q: %w", email, err)
+		return "", fmt.Errorf("invalid email %q: %w", email, err)
 	}
 	if parsed.Name != "" {
-		return fmt.Errorf("invalid email %q: include only the address (e.g., alice@example.edu), not a display name", email)
+		return "", fmt.Errorf("invalid email %q: include only the address (e.g., alice@example.edu), not a display name", email)
 	}
-	return nil
+	return NormalizeInviteEmail(parsed.Address), nil
 }
 
 // checkFieldLengths rejects cells over maxFieldBytes. Errors name the column

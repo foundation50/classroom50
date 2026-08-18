@@ -410,17 +410,28 @@ if any line is unusable, the command reports every bad line and **sends nothing*
 
 Each address goes through the same invite path as a single `roster invite`, and
 every successful invitation is retained as a pending row in **one commit** for
-the batch. The command prints a summary — how many were invited, already
-members/invited, already on the roster, failed, or deferred. Bulk mode is
-**student-only** and carries no names or sections (the `--first-name` /
-`--last-name` / `--section` flags apply to a single invite only); fill that
-metadata in later with [`roster import`](#bulk-import-from-a-csv) or
+the batch. Each address is reported as it resolves, then a summary counts them —
+invited, already members/invited, already on the roster, failed, or deferred —
+and every skipped or failed address is named with its file line. Bulk mode is
+**student-only** and carries no names or sections, so the `--first-name` /
+`--last-name` / `--section` flags are **rejected** with `--file`; fill that
+metadata in afterwards with [`roster import`](#bulk-import-from-a-csv) or
 [`roster sync`](#syncing-the-roster-with-github).
 
-If a GitHub rate limit is hit part-way, the command stops sending, reports the
-remaining addresses, and exits non-zero. **Re-running the same command is safe**:
-addresses already invited are skipped automatically, and addresses already on the
-roster get no second row.
+Exit codes match [`roster sync`](#syncing-the-roster-with-github) so a script can
+tell a retryable run from a broken one:
+
+| Code | Meaning |
+| ---- | ------------------------------------------------------------------ |
+| 0 | Every address was invited or cleanly skipped |
+| 2 | Nothing failed, but a GitHub rate limit left addresses uninvited |
+| 1 | An address genuinely failed, or the roster write failed |
+
+On a rate limit the command stops sending, waits out GitHub's `Retry-After`
+before recording the invitations already sent, then reports the remaining
+addresses and exits 2. **Re-running the same command is safe**: addresses already
+invited are skipped automatically, and addresses already on the roster get no
+second row.
 
 **Call an invitation off:**
 

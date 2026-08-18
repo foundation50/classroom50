@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
@@ -26,13 +28,23 @@ type bulkInviteMock struct {
 	// teamCreate500 holds emails whose invite-team create should hard-fail,
 	// exercising the per-address team-prep failure path.
 	teamCreate500 map[string]bool
+	// teamCreateRateLimitAfter: once this many team creates have succeeded, every
+	// later one returns a secondary rate limit; 0 disables.
+	teamCreateRateLimitAfter int
 	// commitFails fails the tree POST after sends succeed.
 	commitFails bool
+	// onAfterInvitation runs after each invitation POST is served — strictly
+	// before the commit's rebase read — so a test can make the roster the
+	// closure re-reads differ from the pre-send snapshot.
+	onAfterInvitation func()
 
 	calls          []inviteCall
 	invitedEmails  []string
 	deletedTeams   []string
+	teamRecords    map[string]string
 	invitationsPos int
+	teamCreatePos  int
+	slept          time.Duration
 }
 
 func (m *bulkInviteMock) handler(t *testing.T) http.Handler {
@@ -55,6 +67,13 @@ func (m *bulkInviteMock) handler(t *testing.T) http.Handler {
 			_, _ = w.Write([]byte(`{"message":"boom"}`))
 			return
 		}
+		m.teamCreatePos++
+		if m.teamCreateRateLimitAfter > 0 && m.teamCreatePos > m.teamCreateRateLimitAfter {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"message":"You have exceeded a secondary rate limit"}`))
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id": inviteTestInviteTeamID, "slug": body.Name, "privacy": "secret",
 		})
@@ -74,6 +93,10 @@ func (m *bulkInviteMock) handler(t *testing.T) http.Handler {
 				Description string `json:"description"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
+			if m.teamRecords == nil {
+				m.teamRecords = map[string]string{}
+			}
+			m.teamRecords[slug] = body.Description
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"id": inviteTestInviteTeamID, "slug": slug,
 				"privacy": "secret", "description": body.Description,
@@ -107,6 +130,9 @@ func (m *bulkInviteMock) handler(t *testing.T) http.Handler {
 		m.invitedEmails = append(m.invitedEmails, body.Email)
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": 1})
+		if m.onAfterInvitation != nil {
+			m.onAfterInvitation()
+		}
 	})
 
 	failing := http.Handler(base)
@@ -147,12 +173,20 @@ func newBulkMock(t *testing.T, rosterCSV string) *bulkInviteMock {
 
 func runInviteFile(t *testing.T, mock *bulkInviteMock, data []byte) (string, string, error) {
 	t.Helper()
+	// Never sleep through the mock's Retry-After; the wait itself is asserted
+	// separately via slept.
+	prev := inviteFileSleep
+	slept := time.Duration(0)
+	inviteFileSleep = func(d time.Duration) { slept += d }
+	t.Cleanup(func() { inviteFileSleep = prev })
+
 	server := httptest.NewServer(mock.handler(t))
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 
 	var out, errOut bytes.Buffer
 	err := runRosterInviteFile(client, &out, &errOut, inviteTestOrg, inviteTestClassroom, data)
+	mock.slept = slept
 	return out.String(), errOut.String(), err
 }
 
@@ -166,10 +200,12 @@ func countInvitationPOSTs(calls []inviteCall) int {
 	return n
 }
 
-// Covers AE1: five fresh addresses → five invitations, one commit, five rows.
+// Five fresh addresses -> five invitations, one commit, five rows, and the
+// commit must follow every send.
 func TestRunRosterInviteFile_HappyPath(t *testing.T) {
 	mock := newBulkMock(t, storedRosterHeader)
 	list := "ada@uni.edu\nbea@uni.edu\ncam@uni.edu\ndan@uni.edu\neve@uni.edu\n"
+	addrs := []string{"ada@uni.edu", "bea@uni.edu", "cam@uni.edu", "dan@uni.edu", "eve@uni.edu"}
 	out, _, err := runInviteFile(t, mock, []byte(list))
 	if err != nil {
 		t.Fatalf("runRosterInviteFile: %v", err)
@@ -180,21 +216,65 @@ func TestRunRosterInviteFile_HappyPath(t *testing.T) {
 	if len(mock.blobs) != 1 {
 		t.Fatalf("want exactly one roster commit, got %d blobs", len(mock.blobs))
 	}
-	for _, addr := range []string{"ada@uni.edu", "bea@uni.edu", "cam@uni.edu", "dan@uni.edu", "eve@uni.edu"} {
-		if !strings.Contains(mock.blobs[0], addr) {
-			t.Errorf("committed roster missing %s:\n%s", addr, mock.blobs[0])
+
+	// Byte-exact: parse the committed roster and assert each row's shape rather
+	// than substring-matching the address.
+	rows, err := configrepo.ParseRoster([]byte(mock.blobs[0]))
+	if err != nil {
+		t.Fatalf("parse committed roster: %v", err)
+	}
+	if len(rows) != 5 {
+		t.Fatalf("committed %d rows, want 5: %#v", len(rows), rows)
+	}
+	got := map[string]bool{}
+	for _, r := range rows {
+		if r.Username != "" || r.GitHubID != 0 {
+			t.Errorf("row %+v should be identity-less (pending email invite)", r)
+		}
+		if r.Role != rosterRoleStudent {
+			t.Errorf("row %+v should carry role %q", r, rosterRoleStudent)
+		}
+		got[r.Email] = true
+	}
+	for _, a := range addrs {
+		if !got[a] {
+			t.Errorf("committed roster missing %s", a)
 		}
 	}
-	if !strings.Contains(out, "5 invited") {
-		t.Errorf("summary should report 5 invited:\n%s", out)
+
+	// Per-address invite-team identity: each address's record must be its own.
+	for _, a := range addrs {
+		slug := configrepo.InviteTeamName(inviteTestClassroom, a)
+		want, err := configrepo.MarshalInviteDescription(inviteTestClassroom, a)
+		if err != nil {
+			t.Fatalf("MarshalInviteDescription: %v", err)
+		}
+		if mock.teamRecords[slug] != want {
+			t.Errorf("team %s record = %q, want %q", slug, mock.teamRecords[slug], want)
+		}
+	}
+
+	// The commit must follow the LAST send: rows are retained only for
+	// invitations that actually exist.
+	treeIdx := indexOfCall(mock.calls, http.MethodPost, "/repos/o/classroom50/git/trees")
+	lastInvite := -1
+	for i, c := range mock.calls {
+		if c.Method == http.MethodPost && c.Path == "/orgs/o/invitations" {
+			lastInvite = i
+		}
+	}
+	if treeIdx < 0 || lastInvite < 0 || treeIdx < lastInvite {
+		t.Errorf("roster commit (call %d) must follow the last invitation (call %d)", treeIdx, lastInvite)
+	}
+	if !strings.Contains(out, "5 invited") || !strings.Contains(out, "5 appended as pending rows") {
+		t.Errorf("summary should report 5 invited and 5 appended:\n%s", out)
 	}
 }
 
-// Covers AE3: first already-pending, second fresh → no call for the first, one
-// invited, one row.
+// A pending-blocked address costs no API call; a fresh one beside it still goes.
 func TestRunRosterInviteFile_PendingSkippedSecondInvited(t *testing.T) {
 	mock := newBulkMock(t, storedRosterHeader+",,,ada@uni.edu,,,student\n")
-	out, _, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\n"))
+	out, errOut, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\n"))
 	if err != nil {
 		t.Fatalf("runRosterInviteFile: %v", err)
 	}
@@ -207,12 +287,19 @@ func TestRunRosterInviteFile_PendingSkippedSecondInvited(t *testing.T) {
 	if !strings.Contains(out, "1 invited") || !strings.Contains(out, "1 already on the roster") {
 		t.Errorf("summary should report 1 invited, 1 already on roster:\n%s", out)
 	}
+	// The skipped address and its file line must both be named.
+	if !strings.Contains(errOut, "ada@uni.edu (line 1)") {
+		t.Errorf("stderr should name the skipped address and its line:\n%s", errOut)
+	}
+	if !strings.Contains(errOut, "roster sync") {
+		t.Errorf("the skip notice should point at `roster sync`:\n%s", errOut)
+	}
 }
 
 func TestRunRosterInviteFile_422SkippedTeamDeletedBatchContinues(t *testing.T) {
 	mock := newBulkMock(t, storedRosterHeader)
 	mock.status422["bea@uni.edu"] = true
-	out, _, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\ncam@uni.edu\n"))
+	out, errOut, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\ncam@uni.edu\n"))
 	if err != nil {
 		t.Fatalf("a 422 skip must not fail the run: %v", err)
 	}
@@ -220,31 +307,31 @@ func TestRunRosterInviteFile_422SkippedTeamDeletedBatchContinues(t *testing.T) {
 		t.Errorf("invited = %v, want ada and cam", mock.invitedEmails)
 	}
 	beaSlug := configrepo.InviteTeamName(inviteTestClassroom, "bea@uni.edu")
-	found := false
-	for _, s := range mock.deletedTeams {
-		if s == beaSlug {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("bea's freshly-created team should be deleted on 422; deleted = %v", mock.deletedTeams)
+	if len(mock.deletedTeams) != 1 || mock.deletedTeams[0] != beaSlug {
+		t.Errorf("deleted = %v, want exactly bea's freshly-created team (%s)", mock.deletedTeams, beaSlug)
 	}
 	if !strings.Contains(out, "2 invited") || !strings.Contains(out, "1 already member/invited") {
 		t.Errorf("summary wrong:\n%s", out)
+	}
+	// R10: the skipped address must be named, not just counted.
+	if !strings.Contains(errOut, "bea@uni.edu (line 2)") {
+		t.Errorf("stderr should name the 422-skipped address and line:\n%s", errOut)
 	}
 }
 
 func TestRunRosterInviteFile_TeamPrepFailureIsPerAddress(t *testing.T) {
 	mock := newBulkMock(t, storedRosterHeader)
 	mock.teamCreate500["bea@uni.edu"] = true
-	out, _, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\ncam@uni.edu\n"))
+	out, errOut, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\ncam@uni.edu\n"))
 	if err == nil {
 		t.Fatal("a per-address failure must make the run exit non-zero")
+	}
+	if cliutil.ExitCodeFor(err) != 1 {
+		t.Errorf("exit code = %d, want 1 for a hard failure", cliutil.ExitCodeFor(err))
 	}
 	if len(mock.invitedEmails) != 2 {
 		t.Errorf("invited = %v, want ada and cam (bea's team prep failed)", mock.invitedEmails)
 	}
-	// No invitation POST should have fired for bea (team prep precedes the send).
 	for _, e := range mock.invitedEmails {
 		if e == "bea@uni.edu" {
 			t.Errorf("bea was invited despite a team-prep failure")
@@ -253,14 +340,17 @@ func TestRunRosterInviteFile_TeamPrepFailureIsPerAddress(t *testing.T) {
 	if !strings.Contains(out, "1 failed") {
 		t.Errorf("summary should report 1 failed:\n%s", out)
 	}
+	if !strings.Contains(errOut, "bea@uni.edu") || !strings.Contains(errOut, "line 2") {
+		t.Errorf("stderr should name the failed address and its line:\n%s", errOut)
+	}
 }
 
 func TestRunRosterInviteFile_RateLimitDefersRest(t *testing.T) {
 	mock := newBulkMock(t, storedRosterHeader)
 	mock.rateLimitAfter = 1 // first send ok, second rate-limited, rest deferred
 	_, errOut, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\ncam@uni.edu\ndan@uni.edu\n"))
-	if err == nil {
-		t.Fatal("a deferred tail must make the run exit non-zero")
+	if cliutil.ExitCodeFor(err) != 2 {
+		t.Fatalf("exit code = %d (err %v), want 2 for a deferred tail", cliutil.ExitCodeFor(err), err)
 	}
 	// ada sent (1) + bea attempted then rate-limited (1) = 2 POSTs; cam & dan
 	// never attempted.
@@ -270,7 +360,8 @@ func TestRunRosterInviteFile_RateLimitDefersRest(t *testing.T) {
 	if len(mock.invitedEmails) != 1 || mock.invitedEmails[0] != "ada@uni.edu" {
 		t.Errorf("invited = %v, want only ada", mock.invitedEmails)
 	}
-	for _, addr := range []string{"cam@uni.edu", "dan@uni.edu"} {
+	// Every uninvited address, including the one that tripped the limit.
+	for _, addr := range []string{"bea@uni.edu", "cam@uni.edu", "dan@uni.edu"} {
 		if !strings.Contains(errOut, addr) {
 			t.Errorf("deferred report should name %s:\n%s", addr, errOut)
 		}
@@ -290,38 +381,121 @@ func TestRunRosterInviteFile_NoInvitesNoCommit(t *testing.T) {
 	}
 }
 
+// The rebase re-check is the only thing stopping a duplicate row when a
+// concurrent writer (the web app, or a sync) takes an address between the
+// pre-send read and the commit. onAfterInvitation injects exactly that race.
 func TestRunRosterInviteFile_ConcurrentWriterAvoidsDoubleRow(t *testing.T) {
-	// The roster already holds ada (as if a concurrent writer added her); the
-	// rebase re-check must not append a second row for her.
-	mock := newBulkMock(t, storedRosterHeader+",,,ada@uni.edu,,,student\n")
-	// ada is already pending, so she's skipped before send; bea is fresh. To
-	// exercise the rebase drop specifically, invite an address the loaded roster
-	// doesn't show as pending but the commit-time roster does — approximated here
-	// by bea being fresh and ada blocked pre-send. Assert only bea's row lands.
-	_, _, err := runInviteFile(t, mock, []byte("bea@uni.edu\n"))
+	mock := newBulkMock(t, storedRosterHeader)
+	key := inviteTestClassroom + "/roster.csv"
+	mock.onAfterInvitation = func() {
+		// A concurrent writer claims bea after her invitation was sent, so the
+		// rebase read sees a row the pre-send read did not.
+		mock.files[key] = storedRosterHeader + ",,,bea@uni.edu,,,student\n"
+	}
+
+	out, errOut, err := runInviteFile(t, mock, []byte("bea@uni.edu\n"))
 	if err != nil {
 		t.Fatalf("runRosterInviteFile: %v", err)
 	}
-	if len(mock.blobs) != 1 {
-		t.Fatalf("want one commit, got %d", len(mock.blobs))
+	if len(mock.invitedEmails) != 1 {
+		t.Fatalf("invited = %v, want bea invited once", mock.invitedEmails)
 	}
-	if strings.Count(mock.blobs[0], "ada@uni.edu") != 1 {
-		t.Errorf("ada should appear exactly once (no double row):\n%s", mock.blobs[0])
+	// Nothing to append (the concurrent row already carries her), so no commit.
+	if len(mock.blobs) != 0 {
+		t.Errorf("appended a duplicate row despite the rebase re-check: %#v", mock.blobs)
 	}
-	if !strings.Contains(mock.blobs[0], "bea@uni.edu") {
-		t.Errorf("bea's pending row should be committed:\n%s", mock.blobs[0])
+	if !strings.Contains(out, "1 invited, 0 appended as pending rows") {
+		t.Errorf("summary should show invited-but-not-appended:\n%s", out)
+	}
+	if !strings.Contains(errOut, "already carries that address") {
+		t.Errorf("the dropped address should be named:\n%s", errOut)
 	}
 }
 
-func TestRunRosterInviteFile_CommitFailureWarnsSync(t *testing.T) {
+// The batch-abort guard is the change's most important fail-closed behavior: a
+// classroom with no usable team must not produce a batch of invitations that
+// enroll nobody.
+func TestRunRosterInviteFile_ClassroomTeamMissingAbortsBatch(t *testing.T) {
+	mock := newBulkMock(t, storedRosterHeader)
+	delete(mock.files, inviteTestClassroom+"/classroom.json")
+
+	_, _, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\ncam@uni.edu\n"))
+	if err == nil {
+		t.Fatal("err = nil, want a refusal naming `classroom add`")
+	}
+	if !strings.Contains(err.Error(), "classroom add") {
+		t.Errorf("error should point at `classroom add`: %v", err)
+	}
+	if indexOfCall(mock.calls, http.MethodPost, "/orgs/o/teams") >= 0 {
+		t.Error("created an invite team despite the abort")
+	}
+	if countInvitationPOSTs(mock.calls) != 0 {
+		t.Error("sent an invitation despite the abort")
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("committed a roster despite the abort: %#v", mock.blobs)
+	}
+}
+
+// A rate limit raised by the invite-team prep (not the invitation) must defer
+// the remainder too — otherwise the batch keeps hammering a throttled endpoint.
+func TestRunRosterInviteFile_TeamPrepRateLimitDefersRest(t *testing.T) {
+	mock := newBulkMock(t, storedRosterHeader)
+	mock.teamCreateRateLimitAfter = 1
+
+	_, errOut, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\ncam@uni.edu\n"))
+	if cliutil.ExitCodeFor(err) != 2 {
+		t.Fatalf("exit code = %d (err %v), want 2 for a deferred tail", cliutil.ExitCodeFor(err), err)
+	}
+	if len(mock.invitedEmails) != 1 || mock.invitedEmails[0] != "ada@uni.edu" {
+		t.Errorf("invited = %v, want only ada", mock.invitedEmails)
+	}
+	// bea tripped the limit during team prep; cam must never be attempted.
+	teamPOSTs := 0
+	for _, c := range mock.calls {
+		if c.Method == http.MethodPost && c.Path == "/orgs/o/teams" {
+			teamPOSTs++
+		}
+	}
+	if teamPOSTs != 2 {
+		t.Errorf("team POSTs = %d, want 2 (no team prep after the limit)", teamPOSTs)
+	}
+	for _, addr := range []string{"bea@uni.edu", "cam@uni.edu"} {
+		if !strings.Contains(errOut, addr) {
+			t.Errorf("deferred report should name %s:\n%s", addr, errOut)
+		}
+	}
+}
+
+// The roster commit is several more requests; firing them inside the throttle
+// window is what turns a partial success into "sent but unrecorded".
+func TestRunRosterInviteFile_WaitsOutRateLimitBeforeCommit(t *testing.T) {
+	mock := newBulkMock(t, storedRosterHeader)
+	mock.rateLimitAfter = 1
+
+	_, _, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\n"))
+	if cliutil.ExitCodeFor(err) != 2 {
+		t.Fatalf("exit code = %d, want 2", cliutil.ExitCodeFor(err))
+	}
+	if mock.slept <= 0 {
+		t.Error("want a Retry-After wait before the batch commit, slept 0")
+	}
+	if len(mock.blobs) != 1 {
+		t.Fatalf("ada's row should still be committed, got %d blobs", len(mock.blobs))
+	}
+}
+
+func TestRunRosterInviteFile_CommitFailureWarnsRepair(t *testing.T) {
 	mock := newBulkMock(t, storedRosterHeader)
 	mock.commitFails = true
 	_, errOut, err := runInviteFile(t, mock, []byte("ada@uni.edu\n"))
 	if err == nil {
 		t.Fatal("a failed roster commit after sends must exit non-zero")
 	}
-	if !strings.Contains(errOut, "roster sync") {
-		t.Errorf("commit-failure warning must name `roster sync` as the repair:\n%s", errOut)
+	// The repair must be one that actually works: re-running records the row,
+	// and a sync heals it once the student accepts.
+	if !strings.Contains(errOut, "re-run this command") {
+		t.Errorf("commit-failure warning must name re-running as the repair:\n%s", errOut)
 	}
 	if len(mock.invitedEmails) != 1 {
 		t.Errorf("the invitation itself should have been sent, invited = %v", mock.invitedEmails)

@@ -366,11 +366,19 @@ Pass `--file` in place of the positional `<email>` to invite a whole list.
 The file is plaintext, one address per line; blank lines and `#` comment lines
 are ignored. Every address is validated up front — one unusable line refuses the
 whole run and nothing is sent. Each address takes the same path as a single
-invite, and the successfully-invited batch is retained in **one** roster commit.
-Bulk mode is student-only and carries no name/section metadata (the metadata
-flags apply to a single invite only; backfill later with `roster import` or
-`roster sync`). A run stopped by a rate limit reports the remaining addresses and
-exits non-zero; re-running is safe, since already-invited addresses skip.
+invite, is reported as it resolves, and the successfully-invited batch is retained
+in **one** roster commit. Every skipped or failed address is named with its file
+line.
+
+Bulk mode is student-only and carries no name/section metadata, so
+`--first-name`, `--last-name`, and `--section` are rejected with `--file`;
+backfill with `roster import` or `roster sync`.
+
+Exit codes follow [`roster sync`](#roster-sync): **0** all invited or cleanly
+skipped, **2** nothing failed but a rate limit left addresses uninvited, **1** an
+address failed or the roster write failed. On a rate limit the run stops sending,
+waits out `Retry-After` before recording what it already sent, and reports the
+rest; re-running is safe, since already-invited addresses skip.
 
 ### `roster cancel-invite`
 

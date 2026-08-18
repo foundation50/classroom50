@@ -51,10 +51,13 @@ func rosterInviteCmd() *cobra.Command {
 			"lines starting with `#` are ignored. Every address is validated first,\n" +
 			"and if any line is unusable nothing is sent. Successful invitations are\n" +
 			"retained as pending rows in one commit. --file carries no names or\n" +
-			"sections (fill those later with `roster import` or `roster sync`), and\n" +
-			"the --first-name/--last-name/--section flags apply only to a single\n" +
-			"invite. A run interrupted by a GitHub rate limit reports the remaining\n" +
-			"addresses; re-running is safe (already-invited addresses are skipped).\n\n" +
+			"sections (fill those later with `roster import` or `roster sync`), so\n" +
+			"the --first-name/--last-name/--section flags are rejected with it.\n" +
+			"Each address is reported as it resolves, then a summary counts them.\n\n" +
+			"Bulk exit codes follow `roster sync`: 0 every address was invited or\n" +
+			"cleanly skipped, 2 nothing failed but a GitHub rate limit left\n" +
+			"addresses uninvited (re-run to continue — already-invited addresses are\n" +
+			"skipped), 1 an address genuinely failed or the roster write failed.\n\n" +
 			"Returns non-zero on: classroom missing a GitHub team, an address the\n" +
 			"roster already lists as invited, or a failed invitation. An address\n" +
 			"that already belongs to a member (or already has a pending\n" +
@@ -69,6 +72,18 @@ func rosterInviteCmd() *cobra.Command {
 			if strings.TrimSpace(file) != "" {
 				if len(args) != 2 {
 					return errors.New("with --file, pass only <org> <classroom> (the addresses come from the file, not the command line)")
+				}
+				// A per-student flag can't apply to a whole list, and silently
+				// dropping it would lose metadata the teacher believes they set.
+				var ignored []string
+				for _, name := range []string{"first-name", "last-name", "section"} {
+					if cmd.Flags().Changed(name) {
+						ignored = append(ignored, "--"+name)
+					}
+				}
+				if len(ignored) > 0 {
+					return fmt.Errorf("%s applies to a single invite, not --file (a list carries no per-student metadata); invite the list, then fill names and sections in with `gh teacher roster import`",
+						strings.Join(ignored, " and "))
 				}
 				return nil
 			}
@@ -92,13 +107,14 @@ func rosterInviteCmd() *cobra.Command {
 			path := strings.TrimSpace(file)
 			var email string
 			if path == "" {
-				email = strings.TrimSpace(args[2])
-				if email == "" {
-					return errors.New("email must be non-empty")
-				}
-				if err := configrepo.ValidateRosterEmail(email); err != nil {
+				canonical, err := configrepo.CanonicalRosterEmail(strings.TrimSpace(args[2]))
+				if err != nil {
 					return err
 				}
+				if canonical == "" {
+					return errors.New("email must be non-empty")
+				}
+				email = canonical
 			}
 			var data []byte
 			if path != "" {
@@ -140,24 +156,39 @@ func readInviteFile(path string) ([]byte, error) {
 	return data, nil
 }
 
+// errClassroomTeamUnusable refuses a send when classroom.json records no usable
+// team. A team-less email invitation is broken, not degraded: the invitee
+// accepts into the org attached to nothing and, with no username to key on,
+// nothing later notices. A recorded team missing its numeric id is just as
+// unusable, since the invitation carries team ids rather than slugs. Shared so
+// the single and bulk paths refuse identically.
+func errClassroomTeamUnusable(org, classroom string) error {
+	return fmt.Errorf("%s: classroom %s has no usable team recorded in classroom.json, so an invitation would enroll nobody — nothing was sent; run `gh teacher classroom add %s %s` to create the team, then retry",
+		org, classroom, org, classroom)
+}
+
 // emailInviteOutcome classifies what sendOneEmailInvite did with one address,
 // so both the single and bulk callers can react without re-reading the API
 // result. Exactly one is returned per address.
 type emailInviteOutcome int
 
 const (
+	// The zero value is deliberately unnamed and unused: an unset outcome must
+	// not read as success, since the callers' success arm appends a roster row
+	// for an address that may never have been invited. Both switches carry a
+	// default arm that rejects it.
+	_ emailInviteOutcome = iota
 	// outcomeInvited: a fresh invitation was sent; the caller should append a
 	// pending row for the address.
-	outcomeInvited emailInviteOutcome = iota
+	outcomeInvited
 	// outcomeSkippedAlready: GitHub's 422 — already a member or already invited.
 	// No row; a team this run created has already been torn down.
 	outcomeSkippedAlready
 	// outcomePendingBlocked: the stored roster already lists this address as a
 	// pending email invite, so nothing was sent (no API call was made).
 	outcomePendingBlocked
-	// outcomeRateLimited: the invitation hit a secondary rate limit. Nothing was
-	// torn down (a retry re-adopts the team); the bulk caller stops issuing new
-	// sends, and the single caller surfaces the error.
+	// outcomeRateLimited: a secondary rate limit; the bulk caller stops issuing
+	// new sends and the single caller surfaces the error.
 	outcomeRateLimited
 	// outcomeFailed: a hard send or team-prep failure; err is set.
 	outcomeFailed
@@ -165,18 +196,15 @@ const (
 
 // sendOneEmailInvite runs the per-address invite sequence shared by the single
 // `roster invite` and the bulk `--file` path: pre-check the stored roster,
-// ensure the per-invite metadata team (record written LAST), send the org
-// invitation carrying the classroom and invite team ids, and classify the
-// result. It never writes roster.csv — the caller owns the commit — so a bulk
-// run can append every invited address in one batched commit.
+// ensure the per-invite metadata team, send the org invitation carrying the
+// classroom and invite team ids, and classify the result. It never writes
+// roster.csv — the caller owns the commit — so a bulk run can append every
+// invited address in one batched commit.
 //
 // The order is load-bearing (mirrors the web's bulkInviteByEmail inviteOne):
-// every read that could refuse the send happens before the first write; the
+// every read that could refuse the send happens before the first write, and the
 // invite team's record is written before the invitation exists, so an accepted
-// invitation always has an address to recover; and a team created THIS run is
-// deleted only on a doomed send (422 or hard failure), never on a rate limit
-// (the retry re-adopts it) and never for an adopted team (it may hold a prior
-// invite's still-unrecovered record).
+// invitation always has an address to recover.
 func sendOneEmailInvite(client githubapi.Client, errOut io.Writer, org, classroom, email string, classroomTeam configrepo.TeamRef, actor string, rows []configrepo.RosterRow) (emailInviteOutcome, configrepo.TeamRef, error) {
 	holder, pending := rosterEmailClaim(rows, email)
 	if pending {
@@ -187,8 +215,17 @@ func sendOneEmailInvite(client githubapi.Client, errOut io.Writer, org, classroo
 			email, classroom, holder, org, classroom, holder)
 	}
 
+	// EnsureInviteTeam mutates (team create, membership drop, description
+	// PATCH), so it can hit the same secondary limit the invitation can. It must
+	// classify as rate-limited too, or a throttled bulk run keeps hammering the
+	// team endpoints instead of deferring the rest. No teardown either way: the
+	// record is written last, so anything stranded holds no address and the next
+	// invite to this address adopts and heals it.
 	inviteTeam, created, err := configrepo.EnsureInviteTeam(client, org, classroom, email, actor)
 	if err != nil {
+		if cliutil.IsRateLimited(err) {
+			return outcomeRateLimited, configrepo.TeamRef{}, err
+		}
 		return outcomeFailed, configrepo.TeamRef{}, err
 	}
 
@@ -214,13 +251,9 @@ func sendOneEmailInvite(client githubapi.Client, errOut io.Writer, org, classroo
 	return outcomeInvited, inviteTeam, nil
 }
 
-// runRosterInvite sends the email invitation, then records the pending row.
-// The order mirrors the web's bulkInviteByEmail and is load-bearing throughout:
-// every read that could refuse the send happens before the first write, the
-// invite team's record is written before the invitation exists (so an accepted
-// invitation always has an address to recover), and the roster row is appended
-// only once the invitation is real. The per-address work lives in
-// sendOneEmailInvite, shared with the bulk `--file` path.
+// runRosterInvite sends one email invitation, then records its pending row. The
+// per-address work lives in sendOneEmailInvite, shared with the bulk `--file`
+// path; the roster row is appended only once the invitation is real.
 func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classroom, email, firstName, lastName, section string) error {
 	email = configrepo.NormalizeInviteEmail(email)
 
@@ -229,23 +262,23 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 		return err
 	}
 
-	// A team-less email invitation is broken, not degraded: the invitee accepts
-	// into the org attached to nothing and, with no username to key on, nothing
-	// later notices. Refuse while nothing has been created or sent. A recorded
-	// team missing its numeric id is just as unusable — the invitation carries
-	// team ids, not slugs.
 	classroomTeam, ok, err := configrepo.ResolveClassroomTeam(client, org, classroom, branch)
 	if err != nil {
 		return err
 	}
 	if !ok || classroomTeam.ID <= 0 {
-		return fmt.Errorf("%s: classroom %s has no usable team recorded in classroom.json, so an invitation would enroll nobody — nothing was sent; run `gh teacher classroom add %s %s` to create the team, then retry",
-			org, classroom, org, classroom)
+		return errClassroomTeamUnusable(org, classroom)
 	}
 
 	rows, err := configrepo.LoadRosterLenient(client, org, classroom, branch)
 	if err != nil {
 		return err
+	}
+	// Refuse before resolving the actor so an already-invited address still
+	// costs zero API calls, as it did before the send was extracted.
+	if _, pending := rosterEmailClaim(rows, email); pending {
+		return fmt.Errorf("%s is already invited to %s — run `gh teacher roster sync %s %s` if they accepted, or `gh teacher roster cancel-invite %s %s %s` to revoke it; nothing was sent",
+			email, classroom, org, classroom, org, classroom, email)
 	}
 
 	// EnsureInviteTeam drops the creator GitHub silently adds, so it needs to
@@ -257,19 +290,22 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 
 	outcome, inviteTeam, sendErr := sendOneEmailInvite(client, errOut, org, classroom, email, classroomTeam, actor, rows)
 	switch outcome {
+	case outcomeInvited:
+		_, _ = fmt.Fprintf(out, "%s: invited %s as direct_member (teams %s, %s)\n",
+			org, email, classroomTeam.Slug, inviteTeam.Slug)
 	case outcomePendingBlocked:
-		return fmt.Errorf("%s is already invited to %s — run `gh teacher roster sync %s %s` if they accepted, or `gh teacher roster cancel-invite %s %s %s` to revoke it; nothing was sent",
-			email, classroom, org, classroom, org, classroom, email)
+		// Unreachable: the pre-check above already refused. Kept so the switch
+		// stays exhaustive.
+		return fmt.Errorf("%s is already invited to %s; nothing was sent", email, classroom)
 	case outcomeSkippedAlready:
 		_, _ = fmt.Fprintf(out, "%s: skipped %s — already a member of the org or already invited\n", org, email)
 		_, _ = fmt.Fprintf(errOut, "If they accepted an earlier invitation, run `gh teacher roster sync %s %s` to record them on the roster.\n", org, classroom)
 		return nil
 	case outcomeRateLimited, outcomeFailed:
 		return sendErr
+	default:
+		return fmt.Errorf("internal error: unhandled invite outcome %d for %s (nothing was recorded)", outcome, email)
 	}
-	// outcomeInvited: the invitation is real; record the pending row.
-	_, _ = fmt.Fprintf(out, "%s: invited %s as direct_member (teams %s, %s)\n",
-		org, email, classroomTeam.Slug, inviteTeam.Slug)
 
 	var appended bool
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
