@@ -875,13 +875,14 @@ describe("buildScoresCsvRows", () => {
     // The group row keeps all credited logins but takes the owner's name.
     expect(out[1].usernames).toBe("bob, carol")
     expect(out[1].name).toBe("Bob Brown")
-    // Non-submitter carries a name too, with a 0 score and blank fields.
+    // Non-submitter carries a name too, with an EMPTY score (not 0) and blank
+    // fields — an ungraded student, not a graded zero.
     expect(out[2]).toEqual({
       name: "Dave Clark",
       first_name: "Dave",
       last_name: "Clark",
       usernames: "dave",
-      score: 0,
+      score: "",
       max_score: "",
       submissions: 0,
       submitted_at: "",
@@ -1022,6 +1023,76 @@ describe("buildScoresCsvRows", () => {
     )
     expect(out[0].name).toBe("")
     expect(out[0].usernames).toBe("ghost, carol")
+  })
+
+  it("keeps a real graded zero as 0 but leaves an ungraded non-submitter blank", () => {
+    // A collected score of 0 is a real grade and must round-trip as 0; a
+    // non-submitter has no grade and exports an empty cell.
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["zed"], score: 0, "max-score": 10 })],
+      [student({ username: "abe", first_name: "Abe", last_name: "Ant" })],
+      [
+        student({ username: "abe", first_name: "Abe", last_name: "Ant" }),
+        student({ username: "zed", first_name: "Zed", last_name: "Zoo" }),
+      ],
+    )
+    const abe = out.find((r) => r.usernames === "abe")!
+    const zed = out.find((r) => r.usernames === "zed")!
+    expect(abe.score).toBe("") // ungraded non-submitter
+    expect(zed.score).toBe(0) // real graded zero
+  })
+
+  it("orders by first name under name-first sort", () => {
+    const roster = [
+      student({ username: "z1", first_name: "Alice", last_name: "Zephyr" }),
+      student({ username: "a2", first_name: "Zoe", last_name: "Adams" }),
+    ]
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["z1"] }), row({ usernames: ["a2"] })],
+      [],
+      roster,
+      "name-first",
+    )
+    // By first name: Alice(z1) before Zoe(a2).
+    expect(out.map((r) => r.usernames)).toEqual(["z1", "a2"])
+  })
+
+  it("orders by last name under name-last sort", () => {
+    const roster = [
+      student({ username: "z1", first_name: "Alice", last_name: "Zephyr" }),
+      student({ username: "a2", first_name: "Zoe", last_name: "Adams" }),
+    ]
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["z1"] }), row({ usernames: ["a2"] })],
+      [],
+      roster,
+      "name-last",
+    )
+    // By last name: Adams(a2) before Zephyr(z1).
+    expect(out.map((r) => r.usernames)).toEqual(["a2", "z1"])
+  })
+
+  it("orders submitters by time (then timeless non-submitters) under a time sort", () => {
+    const roster = [
+      student({ username: "early", first_name: "Amy", last_name: "Early" }),
+      student({ username: "late", first_name: "Bea", last_name: "Late" }),
+      student({ username: "none", first_name: "Cid", last_name: "None" }),
+    ]
+    const rows = [
+      row({ usernames: ["early"], datetime: "2026-06-01T10:00:00Z" }),
+      row({ usernames: ["late"], datetime: "2026-06-10T10:00:00Z" }),
+    ]
+    const nonSubmitters = [
+      student({ username: "none", first_name: "Cid", last_name: "None" }),
+    ]
+
+    const recent = buildScoresCsvRows(rows, nonSubmitters, roster, "recent")
+    // Newest first (late, early), then the non-submitter last.
+    expect(recent.map((r) => r.usernames)).toEqual(["late", "early", "none"])
+
+    const oldest = buildScoresCsvRows(rows, nonSubmitters, roster, "oldest")
+    // Oldest first (early, late), then the non-submitter last.
+    expect(oldest.map((r) => r.usernames)).toEqual(["early", "late", "none"])
   })
 })
 

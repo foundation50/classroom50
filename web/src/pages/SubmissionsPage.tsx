@@ -881,7 +881,12 @@ const SubmissionsPageContent = () => {
     // make the file's counts depend on the last-viewed page. `snapshotScoped`
     // (the roster-scoped snapshot, already memoized for the fan-out spine) always
     // matches scores.json regardless of paging.
-    const rows = buildScoresCsvRows(snapshotScoped, csvNonSubmitters, students)
+    const rows = buildScoresCsvRows(
+      snapshotScoped,
+      csvNonSubmitters,
+      students,
+      sort,
+    )
 
     const csv = Papa.unparse(rows, {
       header: true,
