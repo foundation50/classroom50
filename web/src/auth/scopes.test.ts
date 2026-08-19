@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest"
 
 import { DEFAULT_GITHUB_SCOPE, ELEVATED_GITHUB_SCOPE } from "./constants"
-import { REQUIRED_SCOPES, expandScopes, hasScope, missingScopes } from "./scopes"
+import {
+  REQUIRED_SCOPES,
+  expandScopes,
+  hasScope,
+  missingScopes,
+} from "./scopes"
 
 describe("expandScopes", () => {
   it("expands repo to its sub-scopes", () => {

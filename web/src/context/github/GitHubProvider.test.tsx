@@ -13,7 +13,11 @@ vi.mock("@/auth/useGithubAuth", () => ({
   useGithubAuth: () => authState,
 }))
 
-import { GitHubProvider, useMissingScopes, useHasDeleteRepoScope } from "./GitHubProvider"
+import {
+  GitHubProvider,
+  useMissingScopes,
+  useHasDeleteRepoScope,
+} from "./GitHubProvider"
 
 function wrapper(token: string | null) {
   return ({ children }: PropsWithChildren) =>
@@ -41,7 +45,8 @@ describe("useMissingScopes (fail-open backstop)", () => {
 
 describe("useHasDeleteRepoScope (gate for elevated teardown)", () => {
   it("returns true when the login scope carries delete_repo", () => {
-    authState.tokenScope = "read:user read:org repo workflow admin:org delete_repo"
+    authState.tokenScope =
+      "read:user read:org repo workflow admin:org delete_repo"
     const { result } = renderHook(() => useHasDeleteRepoScope(), {
       wrapper: wrapper("ghp_xxx"),
     })
