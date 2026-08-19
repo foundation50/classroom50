@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { AlertTriangle, ShieldCheck } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -8,9 +8,7 @@ import { githubOAuthGrantUrl } from "./constants"
 import { Alert, Button, Modal } from "@/components/ui"
 
 // Re-auth for a signed-in teacher who needs to change their delete_repo access.
-// GitHub can't add or drop a single scope client-side, so either direction is a
-// full sign-in: `elevated` true requests base + delete_repo, false requests base
-// only. See auth/constants.ts for the base/elevated policy.
+// See auth/constants.ts for the base/elevated policy.
 //
 // Two paths, because the browser redirect can't complete on localhost (the
 // OAuth callback URL is the deployed origin): "Continue in browser" runs the
@@ -30,60 +28,79 @@ export function ElevatedAccessModal({
     startWebFlow,
     startDeviceFlow,
     cancelDeviceFlow,
+    markDeviceCodeCopied,
+    markVerificationOpened,
     screen,
     device,
-    deviceElevated,
     deviceStatus,
     error,
     isRequestingDeviceCode,
   } = useGithubAuth()
 
-  // Freeze the direction while open: the caller derives `elevated` from live
-  // scope state, so a mid-flow grant would otherwise flip this dialog to the
-  // opposite action under the user's cursor.
-  const [frozen, setFrozen] = useState(elevated)
+  // Whether a device flow started from this dialog is still live. Set on the
+  // click, not on the prompt appearing: between the two, the request is in flight
+  // with nothing rendered, and dismissing there would otherwise leave the poll
+  // running (able to swap the session token) with no UI.
+  const ownsDeviceFlowRef = useRef(false)
+
   // Whether a device prompt has actually appeared in this dialog. The pre-start
   // state (already signed in, no device yet) is indistinguishable from the
   // post-success state, so success is only detectable as "the prompt we showed
-  // went away" — without this, the watcher below fires on the click itself and
-  // closes the dialog before the device code arrives.
+  // went away".
   const [sawDevicePrompt, setSawDevicePrompt] = useState(false)
 
   useEffect(() => {
-    if (open) setFrozen(elevated)
-    else setSawDevicePrompt(false)
-    // Re-freeze only on open; `elevated` changing while open is what we ignore.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!open) setSawDevicePrompt(false)
   }, [open])
 
-  // Only show a pending code that this dialog's direction actually started, so a
-  // stale flow from another surface can't render under the wrong label.
+  // Only show a pending code for this dialog's direction, so a flow started
+  // elsewhere can't render under the wrong label.
   const showingDevice =
-    screen === "device-prompt" && !!device && deviceElevated === frozen
+    screen === "device-prompt" && !!device && device.elevated === elevated
 
   useEffect(() => {
     if (showingDevice) setSawDevicePrompt(true)
   }, [showingDevice])
 
+  // Keep the close handler in a ref: both call sites pass an inline arrow and
+  // re-render with the volatile auth context, so depending on its identity would
+  // re-run the watcher below throughout a device flow.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
   // The prompt we were showing is gone and we're signed in: the flow completed,
   // so retire the dialog instead of falling back to the choice buttons.
   useEffect(() => {
     if (sawDevicePrompt && !showingDevice && screen === "authed") {
-      setSawDevicePrompt(false)
-      onClose()
+      ownsDeviceFlowRef.current = false
+      onCloseRef.current()
     }
-  }, [sawDevicePrompt, showingDevice, screen, onClose])
+  }, [sawDevicePrompt, showingDevice, screen])
 
-  const title = frozen
+  // Abandoning the dialog by navigating away never runs `dismiss`, so release an
+  // owned flow here too.
+  useEffect(
+    () => () => {
+      if (ownsDeviceFlowRef.current) cancelDeviceFlow()
+    },
+    [cancelDeviceFlow],
+  )
+
+  const title = elevated
     ? t("auth.elevated.title")
     : t("auth.elevated.revokeTitle")
-  const body = frozen ? t("auth.elevated.body") : t("auth.elevated.revokeBody")
+  const body = elevated
+    ? t("auth.elevated.body")
+    : t("auth.elevated.revokeBody")
 
   // Dismissing must abort the poll: it lives in the auth provider, not here, so
   // unmounting this dialog would otherwise leave it running (and able to swap
   // the session token) long after the user cancelled.
   const dismiss = () => {
-    if (showingDevice) cancelDeviceFlow()
+    if (ownsDeviceFlowRef.current) cancelDeviceFlow()
+    ownsDeviceFlowRef.current = false
     onClose()
   }
 
@@ -94,8 +111,8 @@ export function ElevatedAccessModal({
           device={device}
           status={deviceStatus}
           onCancel={dismiss}
-          onCodeCopied={() => {}}
-          onVerificationOpened={() => {}}
+          onCodeCopied={markDeviceCodeCopied}
+          onVerificationOpened={markVerificationOpened}
         />
       ) : (
         <div className="space-y-5">
@@ -123,7 +140,7 @@ export function ElevatedAccessModal({
               disabled={isRequestingDeviceCode}
               onClick={() =>
                 void startWebFlow({
-                  elevated: frozen,
+                  elevated,
                   // Come back to the page the user was working on, not the
                   // dashboard the post-login guard would otherwise pick.
                   returnTo: window.location.pathname + window.location.search,
@@ -138,7 +155,8 @@ export function ElevatedAccessModal({
               loading={isRequestingDeviceCode}
               disabled={isRequestingDeviceCode}
               onClick={() => {
-                void startDeviceFlow({ elevated: frozen })
+                ownsDeviceFlowRef.current = true
+                void startDeviceFlow({ elevated })
               }}
             >
               {t("auth.elevated.deviceButton")}
@@ -146,7 +164,7 @@ export function ElevatedAccessModal({
             <p className="text-xs leading-relaxed text-base-content/60">
               {t("auth.elevated.deviceHint")}
             </p>
-            {!frozen && (
+            {!elevated && (
               // Signing in narrows this session's token; only GitHub can revoke
               // the one already issued, so point at where that happens.
               <a

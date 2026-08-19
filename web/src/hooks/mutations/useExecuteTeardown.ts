@@ -3,7 +3,11 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query"
-import { executeTeardown, type TeardownPlan } from "@/domain/teardown"
+import {
+  executeTeardown,
+  teardownProgressOf,
+  type TeardownPlan,
+} from "@/domain/teardown"
 import { githubKeys } from "@/github-core/queries"
 import { orgClassroom50StatusKey } from "@/hooks/useOrgClassroom50Status"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -41,11 +45,14 @@ export function useExecuteTeardown(plan: TeardownPlan | null) {
       void queryClient.invalidateQueries({ queryKey: ["orgs"] })
       if (result?.markerDeleted) forgetSetupState(queryClient, plan.org)
     },
-    onError: () => {
-      // Any abort may have deleted some repos before it stopped (the marker is
-      // always retained), so refresh the org view rather than keep listing
-      // repositories that no longer exist. Rejection still propagates.
-      void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+    onError: (err) => {
+      // Only refresh when the run actually deleted something: an abort that
+      // changed nothing (marker re-check, network failure) would otherwise
+      // discard the org cache and make the next dashboard visit refetch every
+      // org summary for no reason. Rejection still propagates.
+      if (teardownProgressOf(err)?.deleted.length) {
+        void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      }
     },
   })
 }

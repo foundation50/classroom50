@@ -116,10 +116,6 @@ function ServiceTokensSection({ highlighted }: { highlighted?: boolean }) {
   )
 }
 
-// Least-privilege by default: normal sign-in never requests delete_repo, so a
-// destructive action needs an on-demand re-auth. See auth/constants.ts for the
-// base/elevated policy.
-//
 // Rendered only for owners of a Classroom 50 org, the only people who can run
 // teardown. Students share this Settings page, and offering them the very scope
 // #655 removed would widen the blast radius of a stolen token for no benefit.
@@ -137,10 +133,7 @@ function ElevatedPermissionsSection({
   if (!ownsReadyOrg) return null
 
   // An action, not a preference: each direction is a full re-auth the user can
-  // abandon, so a switch would misreport state. Only offer "remove" when the
-  // permission is actually observed — an unknown session (fine-grained PAT) must
-  // not be told it holds something we couldn't read, and revoking it would swap
-  // a deliberately org-scoped token for a broader OAuth one.
+  // abandon, so a switch would misreport state.
   return (
     <>
       <SettingsSectionCard
@@ -165,6 +158,8 @@ function ElevatedPermissionsSection({
               {t("settings.elevatedScope.requestButton")}
             </Button>
             {scopeState === "granted" && (
+              // Only offer this once observed: an unknown session must not be
+              // told it holds a permission we couldn't read.
               <Button
                 variant="ghost"
                 size="sm"

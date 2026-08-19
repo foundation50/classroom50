@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { DEFAULT_GITHUB_SCOPE, ELEVATED_GITHUB_SCOPE } from "./constants"
-import {
-  REQUIRED_SCOPES,
-  expandScopes,
-  hasScope,
-  missingScopes,
-} from "./scopes"
+import { REQUIRED_SCOPES, expandScopes, missingScopes } from "./scopes"
 
 describe("expandScopes", () => {
   it("expands repo to its sub-scopes", () => {
@@ -86,24 +81,17 @@ describe("missingScopes", () => {
   })
 })
 
-describe("hasScope", () => {
-  it("detects a directly granted scope", () => {
-    expect(hasScope("read:user repo delete_repo", "delete_repo")).toBe(true)
-  })
-
-  it("returns false when the scope is absent", () => {
-    expect(hasScope(DEFAULT_GITHUB_SCOPE, "delete_repo")).toBe(false)
-  })
-
-  it("returns false for an empty grant", () => {
-    expect(hasScope("", "delete_repo")).toBe(false)
+describe("expandScopes against the elevated contract", () => {
+  it("does not see delete_repo in the base scope string", () => {
+    expect(expandScopes(DEFAULT_GITHUB_SCOPE).has("delete_repo")).toBe(false)
   })
 
   it("sees delete_repo in the elevated scope string", () => {
-    expect(hasScope(ELEVATED_GITHUB_SCOPE, "delete_repo")).toBe(true)
+    expect(expandScopes(ELEVATED_GITHUB_SCOPE).has("delete_repo")).toBe(true)
   })
 
-  it("resolves implied scopes (admin:org satisfies read:org)", () => {
-    expect(hasScope("admin:org", "read:org")).toBe(true)
+  it("never implies delete_repo from a broader scope", () => {
+    // `repo` must not satisfy the deletion gate by implication.
+    expect(expandScopes("repo admin:org").has("delete_repo")).toBe(false)
   })
 })

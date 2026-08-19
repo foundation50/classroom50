@@ -25,6 +25,9 @@ export type DeviceAuthState = {
   attempts: number
   nextPollAt: number
   progress: 0 | 1 | 2
+  // Which scope tier this flow requested, so a surface offering both (the
+  // elevated-access dialog) never renders a pending code under the wrong label.
+  elevated: boolean
 }
 
 export type GithubAuthScreen =

@@ -32,58 +32,63 @@ import { logger } from "@/lib/logger"
 
 const log = logger.scope("mutations:teardown")
 
-// Teardown's 403 scope wall: the token lacks the elevated delete_repo scope, so
-// the view surfaces the elevation flow. The key is exported so the gate and the
-// backstop name the same message.
-export const TEARDOWN_DELETE_SCOPE_KEY = "orgSettings.teardown.needsDeleteScope"
-
+const TEARDOWN_DELETE_SCOPE_KEY = "orgSettings.teardown.needsDeleteScope"
 const TEARDOWN_RATE_LIMIT_KEY = "orgSettings.teardown.rateLimited"
 
-export class TeardownScopeError extends Error {
+// An abort that stopped the run partway. Carries the progress at that moment: a
+// wall can arrive after some repositories are already permanently deleted, so a
+// bare "you need permission" message would hide the data loss.
+class TeardownAbortError extends Error {
   readonly localized: LocalizedMessage
-  // Progress at the moment the wall was hit. A 403 can arrive partway through
-  // the concurrency pass, so a bare "you need permission" message would hide
-  // repositories that are already permanently deleted.
-  deleted: string[]
-  failed: string[]
+  readonly deleted: string[]
+  readonly failed: string[]
 
-  constructor(deleted: string[] = [], failed: string[] = []) {
-    const localized: LocalizedMessage =
-      deleted.length > 0
-        ? {
-            key: "orgSettings.teardown.needsDeleteScopePartial",
-            params: { deleted: deleted.length },
-          }
-        : { key: TEARDOWN_DELETE_SCOPE_KEY }
+  constructor(
+    name: string,
+    localized: LocalizedMessage,
+    deleted: string[],
+    failed: string[],
+  ) {
     super(describeLocalizedMessage(localized))
-    this.name = "TeardownScopeError"
+    this.name = name
     this.localized = localized
     this.deleted = deleted
     this.failed = failed
   }
 }
 
+export class TeardownScopeError extends TeardownAbortError {
+  constructor(deleted: string[], failed: string[]) {
+    super(
+      "TeardownScopeError",
+      deleted.length > 0
+        ? {
+            key: "orgSettings.teardown.needsDeleteScopePartial",
+            params: { count: deleted.length },
+          }
+        : { key: TEARDOWN_DELETE_SCOPE_KEY },
+      deleted,
+      failed,
+    )
+  }
+}
+
 // A 403 that is not a scope gap: an SSO-gated organization, or a refusal whose
 // headers prove the token's scopes are sufficient. Distinct from
 // TeardownScopeError so the UI doesn't offer an elevation that can't help.
-export class TeardownForbiddenError extends Error {
-  readonly localized: LocalizedMessage
-  deleted: string[]
-  failed: string[]
-
+export class TeardownForbiddenError extends TeardownAbortError {
   constructor(kind: "sso" | "other", deleted: string[], failed: string[]) {
-    const localized: LocalizedMessage = {
-      key:
-        kind === "sso"
-          ? "orgSettings.teardown.ssoRequired"
-          : "orgSettings.teardown.forbidden",
-      params: { deleted: deleted.length },
-    }
-    super(describeLocalizedMessage(localized))
-    this.name = "TeardownForbiddenError"
-    this.localized = localized
-    this.deleted = deleted
-    this.failed = failed
+    super(
+      "TeardownForbiddenError",
+      {
+        key:
+          kind === "sso"
+            ? "orgSettings.teardown.ssoRequired"
+            : "orgSettings.teardown.forbidden",
+      },
+      deleted,
+      failed,
+    )
   }
 }
 
@@ -94,19 +99,31 @@ export class TeardownMarkerError extends Error {
   }
 }
 
+// Partial progress carried by an abort, if any. Duck-typed so a caller doesn't
+// have to know which of the abort classes it caught: an abort that deleted
+// nothing (a marker re-check failure, a network error) reports none, so callers
+// can skip cache work for a run that changed nothing.
+export function teardownProgressOf(
+  err: unknown,
+): { deleted: string[]; failed: string[] } | undefined {
+  if (typeof err !== "object" || err === null) return undefined
+  const candidate = err as { deleted?: unknown; failed?: unknown }
+  if (!Array.isArray(candidate.deleted) || !Array.isArray(candidate.failed)) {
+    return undefined
+  }
+  return { deleted: candidate.deleted, failed: candidate.failed }
+}
+
 // A secondary rate limit aborted the run. Distinct from TeardownScopeError so
 // the UI can offer a retry, and carries partial progress for reporting.
-export class TeardownRateLimitError extends Error {
-  deleted: string[]
-  failed: string[]
-  readonly localized: LocalizedMessage
+export class TeardownRateLimitError extends TeardownAbortError {
   constructor(deleted: string[], failed: string[]) {
-    const localized: LocalizedMessage = { key: TEARDOWN_RATE_LIMIT_KEY }
-    super(describeLocalizedMessage(localized))
-    this.name = "TeardownRateLimitError"
-    this.localized = localized
-    this.deleted = deleted
-    this.failed = failed
+    super(
+      "TeardownRateLimitError",
+      { key: TEARDOWN_RATE_LIMIT_KEY },
+      deleted,
+      failed,
+    )
   }
 }
 
@@ -388,6 +405,15 @@ export async function executeTeardown(
   let rateLimited = false
 
   const tryDelete = async (repo: string) => {
+    // A scope/SSO wall or a throttle is a property of the token, not the repo, so
+    // every remaining delete is guaranteed to fail the same way. Stop issuing
+    // them: on a large org that is hundreds of doomed requests burning rate
+    // limit before the run aborts anyway. `otherForbidden` is deliberately not
+    // here — an org policy or protected repo is genuinely per-repo.
+    if (scopeWall || ssoWall || rateLimited) {
+      failed.push(repo)
+      return
+    }
     try {
       const outcome = await deleteRepoWithRetry(client, plan.org, repo)
       if (outcome === "deleted") {

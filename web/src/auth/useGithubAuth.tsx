@@ -255,10 +255,6 @@ function useGithubAuthState() {
   // prompt's guidance + pre-fill (classic vs fine-grained).
   const [patTokenType, setPatTokenType] = useState<PatTokenType>("classic")
   const [device, setDevice] = useState<DeviceAuthState | null>(null)
-  // Which scope tier the in-flight device flow requested, so a surface that
-  // offers both (the elevated-access modal) never renders a pending code under
-  // the wrong label. null when no device flow is in flight.
-  const [deviceElevated, setDeviceElevated] = useState<boolean | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [hasLoadedStoredAuth, setHasLoadedStoredAuth] = useState(false)
   // Holds status at "loading" while a dev auto-login validates (see
@@ -321,7 +317,6 @@ function useGithubAuthState() {
       setTokenScope(data.scope || "")
       setSessionExpired(false)
       setDevice(null)
-      setDeviceElevated(null)
       setScreen("authed")
 
       queryClient.prefetchQuery({
@@ -616,7 +611,6 @@ function useGithubAuthState() {
     abortRef.current = null
     setError(message)
     setDevice(null)
-    setDeviceElevated(null)
     setScreen("config")
   }, [])
 
@@ -743,8 +737,8 @@ function useGithubAuthState() {
             attempts: 0,
             nextPollAt: Date.now() + intervalSeconds * 1000,
             progress: 0,
+            elevated: opts?.elevated ?? false,
           })
-          setDeviceElevated(opts?.elevated ?? false)
 
           setScreen("device-prompt")
 
@@ -773,7 +767,6 @@ function useGithubAuthState() {
     abortRef.current?.abort()
     abortRef.current = null
     setDevice(null)
-    setDeviceElevated(null)
     setError(null)
     setScreen("config")
   }, [])
@@ -838,7 +831,6 @@ function useGithubAuthState() {
       setToken(null)
       setTokenScope("")
       setDevice(null)
-      setDeviceElevated(null)
       setError(null)
       setScreen("config")
       setSessionExpired(expired)
@@ -971,7 +963,6 @@ function useGithubAuthState() {
     error,
     device,
     deviceStatus,
-    deviceElevated,
     user: githubUserQuery.data ?? null,
     isLoadingUser: githubUserQuery.isLoading,
     isStartingWebFlow: screen === "exchanging",

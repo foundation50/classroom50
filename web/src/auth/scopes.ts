@@ -1,6 +1,8 @@
-import { DEFAULT_GITHUB_SCOPE } from "./constants"
+import { BASE_GITHUB_SCOPES } from "./constants"
 
-export const REQUIRED_SCOPES = DEFAULT_GITHUB_SCOPE.split(/\s+/).filter(Boolean)
+// The scopes a normal sign-in must hold. Sourced from the same array the login
+// scope string is built from, so the two can't drift.
+export const REQUIRED_SCOPES: readonly string[] = BASE_GITHUB_SCOPES
 
 // GitHub normalizes granted scopes and a broader scope implies narrower ones,
 // so we map each grantable scope -> the scopes it also satisfies (e.g., `repo`
@@ -42,11 +44,4 @@ export function expandScopes(granted: string): Set<string> {
 export function missingScopes(granted: string): string[] {
   const have = expandScopes(granted)
   return REQUIRED_SCOPES.filter((scope) => !have.has(scope))
-}
-
-// Whether the expanded granted set satisfies a single scope. Used to gate
-// elevated (on-demand) actions like teardown on delete_repo, which is not part
-// of REQUIRED_SCOPES.
-export function hasScope(granted: string, scope: string): boolean {
-  return expandScopes(granted).has(scope)
 }

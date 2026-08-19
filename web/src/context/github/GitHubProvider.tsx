@@ -12,7 +12,7 @@ import {
   type GitHubResponseSignal,
 } from "@/github-core/client"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { missingScopes, hasScope } from "@/auth/scopes"
+import { missingScopes, expandScopes } from "@/auth/scopes"
 import { ELEVATED_GITHUB_SCOPES } from "@/auth/constants"
 import { GITHUB_PROXY_BASE } from "@/github-core/workerProxy"
 import { observeResponse } from "@/lib/diagnostics/observed"
@@ -106,17 +106,20 @@ export function useOptionalGitHubClient() {
   return useContext(GitHubClientContext)
 }
 
-// Required scopes the current token is missing, for the scope-warning banner.
-// Prefers the live X-OAuth-Scopes observation; falls back to the login scope
-// string. Fails open: with no value from either source, returns [] so the
-// banner stays hidden rather than nagging about scopes we can't verify.
-export function useMissingScopes(): string[] {
+// The granted-scope string to judge the session by. `||`, not `??`: a
+// present-but-empty x-oauth-scopes header is "" (a classic token with no scopes,
+// or any header-rewriting hop) and would beat a usable login scope.
+function useGrantedScopes(): string {
   const { tokenScope } = useGithubAuth()
   const observed = useContext(ObservedContext)
+  return observed?.signal.scopes || tokenScope
+}
 
-  // `||`, not `??`: a present-but-empty x-oauth-scopes header is "", which would
-  // win over a usable login scope and suppress the warning entirely.
-  const granted = observed?.signal.scopes || tokenScope
+// Required scopes the current token is missing, for the scope-warning banner.
+// Fails open: with nothing knowable from either source, returns [] so the banner
+// stays hidden rather than nagging about scopes we can't verify.
+export function useMissingScopes(): string[] {
+  const granted = useGrantedScopes()
 
   return useMemo(() => {
     if (!granted) return []
@@ -134,24 +137,18 @@ export function useMissingScopes(): string[] {
 // gating a destructive action should fail open (GitHub is the real authority and
 // teardown's 403 backstop aborts before anything irreversible), while *telling*
 // the user their current state must never claim a permission we couldn't read.
-// A single fail-open boolean served both and lied to the second caller.
 //
 // "unknown" covers a fine-grained PAT (no X-OAuth-Scopes header) and any session
 // whose scopes we can't introspect.
 export type DeleteRepoScopeState = "granted" | "missing" | "unknown"
 
 export function useDeleteRepoScopeState(): DeleteRepoScopeState {
-  const { tokenScope } = useGithubAuth()
-  const observed = useContext(ObservedContext)
-
-  // `||`, not `??`: a present-but-empty x-oauth-scopes header is "" (a classic
-  // token with no scopes, or any header-rewriting hop), which would otherwise
-  // beat a perfectly good login scope and read as unknown.
-  const granted = observed?.signal.scopes || tokenScope
+  const granted = useGrantedScopes()
 
   return useMemo(() => {
     if (!granted) return "unknown"
-    return ELEVATED_GITHUB_SCOPES.every((scope) => hasScope(granted, scope))
+    const have = expandScopes(granted)
+    return ELEVATED_GITHUB_SCOPES.every((scope) => have.has(scope))
       ? "granted"
       : "missing"
   }, [granted])

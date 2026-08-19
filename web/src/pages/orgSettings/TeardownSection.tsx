@@ -8,7 +8,7 @@ import { Button, HelpTooltip, MonoLtr, cx } from "@/components/ui"
 import {
   formatTeardownResult,
   TeardownMarkerError,
-  TEARDOWN_DELETE_SCOPE_KEY,
+  TeardownScopeError,
   type TeardownPlan,
 } from "@/domain/teardown"
 import {
@@ -114,9 +114,7 @@ const TeardownSection = ({
             : t("orgSettings.teardown.button")}
         </Button>
       ) : (
-        // delete_repo is elevated-only and not granted by a normal sign-in, so
-        // teardown would 403. Offer the one-shot elevation re-auth up front
-        // rather than after a failed attempt (#655).
+        // Offer the elevation up front rather than after a failed attempt (#655).
         <div
           className={cx(
             "flex flex-wrap items-center gap-2",
@@ -244,9 +242,9 @@ const TeardownSection = ({
             // raw key or English assembled below the view.
             const localized = localizedMessageOf(err)
             if (localized) {
-              // The scope messages tell the user to request elevated
-              // permissions, so make that reachable instead of only naming it.
-              if (localized.key.startsWith(TEARDOWN_DELETE_SCOPE_KEY)) {
+              // The scope wall tells the user to request elevated permissions,
+              // so make that reachable instead of only naming it.
+              if (err instanceof TeardownScopeError) {
                 setElevateOpen(true)
               }
               throw new Error(resolveLocalizedMessage(t, localized), {

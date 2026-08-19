@@ -15,13 +15,16 @@ vi.mock("react-i18next", async (importOriginal) => {
 const startWebFlow = vi.fn()
 const startDeviceFlow = vi.fn()
 const cancelDeviceFlow = vi.fn()
+const markDeviceCodeCopied = vi.fn()
+const markVerificationOpened = vi.fn()
 const authState: {
   startWebFlow: typeof startWebFlow
   startDeviceFlow: typeof startDeviceFlow
   cancelDeviceFlow: typeof cancelDeviceFlow
+  markDeviceCodeCopied: typeof markDeviceCodeCopied
+  markVerificationOpened: typeof markVerificationOpened
   screen: string
   device: DeviceAuthState | null
-  deviceElevated: boolean | null
   deviceStatus: null
   error: string | null
   isRequestingDeviceCode: boolean
@@ -29,9 +32,10 @@ const authState: {
   startWebFlow,
   startDeviceFlow,
   cancelDeviceFlow,
+  markDeviceCodeCopied,
+  markVerificationOpened,
   screen: "config",
   device: null,
-  deviceElevated: null,
   deviceStatus: null,
   error: null,
   isRequestingDeviceCode: false,
@@ -47,7 +51,6 @@ afterEach(() => {
   vi.clearAllMocks()
   authState.screen = "config"
   authState.device = null
-  authState.deviceElevated = null
   authState.error = null
   authState.isRequestingDeviceCode = false
 })
@@ -61,6 +64,7 @@ const aDevice: DeviceAuthState = {
   attempts: 0,
   nextPollAt: Date.now() + 5_000,
   progress: 0,
+  elevated: true,
 }
 
 describe("ElevatedAccessModal (#655)", () => {
@@ -90,7 +94,6 @@ describe("ElevatedAccessModal (#655)", () => {
   it("shows the device prompt inline once a matching device code is issued", () => {
     authState.screen = "device-prompt"
     authState.device = aDevice
-    authState.deviceElevated = true
     render(<ElevatedAccessModal open onClose={() => {}} />)
     expect(screen.getByText("WXYZ-1234")).toBeTruthy()
     expect(screen.queryByText("auth.elevated.browserButton")).toBeNull()
@@ -99,22 +102,44 @@ describe("ElevatedAccessModal (#655)", () => {
   it("ignores a pending device flow started for the other direction", () => {
     // A base-scope flow must not render under the "request elevated" label.
     authState.screen = "device-prompt"
-    authState.device = aDevice
-    authState.deviceElevated = false
+    authState.device = { ...aDevice, elevated: false }
     render(<ElevatedAccessModal open elevated onClose={() => {}} />)
     expect(screen.queryByText("WXYZ-1234")).toBeNull()
     expect(screen.getByText("auth.elevated.browserButton")).toBeTruthy()
   })
 
-  it("aborts the device poll when the prompt is cancelled", () => {
+  it("aborts the device poll when the prompt is cancelled", async () => {
+    const onClose = vi.fn()
+    const view = render(<ElevatedAccessModal open onClose={onClose} />)
+
+    // Start the flow from this dialog, so it owns the poll it later cancels.
+    await userEvent.click(screen.getByText("auth.elevated.deviceButton"))
     authState.screen = "device-prompt"
     authState.device = aDevice
-    authState.deviceElevated = true
-    const onClose = vi.fn()
-    render(<ElevatedAccessModal open onClose={onClose} />)
-    screen.getByText("common.cancel").click()
+    view.rerender(<ElevatedAccessModal open onClose={onClose} />)
+
+    await userEvent.click(screen.getByText("common.cancel"))
     expect(cancelDeviceFlow).toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it("does not cancel a device flow it never started", async () => {
+    // A flow begun elsewhere (the login card) must survive this dialog closing.
+    authState.screen = "device-prompt"
+    authState.device = aDevice
+    const onClose = vi.fn()
+    render(<ElevatedAccessModal open onClose={onClose} />)
+    await userEvent.click(screen.getByText("common.cancel"))
+    expect(cancelDeviceFlow).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it("releases an in-flight flow when the dialog unmounts", async () => {
+    const view = render(<ElevatedAccessModal open onClose={() => {}} />)
+    await userEvent.click(screen.getByText("auth.elevated.deviceButton"))
+    // Navigating away never runs the dismiss handler.
+    view.unmount()
+    expect(cancelDeviceFlow).toHaveBeenCalled()
   })
 
   it("stays open after starting a device flow, before the code arrives", async () => {
@@ -132,14 +157,12 @@ describe("ElevatedAccessModal (#655)", () => {
     const onClose = vi.fn()
     authState.screen = "device-prompt"
     authState.device = aDevice
-    authState.deviceElevated = true
     const view = render(<ElevatedAccessModal open onClose={onClose} />)
     expect(screen.getByText("WXYZ-1234")).toBeTruthy()
 
     // completeSignIn clears the device and returns to "authed".
     authState.screen = "authed"
     authState.device = null
-    authState.deviceElevated = null
     view.rerender(<ElevatedAccessModal open onClose={onClose} />)
     expect(onClose).toHaveBeenCalled()
   })
