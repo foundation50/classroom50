@@ -41,13 +41,49 @@ const TEARDOWN_RATE_LIMIT_KEY = "orgSettings.teardown.rateLimited"
 
 export class TeardownScopeError extends Error {
   readonly localized: LocalizedMessage
+  // Progress at the moment the wall was hit. A 403 can arrive partway through
+  // the concurrency pass, so a bare "you need permission" message would hide
+  // repositories that are already permanently deleted.
+  deleted: string[]
+  failed: string[]
 
-  constructor(
-    localized: LocalizedMessage = { key: TEARDOWN_DELETE_SCOPE_KEY },
-  ) {
+  constructor(deleted: string[] = [], failed: string[] = []) {
+    const localized: LocalizedMessage =
+      deleted.length > 0
+        ? {
+            key: "orgSettings.teardown.needsDeleteScopePartial",
+            params: { deleted: deleted.length },
+          }
+        : { key: TEARDOWN_DELETE_SCOPE_KEY }
     super(describeLocalizedMessage(localized))
     this.name = "TeardownScopeError"
     this.localized = localized
+    this.deleted = deleted
+    this.failed = failed
+  }
+}
+
+// A 403 that is not a scope gap: an SSO-gated organization, or a refusal whose
+// headers prove the token's scopes are sufficient. Distinct from
+// TeardownScopeError so the UI doesn't offer an elevation that can't help.
+export class TeardownForbiddenError extends Error {
+  readonly localized: LocalizedMessage
+  deleted: string[]
+  failed: string[]
+
+  constructor(kind: "sso" | "other", deleted: string[], failed: string[]) {
+    const localized: LocalizedMessage = {
+      key:
+        kind === "sso"
+          ? "orgSettings.teardown.ssoRequired"
+          : "orgSettings.teardown.forbidden",
+      params: { deleted: deleted.length },
+    }
+    super(describeLocalizedMessage(localized))
+    this.name = "TeardownForbiddenError"
+    this.localized = localized
+    this.deleted = deleted
+    this.failed = failed
   }
 }
 
@@ -347,6 +383,8 @@ export async function executeTeardown(
   })
 
   let scopeWall = false
+  let ssoWall = false
+  let otherForbidden = false
   let rateLimited = false
 
   const tryDelete = async (repo: string) => {
@@ -368,9 +406,23 @@ export async function executeTeardown(
         failed.push(repo)
       }
     } catch (err) {
-      // deleteRepoWithRetry only throws for an unretryable scope 403.
+      // deleteRepoWithRetry only throws for an unretryable 403. Not every 403 is
+      // a scope gap: an SSO-gated org or a secondary rate limit carrying neither
+      // a remaining=0 nor a Retry-After also lands here, and calling those a
+      // scope wall sends the teacher to an elevation flow that can't help (they
+      // may already hold delete_repo), looping on the same failure.
       if (err instanceof GitHubAPIError && err.isForbidden) {
-        scopeWall = true
+        if (err.isSsoRequired) {
+          ssoWall = true
+        } else if (err.isScopeGap || err.oauthScopes === null) {
+          // A proven gap, or a 403 whose scope headers GitHub didn't send (so a
+          // gap can't be ruled out): treat as the scope wall.
+          scopeWall = true
+        } else {
+          // Headers prove the scopes are sufficient, so this is something else
+          // (org policy, protected repo). Record it rather than mislabel it.
+          otherForbidden = true
+        }
       }
       log.error("teardown: repo delete errored", {
         org: plan.org,
@@ -386,6 +438,20 @@ export async function executeTeardown(
   // A scope 403 is unrecoverable; a throttle is retryable. Both abort before
   // the marker so the run stays re-runnable.
   const abortIfBlocked = () => {
+    if (ssoWall || otherForbidden) {
+      log.error("teardown aborted: forbidden (not a scope gap)", {
+        org: plan.org,
+        sso: ssoWall,
+        deleted: deleted.length,
+        failed: failed.length,
+        record: true,
+      })
+      throw new TeardownForbiddenError(
+        ssoWall ? "sso" : "other",
+        deleted,
+        failed,
+      )
+    }
     if (scopeWall) {
       log.error("teardown aborted: missing delete_repo scope", {
         org: plan.org,
@@ -393,7 +459,7 @@ export async function executeTeardown(
         failed: failed.length,
         record: true,
       })
-      throw new TeardownScopeError()
+      throw new TeardownScopeError(deleted, failed)
     }
     if (rateLimited) {
       log.warn("teardown aborted: rate limited (re-runnable)", {

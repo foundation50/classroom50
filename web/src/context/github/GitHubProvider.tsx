@@ -114,7 +114,9 @@ export function useMissingScopes(): string[] {
   const { tokenScope } = useGithubAuth()
   const observed = useContext(ObservedContext)
 
-  const granted = observed?.signal.scopes ?? tokenScope
+  // `||`, not `??`: a present-but-empty x-oauth-scopes header is "", which would
+  // win over a usable login scope and suppress the warning entirely.
+  const granted = observed?.signal.scopes || tokenScope
 
   return useMemo(() => {
     if (!granted) return []
@@ -143,7 +145,11 @@ export function useHasDeleteRepoScope(): boolean {
   const { tokenScope } = useGithubAuth()
   const observed = useContext(ObservedContext)
 
-  const granted = observed?.signal.scopes ?? tokenScope
+  // `||`, not `??`: a present-but-empty x-oauth-scopes header is "" (a classic
+  // token with no scopes, or any header-rewriting hop), which would otherwise
+  // beat a perfectly good login scope and read as unknowable — failing open and
+  // arming teardown for a token that never had the scope.
+  const granted = observed?.signal.scopes || tokenScope
 
   return useMemo(() => {
     if (!granted) return true

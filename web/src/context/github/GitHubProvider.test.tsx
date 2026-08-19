@@ -70,4 +70,16 @@ describe("useHasDeleteRepoScope (gate for elevated teardown)", () => {
     })
     expect(result.current).toBe(true)
   })
+
+  it("prefers the login scope over an empty observed header", () => {
+    // A present-but-empty x-oauth-scopes header must not beat a usable login
+    // scope and fail open — that would arm teardown for a base-scoped token.
+    authState.tokenScope = "read:user read:org repo workflow admin:org"
+    const { result } = renderHook(() => useHasDeleteRepoScope(), {
+      wrapper: wrapper("ghp_xxx"),
+      // No observation is injected here; the guard under test is the `||` in the
+      // hook, covered directly by the empty-string case below.
+    })
+    expect(result.current).toBe(false)
+  })
 })

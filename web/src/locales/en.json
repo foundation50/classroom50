@@ -1875,6 +1875,10 @@
       "insufficientPermissionHelp": "Teardown deletes repositories. Normal sign-in doesn't request permission to delete them, so request elevated permissions to continue.",
       "grantButton": "Request elevated permissions",
       "needsDeleteScope": "GitHub refused to delete repositories (403). Normal sign-in doesn't request permission to delete them. Request elevated permissions and try again, or archive repositories instead.",
+      "needsDeleteScopePartial_one": "GitHub refused to delete repositories (403) after {{deleted}} was already deleted. That deletion is permanent. Request elevated permissions and run teardown again to finish.",
+      "needsDeleteScopePartial_other": "GitHub refused to delete repositories (403) after {{deleted}} were already deleted. Those deletions are permanent. Request elevated permissions and run teardown again to finish.",
+      "ssoRequired": "GitHub refused to delete repositories (403). This organization requires SAML single sign-on. Authorize your session for this organization on GitHub, then run teardown again.",
+      "forbidden": "GitHub refused to delete repositories (403), and your permissions look sufficient. An organization policy or a protected repository is likely blocking it. Check the organization's settings, then run teardown again.",
       "rateLimited": "GitHub rate-limited the deletions. Some repositories are already deleted. Wait a moment, then run teardown again to finish."
     },
     "preflight": {

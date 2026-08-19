@@ -244,9 +244,9 @@ const TeardownSection = ({
             // raw key or English assembled below the view.
             const localized = localizedMessageOf(err)
             if (localized) {
-              // The message tells the user to request elevated permissions, so
-              // make that reachable instead of only naming it.
-              if (localized.key === TEARDOWN_DELETE_SCOPE_KEY) {
+              // The scope messages tell the user to request elevated
+              // permissions, so make that reachable instead of only naming it.
+              if (localized.key.startsWith(TEARDOWN_DELETE_SCOPE_KEY)) {
                 setElevateOpen(true)
               }
               throw new Error(resolveLocalizedMessage(t, localized), {
