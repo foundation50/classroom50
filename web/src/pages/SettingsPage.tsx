@@ -25,7 +25,6 @@ import { useReducedMotion, type MotionPref } from "@/hooks/useReducedMotion"
 import { useTheme, type ThemePref } from "@/hooks/useTheme"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
 import { useHasDeleteRepoScope } from "@/context/github/GitHubProvider"
-import { useGithubAuth } from "@/auth/useGithubAuth"
 import { ElevatedAccessModal } from "@/auth/ElevatedAccessModal"
 
 // Owned + Classroom 50-ready orgs are the only ones with a manageable service
@@ -130,21 +129,14 @@ function ElevatedPermissionsSection({
   highlighted?: boolean
 }) {
   const { t } = useTranslation()
-  const { startWebFlow } = useGithubAuth()
   const hasDeleteRepo = useHasDeleteRepoScope()
   const [elevateOpen, setElevateOpen] = useState(false)
 
-  // The toggle reflects whether the current session holds delete_repo. Turning
-  // it on opens the elevation flow (browser or device); turning it off re-auths
-  // at base scope, dropping the elevated grant. GitHub has no client-side way to
-  // shed one scope, so "off" is a plain base re-auth.
-  const onToggle = (next: boolean) => {
-    if (next) {
-      setElevateOpen(true)
-    } else {
-      void startWebFlow()
-    }
-  }
+  // The toggle reflects whether the current session holds delete_repo. Either
+  // direction needs a full re-auth (GitHub can't add or drop one scope
+  // client-side), so both open the modal, which offers browser or device sign-in
+  // — the device path is the one that works on localhost.
+  const onToggle = () => setElevateOpen(true)
 
   return (
     <>
@@ -160,12 +152,13 @@ function ElevatedPermissionsSection({
             className="toggle toggle-primary"
             checked={hasDeleteRepo}
             aria-label={t("settings.elevatedScope.toggleLabel")}
-            onChange={(event) => onToggle(event.target.checked)}
+            onChange={onToggle}
           />
         }
       />
       <ElevatedAccessModal
         open={elevateOpen}
+        elevated={!hasDeleteRepo}
         onClose={() => setElevateOpen(false)}
       />
     </>

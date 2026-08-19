@@ -446,6 +446,8 @@
     "elevated": {
       "title": "Request permission to delete repositories",
       "body": "Tearing down an organization deletes repositories. Sign in again to grant that access for this session.",
+      "revokeTitle": "Remove permission to delete repositories",
+      "revokeBody": "Sign in again to drop repository-deletion access from this session.",
       "browserButton": "Continue in browser",
       "deviceButton": "Use a device code",
       "deviceHint": "Use a device code when the browser sign-in can't return to this page, such as on localhost."

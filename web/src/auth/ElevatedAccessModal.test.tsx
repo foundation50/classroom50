@@ -52,6 +52,13 @@ describe("ElevatedAccessModal (#655)", () => {
     expect(startDeviceFlow).toHaveBeenCalledWith({ elevated: true })
   })
 
+  it("re-auths at base scope when elevated is false (revoke)", () => {
+    render(<ElevatedAccessModal open elevated={false} onClose={() => {}} />)
+    expect(screen.getByText("auth.elevated.revokeTitle")).toBeTruthy()
+    screen.getByText("auth.elevated.browserButton").click()
+    expect(startWebFlow).toHaveBeenCalledWith({ elevated: false })
+  })
+
   it("shows the device prompt inline once a device code is issued", () => {
     authState.screen = "device-prompt"
     authState.device = {
