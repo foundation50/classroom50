@@ -19,7 +19,10 @@ import {
 import { usePlanTeardown } from "@/hooks/mutations/usePlanTeardown"
 import { useExecuteTeardown } from "@/hooks/mutations/useExecuteTeardown"
 import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
-import { useHasDeleteRepoScope } from "@/context/github/GitHubProvider"
+import {
+  useHasDeleteRepoScope,
+  useCanElevateInApp,
+} from "@/context/github/GitHubProvider"
 import { ElevatedAccessModal } from "@/auth/ElevatedAccessModal"
 import SettingsSection from "./SettingsSection"
 import { CalloutDiv, CalloutText } from "@/lib/motionComponents"
@@ -45,6 +48,7 @@ const TeardownSection = ({
   const { t } = useTranslation()
   const navigate = useNavigate()
   const hasDeleteRepo = useHasDeleteRepoScope()
+  const canElevateInApp = useCanElevateInApp()
   const [elevateOpen, setElevateOpen] = useState(false)
 
   const [open, setOpen] = useState(false)
@@ -101,16 +105,21 @@ const TeardownSection = ({
       {error && (
         <CalloutDiv className="flex flex-col items-start gap-2 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
           <span>{error.message}</span>
-          {error.canElevate && (
-            // The message names elevation as the remedy, so make it reachable.
-            <Button
-              variant="warning"
-              size="sm"
-              onClick={() => setElevateOpen(true)}
-            >
-              {t("orgSettings.teardown.grantButton")}
-            </Button>
-          )}
+          {error.canElevate &&
+            (canElevateInApp ? (
+              // The message names elevation as the remedy, so make it reachable.
+              <Button
+                variant="warning"
+                size="sm"
+                onClick={() => setElevateOpen(true)}
+              >
+                {t("orgSettings.teardown.grantButton")}
+              </Button>
+            ) : (
+              // A PAT's permissions are fixed at creation, so the only fix is a
+              // replacement token — the elevation flow would swap their session.
+              <span>{t("orgSettings.teardown.needsDeleteScopePat")}</span>
+            ))}
         </CalloutDiv>
       )}
       {done && (
@@ -143,16 +152,26 @@ const TeardownSection = ({
             {t("orgSettings.teardown.insufficientPermission")}
             <HelpTooltip
               position="top"
-              help={t("orgSettings.teardown.insufficientPermissionHelp")}
+              help={
+                canElevateInApp
+                  ? t("orgSettings.teardown.insufficientPermissionHelp")
+                  : t("orgSettings.teardown.insufficientPermissionHelpPat")
+              }
             />
           </span>
-          <Button
-            variant="warning"
-            size="sm"
-            onClick={() => setElevateOpen(true)}
-          >
-            {t("orgSettings.teardown.grantButton")}
-          </Button>
+          {canElevateInApp ? (
+            <Button
+              variant="warning"
+              size="sm"
+              onClick={() => setElevateOpen(true)}
+            >
+              {t("orgSettings.teardown.grantButton")}
+            </Button>
+          ) : (
+            <span className="text-sm text-base-content/70">
+              {t("orgSettings.teardown.needsDeleteScopePat")}
+            </span>
+          )}
         </div>
       )}
 

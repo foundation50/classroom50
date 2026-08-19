@@ -46,6 +46,7 @@ vi.mock("./storage", () => ({
   getStoredGithubToken: () => null,
   getStoredGithubClientId: () => "Ov23liTEST",
   getStoredGithubScope: () => "",
+  getStoredAuthMethod: () => null,
   persistGithubToken: vi.fn(),
   persistGithubClientId: vi.fn(),
   clearGithubToken: vi.fn(),

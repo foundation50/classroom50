@@ -83,6 +83,12 @@ warns and asks for confirmation before proceeding. See
 > no server: the token stays in your browser, so nobody but you can act on your
 > organization with it. The CLIs work the same way: they never request
 > `delete_repo` unless you opt in with `gh teacher login -s delete_repo`.
+>
+> **If you signed in with a personal access token**, Classroom 50 can't add the
+> permission for you — a token's permissions are fixed when you create it on
+> GitHub. Create one that allows deleting repositories (the `delete_repo` scope
+> on a classic token, or **Administration: read and write** on a fine-grained
+> one) and sign in again.
 
 ### 3. Student authentication
 

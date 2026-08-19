@@ -51,6 +51,7 @@ import {
   clearGithubToken,
   consumeOAuthSession,
   getStoredGithubClientId,
+  getStoredAuthMethod,
   getStoredGithubScope,
   getStoredGithubToken,
   persistGithubClientId,
@@ -58,6 +59,7 @@ import {
   saveOAuthSession,
 } from "./storage"
 import type {
+  AuthMethod,
   DeviceAuthState,
   GithubAuthScreen,
   PatTokenType,
@@ -272,6 +274,10 @@ function useGithubAuthState() {
   // keying a cleanup effect off one would stop being unmount-only.
   const tokenRef = useRef(token)
   const [tokenScope, setTokenScope] = useState("")
+  // How the live session signed in; null until restored/known. Only an OAuth
+  // session can be re-issued in-app, so this gates whether a missing
+  // destructive scope offers a re-auth or a replace-your-token warning (#655).
+  const [authMethod, setAuthMethod] = useState<AuthMethod | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Scoped to the PAT prompt so a token-entry failure surfaces on that screen
   // without disturbing the config screen's `error`.
@@ -339,11 +345,16 @@ function useGithubAuthState() {
   // authenticated and the /login guard redirects into the app. Until then the
   // card shows a spinner (no interstitial success splash).
   const completeSignIn = useCallback(
-    (data: { access_token: string; scope?: string }) => {
+    (data: {
+      access_token: string
+      scope?: string
+      authMethod: AuthMethod
+    }) => {
       log.info("sign-in complete, token acquired")
-      persistGithubToken(data.access_token, data.scope || "")
+      persistGithubToken(data.access_token, data.scope || "", data.authMethod)
       setToken(data.access_token)
       setTokenScope(data.scope || "")
+      setAuthMethod(data.authMethod)
       setSessionExpired(false)
       setDevice(null)
       setScreen("authed")
@@ -377,7 +388,11 @@ function useGithubAuthState() {
           // govern its per-resource permissions. It carries an empty granted
           // scope so useMissingScopes stays fail-open (no spurious banner).
           if (result.kind === "fine-grained-ok") {
-            completeSignIn({ access_token: token, scope: "" })
+            completeSignIn({
+              access_token: token,
+              scope: "",
+              authMethod: "pat",
+            })
             return
           }
 
@@ -393,7 +408,11 @@ function useGithubAuthState() {
             return
           }
 
-          completeSignIn({ access_token: token, scope: result.scopes })
+          completeSignIn({
+            access_token: token,
+            scope: result.scopes,
+            authMethod: "pat",
+          })
         },
         onError: (err) => {
           if (err instanceof GitHubUserFetchError && err.status === 401) {
@@ -433,6 +452,7 @@ function useGithubAuthState() {
     if (storedToken) {
       log.info("restored stored session")
       setToken(storedToken)
+      setAuthMethod(getStoredAuthMethod())
       setScreen("authed")
     } else {
       // Dev-only: skip the sign-in screen when VITE_GITHUB_PAT holds a valid PAT
@@ -460,7 +480,11 @@ function useGithubAuthState() {
         void runDevAutoLoginOnce(envPat)
           .then((res) => {
             if (res)
-              completeSignIn({ access_token: res.token, scope: res.scope })
+              completeSignIn({
+                access_token: res.token,
+                scope: res.scope,
+                authMethod: "pat",
+              })
           })
           .finally(() => setAutoLoginPending(false))
       }
@@ -538,7 +562,7 @@ function useGithubAuthState() {
       },
       {
         onSuccess: (data) => {
-          completeSignIn(data)
+          completeSignIn({ ...data, authMethod: "oauth" })
           // Defer the return until status is "authenticated" (effect below);
           // navigating now would race the router context and bounce through the
           // _authed guard (#71).
@@ -733,7 +757,11 @@ function useGithubAuthState() {
           return
         }
 
-        completeSignIn({ access_token: data.access_token, scope: data.scope })
+        completeSignIn({
+          access_token: data.access_token,
+          scope: data.scope,
+          authMethod: "oauth",
+        })
 
         return
       }
@@ -868,6 +896,7 @@ function useGithubAuthState() {
       clearGithubToken()
       setToken(null)
       setTokenScope("")
+      setAuthMethod(null)
       setDevice(null)
       setError(null)
       setScreen("config")
@@ -998,6 +1027,7 @@ function useGithubAuthState() {
     screen,
     token,
     tokenScope,
+    authMethod,
     error,
     device,
     deviceStatus,

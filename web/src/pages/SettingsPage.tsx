@@ -24,7 +24,10 @@ import { TokenHealthChip } from "@/components/status/TokenHealthChip"
 import { useReducedMotion, type MotionPref } from "@/hooks/useReducedMotion"
 import { useTheme, type ThemePref } from "@/hooks/useTheme"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
-import { useDeleteRepoScopeState } from "@/context/github/GitHubProvider"
+import {
+  useDeleteRepoScopeState,
+  useCanElevateInApp,
+} from "@/context/github/GitHubProvider"
 import { ElevatedAccessModal } from "@/auth/ElevatedAccessModal"
 import { RevokeAccessLink } from "@/auth/RevokeAccessLink"
 
@@ -130,6 +133,7 @@ function ElevatedPermissionsSection({
 }) {
   const { t } = useTranslation()
   const scopeState = useDeleteRepoScopeState()
+  const canElevateInApp = useCanElevateInApp()
   const [elevate, setElevate] = useState<null | boolean>(null)
   const { data: orgs = [] } = useGetOrgs()
 
@@ -148,34 +152,45 @@ function ElevatedPermissionsSection({
           <p className="text-sm text-base-content/70">
             {t(`settings.elevatedScope.status.${scopeState}`)}
           </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="warning"
-              size="sm"
-              // Nothing to request when the permission is already observed. Stays
-              // enabled on "unknown" so a session we can't read can still ask.
-              disabled={scopeState === "granted"}
-              onClick={() => setElevate(true)}
-            >
-              {t("settings.elevatedScope.requestButton")}
-            </Button>
-            {scopeState === "granted" && (
-              // Only offer this once observed: an unknown session must not be
-              // told it holds a permission we couldn't read.
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setElevate(false)}
-              >
-                {t("settings.elevatedScope.removeButton")}
-              </Button>
-            )}
-          </div>
-          {/* Always reachable: signing in again only narrows this browser's
-              token, so GitHub is the only place the grant itself goes away —
-              and it's needed most right after the local narrowing, when the
-              state is no longer "granted". */}
-          <RevokeAccessLink />
+          {canElevateInApp ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="warning"
+                  size="sm"
+                  // Nothing to request when the permission is already observed. Stays
+                  // enabled on "unknown" so a session we can't read can still ask.
+                  disabled={scopeState === "granted"}
+                  onClick={() => setElevate(true)}
+                >
+                  {t("settings.elevatedScope.requestButton")}
+                </Button>
+                {scopeState === "granted" && (
+                  // Only offer this once observed: an unknown session must not be
+                  // told it holds a permission we couldn't read.
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setElevate(false)}
+                  >
+                    {t("settings.elevatedScope.removeButton")}
+                  </Button>
+                )}
+              </div>
+              {/* Always reachable: signing in again only narrows this browser's
+                  token, so GitHub is the only place the grant itself goes away —
+                  and it's needed most right after the local narrowing, when the
+                  state is no longer "granted". */}
+              <RevokeAccessLink />
+            </>
+          ) : (
+            // A token's permissions are fixed when it's created on GitHub, so
+            // there is nothing to request here; running the OAuth flow would
+            // replace this session with a different kind of token.
+            <p className="text-sm text-base-content/70">
+              {t("settings.elevatedScope.patNote")}
+            </p>
+          )}
         </div>
       </SettingsSectionCard>
       <ElevatedAccessModal

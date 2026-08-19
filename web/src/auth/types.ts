@@ -43,3 +43,9 @@ export type WebSignInOptions = SignInOptions & { returnTo?: string }
 // through. Classic spans every org the teacher owns (the multi-org default);
 // fine-grained is scoped to one org.
 export type PatTokenType = "classic" | "fine-grained"
+
+// How the session's token was obtained. Only OAuth tokens can be re-issued from
+// inside the app, so this decides whether a missing destructive scope is a
+// re-auth we can offer or a token the user has to replace on GitHub (#655).
+// `null` means unknown — a session stored before this was tracked.
+export type AuthMethod = "oauth" | "pat"

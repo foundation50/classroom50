@@ -159,3 +159,14 @@ export function useDeleteRepoScopeState(): DeleteRepoScopeState {
 export function useHasDeleteRepoScope(): boolean {
   return useDeleteRepoScopeState() !== "missing"
 }
+
+// Whether an in-app re-auth can actually add a missing scope. Only an OAuth
+// session can: a PAT's permissions are fixed at creation on GitHub, so offering
+// elevation to one would run an OAuth flow that silently replaces their session
+// with a different kind of token. Unknown (a session stored before the method
+// was tracked) is treated as OAuth — that was the only in-app flow that could
+// have produced a scope-bearing session, and the 403 backstop still governs.
+export function useCanElevateInApp(): boolean {
+  const { authMethod } = useGithubAuth()
+  return authMethod !== "pat"
+}

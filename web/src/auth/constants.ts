@@ -2,6 +2,9 @@ export const GITHUB_AUTH_STORAGE = {
   TOKEN: "gh_access_token",
   CLIENT_ID: "gh_client_id",
   SCOPE_GRANTED: "gh_scope_granted",
+  // How the session's token was obtained. Absent for a session stored before
+  // this key existed, which reads as "unknown" — never as a specific method.
+  AUTH_METHOD: "gh_auth_method",
 } as const
 
 export const GITHUB_AUTH_SESSION = {

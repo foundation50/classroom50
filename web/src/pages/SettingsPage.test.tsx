@@ -22,10 +22,17 @@ vi.mock("@/hooks/useDocumentTitle", () => ({ useDocumentTitle: () => {} }))
 // access modal; stub both so the page renders without a GitHubAuthProvider (this
 // suite mounts the page bare). The modal's flow has its own test.
 const scopeState = vi.fn<() => DeleteRepoScopeState>(() => "missing")
+// An OAuth session by default; the PAT cases flip this to prove the section
+// stops offering an in-app re-auth it can't deliver.
+const canElevateInApp = vi.fn<() => boolean>(() => true)
 vi.mock("@/context/github/GitHubProvider", async (importActual) => {
   const actual =
     await importActual<typeof import("@/context/github/GitHubProvider")>()
-  return { ...actual, useDeleteRepoScopeState: () => scopeState() }
+  return {
+    ...actual,
+    useDeleteRepoScopeState: () => scopeState(),
+    useCanElevateInApp: () => canElevateInApp(),
+  }
 })
 vi.mock("@/auth/ElevatedAccessModal", () => ({
   ElevatedAccessModal: ({
@@ -146,6 +153,7 @@ afterEach(() => {
   orgsData.data = []
   orgsData.isLoading = false
   scopeState.mockReturnValue("missing")
+  canElevateInApp.mockReturnValue(true)
   for (const k of Object.keys(healthByOrg)) delete healthByOrg[k]
 })
 
@@ -279,6 +287,24 @@ describe("SettingsPage elevated permissions", () => {
       screen.getByText("settings.elevatedScope.removeButton"),
     )
     expect(screen.getByTestId("elevated-modal").dataset.elevated).toBe("false")
+  })
+
+  it("tells a PAT session to replace its token instead of offering a re-auth", async () => {
+    // A PAT's permissions are fixed at creation, so the OAuth elevation flow
+    // can't add the scope — it would just swap the session for a different kind
+    // of token. Offer the instruction, not the button.
+    asOwner()
+    scopeState.mockReturnValue("missing")
+    canElevateInApp.mockReturnValue(false)
+    renderPage()
+
+    expect(screen.getByText("settings.elevatedScope.patNote")).toBeTruthy()
+    expect(
+      screen.queryByText("settings.elevatedScope.requestButton"),
+    ).toBeNull()
+    expect(screen.queryByText("settings.elevatedScope.removeButton")).toBeNull()
+    // The revoke link points at the OAuth grant page, which a PAT never used.
+    expect(screen.queryByText("auth.elevated.revokeLink")).toBeNull()
   })
 })
 

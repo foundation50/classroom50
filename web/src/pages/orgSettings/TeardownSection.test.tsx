@@ -24,8 +24,12 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 
 // The gate hook is the unit under test's switch; drive it per-case.
 const hasDeleteRepo = vi.fn<() => boolean>()
+// OAuth by default; the PAT case flips it to prove the section stops offering an
+// in-app elevation it can't deliver.
+const canElevateInApp = vi.fn<() => boolean>(() => true)
 vi.mock("@/context/github/GitHubProvider", () => ({
   useHasDeleteRepoScope: () => hasDeleteRepo(),
+  useCanElevateInApp: () => canElevateInApp(),
 }))
 
 // The modal owns the web/device choice; here we only assert TeardownSection
@@ -77,6 +81,7 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   executeError.mockReturnValue(null)
+  canElevateInApp.mockReturnValue(true)
 })
 
 describe("TeardownSection scope gate (#655)", () => {
@@ -105,6 +110,19 @@ describe("TeardownSection scope gate (#655)", () => {
     expect(screen.queryByTestId("elevated-modal")).toBeNull()
     await userEvent.click(screen.getByText("orgSettings.teardown.grantButton"))
     expect(screen.getByTestId("elevated-modal")).toBeTruthy()
+  })
+
+  it("tells a PAT session to replace its token instead of offering elevation", () => {
+    // The elevation flow is OAuth-only: offering it to a PAT session would run a
+    // re-auth that silently replaces their token rather than adding the scope.
+    hasDeleteRepo.mockReturnValue(false)
+    canElevateInApp.mockReturnValue(false)
+    render(<TeardownSection org="acme" />)
+
+    expect(
+      screen.getByText("orgSettings.teardown.needsDeleteScopePat"),
+    ).toBeTruthy()
+    expect(screen.queryByText("orgSettings.teardown.grantButton")).toBeNull()
   })
 })
 
@@ -149,5 +167,23 @@ describe("TeardownSection abort reporting", () => {
       screen.getByText("orgSettings.teardown.needsDeleteScope"),
     ).toBeTruthy()
     expect(screen.getByText("orgSettings.teardown.grantButton")).toBeTruthy()
+  })
+
+  it("points a PAT session at a replacement token when the wall is hit", async () => {
+    // The teardown 403 is where a PAT user actually discovers the gap, since the
+    // up-front gate fails open for a token whose scopes we can't read.
+    canElevateInApp.mockReturnValue(false)
+    executeError.mockReturnValue(
+      new TeardownScopeError(["cs101-hw1-alice"], []),
+    )
+    await runTeardown()
+
+    expect(
+      screen.getByText("orgSettings.teardown.needsDeleteScopePartial"),
+    ).toBeTruthy()
+    expect(
+      screen.getByText("orgSettings.teardown.needsDeleteScopePat"),
+    ).toBeTruthy()
+    expect(screen.queryByText("orgSettings.teardown.grantButton")).toBeNull()
   })
 })
