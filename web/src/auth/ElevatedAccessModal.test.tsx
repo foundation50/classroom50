@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import type { DeviceAuthState } from "./types"
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -113,6 +114,33 @@ describe("ElevatedAccessModal (#655)", () => {
     render(<ElevatedAccessModal open onClose={onClose} />)
     screen.getByText("common.cancel").click()
     expect(cancelDeviceFlow).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it("stays open after starting a device flow, before the code arrives", async () => {
+    // The pre-start state (signed in, no device yet) looks identical to the
+    // post-success state, so a naive success watcher closes the dialog the
+    // instant the user picks the device path.
+    const onClose = vi.fn()
+    render(<ElevatedAccessModal open onClose={onClose} />)
+    await userEvent.click(screen.getByText("auth.elevated.deviceButton"))
+    expect(startDeviceFlow).toHaveBeenCalledWith({ elevated: true })
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it("closes once a device flow it started completes", () => {
+    const onClose = vi.fn()
+    authState.screen = "device-prompt"
+    authState.device = aDevice
+    authState.deviceElevated = true
+    const view = render(<ElevatedAccessModal open onClose={onClose} />)
+    expect(screen.getByText("WXYZ-1234")).toBeTruthy()
+
+    // completeSignIn clears the device and returns to "authed".
+    authState.screen = "authed"
+    authState.device = null
+    authState.deviceElevated = null
+    view.rerender(<ElevatedAccessModal open onClose={onClose} />)
     expect(onClose).toHaveBeenCalled()
   })
 

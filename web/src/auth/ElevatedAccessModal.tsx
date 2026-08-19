@@ -42,11 +42,16 @@ export function ElevatedAccessModal({
   // scope state, so a mid-flow grant would otherwise flip this dialog to the
   // opposite action under the user's cursor.
   const [frozen, setFrozen] = useState(elevated)
-  const [awaitingDevice, setAwaitingDevice] = useState(false)
+  // Whether a device prompt has actually appeared in this dialog. The pre-start
+  // state (already signed in, no device yet) is indistinguishable from the
+  // post-success state, so success is only detectable as "the prompt we showed
+  // went away" — without this, the watcher below fires on the click itself and
+  // closes the dialog before the device code arrives.
+  const [sawDevicePrompt, setSawDevicePrompt] = useState(false)
 
   useEffect(() => {
     if (open) setFrozen(elevated)
-    else setAwaitingDevice(false)
+    else setSawDevicePrompt(false)
     // Re-freeze only on open; `elevated` changing while open is what we ignore.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -56,15 +61,18 @@ export function ElevatedAccessModal({
   const showingDevice =
     screen === "device-prompt" && !!device && deviceElevated === frozen
 
-  // A device flow we started finished elsewhere (completeSignIn clears device
-  // and returns to "authed"), so retire the dialog instead of silently falling
-  // back to the choice buttons.
   useEffect(() => {
-    if (awaitingDevice && screen === "authed" && !device) {
-      setAwaitingDevice(false)
+    if (showingDevice) setSawDevicePrompt(true)
+  }, [showingDevice])
+
+  // The prompt we were showing is gone and we're signed in: the flow completed,
+  // so retire the dialog instead of falling back to the choice buttons.
+  useEffect(() => {
+    if (sawDevicePrompt && !showingDevice && screen === "authed") {
+      setSawDevicePrompt(false)
       onClose()
     }
-  }, [awaitingDevice, screen, device, onClose])
+  }, [sawDevicePrompt, showingDevice, screen, onClose])
 
   const title = frozen
     ? t("auth.elevated.title")
@@ -130,7 +138,6 @@ export function ElevatedAccessModal({
               loading={isRequestingDeviceCode}
               disabled={isRequestingDeviceCode}
               onClick={() => {
-                setAwaitingDevice(true)
                 void startDeviceFlow({ elevated: frozen })
               }}
             >
