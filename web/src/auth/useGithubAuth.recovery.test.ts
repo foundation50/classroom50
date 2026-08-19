@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   classifyPatResult,
+  idleScreen,
   isTransientUserError,
   isValidationStuck,
   recoverStrandedExchange,
@@ -53,6 +54,19 @@ describe("recoverStrandedExchange", () => {
   })
 })
 
+// Where a device flow lands once it stops (cancel or failure). An elevated
+// re-auth runs from inside the authenticated app, so returning to "config" would
+// park a signed-in teacher on the login surface (#655).
+describe("idleScreen", () => {
+  it("returns a signed-in session to the authed screen", () => {
+    expect(idleScreen("gho_token")).toBe("authed")
+  })
+
+  it("returns a session with no token to the login surface", () => {
+    expect(idleScreen(null)).toBe("config")
+  })
+})
+
 // The PAT entry gate: submitPat routes a validated token's X-OAuth-Scopes
 // header through classifyPatResult before deciding sign-in vs error. A null
 // header (fine-grained PAT) is accepted without header verification, an
@@ -68,11 +82,11 @@ describe("classifyPatResult", () => {
     expect(result.kind).toBe("missing")
     if (result.kind === "missing") {
       // read:org is implied by admin:org, so it should not be reported once
-      // admin:org is present, but here neither admin:org nor read:user/delete_repo
-      // is granted.
+      // admin:org is present, but here neither admin:org nor read:user is
+      // granted. delete_repo is elevated-only, so it is never reported missing.
       expect(result.missing).toContain("admin:org")
       expect(result.missing).toContain("read:user")
-      expect(result.missing).toContain("delete_repo")
+      expect(result.missing).not.toContain("delete_repo")
     }
   })
 

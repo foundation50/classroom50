@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { HIDDEN_ORGS_STORAGE_KEY } from "@/lib/hiddenOrgsStore"
 import { HiddenOrgsProvider } from "@/context/hiddenOrgs/HiddenOrgsProvider"
+import type { DeleteRepoScopeState } from "@/context/github/GitHubProvider"
 
 vi.mock("@/components/PageShell", () => ({
   default: ({ children }: { children: React.ReactNode }) => (
@@ -17,6 +18,34 @@ vi.mock("@/components/settings/LanguageSwitcher", () => ({
   LanguageSwitcher: () => <div data-testid="language-switcher" />,
 }))
 vi.mock("@/hooks/useDocumentTitle", () => ({ useDocumentTitle: () => {} }))
+// The elevated-permissions section reads scope state and renders the elevated
+// access modal; stub both so the page renders without a GitHubAuthProvider (this
+// suite mounts the page bare). The modal's flow has its own test.
+const scopeState = vi.fn<() => DeleteRepoScopeState>(() => "missing")
+// An OAuth session by default; the PAT cases flip this to prove the section
+// stops offering an in-app re-auth it can't deliver.
+const canElevateInApp = vi.fn<() => boolean>(() => true)
+vi.mock("@/context/github/GitHubProvider", async (importActual) => {
+  const actual =
+    await importActual<typeof import("@/context/github/GitHubProvider")>()
+  return {
+    ...actual,
+    useDeleteRepoScopeState: () => scopeState(),
+    useCanElevateInApp: () => canElevateInApp(),
+  }
+})
+vi.mock("@/auth/ElevatedAccessModal", () => ({
+  ElevatedAccessModal: ({
+    open,
+    elevated,
+  }: {
+    open: boolean
+    elevated?: boolean
+  }) =>
+    open ? (
+      <div data-testid="elevated-modal" data-elevated={String(elevated)} />
+    ) : null,
+}))
 vi.mock("react-i18next", async (importActual) => {
   const actual = await importActual<typeof import("react-i18next")>()
   return { ...actual, useTranslation: () => ({ t: (k: string) => k }) }
@@ -123,6 +152,8 @@ afterEach(() => {
   window.localStorage.clear()
   orgsData.data = []
   orgsData.isLoading = false
+  scopeState.mockReturnValue("missing")
+  canElevateInApp.mockReturnValue(true)
   for (const k of Object.keys(healthByOrg)) delete healthByOrg[k]
 })
 
@@ -152,6 +183,128 @@ describe("SettingsPage hidden organizations", () => {
     await userEvent.click(screen.getByText("settings.hiddenOrgs.unhide"))
     expect(screen.queryByText("acme")).toBeNull()
     expect(screen.getByText("settings.hiddenOrgs.empty")).toBeTruthy()
+  })
+})
+
+describe("SettingsPage elevated permissions", () => {
+  it("hides the section for a user who owns no ready org", () => {
+    // Students share this page; offering them delete_repo would widen the blast
+    // radius of a stolen token for no benefit (#655).
+    orgsData.data = [
+      {
+        org: { login: "member-org", id: 1 },
+        membership: { role: "member" },
+        classroom50: { status: "ready" },
+      },
+    ]
+    renderPage()
+    expect(screen.queryByText("settings.elevatedScope.heading")).toBeNull()
+  })
+
+  const asOwner = () => {
+    orgsData.data = [
+      {
+        org: { login: "cs50", id: 42 },
+        membership: { role: "admin" },
+        classroom50: { status: "ready" },
+      },
+    ]
+  }
+
+  it("offers only the request action when the permission is missing", () => {
+    asOwner()
+    scopeState.mockReturnValue("missing")
+    renderPage()
+    expect(
+      screen.getByText("settings.elevatedScope.status.missing"),
+    ).toBeTruthy()
+    expect(
+      screen.getByText("settings.elevatedScope.requestButton"),
+    ).toBeTruthy()
+    expect(screen.queryByText("settings.elevatedScope.removeButton")).toBeNull()
+  })
+
+  it("offers the remove action only when the permission is observed", () => {
+    asOwner()
+    scopeState.mockReturnValue("granted")
+    renderPage()
+    expect(
+      screen.getByText("settings.elevatedScope.status.granted"),
+    ).toBeTruthy()
+    expect(screen.getByText("settings.elevatedScope.removeButton")).toBeTruthy()
+  })
+
+  it("never offers to remove a permission it could not read", () => {
+    // An unknown session (fine-grained PAT) must not be told it holds the
+    // permission, and must not be offered a revoke that swaps its token.
+    asOwner()
+    scopeState.mockReturnValue("unknown")
+    renderPage()
+    expect(
+      screen.getByText("settings.elevatedScope.status.unknown"),
+    ).toBeTruthy()
+    expect(screen.queryByText("settings.elevatedScope.removeButton")).toBeNull()
+  })
+
+  it("disables the request action once the permission is observed", () => {
+    asOwner()
+    scopeState.mockReturnValue("granted")
+    renderPage()
+    expect(
+      screen
+        .getByText("settings.elevatedScope.requestButton")
+        .closest("button")!.disabled,
+    ).toBe(true)
+  })
+
+  it("keeps the request action available when scopes are unreadable", () => {
+    // An unknown session still needs a way to ask, since we can't prove it holds
+    // the permission.
+    asOwner()
+    scopeState.mockReturnValue("unknown")
+    renderPage()
+    expect(
+      screen
+        .getByText("settings.elevatedScope.requestButton")
+        .closest("button")!.disabled,
+    ).toBe(false)
+  })
+
+  it("asks to grant when requesting, and to drop when removing", async () => {
+    asOwner()
+    scopeState.mockReturnValue("missing")
+    renderPage()
+
+    await userEvent.click(
+      screen.getByText("settings.elevatedScope.requestButton"),
+    )
+    expect(screen.getByTestId("elevated-modal").dataset.elevated).toBe("true")
+    cleanup()
+
+    scopeState.mockReturnValue("granted")
+    renderPage()
+    await userEvent.click(
+      screen.getByText("settings.elevatedScope.removeButton"),
+    )
+    expect(screen.getByTestId("elevated-modal").dataset.elevated).toBe("false")
+  })
+
+  it("tells a PAT session to replace its token instead of offering a re-auth", async () => {
+    // A PAT's permissions are fixed at creation, so the OAuth elevation flow
+    // can't add the scope — it would just swap the session for a different kind
+    // of token. Offer the instruction, not the button.
+    asOwner()
+    scopeState.mockReturnValue("missing")
+    canElevateInApp.mockReturnValue(false)
+    renderPage()
+
+    expect(screen.getByText("settings.elevatedScope.patNote")).toBeTruthy()
+    expect(
+      screen.queryByText("settings.elevatedScope.requestButton"),
+    ).toBeNull()
+    expect(screen.queryByText("settings.elevatedScope.removeButton")).toBeNull()
+    // The revoke link points at the OAuth grant page, which a PAT never used.
+    expect(screen.queryByText("auth.elevated.revokeLink")).toBeNull()
   })
 })
 

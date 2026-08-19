@@ -336,11 +336,13 @@ Classroom 50 authenticates the same way the GitHub CLI does, using GitHub's
 to a single organization's repositories — so the grant covers your repos even
 though Classroom 50 only acts on classroom ones. This matches the CLI's behavior.
 
-### Why does signing in ask for permission to "Delete repositories"?
+### Why does tearing down an organization ask for an extra permission?
 
-One feature uses it: **Tear down organization**, which resets an organization
-by deleting the repositories Classroom 50 manages, and only after you type an
-explicit confirmation. Nothing else ever deletes a repository. See
+Signing in does not request permission to delete repositories. One feature needs
+it: **Tear down organization**, which resets an organization by deleting every
+repository in it, and only after you type an explicit confirmation. When you use
+it, Classroom 50 asks you to request that permission and sign in again. Nothing
+else ever deletes a repository. See
 [the full explanation](GitHub-Integration#2-teacher-authentication) in GitHub
 Integration.
 

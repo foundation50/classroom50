@@ -443,6 +443,16 @@
     "missingScopesBody_other": "This app needs the scopes <scopes>{{scopes}}</scopes>. Some actions may fail until they are granted.",
     "reauthorize": "Re-authorize",
     "reauthorizeHint": "If re-authorizing doesn't clear this, an organization owner may need to approve the app in the org's OAuth policy settings.",
+    "elevated": {
+      "title": "Request permission to delete repositories",
+      "body": "Tearing down an organization deletes repositories. Sign in again to grant that access. It stays authorized for Classroom 50 until you revoke it on GitHub.",
+      "revokeTitle": "Stop using permission to delete repositories",
+      "revokeBody": "Sign in again to get a token without it. Your earlier token stays valid at GitHub until you revoke this app's access there.",
+      "revokeLink": "Review this app's access on GitHub",
+      "browserButton": "Continue in browser",
+      "deviceButton": "Use a device code",
+      "deviceHint": "Use a device code when the browser sign-in can't return to this page, such as on localhost."
+    },
     "patTitleClassic": "Sign in with a classic personal access token",
     "patTitleFineGrained": "Sign in with a fine-grained personal access token",
     "patClassicIntro": "A classic token works across every organization you own.",
@@ -1039,6 +1049,18 @@
       "empty": "No organizations with Classroom 50 set up yet.",
       "expires": "Expires {{date}}",
       "manage": "Manage"
+    },
+    "elevatedScope": {
+      "heading": "Elevated permissions",
+      "subheading": "Tearing down an organization needs permission to delete repositories, which normal sign-in doesn't request. Grant this permission only when you need it, and revoke it on GitHub when you're done.",
+      "status": {
+        "granted": "This session can delete repositories.",
+        "missing": "This session can't delete repositories.",
+        "unknown": "Your token doesn't report its permissions, so Classroom 50 can't tell whether it can delete repositories."
+      },
+      "requestButton": "Request permission to delete repositories",
+      "removeButton": "Stop using this permission",
+      "patNote": "You signed in with a personal access token, so its permissions are fixed when you create it on GitHub. To change what this session can do, create a token with the permissions you need and sign in again."
     },
     "motion": {
       "heading": "Animations",
@@ -1856,7 +1878,24 @@
       "confirmBodyCannotUndo": "This cannot be undone.",
       "repositoriesHeading": "Repositories",
       "classroomTeamsHeading": "Classroom teams",
-      "executeError": "Teardown failed. Some repositories may not have been deleted."
+      "executeError": "Teardown failed. Some repositories may not have been deleted.",
+      "insufficientPermission": "Insufficient permission",
+      "insufficientPermissionHelp": "Teardown deletes repositories. Normal sign-in doesn't request permission to delete them, so request elevated permissions to continue.",
+      "insufficientPermissionHelpPat": "Teardown deletes repositories, and this session's token doesn't allow that. A token's permissions are fixed when you create it on GitHub, so sign in again with one that allows deleting repositories.",
+      "grantButton": "Request elevated permissions",
+      "needsDeleteScopePat": "You signed in with a personal access token, so Classroom 50 can't add this permission for you. Create a token that allows deleting repositories (the delete_repo scope on a classic token, or Administration: read and write on a fine-grained one) and sign in again.",
+      "needsDeleteScope": "GitHub refused to delete repositories (403). Normal sign-in doesn't request permission to delete them. Request elevated permissions and try again, or archive repositories instead.",
+      "needsDeleteScopePartial_one": "GitHub refused to delete repositories (403) after {{count}} was already deleted. That deletion is permanent. Request elevated permissions and run teardown again to finish.",
+      "needsDeleteScopePartial_other": "GitHub refused to delete repositories (403) after {{count}} were already deleted. Those deletions are permanent. Request elevated permissions and run teardown again to finish.",
+      "ssoRequired": "GitHub refused to delete repositories (403). This organization requires SAML single sign-on. Authorize your session for this organization on GitHub, then run teardown again.",
+      "ssoRequiredPartial_one": "GitHub refused to delete repositories (403) after {{count}} was already deleted, and that deletion is permanent. This organization requires SAML single sign-on. Authorize your session for it on GitHub, then run teardown again to finish.",
+      "ssoRequiredPartial_other": "GitHub refused to delete repositories (403) after {{count}} were already deleted, and those deletions are permanent. This organization requires SAML single sign-on. Authorize your session for it on GitHub, then run teardown again to finish.",
+      "forbidden": "GitHub refused to delete repositories (403), and your permissions look sufficient. An organization policy or a protected repository is likely blocking the deletion. Check the organization's settings, then run teardown again.",
+      "forbiddenPartial_one": "GitHub refused to delete repositories (403) after {{count}} was already deleted, and that deletion is permanent. Your permissions look sufficient, so an organization policy or a protected repository is likely blocking the rest. Check the organization's settings, then run teardown again to finish.",
+      "forbiddenPartial_other": "GitHub refused to delete repositories (403) after {{count}} were already deleted, and those deletions are permanent. Your permissions look sufficient, so an organization policy or a protected repository is likely blocking the rest. Check the organization's settings, then run teardown again to finish.",
+      "rateLimited": "GitHub rate-limited the deletions before any repository was deleted. Wait a moment, then run teardown again.",
+      "rateLimitedPartial_one": "GitHub rate-limited the deletions after {{count}} was already deleted, and that deletion is permanent. Wait a moment, then run teardown again to finish.",
+      "rateLimitedPartial_other": "GitHub rate-limited the deletions after {{count}} were already deleted, and those deletions are permanent. Wait a moment, then run teardown again to finish."
     },
     "preflight": {
       "categoryServiceToken": "service token",

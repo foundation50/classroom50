@@ -10,7 +10,11 @@ import {
   type PropsWithChildren,
 } from "react"
 import { useTranslation } from "react-i18next"
-import { DEFAULT_GITHUB_SCOPE, GITHUB_OAUTH_CLIENT_ID } from "./constants"
+import {
+  DEFAULT_GITHUB_SCOPE,
+  ELEVATED_GITHUB_SCOPE,
+  GITHUB_OAUTH_CLIENT_ID,
+} from "./constants"
 import {
   buildGithubAuthorizeUrl,
   exchangeWebCode,
@@ -47,13 +51,21 @@ import {
   clearGithubToken,
   consumeOAuthSession,
   getStoredGithubClientId,
+  getStoredAuthMethod,
   getStoredGithubScope,
   getStoredGithubToken,
   persistGithubClientId,
   persistGithubToken,
   saveOAuthSession,
 } from "./storage"
-import type { DeviceAuthState, GithubAuthScreen, PatTokenType } from "./types"
+import type {
+  AuthMethod,
+  DeviceAuthState,
+  GithubAuthScreen,
+  PatTokenType,
+  SignInOptions,
+  WebSignInOptions,
+} from "./types"
 import type { AuthStatus } from "@/types/router"
 
 // Translator shape used for the auth error strings. Matches the subset of
@@ -213,18 +225,27 @@ export function recoverStrandedExchange(
   return current === "exchanging" ? "config" : current
 }
 
+// The screen a device flow returns to once it stops: the one the session is
+// actually in. Hardcoding "config" would park an authenticated session on the
+// login surface.
+export function idleScreen(token: string | null): GithubAuthScreen {
+  return token ? "authed" : "config"
+}
+
 function sleep(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve) => {
-    const timer = window.setTimeout(resolve, ms)
+    // One AbortController spans a whole device flow (~180 sleeps), so a listener
+    // that only self-removes on abort would pile up for the flow's lifetime.
+    const onAbort = () => {
+      window.clearTimeout(timer)
+      resolve()
+    }
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", onAbort)
+      resolve()
+    }, ms)
 
-    signal.addEventListener(
-      "abort",
-      () => {
-        window.clearTimeout(timer)
-        resolve()
-      },
-      { once: true },
-    )
+    signal.addEventListener("abort", onAbort, { once: true })
   })
 }
 
@@ -235,6 +256,12 @@ function useGithubAuthState() {
   const { t } = useTranslation()
   const isOnline = useOnlineStatus()
   const abortRef = useRef<AbortController | null>(null)
+  // Bumped whenever a device flow is cancelled or fails. `startDeviceFlow`
+  // captures the current value and its callbacks no-op if it changed, because
+  // the device-code request itself is not abortable: abortRef only exists once
+  // polling starts, so without this a cancel during the in-flight request lets a
+  // poll start (and swap the session token) with no UI attached.
+  const deviceGenRef = useRef(0)
   // Deep link (#71) stashed at code-exchange, consumed by the status-driven
   // effect below so navigation runs against an authenticated router context.
   const pendingReturnToRef = useRef<string | null>(null)
@@ -242,7 +269,15 @@ function useGithubAuthState() {
   const [screen, setScreen] = useState<GithubAuthScreen>("config")
   const [clientId, setClientId] = useState(GITHUB_OAUTH_CLIENT_ID)
   const [token, setToken] = useState<string | null>(null)
+  // Mirror of `token` for callbacks that only read it when invoked. Depending on
+  // `token` instead would churn their identity on every sign-in, and a consumer
+  // keying a cleanup effect off one would stop being unmount-only.
+  const tokenRef = useRef(token)
   const [tokenScope, setTokenScope] = useState("")
+  // How the live session signed in; null until restored/known. Only an OAuth
+  // session can be re-issued in-app, so this gates whether a missing
+  // destructive scope offers a re-auth or a replace-your-token warning (#655).
+  const [authMethod, setAuthMethod] = useState<AuthMethod | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Scoped to the PAT prompt so a token-entry failure surfaces on that screen
   // without disturbing the config screen's `error`.
@@ -260,6 +295,10 @@ function useGithubAuthState() {
   // /login can explain why the user was signed out. A deliberate signOut()
   // clears it.
   const [sessionExpired, setSessionExpired] = useState(false)
+
+  useEffect(() => {
+    tokenRef.current = token
+  }, [token])
 
   const githubUserQuery = useQuery({
     queryKey: ["github", "user", token],
@@ -306,11 +345,16 @@ function useGithubAuthState() {
   // authenticated and the /login guard redirects into the app. Until then the
   // card shows a spinner (no interstitial success splash).
   const completeSignIn = useCallback(
-    (data: { access_token: string; scope?: string }) => {
+    (data: {
+      access_token: string
+      scope?: string
+      authMethod: AuthMethod
+    }) => {
       log.info("sign-in complete, token acquired")
-      persistGithubToken(data.access_token, data.scope || "")
+      persistGithubToken(data.access_token, data.scope || "", data.authMethod)
       setToken(data.access_token)
       setTokenScope(data.scope || "")
+      setAuthMethod(data.authMethod)
       setSessionExpired(false)
       setDevice(null)
       setScreen("authed")
@@ -344,7 +388,11 @@ function useGithubAuthState() {
           // govern its per-resource permissions. It carries an empty granted
           // scope so useMissingScopes stays fail-open (no spurious banner).
           if (result.kind === "fine-grained-ok") {
-            completeSignIn({ access_token: token, scope: "" })
+            completeSignIn({
+              access_token: token,
+              scope: "",
+              authMethod: "pat",
+            })
             return
           }
 
@@ -360,7 +408,11 @@ function useGithubAuthState() {
             return
           }
 
-          completeSignIn({ access_token: token, scope: result.scopes })
+          completeSignIn({
+            access_token: token,
+            scope: result.scopes,
+            authMethod: "pat",
+          })
         },
         onError: (err) => {
           if (err instanceof GitHubUserFetchError && err.status === 401) {
@@ -400,6 +452,7 @@ function useGithubAuthState() {
     if (storedToken) {
       log.info("restored stored session")
       setToken(storedToken)
+      setAuthMethod(getStoredAuthMethod())
       setScreen("authed")
     } else {
       // Dev-only: skip the sign-in screen when VITE_GITHUB_PAT holds a valid PAT
@@ -427,7 +480,11 @@ function useGithubAuthState() {
         void runDevAutoLoginOnce(envPat)
           .then((res) => {
             if (res)
-              completeSignIn({ access_token: res.token, scope: res.scope })
+              completeSignIn({
+                access_token: res.token,
+                scope: res.scope,
+                authMethod: "pat",
+              })
           })
           .finally(() => setAutoLoginPending(false))
       }
@@ -505,7 +562,7 @@ function useGithubAuthState() {
       },
       {
         onSuccess: (data) => {
-          completeSignIn(data)
+          completeSignIn({ ...data, authMethod: "oauth" })
           // Defer the return until status is "authenticated" (effect below);
           // navigating now would race the router context and bounce through the
           // _authed guard (#71).
@@ -539,61 +596,75 @@ function useGithubAuthState() {
     return () => window.removeEventListener("pageshow", onPageShow)
   }, [])
 
-  const validateConfig = useCallback(() => {
-    const trimmedClientId = clientId.trim()
+  const validateConfig = useCallback(
+    (opts?: SignInOptions) => {
+      const trimmedClientId = clientId.trim()
 
-    if (!trimmedClientId) {
-      setError(t("auth.errorClientIdMissing"))
-      return null
-    }
+      if (!trimmedClientId) {
+        setError(t("auth.errorClientIdMissing"))
+        return null
+      }
 
-    persistGithubClientId(trimmedClientId)
-    setError(null)
+      persistGithubClientId(trimmedClientId)
+      setError(null)
 
-    return {
-      clientId: trimmedClientId,
-      scope: DEFAULT_GITHUB_SCOPE,
-    }
-  }, [clientId, t])
+      return {
+        clientId: trimmedClientId,
+        // Elevation is one-shot: the broadened scope is chosen at call time and
+        // never persisted, so a later fresh login drops back to base (#655).
+        scope: opts?.elevated ? ELEVATED_GITHUB_SCOPE : DEFAULT_GITHUB_SCOPE,
+      }
+    },
+    [clientId, t],
+  )
 
-  const startWebFlow = useCallback(async () => {
-    const config = validateConfig()
-    if (!config) return
+  const startWebFlow = useCallback(
+    async (opts?: WebSignInOptions) => {
+      const config = validateConfig(opts)
+      if (!config) return
 
-    log.info("starting web (PKCE) sign-in flow")
-    setScreen("exchanging")
+      const elevated = opts?.elevated ?? false
+      log.info("starting web (PKCE) sign-in flow", { elevated })
+      setScreen("exchanging")
 
-    const verifier = generateVerifier()
-    const challenge = await deriveChallenge(verifier)
-    const oauthState = randomBase64Url(16)
+      const verifier = generateVerifier()
+      const challenge = await deriveChallenge(verifier)
+      const oauthState = randomBase64Url(16)
 
-    // Stash the deep link (from /login?redirect=) in the OAuth session so it
-    // survives the GitHub round-trip; restored after the code exchange (#71).
-    const returnTo = new URLSearchParams(window.location.search).get("redirect")
+      // Stash the deep link in the OAuth session so it survives the GitHub
+      // round-trip; restored after the code exchange (#71). A caller mid-task
+      // (the elevation modal) passes its own path so the redirect returns there
+      // instead of the dashboard; otherwise this is /login?redirect=.
+      const returnTo =
+        opts?.returnTo ??
+        new URLSearchParams(window.location.search).get("redirect")
 
-    saveOAuthSession({
-      verifier,
-      state: oauthState,
-      clientId: config.clientId,
-      scope: config.scope,
-      returnTo,
-    })
+      saveOAuthSession({
+        verifier,
+        state: oauthState,
+        clientId: config.clientId,
+        scope: config.scope,
+        returnTo,
+      })
 
-    window.location.href = buildGithubAuthorizeUrl({
-      clientId: config.clientId,
-      scope: config.scope,
-      state: oauthState,
-      challenge,
-    })
-  }, [validateConfig])
+      window.location.href = buildGithubAuthorizeUrl({
+        clientId: config.clientId,
+        scope: config.scope,
+        state: oauthState,
+        challenge,
+      })
+    },
+    [validateConfig],
+  )
 
   const failDeviceFlow = useCallback((message: string) => {
     log.warn("device flow failed", { record: true })
+    deviceGenRef.current += 1
     abortRef.current?.abort()
     abortRef.current = null
     setError(message)
     setDevice(null)
-    setScreen("config")
+    setScreen(idleScreen(tokenRef.current))
   }, [])
 
   const startDevicePolling = useCallback(
@@ -686,7 +757,11 @@ function useGithubAuthState() {
           return
         }
 
-        completeSignIn({ access_token: data.access_token, scope: data.scope })
+        completeSignIn({
+          access_token: data.access_token,
+          scope: data.scope,
+          authMethod: "oauth",
+        })
 
         return
       }
@@ -694,57 +769,72 @@ function useGithubAuthState() {
     [completeSignIn, failDeviceFlow, t],
   )
 
-  const startDeviceFlow = useCallback(async () => {
-    const config = validateConfig()
-    if (!config) return
+  const startDeviceFlow = useCallback(
+    async (opts?: SignInOptions) => {
+      const config = validateConfig(opts)
+      if (!config) return
 
-    log.info("starting device sign-in flow")
-    setError(null)
+      const elevated = opts?.elevated ?? false
+      log.info("starting device sign-in flow", { elevated })
+      setError(null)
 
-    requestDeviceCodeMutation.mutate(config, {
-      onSuccess: (data) => {
-        log.info("device code issued, awaiting authorization")
-        const intervalSeconds = data.interval || 5
-        const expiresAt = Date.now() + data.expires_in! * 1000
+      // Capture the generation: a cancel (or navigation) while the request is in
+      // flight bumps it, and the callbacks below must then do nothing.
+      const generation = ++deviceGenRef.current
 
-        setDevice({
-          userCode: data.user_code!,
-          verificationUri: data.verification_uri!,
-          deviceCode: data.device_code!,
-          expiresAt,
-          intervalSeconds,
-          attempts: 0,
-          nextPollAt: Date.now() + intervalSeconds * 1000,
-          progress: 0,
-        })
+      requestDeviceCodeMutation.mutate(config, {
+        onSuccess: (data) => {
+          if (generation !== deviceGenRef.current) {
+            log.info("device code issued after cancel, discarding")
+            return
+          }
+          log.info("device code issued, awaiting authorization")
+          const intervalSeconds = data.interval || 5
+          const expiresAt = Date.now() + data.expires_in! * 1000
 
-        setScreen("device-prompt")
+          setDevice({
+            userCode: data.user_code!,
+            verificationUri: data.verification_uri!,
+            deviceCode: data.device_code!,
+            expiresAt,
+            intervalSeconds,
+            attempts: 0,
+            nextPollAt: Date.now() + intervalSeconds * 1000,
+            progress: 0,
+            elevated,
+          })
 
-        void startDevicePolling({
-          clientId: config.clientId,
-          deviceCode: data.device_code!,
-          expiresAt,
-          initialIntervalSeconds: intervalSeconds,
-        })
-      },
-      onError: (err) => {
-        failDeviceFlow(formatError(t, err))
-      },
-    })
-  }, [
-    failDeviceFlow,
-    requestDeviceCodeMutation,
-    startDevicePolling,
-    validateConfig,
-    t,
-  ])
+          setScreen("device-prompt")
+
+          void startDevicePolling({
+            clientId: config.clientId,
+            deviceCode: data.device_code!,
+            expiresAt,
+            initialIntervalSeconds: intervalSeconds,
+          })
+        },
+        onError: (err) => {
+          if (generation !== deviceGenRef.current) return
+          failDeviceFlow(formatError(t, err))
+        },
+      })
+    },
+    [
+      failDeviceFlow,
+      requestDeviceCodeMutation,
+      startDevicePolling,
+      validateConfig,
+      t,
+    ],
+  )
 
   const cancelDeviceFlow = useCallback(() => {
+    deviceGenRef.current += 1
     abortRef.current?.abort()
     abortRef.current = null
     setDevice(null)
     setError(null)
-    setScreen("config")
+    setScreen(idleScreen(tokenRef.current))
   }, [])
 
   const markDeviceCodeCopied = useCallback(() => {
@@ -806,6 +896,7 @@ function useGithubAuthState() {
       clearGithubToken()
       setToken(null)
       setTokenScope("")
+      setAuthMethod(null)
       setDevice(null)
       setError(null)
       setScreen("config")
@@ -936,6 +1027,7 @@ function useGithubAuthState() {
     screen,
     token,
     tokenScope,
+    authMethod,
     error,
     device,
     deviceStatus,

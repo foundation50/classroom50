@@ -29,15 +29,18 @@ const storage = {
   token: null as string | null,
   clientId: "",
   scope: "",
+  authMethod: null as "oauth" | "pat" | null,
 }
-const persistGithubToken = vi.fn<(token: string, scope?: string) => void>()
+const persistGithubToken =
+  vi.fn<(token: string, scope?: string, authMethod?: string) => void>()
 
 vi.mock("./storage", () => ({
   getStoredGithubToken: () => storage.token,
   getStoredGithubClientId: () => storage.clientId,
   getStoredGithubScope: () => storage.scope,
-  persistGithubToken: (token: string, scope?: string) =>
-    persistGithubToken(token, scope),
+  getStoredAuthMethod: () => storage.authMethod,
+  persistGithubToken: (token: string, scope?: string, authMethod?: string) =>
+    persistGithubToken(token, scope, authMethod),
   persistGithubClientId: vi.fn(),
   clearGithubToken: vi.fn(),
   saveOAuthSession: vi.fn(),
@@ -87,6 +90,7 @@ beforeEach(() => {
   storage.token = null
   storage.clientId = ""
   storage.scope = ""
+  storage.authMethod = null
   window.history.replaceState({}, "", "/")
 })
 
@@ -110,7 +114,13 @@ describe("dev auto-login effect wiring", () => {
     })
 
     await waitFor(() => expect(result.current.token).toBe("ghp_valid"))
-    expect(persistGithubToken).toHaveBeenCalledWith("ghp_valid", FULL_SCOPES)
+    // The third argument records HOW the session signed in, so a later missing
+    // scope is reported as "replace your token", not an OAuth re-auth (#655).
+    expect(persistGithubToken).toHaveBeenCalledWith(
+      "ghp_valid",
+      FULL_SCOPES,
+      "pat",
+    )
     expect(result.current.screen).toBe("authed")
     expect(fetchGithubUserWithScopes).toHaveBeenCalledWith("ghp_valid")
   })
@@ -209,7 +219,11 @@ describe("dev auto-login effect wiring", () => {
     // Validation resolves after the initiating instance is gone.
     resolveValidation({ user: { login: "octocat" }, scopes: FULL_SCOPES })
     await waitFor(() =>
-      expect(persistGithubToken).toHaveBeenCalledWith("ghp_valid", FULL_SCOPES),
+      expect(persistGithubToken).toHaveBeenCalledWith(
+        "ghp_valid",
+        FULL_SCOPES,
+        "pat",
+      ),
     )
   })
 
@@ -243,7 +257,11 @@ describe("dev auto-login effect wiring", () => {
       expect(fetchGithubUserWithScopes).toHaveBeenCalledTimes(2),
     )
     await waitFor(() =>
-      expect(persistGithubToken).toHaveBeenCalledWith("ghp_valid", FULL_SCOPES),
+      expect(persistGithubToken).toHaveBeenCalledWith(
+        "ghp_valid",
+        FULL_SCOPES,
+        "pat",
+      ),
     )
   })
 

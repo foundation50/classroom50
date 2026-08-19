@@ -249,8 +249,8 @@ var FeedbackTemplatePaths = []string{
 //
 // delete_repo is deliberately NOT here: it stays opt-in for `gh teacher
 // teardown` (`gh teacher login -s delete_repo`) so nobody wipes an org by
-// accident. The web GUI intentionally requests a superset (adds read:user and
-// delete_repo), separate from this CLI-parity set.
+// accident. The web GUI matches that posture — it adds read:user to this set but
+// requests delete_repo only on demand, when a teacher elevates for teardown.
 var requiredOAuthScopes = []string{"admin:org", "read:org", "repo", "workflow"}
 
 // RequiredOAuthScopes returns the unified OAuth scope set (a fresh copy so

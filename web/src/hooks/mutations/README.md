@@ -27,8 +27,9 @@ no → call site.
 - `useSyncRoster` — invalidate-only (the common shape).
 - `useEnrollOrInviteStudent` — optimistic seed-and-reconcile with a
   data-consistency `onEnrolled` callback in the hook.
-- `useExecuteTeardown` — owns invalidation on success AND rate-limit error, yet
-  still re-throws so the caller's `ConfirmModal` shows the failure inline.
+- `useExecuteTeardown` — owns invalidation on success and on any abort that
+  actually deleted something, yet still re-throws so the caller's `ConfirmModal`
+  shows the failure inline.
 
 Hooks stay `t()`-free: a caller passes pre-translated strings via a `messages`
 bag. The boundary is a convention, not yet lint-enforced (P7 earmarks

@@ -1,6 +1,8 @@
-import { DEFAULT_GITHUB_SCOPE } from "./constants"
+import { BASE_GITHUB_SCOPES } from "./constants"
 
-export const REQUIRED_SCOPES = DEFAULT_GITHUB_SCOPE.split(/\s+/).filter(Boolean)
+// The scopes a normal sign-in must hold. Sourced from the same array the login
+// scope string is built from, so the two can't drift.
+export const REQUIRED_SCOPES: readonly string[] = BASE_GITHUB_SCOPES
 
 // GitHub normalizes granted scopes and a broader scope implies narrower ones,
 // so we map each grantable scope -> the scopes it also satisfies (e.g., `repo`
@@ -40,6 +42,15 @@ export function expandScopes(granted: string): Set<string> {
 // every required scope reported missing; callers decide whether an absent
 // signal should suppress the warning (see useMissingScopes).
 export function missingScopes(granted: string): string[] {
+  return missingFrom(REQUIRED_SCOPES, granted)
+}
+
+// Which of `required` the granted string doesn't satisfy, so callers with their
+// own required set (e.g. the elevated scopes) reuse one implication-aware check.
+export function missingFrom(
+  required: readonly string[],
+  granted: string,
+): string[] {
   const have = expandScopes(granted)
-  return REQUIRED_SCOPES.filter((scope) => !have.has(scope))
+  return required.filter((scope) => !have.has(scope))
 }

@@ -18,7 +18,10 @@
 //                  policy/kill switch, rulesets) + Members: write (invite/remove
 //                  members AND classroom-team CRUD, GitHub groups team
 //                  management under the Members permission)
-//   delete_repo -> covered by repository Administration: write
+//   delete_repo -> covered by repository Administration: write. (A fine-grained
+//                  sign-in token grants deletion up front; the OAuth path
+//                  instead treats delete_repo as elevated-only and requests it
+//                  on demand, so the two paths intentionally differ — #655.)
 //   Pages       -> org-setup reads GET .../pages and PUTs the Pages config
 //                  (a read-only Pages permission 403s the pre-flight check).
 //   Secrets     -> saving the service token PUTs an Actions secret (putRepoSecret)

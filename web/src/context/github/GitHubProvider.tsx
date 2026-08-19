@@ -12,7 +12,8 @@ import {
   type GitHubResponseSignal,
 } from "@/github-core/client"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { missingScopes } from "@/auth/scopes"
+import { missingScopes, missingFrom } from "@/auth/scopes"
+import { ELEVATED_GITHUB_SCOPES } from "@/auth/constants"
 import { GITHUB_PROXY_BASE } from "@/github-core/workerProxy"
 import { observeResponse } from "@/lib/diagnostics/observed"
 import { logger } from "@/lib/logger"
@@ -105,15 +106,20 @@ export function useOptionalGitHubClient() {
   return useContext(GitHubClientContext)
 }
 
-// Required scopes the current token is missing, for the scope-warning banner.
-// Prefers the live X-OAuth-Scopes observation; falls back to the login scope
-// string. Fails open: with no value from either source, returns [] so the
-// banner stays hidden rather than nagging about scopes we can't verify.
-export function useMissingScopes(): string[] {
+// The granted-scope string to judge the session by. `||`, not `??`: a
+// present-but-empty x-oauth-scopes header is "" (a classic token with no scopes,
+// or any header-rewriting hop) and would beat a usable login scope.
+function useGrantedScopes(): string {
   const { tokenScope } = useGithubAuth()
   const observed = useContext(ObservedContext)
+  return observed?.signal.scopes || tokenScope
+}
 
-  const granted = observed?.signal.scopes ?? tokenScope
+// Required scopes the current token is missing, for the scope-warning banner.
+// Fails open: with nothing knowable from either source, returns [] so the banner
+// stays hidden rather than nagging about scopes we can't verify.
+export function useMissingScopes(): string[] {
+  const granted = useGrantedScopes()
 
   return useMemo(() => {
     if (!granted) return []
@@ -123,4 +129,44 @@ export function useMissingScopes(): string[] {
     }
     return missing
   }, [granted])
+}
+
+// Whether the current token carries the elevated delete_repo scope (#655).
+//
+// Deliberately tri-state. The same fact needs opposite defaults in two places:
+// gating a destructive action should fail open (GitHub is the real authority and
+// teardown's 403 backstop aborts before anything irreversible), while *telling*
+// the user their current state must never claim a permission we couldn't read.
+//
+// "unknown" covers a fine-grained PAT (no X-OAuth-Scopes header) and any session
+// whose scopes we can't introspect.
+export type DeleteRepoScopeState = "granted" | "missing" | "unknown"
+
+export function useDeleteRepoScopeState(): DeleteRepoScopeState {
+  const granted = useGrantedScopes()
+
+  return useMemo(() => {
+    if (!granted) return "unknown"
+    return missingFrom(ELEVATED_GITHUB_SCOPES, granted).length === 0
+      ? "granted"
+      : "missing"
+  }, [granted])
+}
+
+// Gate for destructive actions: fails open on "unknown" so a session we can't
+// introspect (a fine-grained PAT can delete via Administration: write) isn't
+// blocked from an action GitHub may well permit.
+export function useHasDeleteRepoScope(): boolean {
+  return useDeleteRepoScopeState() !== "missing"
+}
+
+// Whether an in-app re-auth can actually add a missing scope. Only an OAuth
+// session can: a PAT's permissions are fixed at creation on GitHub, so offering
+// elevation to one would run an OAuth flow that silently replaces their session
+// with a different kind of token. Unknown (a session stored before the method
+// was tracked) is treated as OAuth — that was the only in-app flow that could
+// have produced a scope-bearing session, and the 403 backstop still governs.
+export function useCanElevateInApp(): boolean {
+  const { authMethod } = useGithubAuth()
+  return authMethod !== "pat"
 }

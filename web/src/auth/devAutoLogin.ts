@@ -88,7 +88,7 @@ export function runDevAutoLoginOnce(
       const scope = result.kind === "ok" ? result.scopes : ""
       // Persist immediately so a remount restores the session even if the mount
       // that started this validation was already torn down.
-      persistGithubToken(envPat, scope)
+      persistGithubToken(envPat, scope, "pat")
       log.info("dev auto-login validated; token persisted")
       return { token: envPat, scope }
     } catch (err) {

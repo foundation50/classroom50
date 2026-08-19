@@ -73,15 +73,22 @@ warns and asks for confirmation before proceeding. See
 | `workflow` | Committing the `classroom50` repository's workflow files during `init` (GitHub 404s the write without it). |
 
 > [!NOTE]
-> **Why the web app's sign-in asks for "Delete repositories".** Signing in at
-> classroom50.org requests `delete_repo` in addition to the set above. It is
-> used by exactly one feature: **Tear down organization** (org settings →
-> Danger zone), which resets an org by deleting the repositories Classroom 50
-> manages — and it only runs when you type an explicit confirmation. Nothing
-> else deletes repositories. Classroom 50 has no server: the token stays in
-> your browser, so nobody but you can act on your org with it. If you prefer,
-> the CLIs never request `delete_repo` unless you opt in with
-> `gh teacher login -s delete_repo`.
+> **Tearing down an organization needs an extra permission.** Signing in does
+> not request `delete_repo`. Exactly one feature needs it: **Tear down
+> organization**, in the organization's settings under **Danger zone**. It
+> resets an organization by deleting **every** repository in it, not only the
+> ones Classroom 50 created. When you use it, Classroom 50 asks you to request
+> that permission and sign in again, and teardown still runs only after you type
+> an explicit confirmation. Nothing else deletes repositories. Classroom 50 has
+> no server: the token stays in your browser, so nobody but you can act on your
+> organization with it. The CLIs work the same way: they never request
+> `delete_repo` unless you opt in with `gh teacher login -s delete_repo`.
+>
+> **If you signed in with a personal access token**, Classroom 50 can't add the
+> permission for you — a token's permissions are fixed when you create it on
+> GitHub. Create one that allows deleting repositories (the `delete_repo` scope
+> on a classic token, or **Administration: read and write** on a fine-grained
+> one) and sign in again.
 
 ### 3. Student authentication
 
