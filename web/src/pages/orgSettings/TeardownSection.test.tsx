@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import type { ReactNode } from "react"
 
 // Assert on stable i18n keys, not English copy.
@@ -26,9 +27,11 @@ vi.mock("@/context/github/GitHubProvider", () => ({
   useHasDeleteRepoScope: () => hasDeleteRepo(),
 }))
 
-const startWebFlow = vi.fn()
-vi.mock("@/auth/useGithubAuth", () => ({
-  useGithubAuth: () => ({ startWebFlow }),
+// The modal owns the web/device choice; here we only assert TeardownSection
+// opens it. Its flow is covered by ElevatedAccessModal's own test.
+vi.mock("@/auth/ElevatedAccessModal", () => ({
+  ElevatedAccessModal: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="elevated-modal" /> : null,
 }))
 
 // Teardown mutations aren't exercised by these render-time assertions; stub them
@@ -68,10 +71,11 @@ describe("TeardownSection scope gate (#655)", () => {
     expect(screen.queryByText("orgSettings.teardown.button")).toBeNull()
   })
 
-  it("requests elevated permissions one-shot when the prompt button is clicked", () => {
+  it("opens the elevated-access modal when the prompt button is clicked", async () => {
     hasDeleteRepo.mockReturnValue(false)
     render(<TeardownSection org="acme" />)
-    screen.getByText("orgSettings.teardown.grantButton").click()
-    expect(startWebFlow).toHaveBeenCalledWith({ elevated: true })
+    expect(screen.queryByTestId("elevated-modal")).toBeNull()
+    await userEvent.click(screen.getByText("orgSettings.teardown.grantButton"))
+    expect(screen.getByTestId("elevated-modal")).toBeTruthy()
   })
 })

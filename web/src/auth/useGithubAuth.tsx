@@ -710,50 +710,55 @@ function useGithubAuthState() {
     [completeSignIn, failDeviceFlow, t],
   )
 
-  const startDeviceFlow = useCallback(async () => {
-    const config = validateConfig()
-    if (!config) return
+  const startDeviceFlow = useCallback(
+    async (opts?: { elevated?: boolean }) => {
+      const config = validateConfig(opts)
+      if (!config) return
 
-    log.info("starting device sign-in flow")
-    setError(null)
+      log.info("starting device sign-in flow", {
+        elevated: opts?.elevated ?? false,
+      })
+      setError(null)
 
-    requestDeviceCodeMutation.mutate(config, {
-      onSuccess: (data) => {
-        log.info("device code issued, awaiting authorization")
-        const intervalSeconds = data.interval || 5
-        const expiresAt = Date.now() + data.expires_in! * 1000
+      requestDeviceCodeMutation.mutate(config, {
+        onSuccess: (data) => {
+          log.info("device code issued, awaiting authorization")
+          const intervalSeconds = data.interval || 5
+          const expiresAt = Date.now() + data.expires_in! * 1000
 
-        setDevice({
-          userCode: data.user_code!,
-          verificationUri: data.verification_uri!,
-          deviceCode: data.device_code!,
-          expiresAt,
-          intervalSeconds,
-          attempts: 0,
-          nextPollAt: Date.now() + intervalSeconds * 1000,
-          progress: 0,
-        })
+          setDevice({
+            userCode: data.user_code!,
+            verificationUri: data.verification_uri!,
+            deviceCode: data.device_code!,
+            expiresAt,
+            intervalSeconds,
+            attempts: 0,
+            nextPollAt: Date.now() + intervalSeconds * 1000,
+            progress: 0,
+          })
 
-        setScreen("device-prompt")
+          setScreen("device-prompt")
 
-        void startDevicePolling({
-          clientId: config.clientId,
-          deviceCode: data.device_code!,
-          expiresAt,
-          initialIntervalSeconds: intervalSeconds,
-        })
-      },
-      onError: (err) => {
-        failDeviceFlow(formatError(t, err))
-      },
-    })
-  }, [
-    failDeviceFlow,
-    requestDeviceCodeMutation,
-    startDevicePolling,
-    validateConfig,
-    t,
-  ])
+          void startDevicePolling({
+            clientId: config.clientId,
+            deviceCode: data.device_code!,
+            expiresAt,
+            initialIntervalSeconds: intervalSeconds,
+          })
+        },
+        onError: (err) => {
+          failDeviceFlow(formatError(t, err))
+        },
+      })
+    },
+    [
+      failDeviceFlow,
+      requestDeviceCodeMutation,
+      startDevicePolling,
+      validateConfig,
+      t,
+    ],
+  )
 
   const cancelDeviceFlow = useCallback(() => {
     abortRef.current?.abort()

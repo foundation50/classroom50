@@ -15,8 +15,8 @@ import {
 import { usePlanTeardown } from "@/hooks/mutations/usePlanTeardown"
 import { useExecuteTeardown } from "@/hooks/mutations/useExecuteTeardown"
 import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
-import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useHasDeleteRepoScope } from "@/context/github/GitHubProvider"
+import { ElevatedAccessModal } from "@/auth/ElevatedAccessModal"
 import SettingsSection from "./SettingsSection"
 import { CalloutDiv, CalloutText } from "@/lib/motionComponents"
 import { logger } from "@/lib/logger"
@@ -40,8 +40,8 @@ const TeardownSection = ({
 }) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { startWebFlow } = useGithubAuth()
   const hasDeleteRepo = useHasDeleteRepoScope()
+  const [elevateOpen, setElevateOpen] = useState(false)
 
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState<TeardownPlan | null>(null)
@@ -127,12 +127,17 @@ const TeardownSection = ({
           <Button
             variant="warning"
             size="sm"
-            onClick={() => void startWebFlow({ elevated: true })}
+            onClick={() => setElevateOpen(true)}
           >
             {t("orgSettings.teardown.grantButton")}
           </Button>
         </Alert>
       )}
+
+      <ElevatedAccessModal
+        open={elevateOpen}
+        onClose={() => setElevateOpen(false)}
+      />
 
       <ConfirmModal
         open={open}

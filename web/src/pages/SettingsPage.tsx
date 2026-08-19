@@ -10,7 +10,8 @@ import {
   cx,
 } from "@/components/ui"
 import { useTranslation } from "react-i18next"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
+import { ShieldCheck, ShieldOff } from "lucide-react"
 import useGetOrgs from "@/hooks/useGetOrgs"
 import {
   isOwnedReadyOrg,
@@ -24,8 +25,8 @@ import { TokenHealthChip } from "@/components/status/TokenHealthChip"
 import { useReducedMotion, type MotionPref } from "@/hooks/useReducedMotion"
 import { useTheme, type ThemePref } from "@/hooks/useTheme"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
-import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useHasDeleteRepoScope } from "@/context/github/GitHubProvider"
+import { ElevatedAccessModal } from "@/auth/ElevatedAccessModal"
 
 // Owned + Classroom 50-ready orgs are the only ones with a manageable service
 // token (a non-owner can't read/set it). The section reads token health for
@@ -129,8 +130,8 @@ function ElevatedPermissionsSection({
   highlighted?: boolean
 }) {
   const { t } = useTranslation()
-  const { startWebFlow } = useGithubAuth()
   const hasDeleteRepo = useHasDeleteRepoScope()
+  const [elevateOpen, setElevateOpen] = useState(false)
 
   return (
     <SettingsSectionCard
@@ -139,21 +140,36 @@ function ElevatedPermissionsSection({
       subheading={t("settings.elevatedScope.subheading")}
       highlighted={highlighted}
     >
-      <div className="flex flex-col gap-3">
-        <p className="text-sm text-base-content/70">
+      <div className="flex flex-col items-start gap-3">
+        <span
+          className={cx(
+            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+            hasDeleteRepo
+              ? "bg-success/10 text-success"
+              : "bg-base-200 text-base-content/70",
+          )}
+        >
+          {hasDeleteRepo ? (
+            <ShieldCheck aria-hidden="true" className="size-3.5" />
+          ) : (
+            <ShieldOff aria-hidden="true" className="size-3.5" />
+          )}
           {hasDeleteRepo
             ? t("settings.elevatedScope.granted")
             : t("settings.elevatedScope.notGranted")}
-        </p>
+        </span>
         <Button
           variant="outline"
           size="sm"
-          className="self-start"
-          onClick={() => void startWebFlow({ elevated: true })}
+          onClick={() => setElevateOpen(true)}
         >
           {t("settings.elevatedScope.grantButton")}
         </Button>
       </div>
+      <ElevatedAccessModal
+        open={elevateOpen}
+        onClose={() => setElevateOpen(false)}
+      />
     </SettingsSectionCard>
   )
 }

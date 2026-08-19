@@ -17,13 +17,14 @@ vi.mock("@/components/settings/LanguageSwitcher", () => ({
   LanguageSwitcher: () => <div data-testid="language-switcher" />,
 }))
 vi.mock("@/hooks/useDocumentTitle", () => ({ useDocumentTitle: () => {} }))
-// The elevated-permissions section reads auth + scope context; stub both so the
-// page renders without a GitHubAuthProvider (this suite mounts the page bare).
-vi.mock("@/auth/useGithubAuth", () => ({
-  useGithubAuth: () => ({ startWebFlow: vi.fn() }),
-}))
+// The elevated-permissions section reads scope context and renders the elevated
+// access modal; stub both so the page renders without a GitHubAuthProvider (this
+// suite mounts the page bare). The modal's flow has its own test.
 vi.mock("@/context/github/GitHubProvider", () => ({
   useHasDeleteRepoScope: () => false,
+}))
+vi.mock("@/auth/ElevatedAccessModal", () => ({
+  ElevatedAccessModal: () => null,
 }))
 vi.mock("react-i18next", async (importActual) => {
   const actual = await importActual<typeof import("react-i18next")>()

@@ -443,6 +443,13 @@
     "missingScopesBody_other": "This app needs the scopes <scopes>{{scopes}}</scopes>. Some actions may fail until they are granted.",
     "reauthorize": "Re-authorize",
     "reauthorizeHint": "If re-authorizing doesn't clear this, an organization owner may need to approve the app in the org's OAuth policy settings.",
+    "elevated": {
+      "title": "Request permission to delete repositories",
+      "body": "Tearing down an organization deletes repositories. Sign in again to grant that access for this session.",
+      "browserButton": "Continue in browser",
+      "deviceButton": "Use a device code",
+      "deviceHint": "Use a device code when the browser sign-in can't return to this page, such as on localhost."
+    },
     "patTitleClassic": "Sign in with a classic personal access token",
     "patTitleFineGrained": "Sign in with a fine-grained personal access token",
     "patClassicIntro": "A classic token works across every organization you own.",
@@ -1042,9 +1049,9 @@
     },
     "elevatedScope": {
       "heading": "Elevated permissions",
-      "subheading": "Destructive actions like tearing down an organization need permission to delete repositories, which normal sign-in does not request. Grant it only when you need it.",
-      "granted": "Elevated permissions (repository deletion) are currently granted for this session.",
-      "notGranted": "Elevated permissions (repository deletion) are not currently granted. Normal sign-in stays least-privilege.",
+      "subheading": "Tearing down an organization needs permission to delete repositories, which normal sign-in doesn't request. Grant it only when you need it.",
+      "granted": "Repository deletion granted",
+      "notGranted": "Repository deletion not granted",
       "grantButton": "Request elevated permissions"
     },
     "motion": {
