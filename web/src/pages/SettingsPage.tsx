@@ -157,6 +157,9 @@ function ElevatedPermissionsSection({
             <Button
               variant="outline"
               size="sm"
+              // Nothing to request when the permission is already observed. Stays
+              // enabled on "unknown" so a session we can't read can still ask.
+              disabled={scopeState === "granted"}
               onClick={() => setElevate(true)}
             >
               {t("settings.elevatedScope.requestButton")}

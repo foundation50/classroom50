@@ -239,9 +239,33 @@ describe("SettingsPage elevated permissions", () => {
     expect(screen.queryByText("settings.elevatedScope.removeButton")).toBeNull()
   })
 
-  it("asks to grant when requesting, and to drop when removing", async () => {
+  it("disables the request action once the permission is observed", () => {
     asOwner()
     scopeState.mockReturnValue("granted")
+    renderPage()
+    expect(
+      screen
+        .getByText("settings.elevatedScope.requestButton")
+        .closest("button")!.disabled,
+    ).toBe(true)
+  })
+
+  it("keeps the request action available when scopes are unreadable", () => {
+    // An unknown session still needs a way to ask, since we can't prove it holds
+    // the permission.
+    asOwner()
+    scopeState.mockReturnValue("unknown")
+    renderPage()
+    expect(
+      screen
+        .getByText("settings.elevatedScope.requestButton")
+        .closest("button")!.disabled,
+    ).toBe(false)
+  })
+
+  it("asks to grant when requesting, and to drop when removing", async () => {
+    asOwner()
+    scopeState.mockReturnValue("missing")
     renderPage()
 
     await userEvent.click(
