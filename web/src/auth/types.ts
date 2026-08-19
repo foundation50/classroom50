@@ -33,6 +33,12 @@ export type DeviceAuthState = {
 export type GithubAuthScreen =
   "config" | "exchanging" | "device-prompt" | "pat-prompt" | "authed"
 
+// Options shared by every sign-in starter. `elevated` broadens the requested
+// scope for one flow only (see auth/constants.ts); `returnTo` survives the
+// GitHub round-trip so a caller mid-task lands back where it was (#71).
+export type SignInOptions = { elevated?: boolean }
+export type WebSignInOptions = SignInOptions & { returnTo?: string }
+
 // Which personal-access-token variant the PAT sign-in prompt guides the user
 // through. Classic spans every org the teacher owns (the multi-org default);
 // fine-grained is scoped to one org.

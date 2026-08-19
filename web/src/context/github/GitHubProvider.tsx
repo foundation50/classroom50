@@ -12,7 +12,7 @@ import {
   type GitHubResponseSignal,
 } from "@/github-core/client"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { missingScopes, expandScopes } from "@/auth/scopes"
+import { missingScopes, missingFrom } from "@/auth/scopes"
 import { ELEVATED_GITHUB_SCOPES } from "@/auth/constants"
 import { GITHUB_PROXY_BASE } from "@/github-core/workerProxy"
 import { observeResponse } from "@/lib/diagnostics/observed"
@@ -147,8 +147,7 @@ export function useDeleteRepoScopeState(): DeleteRepoScopeState {
 
   return useMemo(() => {
     if (!granted) return "unknown"
-    const have = expandScopes(granted)
-    return ELEVATED_GITHUB_SCOPES.every((scope) => have.has(scope))
+    return missingFrom(ELEVATED_GITHUB_SCOPES, granted).length === 0
       ? "granted"
       : "missing"
   }, [granted])

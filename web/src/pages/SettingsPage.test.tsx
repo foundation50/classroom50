@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { HIDDEN_ORGS_STORAGE_KEY } from "@/lib/hiddenOrgsStore"
 import { HiddenOrgsProvider } from "@/context/hiddenOrgs/HiddenOrgsProvider"
+import type { DeleteRepoScopeState } from "@/context/github/GitHubProvider"
 
 vi.mock("@/components/PageShell", () => ({
   default: ({ children }: { children: React.ReactNode }) => (
@@ -20,9 +21,7 @@ vi.mock("@/hooks/useDocumentTitle", () => ({ useDocumentTitle: () => {} }))
 // The elevated-permissions section reads scope state and renders the elevated
 // access modal; stub both so the page renders without a GitHubAuthProvider (this
 // suite mounts the page bare). The modal's flow has its own test.
-const scopeState = vi.fn<() => "granted" | "missing" | "unknown">(
-  () => "missing",
-)
+const scopeState = vi.fn<() => DeleteRepoScopeState>(() => "missing")
 vi.mock("@/context/github/GitHubProvider", async (importActual) => {
   const actual =
     await importActual<typeof import("@/context/github/GitHubProvider")>()

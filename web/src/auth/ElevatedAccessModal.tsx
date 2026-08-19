@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import { useRouterState } from "@tanstack/react-router"
 import { AlertTriangle, ShieldCheck } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { useGithubAuth } from "./useGithubAuth"
 import { GitHubDevicePrompt } from "./GitHubDevicePrompt"
-import { githubOAuthGrantUrl } from "./constants"
+import { RevokeAccessLink } from "./RevokeAccessLink"
 import { Alert, Button, Modal } from "@/components/ui"
 
 // Re-auth for a signed-in teacher who needs to change their delete_repo access.
@@ -48,52 +48,58 @@ export function ElevatedAccessModal({
   // state (already signed in, no device yet) is indistinguishable from the
   // post-success state, so success is only detectable as "the prompt we showed
   // went away".
-  const [sawDevicePrompt, setSawDevicePrompt] = useState(false)
+  const sawDevicePromptRef = useRef(false)
+
+  // Keep the auth/prop callbacks in refs so the effects below depend only on the
+  // state they react to. Both call sites pass an inline `onClose`, and a cleanup
+  // that depends on a callback identity stops being unmount-only the moment that
+  // identity changes.
+  const cancelDeviceFlowRef = useRef(cancelDeviceFlow)
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    cancelDeviceFlowRef.current = cancelDeviceFlow
+    onCloseRef.current = onClose
+  }, [cancelDeviceFlow, onClose])
 
   useEffect(() => {
     if (open) return
-    setSawDevicePrompt(false)
+    sawDevicePromptRef.current = false
     // Closing via the prop is a close too: without this, a parent that flips
     // `open` leaves an owned poll running with no UI attached.
     if (ownsDeviceFlowRef.current) {
       ownsDeviceFlowRef.current = false
-      cancelDeviceFlow()
+      cancelDeviceFlowRef.current()
     }
-  }, [open, cancelDeviceFlow])
+  }, [open])
 
   // Only show a pending code for this dialog's direction, so a flow started
   // elsewhere can't render under the wrong label.
   const showingDevice =
     screen === "device-prompt" && !!device && device.elevated === elevated
 
+  // Retire the dialog once the prompt we were showing is gone and we're signed
+  // in. `!error` is what distinguishes success from failure: a declined or
+  // expired flow also clears the device and returns an already-signed-in session
+  // to "authed", and closing there would discard the only report of it.
   useEffect(() => {
-    if (showingDevice) setSawDevicePrompt(true)
-  }, [showingDevice])
-
-  // Keep the close handler in a ref: both call sites pass an inline arrow and
-  // re-render with the volatile auth context, so depending on its identity would
-  // re-run the watcher below throughout a device flow.
-  const onCloseRef = useRef(onClose)
-  useEffect(() => {
-    onCloseRef.current = onClose
-  }, [onClose])
-
-  // The prompt we were showing is gone and we're signed in: the flow completed,
-  // so retire the dialog instead of falling back to the choice buttons.
-  useEffect(() => {
-    if (sawDevicePrompt && !showingDevice && screen === "authed") {
+    if (showingDevice) {
+      sawDevicePromptRef.current = true
+      return
+    }
+    if (sawDevicePromptRef.current && screen === "authed" && !error) {
+      sawDevicePromptRef.current = false
       ownsDeviceFlowRef.current = false
       onCloseRef.current()
     }
-  }, [sawDevicePrompt, showingDevice, screen])
+  }, [showingDevice, screen, error])
 
   // Abandoning the dialog by navigating away never runs `dismiss`, so release an
   // owned flow here too.
   useEffect(
     () => () => {
-      if (ownsDeviceFlowRef.current) cancelDeviceFlow()
+      if (ownsDeviceFlowRef.current) cancelDeviceFlowRef.current()
     },
-    [cancelDeviceFlow],
+    [],
   )
 
   // The path to return to after the browser round-trip. Read from the router,
@@ -113,8 +119,7 @@ export function ElevatedAccessModal({
     : t("auth.elevated.revokeBody")
 
   // Dismissing must abort the poll: it lives in the auth provider, not here, so
-  // unmounting this dialog would otherwise leave it running (and able to swap
-  // the session token) long after the user cancelled.
+  // unmounting would otherwise leave it running long after the user cancelled.
   const dismiss = () => {
     if (ownsDeviceFlowRef.current) cancelDeviceFlow()
     ownsDeviceFlowRef.current = false
@@ -184,14 +189,7 @@ export function ElevatedAccessModal({
             {!elevated && (
               // Signing in narrows this session's token; only GitHub can revoke
               // the one already issued, so point at where that happens.
-              <a
-                className="link text-xs"
-                href={githubOAuthGrantUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {t("auth.elevated.revokeLink")}
-              </a>
+              <RevokeAccessLink />
             )}
           </div>
         </div>

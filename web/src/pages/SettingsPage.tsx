@@ -25,8 +25,8 @@ import { useReducedMotion, type MotionPref } from "@/hooks/useReducedMotion"
 import { useTheme, type ThemePref } from "@/hooks/useTheme"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
 import { useDeleteRepoScopeState } from "@/context/github/GitHubProvider"
-import { githubOAuthGrantUrl } from "@/auth/constants"
 import { ElevatedAccessModal } from "@/auth/ElevatedAccessModal"
+import { RevokeAccessLink } from "@/auth/RevokeAccessLink"
 
 // Owned + Classroom 50-ready orgs are the only ones with a manageable service
 // token (a non-owner can't read/set it). The section reads token health for
@@ -120,6 +120,9 @@ function ServiceTokensSection({ highlighted }: { highlighted?: boolean }) {
 // Rendered only for owners of a Classroom 50 org, the only people who can run
 // teardown. Students share this Settings page, and offering them the very scope
 // #655 removed would widen the blast radius of a stolen token for no benefit.
+//
+// Rendered as actions, not a preference switch: each direction is a full re-auth
+// the user can abandon, so a switch would misreport state.
 function ElevatedPermissionsSection({
   highlighted,
 }: {
@@ -133,8 +136,6 @@ function ElevatedPermissionsSection({
   const ownsReadyOrg = useMemo(() => orgs.some(isOwnedReadyOrg), [orgs])
   if (!ownsReadyOrg) return null
 
-  // An action, not a preference: each direction is a full re-auth the user can
-  // abandon, so a switch would misreport state.
   return (
     <>
       <SettingsSectionCard
@@ -174,14 +175,7 @@ function ElevatedPermissionsSection({
               token, so GitHub is the only place the grant itself goes away —
               and it's needed most right after the local narrowing, when the
               state is no longer "granted". */}
-          <a
-            className="link text-xs"
-            href={githubOAuthGrantUrl()}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {t("auth.elevated.revokeLink")}
-          </a>
+          <RevokeAccessLink />
         </div>
       </SettingsSectionCard>
       <ElevatedAccessModal

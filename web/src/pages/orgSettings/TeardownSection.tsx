@@ -7,6 +7,7 @@ import { ConfirmModal } from "@/components/modals"
 import { Button, HelpTooltip, MonoLtr, cx } from "@/components/ui"
 import {
   formatTeardownResult,
+  TeardownAbortError,
   TeardownMarkerError,
   TeardownScopeError,
   type TeardownPlan,
@@ -48,10 +49,12 @@ const TeardownSection = ({
 
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState<TeardownPlan | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  // Whether the current error is the scope wall, so the callout can offer the
-  // elevation the message names.
-  const [scopeWalled, setScopeWalled] = useState(false)
+  // `canElevate` rides with the message so the callout can only offer elevation
+  // for the wall elevation actually fixes; the two are always written together.
+  const [error, setError] = useState<{
+    message: string
+    canElevate: boolean
+  } | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
   const openMutation = usePlanTeardown(org)
@@ -60,17 +63,17 @@ const TeardownSection = ({
       onSuccess: (p) => {
         setPlan(p)
         setError(null)
-        setScopeWalled(false)
         setOpen(true)
       },
       onError: (err) => {
         log.warn("teardown plan failed", { org, err })
-        setScopeWalled(false)
-        setError(
-          err instanceof TeardownMarkerError
-            ? err.message
-            : t("orgSettings.teardown.prepareError"),
-        )
+        setError({
+          message:
+            err instanceof TeardownMarkerError
+              ? err.message
+              : t("orgSettings.teardown.prepareError"),
+          canElevate: false,
+        })
       },
     })
 
@@ -97,8 +100,8 @@ const TeardownSection = ({
     >
       {error && (
         <CalloutDiv className="flex flex-col items-start gap-2 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
-          <span>{error}</span>
-          {scopeWalled && (
+          <span>{error.message}</span>
+          {error.canElevate && (
             // The message names elevation as the remedy, so make it reachable.
             <Button
               variant="warning"
@@ -256,15 +259,17 @@ const TeardownSection = ({
             const localized = localizedMessageOf(err)
             if (localized) {
               const message = resolveLocalizedMessage(t, localized)
-              // An abort can arrive after repositories were already deleted, and
-              // that message is the only record of it. Close the confirmation and
-              // show it as the section callout, which survives — stacking the
-              // elevation dialog over it would hide it, and its first button
-              // navigates the page away.
-              if (err instanceof TeardownScopeError) {
+              // Hoist the message out of the confirmation whenever it is the only
+              // record of real data loss, or whenever elevation is the remedy the
+              // message names. The modal's inline error dies with the modal, and
+              // stacking the elevation dialog over it would hide it (that
+              // dialog's first button navigates the page away).
+              const isScopeWall = err instanceof TeardownScopeError
+              const lostData =
+                err instanceof TeardownAbortError && err.deleted.length > 0
+              if (isScopeWall || lostData) {
                 setOpen(false)
-                setError(message)
-                setScopeWalled(true)
+                setError({ message, canElevate: isScopeWall })
                 return
               }
               throw new Error(message, { cause: err })

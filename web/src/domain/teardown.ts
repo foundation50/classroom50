@@ -33,14 +33,11 @@ import { logger } from "@/lib/logger"
 
 const log = logger.scope("mutations:teardown")
 
-const TEARDOWN_DELETE_SCOPE_KEY = "orgSettings.teardown.needsDeleteScope"
-const TEARDOWN_RATE_LIMIT_KEY = "orgSettings.teardown.rateLimited"
-
 // An abort that stopped the run partway. Carries the progress at that moment: a
 // wall can arrive after some repositories are already permanently deleted, so a
 // bare "you need permission" message would hide the data loss. The partial/plain
 // key choice lives here so no subclass can forget it.
-class TeardownAbortError extends Error {
+export class TeardownAbortError extends Error {
   readonly localized: LocalizedMessage
   readonly deleted: string[]
   readonly failed: string[]
@@ -68,7 +65,7 @@ export class TeardownScopeError extends TeardownAbortError {
     super(
       "TeardownScopeError",
       {
-        plain: TEARDOWN_DELETE_SCOPE_KEY,
+        plain: "orgSettings.teardown.needsDeleteScope",
         partial: "orgSettings.teardown.needsDeleteScopePartial",
       },
       deleted,
@@ -106,19 +103,15 @@ export class TeardownMarkerError extends Error {
   }
 }
 
-// Partial progress carried by an abort, if any. Duck-typed so a caller doesn't
-// have to know which of the abort classes it caught: an abort that deleted
-// nothing (a marker re-check failure, a network error) reports none, so callers
-// can skip cache work for a run that changed nothing.
+// Partial progress carried by an abort, if any, so a caller doesn't have to know
+// which of the abort subclasses it caught: an abort that deleted nothing (a
+// marker re-check failure, a network error) reports none, so callers can skip
+// cache work for a run that changed nothing.
 export function teardownProgressOf(
   err: unknown,
 ): { deleted: string[]; failed: string[] } | undefined {
-  if (typeof err !== "object" || err === null) return undefined
-  const candidate = err as { deleted?: unknown; failed?: unknown }
-  if (!Array.isArray(candidate.deleted) || !Array.isArray(candidate.failed)) {
-    return undefined
-  }
-  return { deleted: candidate.deleted, failed: candidate.failed }
+  if (!(err instanceof TeardownAbortError)) return undefined
+  return { deleted: err.deleted, failed: err.failed }
 }
 
 // A secondary rate limit aborted the run. Distinct from TeardownScopeError so
@@ -128,7 +121,7 @@ export class TeardownRateLimitError extends TeardownAbortError {
     super(
       "TeardownRateLimitError",
       {
-        plain: TEARDOWN_RATE_LIMIT_KEY,
+        plain: "orgSettings.teardown.rateLimited",
         partial: "orgSettings.teardown.rateLimitedPartial",
       },
       deleted,

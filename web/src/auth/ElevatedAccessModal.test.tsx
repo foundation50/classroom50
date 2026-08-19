@@ -201,4 +201,23 @@ describe("ElevatedAccessModal (#655)", () => {
     render(<ElevatedAccessModal open onClose={() => {}} />)
     expect(screen.getByText("proxy unreachable")).toBeTruthy()
   })
+
+  it("stays open to report a declined or expired device flow", () => {
+    // failDeviceFlow clears the device and returns an already-signed-in session
+    // to "authed" — the same shape as success. Closing there would discard the
+    // only report of the failure, since the device prompt never renders `error`.
+    const onClose = vi.fn()
+    authState.screen = "device-prompt"
+    authState.device = aDevice
+    const view = render(<ElevatedAccessModal open onClose={onClose} />)
+    expect(screen.getByText("WXYZ-1234")).toBeTruthy()
+
+    authState.screen = "authed"
+    authState.device = null
+    authState.error = "auth.errorDeviceDeclined"
+    view.rerender(<ElevatedAccessModal open onClose={onClose} />)
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByText("auth.errorDeviceDeclined")).toBeTruthy()
+  })
 })

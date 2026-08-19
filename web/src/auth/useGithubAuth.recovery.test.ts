@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   classifyPatResult,
+  idleScreen,
   isTransientUserError,
   isValidationStuck,
   recoverStrandedExchange,
@@ -50,6 +51,19 @@ describe("recoverStrandedExchange", () => {
     expect(recoverStrandedExchange("config")).toBe("config")
     expect(recoverStrandedExchange("device-prompt")).toBe("device-prompt")
     expect(recoverStrandedExchange("authed")).toBe("authed")
+  })
+})
+
+// Where a device flow lands once it stops (cancel or failure). An elevated
+// re-auth runs from inside the authenticated app, so returning to "config" would
+// park a signed-in teacher on the login surface (#655).
+describe("idleScreen", () => {
+  it("returns a signed-in session to the authed screen", () => {
+    expect(idleScreen("gho_token")).toBe("authed")
+  })
+
+  it("returns a session with no token to the login surface", () => {
+    expect(idleScreen(null)).toBe("config")
   })
 })
 

@@ -13,6 +13,15 @@ import { LOG_SCOPE_GITHUB_CLIENT } from "@/lib/logScopes"
 let logInstance: ReturnType<typeof logger.scope> | null = null
 const log = () => (logInstance ??= logger.scope(LOG_SCOPE_GITHUB_CLIENT))
 
+// GitHub's scope headers (X-OAuth-Scopes, X-Accepted-OAuth-Scopes) are
+// comma-delimited; empty entries carry no meaning and are dropped.
+function parseScopeHeader(header: string): string[] {
+  return header
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
 export type GitHubRateLimit = {
   limit: number | null
   remaining: number | null
@@ -109,14 +118,9 @@ export class GitHubAPIError extends Error {
   get isScopeGap() {
     if (this.status !== 403) return false
     if (this.acceptedScopes === null || this.oauthScopes === null) return false
-    const parse = (h: string) =>
-      h
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    const required = parse(this.acceptedScopes)
+    const required = parseScopeHeader(this.acceptedScopes)
     if (required.length === 0) return false
-    const granted = new Set(parse(this.oauthScopes))
+    const granted = new Set(parseScopeHeader(this.oauthScopes))
     // GitHub treats X-Accepted-OAuth-Scopes as "any one of these satisfies the
     // endpoint", so a gap is only when the token holds NONE of them.
     return !required.some((scope) => granted.has(scope))
@@ -130,10 +134,7 @@ export class GitHubAPIError extends Error {
   // token demonstrably lacks the scope the caller cares about.
   grantsScope(scope: string): boolean {
     if (this.oauthScopes === null) return false
-    return this.oauthScopes
-      .split(",")
-      .map((s) => s.trim())
-      .includes(scope)
+    return parseScopeHeader(this.oauthScopes).includes(scope)
   }
 
   // The GitHub SSO authorization URL to send the user to, if the header carried
