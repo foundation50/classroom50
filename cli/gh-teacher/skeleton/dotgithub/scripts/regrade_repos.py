@@ -74,10 +74,11 @@ ASSIGNMENTS_SCHEMA_V1 = "classroom50/assignments/v1"
 SUBMIT_TAG_PREFIX = "submit/"
 
 # Body markers that identify a rate-limit response, and the longest a single
-# retry sleeps. Mirrors collect_scores.py (and, through it, Go's
-# ghutil.IsRateLimited) — GitHub returns throttling as 403 as often as 429, and
-# this file shares that transport (and shared the bug: any 403 read as an
-# under-scoped token).
+# retry sleeps. Mirrors collect_scores.py verbatim (which documents the
+# relationship to Go's ghutil.IsRateLimited: its two markers plus the
+# deliberate "rate limit exceeded" extra) — GitHub returns throttling as 403
+# as often as 429, and this file shares that transport (and shared the bug:
+# any 403 read as an under-scoped token).
 RATE_LIMIT_BODY_MARKERS = (
     "secondary rate limit",
     "rate limit exceeded",

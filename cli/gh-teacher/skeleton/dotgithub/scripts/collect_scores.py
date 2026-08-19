@@ -88,9 +88,15 @@ STAFF_TEAM_PERMISSIONS = {"hta": "pull", "ta": "pull"}
 # Body markers that identify a rate-limit response. GitHub words the
 # secondary limit and the abuse detector differently, and neither always ships
 # a Retry-After header — see rate_limit_verdict. "abuse" is the bare stem on
-# purpose: it catches every "abuse detection mechanism" phrasing, and keeps
-# this in lockstep with the canonical classifier, Go's ghutil.IsRateLimited
-# (cli/shared/ghutil/ghutil.go) — keep the two marker sets aligned.
+# purpose: it catches every "abuse detection mechanism" phrasing. The first
+# two entries mirror the canonical Go classifier, ghutil.IsRateLimited
+# (cli/shared/ghutil/ghutil.go); "rate limit exceeded" is a DELIBERATE
+# Python-only extra — the primary limit's body phrase ("API rate limit
+# exceeded for ..."), normally caught by the X-RateLimit-Remaining check that
+# runs before the marker scan, kept as a fallback for a response whose
+# headers a proxy stripped. Go relies on the header alone there.
+# TestRateLimitMarkersParity_GoVsInlinePython pins both sets exactly, the
+# extra included.
 RATE_LIMIT_BODY_MARKERS = (
     "secondary rate limit",
     "rate limit exceeded",

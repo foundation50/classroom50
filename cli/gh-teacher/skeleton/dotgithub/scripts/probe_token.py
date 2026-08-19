@@ -74,9 +74,10 @@ CONFIG_REPO = "classroom50"
 CLASSROOM_SCHEMA_V1 = "classroom50/classroom/v1"
 
 # Body markers that identify a rate-limit response, and the longest a single
-# retry sleeps. Hand-mirrored from collect_scores.py / regrade_repos.py (and,
-# through them, Go's ghutil.IsRateLimited); pinned against all four by
-# TestRateLimitMarkersParity_GoVsInlinePython.
+# retry sleeps. Hand-mirrored from collect_scores.py / regrade_repos.py, which
+# carry Go's ghutil.IsRateLimited markers plus the deliberate "rate limit
+# exceeded" extra (documented in collect_scores.py); all four copies are
+# pinned exactly by TestRateLimitMarkersParity_GoVsInlinePython.
 #
 # This file needs the distinction MOST: it is the script a teacher runs to ask
 # "is my token healthy?", so reporting a throttled 403 as a missing scope sends
