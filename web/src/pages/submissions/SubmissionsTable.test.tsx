@@ -190,6 +190,34 @@ describe("SubmissionsTable initial loading", () => {
   })
 })
 
+describe("SubmissionsTable settling", () => {
+  it("shimmers the submitter row's volatile cells while settling", () => {
+    const { container } = render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+        settling
+      />,
+    )
+    // The count + last-submitted cells shimmer (settling threads down into them)
+    // and the swap is marked busy for assistive tech.
+    expect(container.querySelectorAll(".skeleton-shimmer").length).toBe(2)
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy()
+  })
+
+  it("shows the submitter row's values with no shimmer when not settling", () => {
+    const { container } = render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    expect(container.querySelector(".skeleton-shimmer")).toBeNull()
+  })
+})
+
 describe("SubmissionsTable empty_repo score cell", () => {
   it("renders a no-grading em-dash instead of a score for an empty_repo assignment", () => {
     render(

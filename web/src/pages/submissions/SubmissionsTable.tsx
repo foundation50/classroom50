@@ -1,4 +1,5 @@
 import { Inbox, SearchX } from "lucide-react"
+import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -68,6 +69,7 @@ import type { SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import type { Student, SubmissionMode } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
+import { blockEnter } from "@/lib/motion"
 
 // Score chip: the shared ScoreBadge (one recipe, one source — see
 // ./ScoreBadge). Imported rather than re-implemented so the manual-grade cell
@@ -247,6 +249,8 @@ const SubmissionsTable = ({
   onPageChange = () => {},
   onPageSizeChange = () => {},
   sort = "name-first",
+  viewSignature = "",
+  settling = false,
 }: {
   scores: SubmissionRow[]
   students: Student[]
@@ -320,6 +324,16 @@ const SubmissionsTable = ({
   // name order under a name sort (the live-eligible view); a time sort renders
   // the sorted submitted rows then non-submitters (a static snapshot view).
   sort?: SubmissionSort
+  // A signature of the current view (search/filter/sort/size/assignment) from
+  // the page. Combined with `page` it keys the row container, so the rows
+  // re-stagger their entrance whenever the visible set changes. Empty (the
+  // default) means the container never re-keys — fine for tests that render a
+  // single static page.
+  viewSignature?: string
+  // The current page's live/detected submission data is still resolving, so the
+  // volatile submitter cells (count, last-submitted) shimmer until they settle.
+  // Off for non-live views and already-settled pages.
+  settling?: boolean
 }) => {
   const { t } = useTranslation()
   const passBar = thresholdFraction ?? null
@@ -471,6 +485,7 @@ const SubmissionsTable = ({
             count={submissionCount}
             onOpen={openDetails}
             staleCount={rest.staleCount}
+            settling={settling}
           />
         </td>
         <td>
@@ -546,6 +561,7 @@ const SubmissionsTable = ({
             late={late}
             gradedAt={rest.gradedAt}
             liveLatestAt={rest.liveLatestAt}
+            settling={settling}
           />
         </td>
         <td>
@@ -629,7 +645,12 @@ const SubmissionsTable = ({
               <th scope="col">{t("submissions.table.colActions")}</th>
             </tr>
           </thead>
-          <tbody>
+          <motion.tbody
+            key={`${viewSignature}:${page}`}
+            variants={blockEnter}
+            initial="initial"
+            animate="animate"
+          >
             {initialLoading && (
               <tr>
                 <td colSpan={5} className="py-10 text-center">
@@ -839,7 +860,7 @@ const SubmissionsTable = ({
                 </td>
               </tr>
             )}
-          </tbody>
+          </motion.tbody>
         </table>
         {showPager && (
           <TablePagination

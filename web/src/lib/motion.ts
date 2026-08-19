@@ -63,6 +63,19 @@ export const calloutVariants: Variants = {
   },
 }
 
+// Whole-block entrance for a table body: a fade + small rise applied to the
+// <tbody> as one unit, replayed when the body re-keys on a visible-set change
+// (sort/filter/search/page). No `scale` (scaling a table section reads wrong)
+// and no `exit` — the re-key remounts the body rather than presence-exiting it.
+export const blockEnter: Variants = {
+  initial: { opacity: 0, y: -4 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: DURATION.base, ease: EASE_OUT },
+  },
+}
+
 // Hover affordance for clickable list rows: a subtle lift + shadow (the former
 // `clickable-row` CSS utility). Pair with a `bg` hover via className.
 export const rowHover = {

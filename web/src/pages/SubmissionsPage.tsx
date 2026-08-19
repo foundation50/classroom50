@@ -451,16 +451,19 @@ const SubmissionsPageContent = () => {
   // page-scoped owners as the live fan-out, reading each repo's default-branch
   // pushes (branch mode) or git tags (tag mode) so a submission shows even
   // without a submit/* release. Grades still come from the snapshot/live side.
-  const { detected: detectedSubmissions, refetch: refetchDetected } =
-    useDetectedSubmissions({
-      org,
-      classroom,
-      assignment,
-      mode: assignmentInfo?.submission_mode,
-      submissionTags: assignmentInfo?.submission_tags,
-      repoOwners: livePageOwners,
-      enabled: liveCapable && submissionTrackingMigrated,
-    })
+  const {
+    detected: detectedSubmissions,
+    isPending: detectedPending,
+    refetch: refetchDetected,
+  } = useDetectedSubmissions({
+    org,
+    classroom,
+    assignment,
+    mode: assignmentInfo?.submission_mode,
+    submissionTags: assignmentInfo?.submission_tags,
+    repoOwners: livePageOwners,
+    enabled: liveCapable && submissionTrackingMigrated,
+  })
 
   // Overlay live presence over the snapshot for a live-capable viewer (snapshot
   // wins per owner for GRADES; live adds a pending row for an as-yet-uncollected
@@ -1347,6 +1350,14 @@ const SubmissionsPageContent = () => {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         sort={sort}
+        // Re-stagger the row entrance whenever the visible set changes (search/
+        // filter/sort/size/assignment). Combined with `page` inside the table.
+        viewSignature={viewSignature}
+        // The current page's live/detected data is still resolving, so the
+        // count + last-submitted cells shimmer until they settle. Gated on
+        // liveCapable so non-live views never show a settling affordance;
+        // detectedPending is already false unless detection is enabled.
+        settling={liveCapable && (livePending || detectedPending)}
       />
       <ConfirmModal
         open={regradeConfirmOpen}
