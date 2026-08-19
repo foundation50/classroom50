@@ -87,17 +87,27 @@ STAFF_TEAM_PERMISSIONS = {"hta": "pull", "ta": "pull"}
 
 # Body markers that identify a rate-limit response. GitHub words the
 # secondary limit and the abuse detector differently, and neither always ships
-# a Retry-After header — see rate_limit_reason.
+# a Retry-After header — see rate_limit_verdict. "abuse" is the bare stem on
+# purpose: it catches every "abuse detection mechanism" phrasing, and keeps
+# this in lockstep with the canonical classifier, Go's ghutil.IsRateLimited
+# (cli/shared/ghutil/ghutil.go) — keep the two marker sets aligned.
 RATE_LIMIT_BODY_MARKERS = (
     "secondary rate limit",
     "rate limit exceeded",
-    "abuse detection",
+    "abuse",
 )
 
 # Longest a single retry sleeps. A secondary rate limit clears in about a
 # minute (GitHub documents that as the minimum wait); the primary hourly budget
 # is not waited out at all — retry_delay declines it.
 MAX_RETRY_SLEEP_SECONDS = 60
+
+# The three verdicts classify() returns — the single vocabulary every HTTP
+# error handler in this file branches on. Plain strings (not an Enum) so the
+# hand-mirrored copy in regrade_repos.py stays a literal-for-literal mirror.
+THROTTLED = "throttled"
+FATAL = "fatal"
+SKIPPABLE = "skippable"
 
 RFC3339_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d"
@@ -461,12 +471,13 @@ def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str
 class RepoIndex:
     """The org's repo names, read once per run and only when something asks.
 
-    Both passes below walk the (team member × assignment) product: 65
-    assignments × 46 members names ~3000 repos, of which only the accepted ones
-    exist. Collection swallows the misses quietly (a 404 on /releases reads as
-    "not submitted"), but the staff-team grant spends two requests on each one
-    — the access check and a PUT that 404s — and warns per repo. That volume is
-    also what pushes the pass into GitHub's secondary rate limit.
+    Both passes below walk the (team member × assignment) product, so the
+    number of names grows as members × assignments and reaches the thousands
+    for an ordinary course, of which only the accepted ones exist. Collection
+    swallows the misses quietly (a 404 on /releases reads as "not submitted"),
+    but the staff-team grant spends two requests on each one — the access check
+    and a PUT that 404s — and warns per repo. That volume is also what pushes
+    the pass into GitHub's secondary rate limit.
 
     A fine-grained PAT lists exactly the repos it is scoped to, which is the
     same set it could grant on or read anyway, so skipping a name that is
@@ -487,13 +498,21 @@ class RepoIndex:
 
     def names(self) -> set[str] | None:
         """The lowercased repo names, or None when they could not be read. The
-        listing runs once; a failure warns once and stays None."""
+        listing runs once; a soft failure warns once and stays None.
+
+        A THROTTLED or FATAL listing failure PROPAGATES instead of degrading:
+        falling back to per-repo probing means issuing the thousands of
+        requests this index exists to avoid, and doing that while GitHub is
+        actively rate limiting is the worst possible response to a rate
+        limit."""
         if self._loaded:
             return self._names
         self._loaded = True
         try:
             names = list_org_repo_names(self._api_url, self._org, self._token)
         except urllib.error.HTTPError as exc:
+            if classify(exc) is not SKIPPABLE:
+                raise
             emit_warning(
                 f"{self._org}: could not list the org's repositories: HTTP "
                 f"{exc.code} ({exc.reason or 'no reason'}); falling back to "
@@ -623,7 +642,7 @@ def list_enrolled_logins(
                 list_team_member_logins(api_url, org, staff_slug, service_token)
             )
         except urllib.error.HTTPError as exc:
-            if is_hard_http_error(exc):
+            if classify(exc) is not SKIPPABLE:
                 raise
             emit_warning(
                 f"{classroom_short}: could not read staff team {staff_slug!r} "
@@ -698,7 +717,7 @@ def collect_classroom(
             api_url, org, classroom_meta, classroom_short, service_token
         )
     except urllib.error.HTTPError as exc:
-        if is_hard_http_error(exc):
+        if classify(exc) is not SKIPPABLE:
             raise
         emit_warning(
             f"{classroom_short}: could not read team {team_slug!r} members: "
@@ -787,7 +806,7 @@ def collect_classroom(
             try:
                 releases = all_submit_releases(api_url, org, repo_name, service_token)
             except urllib.error.HTTPError as exc:
-                if is_hard_http_error(exc):
+                if classify(exc) is not SKIPPABLE:
                     raise
                 emit_warning(
                     f"{org}/{repo_name}: release listing failed: HTTP {exc.code} "
@@ -815,7 +834,7 @@ def collect_classroom(
                 try:
                     candidate = download_result_asset(api_url, release, service_token)
                 except urllib.error.HTTPError as exc:
-                    if is_hard_http_error(exc):
+                    if classify(exc) is not SKIPPABLE:
                         raise
                     emit_warning(
                         f"{org}/{repo_name}: result.json download failed for "
@@ -1084,11 +1103,11 @@ def grant_classroom_team_access(
     no-op.
     """
     role_slugs = resolve_staff_team_slugs(classroom_meta)
-    grant_slugs = {
-        role: (slug, STAFF_TEAM_PERMISSIONS[role])
+    grant_slugs = [
+        (slug, STAFF_TEAM_PERMISSIONS[role])
         for role, slug in role_slugs.items()
         if role in STAFF_TEAM_PERMISSIONS
-    }
+    ]
     if not grant_slugs:
         return
 
@@ -1103,7 +1122,7 @@ def grant_classroom_team_access(
     try:
         team_logins = list_team_member_logins(api_url, org, student_team_slug, service_token)
     except urllib.error.HTTPError as exc:
-        if is_hard_http_error(exc):
+        if classify(exc) is not SKIPPABLE:
             raise
         emit_warning(
             f"{classroom_short}: could not read team {student_team_slug!r} members for "
@@ -1133,8 +1152,10 @@ def grant_classroom_team_access(
     targets.extend(
         private_template_targets(api_url, org, assignments, service_token)
     )
+    if not targets:
+        return
 
-    for _role, (team_slug, permission) in grant_slugs.items():
+    for team_slug, permission in grant_slugs:
         # The team's current repos, read once, replace grant_team_repo's
         # per-repo access check: after the first run nearly every target is
         # already granted, so that check — not the PUT — is the request that
@@ -1153,16 +1174,16 @@ def grant_classroom_team_access(
                     t_repo,
                     permission,
                     service_token,
-                    known_access=_has_access(already_granted, t_owner, t_repo),
+                    known_repos=already_granted,
                 ):
                     granted += 1
             except urllib.error.HTTPError as exc:
-                throttled = rate_limit_reason(exc)
-                if throttled is not None:
+                verdict = classify(exc)
+                if verdict is THROTTLED:
                     raise GrantThrottled(
-                        throttled, team_slug, granted, len(targets) - index
+                        rate_limit_reason(exc), team_slug, granted, len(targets) - index
                     ) from exc
-                if is_hard_http_error(exc):
+                if verdict is FATAL:
                     raise
                 # 404 = repo not accepted yet; 422 = not org-owned. Neither is
                 # a token problem — skip that repo.
@@ -1186,17 +1207,23 @@ def private_template_targets(
     read is warned about and dropped, while a hard error propagates. Resolved
     once for all staff roles — the read doesn't depend on the team."""
     targets: list[tuple[str, str]] = []
+    # Seen on the REF, not on the kept targets: assignments commonly share one
+    # starter template, and only the private ones end up in `targets`, so
+    # deduping on the output would re-read every public or unreadable template
+    # once per assignment that names it.
+    seen: set[tuple[str, str]] = set()
     for entry in assignments.get("assignments") or []:
         ref = assignment_template_ref(entry) if isinstance(entry, dict) else None
         if ref is None:
             continue
         t_owner, t_repo = ref
-        if t_owner.lower() != org.lower() or (t_owner, t_repo) in targets:
+        if t_owner.lower() != org.lower() or ref in seen:
             continue
+        seen.add(ref)
         try:
             repo = get_repo(api_url, t_owner, t_repo, service_token)
         except urllib.error.HTTPError as exc:
-            if is_hard_http_error(exc):
+            if classify(exc) is not SKIPPABLE:
                 raise
             emit_warning(
                 f"{t_owner}/{t_repo}: could not read template for the staff-team "
@@ -1219,7 +1246,7 @@ def team_repo_full_names(
     try:
         return list_team_repo_full_names(api_url, org, team_slug, token)
     except urllib.error.HTTPError as exc:
-        if is_hard_http_error(exc):
+        if classify(exc) is not SKIPPABLE:
             raise
         emit_warning(
             f"{classroom_short}: could not list team {team_slug!r} repos: HTTP "
@@ -1231,14 +1258,6 @@ def team_repo_full_names(
             f"({exc}); checking access per repo."
         )
     return None
-
-
-def _has_access(granted: set[str] | None, owner: str, repo: str) -> bool | None:
-    """Whether `granted` (from team_repo_full_names) already covers owner/repo,
-    or None when the listing is unknown."""
-    if granted is None:
-        return None
-    return f"{owner}/{repo}".lower() in granted
 
 
 def _dedupe_logins(logins: list[str]) -> list[str]:
@@ -1847,11 +1866,18 @@ def _paginate_field_list(
         next_url = _next_page_link(link_header)
         if next_url:
             next_url = _assert_same_host(next_url, api_url)
-            # Stop if the server points back at an already-fetched page
-            # (self/looping rel="next"): bounds a crafted or buggy Link chain
-            # to the pages actually seen instead of running out the cap.
+            # A server pointing back at an already-fetched page (self/looping
+            # rel="next") bounds a crafted or buggy Link chain — but what we
+            # hold is a TRUNCATED listing, and returning it would be
+            # indistinguishable from a complete one. RepoIndex would then read
+            # the missing names as "no repo" and mark real submissions as not
+            # submitted, silently. Raise for the same reason the page cap does:
+            # every caller turns ValueError into "unknown", which fails open.
             if next_url in seen_next:
-                return logins
+                raise ValueError(
+                    f"{resource_label}: pagination Link loops back to a page "
+                    f"already fetched ({next_url}); the listing is incomplete"
+                )
             seen_next.add(next_url)
             url = next_url
             continue
@@ -2025,10 +2051,17 @@ def attribute_group_members(
     collaborator-read failure `usernames` is forced to [owner] — never the
     runner/student-supplied list — and `warning` is a message the caller should
     emit and count as a degraded attribution.
+
+    A THROTTLE is NOT such a failure and propagates: degrading here PERSISTS an
+    owner-only member list into scores.json, so a rate-limit burst mid-run
+    would silently uncredit real teammates and then blame the token in the
+    aggregate warning. Better to fail the run and re-collect.
     """
     try:
         return group_member_usernames(api_url, org, repo, owner_username, token, roster_logins), None
     except urllib.error.HTTPError as exc:
+        if classify(exc) is THROTTLED:
+            raise
         return [owner_username], (
             f"{org}/{repo}: could not read group collaborators "
             f"(HTTP {exc.code} {exc.reason or 'no reason'}); crediting the "
@@ -2253,7 +2286,7 @@ def grant_team_repo(
     permission: str,
     token: str,
     *,
-    known_access: bool | None = None,
+    known_repos: set[str] | None = None,
 ) -> bool:
     """Grant `team_slug` `permission` on <repo_owner>/<repo> via
     PUT /orgs/{org}/teams/{slug}/repos/{owner}/{repo}, skipping the write when
@@ -2262,14 +2295,16 @@ def grant_team_repo(
     599 propagates so main() aborts the run (is_hard_http_error); a 404/422 (repo
     absent / not org-owned) is left for the caller to warn-and-skip.
 
-    `known_access` is that idempotence verdict already read in bulk (see
-    list_team_repo_full_names); None means unknown and costs the per-repo
-    check."""
-    if known_access is None:
-        known_access = team_has_repo_access(
+    `known_repos` is the team's repos already read in bulk (lowercased
+    `owner/repo`, see list_team_repo_full_names), which answers the idempotence
+    check without a request; None means unknown and costs the per-repo check."""
+    if known_repos is not None:
+        already_granted = f"{repo_owner}/{repo}".lower() in known_repos
+    else:
+        already_granted = team_has_repo_access(
             api_url, org, team_slug, repo_owner, repo, token
         )
-    if known_access:
+    if already_granted:
         return False
     url = (
         f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
@@ -2286,8 +2321,8 @@ def grant_team_repo(
     return True
 
 
-def error_body_snippet(exc: urllib.error.HTTPError, limit: int = 300) -> str:
-    """First `limit` characters of an error response body, whitespace-collapsed
+def error_body_snippet(exc: urllib.error.HTTPError) -> str:
+    """First 300 characters of an error response body, whitespace-collapsed
     and cached on the exception so later readers (the retry decision, then the
     log line) still see it after the stream is consumed. Empty when the body
     can't be read.
@@ -2301,7 +2336,7 @@ def error_body_snippet(exc: urllib.error.HTTPError, limit: int = 300) -> str:
             raw = exc.read() or b""
         except (OSError, ValueError, AttributeError):
             raw = b""
-        cached = " ".join(raw.decode("utf-8", "replace").split())[:limit]
+        cached = " ".join(raw.decode("utf-8", "replace").split())[:300]
         setattr(exc, "_body_snippet", cached)
     return cached
 
@@ -2312,37 +2347,73 @@ def body_note(exc: urllib.error.HTTPError) -> str:
     return f" — response: {snippet}" if snippet else ""
 
 
-def rate_limit_reason(exc: urllib.error.HTTPError) -> str | None:
-    """What in the response says GitHub is THROTTLING rather than refusing, or
-    None when nothing does.
+def rate_limit_verdict(
+    exc: urllib.error.HTTPError,
+) -> tuple[str, float | None] | None:
+    """`(reason, seconds-to-wait)` when the response says GitHub is THROTTLING
+    rather than refusing, else None. `seconds` is None for a throttle that must
+    NOT be waited out.
 
     GitHub returns rate limits as 403 as often as 429, and the only thing
     separating that from a genuinely under-scoped token is the response itself:
     a Retry-After header, an exhausted X-RateLimit-Remaining, or a body naming
     the limit. Treating every 403 as a scope problem is what made this script
-    tell operators to rotate healthy service tokens."""
+    tell operators to rotate healthy service tokens.
+
+    Reason and delay are decided in ONE ladder so they can't disagree: the two
+    questions ("is this a throttle?" and "how long do we wait?") are answered by
+    the same branch. rate_limit_reason and retry_delay are its two views."""
     if exc.code not in (403, 429):
         return None
     headers = exc.headers or {}
     retry_after = (headers.get("Retry-After") or "").strip()
     if retry_after.isdigit():
-        return f"Retry-After: {retry_after}s"
+        # GitHub named a wait; honour it, but bounded so a mistaken or hostile
+        # header can't park the job.
+        return (
+            f"Retry-After: {retry_after}s",
+            min(int(retry_after), MAX_RETRY_SLEEP_SECONDS),
+        )
     if (headers.get("X-RateLimit-Remaining") or "").strip() == "0":
+        # The PRIMARY hourly budget: its window runs up to an hour, so a named
+        # error beats a sleeping job — never retried.
         reset = (headers.get("X-RateLimit-Reset") or "").strip()
         window = f", resets at {epoch_to_iso(reset)}" if reset.isdigit() else ""
-        return f"X-RateLimit-Remaining: 0{window}"
+        return (f"X-RateLimit-Remaining: 0{window}", None)
     body = error_body_snippet(exc).lower()
     for marker in RATE_LIMIT_BODY_MARKERS:
         if marker in body:
-            return f'response body names the "{marker}"'
+            # A secondary limit with no header: GitHub documents a minute as
+            # the minimum wait.
+            return (
+                f'response body names the "{marker}"',
+                MAX_RETRY_SLEEP_SECONDS,
+            )
     return None
 
 
+def rate_limit_reason(exc: urllib.error.HTTPError) -> str | None:
+    """What in the response says GitHub is THROTTLING rather than refusing, or
+    None when nothing does. The reason half of rate_limit_verdict."""
+    verdict = rate_limit_verdict(exc)
+    return verdict[0] if verdict is not None else None
+
+
 def epoch_to_iso(value: str) -> str:
-    """Unix epoch seconds (X-RateLimit-Reset) as an RFC 3339 UTC timestamp."""
-    return datetime.datetime.fromtimestamp(
-        int(value), tz=datetime.timezone.utc
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    """Unix epoch seconds (X-RateLimit-Reset) as an RFC 3339 UTC timestamp, or
+    the raw value when it doesn't name a representable time.
+
+    `.isdigit()` is not enough of a guard: GitHub occasionally sends a
+    MILLISECOND epoch, and datetime raises ValueError/OverflowError past year
+    9999. This runs inside an `except HTTPError` block, so an exception here
+    escapes every throttle handler as a traceback — the run would crash on the
+    header that exists to explain the throttle."""
+    try:
+        return datetime.datetime.fromtimestamp(
+            int(value), tz=datetime.timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (ValueError, OverflowError, OSError):
+        return value
 
 
 def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
@@ -2356,31 +2427,49 @@ def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
     sleeping job. Everything else keeps the previous contract: 429/5xx honour
     Retry-After (capped at 30s) or back off exponentially; any other status is
     terminal."""
+    verdict = rate_limit_verdict(exc)
+    if verdict is not None:
+        return verdict[1]
     headers = exc.headers or {}
-    if rate_limit_reason(exc) is not None:
-        retry_after = (headers.get("Retry-After") or "").strip()
-        if retry_after.isdigit():
-            return min(int(retry_after), MAX_RETRY_SLEEP_SECONDS)
-        if (headers.get("X-RateLimit-Remaining") or "").strip() == "0":
-            return None
-        return MAX_RETRY_SLEEP_SECONDS
     if exc.code in (429, 500, 502, 503, 504):
         retry_after = (headers.get("Retry-After") or "").strip()
         return min(int(retry_after), 30) if retry_after.isdigit() else 2 ** attempt
     return None
 
 
-def is_hard_http_error(exc: urllib.error.HTTPError) -> bool:
-    """Hard failures that should fail the whole run: 401/403 (bad/under-scoped
-    token) and 599 (synthetic "network unavailable" after retries). Treating
-    these as per-student "not submitted" would make a broken run report success
-    while collecting nothing.
+def classify(exc: urllib.error.HTTPError) -> str:
+    """The ONE verdict every error handler branches on.
 
-    A 403 reaches here only after retry_delay declined to retry it, so a
-    throttle that could be waited out never counts as hard — callers that can
-    act on the distinction ask rate_limit_reason as well.
+    THROTTLED — GitHub is rate limiting. The token is healthy; the work is
+        deferrable and must never be reported as a scope problem.
+    FATAL     — 401/403 (bad or under-scoped token) or 599 (synthetic
+        "network unavailable" after retries). Aborts the run: treating these as
+        per-student "not submitted" would report a broken run as success while
+        collecting nothing.
+    SKIPPABLE — everything else (404 = repo not accepted yet, 422 = not
+        org-owned, ...). Warn and move on.
+
+    The throttle is checked FIRST, which is the whole point: a rate limit
+    arrives as 403 as often as 429, so classifying by status code alone put
+    every throttle in FATAL and sent operators to rotate a working credential.
+    Pairing a status check with a separate rate_limit_reason call at each site
+    was the same rule written ten times — one site forgetting the pair (as the
+    429 path did) silently got the old, wrong answer.
     """
-    return exc.code in (401, 403, 599)
+    if rate_limit_verdict(exc) is not None:
+        return THROTTLED
+    if exc.code in (401, 403, 599):
+        return FATAL
+    return SKIPPABLE
+
+
+def is_hard_http_error(exc: urllib.error.HTTPError) -> bool:
+    """Whether `exc` must abort the whole run. The FATAL view of classify().
+
+    NOTE a throttle is NOT fatal, so this alone is not a "propagate?" test:
+    handlers that warn-and-skip must re-raise THROTTLED as well, which is why
+    they ask `classify(exc) is not SKIPPABLE` rather than calling this."""
+    return classify(exc) is FATAL
 
 
 # Workflow-command output -----------------------------------------------------

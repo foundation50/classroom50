@@ -74,16 +74,22 @@ ASSIGNMENTS_SCHEMA_V1 = "classroom50/assignments/v1"
 SUBMIT_TAG_PREFIX = "submit/"
 
 # Body markers that identify a rate-limit response, and the longest a single
-# retry sleeps. Mirrors collect_scores.py — GitHub returns throttling as 403 as
-# often as 429, and this file shares that transport (and shared the bug: any
-# 403 read as an under-scoped token).
+# retry sleeps. Mirrors collect_scores.py (and, through it, Go's
+# ghutil.IsRateLimited) — GitHub returns throttling as 403 as often as 429, and
+# this file shares that transport (and shared the bug: any 403 read as an
+# under-scoped token).
 RATE_LIMIT_BODY_MARKERS = (
     "secondary rate limit",
     "rate limit exceeded",
-    "abuse detection",
+    "abuse",
 )
 
 MAX_RETRY_SLEEP_SECONDS = 60
+
+# The three verdicts classify() returns. Mirrors collect_scores.py.
+THROTTLED = "throttled"
+FATAL = "fatal"
+SKIPPABLE = "skippable"
 
 # Fallback submission branch when a repo's default branch can't be read.
 # Submissions grade off the repo's default branch (the autograde shim's
@@ -223,16 +229,16 @@ def main() -> int:
         emit_error(str(exc))
         return 1
     except urllib.error.HTTPError as exc:
-        if is_hard_http_error(exc):
-            throttled = rate_limit_reason(exc)
-            if throttled is not None:
-                emit_error(
-                    f"{classroom_filter}: could not list the classroom team — GitHub "
-                    f"is throttling (HTTP {exc.code}, {throttled}) and the request did "
-                    f"not recover after retrying. The service token is fine, do NOT "
-                    f"rotate it; re-run once the limit resets."
-                )
-                return 1
+        verdict = classify(exc)
+        if verdict is THROTTLED:
+            emit_error(
+                f"{classroom_filter}: could not list the classroom team — GitHub "
+                f"is throttling (HTTP {exc.code}, {rate_limit_reason(exc)}) and the "
+                f"request did not recover after retrying. The service token is fine, "
+                f"do NOT rotate it; re-run once the limit resets."
+            )
+            return 1
+        if verdict is FATAL:
             emit_error(
                 f"{classroom_filter}: could not list the classroom team — service token "
                 f"rejected or network unavailable (HTTP {exc.code} {exc.reason or 'no reason'})"
@@ -304,16 +310,16 @@ def main() -> int:
             skipped += 1
             continue
         except urllib.error.HTTPError as exc:
-            if is_hard_http_error(exc):
-                throttled = rate_limit_reason(exc)
-                if throttled is not None:
-                    emit_error(
-                        f"{org}/{repo_name}: regrade aborted — GitHub is throttling "
-                        f"(HTTP {exc.code}, {throttled}) and the request did not recover "
-                        f"after retrying. The service token is fine, do NOT rotate it; "
-                        f"re-run once the limit resets."
-                    )
-                    return 1
+            verdict = classify(exc)
+            if verdict is THROTTLED:
+                emit_error(
+                    f"{org}/{repo_name}: regrade aborted — GitHub is throttling "
+                    f"(HTTP {exc.code}, {rate_limit_reason(exc)}) and the request did "
+                    f"not recover after retrying. The service token is fine, do NOT "
+                    f"rotate it; re-run once the limit resets."
+                )
+                return 1
+            if verdict is FATAL:
                 emit_error(
                     f"{org}/{repo_name}: regrade aborted — service token rejected or network "
                     f"unavailable (HTTP {exc.code} {exc.reason or 'no reason'}){body_note(exc)}. "
@@ -687,22 +693,19 @@ def _http_error_says_ref_exists(exc: urllib.error.HTTPError) -> bool:
     """Whether a 422's response body reports the ref already exists.
 
     GitHub's git/refs endpoint returns `{"message": "Reference already
-    exists", ...}` for a duplicate ref. Match on that (case-insensitively) so a
-    genuinely different 422 isn't mistaken for the benign race. An unreadable
-    body falls back to False (treat as a real error) — failing safe toward
-    surfacing the failure."""
-    try:
-        raw = exc.read()
-    except (OSError, ValueError):
-        return False
-    if not raw:
-        return False
-    try:
-        body = json.loads(raw.decode("utf-8", errors="replace"))
-    except (json.JSONDecodeError, ValueError):
-        return False
-    message = body.get("message") if isinstance(body, dict) else None
-    return isinstance(message, str) and "already exists" in message.lower()
+    exists", ...}` for a duplicate ref. Match on that phrase
+    (case-insensitively) so a genuinely different 422 isn't mistaken for the
+    benign race. An unreadable body falls back to False (treat as a real error)
+    — failing safe toward surfacing the failure.
+
+    Reads through error_body_snippet rather than exc.read(): the body is a
+    one-shot stream, so a second reader anywhere in the file would get b"" and
+    silently lose this detection. One cached reader, one convention. That
+    widens the match from the `message` field to the whole (300-char) body,
+    which is deliberate — a duplicate-ref 422 says "already exists" nowhere
+    else, and matching the field alone would miss GitHub's other phrasings of
+    the same race."""
+    return "already exists" in error_body_snippet(exc).lower()
 
 
 # Roster / assignment loading -------------------------------------------------
@@ -1090,8 +1093,8 @@ def _http_send(
     raise RuntimeError(f"_http_send called with _retries={_retries}")
 
 
-def error_body_snippet(exc: urllib.error.HTTPError, limit: int = 300) -> str:
-    """First `limit` characters of an error response body, whitespace-collapsed
+def error_body_snippet(exc: urllib.error.HTTPError) -> str:
+    """First 300 characters of an error response body, whitespace-collapsed
     and cached on the exception so a later reader still sees it after the
     stream is consumed. Mirrors collect_scores.py."""
     cached = getattr(exc, "_body_snippet", None)
@@ -1100,7 +1103,7 @@ def error_body_snippet(exc: urllib.error.HTTPError, limit: int = 300) -> str:
             raw = exc.read() or b""
         except (OSError, ValueError, AttributeError):
             raw = b""
-        cached = " ".join(raw.decode("utf-8", "replace").split())[:limit]
+        cached = " ".join(raw.decode("utf-8", "replace").split())[:300]
         setattr(exc, "_body_snippet", cached)
     return cached
 
@@ -1111,32 +1114,60 @@ def body_note(exc: urllib.error.HTTPError) -> str:
     return f" — response: {snippet}" if snippet else ""
 
 
-def rate_limit_reason(exc: urllib.error.HTTPError) -> str | None:
-    """What in the response says GitHub is THROTTLING rather than refusing, or
-    None when nothing does. Mirrors collect_scores.py: a 403 is a rate limit as
-    often as it is a scope problem, and only the response tells them apart."""
+def rate_limit_verdict(
+    exc: urllib.error.HTTPError,
+) -> tuple[str, float | None] | None:
+    """`(reason, seconds-to-wait)` when the response says GitHub is THROTTLING
+    rather than refusing, else None; `seconds` is None for a throttle that must
+    NOT be waited out. Mirrors collect_scores.py: a 403 is a rate limit as often
+    as it is a scope problem, and only the response tells them apart.
+
+    One ladder answers both questions, so the reason and the delay can't
+    disagree; rate_limit_reason and retry_delay are its two views."""
     if exc.code not in (403, 429):
         return None
     headers = exc.headers or {}
     retry_after = (headers.get("Retry-After") or "").strip()
     if retry_after.isdigit():
-        return f"Retry-After: {retry_after}s"
+        return (
+            f"Retry-After: {retry_after}s",
+            min(int(retry_after), MAX_RETRY_SLEEP_SECONDS),
+        )
     if (headers.get("X-RateLimit-Remaining") or "").strip() == "0":
+        # The primary hourly budget: not waited out — its window runs up to an
+        # hour, so a named error beats a sleeping job.
         reset = (headers.get("X-RateLimit-Reset") or "").strip()
         window = f", resets at {epoch_to_iso(reset)}" if reset.isdigit() else ""
-        return f"X-RateLimit-Remaining: 0{window}"
+        return (f"X-RateLimit-Remaining: 0{window}", None)
     body = error_body_snippet(exc).lower()
     for marker in RATE_LIMIT_BODY_MARKERS:
         if marker in body:
-            return f'response body names the "{marker}"'
+            return (
+                f'response body names the "{marker}"',
+                MAX_RETRY_SLEEP_SECONDS,
+            )
     return None
 
 
+def rate_limit_reason(exc: urllib.error.HTTPError) -> str | None:
+    """What in the response says GitHub is THROTTLING rather than refusing, or
+    None when nothing does. The reason half of rate_limit_verdict."""
+    verdict = rate_limit_verdict(exc)
+    return verdict[0] if verdict is not None else None
+
+
 def epoch_to_iso(value: str) -> str:
-    """Unix epoch seconds (X-RateLimit-Reset) as an RFC 3339 UTC timestamp."""
-    return datetime.datetime.fromtimestamp(
-        int(value), tz=datetime.timezone.utc
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    """Unix epoch seconds (X-RateLimit-Reset) as an RFC 3339 UTC timestamp, or
+    the raw value when it doesn't name a representable time. Mirrors
+    collect_scores.py: a millisecond epoch overflows datetime, and this runs
+    inside an `except HTTPError` block, so raising here would surface the
+    throttle as a traceback."""
+    try:
+        return datetime.datetime.fromtimestamp(
+            int(value), tz=datetime.timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (ValueError, OverflowError, OSError):
+        return value
 
 
 def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
@@ -1145,29 +1176,40 @@ def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
     that long (capped), a secondary limit without one waits a minute, an
     exhausted primary budget is not waited out at all, and 429/5xx keep the
     previous backoff."""
+    verdict = rate_limit_verdict(exc)
+    if verdict is not None:
+        return verdict[1]
     headers = exc.headers or {}
-    if rate_limit_reason(exc) is not None:
-        retry_after = (headers.get("Retry-After") or "").strip()
-        if retry_after.isdigit():
-            return min(int(retry_after), MAX_RETRY_SLEEP_SECONDS)
-        if (headers.get("X-RateLimit-Remaining") or "").strip() == "0":
-            return None
-        return MAX_RETRY_SLEEP_SECONDS
     if exc.code in (429, 500, 502, 503, 504):
         retry_after = (headers.get("Retry-After") or "").strip()
         return min(int(retry_after), 30) if retry_after.isdigit() else 2**attempt
     return None
 
 
-def is_hard_http_error(exc: urllib.error.HTTPError) -> bool:
-    """Hard failures that abort the whole run: 401/403 (bad/under-scoped
-    token) and 599 (synthetic network-unavailable after retries). Mirrors
-    collect_scores.py. A per-repo 404/422 is NOT hard — it warns and skips.
+def classify(exc: urllib.error.HTTPError) -> str:
+    """The ONE verdict every error handler branches on. Mirrors
+    collect_scores.py.
 
-    A 403 reaches here only after retry_delay declined to retry it; callers
-    that can act on the distinction ask rate_limit_reason as well, so a
-    throttle is never reported as a token problem."""
-    return exc.code in (401, 403, 599)
+    THROTTLED — GitHub is rate limiting; the token is healthy and the work is
+        deferrable.
+    FATAL     — 401/403 (bad or under-scoped token) or 599 (synthetic
+        network-unavailable after retries). Aborts the run.
+    SKIPPABLE — everything else; a per-repo 404/422 warns and skips.
+
+    The throttle is checked FIRST. Checking the status code first — as this
+    file did, with the rate-limit test nested INSIDE the hard-error branch —
+    meant a throttled 429 was never "hard", so it fell through to the generic
+    per-repo warning and never reached its "do NOT rotate" message."""
+    if rate_limit_verdict(exc) is not None:
+        return THROTTLED
+    if exc.code in (401, 403, 599):
+        return FATAL
+    return SKIPPABLE
+
+
+def is_hard_http_error(exc: urllib.error.HTTPError) -> bool:
+    """Whether `exc` must abort the whole run. The FATAL view of classify()."""
+    return classify(exc) is FATAL
 
 
 # Workflow-command output -----------------------------------------------------

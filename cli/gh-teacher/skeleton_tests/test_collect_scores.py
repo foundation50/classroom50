@@ -9,7 +9,6 @@ the roster CSV parser, and the deterministic repo-name formula.
 from __future__ import annotations
 
 import csv
-import io
 import json
 import os
 import pathlib
@@ -18,6 +17,7 @@ import re
 import pytest
 
 from conftest import collect_scores as cs
+from conftest import github_http_error as http_error
 
 
 # The exact `collected_at` shape the scores-v1 schema (and every reader —
@@ -829,13 +829,16 @@ class TestListRepoCollaboratorLogins:
             return json.dumps([{"login": "alice", "role_name": "push"}]).encode("utf-8"), LoopHeaders()
 
         monkeypatch.setattr(cs, "_http_get_with_headers", fake_http_get_with_headers)
-        logins = cs.list_repo_collaborator_logins(
-            "https://api.github.com", "cs50", "cs-principles-hello-alice", "token"
-        )
-        # Page 1 fetch (alice) -> follow next once (page 2 fetch, alice
-        # again) -> the same next URL is seen again -> stop. So two
-        # requests and the two collected entries, NOT an exhausted cap.
-        assert logins == ["alice", "alice"]
+        # A loop means the listing is TRUNCATED, and returning the partial list
+        # would be indistinguishable from a complete one — callers would read
+        # the missing entries as "doesn't exist". Raise instead; every caller
+        # turns ValueError into "unknown" and fails open.
+        with pytest.raises(ValueError, match="incomplete"):
+            cs.list_repo_collaborator_logins(
+                "https://api.github.com", "cs50", "cs-principles-hello-alice", "token"
+            )
+        # Page 1 fetch -> follow next once (page 2 fetch) -> the same next URL
+        # is seen again -> stop. Two requests, NOT an exhausted 100-page cap.
         assert calls["n"] == 2, f"self-loop should stop at 2 requests, made {calls['n']}"
 
 
@@ -3152,14 +3155,6 @@ class TestGrantClassroomTeamAccess:
 # Throttling vs. refusal ------------------------------------------------------
 
 
-def http_error(code, headers=None, body=b"", url="https://api.github.com/x"):
-    """An HTTPError shaped like GitHub's: `headers` is a plain dict (the real
-    HTTPMessage answers .get the same way) and `body` is readable once."""
-    return cs.urllib.error.HTTPError(
-        url=url, code=code, msg="msg", hdrs=headers, fp=io.BytesIO(body)
-    )
-
-
 class TestErrorBodySnippet:
     def test_reads_once_and_caches(self):
         # The body stream is consumable exactly once, and the retry decision
@@ -3254,6 +3249,91 @@ class FakeResponse:
 
     def __exit__(self, *exc):
         return False
+
+
+class TestClassify:
+    """One verdict, checked throttle-first. Pairing a status-code test with a
+    separate rate_limit_reason call at each site was the same rule written ten
+    times, and the site that forgot the pair silently kept the old answer."""
+
+    def test_throttle_beats_the_status_code(self):
+        # The whole point: a rate limit arrives as 403 as often as 429, so
+        # classifying on status alone put every throttle in FATAL.
+        assert cs.classify(http_error(403, {"Retry-After": "30"})) is cs.THROTTLED
+        assert cs.classify(http_error(429, {"X-RateLimit-Remaining": "0"})) is cs.THROTTLED
+        body = b'{"message": "You have exceeded a secondary rate limit"}'
+        assert cs.classify(http_error(403, {}, body)) is cs.THROTTLED
+
+    def test_bare_auth_errors_are_fatal(self):
+        for code in (401, 403, 599):
+            assert cs.classify(http_error(code)) is cs.FATAL
+
+    def test_per_repo_errors_are_skippable(self):
+        for code in (404, 422, 500):
+            assert cs.classify(http_error(code)) is cs.SKIPPABLE
+
+    def test_plain_429_is_skippable_not_fatal(self):
+        # No throttle signal on the response: a bare 429 keeps the old
+        # warn-and-skip contract rather than aborting the run.
+        assert cs.classify(http_error(429)) is cs.SKIPPABLE
+
+    def test_is_hard_http_error_is_the_fatal_view(self):
+        assert cs.is_hard_http_error(http_error(403)) is True
+        # ...and a THROTTLED 403 is NOT hard, so handlers that warn-and-skip
+        # must ask classify(), not this.
+        assert cs.is_hard_http_error(http_error(403, {"Retry-After": "5"})) is False
+
+
+class TestEpochToIso:
+    def test_formats_a_plain_epoch(self):
+        assert cs.epoch_to_iso("1787120877").endswith("Z")
+
+    def test_out_of_range_epoch_does_not_raise(self):
+        # GitHub occasionally sends a MILLISECOND epoch. This runs inside an
+        # `except HTTPError` block, so raising here escapes every throttle
+        # handler as a traceback — the run would crash on the very header that
+        # exists to explain the throttle.
+        assert cs.epoch_to_iso("1787120877000") == "1787120877000"
+
+    def test_throttle_with_a_millisecond_reset_still_classifies(self):
+        exc = http_error(403, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1787120877000"})
+        assert cs.classify(exc) is cs.THROTTLED
+        assert cs.retry_delay(exc, 0) is None  # primary budget: never waited out
+
+
+class TestThrottlePropagatesInsteadOfDegrading:
+    def test_repo_index_reraises_a_throttle(self, monkeypatch, capsys):
+        # Falling back to per-repo probing means issuing the thousands of
+        # requests the index exists to avoid — while GitHub is actively rate
+        # limiting. The listing failure must propagate instead.
+        def throttled(*a, **k):
+            raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+
+        monkeypatch.setattr(cs, "list_org_repo_names", throttled)
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        with pytest.raises(cs.urllib.error.HTTPError):
+            index.contains("cs-hw1-alice")
+
+    def test_repo_index_still_degrades_on_a_soft_failure(self, monkeypatch, capsys):
+        def soft(*a, **k):
+            raise http_error(404, {}, b"nope")
+
+        monkeypatch.setattr(cs, "list_org_repo_names", soft)
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        assert index.contains("anything") is True
+        assert "::warning::" in capsys.readouterr().err
+
+    def test_team_repo_listing_reraises_a_throttled_429(self, monkeypatch):
+        # Previously swallowed: a 429 isn't "hard", so the grant pass fell back
+        # to a per-repo access check for every target, mid-throttle.
+        def throttled(*a, **k):
+            raise http_error(429, {"Retry-After": "60"})
+
+        monkeypatch.setattr(cs, "list_team_repo_full_names", throttled)
+        with pytest.raises(cs.urllib.error.HTTPError):
+            cs.team_repo_full_names(
+                "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", "cs"
+            )
 
 
 class TestTransportRetriesThrottles:
@@ -3501,16 +3581,17 @@ class TestPassesSkipMissingRepos:
 
 
 class TestBulkAccessCheck:
-    def test_known_access_true_skips_every_request(self, monkeypatch):
+    def test_repo_in_known_set_skips_every_request(self, monkeypatch):
         monkeypatch.setattr(
             cs, "_http_send", lambda *a, **k: pytest.fail("no request expected")
         )
+        # Set is lowercased; the target's casing must not matter.
         assert cs.grant_team_repo(
-            "https://api.github.com", "cs50", "classroom50-cs-ta", "cs50", "cs-hw1-alice",
-            "pull", "tok", known_access=True,
+            "https://api.github.com", "cs50", "classroom50-cs-ta", "CS50", "CS-HW1-Alice",
+            "pull", "tok", known_repos={"cs50/cs-hw1-alice"},
         ) is False
 
-    def test_known_access_false_puts_without_a_precheck(self, monkeypatch):
+    def test_repo_absent_from_known_set_puts_without_a_precheck(self, monkeypatch):
         calls: list[str] = []
 
         def fake_send(method, url, token, *, accept, body, _retries=3):
@@ -3519,8 +3600,8 @@ class TestBulkAccessCheck:
 
         monkeypatch.setattr(cs, "_http_send", fake_send)
         assert cs.grant_team_repo(
-            "https://api.github.com", "cs50", "classroom50-cs-ta", "cs50", "cs-hw1-alice",
-            "pull", "tok", known_access=False,
+            "https://api.github.com", "cs50", "classroom50-cs-ta", "cs50", "cs-hw1-bob",
+            "pull", "tok", known_repos={"cs50/cs-hw1-alice"},
         ) is True
         assert calls == ["PUT"]
 
@@ -3544,11 +3625,21 @@ class TestBulkAccessCheck:
                 "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", "cs"
             )
 
-    def test_has_access_matches_case_insensitively(self):
-        granted = {"cs50/cs-hw1-alice"}
-        assert cs._has_access(granted, "CS50", "CS-HW1-Alice") is True
-        assert cs._has_access(granted, "cs50", "cs-hw1-bob") is False
-        assert cs._has_access(None, "cs50", "cs-hw1-alice") is None
+    def test_unknown_listing_falls_back_to_the_per_repo_check(self, monkeypatch):
+        checked: list[str] = []
+        monkeypatch.setattr(
+            cs,
+            "team_has_repo_access",
+            lambda a, o, t, owner, repo, tok: checked.append(repo) or True,
+        )
+        monkeypatch.setattr(
+            cs, "_http_send", lambda *a, **k: pytest.fail("no PUT expected")
+        )
+        assert cs.grant_team_repo(
+            "https://api.github.com", "cs50", "classroom50-cs-ta", "cs50", "cs-hw1-alice",
+            "pull", "tok", known_repos=None,
+        ) is False
+        assert checked == ["cs-hw1-alice"]
 
 
 class TestPaginateFieldList:

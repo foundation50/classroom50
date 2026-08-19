@@ -17,6 +17,7 @@ import email.message
 
 import pytest
 
+from conftest import github_http_error
 from conftest import regrade_repos as rr
 
 
@@ -770,8 +771,7 @@ def test_auth_stripping_redirect_drops_authorization_cross_host():
 
 
 def _http_error(code: int, *, body: dict | None = None) -> urllib.error.HTTPError:
-    fp = io.BytesIO(json.dumps(body).encode("utf-8")) if body is not None else None
-    return urllib.error.HTTPError(url="https://api", code=code, msg="x", hdrs=None, fp=fp)
+    return github_http_error(code, body=body)
 
 
 # empty_repo skip -------------------------------------------------------------
@@ -1114,12 +1114,32 @@ def test_latest_autograde_run_id_tag_only_accepts_milestone_runs(monkeypatch):
 # Throttling vs. refusal ------------------------------------------------------
 
 
-def _throttle_error(code, headers=None, body=b""):
-    """An HTTPError shaped like GitHub's — `headers` answers .get, `body` reads
-    once. Mirrors the helper in test_collect_scores.py."""
-    return urllib.error.HTTPError(
-        url="https://api.github.com/x", code=code, msg="msg", hdrs=headers, fp=io.BytesIO(body)
-    )
+class TestClassify:
+    """Mirrors collect_scores.py. The inversion this file shipped with — the
+    rate-limit test nested INSIDE the hard-error branch — meant a throttled 429
+    was never "hard", so it fell through to the generic per-repo warning and
+    never reached its "do NOT rotate" message."""
+
+    def test_throttle_beats_the_status_code(self):
+        assert rr.classify(github_http_error(403, {"Retry-After": "30"})) is rr.THROTTLED
+        assert rr.classify(github_http_error(429, {"Retry-After": "60"})) is rr.THROTTLED
+        body = b'{"message": "You have exceeded a secondary rate limit"}'
+        assert rr.classify(github_http_error(403, {}, body)) is rr.THROTTLED
+
+    def test_bare_auth_errors_are_fatal(self):
+        for code in (401, 403, 599):
+            assert rr.classify(github_http_error(code)) is rr.FATAL
+
+    def test_per_repo_errors_are_skippable(self):
+        for code in (404, 422, 500):
+            assert rr.classify(github_http_error(code)) is rr.SKIPPABLE
+
+    def test_out_of_range_reset_header_does_not_raise(self):
+        # A millisecond epoch overflows datetime; classify() runs inside an
+        # `except HTTPError` block, so raising would surface as a traceback.
+        exc = github_http_error(429, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1787120877000"})
+        assert rr.classify(exc) is rr.THROTTLED
+        assert rr.epoch_to_iso("1787120877000") == "1787120877000"
 
 
 class TestRateLimitClassification:
@@ -1128,24 +1148,24 @@ class TestRateLimitClassification:
     to rotate a healthy credential."""
 
     def test_retry_after_and_body_marker_are_throttles(self):
-        assert rr.rate_limit_reason(_throttle_error(403, {"Retry-After": "30"})) == "Retry-After: 30s"
-        exc = _throttle_error(403, {}, b'{"message": "You have exceeded a secondary rate limit"}')
+        assert rr.rate_limit_reason(github_http_error(403, {"Retry-After": "30"})) == "Retry-After: 30s"
+        exc = github_http_error(403, {}, b'{"message": "You have exceeded a secondary rate limit"}')
         assert "secondary rate limit" in (rr.rate_limit_reason(exc) or "")
 
     def test_plain_403_is_still_a_permission_problem(self):
-        exc = _throttle_error(403, {}, b'{"message": "Resource not accessible by personal access token"}')
+        exc = github_http_error(403, {}, b'{"message": "Resource not accessible by personal access token"}')
         assert rr.rate_limit_reason(exc) is None
         assert rr.retry_delay(exc, 0) is None
 
     def test_exhausted_primary_budget_is_named_but_not_slept_on(self):
-        exc = _throttle_error(403, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1787120877"})
+        exc = github_http_error(403, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1787120877"})
         assert "X-RateLimit-Remaining: 0" in (rr.rate_limit_reason(exc) or "")
         assert rr.retry_delay(exc, 0) is None
 
     def test_transient_statuses_keep_the_old_backoff(self):
-        assert rr.retry_delay(_throttle_error(500), 0) == 1
-        assert rr.retry_delay(_throttle_error(503, {"Retry-After": "9999"}), 0) == 30
-        assert rr.retry_delay(_throttle_error(404), 0) is None
+        assert rr.retry_delay(github_http_error(500), 0) == 1
+        assert rr.retry_delay(github_http_error(503, {"Retry-After": "9999"}), 0) == 30
+        assert rr.retry_delay(github_http_error(404), 0) is None
 
     def test_throttled_request_is_retried_then_succeeds(self, monkeypatch):
         slept: list[float] = []
@@ -1166,7 +1186,7 @@ class TestRateLimitClassification:
         def fake_open(req, timeout=None):
             attempts.append(1)
             if len(attempts) == 1:
-                raise _throttle_error(403, {"Retry-After": "2"}, b"secondary rate limit")
+                raise github_http_error(403, {"Retry-After": "2"}, b"secondary rate limit")
             return _Resp()
 
         monkeypatch.setattr(rr._OPENER, "open", fake_open)
@@ -1179,7 +1199,7 @@ class TestRateLimitClassification:
         assert len(attempts) == 2 and slept == [2]
 
     def test_body_snippet_survives_a_second_read(self):
-        exc = _throttle_error(403, {}, b'{"message":   "secondary rate  limit"}')
+        exc = github_http_error(403, {}, b'{"message":   "secondary rate  limit"}')
         first = rr.error_body_snippet(exc)
         assert "secondary rate limit" in first
         assert rr.error_body_snippet(exc) == first

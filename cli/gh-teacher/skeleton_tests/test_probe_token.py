@@ -14,13 +14,72 @@ import urllib.error
 
 import pytest
 
+from conftest import github_http_error
 from conftest import probe_token as pt
 
 
 def _http_error(code: int) -> urllib.error.HTTPError:
-    return urllib.error.HTTPError(
-        url="https://api.github.com/x", code=code, msg="e", hdrs=None, fp=None
-    )
+    return github_http_error(code, body=None)
+
+
+class TestThrottleIsNotAScopeProblem:
+    """This is the script a teacher runs to ask "is my token healthy?", so a
+    throttled 403 reported as a missing scope sends them to rotate a working
+    credential with this script's authority behind the advice."""
+
+    def test_throttled_403_is_named_as_throttling(self):
+        exc = github_http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+        cause = pt._classify_repo_read(exc)
+        assert "THROTTLING" in cause
+        assert "do NOT rotate" in cause
+        assert "scope is missing" not in cause
+
+    def test_body_marker_alone_is_enough(self):
+        body = b'{"message": "You have exceeded a secondary rate limit"}'
+        assert "THROTTLING" in pt._classify_repo_read(github_http_error(403, {}, body))
+
+    def test_plain_403_still_reads_as_a_scope_problem(self):
+        body = b'{"message": "Resource not accessible by personal access token"}'
+        cause = pt._classify_repo_read(github_http_error(403, {}, body))
+        assert "scope is missing" in cause
+        assert "THROTTLING" not in cause
+
+    def test_401_is_still_an_invalid_token(self):
+        assert "invalid" in pt._classify_repo_read(_http_error(401))
+
+    def test_throttled_403_is_retried_by_the_transport(self, monkeypatch):
+        # Previously only 429/5xx were retried, so a throttled 403 failed the
+        # probe on the first response.
+        slept: list[float] = []
+        attempts: list[int] = []
+
+        class _Resp:
+            status = 200
+
+            def read(self):
+                return b"{}"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def fake_open(req, timeout=None):
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise github_http_error(403, {"Retry-After": "1"}, b"secondary rate limit")
+            return _Resp()
+
+        monkeypatch.setattr(pt.urllib.request, "urlopen", fake_open)
+        monkeypatch.setattr(pt.time, "sleep", lambda d: slept.append(d))
+        status, _body = pt.http_get("https://api.github.com/x", "tok")
+        assert status == 200
+        assert slept == [1]
+
+    def test_exhausted_primary_budget_is_not_slept_on(self):
+        exc = github_http_error(403, {"X-RateLimit-Remaining": "0"})
+        assert pt.retry_delay(exc, 0) is None
 
 
 # Pure helpers ----------------------------------------------------------------
