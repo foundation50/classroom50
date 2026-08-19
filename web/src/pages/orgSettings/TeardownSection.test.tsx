@@ -60,13 +60,17 @@ describe("TeardownSection scope gate (#655)", () => {
     hasDeleteRepo.mockReturnValue(true)
     render(<TeardownSection org="acme" />)
     expect(screen.getByText("orgSettings.teardown.button")).toBeTruthy()
-    expect(screen.queryByText("orgSettings.teardown.needsElevation")).toBeNull()
+    expect(
+      screen.queryByText("orgSettings.teardown.insufficientPermission"),
+    ).toBeNull()
   })
 
   it("renders the elevation prompt (not the teardown button) when delete_repo is absent", () => {
     hasDeleteRepo.mockReturnValue(false)
     render(<TeardownSection org="acme" />)
-    expect(screen.getByText("orgSettings.teardown.needsElevation")).toBeTruthy()
+    expect(
+      screen.getByText("orgSettings.teardown.insufficientPermission"),
+    ).toBeTruthy()
     expect(screen.getByText("orgSettings.teardown.grantButton")).toBeTruthy()
     expect(screen.queryByText("orgSettings.teardown.button")).toBeNull()
   })

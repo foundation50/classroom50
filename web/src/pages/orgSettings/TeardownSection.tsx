@@ -4,7 +4,7 @@ import { Trans, useTranslation } from "react-i18next"
 import { TriangleAlert } from "lucide-react"
 
 import { ConfirmModal } from "@/components/modals"
-import { Alert, Button, MonoLtr, cx } from "@/components/ui"
+import { Button, HelpTooltip, MonoLtr, cx } from "@/components/ui"
 import {
   formatTeardownResult,
   TeardownMarkerError,
@@ -114,24 +114,27 @@ const TeardownSection = ({
         // delete_repo is elevated-only and not granted by a normal sign-in, so
         // teardown would 403. Offer the one-shot elevation re-auth up front
         // rather than after a failed attempt (#655).
-        <Alert
-          tone="warning"
+        <div
           className={cx(
-            "flex-col items-start gap-2",
+            "flex flex-wrap items-center gap-2",
             error || done ? "mt-4" : "",
           )}
         >
-          <span className="text-sm">
-            {t("orgSettings.teardown.needsElevation")}
+          <span className="inline-flex items-center gap-1 text-sm text-base-content/70">
+            {t("orgSettings.teardown.insufficientPermission")}
+            <HelpTooltip
+              position="top"
+              help={t("orgSettings.teardown.insufficientPermissionHelp")}
+            />
           </span>
           <Button
-            variant="warning"
+            variant="outline"
             size="sm"
             onClick={() => setElevateOpen(true)}
           >
             {t("orgSettings.teardown.grantButton")}
           </Button>
-        </Alert>
+        </div>
       )}
 
       <ElevatedAccessModal
