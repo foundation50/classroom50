@@ -13,7 +13,7 @@ vi.mock("@/auth/useGithubAuth", () => ({
   useGithubAuth: () => authState,
 }))
 
-import { GitHubProvider, useMissingScopes } from "./GitHubProvider"
+import { GitHubProvider, useMissingScopes, useHasDeleteRepoScope } from "./GitHubProvider"
 
 function wrapper(token: string | null) {
   return ({ children }: PropsWithChildren) =>
@@ -36,5 +36,33 @@ describe("useMissingScopes (fail-open backstop)", () => {
     })
     // A real classic grant that's missing scopes must still surface them.
     expect(result.current.length).toBeGreaterThan(0)
+  })
+})
+
+describe("useHasDeleteRepoScope (gate for elevated teardown)", () => {
+  it("returns true when the login scope carries delete_repo", () => {
+    authState.tokenScope = "read:user read:org repo workflow admin:org delete_repo"
+    const { result } = renderHook(() => useHasDeleteRepoScope(), {
+      wrapper: wrapper("ghp_xxx"),
+    })
+    expect(result.current).toBe(true)
+  })
+
+  it("returns false for a positively-scoped classic token without delete_repo", () => {
+    authState.tokenScope = "read:user read:org repo workflow admin:org"
+    const { result } = renderHook(() => useHasDeleteRepoScope(), {
+      wrapper: wrapper("ghp_xxx"),
+    })
+    expect(result.current).toBe(false)
+  })
+
+  it("fails open (true) for a fine-grained session with no introspectable scopes", () => {
+    // A fine-grained PAT can delete via Administration: write but reports no
+    // X-OAuth-Scopes header, so we must not nag it with an OAuth-only prompt.
+    authState.tokenScope = ""
+    const { result } = renderHook(() => useHasDeleteRepoScope(), {
+      wrapper: wrapper("github_pat_xxx"),
+    })
+    expect(result.current).toBe(true)
   })
 })

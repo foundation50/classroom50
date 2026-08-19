@@ -12,7 +12,8 @@ import {
   type GitHubResponseSignal,
 } from "@/github-core/client"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { missingScopes } from "@/auth/scopes"
+import { missingScopes, hasScope } from "@/auth/scopes"
+import { ELEVATED_GITHUB_SCOPES } from "@/auth/constants"
 import { GITHUB_PROXY_BASE } from "@/github-core/workerProxy"
 import { observeResponse } from "@/lib/diagnostics/observed"
 import { logger } from "@/lib/logger"
@@ -122,5 +123,29 @@ export function useMissingScopes(): string[] {
       log.debug("token is missing required scopes", { missing })
     }
     return missing
+  }, [granted])
+}
+
+// Whether the current token is known to carry the elevated delete_repo scope,
+// for gating destructive actions (teardown) on the elevation flow (#655).
+//
+// Fails open, like useMissingScopes: when the granted scopes are unknowable
+// (empty string, or a fine-grained PAT whose X-OAuth-Scopes header is absent),
+// return true so we do NOT surface an OAuth-only "request elevated permissions"
+// prompt to a token that may well be able to delete (a fine-grained token grants
+// deletion via Administration: write). A genuinely under-scoped token is still
+// caught by teardown's 403 backstop, so the cost of a false "has scope" is a
+// clear runtime error, whereas a false "missing" would nag PAT users with an
+// action they can't use. Only a classic OAuth token that positively lists its
+// scopes without delete_repo returns false and gets the prompt.
+export function useHasDeleteRepoScope(): boolean {
+  const { tokenScope } = useGithubAuth()
+  const observed = useContext(ObservedContext)
+
+  const granted = observed?.signal.scopes ?? tokenScope
+
+  return useMemo(() => {
+    if (!granted) return true
+    return hasScope(granted, ELEVATED_GITHUB_SCOPES[0])
   }, [granted])
 }
