@@ -43,3 +43,10 @@ export function missingScopes(granted: string): string[] {
   const have = expandScopes(granted)
   return REQUIRED_SCOPES.filter((scope) => !have.has(scope))
 }
+
+// Whether the expanded granted set satisfies a single scope. Used to gate
+// elevated (on-demand) actions like teardown on delete_repo, which is not part
+// of REQUIRED_SCOPES.
+export function hasScope(granted: string, scope: string): boolean {
+  return expandScopes(granted).has(scope)
+}

@@ -68,11 +68,11 @@ describe("classifyPatResult", () => {
     expect(result.kind).toBe("missing")
     if (result.kind === "missing") {
       // read:org is implied by admin:org, so it should not be reported once
-      // admin:org is present, but here neither admin:org nor read:user/delete_repo
-      // is granted.
+      // admin:org is present, but here neither admin:org nor read:user is
+      // granted. delete_repo is elevated-only, so it is never reported missing.
       expect(result.missing).toContain("admin:org")
       expect(result.missing).toContain("read:user")
-      expect(result.missing).toContain("delete_repo")
+      expect(result.missing).not.toContain("delete_repo")
     }
   })
 

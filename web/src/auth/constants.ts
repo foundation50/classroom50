@@ -14,12 +14,37 @@ export const GITHUB_AUTH_SESSION = {
   RETURN_TO: "gh_oauth_return_to",
 } as const
 
-// Scopes: admin:org enables org-invite management + team writes; repo covers
-// roster commits and repo archiving; delete_repo lets teardown delete repos
-// (else deletion 403s and callers fall back to archiving). delete_repo is
-// requested here for the GUI; the CLIs keep it opt-in.
-export const DEFAULT_GITHUB_SCOPE =
-  "read:user read:org repo workflow admin:org delete_repo"
+// Scopes split into two tiers so login stays least-privilege for everyone
+// (teachers and students share one flow):
+//
+// - BASE is requested at every sign-in and is what REQUIRED_SCOPES enforces.
+//   admin:org enables org-invite management + team writes; repo covers roster
+//   commits and repo archiving; workflow commits the autograder shim.
+// - ELEVATED (delete_repo) is destructive and requested only on demand, when a
+//   teacher opts into an elevated action (today: Teardown Organization). It is
+//   intentionally absent from BASE, so a student authorizing the app never
+//   grants repo deletion, and REQUIRED_SCOPES never nags for it (#655). Add a
+//   normally-required scope to BASE; add a destructive one to ELEVATED.
+//
+// The CLIs keep delete_repo opt-in as well.
+export const BASE_GITHUB_SCOPES = [
+  "read:user",
+  "read:org",
+  "repo",
+  "workflow",
+  "admin:org",
+] as const
+
+export const ELEVATED_GITHUB_SCOPES = ["delete_repo"] as const
+
+// The scope string a normal (least-privilege) sign-in requests.
+export const DEFAULT_GITHUB_SCOPE = BASE_GITHUB_SCOPES.join(" ")
+
+// The scope string an elevated sign-in requests: base + the destructive scopes.
+export const ELEVATED_GITHUB_SCOPE = [
+  ...BASE_GITHUB_SCOPES,
+  ...ELEVATED_GITHUB_SCOPES,
+].join(" ")
 
 // An org's OAuth app policy page, where owners approve apps or relax the
 // restriction.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { DEFAULT_GITHUB_SCOPE } from "./constants"
-import { REQUIRED_SCOPES, expandScopes, missingScopes } from "./scopes"
+import { DEFAULT_GITHUB_SCOPE, ELEVATED_GITHUB_SCOPE } from "./constants"
+import { REQUIRED_SCOPES, expandScopes, hasScope, missingScopes } from "./scopes"
 
 describe("expandScopes", () => {
   it("expands repo to its sub-scopes", () => {
@@ -39,22 +39,30 @@ describe("missingScopes", () => {
   })
 
   it("treats admin:org as covering read:org (implication, not literal match)", () => {
-    // read:user repo workflow admin:org delete_repo — read:org omitted but
-    // implied by admin:org.
-    const granted = "read:user repo workflow admin:org delete_repo"
+    // read:user repo workflow admin:org — read:org omitted but implied by
+    // admin:org.
+    const granted = "read:user repo workflow admin:org"
     expect(missingScopes(granted)).toEqual([])
   })
 
   it("treats a broad real-world grant as fully satisfying", () => {
     // GitHub commonly returns broader top-level scopes; user covers read:user.
-    const granted = "user repo workflow admin:org delete_repo"
+    const granted = "user repo workflow admin:org"
     expect(missingScopes(granted)).toEqual([])
   })
 
-  it("flags an actually-absent scope", () => {
-    // delete_repo dropped from the grant.
+  it("does not require delete_repo (it is elevated-only, not a base scope)", () => {
+    // A least-privilege base grant must never trip the scope-warning banner
+    // just because delete_repo is absent (#655).
     const granted = "read:user read:org repo workflow admin:org"
-    expect(missingScopes(granted)).toEqual(["delete_repo"])
+    expect(missingScopes(granted)).toEqual([])
+    expect(REQUIRED_SCOPES).not.toContain("delete_repo")
+  })
+
+  it("flags an actually-absent required scope", () => {
+    // workflow dropped from the grant.
+    const granted = "read:user read:org repo admin:org"
+    expect(missingScopes(granted)).toEqual(["workflow"])
   })
 
   it("reports every required scope for an empty grant", () => {
@@ -68,7 +76,29 @@ describe("missingScopes", () => {
   // source of spurious production banners.
   it("diffs a captured DEFAULT_GITHUB_SCOPE header to zero missing", () => {
     const capturedHeader =
-      "read:org, read:user, repo, workflow, admin:org, write:org, delete_repo"
+      "read:org, read:user, repo, workflow, admin:org, write:org"
     expect(missingScopes(capturedHeader)).toEqual([])
+  })
+})
+
+describe("hasScope", () => {
+  it("detects a directly granted scope", () => {
+    expect(hasScope("read:user repo delete_repo", "delete_repo")).toBe(true)
+  })
+
+  it("returns false when the scope is absent", () => {
+    expect(hasScope(DEFAULT_GITHUB_SCOPE, "delete_repo")).toBe(false)
+  })
+
+  it("returns false for an empty grant", () => {
+    expect(hasScope("", "delete_repo")).toBe(false)
+  })
+
+  it("sees delete_repo in the elevated scope string", () => {
+    expect(hasScope(ELEVATED_GITHUB_SCOPE, "delete_repo")).toBe(true)
+  })
+
+  it("resolves implied scopes (admin:org satisfies read:org)", () => {
+    expect(hasScope("admin:org", "read:org")).toBe(true)
   })
 })
