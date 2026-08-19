@@ -49,6 +49,9 @@ const TeardownSection = ({
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState<TeardownPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Whether the current error is the scope wall, so the callout can offer the
+  // elevation the message names.
+  const [scopeWalled, setScopeWalled] = useState(false)
   const [done, setDone] = useState<string | null>(null)
 
   const openMutation = usePlanTeardown(org)
@@ -57,10 +60,12 @@ const TeardownSection = ({
       onSuccess: (p) => {
         setPlan(p)
         setError(null)
+        setScopeWalled(false)
         setOpen(true)
       },
       onError: (err) => {
         log.warn("teardown plan failed", { org, err })
+        setScopeWalled(false)
         setError(
           err instanceof TeardownMarkerError
             ? err.message
@@ -91,8 +96,18 @@ const TeardownSection = ({
       }
     >
       {error && (
-        <CalloutDiv className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
-          {error}
+        <CalloutDiv className="flex flex-col items-start gap-2 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+          <span>{error}</span>
+          {scopeWalled && (
+            // The message names elevation as the remedy, so make it reachable.
+            <Button
+              variant="warning"
+              size="sm"
+              onClick={() => setElevateOpen(true)}
+            >
+              {t("orgSettings.teardown.grantButton")}
+            </Button>
+          )}
         </CalloutDiv>
       )}
       {done && (
@@ -237,19 +252,22 @@ const TeardownSection = ({
             })
           } catch (err) {
             // Backstop: the up-front gate should have caught the scope case, but
-            // a token that lost the scope mid-session still 403s. Domain errors
-            // carry a LocalizedMessage, so resolve it here rather than showing a
-            // raw key or English assembled below the view.
+            // a token that lost the scope mid-session still 403s.
             const localized = localizedMessageOf(err)
             if (localized) {
-              // The scope wall tells the user to request elevated permissions,
-              // so make that reachable instead of only naming it.
+              const message = resolveLocalizedMessage(t, localized)
+              // An abort can arrive after repositories were already deleted, and
+              // that message is the only record of it. Close the confirmation and
+              // show it as the section callout, which survives — stacking the
+              // elevation dialog over it would hide it, and its first button
+              // navigates the page away.
               if (err instanceof TeardownScopeError) {
-                setElevateOpen(true)
+                setOpen(false)
+                setError(message)
+                setScopeWalled(true)
+                return
               }
-              throw new Error(resolveLocalizedMessage(t, localized), {
-                cause: err,
-              })
+              throw new Error(message, { cause: err })
             }
             throw new Error(t("orgSettings.teardown.executeError"), {
               cause: err,

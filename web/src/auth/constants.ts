@@ -35,7 +35,11 @@ export const BASE_GITHUB_SCOPES = [
   "admin:org",
 ] as const
 
-export const ELEVATED_GITHUB_SCOPES = ["delete_repo"] as const
+// GitHub's scope for permanently deleting a repository. Named because both the
+// elevated scope set and teardown's 403 classifier key off this one string.
+export const DELETE_REPO_SCOPE = "delete_repo"
+
+export const ELEVATED_GITHUB_SCOPES = [DELETE_REPO_SCOPE] as const
 
 // The scope string a normal (least-privilege) sign-in requests.
 export const DEFAULT_GITHUB_SCOPE = BASE_GITHUB_SCOPES.join(" ")

@@ -75,14 +75,14 @@ warns and asks for confirmation before proceeding. See
 > [!NOTE]
 > **Tearing down an organization needs an extra permission.** Signing in does
 > not request `delete_repo`. Exactly one feature needs it: **Tear down
-> organization** (org settings → Danger zone), which resets an org by deleting
-> the repositories Classroom 50 manages. When you use it, Classroom 50 asks you
-> to request elevated permissions and sign in again, and teardown still runs
-> only after you type an explicit confirmation. Nothing else deletes
-> repositories. Classroom 50 has no server: the token stays in your browser, so
-> nobody but you can act on your org with it. The CLIs work the same way — they
-> never request `delete_repo` unless you opt in with
-> `gh teacher login -s delete_repo`.
+> organization**, in the organization's settings under **Danger zone**. It
+> resets an organization by deleting **every** repository in it, not only the
+> ones Classroom 50 created. When you use it, Classroom 50 asks you to request
+> that permission and sign in again, and teardown still runs only after you type
+> an explicit confirmation. Nothing else deletes repositories. Classroom 50 has
+> no server: the token stays in your browser, so nobody but you can act on your
+> organization with it. The CLIs work the same way: they never request
+> `delete_repo` unless you opt in with `gh teacher login -s delete_repo`.
 
 ### 3. Student authentication
 

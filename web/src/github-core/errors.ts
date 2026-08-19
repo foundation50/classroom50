@@ -122,6 +122,20 @@ export class GitHubAPIError extends Error {
     return !required.some((scope) => granted.has(scope))
   }
 
+  // Whether X-OAuth-Scopes affirmatively lists a scope. False when the header is
+  // absent (the token's scopes are unknowable — a fine-grained PAT sends none),
+  // so callers must treat false as "not proven granted", never as "proven
+  // missing". Unlike isScopeGap this needs no X-Accepted-OAuth-Scopes: GitHub
+  // often sends that header empty, which makes a gap unprovable even when the
+  // token demonstrably lacks the scope the caller cares about.
+  grantsScope(scope: string): boolean {
+    if (this.oauthScopes === null) return false
+    return this.oauthScopes
+      .split(",")
+      .map((s) => s.trim())
+      .includes(scope)
+  }
+
   // The GitHub SSO authorization URL to send the user to, if the header carried
   // one (`required; url=…`). Null for the `partial-results` shape or when no
   // header is present.

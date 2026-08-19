@@ -25,6 +25,10 @@ const requestDeviceCode = vi.fn<
   interval: 5,
 }))
 
+const pollDeviceToken = vi.fn<() => Promise<Record<string, unknown>>>(
+  async () => ({ error: "authorization_pending" }),
+)
+
 vi.mock("./github-oauth-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./github-oauth-api")>()
   return {
@@ -32,6 +36,7 @@ vi.mock("./github-oauth-api", async (importOriginal) => {
     buildGithubAuthorizeUrl: (input: { scope: string }) =>
       buildGithubAuthorizeUrl(input),
     requestDeviceCode: (input: { scope: string }) => requestDeviceCode(input),
+    pollDeviceToken: () => pollDeviceToken(),
   }
 })
 
@@ -126,5 +131,60 @@ describe("sign-in scope (#655)", () => {
     const { scope } = requestDeviceCode.mock.calls[0]![0]
     expect(scope).toBe(ELEVATED_GITHUB_SCOPE)
     expect(scope).toContain("delete_repo")
+  })
+
+  it("records the requested tier on the stored device state", async () => {
+    // The modal decides which prompt is "its own" by comparing device.elevated
+    // to its direction, so the provider's writer must be correct — the modal's
+    // own tests use a hand-built fixture and can't prove this.
+    const { result } = renderHook(() => useGithubAuth(), { wrapper })
+    await result.current.startDeviceFlow({ elevated: true })
+
+    await waitFor(() => expect(result.current.device).toBeTruthy())
+    expect(result.current.device!.elevated).toBe(true)
+    expect(result.current.screen).toBe("device-prompt")
+  })
+
+  it("records a base device flow as not elevated", async () => {
+    const { result } = renderHook(() => useGithubAuth(), { wrapper })
+    await result.current.startDeviceFlow()
+
+    await waitFor(() => expect(result.current.device).toBeTruthy())
+    expect(result.current.device!.elevated).toBe(false)
+  })
+
+  it("discards a device code that arrives after the flow was cancelled", async () => {
+    // The device-code request is not abortable, so a cancel during the in-flight
+    // window must make its callback a no-op. Otherwise a poll starts with no UI
+    // and can silently swap the session token for an elevated one.
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    requestDeviceCode.mockImplementationOnce(async () => {
+      await gate
+      return {
+        device_code: "dc",
+        user_code: "UC-1",
+        verification_uri: "https://github.com/login/device",
+        expires_in: 900,
+        interval: 5,
+      }
+    })
+
+    const { result } = renderHook(() => useGithubAuth(), { wrapper })
+    const pending = result.current.startDeviceFlow({ elevated: true })
+    await waitFor(() => expect(requestDeviceCode).toHaveBeenCalled())
+    // Cancel while the request is still in flight, then let it resolve.
+    result.current.cancelDeviceFlow()
+    release!()
+    await pending
+    await gate
+    // Give any (incorrectly) started poll a chance to fire.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    // The hazard is a poll running with no UI attached, able to swap the token.
+    expect(pollDeviceToken).not.toHaveBeenCalled()
+    expect(result.current.device).toBeNull()
   })
 })

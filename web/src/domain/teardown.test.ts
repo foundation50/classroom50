@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  TeardownForbiddenError,
   TeardownMarkerError,
   TeardownRateLimitError,
   TeardownScopeError,
@@ -50,6 +51,33 @@ function forbidden(): GitHubAPIError {
       resource: null,
       retryAfter: null,
     },
+  })
+}
+
+// A 403 carrying scope headers, so the classifier's header-driven branches are
+// reachable. `accepted: ""` is the realistic shape GitHub often sends, which
+// makes isScopeGap unprovable even when the granted set plainly lacks the scope.
+function forbiddenWithScopes(input: {
+  granted: string
+  accepted?: string
+  sso?: string
+}): GitHubAPIError {
+  return new GitHubAPIError({
+    status: 403,
+    url: "x",
+    message: "Forbidden",
+    body: null,
+    rateLimit: {
+      limit: null,
+      remaining: null,
+      used: null,
+      reset: null,
+      resource: null,
+      retryAfter: null,
+    },
+    oauthScopes: input.granted,
+    acceptedScopes: input.accepted ?? "",
+    ssoHeader: input.sso ?? null,
   })
 }
 
@@ -107,6 +135,9 @@ type Opts = {
   markerExists: boolean
   repos: string[]
   deleteForbidden?: boolean
+  // A 403 for every DELETE, carrying the given scope/SSO headers so the
+  // classifier's header-driven branches are reachable.
+  deleteForbiddenWith?: { granted: string; accepted?: string; sso?: string }
   // Repos that fail every DELETE with the given error kind.
   failRepos?: Record<string, "rate-limit" | "scope" | "server">
   // Classrooms present under classroom50/ (with optional team ref).
@@ -119,6 +150,7 @@ type Opts = {
 
 function makeClient(opts: Opts) {
   const deletes: string[] = []
+  const deleteAttempts: string[] = []
   const teamDeletes: string[] = []
   const classrooms = opts.classrooms ?? []
 
@@ -163,8 +195,12 @@ function makeClient(opts: Opts) {
       }
       // Repo delete.
       if (method === "DELETE") {
-        if (opts.deleteForbidden) return Promise.reject(forbidden())
         const repo = path.split("/").pop() ?? ""
+        deleteAttempts.push(repo)
+        if (opts.deleteForbidden) return Promise.reject(forbidden())
+        if (opts.deleteForbiddenWith) {
+          return Promise.reject(forbiddenWithScopes(opts.deleteForbiddenWith))
+        }
         const kind = opts.failRepos?.[repo]
         if (kind === "rate-limit") return Promise.reject(rateLimited403())
         if (kind === "scope") return Promise.reject(forbidden())
@@ -212,7 +248,7 @@ function makeClient(opts: Opts) {
     requestRaw: requestRaw as unknown as GitHubClient["requestRaw"],
     fetchArchive: vi.fn() as unknown as GitHubClient["fetchArchive"],
   }
-  return { client, deletes, teamDeletes }
+  return { client, deletes, deleteAttempts, teamDeletes }
 }
 
 // A requestRaw mock for tests that build their own `request` mock inline and
@@ -292,6 +328,105 @@ describe("executeTeardown", () => {
       "orgSettings.teardown.needsDeleteScope",
     )
     expect(err.message).not.toMatch(/forbidden/i)
+  })
+
+  // GitHub commonly sends an EMPTY X-Accepted-OAuth-Scopes, which makes
+  // isScopeGap unprovable. Without an explicit delete_repo check that case fell
+  // through to "your permissions look sufficient", sending the teacher to audit
+  // org settings instead of the elevation that actually fixes it.
+  it("treats a 403 whose granted scopes lack delete_repo as the scope wall", async () => {
+    const { client } = makeClient({
+      markerExists: true,
+      repos: ["classroom50", "cs101-hw1-alice"],
+      deleteForbiddenWith: {
+        granted: "read:user, read:org, repo, workflow, admin:org",
+        accepted: "",
+      },
+    })
+    const plan = await planTeardown(client, "acme")
+    const err = await executeTeardown(client, plan).catch((e) => e)
+    expect(err).toBeInstanceOf(TeardownScopeError)
+    expect((err as TeardownScopeError).localized.key).toBe(
+      "orgSettings.teardown.needsDeleteScope",
+    )
+  })
+
+  it("reports an SSO gate as its own wall, not a scope gap", async () => {
+    const { client } = makeClient({
+      markerExists: true,
+      repos: ["classroom50", "cs101-hw1-alice"],
+      deleteForbiddenWith: {
+        granted: "repo, delete_repo",
+        sso: "required; url=https://github.com/orgs/acme/sso",
+      },
+    })
+    const plan = await planTeardown(client, "acme")
+    const err = await executeTeardown(client, plan).catch((e) => e)
+    expect(err).toBeInstanceOf(TeardownForbiddenError)
+    expect((err as TeardownForbiddenError).localized.key).toBe(
+      "orgSettings.teardown.ssoRequired",
+    )
+  })
+
+  it("reports a refusal with delete_repo granted as something other than scope", async () => {
+    // An org policy or protected repository — offering elevation here would
+    // loop the teacher through a re-auth that cannot help.
+    const { client } = makeClient({
+      markerExists: true,
+      repos: ["classroom50", "cs101-hw1-alice"],
+      deleteForbiddenWith: {
+        granted: "read:user, read:org, repo, workflow, admin:org, delete_repo",
+        accepted: "",
+      },
+    })
+    const plan = await planTeardown(client, "acme")
+    const err = await executeTeardown(client, plan).catch((e) => e)
+    expect(err).toBeInstanceOf(TeardownForbiddenError)
+    expect((err as TeardownForbiddenError).localized.key).toBe(
+      "orgSettings.teardown.forbidden",
+    )
+  })
+
+  it("names the repositories already destroyed when a wall arrives mid-run", async () => {
+    // The abort message is the only record that deletions happened, so it must
+    // carry the count. This branch previously shipped a bug (it passed `deleted`
+    // where i18next needs `count`, rendering the raw key).
+    const { client } = makeClient({
+      markerExists: true,
+      repos: ["classroom50", "ok1", "ok2", "walled"],
+      failRepos: { walled: "scope" },
+    })
+    const plan = await planTeardown(client, "acme")
+    const err = await executeTeardown(client, plan).catch((e) => e)
+    expect(err).toBeInstanceOf(TeardownScopeError)
+    const scopeErr = err as TeardownScopeError
+    expect(scopeErr.localized.key).toBe(
+      "orgSettings.teardown.needsDeleteScopePartial",
+    )
+    // The count must match what was actually deleted, and exclude the marker.
+    expect(scopeErr.localized.params?.count).toBe(scopeErr.deleted.length)
+    expect(scopeErr.deleted).not.toContain("classroom50")
+    expect(scopeErr.deleted.length).toBeGreaterThan(0)
+  })
+
+  it("stops issuing deletes once a token-wide wall is hit", async () => {
+    // A scope wall is a property of the token, so every remaining repo would
+    // fail identically. Without the short-circuit a large org burns hundreds of
+    // doomed requests and the exhausted retries mislabel the abort as a throttle.
+    const { client, deleteAttempts } = makeClient({
+      markerExists: true,
+      repos: [
+        "classroom50",
+        ...Array.from({ length: 12 }, (_, i) => `r${i + 1}`),
+      ],
+      deleteForbidden: true,
+    })
+    const plan = await planTeardown(client, "acme")
+    const err = await executeTeardown(client, plan).catch((e) => e)
+    expect(err).toBeInstanceOf(TeardownScopeError)
+    // Concurrency is 4, so at most that many can be in flight before the wall is
+    // observed; the rest must short-circuit rather than call DELETE.
+    expect(deleteAttempts.length).toBeLessThanOrEqual(4)
   })
 
   it("does not throw scope error when there is nothing but the marker", async () => {

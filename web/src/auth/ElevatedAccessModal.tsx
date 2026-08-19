@@ -51,8 +51,15 @@ export function ElevatedAccessModal({
   const [sawDevicePrompt, setSawDevicePrompt] = useState(false)
 
   useEffect(() => {
-    if (!open) setSawDevicePrompt(false)
-  }, [open])
+    if (open) return
+    setSawDevicePrompt(false)
+    // Closing via the prop is a close too: without this, a parent that flips
+    // `open` leaves an owned poll running with no UI attached.
+    if (ownsDeviceFlowRef.current) {
+      ownsDeviceFlowRef.current = false
+      cancelDeviceFlow()
+    }
+  }, [open, cancelDeviceFlow])
 
   // Only show a pending code for this dialog's direction, so a flow started
   // elsewhere can't render under the wrong label.

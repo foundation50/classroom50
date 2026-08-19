@@ -24,6 +24,7 @@ import {
 import { getRepo } from "@/github-core/repoReads"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { mapWithConcurrency } from "@/util/concurrency"
+import { DELETE_REPO_SCOPE } from "@/auth/constants"
 import {
   describeLocalizedMessage,
   type LocalizedMessage,
@@ -37,7 +38,8 @@ const TEARDOWN_RATE_LIMIT_KEY = "orgSettings.teardown.rateLimited"
 
 // An abort that stopped the run partway. Carries the progress at that moment: a
 // wall can arrive after some repositories are already permanently deleted, so a
-// bare "you need permission" message would hide the data loss.
+// bare "you need permission" message would hide the data loss. The partial/plain
+// key choice lives here so no subclass can forget it.
 class TeardownAbortError extends Error {
   readonly localized: LocalizedMessage
   readonly deleted: string[]
@@ -45,10 +47,14 @@ class TeardownAbortError extends Error {
 
   constructor(
     name: string,
-    localized: LocalizedMessage,
+    keys: { plain: string; partial: string },
     deleted: string[],
     failed: string[],
   ) {
+    const localized: LocalizedMessage =
+      deleted.length > 0
+        ? { key: keys.partial, params: { count: deleted.length } }
+        : { key: keys.plain }
     super(describeLocalizedMessage(localized))
     this.name = name
     this.localized = localized
@@ -61,12 +67,10 @@ export class TeardownScopeError extends TeardownAbortError {
   constructor(deleted: string[], failed: string[]) {
     super(
       "TeardownScopeError",
-      deleted.length > 0
-        ? {
-            key: "orgSettings.teardown.needsDeleteScopePartial",
-            params: { count: deleted.length },
-          }
-        : { key: TEARDOWN_DELETE_SCOPE_KEY },
+      {
+        plain: TEARDOWN_DELETE_SCOPE_KEY,
+        partial: "orgSettings.teardown.needsDeleteScopePartial",
+      },
       deleted,
       failed,
     )
@@ -80,12 +84,15 @@ export class TeardownForbiddenError extends TeardownAbortError {
   constructor(kind: "sso" | "other", deleted: string[], failed: string[]) {
     super(
       "TeardownForbiddenError",
-      {
-        key:
-          kind === "sso"
-            ? "orgSettings.teardown.ssoRequired"
-            : "orgSettings.teardown.forbidden",
-      },
+      kind === "sso"
+        ? {
+            plain: "orgSettings.teardown.ssoRequired",
+            partial: "orgSettings.teardown.ssoRequiredPartial",
+          }
+        : {
+            plain: "orgSettings.teardown.forbidden",
+            partial: "orgSettings.teardown.forbiddenPartial",
+          },
       deleted,
       failed,
     )
@@ -120,7 +127,10 @@ export class TeardownRateLimitError extends TeardownAbortError {
   constructor(deleted: string[], failed: string[]) {
     super(
       "TeardownRateLimitError",
-      { key: TEARDOWN_RATE_LIMIT_KEY },
+      {
+        plain: TEARDOWN_RATE_LIMIT_KEY,
+        partial: "orgSettings.teardown.rateLimitedPartial",
+      },
       deleted,
       failed,
     )
@@ -440,13 +450,21 @@ export async function executeTeardown(
       if (err instanceof GitHubAPIError && err.isForbidden) {
         if (err.isSsoRequired) {
           ssoWall = true
-        } else if (err.isScopeGap || err.oauthScopes === null) {
-          // A proven gap, or a 403 whose scope headers GitHub didn't send (so a
-          // gap can't be ruled out): treat as the scope wall.
+        } else if (
+          err.isScopeGap ||
+          err.oauthScopes === null ||
+          !err.grantsScope(DELETE_REPO_SCOPE)
+        ) {
+          // A proven gap, a 403 whose scope headers GitHub didn't send, or one
+          // whose granted scopes visibly lack delete_repo. The last case matters
+          // because GitHub often sends an empty X-Accepted-OAuth-Scopes, which
+          // makes isScopeGap unprovable even for a token that plainly can't
+          // delete — misreporting that as an org-policy problem would send the
+          // teacher to settings instead of the elevation that actually fixes it.
           scopeWall = true
         } else {
-          // Headers prove the scopes are sufficient, so this is something else
-          // (org policy, protected repo). Record it rather than mislabel it.
+          // delete_repo is granted, so the refusal is something else: an org
+          // policy or a protected repository.
           otherForbidden = true
         }
       }

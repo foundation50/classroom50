@@ -445,7 +445,7 @@
     "reauthorizeHint": "If re-authorizing doesn't clear this, an organization owner may need to approve the app in the org's OAuth policy settings.",
     "elevated": {
       "title": "Request permission to delete repositories",
-      "body": "Tearing down an organization deletes repositories. Sign in again to grant that access for this session.",
+      "body": "Tearing down an organization deletes repositories. Sign in again to grant that access. It stays authorized for Classroom 50 until you revoke it on GitHub.",
       "revokeTitle": "Stop using permission to delete repositories",
       "revokeBody": "Sign in again to get a token without it. Your earlier token stays valid at GitHub until you revoke this app's access there.",
       "revokeLink": "Review this app's access on GitHub",
@@ -1052,7 +1052,7 @@
     },
     "elevatedScope": {
       "heading": "Elevated permissions",
-      "subheading": "Tearing down an organization needs permission to delete repositories, which normal sign-in doesn't request. Grant this permission only when you need it.",
+      "subheading": "Tearing down an organization needs permission to delete repositories, which normal sign-in doesn't request. Grant this permission only when you need it, and revoke it on GitHub when you're done.",
       "status": {
         "granted": "This session can delete repositories.",
         "missing": "This session can't delete repositories.",
@@ -1885,8 +1885,14 @@
       "needsDeleteScopePartial_one": "GitHub refused to delete repositories (403) after {{count}} was already deleted. That deletion is permanent. Request elevated permissions and run teardown again to finish.",
       "needsDeleteScopePartial_other": "GitHub refused to delete repositories (403) after {{count}} were already deleted. Those deletions are permanent. Request elevated permissions and run teardown again to finish.",
       "ssoRequired": "GitHub refused to delete repositories (403). This organization requires SAML single sign-on. Authorize your session for this organization on GitHub, then run teardown again.",
-      "forbidden": "GitHub refused to delete repositories (403), and your permissions look sufficient. An organization policy or a protected repository is likely blocking it. Check the organization's settings, then run teardown again.",
-      "rateLimited": "GitHub rate-limited the deletions. Some repositories are already deleted. Wait a moment, then run teardown again to finish."
+      "ssoRequiredPartial_one": "GitHub refused to delete repositories (403) after {{count}} was already deleted, and that deletion is permanent. This organization requires SAML single sign-on. Authorize your session for it on GitHub, then run teardown again to finish.",
+      "ssoRequiredPartial_other": "GitHub refused to delete repositories (403) after {{count}} were already deleted, and those deletions are permanent. This organization requires SAML single sign-on. Authorize your session for it on GitHub, then run teardown again to finish.",
+      "forbidden": "GitHub refused to delete repositories (403), and your permissions look sufficient. An organization policy or a protected repository is likely blocking the deletion. Check the organization's settings, then run teardown again.",
+      "forbiddenPartial_one": "GitHub refused to delete repositories (403) after {{count}} was already deleted, and that deletion is permanent. Your permissions look sufficient, so an organization policy or a protected repository is likely blocking the rest. Check the organization's settings, then run teardown again to finish.",
+      "forbiddenPartial_other": "GitHub refused to delete repositories (403) after {{count}} were already deleted, and those deletions are permanent. Your permissions look sufficient, so an organization policy or a protected repository is likely blocking the rest. Check the organization's settings, then run teardown again to finish.",
+      "rateLimited": "GitHub rate-limited the deletions before any repository was deleted. Wait a moment, then run teardown again.",
+      "rateLimitedPartial_one": "GitHub rate-limited the deletions after {{count}} was already deleted, and that deletion is permanent. Wait a moment, then run teardown again to finish.",
+      "rateLimitedPartial_other": "GitHub rate-limited the deletions after {{count}} were already deleted, and those deletions are permanent. Wait a moment, then run teardown again to finish."
     },
     "preflight": {
       "categoryServiceToken": "service token",

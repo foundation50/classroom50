@@ -239,6 +239,12 @@ function useGithubAuthState() {
   const { t } = useTranslation()
   const isOnline = useOnlineStatus()
   const abortRef = useRef<AbortController | null>(null)
+  // Bumped whenever a device flow is cancelled or fails. `startDeviceFlow`
+  // captures the current value and its callbacks no-op if it changed, because
+  // the device-code request itself is not abortable: abortRef only exists once
+  // polling starts, so without this a cancel during the in-flight request lets a
+  // poll start (and swap the session token) with no UI attached.
+  const deviceGenRef = useRef(0)
   // Deep link (#71) stashed at code-exchange, consumed by the status-driven
   // effect below so navigation runs against an authenticated router context.
   const pendingReturnToRef = useRef<string | null>(null)
@@ -605,14 +611,18 @@ function useGithubAuthState() {
     [validateConfig],
   )
 
-  const failDeviceFlow = useCallback((message: string) => {
-    log.warn("device flow failed", { record: true })
-    abortRef.current?.abort()
-    abortRef.current = null
-    setError(message)
-    setDevice(null)
-    setScreen("config")
-  }, [])
+  const failDeviceFlow = useCallback(
+    (message: string) => {
+      log.warn("device flow failed", { record: true })
+      deviceGenRef.current += 1
+      abortRef.current?.abort()
+      abortRef.current = null
+      setError(message)
+      setDevice(null)
+      setScreen(token ? "authed" : "config")
+    },
+    [token],
+  )
 
   const startDevicePolling = useCallback(
     async (input: {
@@ -722,8 +732,16 @@ function useGithubAuthState() {
       })
       setError(null)
 
+      // Capture the generation: a cancel (or navigation) while the request is in
+      // flight bumps it, and the callbacks below must then do nothing.
+      const generation = ++deviceGenRef.current
+
       requestDeviceCodeMutation.mutate(config, {
         onSuccess: (data) => {
+          if (generation !== deviceGenRef.current) {
+            log.info("device code issued after cancel, discarding")
+            return
+          }
           log.info("device code issued, awaiting authorization")
           const intervalSeconds = data.interval || 5
           const expiresAt = Date.now() + data.expires_in! * 1000
@@ -750,6 +768,7 @@ function useGithubAuthState() {
           })
         },
         onError: (err) => {
+          if (generation !== deviceGenRef.current) return
           failDeviceFlow(formatError(t, err))
         },
       })
@@ -764,12 +783,15 @@ function useGithubAuthState() {
   )
 
   const cancelDeviceFlow = useCallback(() => {
+    deviceGenRef.current += 1
     abortRef.current?.abort()
     abortRef.current = null
     setDevice(null)
     setError(null)
-    setScreen("config")
-  }, [])
+    // Restore the screen the session is actually in: hardcoding "config" parks an
+    // authenticated session on the login surface.
+    setScreen(token ? "authed" : "config")
+  }, [token])
 
   const markDeviceCodeCopied = useCallback(() => {
     setDevice((current) =>

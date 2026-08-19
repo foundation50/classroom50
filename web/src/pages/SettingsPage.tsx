@@ -25,6 +25,7 @@ import { useReducedMotion, type MotionPref } from "@/hooks/useReducedMotion"
 import { useTheme, type ThemePref } from "@/hooks/useTheme"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
 import { useDeleteRepoScopeState } from "@/context/github/GitHubProvider"
+import { githubOAuthGrantUrl } from "@/auth/constants"
 import { ElevatedAccessModal } from "@/auth/ElevatedAccessModal"
 
 // Owned + Classroom 50-ready orgs are the only ones with a manageable service
@@ -169,6 +170,18 @@ function ElevatedPermissionsSection({
               </Button>
             )}
           </div>
+          {/* Always reachable: signing in again only narrows this browser's
+              token, so GitHub is the only place the grant itself goes away —
+              and it's needed most right after the local narrowing, when the
+              state is no longer "granted". */}
+          <a
+            className="link text-xs"
+            href={githubOAuthGrantUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t("auth.elevated.revokeLink")}
+          </a>
         </div>
       </SettingsSectionCard>
       <ElevatedAccessModal
