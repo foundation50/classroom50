@@ -128,31 +128,38 @@ export function useMissingScopes(): string[] {
   }, [granted])
 }
 
-// Whether the current token is known to carry the elevated delete_repo scope,
-// for gating destructive actions (teardown) on the elevation flow (#655).
+// Whether the current token carries the elevated delete_repo scope (#655).
 //
-// Fails open, like useMissingScopes: when the granted scopes are unknowable
-// (empty string, or a fine-grained PAT whose X-OAuth-Scopes header is absent),
-// return true rather than surface a prompt to a token that may well be able to
-// delete. A genuinely under-scoped token is still caught by teardown's 403
-// backstop, which aborts before anything irreversible.
+// Deliberately tri-state. The same fact needs opposite defaults in two places:
+// gating a destructive action should fail open (GitHub is the real authority and
+// teardown's 403 backstop aborts before anything irreversible), while *telling*
+// the user their current state must never claim a permission we couldn't read.
+// A single fail-open boolean served both and lied to the second caller.
 //
-// A classic PAT does report its scopes, so one lacking delete_repo correctly
-// reads false. Its holder can't use the OAuth elevation the prompt offers, but
-// the prompt is still the right signal: they must re-create the token with that
-// scope (or sign in with OAuth) before teardown can work.
-export function useHasDeleteRepoScope(): boolean {
+// "unknown" covers a fine-grained PAT (no X-OAuth-Scopes header) and any session
+// whose scopes we can't introspect.
+export type DeleteRepoScopeState = "granted" | "missing" | "unknown"
+
+export function useDeleteRepoScopeState(): DeleteRepoScopeState {
   const { tokenScope } = useGithubAuth()
   const observed = useContext(ObservedContext)
 
   // `||`, not `??`: a present-but-empty x-oauth-scopes header is "" (a classic
   // token with no scopes, or any header-rewriting hop), which would otherwise
-  // beat a perfectly good login scope and read as unknowable — failing open and
-  // arming teardown for a token that never had the scope.
+  // beat a perfectly good login scope and read as unknown.
   const granted = observed?.signal.scopes || tokenScope
 
   return useMemo(() => {
-    if (!granted) return true
+    if (!granted) return "unknown"
     return ELEVATED_GITHUB_SCOPES.every((scope) => hasScope(granted, scope))
+      ? "granted"
+      : "missing"
   }, [granted])
+}
+
+// Gate for destructive actions: fails open on "unknown" so a session we can't
+// introspect (a fine-grained PAT can delete via Administration: write) isn't
+// blocked from an action GitHub may well permit.
+export function useHasDeleteRepoScope(): boolean {
+  return useDeleteRepoScopeState() !== "missing"
 }

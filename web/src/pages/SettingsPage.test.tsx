@@ -17,18 +17,28 @@ vi.mock("@/components/settings/LanguageSwitcher", () => ({
   LanguageSwitcher: () => <div data-testid="language-switcher" />,
 }))
 vi.mock("@/hooks/useDocumentTitle", () => ({ useDocumentTitle: () => {} }))
-// The elevated-permissions section reads scope + auth context and renders the
-// elevated access modal; stub all three so the page renders without a
-// GitHubAuthProvider (this suite mounts the page bare). The modal and toggle
-// behavior have their own tests.
-vi.mock("@/context/github/GitHubProvider", () => ({
-  useHasDeleteRepoScope: () => false,
-}))
-vi.mock("@/auth/useGithubAuth", () => ({
-  useGithubAuth: () => ({ startWebFlow: vi.fn() }),
-}))
+// The elevated-permissions section reads scope state and renders the elevated
+// access modal; stub both so the page renders without a GitHubAuthProvider (this
+// suite mounts the page bare). The modal's flow has its own test.
+const scopeState = vi.fn<() => "granted" | "missing" | "unknown">(
+  () => "missing",
+)
+vi.mock("@/context/github/GitHubProvider", async (importActual) => {
+  const actual =
+    await importActual<typeof import("@/context/github/GitHubProvider")>()
+  return { ...actual, useDeleteRepoScopeState: () => scopeState() }
+})
 vi.mock("@/auth/ElevatedAccessModal", () => ({
-  ElevatedAccessModal: () => null,
+  ElevatedAccessModal: ({
+    open,
+    elevated,
+  }: {
+    open: boolean
+    elevated?: boolean
+  }) =>
+    open ? (
+      <div data-testid="elevated-modal" data-elevated={String(elevated)} />
+    ) : null,
 }))
 vi.mock("react-i18next", async (importActual) => {
   const actual = await importActual<typeof import("react-i18next")>()
@@ -136,6 +146,7 @@ afterEach(() => {
   window.localStorage.clear()
   orgsData.data = []
   orgsData.isLoading = false
+  scopeState.mockReturnValue("missing")
   for (const k of Object.keys(healthByOrg)) delete healthByOrg[k]
 })
 
@@ -169,7 +180,7 @@ describe("SettingsPage hidden organizations", () => {
 })
 
 describe("SettingsPage elevated permissions", () => {
-  it("hides the elevated-permissions section for a user who owns no ready org", () => {
+  it("hides the section for a user who owns no ready org", () => {
     // Students share this page; offering them delete_repo would widen the blast
     // radius of a stolen token for no benefit (#655).
     orgsData.data = [
@@ -183,7 +194,7 @@ describe("SettingsPage elevated permissions", () => {
     expect(screen.queryByText("settings.elevatedScope.heading")).toBeNull()
   })
 
-  it("shows it for an owner of a ready org", () => {
+  const asOwner = () => {
     orgsData.data = [
       {
         org: { login: "cs50", id: 42 },
@@ -191,11 +202,60 @@ describe("SettingsPage elevated permissions", () => {
         classroom50: { status: "ready" },
       },
     ]
+  }
+
+  it("offers only the request action when the permission is missing", () => {
+    asOwner()
+    scopeState.mockReturnValue("missing")
     renderPage()
-    expect(screen.getByText("settings.elevatedScope.heading")).toBeTruthy()
     expect(
-      screen.getByLabelText("settings.elevatedScope.toggleLabel"),
+      screen.getByText("settings.elevatedScope.status.missing"),
     ).toBeTruthy()
+    expect(
+      screen.getByText("settings.elevatedScope.requestButton"),
+    ).toBeTruthy()
+    expect(screen.queryByText("settings.elevatedScope.removeButton")).toBeNull()
+  })
+
+  it("offers the remove action only when the permission is observed", () => {
+    asOwner()
+    scopeState.mockReturnValue("granted")
+    renderPage()
+    expect(
+      screen.getByText("settings.elevatedScope.status.granted"),
+    ).toBeTruthy()
+    expect(screen.getByText("settings.elevatedScope.removeButton")).toBeTruthy()
+  })
+
+  it("never offers to remove a permission it could not read", () => {
+    // An unknown session (fine-grained PAT) must not be told it holds the
+    // permission, and must not be offered a revoke that swaps its token.
+    asOwner()
+    scopeState.mockReturnValue("unknown")
+    renderPage()
+    expect(
+      screen.getByText("settings.elevatedScope.status.unknown"),
+    ).toBeTruthy()
+    expect(screen.queryByText("settings.elevatedScope.removeButton")).toBeNull()
+  })
+
+  it("asks to grant when requesting, and to drop when removing", async () => {
+    asOwner()
+    scopeState.mockReturnValue("granted")
+    renderPage()
+
+    await userEvent.click(
+      screen.getByText("settings.elevatedScope.requestButton"),
+    )
+    expect(screen.getByTestId("elevated-modal").dataset.elevated).toBe("true")
+    cleanup()
+
+    scopeState.mockReturnValue("granted")
+    renderPage()
+    await userEvent.click(
+      screen.getByText("settings.elevatedScope.removeButton"),
+    )
+    expect(screen.getByTestId("elevated-modal").dataset.elevated).toBe("false")
   })
 })
 

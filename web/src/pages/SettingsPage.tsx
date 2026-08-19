@@ -24,7 +24,7 @@ import { TokenHealthChip } from "@/components/status/TokenHealthChip"
 import { useReducedMotion, type MotionPref } from "@/hooks/useReducedMotion"
 import { useTheme, type ThemePref } from "@/hooks/useTheme"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
-import { useHasDeleteRepoScope } from "@/context/github/GitHubProvider"
+import { useDeleteRepoScopeState } from "@/context/github/GitHubProvider"
 import { ElevatedAccessModal } from "@/auth/ElevatedAccessModal"
 
 // Owned + Classroom 50-ready orgs are the only ones with a manageable service
@@ -129,17 +129,18 @@ function ElevatedPermissionsSection({
   highlighted?: boolean
 }) {
   const { t } = useTranslation()
-  const hasDeleteRepo = useHasDeleteRepoScope()
-  const [elevateOpen, setElevateOpen] = useState(false)
+  const scopeState = useDeleteRepoScopeState()
+  const [elevate, setElevate] = useState<null | boolean>(null)
   const { data: orgs = [] } = useGetOrgs()
 
   const ownsReadyOrg = useMemo(() => orgs.some(isOwnedReadyOrg), [orgs])
   if (!ownsReadyOrg) return null
 
-  // Either direction needs a full re-auth, so both open the modal (which offers
-  // the device path that works on localhost).
-  const onToggle = () => setElevateOpen(true)
-
+  // An action, not a preference: each direction is a full re-auth the user can
+  // abandon, so a switch would misreport state. Only offer "remove" when the
+  // permission is actually observed — an unknown session (fine-grained PAT) must
+  // not be told it holds something we couldn't read, and revoking it would swap
+  // a deliberately org-scoped token for a broader OAuth one.
   return (
     <>
       <SettingsSectionCard
@@ -147,21 +148,35 @@ function ElevatedPermissionsSection({
         heading={t("settings.elevatedScope.heading")}
         subheading={t("settings.elevatedScope.subheading")}
         highlighted={highlighted}
-        control={
-          <input
-            type="checkbox"
-            role="switch"
-            className="toggle toggle-primary"
-            checked={hasDeleteRepo}
-            aria-label={t("settings.elevatedScope.toggleLabel")}
-            onChange={onToggle}
-          />
-        }
-      />
+      >
+        <div className="flex flex-col items-start gap-2">
+          <p className="text-sm text-base-content/70">
+            {t(`settings.elevatedScope.status.${scopeState}`)}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setElevate(true)}
+            >
+              {t("settings.elevatedScope.requestButton")}
+            </Button>
+            {scopeState === "granted" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setElevate(false)}
+              >
+                {t("settings.elevatedScope.removeButton")}
+              </Button>
+            )}
+          </div>
+        </div>
+      </SettingsSectionCard>
       <ElevatedAccessModal
-        open={elevateOpen}
-        elevated={!hasDeleteRepo}
-        onClose={() => setElevateOpen(false)}
+        open={elevate !== null}
+        elevated={elevate ?? true}
+        onClose={() => setElevate(null)}
       />
     </>
   )
@@ -227,16 +242,13 @@ function SettingsSectionCard({
   heading,
   subheading,
   highlighted,
-  control,
   children,
 }: {
   id: string
   heading: string
   subheading: string
   highlighted?: boolean
-  // Pinned to the top-right; for a section whose whole state is one switch.
-  control?: React.ReactNode
-  children?: React.ReactNode
+  children: React.ReactNode
 }) {
   return (
     <Card
@@ -249,16 +261,11 @@ function SettingsSectionCard({
       )}
     >
       <Card.Body>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <SectionAnchorHeading anchorId={id} as="h3" className="card-title">
-              {heading}
-            </SectionAnchorHeading>
-            <p className="text-sm text-base-content/70">{subheading}</p>
-          </div>
-          {control ? <div className="shrink-0 pt-1">{control}</div> : null}
-        </div>
-        {children ? <div className="mt-4">{children}</div> : null}
+        <SectionAnchorHeading anchorId={id} as="h3" className="card-title">
+          {heading}
+        </SectionAnchorHeading>
+        <p className="text-sm text-base-content/70">{subheading}</p>
+        <div className="mt-4">{children}</div>
       </Card.Body>
     </Card>
   )

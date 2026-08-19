@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import { useGithubAuth } from "./useGithubAuth"
 import { GitHubDevicePrompt } from "./GitHubDevicePrompt"
+import { githubOAuthGrantUrl } from "./constants"
 import { Alert, Button, Modal } from "@/components/ui"
 
 // Re-auth for a signed-in teacher who needs to change their delete_repo access.
@@ -138,6 +139,18 @@ export function ElevatedAccessModal({
             <p className="text-xs leading-relaxed text-base-content/60">
               {t("auth.elevated.deviceHint")}
             </p>
+            {!frozen && (
+              // Signing in narrows this session's token; only GitHub can revoke
+              // the one already issued, so point at where that happens.
+              <a
+                className="link text-xs"
+                href={githubOAuthGrantUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t("auth.elevated.revokeLink")}
+              </a>
+            )}
           </div>
         </div>
       )}

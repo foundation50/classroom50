@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest"
-import { renderHook } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { cleanup, renderHook } from "@testing-library/react"
 import { createElement, type PropsWithChildren } from "react"
 
 // useMissingScopes reads the login scope from useGithubAuth and the live
@@ -17,12 +17,21 @@ import {
   GitHubProvider,
   useMissingScopes,
   useHasDeleteRepoScope,
+  useDeleteRepoScopeState,
 } from "./GitHubProvider"
 
 function wrapper(token: string | null) {
   return ({ children }: PropsWithChildren) =>
     createElement(GitHubProvider, { token }, children)
 }
+
+// The gate drives an irreversible action, so never let a scope string leak from
+// one case into the next.
+beforeEach(() => {
+  authState.tokenScope = ""
+})
+
+afterEach(cleanup)
 
 describe("useMissingScopes (fail-open backstop)", () => {
   it("returns [] for a fine-grained session (empty login scope, no observation)", () => {
@@ -43,17 +52,41 @@ describe("useMissingScopes (fail-open backstop)", () => {
   })
 })
 
-describe("useHasDeleteRepoScope (gate for elevated teardown)", () => {
-  it("returns true when the login scope carries delete_repo", () => {
-    authState.tokenScope =
-      "read:user read:org repo workflow admin:org delete_repo"
+describe("useDeleteRepoScopeState (honest three-way signal)", () => {
+  const state = (tokenScope: string, token = "ghp_xxx") => {
+    authState.tokenScope = tokenScope
+    return renderHook(() => useDeleteRepoScopeState(), {
+      wrapper: wrapper(token),
+    }).result.current
+  }
+
+  it("reports granted when the scope is present", () => {
+    expect(
+      state("read:user read:org repo workflow admin:org delete_repo"),
+    ).toBe("granted")
+  })
+
+  it("reports missing when a readable grant lacks it", () => {
+    expect(state("read:user read:org repo workflow admin:org")).toBe("missing")
+  })
+
+  it("reports unknown when no scopes are introspectable", () => {
+    // A fine-grained PAT sends no X-OAuth-Scopes header; claiming either answer
+    // would be a lie, and "granted" is the dangerous one to display.
+    expect(state("", "github_pat_xxx")).toBe("unknown")
+  })
+})
+
+describe("useHasDeleteRepoScope (gate: fails open)", () => {
+  it("allows the action when the scope is present", () => {
+    authState.tokenScope = "repo delete_repo"
     const { result } = renderHook(() => useHasDeleteRepoScope(), {
       wrapper: wrapper("ghp_xxx"),
     })
     expect(result.current).toBe(true)
   })
 
-  it("returns false for a positively-scoped classic token without delete_repo", () => {
+  it("blocks the action only when the grant readably lacks it", () => {
     authState.tokenScope = "read:user read:org repo workflow admin:org"
     const { result } = renderHook(() => useHasDeleteRepoScope(), {
       wrapper: wrapper("ghp_xxx"),
@@ -61,25 +94,11 @@ describe("useHasDeleteRepoScope (gate for elevated teardown)", () => {
     expect(result.current).toBe(false)
   })
 
-  it("fails open (true) for a fine-grained session with no introspectable scopes", () => {
-    // A fine-grained PAT can delete via Administration: write but reports no
-    // X-OAuth-Scopes header, so we must not nag it with an OAuth-only prompt.
+  it("fails open on unknown so GitHub stays the authority", () => {
     authState.tokenScope = ""
     const { result } = renderHook(() => useHasDeleteRepoScope(), {
       wrapper: wrapper("github_pat_xxx"),
     })
     expect(result.current).toBe(true)
-  })
-
-  it("prefers the login scope over an empty observed header", () => {
-    // A present-but-empty x-oauth-scopes header must not beat a usable login
-    // scope and fail open — that would arm teardown for a base-scoped token.
-    authState.tokenScope = "read:user read:org repo workflow admin:org"
-    const { result } = renderHook(() => useHasDeleteRepoScope(), {
-      wrapper: wrapper("ghp_xxx"),
-      // No observation is injected here; the guard under test is the `||` in the
-      // hook, covered directly by the empty-string case below.
-    })
-    expect(result.current).toBe(false)
   })
 })
