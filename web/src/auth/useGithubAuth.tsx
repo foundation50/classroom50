@@ -10,7 +10,11 @@ import {
   type PropsWithChildren,
 } from "react"
 import { useTranslation } from "react-i18next"
-import { DEFAULT_GITHUB_SCOPE, GITHUB_OAUTH_CLIENT_ID } from "./constants"
+import {
+  DEFAULT_GITHUB_SCOPE,
+  ELEVATED_GITHUB_SCOPE,
+  GITHUB_OAUTH_CLIENT_ID,
+} from "./constants"
 import {
   buildGithubAuthorizeUrl,
   exchangeWebCode,
@@ -539,53 +543,65 @@ function useGithubAuthState() {
     return () => window.removeEventListener("pageshow", onPageShow)
   }, [])
 
-  const validateConfig = useCallback(() => {
-    const trimmedClientId = clientId.trim()
+  const validateConfig = useCallback(
+    (opts?: { elevated?: boolean }) => {
+      const trimmedClientId = clientId.trim()
 
-    if (!trimmedClientId) {
-      setError(t("auth.errorClientIdMissing"))
-      return null
-    }
+      if (!trimmedClientId) {
+        setError(t("auth.errorClientIdMissing"))
+        return null
+      }
 
-    persistGithubClientId(trimmedClientId)
-    setError(null)
+      persistGithubClientId(trimmedClientId)
+      setError(null)
 
-    return {
-      clientId: trimmedClientId,
-      scope: DEFAULT_GITHUB_SCOPE,
-    }
-  }, [clientId, t])
+      return {
+        clientId: trimmedClientId,
+        // Elevation is one-shot: the broadened scope is chosen at call time and
+        // never persisted, so a later fresh login drops back to base (#655).
+        scope: opts?.elevated ? ELEVATED_GITHUB_SCOPE : DEFAULT_GITHUB_SCOPE,
+      }
+    },
+    [clientId, t],
+  )
 
-  const startWebFlow = useCallback(async () => {
-    const config = validateConfig()
-    if (!config) return
+  const startWebFlow = useCallback(
+    async (opts?: { elevated?: boolean }) => {
+      const config = validateConfig(opts)
+      if (!config) return
 
-    log.info("starting web (PKCE) sign-in flow")
-    setScreen("exchanging")
+      log.info("starting web (PKCE) sign-in flow", {
+        elevated: opts?.elevated ?? false,
+      })
+      setScreen("exchanging")
 
-    const verifier = generateVerifier()
-    const challenge = await deriveChallenge(verifier)
-    const oauthState = randomBase64Url(16)
+      const verifier = generateVerifier()
+      const challenge = await deriveChallenge(verifier)
+      const oauthState = randomBase64Url(16)
 
-    // Stash the deep link (from /login?redirect=) in the OAuth session so it
-    // survives the GitHub round-trip; restored after the code exchange (#71).
-    const returnTo = new URLSearchParams(window.location.search).get("redirect")
+      // Stash the deep link (from /login?redirect=) in the OAuth session so it
+      // survives the GitHub round-trip; restored after the code exchange (#71).
+      const returnTo = new URLSearchParams(window.location.search).get(
+        "redirect",
+      )
 
-    saveOAuthSession({
-      verifier,
-      state: oauthState,
-      clientId: config.clientId,
-      scope: config.scope,
-      returnTo,
-    })
+      saveOAuthSession({
+        verifier,
+        state: oauthState,
+        clientId: config.clientId,
+        scope: config.scope,
+        returnTo,
+      })
 
-    window.location.href = buildGithubAuthorizeUrl({
-      clientId: config.clientId,
-      scope: config.scope,
-      state: oauthState,
-      challenge,
-    })
-  }, [validateConfig])
+      window.location.href = buildGithubAuthorizeUrl({
+        clientId: config.clientId,
+        scope: config.scope,
+        state: oauthState,
+        challenge,
+      })
+    },
+    [validateConfig],
+  )
 
   const failDeviceFlow = useCallback((message: string) => {
     log.warn("device flow failed", { record: true })
