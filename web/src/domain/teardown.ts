@@ -28,10 +28,19 @@ import { logger } from "@/lib/logger"
 
 const log = logger.scope("mutations:teardown")
 
+// The i18n key for the 403 scope-wall message, resolved at the view layer.
+// Domain code must not assemble user-facing English (AGENTS.md i18n rule); this
+// error carries the key so TeardownSection can translate it and surface the
+// elevation action. The message string mirrors the key's English for logs and
+// any non-i18n consumer.
+export const TEARDOWN_DELETE_SCOPE_KEY = "orgSettings.teardown.needsDeleteScope"
+
 export class TeardownScopeError extends Error {
-  constructor(message: string) {
-    super(message)
+  readonly messageKey: string
+  constructor(messageKey: string = TEARDOWN_DELETE_SCOPE_KEY) {
+    super(messageKey)
     this.name = "TeardownScopeError"
+    this.messageKey = messageKey
   }
 }
 
@@ -161,9 +170,6 @@ export type TeardownResult = {
 }
 
 const MAX_DELETE_ATTEMPTS = 4
-
-const DELETE_SCOPE_MESSAGE =
-  "Deleting repositories was forbidden (403). Teardown needs the `delete_repo` OAuth scope, which is not granted by default. Re-authenticate with that scope, or archive repositories instead."
 
 // "1 repository" / "3 repositories" — count + correctly-pluralized noun.
 function countLabel(count: number, singular: string, plural: string): string {
@@ -379,7 +385,7 @@ export async function executeTeardown(
         failed: failed.length,
         record: true,
       })
-      throw new TeardownScopeError(DELETE_SCOPE_MESSAGE)
+      throw new TeardownScopeError()
     }
     if (rateLimited) {
       log.warn("teardown aborted: rate limited (re-runnable)", {

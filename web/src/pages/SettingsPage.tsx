@@ -24,6 +24,8 @@ import { TokenHealthChip } from "@/components/status/TokenHealthChip"
 import { useReducedMotion, type MotionPref } from "@/hooks/useReducedMotion"
 import { useTheme, type ThemePref } from "@/hooks/useTheme"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
+import { useGithubAuth } from "@/auth/useGithubAuth"
+import { useHasDeleteRepoScope } from "@/context/github/GitHubProvider"
 
 // Owned + Classroom 50-ready orgs are the only ones with a manageable service
 // token (a non-owner can't read/set it). The section reads token health for
@@ -110,6 +112,45 @@ function ServiceTokensSection({ highlighted }: { highlighted?: boolean }) {
           })}
         </ul>
       )}
+    </SettingsSectionCard>
+  )
+}
+
+// Least-privilege by default: normal sign-in never requests delete_repo, so a
+// destructive action (Teardown Organization) needs a one-shot elevated re-auth.
+// This is an action, not a persisted toggle — nothing is stored, so a later
+// fresh login drops back to base scopes (#655).
+function ElevatedPermissionsSection({
+  highlighted,
+}: {
+  highlighted?: boolean
+}) {
+  const { t } = useTranslation()
+  const { startWebFlow } = useGithubAuth()
+  const hasDeleteRepo = useHasDeleteRepoScope()
+
+  return (
+    <SettingsSectionCard
+      id="elevated-permissions"
+      heading={t("settings.elevatedScope.heading")}
+      subheading={t("settings.elevatedScope.subheading")}
+      highlighted={highlighted}
+    >
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-base-content/70">
+          {hasDeleteRepo
+            ? t("settings.elevatedScope.granted")
+            : t("settings.elevatedScope.notGranted")}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="self-start"
+          onClick={() => void startWebFlow({ elevated: true })}
+        >
+          {t("settings.elevatedScope.grantButton")}
+        </Button>
+      </div>
     </SettingsSectionCard>
   )
 }
@@ -390,6 +431,9 @@ const SettingsPage = () => {
           <HiddenOrgsSection highlighted={highlightedId === "hidden-orgs"} />
           <ServiceTokensSection
             highlighted={highlightedId === "service-tokens"}
+          />
+          <ElevatedPermissionsSection
+            highlighted={highlightedId === "elevated-permissions"}
           />
         </SettingsGroup>
 

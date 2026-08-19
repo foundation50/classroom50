@@ -4,7 +4,7 @@ import { Trans, useTranslation } from "react-i18next"
 import { TriangleAlert } from "lucide-react"
 
 import { ConfirmModal } from "@/components/modals"
-import { Button, MonoLtr } from "@/components/ui"
+import { Alert, Button, MonoLtr, cx } from "@/components/ui"
 import {
   formatTeardownResult,
   TeardownMarkerError,
@@ -15,6 +15,8 @@ import {
 import { usePlanTeardown } from "@/hooks/mutations/usePlanTeardown"
 import { useExecuteTeardown } from "@/hooks/mutations/useExecuteTeardown"
 import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
+import { useGithubAuth } from "@/auth/useGithubAuth"
+import { useHasDeleteRepoScope } from "@/context/github/GitHubProvider"
 import SettingsSection from "./SettingsSection"
 import { CalloutDiv, CalloutText } from "@/lib/motionComponents"
 import { logger } from "@/lib/logger"
@@ -38,6 +40,8 @@ const TeardownSection = ({
 }) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { startWebFlow } = useGithubAuth()
+  const hasDeleteRepo = useHasDeleteRepoScope()
 
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState<TeardownPlan | null>(null)
@@ -92,19 +96,43 @@ const TeardownSection = ({
         <CalloutText className="text-sm text-success">{done}</CalloutText>
       )}
 
-      <Button
-        variant="error"
-        size="sm"
-        className={error || done ? "mt-4" : ""}
-        disabled={openMutation.isPending}
-        onClick={() => {
-          if (!openMutation.isPending) openTeardown()
-        }}
-      >
-        {openMutation.isPending
-          ? t("orgSettings.teardown.preparing")
-          : t("orgSettings.teardown.button")}
-      </Button>
+      {hasDeleteRepo ? (
+        <Button
+          variant="error"
+          size="sm"
+          className={error || done ? "mt-4" : ""}
+          disabled={openMutation.isPending}
+          onClick={() => {
+            if (!openMutation.isPending) openTeardown()
+          }}
+        >
+          {openMutation.isPending
+            ? t("orgSettings.teardown.preparing")
+            : t("orgSettings.teardown.button")}
+        </Button>
+      ) : (
+        // delete_repo is elevated-only and not granted by a normal sign-in, so
+        // teardown would 403. Offer the one-shot elevation re-auth up front
+        // rather than after a failed attempt (#655).
+        <Alert
+          tone="warning"
+          className={cx(
+            "flex-col items-start gap-2",
+            error || done ? "mt-4" : "",
+          )}
+        >
+          <span className="text-sm">
+            {t("orgSettings.teardown.needsElevation")}
+          </span>
+          <Button
+            variant="warning"
+            size="sm"
+            onClick={() => void startWebFlow({ elevated: true })}
+          >
+            {t("orgSettings.teardown.grantButton")}
+          </Button>
+        </Alert>
+      )}
 
       <ConfirmModal
         open={open}
@@ -199,10 +227,14 @@ const TeardownSection = ({
               },
             })
           } catch (err) {
-            if (
-              err instanceof TeardownScopeError ||
-              err instanceof TeardownRateLimitError
-            ) {
+            if (err instanceof TeardownScopeError) {
+              // Backstop: the up-front gate should have caught this, but a
+              // token that lost the scope mid-session still 403s. Surface the
+              // translated message (domain carries only the i18n key) so the
+              // modal points at the elevation flow.
+              throw new Error(t(err.messageKey), { cause: err })
+            }
+            if (err instanceof TeardownRateLimitError) {
               throw err
             }
             throw new Error(t("orgSettings.teardown.executeError"), {

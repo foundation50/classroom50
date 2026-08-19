@@ -285,9 +285,13 @@ describe("executeTeardown", () => {
       deleteForbidden: true,
     })
     const plan = await planTeardown(client, "acme")
-    await expect(executeTeardown(client, plan)).rejects.toBeInstanceOf(
-      TeardownScopeError,
+    const err = await executeTeardown(client, plan).catch((e) => e)
+    expect(err).toBeInstanceOf(TeardownScopeError)
+    // Domain carries the i18n key, not assembled English (AGENTS.md i18n rule).
+    expect((err as TeardownScopeError).messageKey).toBe(
+      "orgSettings.teardown.needsDeleteScope",
     )
+    expect(err.message).not.toMatch(/forbidden/i)
   })
 
   it("does not throw scope error when there is nothing but the marker", async () => {

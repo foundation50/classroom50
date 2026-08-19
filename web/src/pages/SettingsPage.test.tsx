@@ -17,6 +17,14 @@ vi.mock("@/components/settings/LanguageSwitcher", () => ({
   LanguageSwitcher: () => <div data-testid="language-switcher" />,
 }))
 vi.mock("@/hooks/useDocumentTitle", () => ({ useDocumentTitle: () => {} }))
+// The elevated-permissions section reads auth + scope context; stub both so the
+// page renders without a GitHubAuthProvider (this suite mounts the page bare).
+vi.mock("@/auth/useGithubAuth", () => ({
+  useGithubAuth: () => ({ startWebFlow: vi.fn() }),
+}))
+vi.mock("@/context/github/GitHubProvider", () => ({
+  useHasDeleteRepoScope: () => false,
+}))
 vi.mock("react-i18next", async (importActual) => {
   const actual = await importActual<typeof import("react-i18next")>()
   return { ...actual, useTranslation: () => ({ t: (k: string) => k }) }

@@ -1040,6 +1040,13 @@
       "expires": "Expires {{date}}",
       "manage": "Manage"
     },
+    "elevatedScope": {
+      "heading": "Elevated permissions",
+      "subheading": "Destructive actions like tearing down an organization need permission to delete repositories, which normal sign-in does not request. Grant it only when you need it.",
+      "granted": "Elevated permissions (repository deletion) are currently granted for this session.",
+      "notGranted": "Elevated permissions (repository deletion) are not currently granted. Normal sign-in stays least-privilege.",
+      "grantButton": "Request elevated permissions"
+    },
     "motion": {
       "heading": "Animations",
       "subheading": "Control interface motion such as page transitions, menus, and other animated effects.",
@@ -1856,7 +1863,10 @@
       "confirmBodyCannotUndo": "This cannot be undone.",
       "repositoriesHeading": "Repositories",
       "classroomTeamsHeading": "Classroom teams",
-      "executeError": "Teardown failed. Some repositories may not have been deleted."
+      "executeError": "Teardown failed. Some repositories may not have been deleted.",
+      "needsElevation": "Tearing down an organization deletes repositories, which needs elevated permissions that normal sign-in does not request. Request them to continue.",
+      "grantButton": "Request elevated permissions",
+      "needsDeleteScope": "Deleting repositories was forbidden (403). Teardown needs elevated permissions to delete repositories, which normal sign-in does not request. Request elevated permissions and try again, or archive repositories instead."
     },
     "preflight": {
       "categoryServiceToken": "service token",
