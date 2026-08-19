@@ -97,8 +97,7 @@ export function ClickableRow({
 
 /** Table row with a staggered fade/rise entrance. Meant for rows under a
  *  `listStagger` <tbody> whose `key` changes when the visible set does, so the
- *  page re-staggers on sort/filter/search. Honors reduced motion via the
- *  app-level MotionConfig. */
+ *  page re-staggers on sort/filter/search. */
 export function MotionTr({
   children,
   ...props

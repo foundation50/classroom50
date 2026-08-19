@@ -61,8 +61,6 @@ describe("SubmissionCountCell", () => {
         settling
       />,
     )
-    // While settling, the count chip is replaced by a shimmer placeholder and
-    // the swap is marked busy for assistive tech.
     expect(
       screen.queryByRole("button", { name: "submissions.type.countEveryPush" }),
     ).toBeNull()

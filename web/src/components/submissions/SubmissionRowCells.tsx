@@ -117,6 +117,7 @@ export const SubmissionCountCell = ({
   return (
     <LoadingSwap
       loading={settling}
+      deferUntilLoaded
       fallback={<div className="skeleton skeleton-shimmer h-5 w-16" />}
     >
       <div className="flex items-center gap-1.5">
@@ -172,6 +173,7 @@ export const LastSubmittedCell = ({
   return (
     <LoadingSwap
       loading={settling}
+      deferUntilLoaded
       fallback={<div className="skeleton skeleton-shimmer h-4 w-28" />}
     >
       <div className="flex flex-col gap-0.5">
