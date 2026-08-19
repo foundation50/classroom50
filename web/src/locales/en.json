@@ -1050,9 +1050,7 @@
     "elevatedScope": {
       "heading": "Elevated permissions",
       "subheading": "Tearing down an organization needs permission to delete repositories, which normal sign-in doesn't request. Grant it only when you need it.",
-      "granted": "Repository deletion granted",
-      "notGranted": "Repository deletion not granted",
-      "grantButton": "Request elevated permissions"
+      "toggleLabel": "Allow repository deletion"
     },
     "motion": {
       "heading": "Animations",

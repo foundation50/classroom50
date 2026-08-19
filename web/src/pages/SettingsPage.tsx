@@ -11,7 +11,6 @@ import {
 } from "@/components/ui"
 import { useTranslation } from "react-i18next"
 import { useMemo, useState } from "react"
-import { ShieldCheck, ShieldOff } from "lucide-react"
 import useGetOrgs from "@/hooks/useGetOrgs"
 import {
   isOwnedReadyOrg,
@@ -26,6 +25,7 @@ import { useReducedMotion, type MotionPref } from "@/hooks/useReducedMotion"
 import { useTheme, type ThemePref } from "@/hooks/useTheme"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
 import { useHasDeleteRepoScope } from "@/context/github/GitHubProvider"
+import { useGithubAuth } from "@/auth/useGithubAuth"
 import { ElevatedAccessModal } from "@/auth/ElevatedAccessModal"
 
 // Owned + Classroom 50-ready orgs are the only ones with a manageable service
@@ -130,47 +130,45 @@ function ElevatedPermissionsSection({
   highlighted?: boolean
 }) {
   const { t } = useTranslation()
+  const { startWebFlow } = useGithubAuth()
   const hasDeleteRepo = useHasDeleteRepoScope()
   const [elevateOpen, setElevateOpen] = useState(false)
 
+  // The toggle reflects whether the current session holds delete_repo. Turning
+  // it on opens the elevation flow (browser or device); turning it off re-auths
+  // at base scope, dropping the elevated grant. GitHub has no client-side way to
+  // shed one scope, so "off" is a plain base re-auth.
+  const onToggle = (next: boolean) => {
+    if (next) {
+      setElevateOpen(true)
+    } else {
+      void startWebFlow()
+    }
+  }
+
   return (
-    <SettingsSectionCard
-      id="elevated-permissions"
-      heading={t("settings.elevatedScope.heading")}
-      subheading={t("settings.elevatedScope.subheading")}
-      highlighted={highlighted}
-    >
-      <div className="flex flex-col items-start gap-3">
-        <span
-          className={cx(
-            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-            hasDeleteRepo
-              ? "bg-success/10 text-success"
-              : "bg-base-200 text-base-content/70",
-          )}
-        >
-          {hasDeleteRepo ? (
-            <ShieldCheck aria-hidden="true" className="size-3.5" />
-          ) : (
-            <ShieldOff aria-hidden="true" className="size-3.5" />
-          )}
-          {hasDeleteRepo
-            ? t("settings.elevatedScope.granted")
-            : t("settings.elevatedScope.notGranted")}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setElevateOpen(true)}
-        >
-          {t("settings.elevatedScope.grantButton")}
-        </Button>
-      </div>
+    <>
+      <SettingsSectionCard
+        id="elevated-permissions"
+        heading={t("settings.elevatedScope.heading")}
+        subheading={t("settings.elevatedScope.subheading")}
+        highlighted={highlighted}
+        control={
+          <input
+            type="checkbox"
+            role="switch"
+            className="toggle toggle-primary"
+            checked={hasDeleteRepo}
+            aria-label={t("settings.elevatedScope.toggleLabel")}
+            onChange={(event) => onToggle(event.target.checked)}
+          />
+        }
+      />
       <ElevatedAccessModal
         open={elevateOpen}
         onClose={() => setElevateOpen(false)}
       />
-    </SettingsSectionCard>
+    </>
   )
 }
 
@@ -234,13 +232,17 @@ function SettingsSectionCard({
   heading,
   subheading,
   highlighted,
+  control,
   children,
 }: {
   id: string
   heading: string
   subheading: string
   highlighted?: boolean
-  children: React.ReactNode
+  // Optional control (e.g. a toggle) pinned to the top-right, aligned with the
+  // heading. Use for a section whose whole state is one on/off switch.
+  control?: React.ReactNode
+  children?: React.ReactNode
 }) {
   return (
     <Card
@@ -253,11 +255,16 @@ function SettingsSectionCard({
       )}
     >
       <Card.Body>
-        <SectionAnchorHeading anchorId={id} as="h3" className="card-title">
-          {heading}
-        </SectionAnchorHeading>
-        <p className="text-sm text-base-content/70">{subheading}</p>
-        <div className="mt-4">{children}</div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <SectionAnchorHeading anchorId={id} as="h3" className="card-title">
+              {heading}
+            </SectionAnchorHeading>
+            <p className="text-sm text-base-content/70">{subheading}</p>
+          </div>
+          {control ? <div className="shrink-0 pt-1">{control}</div> : null}
+        </div>
+        {children ? <div className="mt-4">{children}</div> : null}
       </Card.Body>
     </Card>
   )
