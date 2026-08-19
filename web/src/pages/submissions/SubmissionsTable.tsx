@@ -68,8 +68,8 @@ import {
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import type { Student, SubmissionMode } from "@/types/classroom"
-import { EnterDiv, MotionTr } from "@/lib/motionComponents"
-import { listStagger } from "@/lib/motion"
+import { EnterDiv } from "@/lib/motionComponents"
+import { blockEnter } from "@/lib/motion"
 
 // Score chip: the shared ScoreBadge (one recipe, one source — see
 // ./ScoreBadge). Imported rather than re-implemented so the manual-grade cell
@@ -454,7 +454,7 @@ const SubmissionsTable = ({
         ),
       })
     return (
-      <MotionTr key={`row-${rest.owner}`}>
+      <tr key={rest.owner}>
         <td>
           {isGroup ? (
             <GroupMembers
@@ -619,7 +619,7 @@ const SubmissionsTable = ({
             )}
           </div>
         </td>
-      </MotionTr>
+      </tr>
     )
   }
 
@@ -647,7 +647,7 @@ const SubmissionsTable = ({
           </thead>
           <motion.tbody
             key={`${viewSignature}:${page}`}
-            variants={listStagger}
+            variants={blockEnter}
             initial="initial"
             animate="animate"
           >
@@ -779,7 +779,7 @@ const SubmissionsTable = ({
                 }
                 return (
                   <NonSubmitterRow
-                    key={`nonSubmitter-${student.username || student.email || student.github_id}`}
+                    key={`missing-${student.username || student.email || student.github_id}`}
                     student={student}
                     students={students}
                     isGroup={isGroup}
@@ -815,7 +815,7 @@ const SubmissionsTable = ({
               )
               return (
                 <GroupRepoRow
-                  key={`groupRepo-${repoName}`}
+                  key={`group-${repoName}`}
                   org={org}
                   classroom={classroom}
                   assignment={assignment}

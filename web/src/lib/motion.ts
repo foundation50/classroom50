@@ -63,12 +63,11 @@ export const calloutVariants: Variants = {
   },
 }
 
-// Table-row entrance: a fade + small rise, cascaded by a `listStagger` parent so
-// a table body re-staggers its rows when the visible set changes (sort/filter/
-// search/page). Unlike `enterExit` there's no `scale` (a scaling <tr> reads wrong
-// mid-table) and no `exit` — the re-stagger remounts the rows via a container key
-// rather than presence-exiting them, so rows never need an exit variant.
-export const rowEnter: Variants = {
+// Whole-block entrance for a table body: a fade + small rise applied to the
+// <tbody> as one unit, replayed when the body re-keys on a visible-set change
+// (sort/filter/search/page). No `scale` (scaling a table section reads wrong)
+// and no `exit` — the re-key remounts the body rather than presence-exiting it.
+export const blockEnter: Variants = {
   initial: { opacity: 0, y: -4 },
   animate: {
     opacity: 1,
