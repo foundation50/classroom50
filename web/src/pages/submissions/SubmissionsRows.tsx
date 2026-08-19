@@ -9,6 +9,7 @@ import { nonSubmitterStatus } from "@/pages/submissions/dashboard"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
 import type { ScoreOverrideCapability } from "@/pages/submissions/ScoreOverrideModal"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
+import { MotionTr } from "@/lib/motionComponents"
 import type { Student } from "@/types/classroom"
 import type { StudentSortMode } from "@/util/students"
 
@@ -267,7 +268,7 @@ export const NonSubmitterRow = ({
     !isGroup &&
     Boolean(student.username)
   return (
-    <tr>
+    <MotionTr>
       <td>
         <Avatar
           name={getDisplayName(student.username, students, nameMode)}
@@ -313,7 +314,7 @@ export const NonSubmitterRow = ({
           "—"
         )}
       </td>
-    </tr>
+    </MotionTr>
   )
 }
 
@@ -341,7 +342,7 @@ export const GroupRepoRow = ({
   const { t } = useTranslation()
   const repoHref = studentRepoUrl(org, classroom, assignment, owner)
   return (
-    <tr>
+    <MotionTr>
       <td>
         <GroupMembers
           org={org}
@@ -362,6 +363,6 @@ export const GroupRepoRow = ({
       <td>
         <div className="flex items-center gap-1">{actions}</div>
       </td>
-    </tr>
+    </MotionTr>
   )
 }

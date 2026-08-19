@@ -51,6 +51,35 @@ describe("SubmissionCountCell", () => {
     )
     expect(screen.getByText("submissions.table.staleCount")).toBeTruthy()
   })
+
+  it("shimmers instead of the count while the row is settling", () => {
+    const { container } = render(
+      <SubmissionCountCell
+        mode="every-push"
+        count={2}
+        onOpen={() => {}}
+        settling
+      />,
+    )
+    // While settling, the count chip is replaced by a shimmer placeholder and
+    // the swap is marked busy for assistive tech.
+    expect(
+      screen.queryByRole("button", { name: "submissions.type.countEveryPush" }),
+    ).toBeNull()
+    expect(container.querySelector(".skeleton-shimmer")).toBeTruthy()
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy()
+  })
+
+  it("shows the count with no shimmer when settling is omitted (student view)", () => {
+    const { container } = render(
+      <SubmissionCountCell mode="every-push" count={2} onOpen={() => {}} />,
+    )
+    expect(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    ).toBeTruthy()
+    expect(container.querySelector(".skeleton-shimmer")).toBeNull()
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull()
+  })
 })
 
 describe("LastSubmittedCell", () => {
@@ -87,5 +116,23 @@ describe("LastSubmittedCell", () => {
     )
     expect(screen.getByText("submissions.table.notCollectedYet")).toBeTruthy()
     expect(screen.getByText(/submissions\.table\.liveLatest/)).toBeTruthy()
+  })
+
+  it("shimmers instead of the time while the row is settling", () => {
+    const { container } = render(
+      <LastSubmittedCell datetime="2026-06-20T10:00:00Z" settling />,
+    )
+    expect(container.querySelector(".skeleton-shimmer")).toBeTruthy()
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy()
+    // The formatted time is not shown while shimmering.
+    expect(screen.queryByText(/2026/)).toBeNull()
+  })
+
+  it("shows the settled time with no shimmer when not settling", () => {
+    const { container } = render(
+      <LastSubmittedCell datetime="2026-06-20T10:00:00Z" />,
+    )
+    expect(container.querySelector(".skeleton-shimmer")).toBeNull()
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull()
   })
 })

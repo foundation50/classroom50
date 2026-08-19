@@ -1,6 +1,6 @@
 import { motion } from "motion/react"
 import type { ComponentPropsWithoutRef } from "react"
-import { calloutVariants, enterExit, rowHover } from "./motion"
+import { calloutVariants, enterExit, rowEnter, rowHover } from "./motion"
 
 // Reusable Motion wrappers replacing the per-element CSS animation utilities
 // (animate-enter, animate-callout, clickable-row), keeping call sites terse and
@@ -92,5 +92,20 @@ export function ClickableRow({
     >
       {children}
     </motion.li>
+  )
+}
+
+/** Table row with a staggered fade/rise entrance. Meant for rows under a
+ *  `listStagger` <tbody> whose `key` changes when the visible set does, so the
+ *  page re-staggers on sort/filter/search. Honors reduced motion via the
+ *  app-level MotionConfig. */
+export function MotionTr({
+  children,
+  ...props
+}: ComponentPropsWithoutRef<typeof motion.tr>) {
+  return (
+    <motion.tr variants={rowEnter} {...props}>
+      {children}
+    </motion.tr>
   )
 }

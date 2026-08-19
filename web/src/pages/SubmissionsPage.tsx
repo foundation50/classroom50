@@ -1347,6 +1347,13 @@ const SubmissionsPageContent = () => {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         sort={sort}
+        // Re-stagger the row entrance whenever the visible set changes (search/
+        // filter/sort/size/assignment). Combined with `page` inside the table.
+        viewSignature={viewSignature}
+        // The current page's live/detected data is still resolving, so the
+        // count + last-submitted cells shimmer until they settle. Gated on
+        // liveCapable so non-live views never show a settling affordance.
+        settling={liveCapable && livePending}
       />
       <ConfirmModal
         open={regradeConfirmOpen}

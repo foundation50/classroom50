@@ -63,6 +63,20 @@ export const calloutVariants: Variants = {
   },
 }
 
+// Table-row entrance: a fade + small rise, cascaded by a `listStagger` parent so
+// a table body re-staggers its rows when the visible set changes (sort/filter/
+// search/page). Unlike `enterExit` there's no `scale` (a scaling <tr> reads wrong
+// mid-table) and no `exit` — the re-stagger remounts the rows via a container key
+// rather than presence-exiting them, so rows never need an exit variant.
+export const rowEnter: Variants = {
+  initial: { opacity: 0, y: -4 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: DURATION.base, ease: EASE_OUT },
+  },
+}
+
 // Hover affordance for clickable list rows: a subtle lift + shadow (the former
 // `clickable-row` CSS utility). Pair with a `bg` hover via className.
 export const rowHover = {

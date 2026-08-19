@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import { Bot, CircleOff, GitCommitHorizontal, Tag } from "lucide-react"
 
 import { Badge, type BadgeSize } from "@/components/ui"
+import { LoadingSwap } from "@/lib/LoadingSwap"
 import {
   submissionModeBadgeKey,
   submissionModeCountKey,
@@ -100,6 +101,7 @@ export const SubmissionCountCell = ({
   count,
   onOpen,
   staleCount = false,
+  settling = false,
 }: {
   mode: SubmissionMode | undefined
   count: number
@@ -107,29 +109,37 @@ export const SubmissionCountCell = ({
   // Teacher-only: the collected count lags live/detected data; show the "New"
   // hint alongside the chip. Omitted on the student view.
   staleCount?: boolean
+  // Teacher-only: the current page's live/detected data is still resolving, so
+  // shimmer the chip until the count settles rather than popping a stale value.
+  settling?: boolean
 }) => {
   const { t } = useTranslation()
   return (
-    <div className="flex items-center gap-1.5">
-      <button
-        type="button"
-        className="badge max-xl:text-xs whitespace-nowrap gap-1 hover:badge-neutral cursor-pointer"
-        title={t("submissions.table.viewSubmissionsTitle")}
-        onClick={onOpen}
-      >
-        <SubmissionModeIcon mode={mode} />
-        {t(submissionModeCountKey(mode), { count })}
-      </button>
-      {staleCount ? (
-        <Badge
-          tone="info"
-          size="sm"
-          title={t("submissions.table.staleCountTitle")}
+    <LoadingSwap
+      loading={settling}
+      fallback={<div className="skeleton skeleton-shimmer h-5 w-16" />}
+    >
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          className="badge max-xl:text-xs whitespace-nowrap gap-1 hover:badge-neutral cursor-pointer"
+          title={t("submissions.table.viewSubmissionsTitle")}
+          onClick={onOpen}
         >
-          {t("submissions.table.staleCount")}
-        </Badge>
-      ) : null}
-    </div>
+          <SubmissionModeIcon mode={mode} />
+          {t(submissionModeCountKey(mode), { count })}
+        </button>
+        {staleCount ? (
+          <Badge
+            tone="info"
+            size="sm"
+            title={t("submissions.table.staleCountTitle")}
+          >
+            {t("submissions.table.staleCount")}
+          </Badge>
+        ) : null}
+      </div>
+    </LoadingSwap>
   )
 }
 
@@ -147,55 +157,64 @@ export const LastSubmittedCell = ({
   late = false,
   gradedAt,
   liveLatestAt,
+  settling = false,
 }: {
   datetime: string
   late?: boolean
   gradedAt?: string
   liveLatestAt?: string
+  // Teacher-only: the current page's live/detected data is still resolving, so
+  // shimmer the time until it settles rather than popping a stale/placeholder.
+  settling?: boolean
 }) => {
   const { t } = useTranslation()
   const hasDatetime = !Number.isNaN(new Date(datetime).getTime())
   return (
-    <div className="flex flex-col gap-0.5">
-      <div className="flex items-center gap-2">
-        {hasDatetime ? (
-          <span className="whitespace-nowrap">
-            {formatSubmissionDateTime(datetime)}
-          </span>
-        ) : (
+    <LoadingSwap
+      loading={settling}
+      fallback={<div className="skeleton skeleton-shimmer h-4 w-28" />}
+    >
+      <div className="flex flex-col gap-0.5">
+        <div className="flex items-center gap-2">
+          {hasDatetime ? (
+            <span className="whitespace-nowrap">
+              {formatSubmissionDateTime(datetime)}
+            </span>
+          ) : (
+            <span
+              className="whitespace-nowrap text-base-content/50"
+              title={t("submissions.table.notCollectedYetTitle")}
+            >
+              {t("submissions.table.notCollectedYet")}
+            </span>
+          )}
+          {late ? (
+            <Badge tone="error" title={t("submissions.table.lateRowTitle")}>
+              {t("submissions.table.late")}
+            </Badge>
+          ) : null}
+        </div>
+        {gradedAt && gradedAt !== datetime ? (
           <span
-            className="whitespace-nowrap text-base-content/50"
-            title={t("submissions.table.notCollectedYetTitle")}
+            className="whitespace-nowrap text-xs text-base-content/70"
+            title={t("submissions.table.gradedAtTitle")}
           >
-            {t("submissions.table.notCollectedYet")}
+            {t("submissions.table.gradedAt", {
+              date: formatSubmissionDateTime(gradedAt),
+            })}
           </span>
-        )}
-        {late ? (
-          <Badge tone="error" title={t("submissions.table.lateRowTitle")}>
-            {t("submissions.table.late")}
-          </Badge>
+        ) : null}
+        {liveLatestAt ? (
+          <span
+            className="whitespace-nowrap text-xs text-info"
+            title={t("submissions.table.liveLatestTitle")}
+          >
+            {t("submissions.table.liveLatest", {
+              date: formatSubmissionDateTime(liveLatestAt),
+            })}
+          </span>
         ) : null}
       </div>
-      {gradedAt && gradedAt !== datetime ? (
-        <span
-          className="whitespace-nowrap text-xs text-base-content/70"
-          title={t("submissions.table.gradedAtTitle")}
-        >
-          {t("submissions.table.gradedAt", {
-            date: formatSubmissionDateTime(gradedAt),
-          })}
-        </span>
-      ) : null}
-      {liveLatestAt ? (
-        <span
-          className="whitespace-nowrap text-xs text-info"
-          title={t("submissions.table.liveLatestTitle")}
-        >
-          {t("submissions.table.liveLatest", {
-            date: formatSubmissionDateTime(liveLatestAt),
-          })}
-        </span>
-      ) : null}
-    </div>
+    </LoadingSwap>
   )
 }
