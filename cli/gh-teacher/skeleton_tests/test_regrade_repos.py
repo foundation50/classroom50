@@ -1109,3 +1109,78 @@ def test_latest_autograde_run_id_tag_only_accepts_milestone_runs(monkeypatch):
         "https://api", "cs50", "repo", "tok", tag_only=True,
     )
     assert got == 4
+
+
+# Throttling vs. refusal ------------------------------------------------------
+
+
+def _throttle_error(code, headers=None, body=b""):
+    """An HTTPError shaped like GitHub's — `headers` answers .get, `body` reads
+    once. Mirrors the helper in test_collect_scores.py."""
+    return urllib.error.HTTPError(
+        url="https://api.github.com/x", code=code, msg="msg", hdrs=headers, fp=io.BytesIO(body)
+    )
+
+
+class TestRateLimitClassification:
+    """This file shares collect_scores.py's transport, and shared its bug: any
+    403 counted as an under-scoped token, so a throttled run told the operator
+    to rotate a healthy credential."""
+
+    def test_retry_after_and_body_marker_are_throttles(self):
+        assert rr.rate_limit_reason(_throttle_error(403, {"Retry-After": "30"})) == "Retry-After: 30s"
+        exc = _throttle_error(403, {}, b'{"message": "You have exceeded a secondary rate limit"}')
+        assert "secondary rate limit" in (rr.rate_limit_reason(exc) or "")
+
+    def test_plain_403_is_still_a_permission_problem(self):
+        exc = _throttle_error(403, {}, b'{"message": "Resource not accessible by personal access token"}')
+        assert rr.rate_limit_reason(exc) is None
+        assert rr.retry_delay(exc, 0) is None
+
+    def test_exhausted_primary_budget_is_named_but_not_slept_on(self):
+        exc = _throttle_error(403, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1787120877"})
+        assert "X-RateLimit-Remaining: 0" in (rr.rate_limit_reason(exc) or "")
+        assert rr.retry_delay(exc, 0) is None
+
+    def test_transient_statuses_keep_the_old_backoff(self):
+        assert rr.retry_delay(_throttle_error(500), 0) == 1
+        assert rr.retry_delay(_throttle_error(503, {"Retry-After": "9999"}), 0) == 30
+        assert rr.retry_delay(_throttle_error(404), 0) is None
+
+    def test_throttled_request_is_retried_then_succeeds(self, monkeypatch):
+        slept: list[float] = []
+        attempts: list[int] = []
+
+        class _Resp:
+            headers: dict[str, str] = {}
+
+            def read(self, *args):
+                return b"{}"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def fake_open(req, timeout=None):
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise _throttle_error(403, {"Retry-After": "2"}, b"secondary rate limit")
+            return _Resp()
+
+        monkeypatch.setattr(rr._OPENER, "open", fake_open)
+        monkeypatch.setattr(rr.time, "sleep", lambda s: slept.append(s))
+
+        body, _ = rr._http_send(
+            "POST", "https://api.github.com/x", "tok", accept="application/vnd.github+json", body=b"{}"
+        )
+        assert body == b"{}"
+        assert len(attempts) == 2 and slept == [2]
+
+    def test_body_snippet_survives_a_second_read(self):
+        exc = _throttle_error(403, {}, b'{"message":   "secondary rate  limit"}')
+        first = rr.error_body_snippet(exc)
+        assert "secondary rate limit" in first
+        assert rr.error_body_snippet(exc) == first
+        assert rr.body_note(exc).startswith(" — response: ")

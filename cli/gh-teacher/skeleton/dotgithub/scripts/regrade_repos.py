@@ -73,6 +73,18 @@ ASSIGNMENTS_SCHEMA_V1 = "classroom50/assignments/v1"
 # prefix aligned with autograde-runner.yaml and collect_scores.py.
 SUBMIT_TAG_PREFIX = "submit/"
 
+# Body markers that identify a rate-limit response, and the longest a single
+# retry sleeps. Mirrors collect_scores.py — GitHub returns throttling as 403 as
+# often as 429, and this file shares that transport (and shared the bug: any
+# 403 read as an under-scoped token).
+RATE_LIMIT_BODY_MARKERS = (
+    "secondary rate limit",
+    "rate limit exceeded",
+    "abuse detection",
+)
+
+MAX_RETRY_SLEEP_SECONDS = 60
+
 # Fallback submission branch when a repo's default branch can't be read.
 # Submissions grade off the repo's default branch (the autograde shim's
 # `on.push.branches`); `main` is only the fallback for a repo with no default.
@@ -212,11 +224,20 @@ def main() -> int:
         return 1
     except urllib.error.HTTPError as exc:
         if is_hard_http_error(exc):
+            throttled = rate_limit_reason(exc)
+            if throttled is not None:
+                emit_error(
+                    f"{classroom_filter}: could not list the classroom team — GitHub "
+                    f"is throttling (HTTP {exc.code}, {throttled}) and the request did "
+                    f"not recover after retrying. The service token is fine, do NOT "
+                    f"rotate it; re-run once the limit resets."
+                )
+                return 1
             emit_error(
                 f"{classroom_filter}: could not list the classroom team — service token "
-                f"rejected or network unavailable (HTTP {exc.code} {exc.reason or 'no reason'}). "
-                f"Ensure CLASSROOM50_SERVICE_TOKEN has Organization -> Members: Read with "
-                f"`gh teacher rotate-service-token {org}`"
+                f"rejected or network unavailable (HTTP {exc.code} {exc.reason or 'no reason'})"
+                f"{body_note(exc)}. Ensure CLASSROOM50_SERVICE_TOKEN has Organization -> "
+                f"Members: Read with `gh teacher rotate-service-token {org}`"
             )
             return 1
         emit_error(
@@ -284,11 +305,20 @@ def main() -> int:
             continue
         except urllib.error.HTTPError as exc:
             if is_hard_http_error(exc):
+                throttled = rate_limit_reason(exc)
+                if throttled is not None:
+                    emit_error(
+                        f"{org}/{repo_name}: regrade aborted — GitHub is throttling "
+                        f"(HTTP {exc.code}, {throttled}) and the request did not recover "
+                        f"after retrying. The service token is fine, do NOT rotate it; "
+                        f"re-run once the limit resets."
+                    )
+                    return 1
                 emit_error(
                     f"{org}/{repo_name}: regrade aborted — service token rejected or network "
-                    f"unavailable (HTTP {exc.code} {exc.reason or 'no reason'}). Re-scope the PAT "
-                    f"to Contents: Read and write AND Actions: Read and write with "
-                    f"`gh teacher rotate-service-token {org}`"
+                    f"unavailable (HTTP {exc.code} {exc.reason or 'no reason'}){body_note(exc)}. "
+                    f"Re-scope the PAT to Contents: Read and write AND Actions: Read and write "
+                    f"with `gh teacher rotate-service-token {org}`"
                 )
                 return 1
             emit_warning(
@@ -1021,10 +1051,11 @@ def _http_send(
     _retries: int = 3,
 ) -> tuple[bytes, Any]:
     """The single transport core: issue `method url` with bearer auth and return
-    (body, response headers). Retries 5xx/429 with backoff (honoring Retry-After),
-    wraps a read-phase stall into a synthetic 599 so is_hard_http_error aborts the
-    run, and routes through _OPENER so a cross-host redirect strips Authorization.
-    Mirrors collect_scores.py's transport."""
+    (body, response headers). Retries 5xx/429 and throttled 403s with backoff
+    (see retry_delay), wraps a read-phase stall into a synthetic 599 so
+    is_hard_http_error aborts the run, and routes through _OPENER so a
+    cross-host redirect strips Authorization. Mirrors collect_scores.py's
+    transport."""
     headers = {
         "Accept": accept,
         "Authorization": f"Bearer {token}",
@@ -1040,13 +1071,8 @@ def _http_send(
             with _OPENER.open(req, timeout=30) as resp:
                 return resp.read(), resp.headers
         except urllib.error.HTTPError as exc:
-            if exc.code in (429, 500, 502, 503, 504) and attempt < _retries - 1:
-                retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                delay = (
-                    min(int(retry_after), 30)
-                    if (retry_after or "").isdigit()
-                    else 2**attempt
-                )
+            delay = retry_delay(exc, attempt)
+            if delay is not None and attempt < _retries - 1:
                 time.sleep(delay)
                 continue
             raise
@@ -1064,10 +1090,83 @@ def _http_send(
     raise RuntimeError(f"_http_send called with _retries={_retries}")
 
 
+def error_body_snippet(exc: urllib.error.HTTPError, limit: int = 300) -> str:
+    """First `limit` characters of an error response body, whitespace-collapsed
+    and cached on the exception so a later reader still sees it after the
+    stream is consumed. Mirrors collect_scores.py."""
+    cached = getattr(exc, "_body_snippet", None)
+    if cached is None:
+        try:
+            raw = exc.read() or b""
+        except (OSError, ValueError, AttributeError):
+            raw = b""
+        cached = " ".join(raw.decode("utf-8", "replace").split())[:limit]
+        setattr(exc, "_body_snippet", cached)
+    return cached
+
+
+def body_note(exc: urllib.error.HTTPError) -> str:
+    """error_body_snippet formatted for appending to a log line."""
+    snippet = error_body_snippet(exc)
+    return f" — response: {snippet}" if snippet else ""
+
+
+def rate_limit_reason(exc: urllib.error.HTTPError) -> str | None:
+    """What in the response says GitHub is THROTTLING rather than refusing, or
+    None when nothing does. Mirrors collect_scores.py: a 403 is a rate limit as
+    often as it is a scope problem, and only the response tells them apart."""
+    if exc.code not in (403, 429):
+        return None
+    headers = exc.headers or {}
+    retry_after = (headers.get("Retry-After") or "").strip()
+    if retry_after.isdigit():
+        return f"Retry-After: {retry_after}s"
+    if (headers.get("X-RateLimit-Remaining") or "").strip() == "0":
+        reset = (headers.get("X-RateLimit-Reset") or "").strip()
+        window = f", resets at {epoch_to_iso(reset)}" if reset.isdigit() else ""
+        return f"X-RateLimit-Remaining: 0{window}"
+    body = error_body_snippet(exc).lower()
+    for marker in RATE_LIMIT_BODY_MARKERS:
+        if marker in body:
+            return f'response body names the "{marker}"'
+    return None
+
+
+def epoch_to_iso(value: str) -> str:
+    """Unix epoch seconds (X-RateLimit-Reset) as an RFC 3339 UTC timestamp."""
+    return datetime.datetime.fromtimestamp(
+        int(value), tz=datetime.timezone.utc
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
+    """Seconds to wait before retrying `exc`, or None when it must not be
+    retried. Mirrors collect_scores.py: throttles carrying Retry-After wait
+    that long (capped), a secondary limit without one waits a minute, an
+    exhausted primary budget is not waited out at all, and 429/5xx keep the
+    previous backoff."""
+    headers = exc.headers or {}
+    if rate_limit_reason(exc) is not None:
+        retry_after = (headers.get("Retry-After") or "").strip()
+        if retry_after.isdigit():
+            return min(int(retry_after), MAX_RETRY_SLEEP_SECONDS)
+        if (headers.get("X-RateLimit-Remaining") or "").strip() == "0":
+            return None
+        return MAX_RETRY_SLEEP_SECONDS
+    if exc.code in (429, 500, 502, 503, 504):
+        retry_after = (headers.get("Retry-After") or "").strip()
+        return min(int(retry_after), 30) if retry_after.isdigit() else 2**attempt
+    return None
+
+
 def is_hard_http_error(exc: urllib.error.HTTPError) -> bool:
     """Hard failures that abort the whole run: 401/403 (bad/under-scoped
     token) and 599 (synthetic network-unavailable after retries). Mirrors
-    collect_scores.py. A per-repo 404/422 is NOT hard — it warns and skips."""
+    collect_scores.py. A per-repo 404/422 is NOT hard — it warns and skips.
+
+    A 403 reaches here only after retry_delay declined to retry it; callers
+    that can act on the distinction ask rate_limit_reason as well, so a
+    throttle is never reported as a token problem."""
     return exc.code in (401, 403, 599)
 
 

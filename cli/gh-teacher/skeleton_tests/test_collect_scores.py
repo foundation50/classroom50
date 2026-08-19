@@ -9,6 +9,7 @@ the roster CSV parser, and the deterministic repo-name formula.
 from __future__ import annotations
 
 import csv
+import io
 import json
 import os
 import pathlib
@@ -3026,11 +3027,14 @@ class TestGrantClassroomTeamAccess:
     def _capture_grants(self, monkeypatch):
         grants: list[tuple[str, str, str, str]] = []
 
-        def fake_grant(api_url, org, team_slug, owner, repo, permission, token):
+        def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
             grants.append((team_slug, owner, repo, permission))
             return True
 
         monkeypatch.setattr(cs, "grant_team_repo", fake_grant)
+        # The bulk read of the team's current repos is network; "unknown" (None)
+        # is the fallback that leaves grant_team_repo deciding per repo.
+        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
         return grants
 
     def test_grants_ta_pull_on_each_student_repo(self, monkeypatch):
@@ -3092,6 +3096,7 @@ class TestGrantClassroomTeamAccess:
         # grant_team_repo returns False when the team already has access; the
         # pass must not report any new grant.
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice"])
+        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
         monkeypatch.setattr(cs, "grant_team_repo", lambda *a, **k: False)
         cs.grant_classroom_team_access(
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
@@ -3105,9 +3110,10 @@ class TestGrantClassroomTeamAccess:
         # A student repo not accepted yet (404) is skipped, not fatal; the rest
         # still get granted.
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob"])
+        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
         seen: list[str] = []
 
-        def fake_grant(api_url, org, team_slug, owner, repo, permission, token):
+        def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
             seen.append(repo)
             if repo == "cs-hw1-alice":
                 raise cs.urllib.error.HTTPError(url="u", code=404, msg="no", hdrs=None, fp=None)
@@ -3124,8 +3130,10 @@ class TestGrantClassroomTeamAccess:
         assert "::warning::" in capsys.readouterr().err
 
     def test_hard_error_propagates(self, monkeypatch):
-        # A 403 (missing Administration) must abort the pass so main() fails.
+        # A 403 that is NOT a throttle (missing Administration) must abort the
+        # pass so main() fails — see TestGrantThrottled for the other 403.
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice"])
+        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
 
         def fake_grant(*a, **k):
             raise cs.urllib.error.HTTPError(url="u", code=403, msg="forbidden", hdrs=None, fp=None)
@@ -3139,3 +3147,422 @@ class TestGrantClassroomTeamAccess:
                 service_token="tok",
             )
         assert ei.value.code == 403
+
+
+# Throttling vs. refusal ------------------------------------------------------
+
+
+def http_error(code, headers=None, body=b"", url="https://api.github.com/x"):
+    """An HTTPError shaped like GitHub's: `headers` is a plain dict (the real
+    HTTPMessage answers .get the same way) and `body` is readable once."""
+    return cs.urllib.error.HTTPError(
+        url=url, code=code, msg="msg", hdrs=headers, fp=io.BytesIO(body)
+    )
+
+
+class TestErrorBodySnippet:
+    def test_reads_once_and_caches(self):
+        # The body stream is consumable exactly once, and the retry decision
+        # reads it before the log line does — without caching the message would
+        # print an empty body for every throttle it just diagnosed.
+        exc = http_error(403, body=b'{"message":  "You have exceeded a secondary rate  limit"}')
+        first = cs.error_body_snippet(exc)
+        assert "secondary rate limit" in first
+        # Whitespace collapsed, and the second read still sees it.
+        assert "  " not in first
+        assert cs.error_body_snippet(exc) == first
+
+    def test_unreadable_body_is_empty_not_an_error(self):
+        exc = cs.urllib.error.HTTPError(url="u", code=403, msg="m", hdrs=None, fp=None)
+        assert cs.error_body_snippet(exc) == ""
+        assert cs.body_note(exc) == ""
+
+    def test_truncates_to_limit(self):
+        exc = http_error(403, body=b"x" * 5000)
+        assert len(cs.error_body_snippet(exc)) == 300
+
+
+class TestRateLimitReason:
+    def test_retry_after_header_is_a_throttle(self):
+        assert cs.rate_limit_reason(http_error(403, {"Retry-After": "60"})) == "Retry-After: 60s"
+
+    def test_exhausted_primary_budget_names_the_reset(self):
+        reason = cs.rate_limit_reason(
+            http_error(403, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1787120877"})
+        )
+        assert reason is not None
+        assert "X-RateLimit-Remaining: 0" in reason
+        assert "resets at 2026-08-1" in reason
+
+    def test_secondary_limit_recognized_from_the_body(self):
+        # The shape that actually bit us: no Retry-After, budget not exhausted,
+        # only the body says what happened.
+        exc = http_error(403, {}, b'{"message": "You have exceeded a secondary rate limit"}')
+        reason = cs.rate_limit_reason(exc)
+        assert reason is not None and "secondary rate limit" in reason
+
+    def test_plain_403_is_not_a_throttle(self):
+        # An under-scoped token: no header, no marker. This is the one case
+        # that may still tell the operator to rotate.
+        exc = http_error(403, {}, b'{"message": "Resource not accessible by personal access token"}')
+        assert cs.rate_limit_reason(exc) is None
+
+    def test_other_statuses_are_never_throttles(self):
+        assert cs.rate_limit_reason(http_error(404, {"Retry-After": "60"})) is None
+        assert cs.rate_limit_reason(http_error(500)) is None
+
+
+class TestRetryDelay:
+    def test_throttled_403_waits_retry_after(self):
+        assert cs.retry_delay(http_error(403, {"Retry-After": "5"}), 0) == 5
+
+    def test_retry_after_is_capped(self):
+        assert cs.retry_delay(http_error(403, {"Retry-After": "9999"}), 0) == cs.MAX_RETRY_SLEEP_SECONDS
+
+    def test_secondary_limit_without_header_waits_a_minute(self):
+        exc = http_error(403, {}, b'{"message": "You have exceeded a secondary rate limit"}')
+        assert cs.retry_delay(exc, 0) == cs.MAX_RETRY_SLEEP_SECONDS
+
+    def test_exhausted_primary_budget_is_not_retried(self):
+        # Its window runs up to an hour — a named error beats a sleeping job.
+        exc = http_error(403, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1787120877"})
+        assert cs.retry_delay(exc, 0) is None
+
+    def test_plain_403_is_not_retried(self):
+        assert cs.retry_delay(http_error(403, {}, b"nope"), 0) is None
+
+    def test_transient_statuses_keep_the_old_contract(self):
+        assert cs.retry_delay(http_error(500), 0) == 1
+        assert cs.retry_delay(http_error(502), 2) == 4
+        assert cs.retry_delay(http_error(503, {"Retry-After": "9999"}), 0) == 30
+        assert cs.retry_delay(http_error(404), 0) is None
+
+
+class FakeResponse:
+    """Minimal stand-in for the object _OPENER.open returns."""
+
+    def __init__(self, body=b"{}", status=200):
+        self.status = status
+        self.headers = {}
+        self._body = body
+
+    def read(self, *args):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class TestTransportRetriesThrottles:
+    def test_throttled_403_is_retried_then_succeeds(self, monkeypatch):
+        slept: list[float] = []
+        attempts: list[int] = []
+
+        def fake_open(req, timeout=None):
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise http_error(403, {"Retry-After": "1"}, b"secondary rate limit")
+            return FakeResponse(b"", status=204)
+
+        monkeypatch.setattr(cs._OPENER, "open", fake_open)
+        monkeypatch.setattr(cs.time, "sleep", lambda s: slept.append(s))
+
+        status, _ = cs._http_send(
+            "PUT", "https://api.github.com/x", "tok", accept="application/vnd.github+json", body=b"{}"
+        )
+        assert status == 204
+        assert len(attempts) == 2
+        assert slept == [1]
+
+    def test_plain_403_is_not_retried(self, monkeypatch):
+        # The regression that made a healthy token look under-scoped only ever
+        # mattered because the request was never retried; the inverse must hold
+        # too — a real permission failure must not be slept on three times.
+        attempts: list[int] = []
+
+        def fake_open(req, timeout=None):
+            attempts.append(1)
+            raise http_error(403, {}, b'{"message": "Resource not accessible"}')
+
+        monkeypatch.setattr(cs._OPENER, "open", fake_open)
+        monkeypatch.setattr(cs.time, "sleep", lambda s: pytest.fail("must not sleep"))
+
+        with pytest.raises(cs.urllib.error.HTTPError) as ei:
+            cs._http_get_with_headers(
+                "https://api.github.com/x", "tok", accept="application/vnd.github+json"
+            )
+        assert ei.value.code == 403
+        assert len(attempts) == 1
+
+
+class TestGrantThrottled:
+    META = {
+        "schema": cs.CLASSROOM_SCHEMA_V1,
+        "short_name": "cs",
+        "team": {"id": 1, "slug": "classroom50-cs"},
+        "teams": {"ta": {"id": 2, "slug": "classroom50-cs-ta"}},
+    }
+    ASSIGNMENTS = {
+        "schema": cs.ASSIGNMENTS_SCHEMA_V1,
+        "assignments": [
+            {"slug": "hw1", "mode": "individual"},
+            {"slug": "hw2", "mode": "individual"},
+        ],
+    }
+
+    def test_throttle_reports_progress_and_remainder(self, monkeypatch):
+        # 2 assignments x 3 members = 6 targets; the third call is throttled.
+        monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob", "carol"])
+        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
+        calls: list[str] = []
+
+        def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
+            calls.append(repo)
+            if len(calls) == 3:
+                raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+            return True
+
+        monkeypatch.setattr(cs, "grant_team_repo", fake_grant)
+        with pytest.raises(cs.GrantThrottled) as ei:
+            cs.grant_classroom_team_access(
+                api_url="https://api.github.com", org="cs50", classroom_short="cs",
+                classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+            )
+        assert ei.value.granted == 2
+        assert ei.value.deferred == 4  # 6 targets, throttled on the third
+        assert "Retry-After: 60s" in ei.value.reason
+
+    def test_main_stays_green_and_never_says_rotate(self, tmp_path, monkeypatch, capsys):
+        # The core of #652: a throttled grant pass is a deferral, not a failed
+        # run, and must not send the operator to rotate a working token.
+        classroom = write_minimal_classroom(tmp_path)
+        (classroom / "classroom.json").write_text(json.dumps(self.META))
+
+        def fake_grant_pass(**kwargs):
+            raise cs.GrantThrottled("Retry-After: 60s", "classroom50-cs-ta", 12, 340)
+
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        monkeypatch.setattr(cs, "grant_classroom_team_access", fake_grant_pass)
+        monkeypatch.setattr(cs, "collect_classroom", lambda **k: ([], 0, {}))
+
+        assert cs.main() == 0
+        err = capsys.readouterr().err
+        assert "::error::" not in err
+        throttle_line = next(line for line in err.splitlines() if "throttled" in line)
+        assert "340 target(s) deferred" in throttle_line
+        assert "do NOT rotate" in throttle_line
+        # The scope hint belongs to a real 403 only (the unrelated
+        # "collected 0 submissions" warning has its own token advice).
+        assert "rotate-service-token" not in throttle_line
+
+    def test_main_still_fails_on_a_real_scope_403(self, tmp_path, monkeypatch, capsys):
+        classroom = write_minimal_classroom(tmp_path)
+        (classroom / "classroom.json").write_text(json.dumps(self.META))
+
+        def fake_grant_pass(**kwargs):
+            raise http_error(403, {}, b'{"message": "Resource not accessible by personal access token"}')
+
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        monkeypatch.setattr(cs, "grant_classroom_team_access", fake_grant_pass)
+        monkeypatch.setattr(cs, "collect_classroom", lambda **k: ([], 0, {}))
+
+        assert cs.main() == 1
+        err = capsys.readouterr().err
+        assert "Administration: Read and write" in err
+        # The body is logged now, so the next reader can tell the two apart.
+        assert "Resource not accessible" in err
+
+    def test_collection_throttle_is_fatal_but_named(self, tmp_path, monkeypatch, capsys):
+        # Collection can't defer — an incomplete gradebook must not report
+        # success — but the message still must not blame the token.
+        write_minimal_classroom(tmp_path)
+
+        def fail_collect(**kwargs):
+            raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        monkeypatch.setattr(cs, "collect_classroom", fail_collect)
+
+        assert cs.main() == 1
+        err = capsys.readouterr().err
+        assert "throttled by GitHub" in err
+        assert "rotate-service-token" not in err
+
+
+# Repo index ------------------------------------------------------------------
+
+
+class TestRepoIndex:
+    def test_reads_once_and_answers_from_the_set(self, monkeypatch, capsys):
+        calls: list[str] = []
+
+        def fake_list(api_url, org, token):
+            calls.append(org)
+            return {"cs-hw1-alice", "cs-hw1-bob"}
+
+        monkeypatch.setattr(cs, "list_org_repo_names", fake_list)
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        assert calls == []  # lazy: nothing read yet
+        assert index.contains("cs-hw1-ALICE") is True  # case-insensitive
+        assert index.contains("cs-hw1-carol") is False
+        assert calls == ["cs50"]  # and only once
+        assert "2 repo(s) visible" in capsys.readouterr().out
+
+    def test_failed_listing_hides_nothing(self, monkeypatch, capsys):
+        def fail(*a, **k):
+            raise http_error(404, {}, b"nope")
+
+        monkeypatch.setattr(cs, "list_org_repo_names", fail)
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        assert index.contains("cs-hw1-alice") is True
+        assert index.contains("anything-at-all") is True
+        err = capsys.readouterr().err
+        assert "::warning::" in err
+        assert err.count("could not list") == 1  # warned once, not per lookup
+
+    def test_empty_listing_is_unknown_not_empty(self, monkeypatch):
+        # A token scoped to zero repos must not silently skip every poll.
+        monkeypatch.setattr(cs, "list_org_repo_names", lambda *a, **k: set())
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        assert index.contains("cs-hw1-alice") is True
+
+
+class StubIndex:
+    """RepoIndex stand-in with a fixed answer set."""
+
+    def __init__(self, names):
+        self._names = {n.lower() for n in names}
+
+    def contains(self, repo_name):
+        return repo_name.lower() in self._names
+
+
+class TestPassesSkipMissingRepos:
+    META = TestGrantThrottled.META
+    ASSIGNMENTS = TestGrantThrottled.ASSIGNMENTS
+
+    def test_grant_pass_only_touches_existing_repos(self, monkeypatch):
+        monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob"])
+        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
+        seen: list[str] = []
+
+        def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
+            seen.append(repo)
+            return True
+
+        monkeypatch.setattr(cs, "grant_team_repo", fake_grant)
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+            repo_index=StubIndex({"cs-hw1-alice"}),
+        )
+        # 4 names in the product, one repo — three requests not made.
+        assert seen == ["cs-hw1-alice"]
+
+    def test_collection_skips_names_without_a_repo(self, monkeypatch):
+        polled: list[str] = []
+
+        def fake_releases(api_url, org, repo, token):
+            polled.append(repo)
+            return []
+
+        monkeypatch.setattr(cs, "list_enrolled_logins", lambda *a, **k: (["alice", "bob"], {"alice", "bob"}))
+        monkeypatch.setattr(cs, "all_submit_releases", fake_releases)
+        cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META,
+            assignments={"schema": cs.ASSIGNMENTS_SCHEMA_V1, "assignments": [{"slug": "hw1", "mode": "individual"}]},
+            service_token="tok",
+            repo_index=StubIndex({"cs-hw1-bob"}),
+        )
+        assert polled == ["cs-hw1-bob"]
+
+    def test_unknown_index_polls_everything(self, monkeypatch):
+        polled: list[str] = []
+        monkeypatch.setattr(cs, "list_enrolled_logins", lambda *a, **k: (["alice", "bob"], {"alice", "bob"}))
+        monkeypatch.setattr(cs, "all_submit_releases", lambda a, o, repo, t: polled.append(repo) or [])
+        cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META,
+            assignments={"schema": cs.ASSIGNMENTS_SCHEMA_V1, "assignments": [{"slug": "hw1", "mode": "individual"}]},
+            service_token="tok",
+            repo_index=None,
+        )
+        assert polled == ["cs-hw1-alice", "cs-hw1-bob"]
+
+
+class TestBulkAccessCheck:
+    def test_known_access_true_skips_every_request(self, monkeypatch):
+        monkeypatch.setattr(
+            cs, "_http_send", lambda *a, **k: pytest.fail("no request expected")
+        )
+        assert cs.grant_team_repo(
+            "https://api.github.com", "cs50", "classroom50-cs-ta", "cs50", "cs-hw1-alice",
+            "pull", "tok", known_access=True,
+        ) is False
+
+    def test_known_access_false_puts_without_a_precheck(self, monkeypatch):
+        calls: list[str] = []
+
+        def fake_send(method, url, token, *, accept, body, _retries=3):
+            calls.append(method)
+            return 204, b""
+
+        monkeypatch.setattr(cs, "_http_send", fake_send)
+        assert cs.grant_team_repo(
+            "https://api.github.com", "cs50", "classroom50-cs-ta", "cs50", "cs-hw1-alice",
+            "pull", "tok", known_access=False,
+        ) is True
+        assert calls == ["PUT"]
+
+    def test_listing_failure_falls_back_to_per_repo_checks(self, monkeypatch, capsys):
+        def fail(*a, **k):
+            raise http_error(404, {}, b"no team")
+
+        monkeypatch.setattr(cs, "list_team_repo_full_names", fail)
+        assert cs.team_repo_full_names(
+            "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", "cs"
+        ) is None
+        assert "::warning::" in capsys.readouterr().err
+
+    def test_hard_listing_failure_propagates(self, monkeypatch):
+        def fail(*a, **k):
+            raise http_error(401, {}, b"bad credentials")
+
+        monkeypatch.setattr(cs, "list_team_repo_full_names", fail)
+        with pytest.raises(cs.urllib.error.HTTPError):
+            cs.team_repo_full_names(
+                "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", "cs"
+            )
+
+    def test_has_access_matches_case_insensitively(self):
+        granted = {"cs50/cs-hw1-alice"}
+        assert cs._has_access(granted, "CS50", "CS-HW1-Alice") is True
+        assert cs._has_access(granted, "cs50", "cs-hw1-bob") is False
+        assert cs._has_access(None, "cs50", "cs-hw1-alice") is None
+
+
+class TestPaginateFieldList:
+    def test_collects_the_requested_field(self, monkeypatch):
+        # One short page: no Link header, so the short-page heuristic stops.
+        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            return json.dumps([{"name": "a"}, {"name": "b"}]).encode(), {}
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
+        got = cs._paginate_field_list(
+            page_url=lambda page: f"https://api.github.com/orgs/cs50/repos?per_page=100&page={page}",
+            api_url="https://api.github.com",
+            token="tok",
+            resource_label="orgs/cs50/repos",
+            field="name",
+        )
+        assert got == ["a", "b"]

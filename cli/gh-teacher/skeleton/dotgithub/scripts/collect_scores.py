@@ -85,6 +85,20 @@ SUBMIT_TAG_PREFIX = "submit/"
 # so only the non-owner staff teams — head-TA and TA — need a grant).
 STAFF_TEAM_PERMISSIONS = {"hta": "pull", "ta": "pull"}
 
+# Body markers that identify a rate-limit response. GitHub words the
+# secondary limit and the abuse detector differently, and neither always ships
+# a Retry-After header — see rate_limit_reason.
+RATE_LIMIT_BODY_MARKERS = (
+    "secondary rate limit",
+    "rate limit exceeded",
+    "abuse detection",
+)
+
+# Longest a single retry sleeps. A secondary rate limit clears in about a
+# minute (GitHub documents that as the minimum wait); the primary hourly budget
+# is not waited out at all — retry_delay declines it.
+MAX_RETRY_SLEEP_SECONDS = 60
+
 RFC3339_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d"
     r"(\.\d+)?(Z|[+-]([01]\d|2[0-3]):[0-5]\d)$"
@@ -158,6 +172,9 @@ def main() -> int:
         print(f"no classrooms found in {base_dir}")
         return 0
 
+    # Read once, on first use, and handed to both passes below (see RepoIndex).
+    repo_index = RepoIndex(api_url, org, service_token)
+
     total_changes = 0
     failed_classrooms: list[str] = []
     # Whether ASSIGNMENT_FILTER named a slug that exists in at least one
@@ -195,22 +212,45 @@ def main() -> int:
                 classroom_meta=classroom_meta,
                 assignments=assignments,
                 service_token=service_token,
+                repo_index=repo_index,
+            )
+        except GrantThrottled as exc:
+            # NOT a failure. Collection is untouched, the pass is idempotent,
+            # and the token is healthy — reporting this as an under-scoped
+            # token (what every 403 used to do here) sends the operator to
+            # rotate a working credential and paints the nightly run red for a
+            # cosmetic reason.
+            emit_warning(
+                f"{classroom_short}: {exc}. GitHub is throttling, not refusing: "
+                f"the service token is fine, do NOT rotate it. The deferred "
+                f"repos are granted by the next run."
             )
         except urllib.error.HTTPError as exc:
-            grant_hint = (
-                f" — grant staff teams repo access needs a fine-grained PAT with "
-                f"Repository -> Administration: Read and write; run "
-                f"`gh teacher rotate-service-token {org}`"
-                if exc.code in (401, 403)
-                else ""
-            )
-            emit_error(
-                f"{classroom_short}: staff-team access grant failed with HTTP "
-                f"{exc.code} ({exc.reason or 'no reason'}){grant_hint}. Score "
-                f"collection continues; TAs may not see student repos until this "
-                f"is fixed."
-            )
-            failed_classrooms.append(classroom_short)
+            throttled = rate_limit_reason(exc)
+            if throttled is not None:
+                # Same verdict as GrantThrottled, for a throttle that hit the
+                # pass before it reached its first repo (the team reads).
+                emit_warning(
+                    f"{classroom_short}: staff-team access grant was throttled "
+                    f"by GitHub (HTTP {exc.code}, {throttled}); it is deferred "
+                    f"to the next run. The service token is fine, do NOT "
+                    f"rotate it."
+                )
+            else:
+                grant_hint = (
+                    f" — grant staff teams repo access needs a fine-grained PAT with "
+                    f"Repository -> Administration: Read and write; run "
+                    f"`gh teacher rotate-service-token {org}`"
+                    if exc.code in (401, 403)
+                    else ""
+                )
+                emit_error(
+                    f"{classroom_short}: staff-team access grant failed with HTTP "
+                    f"{exc.code} ({exc.reason or 'no reason'}){body_note(exc)}"
+                    f"{grant_hint}. Score collection continues; TAs may not see "
+                    f"student repos until this is fixed."
+                )
+                failed_classrooms.append(classroom_short)
 
         try:
             updates, mode_flip_assignments, collected = collect_classroom(
@@ -222,6 +262,7 @@ def main() -> int:
                 service_token=service_token,
                 roster_meta=load_roster_metadata(base_dir / classroom_short),
                 assignment_filter=assignment_filter,
+                repo_index=repo_index,
             )
         except urllib.error.HTTPError as exc:
             # Auth (401/403) and synthetic-network (599) failures on COLLECTION
@@ -231,10 +272,22 @@ def main() -> int:
             # (which would report a broken run as success that collected
             # nothing). The staff-grant pass above is excluded — its
             # Administration scope isn't needed to collect.
-            if exc.code in (401, 403):
+            throttled = rate_limit_reason(exc)
+            if throttled is not None:
+                # A throttle survived the transport's retries. Still fatal —
+                # collection is incomplete — but naming the cause keeps the
+                # operator from rotating a healthy token.
+                emit_error(
+                    f"{classroom_short}: collection was throttled by GitHub "
+                    f"(HTTP {exc.code}, {throttled}) and did not recover after "
+                    f"retrying. The service token is fine, do NOT rotate it; "
+                    f"re-run once the limit resets."
+                )
+            elif exc.code in (401, 403):
                 emit_error(
                     f"{classroom_short}: service token was rejected with HTTP {exc.code} "
-                    f"({exc.reason or 'no reason'}) — run `gh teacher rotate-service-token {org}` "
+                    f"({exc.reason or 'no reason'}){body_note(exc)} — run "
+                    f"`gh teacher rotate-service-token {org}` "
                     f"with a fine-grained PAT scoped to Organization -> Members: Read (collection "
                     f"lists the classroom team's members) AND Repository -> Contents: Read and write "
                     f"(read the student repos' releases; the write scope is shared with regrade)"
@@ -405,6 +458,70 @@ def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str
 # Per-classroom collection ----------------------------------------------------
 
 
+class RepoIndex:
+    """The org's repo names, read once per run and only when something asks.
+
+    Both passes below walk the (team member × assignment) product: 65
+    assignments × 46 members names ~3000 repos, of which only the accepted ones
+    exist. Collection swallows the misses quietly (a 404 on /releases reads as
+    "not submitted"), but the staff-team grant spends two requests on each one
+    — the access check and a PUT that 404s — and warns per repo. That volume is
+    also what pushes the pass into GitHub's secondary rate limit.
+
+    A fine-grained PAT lists exactly the repos it is scoped to, which is the
+    same set it could grant on or read anyway, so skipping a name that is
+    absent here drops only a call that was going to 404. When the listing
+    can't be read, `contains` answers True for everything and both passes fall
+    back to probing per repo — slower and noisier, never less complete.
+
+    Lazy on purpose: a run with nothing to collect (or one whose collection is
+    stubbed) issues no request at all.
+    """
+
+    def __init__(self, api_url: str, org: str, token: str) -> None:
+        self._api_url = api_url
+        self._org = org
+        self._token = token
+        self._names: set[str] | None = None
+        self._loaded = False
+
+    def names(self) -> set[str] | None:
+        """The lowercased repo names, or None when they could not be read. The
+        listing runs once; a failure warns once and stays None."""
+        if self._loaded:
+            return self._names
+        self._loaded = True
+        try:
+            names = list_org_repo_names(self._api_url, self._org, self._token)
+        except urllib.error.HTTPError as exc:
+            emit_warning(
+                f"{self._org}: could not list the org's repositories: HTTP "
+                f"{exc.code} ({exc.reason or 'no reason'}); falling back to "
+                f"probing every (member, assignment) repo name — slower, and "
+                f"one warning per repo that has not been accepted yet."
+            )
+            return None
+        except (json.JSONDecodeError, ValueError) as exc:
+            emit_warning(
+                f"{self._org}: org repository listing malformed ({exc}); "
+                f"falling back to probing every (member, assignment) repo name."
+            )
+            return None
+        # An empty listing reads as "unknown", not "nothing exists": a token
+        # scoped to zero repos must not silently skip every poll.
+        if not names:
+            return None
+        print(f"{self._org}: {len(names)} repo(s) visible to the service token")
+        self._names = names
+        return self._names
+
+    def contains(self, repo_name: str) -> bool:
+        """Whether `repo_name` exists. True whenever the listing is unknown, so
+        an unreadable index never hides a repo from either pass."""
+        names = self.names()
+        return True if names is None else repo_name.lower() in names
+
+
 def is_empty_repo(entry: dict[str, Any]) -> bool:
     """True only when empty_repo is the boolean `true`. The wire contract is a
     JSON boolean (schema type "boolean"; Go decodes into a strict `bool`), so a
@@ -531,6 +648,7 @@ def collect_classroom(
     service_token: str,
     roster_meta: dict[str, dict[str, str]] | None = None,
     assignment_filter: str = "",
+    repo_index: RepoIndex | None = None,
 ) -> tuple[list[dict[str, Any]], int, dict[str, str]]:
     """Return (validated result payloads for every (student, assignment) pair,
     count of assignments whose only submissions were rejected by validation,
@@ -659,6 +777,12 @@ def collect_classroom(
         mode_flip_repos: list[str] = []
         for username in team_usernames:
             repo_name = assignment_repo_name(classroom_short, slug, username)
+            # A name the org listing doesn't know has no repo, so its release
+            # poll would 404 and read as "not submitted" anyway — same outcome,
+            # one request less. An unknown index answers True and nothing is
+            # skipped.
+            if repo_index is not None and not repo_index.contains(repo_name):
+                continue
 
             try:
                 releases = all_submit_releases(api_url, org, repo_name, service_token)
@@ -915,6 +1039,26 @@ def assignment_template_ref(entry: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
+class GrantThrottled(Exception):
+    """The staff-team grant pass hit GitHub's rate limiter.
+
+    Distinct from an HTTPError so main() can tell throttling from refusal: it
+    carries how far the pass got, the run stays green, and nothing suggests
+    rotating a credential that is working. The pass is idempotent, so whatever
+    is deferred is granted by the next run."""
+
+    def __init__(self, reason: str, team_slug: str, granted: int, deferred: int) -> None:
+        super().__init__(
+            f"staff-team grant for {team_slug!r} was throttled by GitHub "
+            f"({reason}) after {granted} new grant(s); {deferred} target(s) "
+            f"deferred to the next run"
+        )
+        self.reason = reason
+        self.team_slug = team_slug
+        self.granted = granted
+        self.deferred = deferred
+
+
 def grant_classroom_team_access(
     *,
     api_url: str,
@@ -923,6 +1067,7 @@ def grant_classroom_team_access(
     classroom_meta: dict[str, Any],
     assignments: dict[str, Any],
     service_token: str,
+    repo_index: RepoIndex | None = None,
 ) -> None:
     """Grant each classroom staff team its mapped repo permission (see
     STAFF_TEAM_PERMISSIONS) on every EXISTING student assignment repo and on each
@@ -930,9 +1075,13 @@ def grant_classroom_team_access(
     collection re-affirms access cheaply.
 
     Student-repo targets are the (team member × assignment) product — the same
-    set collect_classroom polls. A per-repo 404/422 (repo not accepted yet, or
-    template not org-owned) is warned-and-skipped; a hard error (401/403/599)
-    propagates so main() aborts. A classroom with no mapped staff team is a no-op.
+    set collect_classroom polls — narrowed to the repos that exist when
+    `repo_index` can say (thousands of names per classroom, two wasted requests
+    each). A per-repo 404/422 (repo not accepted yet, or template not
+    org-owned) is warned-and-skipped; a hard error (401/403/599) propagates so
+    main() aborts; a throttle raises GrantThrottled, which main() reports as a
+    deferral rather than a failure. A classroom with no mapped staff team is a
+    no-op.
     """
     role_slugs = resolve_staff_team_slugs(classroom_meta)
     grant_slugs = {
@@ -970,65 +1119,126 @@ def grant_classroom_team_access(
 
     usernames = _dedupe_logins(team_logins)
 
-    # Grant on each existing student repo (the team × assignment product).
-    for role, (team_slug, permission) in grant_slugs.items():
-        granted = 0
-        for slug in slugs:
-            for username in usernames:
-                repo_name = assignment_repo_name(classroom_short, slug, username)
-                try:
-                    if grant_team_repo(
-                        api_url, org, team_slug, org, repo_name, permission, service_token
-                    ):
-                        granted += 1
-                except urllib.error.HTTPError as exc:
-                    if is_hard_http_error(exc):
-                        raise
-                    # 404 = repo not accepted yet; 422 = not org-owned. Neither is
-                    # a token problem — skip that repo.
-                    emit_warning(
-                        f"{org}/{repo_name}: could not grant {team_slug!r} {permission}: "
-                        f"HTTP {exc.code} ({exc.reason or 'no reason'}); skipping"
-                    )
+    # Targets are resolved once rather than per staff role: the student product
+    # narrowed to repos that exist, plus the private in-org templates. Knowing
+    # the full list up front is also what lets a throttled pass say how much is
+    # left for the next run.
+    targets: list[tuple[str, str]] = []
+    for slug in slugs:
+        for username in usernames:
+            repo_name = assignment_repo_name(classroom_short, slug, username)
+            if repo_index is not None and not repo_index.contains(repo_name):
+                continue
+            targets.append((org, repo_name))
+    targets.extend(
+        private_template_targets(api_url, org, assignments, service_token)
+    )
 
-        # Grant on each private, in-org template (starter code the staff team
-        # should also be able to read). Public and out-of-org templates are
-        # skipped: a public template needs no grant, and an out-of-org private
-        # template can't be granted to this org's team.
-        for entry in assignments.get("assignments") or []:
-            ref = assignment_template_ref(entry) if isinstance(entry, dict) else None
-            if ref is None:
-                continue
-            t_owner, t_repo = ref
-            if t_owner.lower() != org.lower():
-                continue
-            try:
-                repo = get_repo(api_url, t_owner, t_repo, service_token)
-            except urllib.error.HTTPError as exc:
-                if is_hard_http_error(exc):
-                    raise
-                emit_warning(
-                    f"{t_owner}/{t_repo}: could not read template for {team_slug!r} grant: "
-                    f"HTTP {exc.code} ({exc.reason or 'no reason'}); skipping"
-                )
-                continue
-            if repo is None or not repo.get("private"):
-                continue
+    for _role, (team_slug, permission) in grant_slugs.items():
+        # The team's current repos, read once, replace grant_team_repo's
+        # per-repo access check: after the first run nearly every target is
+        # already granted, so that check — not the PUT — is the request that
+        # dominates. None means "unknown" and each grant asks for itself.
+        already_granted = team_repo_full_names(
+            api_url, org, team_slug, service_token, classroom_short
+        )
+        granted = 0
+        for index, (t_owner, t_repo) in enumerate(targets):
             try:
                 if grant_team_repo(
-                    api_url, org, team_slug, t_owner, t_repo, permission, service_token
+                    api_url,
+                    org,
+                    team_slug,
+                    t_owner,
+                    t_repo,
+                    permission,
+                    service_token,
+                    known_access=_has_access(already_granted, t_owner, t_repo),
                 ):
                     granted += 1
             except urllib.error.HTTPError as exc:
+                throttled = rate_limit_reason(exc)
+                if throttled is not None:
+                    raise GrantThrottled(
+                        throttled, team_slug, granted, len(targets) - index
+                    ) from exc
                 if is_hard_http_error(exc):
                     raise
+                # 404 = repo not accepted yet; 422 = not org-owned. Neither is
+                # a token problem — skip that repo.
                 emit_warning(
                     f"{t_owner}/{t_repo}: could not grant {team_slug!r} {permission}: "
-                    f"HTTP {exc.code} ({exc.reason or 'no reason'}); skipping"
+                    f"HTTP {exc.code} ({exc.reason or 'no reason'}){body_note(exc)}; skipping"
                 )
 
         if granted:
             print(f"{classroom_short}: granted {team_slug} {permission} on {granted} repo(s)")
+
+
+def private_template_targets(
+    api_url: str, org: str, assignments: dict[str, Any], service_token: str
+) -> list[tuple[str, str]]:
+    """The private, in-org assignment templates (starter code the staff team
+    should also be able to read), as (owner, repo) pairs.
+
+    Public templates need no grant and an out-of-org private template can't be
+    granted to this org's team, so both are skipped; a template that can't be
+    read is warned about and dropped, while a hard error propagates. Resolved
+    once for all staff roles — the read doesn't depend on the team."""
+    targets: list[tuple[str, str]] = []
+    for entry in assignments.get("assignments") or []:
+        ref = assignment_template_ref(entry) if isinstance(entry, dict) else None
+        if ref is None:
+            continue
+        t_owner, t_repo = ref
+        if t_owner.lower() != org.lower() or (t_owner, t_repo) in targets:
+            continue
+        try:
+            repo = get_repo(api_url, t_owner, t_repo, service_token)
+        except urllib.error.HTTPError as exc:
+            if is_hard_http_error(exc):
+                raise
+            emit_warning(
+                f"{t_owner}/{t_repo}: could not read template for the staff-team "
+                f"grant: HTTP {exc.code} ({exc.reason or 'no reason'}); skipping"
+            )
+            continue
+        if repo is None or not repo.get("private"):
+            continue
+        targets.append((t_owner, t_repo))
+    return targets
+
+
+def team_repo_full_names(
+    api_url: str, org: str, team_slug: str, token: str, classroom_short: str
+) -> set[str] | None:
+    """Lowercased `owner/repo` of every repo `team_slug` already has access to,
+    or None when the listing failed. None means "unknown", which makes callers
+    fall back to the per-repo access check — never to "not granted", which
+    would re-PUT every repo on every run."""
+    try:
+        return list_team_repo_full_names(api_url, org, team_slug, token)
+    except urllib.error.HTTPError as exc:
+        if is_hard_http_error(exc):
+            raise
+        emit_warning(
+            f"{classroom_short}: could not list team {team_slug!r} repos: HTTP "
+            f"{exc.code} ({exc.reason or 'no reason'}); checking access per repo."
+        )
+    except (json.JSONDecodeError, ValueError) as exc:
+        emit_warning(
+            f"{classroom_short}: team {team_slug!r} repo listing malformed "
+            f"({exc}); checking access per repo."
+        )
+    return None
+
+
+def _has_access(granted: set[str] | None, owner: str, repo: str) -> bool | None:
+    """Whether `granted` (from team_repo_full_names) already covers owner/repo,
+    or None when the listing is unknown."""
+    if granted is None:
+        return None
+    return f"{owner}/{repo}".lower() in granted
 
 
 def _dedupe_logins(logins: list[str]) -> list[str]:
@@ -1589,16 +1799,18 @@ def _assert_same_host(next_url: str, api_url: str) -> str:
     return next_url
 
 
-def _paginate_login_list(
+def _paginate_field_list(
     page_url: Callable[[int], str],
     api_url: str,
     token: str,
     resource_label: str,
+    field: str = "login",
 ) -> list[str]:
-    """Walk a paginated GitHub list-of-accounts endpoint, returning every
-    `login`. Shared core for list_repo_collaborator_logins and
-    list_team_member_logins — the only per-caller differences are the URL
-    builder and the cap-error label.
+    """Walk a paginated GitHub list endpoint, returning every object's `field`
+    (accounts by `login`, repos by `name`/`full_name`). Shared core for
+    list_repo_collaborator_logins, list_team_member_logins, list_org_repo_names
+    and list_team_repo_full_names — the only per-caller differences are the URL
+    builder, the collected field and the cap-error label.
 
     `page_url(page)` builds the request URL for a 1-based page (caller owns
     per_page/page formatting). Only the first page uses it; subsequent pages
@@ -1628,9 +1840,9 @@ def _paginate_login_list(
         for item in batch:
             if not isinstance(item, dict):
                 continue
-            login = item.get("login")
-            if isinstance(login, str) and login:
-                logins.append(login)
+            value = item.get(field)
+            if isinstance(value, str) and value:
+                logins.append(value)
         link_header = headers.get("Link") if headers else None
         next_url = _next_page_link(link_header)
         if next_url:
@@ -1676,7 +1888,7 @@ def list_repo_collaborator_logins(
     """
     per_page = 100
     base = f"{_repo_url(api_url, owner, repo)}/collaborators"
-    return _paginate_login_list(
+    return _paginate_field_list(
         page_url=lambda page: f"{base}?per_page={per_page}&page={page}",
         api_url=api_url,
         token=token,
@@ -1701,12 +1913,59 @@ def list_team_member_logins(
         f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
         f"{urllib.parse.quote(team_slug, safe='')}/members"
     )
-    return _paginate_login_list(
+    return _paginate_field_list(
         page_url=lambda page: f"{base}?per_page={per_page}&page={page}",
         api_url=api_url,
         token=token,
         resource_label=f"orgs/{org}/teams/{team_slug}/members",
     )
+
+
+def list_org_repo_names(api_url: str, org: str, token: str) -> set[str]:
+    """Lowercased names of every repo in `org` the token can see, walking
+    pagination. Hits GET /orgs/{org}/repos.
+
+    Read once per run (see RepoIndex) so both passes can skip the
+    (member × assignment) names that have no repo yet. A fine-grained PAT lists
+    exactly the repos it is scoped to — the same set it could grant on or read
+    anyway — so a name missing here would have 404'd on the real call.
+
+    Raises urllib.error.HTTPError on any non-2xx so the caller can fall back to
+    per-repo probing."""
+    per_page = 100
+    base = f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/repos"
+    names = _paginate_field_list(
+        page_url=lambda page: f"{base}?per_page={per_page}&page={page}&type=all",
+        api_url=api_url,
+        token=token,
+        resource_label=f"orgs/{org}/repos",
+        field="name",
+    )
+    return {name.lower() for name in names}
+
+
+def list_team_repo_full_names(
+    api_url: str, org: str, team_slug: str, token: str
+) -> set[str]:
+    """Lowercased `owner/repo` of every repo `team_slug` has access to, walking
+    pagination. Hits GET /orgs/{org}/teams/{slug}/repos — the bulk form of
+    team_has_repo_access, read once instead of once per candidate repo.
+
+    Raises urllib.error.HTTPError on any non-2xx (including 404 when the team
+    doesn't exist) so the caller can warn-and-skip vs. hard-fail."""
+    per_page = 100
+    base = (
+        f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
+        f"{urllib.parse.quote(team_slug, safe='')}/repos"
+    )
+    full_names = _paginate_field_list(
+        page_url=lambda page: f"{base}?per_page={per_page}&page={page}",
+        api_url=api_url,
+        token=token,
+        resource_label=f"orgs/{org}/teams/{team_slug}/repos",
+        field="full_name",
+    )
+    return {name.lower() for name in full_names}
 
 
 def group_member_usernames(
@@ -1869,7 +2128,8 @@ def _http_get_with_headers(
     url: str, token: str, *, accept: str, max_bytes: int | None = None, _retries: int = 3
 ) -> tuple[bytes, Any]:
     """GET `url` with bearer auth; return (body, response headers). Retries
-    5xx/429 with exponential backoff. The custom redirect handler strips
+    5xx/429 and throttled 403s with backoff (see retry_delay). The custom
+    redirect handler strips
     Authorization before following GitHub's asset-download redirect to S3
     (otherwise the signed URL rejects the forwarded token).
 
@@ -1892,10 +2152,8 @@ def _http_get_with_headers(
                 body = resp.read(max_bytes) if max_bytes is not None else resp.read()
                 return body, resp.headers
         except urllib.error.HTTPError as exc:
-            if exc.code in (429, 500, 502, 503, 504) and attempt < _retries - 1:
-                # Honor Retry-After (capped at 30s); else exp backoff.
-                retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                delay = min(int(retry_after), 30) if (retry_after or "").isdigit() else 2 ** attempt
+            delay = retry_delay(exc, attempt)
+            if delay is not None and attempt < _retries - 1:
                 time.sleep(delay)
                 continue
             raise
@@ -1929,7 +2187,8 @@ def _http_send(
     _retries: int = 3,
 ) -> tuple[int, bytes]:
     """Issue `method url` with bearer auth; return (status, body). Same
-    retry/backoff and synthetic-599 contract as _http_get_with_headers (and
+    retry/backoff (including throttled 403s) and synthetic-599 contract as
+    _http_get_with_headers (and
     _OPENER strips Authorization on a cross-host redirect). Mirrors
     regrade_repos.py's transport; used only for the team-repo grant PUT/GET."""
     headers = {
@@ -1946,9 +2205,8 @@ def _http_send(
             with _OPENER.open(req, timeout=30) as resp:
                 return resp.status, resp.read()
         except urllib.error.HTTPError as exc:
-            if exc.code in (429, 500, 502, 503, 504) and attempt < _retries - 1:
-                retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                delay = min(int(retry_after), 30) if (retry_after or "").isdigit() else 2 ** attempt
+            delay = retry_delay(exc, attempt)
+            if delay is not None and attempt < _retries - 1:
                 time.sleep(delay)
                 continue
             raise
@@ -1994,14 +2252,24 @@ def grant_team_repo(
     repo: str,
     permission: str,
     token: str,
+    *,
+    known_access: bool | None = None,
 ) -> bool:
     """Grant `team_slug` `permission` on <repo_owner>/<repo> via
     PUT /orgs/{org}/teams/{slug}/repos/{owner}/{repo}, skipping the write when
     the team already has any access (idempotent). Returns whether a new grant was
     applied. Mirrors Go's grantTeamRepo. A 403 (token lacks Administration) or
     599 propagates so main() aborts the run (is_hard_http_error); a 404/422 (repo
-    absent / not org-owned) is left for the caller to warn-and-skip."""
-    if team_has_repo_access(api_url, org, team_slug, repo_owner, repo, token):
+    absent / not org-owned) is left for the caller to warn-and-skip.
+
+    `known_access` is that idempotence verdict already read in bulk (see
+    list_team_repo_full_names); None means unknown and costs the per-repo
+    check."""
+    if known_access is None:
+        known_access = team_has_repo_access(
+            api_url, org, team_slug, repo_owner, repo, token
+        )
+    if known_access:
         return False
     url = (
         f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
@@ -2018,11 +2286,99 @@ def grant_team_repo(
     return True
 
 
+def error_body_snippet(exc: urllib.error.HTTPError, limit: int = 300) -> str:
+    """First `limit` characters of an error response body, whitespace-collapsed
+    and cached on the exception so later readers (the retry decision, then the
+    log line) still see it after the stream is consumed. Empty when the body
+    can't be read.
+
+    Worth logging: a 403 without its body leaves "throttled or under-scoped?"
+    unanswerable, which is exactly the question this file used to answer by
+    guessing."""
+    cached = getattr(exc, "_body_snippet", None)
+    if cached is None:
+        try:
+            raw = exc.read() or b""
+        except (OSError, ValueError, AttributeError):
+            raw = b""
+        cached = " ".join(raw.decode("utf-8", "replace").split())[:limit]
+        setattr(exc, "_body_snippet", cached)
+    return cached
+
+
+def body_note(exc: urllib.error.HTTPError) -> str:
+    """error_body_snippet formatted for appending to a log line."""
+    snippet = error_body_snippet(exc)
+    return f" — response: {snippet}" if snippet else ""
+
+
+def rate_limit_reason(exc: urllib.error.HTTPError) -> str | None:
+    """What in the response says GitHub is THROTTLING rather than refusing, or
+    None when nothing does.
+
+    GitHub returns rate limits as 403 as often as 429, and the only thing
+    separating that from a genuinely under-scoped token is the response itself:
+    a Retry-After header, an exhausted X-RateLimit-Remaining, or a body naming
+    the limit. Treating every 403 as a scope problem is what made this script
+    tell operators to rotate healthy service tokens."""
+    if exc.code not in (403, 429):
+        return None
+    headers = exc.headers or {}
+    retry_after = (headers.get("Retry-After") or "").strip()
+    if retry_after.isdigit():
+        return f"Retry-After: {retry_after}s"
+    if (headers.get("X-RateLimit-Remaining") or "").strip() == "0":
+        reset = (headers.get("X-RateLimit-Reset") or "").strip()
+        window = f", resets at {epoch_to_iso(reset)}" if reset.isdigit() else ""
+        return f"X-RateLimit-Remaining: 0{window}"
+    body = error_body_snippet(exc).lower()
+    for marker in RATE_LIMIT_BODY_MARKERS:
+        if marker in body:
+            return f'response body names the "{marker}"'
+    return None
+
+
+def epoch_to_iso(value: str) -> str:
+    """Unix epoch seconds (X-RateLimit-Reset) as an RFC 3339 UTC timestamp."""
+    return datetime.datetime.fromtimestamp(
+        int(value), tz=datetime.timezone.utc
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
+    """Seconds to wait before retrying `exc`, or None when it must not be
+    retried.
+
+    Throttles come first: a 403/429 carrying Retry-After waits that long
+    (capped), a secondary limit without one waits a minute — GitHub's
+    documented minimum — and an exhausted PRIMARY budget is deliberately not
+    retried, because its window runs up to an hour and a named error beats a
+    sleeping job. Everything else keeps the previous contract: 429/5xx honour
+    Retry-After (capped at 30s) or back off exponentially; any other status is
+    terminal."""
+    headers = exc.headers or {}
+    if rate_limit_reason(exc) is not None:
+        retry_after = (headers.get("Retry-After") or "").strip()
+        if retry_after.isdigit():
+            return min(int(retry_after), MAX_RETRY_SLEEP_SECONDS)
+        if (headers.get("X-RateLimit-Remaining") or "").strip() == "0":
+            return None
+        return MAX_RETRY_SLEEP_SECONDS
+    if exc.code in (429, 500, 502, 503, 504):
+        retry_after = (headers.get("Retry-After") or "").strip()
+        return min(int(retry_after), 30) if retry_after.isdigit() else 2 ** attempt
+    return None
+
+
 def is_hard_http_error(exc: urllib.error.HTTPError) -> bool:
     """Hard failures that should fail the whole run: 401/403 (bad/under-scoped
     token) and 599 (synthetic "network unavailable" after retries). Treating
     these as per-student "not submitted" would make a broken run report success
     while collecting nothing.
+
+    A 403 reaches here only after retry_delay declined to retry it, so a
+    throttle that could be waited out never counts as hard — callers that can
+    act on the distinction ask rate_limit_reason as well.
     """
     return exc.code in (401, 403, 599)
 
