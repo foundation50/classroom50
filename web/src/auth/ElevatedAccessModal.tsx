@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { useRouterState } from "@tanstack/react-router"
 import { AlertTriangle, ShieldCheck } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -88,6 +89,15 @@ export function ElevatedAccessModal({
     [cancelDeviceFlow],
   )
 
+  // The path to return to after the browser round-trip. Read from the router,
+  // not window.location: the router is created with a `basepath`, so its pathname
+  // is base-relative — and `returnTo` is consumed by `router.history.push`. Using
+  // window.location.pathname would include the base segment and duplicate it on
+  // the GitHub Pages deploy. Matches the guard in routes/_authed.tsx.
+  const returnTo = useRouterState({
+    select: (s) => s.location.pathname + s.location.searchStr,
+  })
+
   const title = elevated
     ? t("auth.elevated.title")
     : t("auth.elevated.revokeTitle")
@@ -143,7 +153,7 @@ export function ElevatedAccessModal({
                   elevated,
                   // Come back to the page the user was working on, not the
                   // dashboard the post-login guard would otherwise pick.
-                  returnTo: window.location.pathname + window.location.search,
+                  returnTo,
                 })
               }
             >

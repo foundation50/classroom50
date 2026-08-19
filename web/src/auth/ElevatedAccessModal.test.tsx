@@ -12,6 +12,24 @@ vi.mock("react-i18next", async (importOriginal) => {
   }
 })
 
+// The router's location is base-relative (the router owns `basepath`), unlike
+// window.location. Return a path with a search string so the selector is proven
+// to build both halves.
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-router")>()
+  return {
+    ...actual,
+    useRouterState: ({
+      select,
+    }: {
+      select: (s: {
+        location: { pathname: string; searchStr: string }
+      }) => string
+    }) =>
+      select({ location: { pathname: "/acme/settings", searchStr: "?x=1" } }),
+  }
+})
+
 const startWebFlow = vi.fn()
 const startDeviceFlow = vi.fn()
 const cancelDeviceFlow = vi.fn()
@@ -73,6 +91,17 @@ describe("ElevatedAccessModal (#655)", () => {
     screen.getByText("auth.elevated.browserButton").click()
     expect(startWebFlow).toHaveBeenCalledWith(
       expect.objectContaining({ elevated: true }),
+    )
+  })
+
+  it("returns to a base-relative path, not window.location", () => {
+    // `returnTo` is replayed through router.history.push, which prepends the
+    // basepath — so a window.location.pathname value would double it on the
+    // GitHub Pages deploy.
+    render(<ElevatedAccessModal open onClose={() => {}} />)
+    screen.getByText("auth.elevated.browserButton").click()
+    expect(startWebFlow).toHaveBeenCalledWith(
+      expect.objectContaining({ returnTo: "/acme/settings?x=1" }),
     )
   })
 
