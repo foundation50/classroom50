@@ -8,10 +8,13 @@ import { Button, HelpTooltip, MonoLtr, cx } from "@/components/ui"
 import {
   formatTeardownResult,
   TeardownMarkerError,
-  TeardownRateLimitError,
-  TeardownScopeError,
+  TEARDOWN_DELETE_SCOPE_KEY,
   type TeardownPlan,
 } from "@/domain/teardown"
+import {
+  localizedMessageOf,
+  resolveLocalizedMessage,
+} from "@/types/localizedMessage"
 import { usePlanTeardown } from "@/hooks/mutations/usePlanTeardown"
 import { useExecuteTeardown } from "@/hooks/mutations/useExecuteTeardown"
 import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
@@ -235,15 +238,20 @@ const TeardownSection = ({
               },
             })
           } catch (err) {
-            if (err instanceof TeardownScopeError) {
-              // Backstop: the up-front gate should have caught this, but a
-              // token that lost the scope mid-session still 403s. Surface the
-              // translated message (domain carries only the i18n key) so the
-              // modal points at the elevation flow.
-              throw new Error(t(err.messageKey), { cause: err })
-            }
-            if (err instanceof TeardownRateLimitError) {
-              throw err
+            // Backstop: the up-front gate should have caught the scope case, but
+            // a token that lost the scope mid-session still 403s. Domain errors
+            // carry a LocalizedMessage, so resolve it here rather than showing a
+            // raw key or English assembled below the view.
+            const localized = localizedMessageOf(err)
+            if (localized) {
+              // The message tells the user to request elevated permissions, so
+              // make that reachable instead of only naming it.
+              if (localized.key === TEARDOWN_DELETE_SCOPE_KEY) {
+                setElevateOpen(true)
+              }
+              throw new Error(resolveLocalizedMessage(t, localized), {
+                cause: err,
+              })
             }
             throw new Error(t("orgSettings.teardown.executeError"), {
               cause: err,

@@ -24,23 +24,30 @@ import {
 import { getRepo } from "@/github-core/repoReads"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { mapWithConcurrency } from "@/util/concurrency"
+import {
+  describeLocalizedMessage,
+  type LocalizedMessage,
+} from "@/types/localizedMessage"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("mutations:teardown")
 
-// The i18n key for the 403 scope-wall message, resolved at the view layer.
-// Domain code must not assemble user-facing English (AGENTS.md i18n rule); this
-// error carries the key so TeardownSection can translate it and surface the
-// elevation action. The message string mirrors the key's English for logs and
-// any non-i18n consumer.
+// Teardown's 403 scope wall: the token lacks the elevated delete_repo scope, so
+// the view surfaces the elevation flow. The key is exported so the gate and the
+// backstop name the same message.
 export const TEARDOWN_DELETE_SCOPE_KEY = "orgSettings.teardown.needsDeleteScope"
 
+const TEARDOWN_RATE_LIMIT_KEY = "orgSettings.teardown.rateLimited"
+
 export class TeardownScopeError extends Error {
-  readonly messageKey: string
-  constructor(messageKey: string = TEARDOWN_DELETE_SCOPE_KEY) {
-    super(messageKey)
+  readonly localized: LocalizedMessage
+
+  constructor(
+    localized: LocalizedMessage = { key: TEARDOWN_DELETE_SCOPE_KEY },
+  ) {
+    super(describeLocalizedMessage(localized))
     this.name = "TeardownScopeError"
-    this.messageKey = messageKey
+    this.localized = localized
   }
 }
 
@@ -56,11 +63,12 @@ export class TeardownMarkerError extends Error {
 export class TeardownRateLimitError extends Error {
   deleted: string[]
   failed: string[]
+  readonly localized: LocalizedMessage
   constructor(deleted: string[], failed: string[]) {
-    super(
-      "Hit a GitHub rate limit while deleting repositories. Some repositories may already be deleted; wait a moment and re-run teardown to finish.",
-    )
+    const localized: LocalizedMessage = { key: TEARDOWN_RATE_LIMIT_KEY }
+    super(describeLocalizedMessage(localized))
     this.name = "TeardownRateLimitError"
+    this.localized = localized
     this.deleted = deleted
     this.failed = failed
   }

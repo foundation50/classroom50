@@ -447,7 +447,7 @@
       "title": "Request permission to delete repositories",
       "body": "Tearing down an organization deletes repositories. Sign in again to grant that access for this session.",
       "revokeTitle": "Remove permission to delete repositories",
-      "revokeBody": "Sign in again to drop repository-deletion access from this session.",
+      "revokeBody": "Sign in again to drop permission to delete repositories from this session.",
       "browserButton": "Continue in browser",
       "deviceButton": "Use a device code",
       "deviceHint": "Use a device code when the browser sign-in can't return to this page, such as on localhost."
@@ -1051,8 +1051,8 @@
     },
     "elevatedScope": {
       "heading": "Elevated permissions",
-      "subheading": "Tearing down an organization needs permission to delete repositories, which normal sign-in doesn't request. Grant it only when you need it.",
-      "toggleLabel": "Allow repository deletion"
+      "subheading": "Tearing down an organization needs permission to delete repositories, which normal sign-in doesn't request. Grant this permission only when you need it.",
+      "toggleLabel": "Allow deleting repositories"
     },
     "motion": {
       "heading": "Animations",
@@ -1872,9 +1872,10 @@
       "classroomTeamsHeading": "Classroom teams",
       "executeError": "Teardown failed. Some repositories may not have been deleted.",
       "insufficientPermission": "Insufficient permission",
-      "insufficientPermissionHelp": "Teardown deletes repositories, which normal sign-in doesn't request. Request elevated permissions to continue.",
+      "insufficientPermissionHelp": "Teardown deletes repositories. Normal sign-in doesn't request permission to delete them, so request elevated permissions to continue.",
       "grantButton": "Request elevated permissions",
-      "needsDeleteScope": "Deleting repositories was forbidden (403). Teardown needs elevated permissions to delete repositories, which normal sign-in does not request. Request elevated permissions and try again, or archive repositories instead."
+      "needsDeleteScope": "GitHub refused to delete repositories (403). Normal sign-in doesn't request permission to delete them. Request elevated permissions and try again, or archive repositories instead.",
+      "rateLimited": "GitHub rate-limited the deletions. Some repositories are already deleted. Wait a moment, then run teardown again to finish."
     },
     "preflight": {
       "categoryServiceToken": "service token",

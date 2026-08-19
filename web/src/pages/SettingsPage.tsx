@@ -117,12 +117,12 @@ function ServiceTokensSection({ highlighted }: { highlighted?: boolean }) {
 }
 
 // Least-privilege by default: normal sign-in never requests delete_repo, so a
-// destructive action (Teardown Organization) needs a one-shot elevated re-auth.
-// This is an action, not a persisted toggle: the scope *request* defaults to
-// base on every sign-in (only this button asks for delete_repo, for that one
-// re-auth), so a later plain sign-in drops back to base. The elevated token
-// itself is stored like any OAuth token until sign-out — one-shot is about the
-// request preference, not the token's lifetime (#655).
+// destructive action needs an on-demand re-auth. See auth/constants.ts for the
+// base/elevated policy.
+//
+// Rendered only for owners of a Classroom 50 org, the only people who can run
+// teardown. Students share this Settings page, and offering them the very scope
+// #655 removed would widen the blast radius of a stolen token for no benefit.
 function ElevatedPermissionsSection({
   highlighted,
 }: {
@@ -131,11 +131,13 @@ function ElevatedPermissionsSection({
   const { t } = useTranslation()
   const hasDeleteRepo = useHasDeleteRepoScope()
   const [elevateOpen, setElevateOpen] = useState(false)
+  const { data: orgs = [] } = useGetOrgs()
 
-  // The toggle reflects whether the current session holds delete_repo. Either
-  // direction needs a full re-auth (GitHub can't add or drop one scope
-  // client-side), so both open the modal, which offers browser or device sign-in
-  // — the device path is the one that works on localhost.
+  const ownsReadyOrg = useMemo(() => orgs.some(isOwnedReadyOrg), [orgs])
+  if (!ownsReadyOrg) return null
+
+  // Either direction needs a full re-auth, so both open the modal (which offers
+  // the device path that works on localhost).
   const onToggle = () => setElevateOpen(true)
 
   return (
@@ -232,8 +234,7 @@ function SettingsSectionCard({
   heading: string
   subheading: string
   highlighted?: boolean
-  // Optional control (e.g. a toggle) pinned to the top-right, aligned with the
-  // heading. Use for a section whose whole state is one on/off switch.
+  // Pinned to the top-right; for a section whose whole state is one switch.
   control?: React.ReactNode
   children?: React.ReactNode
 }) {

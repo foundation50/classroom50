@@ -255,6 +255,10 @@ function useGithubAuthState() {
   // prompt's guidance + pre-fill (classic vs fine-grained).
   const [patTokenType, setPatTokenType] = useState<PatTokenType>("classic")
   const [device, setDevice] = useState<DeviceAuthState | null>(null)
+  // Which scope tier the in-flight device flow requested, so a surface that
+  // offers both (the elevated-access modal) never renders a pending code under
+  // the wrong label. null when no device flow is in flight.
+  const [deviceElevated, setDeviceElevated] = useState<boolean | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [hasLoadedStoredAuth, setHasLoadedStoredAuth] = useState(false)
   // Holds status at "loading" while a dev auto-login validates (see
@@ -317,6 +321,7 @@ function useGithubAuthState() {
       setTokenScope(data.scope || "")
       setSessionExpired(false)
       setDevice(null)
+      setDeviceElevated(null)
       setScreen("authed")
 
       queryClient.prefetchQuery({
@@ -566,7 +571,7 @@ function useGithubAuthState() {
   )
 
   const startWebFlow = useCallback(
-    async (opts?: { elevated?: boolean }) => {
+    async (opts?: { elevated?: boolean; returnTo?: string }) => {
       const config = validateConfig(opts)
       if (!config) return
 
@@ -579,11 +584,13 @@ function useGithubAuthState() {
       const challenge = await deriveChallenge(verifier)
       const oauthState = randomBase64Url(16)
 
-      // Stash the deep link (from /login?redirect=) in the OAuth session so it
-      // survives the GitHub round-trip; restored after the code exchange (#71).
-      const returnTo = new URLSearchParams(window.location.search).get(
-        "redirect",
-      )
+      // Stash the deep link in the OAuth session so it survives the GitHub
+      // round-trip; restored after the code exchange (#71). A caller mid-task
+      // (the elevation modal) passes its own path so the redirect returns there
+      // instead of the dashboard; otherwise this is /login?redirect=.
+      const returnTo =
+        opts?.returnTo ??
+        new URLSearchParams(window.location.search).get("redirect")
 
       saveOAuthSession({
         verifier,
@@ -609,6 +616,7 @@ function useGithubAuthState() {
     abortRef.current = null
     setError(message)
     setDevice(null)
+    setDeviceElevated(null)
     setScreen("config")
   }, [])
 
@@ -736,6 +744,7 @@ function useGithubAuthState() {
             nextPollAt: Date.now() + intervalSeconds * 1000,
             progress: 0,
           })
+          setDeviceElevated(opts?.elevated ?? false)
 
           setScreen("device-prompt")
 
@@ -764,6 +773,7 @@ function useGithubAuthState() {
     abortRef.current?.abort()
     abortRef.current = null
     setDevice(null)
+    setDeviceElevated(null)
     setError(null)
     setScreen("config")
   }, [])
@@ -828,6 +838,7 @@ function useGithubAuthState() {
       setToken(null)
       setTokenScope("")
       setDevice(null)
+      setDeviceElevated(null)
       setError(null)
       setScreen("config")
       setSessionExpired(expired)
@@ -960,6 +971,7 @@ function useGithubAuthState() {
     error,
     device,
     deviceStatus,
+    deviceElevated,
     user: githubUserQuery.data ?? null,
     isLoadingUser: githubUserQuery.isLoading,
     isStartingWebFlow: screen === "exchanging",

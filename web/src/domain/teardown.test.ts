@@ -287,8 +287,8 @@ describe("executeTeardown", () => {
     const plan = await planTeardown(client, "acme")
     const err = await executeTeardown(client, plan).catch((e) => e)
     expect(err).toBeInstanceOf(TeardownScopeError)
-    // Domain carries the i18n key, not assembled English (AGENTS.md i18n rule).
-    expect((err as TeardownScopeError).messageKey).toBe(
+    // Domain carries a LocalizedMessage, not assembled English (AGENTS.md i18n).
+    expect((err as TeardownScopeError).localized.key).toBe(
       "orgSettings.teardown.needsDeleteScope",
     )
     expect(err.message).not.toMatch(/forbidden/i)
@@ -314,9 +314,13 @@ describe("executeTeardown", () => {
       failRepos: { "cs101-hw1-alice": "rate-limit" },
     })
     const plan = await planTeardown(client, "acme")
-    await expect(executeTeardown(client, plan)).rejects.toBeInstanceOf(
-      TeardownRateLimitError,
+    const err = await executeTeardown(client, plan).catch((e) => e)
+    expect(err).toBeInstanceOf(TeardownRateLimitError)
+    // Carries a LocalizedMessage too, so the modal never shows raw English.
+    expect((err as TeardownRateLimitError).localized.key).toBe(
+      "orgSettings.teardown.rateLimited",
     )
+    expect(err.message).not.toMatch(/wait a moment/i)
   })
 
   it("preserves the marker when a non-marker delete fails (re-runnable)", async () => {

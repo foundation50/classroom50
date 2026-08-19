@@ -168,6 +168,37 @@ describe("SettingsPage hidden organizations", () => {
   })
 })
 
+describe("SettingsPage elevated permissions", () => {
+  it("hides the elevated-permissions section for a user who owns no ready org", () => {
+    // Students share this page; offering them delete_repo would widen the blast
+    // radius of a stolen token for no benefit (#655).
+    orgsData.data = [
+      {
+        org: { login: "member-org", id: 1 },
+        membership: { role: "member" },
+        classroom50: { status: "ready" },
+      },
+    ]
+    renderPage()
+    expect(screen.queryByText("settings.elevatedScope.heading")).toBeNull()
+  })
+
+  it("shows it for an owner of a ready org", () => {
+    orgsData.data = [
+      {
+        org: { login: "cs50", id: 42 },
+        membership: { role: "admin" },
+        classroom50: { status: "ready" },
+      },
+    ]
+    renderPage()
+    expect(screen.getByText("settings.elevatedScope.heading")).toBeTruthy()
+    expect(
+      screen.getByLabelText("settings.elevatedScope.toggleLabel"),
+    ).toBeTruthy()
+  })
+})
+
 describe("SettingsPage service tokens", () => {
   it("shows the empty state when no owned+ready orgs exist", () => {
     orgsData.data = [

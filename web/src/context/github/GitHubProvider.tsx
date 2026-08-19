@@ -131,13 +131,14 @@ export function useMissingScopes(): string[] {
 //
 // Fails open, like useMissingScopes: when the granted scopes are unknowable
 // (empty string, or a fine-grained PAT whose X-OAuth-Scopes header is absent),
-// return true so we do NOT surface an OAuth-only "request elevated permissions"
-// prompt to a token that may well be able to delete (a fine-grained token grants
-// deletion via Administration: write). A genuinely under-scoped token is still
-// caught by teardown's 403 backstop, so the cost of a false "has scope" is a
-// clear runtime error, whereas a false "missing" would nag PAT users with an
-// action they can't use. Only a classic OAuth token that positively lists its
-// scopes without delete_repo returns false and gets the prompt.
+// return true rather than surface a prompt to a token that may well be able to
+// delete. A genuinely under-scoped token is still caught by teardown's 403
+// backstop, which aborts before anything irreversible.
+//
+// A classic PAT does report its scopes, so one lacking delete_repo correctly
+// reads false. Its holder can't use the OAuth elevation the prompt offers, but
+// the prompt is still the right signal: they must re-create the token with that
+// scope (or sign in with OAuth) before teardown can work.
 export function useHasDeleteRepoScope(): boolean {
   const { tokenScope } = useGithubAuth()
   const observed = useContext(ObservedContext)
@@ -146,6 +147,6 @@ export function useHasDeleteRepoScope(): boolean {
 
   return useMemo(() => {
     if (!granted) return true
-    return hasScope(granted, ELEVATED_GITHUB_SCOPES[0])
+    return ELEVATED_GITHUB_SCOPES.every((scope) => hasScope(granted, scope))
   }, [granted])
 }

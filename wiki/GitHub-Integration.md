@@ -73,14 +73,15 @@ warns and asks for confirmation before proceeding. See
 | `workflow` | Committing the `classroom50` repository's workflow files during `init` (GitHub 404s the write without it). |
 
 > [!NOTE]
-> **Why the web app's sign-in asks for "Delete repositories".** Signing in at
-> classroom50.org requests `delete_repo` in addition to the set above. It is
-> used by exactly one feature: **Tear down organization** (org settings →
-> Danger zone), which resets an org by deleting the repositories Classroom 50
-> manages — and it only runs when you type an explicit confirmation. Nothing
-> else deletes repositories. Classroom 50 has no server: the token stays in
-> your browser, so nobody but you can act on your org with it. If you prefer,
-> the CLIs never request `delete_repo` unless you opt in with
+> **Tearing down an organization needs an extra permission.** Signing in does
+> not request `delete_repo`. Exactly one feature needs it: **Tear down
+> organization** (org settings → Danger zone), which resets an org by deleting
+> the repositories Classroom 50 manages. When you use it, Classroom 50 asks you
+> to request elevated permissions and sign in again, and teardown still runs
+> only after you type an explicit confirmation. Nothing else deletes
+> repositories. Classroom 50 has no server: the token stays in your browser, so
+> nobody but you can act on your org with it. The CLIs work the same way — they
+> never request `delete_repo` unless you opt in with
 > `gh teacher login -s delete_repo`.
 
 ### 3. Student authentication

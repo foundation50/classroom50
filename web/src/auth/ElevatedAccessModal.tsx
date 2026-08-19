@@ -1,19 +1,20 @@
-import { ShieldCheck } from "lucide-react"
+import { useEffect, useState } from "react"
+import { AlertTriangle, ShieldCheck } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { useGithubAuth } from "./useGithubAuth"
 import { GitHubDevicePrompt } from "./GitHubDevicePrompt"
-import { Button, Modal } from "@/components/ui"
+import { Alert, Button, Modal } from "@/components/ui"
 
 // Re-auth for a signed-in teacher who needs to change their delete_repo access.
 // GitHub can't add or drop a single scope client-side, so either direction is a
 // full sign-in: `elevated` true requests base + delete_repo, false requests base
-// only (dropping delete_repo).
+// only. See auth/constants.ts for the base/elevated policy.
 //
 // Two paths, because the browser redirect can't complete on localhost (the
 // OAuth callback URL is the deployed origin): "Continue in browser" runs the
-// standard redirect flow (production), and "Use a device code" runs the device
-// flow inline in this modal (works anywhere, including local development).
+// standard redirect flow, and "Use a device code" runs the device flow inline
+// here (works anywhere, including local development).
 export function ElevatedAccessModal({
   open,
   onClose,
@@ -24,25 +25,66 @@ export function ElevatedAccessModal({
   elevated?: boolean
 }) {
   const { t } = useTranslation()
-  const { startWebFlow, startDeviceFlow, screen, device, deviceStatus } =
-    useGithubAuth()
+  const {
+    startWebFlow,
+    startDeviceFlow,
+    cancelDeviceFlow,
+    screen,
+    device,
+    deviceElevated,
+    deviceStatus,
+    error,
+    isRequestingDeviceCode,
+  } = useGithubAuth()
 
-  const showingDevice = screen === "device-prompt" && !!device
+  // Freeze the direction while open: the caller derives `elevated` from live
+  // scope state, so a mid-flow grant would otherwise flip this dialog to the
+  // opposite action under the user's cursor.
+  const [frozen, setFrozen] = useState(elevated)
+  const [awaitingDevice, setAwaitingDevice] = useState(false)
 
-  const title = elevated
+  useEffect(() => {
+    if (open) setFrozen(elevated)
+    else setAwaitingDevice(false)
+    // Re-freeze only on open; `elevated` changing while open is what we ignore.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  // Only show a pending code that this dialog's direction actually started, so a
+  // stale flow from another surface can't render under the wrong label.
+  const showingDevice =
+    screen === "device-prompt" && !!device && deviceElevated === frozen
+
+  // A device flow we started finished elsewhere (completeSignIn clears device
+  // and returns to "authed"), so retire the dialog instead of silently falling
+  // back to the choice buttons.
+  useEffect(() => {
+    if (awaitingDevice && screen === "authed" && !device) {
+      setAwaitingDevice(false)
+      onClose()
+    }
+  }, [awaitingDevice, screen, device, onClose])
+
+  const title = frozen
     ? t("auth.elevated.title")
     : t("auth.elevated.revokeTitle")
-  const body = elevated
-    ? t("auth.elevated.body")
-    : t("auth.elevated.revokeBody")
+  const body = frozen ? t("auth.elevated.body") : t("auth.elevated.revokeBody")
+
+  // Dismissing must abort the poll: it lives in the auth provider, not here, so
+  // unmounting this dialog would otherwise leave it running (and able to swap
+  // the session token) long after the user cancelled.
+  const dismiss = () => {
+    if (showingDevice) cancelDeviceFlow()
+    onClose()
+  }
 
   return (
-    <Modal open={open} onClose={onClose} size="lg" aria-label={title}>
+    <Modal open={open} onClose={dismiss} size="lg" aria-label={title}>
       {showingDevice ? (
         <GitHubDevicePrompt
           device={device}
           status={deviceStatus}
-          onCancel={onClose}
+          onCancel={dismiss}
           onCodeCopied={() => {}}
           onVerificationOpened={() => {}}
         />
@@ -58,18 +100,38 @@ export function ElevatedAccessModal({
             </div>
           </div>
 
+          {error ? (
+            <Alert tone="error" className="items-start text-sm">
+              <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+              <span>{error}</span>
+            </Alert>
+          ) : null}
+
           <div className="flex flex-col gap-3">
             <Button
               variant="primary"
               className="w-full"
-              onClick={() => void startWebFlow({ elevated })}
+              disabled={isRequestingDeviceCode}
+              onClick={() =>
+                void startWebFlow({
+                  elevated: frozen,
+                  // Come back to the page the user was working on, not the
+                  // dashboard the post-login guard would otherwise pick.
+                  returnTo: window.location.pathname + window.location.search,
+                })
+              }
             >
               {t("auth.elevated.browserButton")}
             </Button>
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => void startDeviceFlow({ elevated })}
+              loading={isRequestingDeviceCode}
+              disabled={isRequestingDeviceCode}
+              onClick={() => {
+                setAwaitingDevice(true)
+                void startDeviceFlow({ elevated: frozen })
+              }}
             >
               {t("auth.elevated.deviceButton")}
             </Button>
