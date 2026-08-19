@@ -118,8 +118,11 @@ function ServiceTokensSection({ highlighted }: { highlighted?: boolean }) {
 
 // Least-privilege by default: normal sign-in never requests delete_repo, so a
 // destructive action (Teardown Organization) needs a one-shot elevated re-auth.
-// This is an action, not a persisted toggle — nothing is stored, so a later
-// fresh login drops back to base scopes (#655).
+// This is an action, not a persisted toggle: the scope *request* defaults to
+// base on every sign-in (only this button asks for delete_repo, for that one
+// re-auth), so a later plain sign-in drops back to base. The elevated token
+// itself is stored like any OAuth token until sign-out — one-shot is about the
+// request preference, not the token's lifetime (#655).
 function ElevatedPermissionsSection({
   highlighted,
 }: {
