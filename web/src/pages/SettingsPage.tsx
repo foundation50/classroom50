@@ -148,7 +148,7 @@ function ElevatedPermissionsSection({
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
-              variant="outline"
+              variant="warning"
               size="sm"
               // Nothing to request when the permission is already observed. Stays
               // enabled on "unknown" so a session we can't read can still ask.

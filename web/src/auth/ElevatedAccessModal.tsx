@@ -135,7 +135,7 @@ export function ElevatedAccessModal({
 
           <div className="flex flex-col gap-3">
             <Button
-              variant="primary"
+              variant={elevated ? "warning" : "primary"}
               className="w-full"
               disabled={isRequestingDeviceCode}
               onClick={() =>

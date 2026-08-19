@@ -129,7 +129,7 @@ const TeardownSection = ({
             />
           </span>
           <Button
-            variant="outline"
+            variant="warning"
             size="sm"
             onClick={() => setElevateOpen(true)}
           >
