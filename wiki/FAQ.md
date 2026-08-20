@@ -344,7 +344,7 @@ the tighter path (see
 ### Do teachers and students grant the same access?
 
 Yes. Sign-in requests one scope set for everyone, on purpose: one person can be
-both a teacher and a student (an instructor testing an assignment, a TA who also
+both a teacher and a student (a teacher testing an assignment, a TA who also
 takes the course), so Classroom 50 never asks you to declare a role at sign-in.
 What you can *do* is decided afterward by your role in the organization and
 classroom, not by your token — a student's grant is broader than what a student

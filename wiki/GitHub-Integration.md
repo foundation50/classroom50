@@ -196,7 +196,7 @@ Classroom 50 has no server. Whatever you authorize is a GitHub token that lives
 only in your browser (web app) or your local `gh` credential store (CLI) —
 nobody but you can act on your account with it. Sign-in requests the **same
 scope set for everyone**, because teachers and students share one flow and one
-person can be both (an instructor testing an assignment as a student, a TA who
+person can be both (a teacher testing an assignment as a student, a TA who
 also takes the course). Capabilities are gated after sign-in by your role in the
 organization and classroom, not by the scopes on your token.
 
