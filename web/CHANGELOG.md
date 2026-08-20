@@ -17,6 +17,16 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.32.0](https://github.com/foundation50/classroom50/compare/web-v1.31.0...web-v1.32.0) (2026-08-20)
+
+
+### Features
+
+* **cli:** drop nightly score collection as the default ([#670](https://github.com/foundation50/classroom50/issues/670)) ([604f7f0](https://github.com/foundation50/classroom50/commit/604f7f097a53594d61564f59b58298eab0eb3adb))
+* **web:** animate the submissions table on sort/filter with a settling state ([#663](https://github.com/foundation50/classroom50/issues/663)) ([d5107b8](https://github.com/foundation50/classroom50/commit/d5107b8668af2bb260466be4e93b338ea812e6ac))
+* **web:** improve the submissions and dashboard toolbars ([#660](https://github.com/foundation50/classroom50/issues/660)) ([870ea8a](https://github.com/foundation50/classroom50/commit/870ea8ab4916f1d93fb1748925b1b5e4a7a82638))
+* **web:** request delete_repo on demand instead of at every sign-in ([#667](https://github.com/foundation50/classroom50/issues/667)) ([a9ddca8](https://github.com/foundation50/classroom50/commit/a9ddca812006145f37a2f656520bf4cd052f9846))
+
 ## [1.31.0](https://github.com/foundation50/classroom50/compare/web-v1.30.0...web-v1.31.0) (2026-08-18)
 
 
