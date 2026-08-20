@@ -194,10 +194,13 @@ Side-effect free.
 
 Classroom 50 has no server. Whatever you authorize is a GitHub token that lives
 only in your browser (web app) or your local `gh` credential store (CLI) —
-nobody but you can act on your account with it. Sign-in requests the **same
-scope set for everyone**, because teachers and students share one flow and one
-person can be both (a teacher testing an assignment as a student, a TA who
-also takes the course). Capabilities are gated after sign-in by your role in the
+nobody but you can act on your account with it. Sign-in requests **one scope set
+for everyone** — a deliberate simplicity choice, not a technical requirement.
+Teachers and students share a single flow because one person can be both (a
+teacher testing an assignment as a student, a TA who also takes the course), so
+the app asks for the union of what any role might need rather than making you
+declare a role up front. A student's grant is therefore broader than what a
+student actually uses. Capabilities are gated after sign-in by your role in the
 organization and classroom, not by the scopes on your token.
 
 The scopes below are GitHub's own. The table lists what each one grants across
@@ -212,16 +215,24 @@ your whole account, why Classroom 50 needs it, and who actually exercises it.
 | `admin:org` | Administer organizations you own — invite/remove members, manage teams, change org settings. | Inviting and removing students, managing classroom teams, and locking down org policy. Implies `read:org`. | Teachers only. |
 | `delete_repo` | **Permanently delete repositories.** | Not requested at sign-in. One feature needs it — **Tear down organization** — and Classroom 50 asks for it on demand, then only after an explicit typed confirmation (see the [teacher-authentication note](#2-teacher-authentication) above). | Teachers only, on demand. |
 
-### What a student actually uses versus a teacher
+### What a student actually needs versus a teacher
 
-A student's session carries the same grant, but a student only ever exercises
-`read:user`, `read:org`, and `repo` (plus `workflow` for default-autograder
-accepts). The `admin:org` and `delete_repo` powers are never used by a student:
-every organization-administration call the code makes is owner-only, and a plain
-member's token can't perform them on an org they don't own even though the grant
-nominally includes the scope. In other words, the grant is broader than the
-footprint — the token *can* touch all your repos, but Classroom 50 only ever
-acts on classroom ones. This matches the GitHub CLI's behavior.
+A student's flow only ever exercises three scopes: `read:user` (identify
+themselves), `read:org` (accept their own organization invitation and read
+their own memberships), and `repo` (generate their assignment repository, commit
+their work, add a teammate as a collaborator on a group repository, and read
+their own grades). Default-autograder assignments also need `workflow`, because
+the browser commits the autograde workflow file on accept; template-less and
+no-autograder assignments don't. That's the whole student footprint.
+
+A student never uses `admin:org` or `delete_repo`. Those are organization-owner
+powers — a plain member's token can't perform them on an org they don't own,
+even though the shared grant nominally includes `admin:org`. The app requests
+them because the sign-in flow is shared with teachers, not because a student
+needs them. So the grant is broader than the footprint: the token *can* touch
+all your repositories, but Classroom 50 only ever acts on classroom ones. This
+matches the GitHub CLI's behavior, where `gh teacher login` and `gh student
+login` share one scope set for the same reason.
 
 ### Reducing what you grant
 
