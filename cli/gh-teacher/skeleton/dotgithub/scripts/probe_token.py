@@ -37,7 +37,7 @@ team VISIBILITY — a secret team the token can't see 404/403s here even when th
 org-members proxy passes. It additionally reads each STAFF team (classroom.json
 `teams`, e.g., `classroom50-<short>-ta`) the collect-time grant targets, so a
 secret/invisible staff team fails RED here rather than silently granting TAs no
-access at cron. A team that doesn't exist yet (404) is a PASS with a note (an
+access at collect time. A team that doesn't exist yet (404) is a PASS with a note (an
 early-term classroom legitimately has no team), never a failure.
 
 Environment (set by `probe-token.yaml`):

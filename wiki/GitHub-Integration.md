@@ -161,10 +161,9 @@ gh api -X PUT /repos/<org>/classroom50/actions/permissions/access \
 
 ### 6. Score collection
 
-The `collect-scores.yaml` workflow runs nightly (`17 4 * * *` UTC) across every
-classroom. Trigger it manually, optionally scoped to one classroom or a single
-assignment (the same scoped run the web app's per-assignment **Sync now**
-button dispatches):
+Trigger the `collect-scores.yaml` workflow from the Actions tab, optionally
+scoped to one classroom or a single assignment (the same scoped run the web
+app's per-assignment **Sync now** button dispatches):
 
 ```sh
 gh workflow run collect-scores.yaml --repo <org>/classroom50
@@ -394,7 +393,7 @@ release` for tags and Releases, and fetches unauthenticated from Pages:
 | File | Triggers | Purpose |
 |------|----------|---------|
 | `publish-pages.yaml` | Push to default branch, `workflow_dispatch` | Deploy `assignments.json`, autograders, shims, `runner.py`, and bundles to Pages. |
-| `collect-scores.yaml` | `workflow_dispatch`, nightly cron | Aggregate `result.json` into `*/scores.json`. |
+| `collect-scores.yaml` | `workflow_dispatch` | Aggregate `result.json` into `*/scores.json`. |
 | `regrade.yaml` | `workflow_dispatch` | Push regrade tags to student repos for an assignment. |
 | `probe-token.yaml` | `workflow_dispatch` | Read-only service-token scope check. |
 | `autograde-runner.yaml` (reusable) | Called by each student's `autograde.yaml` | Grade, publish, update the latest pointer. |

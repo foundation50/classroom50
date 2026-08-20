@@ -2290,7 +2290,7 @@ class TestMain:
         assert "no-such-classroom" in err
 
     def test_no_classrooms_without_filter_still_exits_zero(self, tmp_path, monkeypatch):
-        # An empty config repo with the nightly cron enabled legitimately has
+        # An empty config repo with an org-wide collect run legitimately has
         # nothing to collect — that stays a clean no-op, unlike a no-match
         # explicit filter.
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))

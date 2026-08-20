@@ -374,7 +374,7 @@ export async function getRegradeRunAfterId(
   )
 }
 
-// The most recent *successful* collect-scores run (cron or manual), or null if
+// The most recent *successful* collect-scores run (manual or scheduled), or null if
 // the workflow has never succeeded. Used for the "last collected" timestamp;
 // a completed-but-FAILED run committed nothing, so counting it would make a
 // stale snapshot read as fresh and hide the "Sync now" prompt.

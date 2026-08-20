@@ -237,10 +237,9 @@ GitHub's side.
 
 A few common reasons:
 
-- **Scores haven't been collected yet.** Collection runs nightly; click
-  **Sync now** on the submissions page to pull this assignment's latest
-  results immediately (the sync is scoped to the assignment you're viewing, so
-  it's fast even in a big classroom).
+- **Scores haven't been collected yet.** Click **Sync now** on the submissions
+  page to pull this assignment's latest results (the sync is scoped to the
+  assignment you're viewing, so it's fast even in a big classroom).
 - **GitHub Pages is still deploying.** Right after a config change, published
   files can take a few minutes to go live.
 - **The student's repo predates a workflow update.** If you updated Classroom 50

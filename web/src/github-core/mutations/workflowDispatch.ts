@@ -23,7 +23,7 @@ export class CollectInputsUnsupportedError extends Error {
 
 /**
  * Dispatches the classroom50 repo's `collect-scores.yaml` workflow (the same
- * nightly job that refreshes `scores.json`) so a teacher can pull fresh
+ * job that refreshes `scores.json`) so a teacher can pull fresh
  * submissions on demand.
  *
  * Returns `sinceRunId`: the newest collect-scores dispatch run before this POST

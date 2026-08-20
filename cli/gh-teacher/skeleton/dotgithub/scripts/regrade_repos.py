@@ -19,8 +19,8 @@ fires its autograde workflow. Repos with no `main` HEAD (student hasn't
 accepted/pushed) are skipped.
 
 Grading then happens ASYNCHRONOUSLY inside each student repo, so refreshed
-releases are ingested by the next `collect-scores.py` run (nightly or "Collect
-now"). Until then the gradebook shows PRE-regrade scores — an eventual-
+releases are ingested by the next `collect-scores.py` run ("Collect
+now", or a manual dispatch). Until then the gradebook shows PRE-regrade scores — an eventual-
 consistency window, by design (collecting here would race the still-running
 grade jobs).
 
@@ -327,7 +327,7 @@ def main() -> int:
         f"first-graded {tagged}, skipped {skipped} across {total} repo(s). "
         f"Grading runs asynchronously inside each student repo and can take "
         f"minutes; refreshed scores are NOT visible until the next collect-scores "
-        f"run ingests the new releases (nightly cron, or \"Collect now\")."
+        f"run ingests the new releases (\"Collect now\", or a manual dispatch)."
     )
     if failed:
         emit_error(
