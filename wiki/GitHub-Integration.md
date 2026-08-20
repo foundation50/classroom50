@@ -190,6 +190,56 @@ Side-effect free.
 
 ---
 
+## Permissions and blast radius
+
+Classroom 50 has no server. Whatever you authorize is a GitHub token that lives
+only in your browser (web app) or your local `gh` credential store (CLI) —
+nobody but you can act on your account with it. Sign-in requests the **same
+scope set for everyone**, because teachers and students share one flow and one
+person can be both (an instructor testing an assignment as a student, a TA who
+also takes the course). Capabilities are gated after sign-in by your role in the
+organization and classroom, not by the scopes on your token.
+
+The scopes below are GitHub's own. The table lists what each one grants across
+your whole account (the blast radius), why Classroom 50 needs it, and who
+actually exercises it.
+
+| Scope | Blast radius (what it can touch) | Why Classroom 50 needs it | Who uses it |
+|---|---|---|---|
+| `read:user` | Reads your public profile. | Identifies who you are after sign-in. | Everyone. |
+| `read:org` | Reads your organization and team memberships. | Confirms membership and resolves your classroom role; a student accepts their own org invitation. | Everyone. |
+| `repo` | **Full control of all your repositories** — public and private, in every organization, not only the classroom one. GitHub offers no way to narrow it to a single org. | Creating student repositories, committing config and setup files, reading grades (private-repo Releases), and managing repo collaborators. | Everyone. |
+| `workflow` | Commit files under `.github/workflows/` in repositories you can write. | Landing the autograder workflow — teachers during `init`, students when the browser commits the autograde shim on accept. | Everyone (students only for default-autograder accepts). |
+| `admin:org` | Administer organizations you own — invite/remove members, manage teams, change org settings. | Inviting and removing students, managing classroom teams, and locking down org policy. Implies `read:org`. | Teachers only. |
+| `delete_repo` | **Permanently delete repositories.** | Not requested at sign-in. One feature needs it — **Tear down organization** — and Classroom 50 asks for it on demand, then only after an explicit typed confirmation (see the [teacher-authentication note](#2-teacher-authentication) above). | Teachers only, on demand. |
+
+### What a student actually uses versus a teacher
+
+A student's session carries the same grant, but a student only ever exercises
+`read:user`, `read:org`, and `repo` (plus `workflow` for default-autograder
+accepts). The `admin:org` and `delete_repo` powers are never used by a student:
+every organization-administration call the code makes is owner-only, and a plain
+member's token can't perform them on an org they don't own even though the grant
+nominally includes the scope. In other words, the grant is broader than the
+footprint — the token *can* touch all your repos, but Classroom 50 only ever
+acts on classroom ones. This matches the GitHub CLI's behavior.
+
+### Reducing what you grant
+
+The one lever that actually narrows the grant is a **fine-grained personal
+access token**, which is scoped to a single organization instead of your whole
+account. On the sign-in card, open **Other sign-in methods** and pick **Use a
+personal access token (fine-grained)**; you name the org (it becomes the token's
+resource owner) and set Repository access to **All repositories**. See
+[If the proxy domain is blocked](#if-the-proxy-domain-is-blocked) for the full
+walkthrough. A classic OAuth sign-in can't be scoped this way — the `repo` scope
+is all-or-nothing — so the fine-grained token is the tighter-security path for
+anyone who wants to grant less. Why classic OAuth can't be scoped per
+organization, and why sign-in doesn't ask you to pick a teacher or student role,
+are recorded in [Known Limitations](Known-Limitations#requested-but-architecturally-hard).
+
+---
+
 ## Network and allowed domains
 
 If your school or district filters web traffic, allow the domains below so

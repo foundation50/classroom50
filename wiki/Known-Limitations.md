@@ -102,6 +102,16 @@ briefly fail or show stale data; wait a minute and retry.
   above ([#567](https://github.com/foundation50/classroom50/issues/567)).
 - **Roster self-selection** would need a server to arbitrate identity
   claims.
+- **Per-organization sign-in access** isn't possible with a classic OAuth
+  sign-in: GitHub's `repo` scope is all-or-nothing, so the grant covers all
+  your repositories, not just the classroom org's. The tighter path is a
+  fine-grained personal access token scoped to one organization; see
+  [Reducing what you grant](GitHub-Integration#reducing-what-you-grant).
+- **Separate teacher and student sign-in profiles** would require choosing a
+  role at sign-in, which the design avoids — one person can be both a teacher
+  and a student in the same organization. What you can do is gated by your
+  org and classroom role after sign-in, not by your token's scopes; see
+  [Permissions and blast radius](GitHub-Integration#permissions-and-blast-radius).
 
 Classroom 50 is open source and actively developed; if one of these matters
 to your course, share your use case in
