@@ -336,7 +336,7 @@ Classroom 50 authenticates the same way the GitHub CLI does, using GitHub's
 to a single organization's repositories — so the grant covers your repos even
 though Classroom 50 only acts on classroom ones. This matches the CLI's
 behavior. For what every scope grants and why, see
-[Permissions and blast radius](GitHub-Integration#permissions-and-blast-radius);
+[Permissions and access](GitHub-Integration#permissions-and-access);
 if you want to grant less, a fine-grained token scoped to one organization is
 the tighter path (see
 [Reducing what you grant](GitHub-Integration#reducing-what-you-grant)).

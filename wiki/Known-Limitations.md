@@ -111,7 +111,7 @@ briefly fail or show stale data; wait a minute and retry.
   role at sign-in, which the design avoids — one person can be both a teacher
   and a student in the same organization. What you can do is gated by your
   org and classroom role after sign-in, not by your token's scopes; see
-  [Permissions and blast radius](GitHub-Integration#permissions-and-blast-radius).
+  [Permissions and access](GitHub-Integration#permissions-and-access).
 
 Classroom 50 is open source and actively developed; if one of these matters
 to your course, share your use case in

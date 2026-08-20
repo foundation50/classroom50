@@ -190,7 +190,7 @@ Side-effect free.
 
 ---
 
-## Permissions and blast radius
+## Permissions and access
 
 Classroom 50 has no server. Whatever you authorize is a GitHub token that lives
 only in your browser (web app) or your local `gh` credential store (CLI) —
@@ -201,10 +201,9 @@ also takes the course). Capabilities are gated after sign-in by your role in the
 organization and classroom, not by the scopes on your token.
 
 The scopes below are GitHub's own. The table lists what each one grants across
-your whole account (the blast radius), why Classroom 50 needs it, and who
-actually exercises it.
+your whole account, why Classroom 50 needs it, and who actually exercises it.
 
-| Scope | Blast radius (what it can touch) | Why Classroom 50 needs it | Who uses it |
+| Scope | Access it grants | Why Classroom 50 needs it | Who uses it |
 |---|---|---|---|
 | `read:user` | Reads your public profile. | Identifies who you are after sign-in. | Everyone. |
 | `read:org` | Reads your organization and team memberships. | Confirms membership and resolves your classroom role; a student accepts their own org invitation. | Everyone. |
