@@ -152,7 +152,7 @@ const (
 	// ServiceTokenExpiresAtVar is the repo-level Actions VARIABLE (readable,
 	// unlike the secret) recording the service token's expected expiry as an
 	// RFC 3339 timestamp, so the web GUI can show an expiry countdown and warn
-	// before the nightly collect breaks. Advisory only: it records the teacher's
+	// before collection breaks. Advisory only: it records the teacher's
 	// chosen `expires_in`, which GitHub does not echo back for a fine-grained
 	// PAT. Currently WRITTEN ONLY BY THE WEB GUI on save/rotate; the CLI
 	// rotate/init path provisions the secret without it, so a CLI-provisioned

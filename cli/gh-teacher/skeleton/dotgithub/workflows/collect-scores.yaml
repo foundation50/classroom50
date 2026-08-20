@@ -1,8 +1,9 @@
 name: Collect Scores
 
-# Teacher-triggered workflow. Iterates the (member, assignment)
-# Cartesian product of the classroom GitHub teams' members ×
-# <classroom>/assignments.json (the teams are authoritative for
+# Teacher-triggered workflow (run it from the Actions tab or the web app's
+# "Sync now" button). Iterates
+# the (member, assignment) Cartesian product of the classroom GitHub teams'
+# members × <classroom>/assignments.json (the teams are authoritative for
 # enrollment; roster.csv is optional display metadata). The polled
 # members are the union of the STUDENT team and the STAFF teams
 # (teacher/hta/ta), so a staff member who accepted an assignment to test
@@ -22,16 +23,12 @@ on:
       assignment:
         description: "Assignment slug (leave blank to collect the whole classroom; requires classroom to be meaningful)"
         required: false
-  schedule:
-    # Nightly autopilot. Comment out the next line if you only want
-    # manual triggers.
-    - cron: "17 4 * * *"
 
 permissions:
   contents: write       # write scores.json + commit
 
 # Serialize same-classroom runs (scoped or not); only runs for DIFFERENT
-# classrooms may overlap. The org-wide nightly ('all') still overlaps a scoped
+# classrooms may overlap. An org-wide ('all') run still overlaps a scoped
 # run on the same scores.json, so on a push race the step below re-runs the
 # collector against the freshly-pulled tree (re-applying this run's per-owner
 # upserts onto the other run's already-committed entries) instead of a blind
@@ -46,7 +43,7 @@ jobs:
     # Bound the job: the commit/push retry below can loop, and with
     # cancel-in-progress: false a wedged git operation would otherwise hold the
     # same-classroom concurrency slot until GitHub's ~6h default, stalling every
-    # queued scoped/nightly run behind it. Fail loudly instead.
+    # queued scoped/org-wide run behind it. Fail loudly instead.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -101,7 +98,7 @@ jobs:
           fi
 
           # The branch can advance mid-run: a teacher edit, a collect for
-          # another classroom, or the org-wide nightly overlapping a scoped run
+          # another classroom, or an org-wide run overlapping a scoped run
           # on the SAME scores.json (the concurrency group only serializes
           # same-classroom runs). On a push race, fast-forward to the remote tip
           # and RE-RUN the collector: apply_updates upserts this run's entries

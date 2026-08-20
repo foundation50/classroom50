@@ -51,7 +51,8 @@ requests).
 
 **State refreshes only when a page loads.** With no server polling in the
 background, the app reads GitHub's current state when you open or reload a
-page, and scores update only when collection runs (nightly, or **Sync now**).
+page, and scores update only when collection runs (**Sync now**, or a manual
+`collect-scores` run).
 If a view looks stale, reload it. See
 [When state refreshes](How-Classroom-50-Works#when-state-refreshes).
 

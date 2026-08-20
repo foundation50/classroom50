@@ -173,7 +173,7 @@ async function readScoresFile(
 // so the CLI collector preserves it verbatim (collect_scores.py apply_updates
 // skips override:true entries), which is what makes a manual grade — and an
 // override of an autograded score — survive re-collection. The whole thing is
-// wrapped in withGitConflictRetry so a race with the nightly collect run (or
+// wrapped in withGitConflictRetry so a race with a collect run (or
 // another teacher) re-reads and retries transparently.
 export async function editScoreOverride(
   client: GitHubClient,

@@ -108,7 +108,7 @@ in GitHub Integration.
 | Path | Purpose |
 | --- | --- |
 | `.github/workflows/publish-pages.yaml` | Publishes allow-listed files to Pages. |
-| `.github/workflows/collect-scores.yaml` | `workflow_dispatch` + nightly cron score collection. |
+| `.github/workflows/collect-scores.yaml` | `workflow_dispatch` score collection. |
 | `.github/workflows/probe-token.yaml` | Read-only service-token health check. |
 | `.github/workflows/autograde-runner.yaml` | Reusable workflow called by every student repo. |
 | `.github/workflows/regrade.yaml` | Teacher-triggered regrade: re-runs each targeted repo's latest autograde run against the current autograder, without creating a new submission. |

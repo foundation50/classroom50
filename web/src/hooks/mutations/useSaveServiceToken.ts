@@ -38,7 +38,7 @@ type SaveServiceTokenInput = {
 // Validate a service PAT and store it as the config repo's
 // CLASSROOM50_SERVICE_TOKEN secret. When an expiry window and/or name is
 // supplied, also record them as readable repo variables so the org list and
-// settings surfaces can show a countdown, warn before the nightly collect
+// settings surfaces can show a countdown, warn before collection
 // breaks, and label the token. Hook seeds + invalidates the org list and this
 // org's service-token status; the field-clear/saved-kind UI effects (and the
 // useSafeSubmit composition) stay at the call site (see ./README.md).

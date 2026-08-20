@@ -14,7 +14,7 @@ import {
 // classroom's scores.json in the config repo (the web's only scores write).
 // Invalidates the scores.json read so the submissions page reflects it. The
 // domain helper wraps the read-modify-write in withGitConflictRetry, so a race
-// with the nightly collect run retries transparently.
+// with the collect run retries transparently.
 export function useSetScoreOverride(opts?: {
   onWrite?: (
     result: SetScoreOverrideResult,

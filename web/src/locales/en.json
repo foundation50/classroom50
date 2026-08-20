@@ -1044,7 +1044,7 @@
     },
     "serviceTokens": {
       "heading": "Manage Service Tokens",
-      "subheading": "Service-token status across every organization you own. Rotate a token before it expires so nightly score collection keeps running.",
+      "subheading": "Service-token status across every organization you own. Rotate a token before it expires so score collection keeps working.",
       "loading": "Checking your organizations…",
       "empty": "No organizations with Classroom 50 set up yet.",
       "expires": "Expires {{date}}",
@@ -2576,7 +2576,7 @@
       "resolvingNonSubmitters": "Checking who hasn't submitted yet…",
       "loading": "Loading submissions…",
       "pendingGrade": "Pending",
-      "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Sync submissions now\" or wait for the nightly collection.",
+      "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Sync submissions now\" to collect it.",
       "overridden": "Manual",
       "overriddenTitle": "This score was set by hand and won't be changed by autograding until the override is cleared.",
       "notSubmitted": "Not submitted",

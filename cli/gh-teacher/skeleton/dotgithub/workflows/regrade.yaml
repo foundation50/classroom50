@@ -23,7 +23,7 @@ name: Regrade
 # student repo (it can take minutes), so this workflow does NOT collect
 # scores itself — collecting immediately would race the still-running grade
 # jobs. The refreshed releases are ingested by `collect-scores.yaml`
-# (nightly, or "Collect now" from the web app). EVENTUAL CONSISTENCY: until
+# ("Collect now" from the web app, or a manual dispatch). EVENTUAL CONSISTENCY: until
 # that next collect runs, the gradebook still shows the PRE-regrade scores —
 # a "Collect now" fired while grading is still in flight will read the old
 # result.json and only pick up the new score on a later collect. This is

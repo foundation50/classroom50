@@ -6,7 +6,7 @@ name: Probe Service Token
 # CLASSROOM50_SERVICE_TOKEN holds EVERY scope the pipeline needs — including
 # the org-team read and repo-level Actions permission that the CLI/web
 # provisioning validators can't cheaply check and that otherwise only surface
-# as an opaque failure in a nightly collect or a regrade.
+# as an opaque failure in a collect run or a regrade.
 #
 # SIDE-EFFECT FREE: the probe only READS. It proves the write scopes with
 # read-only proxies GitHub gates behind the write permission (config-repo
