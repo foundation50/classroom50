@@ -55,8 +55,8 @@ Exit codes:
 
 from __future__ import annotations
 
-import json
 import datetime
+import json
 import os
 import pathlib
 import sys
@@ -88,6 +88,12 @@ RATE_LIMIT_BODY_MARKERS = (
 )
 
 MAX_RETRY_SLEEP_SECONDS = 60
+
+# Retry-After cap for a plain transient; see collect_scores.py.
+TRANSIENT_RETRY_CAP_SECONDS = 30
+
+# Cap on the error body read for diagnosis; see collect_scores.py.
+BODY_SNIPPET_READ_BYTES = 4096
 
 
 # GitHub API transport --------------------------------------------------------
@@ -122,11 +128,10 @@ def http_get(url: str, token: str, *, _retries: int = 3) -> tuple[int, bytes]:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return resp.status, resp.read()
         except urllib.error.HTTPError as exc:
-            if attempt < _retries - 1:
-                delay = retry_delay(exc, attempt)
-                if delay is not None:
-                    time.sleep(delay)
-                    continue
+            delay = retry_delay(exc, attempt)
+            if delay is not None and attempt < _retries - 1:
+                time.sleep(delay)
+                continue
             raise
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             if attempt < _retries - 1:
@@ -145,7 +150,7 @@ def error_body_snippet(exc: urllib.error.HTTPError) -> str:
     cached = getattr(exc, "_body_snippet", None)
     if cached is None:
         try:
-            raw = exc.read() or b""
+            raw = exc.read(BODY_SNIPPET_READ_BYTES) or b""
         except (OSError, ValueError, AttributeError):
             raw = b""
         cached = " ".join(raw.decode("utf-8", "replace").split())[:300]
@@ -174,8 +179,8 @@ def rate_limit_verdict(
     if exc.code not in (403, 429):
         return None
     headers = exc.headers or {}
-    retry_after = (headers.get("Retry-After") or "").strip()
-    if retry_after.isdigit():
+    retry_after = _retry_after_seconds(headers)
+    if retry_after is not None:
         return (
             f"Retry-After: {retry_after}s",
             min(int(retry_after), MAX_RETRY_SLEEP_SECONDS),
@@ -201,18 +206,30 @@ def rate_limit_reason(exc: urllib.error.HTTPError) -> str | None:
     return verdict[0] if verdict is not None else None
 
 
+def _retry_after_seconds(headers: Any) -> str | None:
+    """The Retry-After header when it names plain delta-seconds, else None.
+    Mirrors collect_scores.py."""
+    value = (headers.get("Retry-After") or "").strip() if headers else ""
+    return value if value.isdigit() else None
+
+
 def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
     """Seconds to wait before retrying `exc`, or None when it must not be
     retried. Mirrors collect_scores.py: throttles first (an exhausted PRIMARY
     budget is never waited out), then the 429/5xx backoff this probe already
-    had."""
+    had.
+
+    No run-level sleep ceiling here, unlike collect/regrade: a probe issues a
+    handful of requests, so it cannot pile up enough recovered throttles to
+    threaten its own job timeout."""
     verdict = rate_limit_verdict(exc)
     if verdict is not None:
         return verdict[1]
-    headers = exc.headers or {}
     if exc.code in (429, 500, 502, 503, 504):
-        retry_after = (headers.get("Retry-After") or "").strip()
-        return min(int(retry_after), 30) if retry_after.isdigit() else 2**attempt
+        retry_after = _retry_after_seconds(exc.headers)
+        if retry_after is not None:
+            return min(int(retry_after), TRANSIENT_RETRY_CAP_SECONDS)
+        return 2**attempt
     return None
 
 
@@ -246,10 +263,10 @@ def _classify_repo_read(exc: urllib.error.HTTPError) -> str:
     The THROTTLE check comes first: GitHub returns a rate limit as 403 as often
     as 429, and reporting a healthy, rate-limited token as under-scoped is the
     one verdict a token probe must never get wrong."""
-    throttled = rate_limit_reason(exc)
-    if throttled is not None:
+    throttle_reason = rate_limit_reason(exc)
+    if throttle_reason is not None:
         return (
-            f"HTTP {exc.code} — GitHub is THROTTLING, not refusing ({throttled}); "
+            f"HTTP {exc.code} — GitHub is THROTTLING, not refusing ({throttle_reason}); "
             f"the token is fine, do NOT rotate it. Re-run the probe once the "
             f"limit resets."
         )

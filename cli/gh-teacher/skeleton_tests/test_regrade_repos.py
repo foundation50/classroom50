@@ -18,6 +18,7 @@ import email.message
 import pytest
 
 from conftest import github_http_error
+from conftest import FakeResponse
 from conftest import regrade_repos as rr
 
 
@@ -1162,10 +1163,8 @@ def test_latest_autograde_run_id_tag_only_accepts_milestone_runs(monkeypatch):
 
 
 class TestClassify:
-    """Mirrors collect_scores.py. The inversion this file shipped with — the
-    rate-limit test nested INSIDE the hard-error branch — meant a throttled 429
-    was never "hard", so it fell through to the generic per-repo warning and
-    never reached its "do NOT rotate" message."""
+    """Mirrors collect_scores.py: a throttled 403/429 must classify as THROTTLED,
+    not as an under-scoped token."""
 
     def test_throttle_beats_the_status_code(self):
         assert rr.classify(github_http_error(403, {"Retry-After": "30"})) is rr.THROTTLED
@@ -1190,9 +1189,8 @@ class TestClassify:
 
 
 class TestRateLimitClassification:
-    """This file shares collect_scores.py's transport, and shared its bug: any
-    403 counted as an under-scoped token, so a throttled run told the operator
-    to rotate a healthy credential."""
+    """This file shares collect_scores.py's transport: any 403 counting as an
+    under-scoped token would tell the operator to rotate a healthy credential."""
 
     def test_retry_after_and_body_marker_are_throttles(self):
         assert rr.rate_limit_reason(github_http_error(403, {"Retry-After": "30"})) == "Retry-After: 30s"
@@ -1218,23 +1216,11 @@ class TestRateLimitClassification:
         slept: list[float] = []
         attempts: list[int] = []
 
-        class _Resp:
-            headers: dict[str, str] = {}
-
-            def read(self, *args):
-                return b"{}"
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *exc):
-                return False
-
         def fake_open(req, timeout=None):
             attempts.append(1)
             if len(attempts) == 1:
                 raise github_http_error(403, {"Retry-After": "2"}, b"secondary rate limit")
-            return _Resp()
+            return FakeResponse()
 
         monkeypatch.setattr(rr._OPENER, "open", fake_open)
         monkeypatch.setattr(rr.time, "sleep", lambda s: slept.append(s))

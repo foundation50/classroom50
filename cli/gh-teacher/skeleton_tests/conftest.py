@@ -57,3 +57,22 @@ def github_http_error(
         body = json.dumps(body).encode("utf-8")
     fp = io.BytesIO(body) if body is not None else None
     return urllib.error.HTTPError(url=url, code=code, msg="msg", hdrs=headers, fp=fp)
+
+
+class FakeResponse:
+    """Stand-in for the object the scripts' opener returns. `read(*args)` covers
+    both `resp.read()` and collect's `resp.read(max_bytes)`."""
+
+    def __init__(self, body: bytes = b"{}", status: int = 200):
+        self.status = status
+        self.headers: dict[str, str] = {}
+        self._body = body
+
+    def read(self, *args):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False

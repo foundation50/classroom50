@@ -15,6 +15,7 @@ import urllib.error
 import pytest
 
 from conftest import github_http_error
+from conftest import FakeResponse
 from conftest import probe_token as pt
 
 
@@ -53,23 +54,11 @@ class TestThrottleIsNotAScopeProblem:
         slept: list[float] = []
         attempts: list[int] = []
 
-        class _Resp:
-            status = 200
-
-            def read(self):
-                return b"{}"
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *exc):
-                return False
-
         def fake_open(req, timeout=None):
             attempts.append(1)
             if len(attempts) == 1:
                 raise github_http_error(403, {"Retry-After": "1"}, b"secondary rate limit")
-            return _Resp()
+            return FakeResponse()
 
         monkeypatch.setattr(pt.urllib.request, "urlopen", fake_open)
         monkeypatch.setattr(pt.time, "sleep", lambda d: slept.append(d))

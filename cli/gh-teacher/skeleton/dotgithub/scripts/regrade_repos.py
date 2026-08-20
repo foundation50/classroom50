@@ -75,8 +75,7 @@ SUBMIT_TAG_PREFIX = "submit/"
 
 # Rate-limit body markers and the longest a single retry sleeps. Mirrors
 # collect_scores.py, which documents the set and its relationship to Go's
-# ghutil.IsRateLimited; this file shares that transport, and shared the bug
-# (any 403 read as an under-scoped token).
+# ghutil.IsRateLimited; this file shares that transport.
 RATE_LIMIT_BODY_MARKERS = (
     "secondary rate limit",
     "rate limit exceeded",
@@ -84,6 +83,18 @@ RATE_LIMIT_BODY_MARKERS = (
 )
 
 MAX_RETRY_SLEEP_SECONDS = 60
+
+# Retry-After cap for a plain transient; see collect_scores.py.
+TRANSIENT_RETRY_CAP_SECONDS = 30
+
+# Ceiling on the run's total throttle sleep; see collect_scores.py.
+MAX_TOTAL_THROTTLE_SLEEP_SECONDS = 300
+
+# Seconds this run has already slept waiting out throttles.
+_throttle_sleep_spent = 0.0
+
+# Cap on the error body read for diagnosis; see collect_scores.py.
+BODY_SNIPPET_READ_BYTES = 4096
 
 # The three verdicts classify() returns. Mirrors collect_scores.py.
 THROTTLED = "throttled"
@@ -701,12 +712,11 @@ def _http_error_says_ref_exists(exc: urllib.error.HTTPError) -> bool:
     — failing safe toward surfacing the failure.
 
     Reads through error_body_snippet rather than exc.read(): the body is a
-    one-shot stream, so a second reader anywhere in the file would get b"" and
-    silently lose this detection. One cached reader, one convention. That
-    widens the match from the `message` field to the whole (300-char) body,
-    which is deliberate — a duplicate-ref 422 says "already exists" nowhere
-    else, and matching the field alone would miss GitHub's other phrasings of
-    the same race."""
+    one-shot stream, so a second reader would get b"" and silently lose this
+    detection. That widens the match from the `message` field to the whole
+    300-char body — deliberate: a duplicate-ref 422 says "already exists"
+    nowhere else, and matching the field alone would miss GitHub's other
+    phrasings of the same race."""
     return "already exists" in error_body_snippet(exc).lower()
 
 
@@ -1102,7 +1112,7 @@ def error_body_snippet(exc: urllib.error.HTTPError) -> str:
     cached = getattr(exc, "_body_snippet", None)
     if cached is None:
         try:
-            raw = exc.read() or b""
+            raw = exc.read(BODY_SNIPPET_READ_BYTES) or b""
         except (OSError, ValueError, AttributeError):
             raw = b""
         cached = " ".join(raw.decode("utf-8", "replace").split())[:300]
@@ -1129,8 +1139,8 @@ def rate_limit_verdict(
     if exc.code not in (403, 429):
         return None
     headers = exc.headers or {}
-    retry_after = (headers.get("Retry-After") or "").strip()
-    if retry_after.isdigit():
+    retry_after = _retry_after_seconds(headers)
+    if retry_after is not None:
         return (
             f"Retry-After: {retry_after}s",
             min(int(retry_after), MAX_RETRY_SLEEP_SECONDS),
@@ -1170,16 +1180,38 @@ def epoch_to_iso(value: str) -> str:
         return value
 
 
+def throttle_sleep_budget_spent(delay: float) -> bool:
+    """Whether waiting `delay` would exceed the run's total throttle-sleep
+    budget; charges it when it fits. Mirrors collect_scores.py, which documents
+    why the ceiling exists."""
+    global _throttle_sleep_spent
+    if _throttle_sleep_spent + delay > MAX_TOTAL_THROTTLE_SLEEP_SECONDS:
+        return True
+    _throttle_sleep_spent += delay
+    return False
+
+
+def _retry_after_seconds(headers: Any) -> str | None:
+    """The Retry-After header when it names plain delta-seconds, else None.
+    Mirrors collect_scores.py."""
+    value = (headers.get("Retry-After") or "").strip() if headers else ""
+    return value if value.isdigit() else None
+
+
 def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
     """Seconds to wait before retrying `exc`, or None when it must not be
     retried. Mirrors collect_scores.py."""
     verdict = rate_limit_verdict(exc)
     if verdict is not None:
-        return verdict[1]
-    headers = exc.headers or {}
+        delay = verdict[1]
+        if delay is not None and throttle_sleep_budget_spent(delay):
+            return None
+        return delay
     if exc.code in (429, 500, 502, 503, 504):
-        retry_after = (headers.get("Retry-After") or "").strip()
-        return min(int(retry_after), 30) if retry_after.isdigit() else 2**attempt
+        retry_after = _retry_after_seconds(exc.headers)
+        if retry_after is not None:
+            return min(int(retry_after), TRANSIENT_RETRY_CAP_SECONDS)
+        return 2**attempt
     return None
 
 
@@ -1193,8 +1225,7 @@ def classify(exc: urllib.error.HTTPError) -> str:
         network-unavailable after retries). Aborts the run.
     SKIPPABLE — everything else; a per-repo 404/422 warns and skips.
 
-    The throttle is checked FIRST: a rate limit arrives as 403 as often as 429,
-    so a status-code-first test never reaches the "do NOT rotate" message."""
+    The throttle is checked FIRST (see rate_limit_verdict)."""
     if rate_limit_verdict(exc) is not None:
         return THROTTLED
     if exc.code in (401, 403, 599):

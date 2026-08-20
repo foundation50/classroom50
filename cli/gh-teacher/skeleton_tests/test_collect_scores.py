@@ -18,6 +18,7 @@ import pytest
 
 from conftest import collect_scores as cs
 from conftest import github_http_error as http_error
+from conftest import FakeResponse
 
 
 # The exact `collected_at` shape the scores-v1 schema (and every reader —
@@ -829,11 +830,7 @@ class TestListRepoCollaboratorLogins:
             return json.dumps([{"login": "alice", "role_name": "push"}]).encode("utf-8"), LoopHeaders()
 
         monkeypatch.setattr(cs, "_http_get_with_headers", fake_http_get_with_headers)
-        # A loop means the listing is TRUNCATED, and returning the partial list
-        # would be indistinguishable from a complete one — callers would read
-        # the missing entries as "doesn't exist". Raise instead; every caller
-        # turns ValueError into "unknown" and fails open.
-        with pytest.raises(ValueError, match="incomplete"):
+        with pytest.raises(cs.IncompleteListing, match="incomplete"):
             cs.list_repo_collaborator_logins(
                 "https://api.github.com", "cs50", "cs-principles-hello-alice", "token"
             )
@@ -1872,44 +1869,6 @@ class TestScoresIO:
 
 
 class TestErrorClassification:
-    def test_auth_errors_are_hard_failures(self):
-        # 401/403 means the collect PAT is missing, expired, or
-        # under-scoped — fail the run instead of warn-and-skip.
-        for code in (401, 403):
-            exc = cs.urllib.error.HTTPError(
-                url="https://api.github.com/x",
-                code=code,
-                msg="auth failed",
-                hdrs=None,
-                fp=None,
-            )
-            assert cs.classify(exc) is cs.FATAL
-
-    def test_network_error_is_a_hard_failure(self):
-        # _http_get raises synthetic 599 on final URLError —
-        # GitHub/DNS unreachable, not "student didn't submit".
-        exc = cs.urllib.error.HTTPError(
-            url="https://api.github.com/x",
-            code=599,
-            msg="network error",
-            hdrs=None,
-            fp=None,
-        )
-        assert cs.classify(exc) is cs.FATAL
-
-    def test_non_auth_http_errors_are_per_repo_warnings(self):
-        # Transient/per-repo failures warn-and-skip at the call
-        # site; only auth errors poison the whole run.
-        for code in (404, 429, 500):
-            exc = cs.urllib.error.HTTPError(
-                url="https://api.github.com/x",
-                code=code,
-                msg="not auth",
-                hdrs=None,
-                fp=None,
-            )
-            assert cs.classify(exc) is not cs.FATAL
-
     def test_missing_result_asset_has_its_own_exception_type(self):
         # Missing result.json is a malformed release, not an HTTP
         # 404 — distinct type keeps logs unambiguous.
@@ -3037,7 +2996,7 @@ class TestGrantClassroomTeamAccess:
         monkeypatch.setattr(cs, "grant_team_repo", fake_grant)
         # The bulk read of the team's current repos is network; "unknown" (None)
         # is the fallback that leaves grant_team_repo deciding per repo.
-        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
+        monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
         return grants
 
     def test_grants_ta_pull_on_each_student_repo(self, monkeypatch):
@@ -3099,7 +3058,7 @@ class TestGrantClassroomTeamAccess:
         # grant_team_repo returns False when the team already has access; the
         # pass must not report any new grant.
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice"])
-        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
+        monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
         monkeypatch.setattr(cs, "grant_team_repo", lambda *a, **k: False)
         cs.grant_classroom_team_access(
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
@@ -3113,7 +3072,7 @@ class TestGrantClassroomTeamAccess:
         # A student repo not accepted yet (404) is skipped, not fatal; the rest
         # still get granted.
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob"])
-        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
+        monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
         seen: list[str] = []
 
         def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
@@ -3136,7 +3095,7 @@ class TestGrantClassroomTeamAccess:
         # A 403 that is NOT a throttle (missing Administration) must abort the
         # pass so main() fails — see TestGrantThrottled for the other 403.
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice"])
-        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
+        monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
 
         def fake_grant(*a, **k):
             raise cs.urllib.error.HTTPError(url="u", code=403, msg="forbidden", hdrs=None, fp=None)
@@ -3168,7 +3127,7 @@ class TestErrorBodySnippet:
         assert cs.error_body_snippet(exc) == first
 
     def test_unreadable_body_is_empty_not_an_error(self):
-        exc = cs.urllib.error.HTTPError(url="u", code=403, msg="m", hdrs=None, fp=None)
+        exc = http_error(403, body=None)
         assert cs.error_body_snippet(exc) == ""
         assert cs.body_note(exc) == ""
 
@@ -3233,28 +3192,9 @@ class TestRetryDelay:
         assert cs.retry_delay(http_error(404), 0) is None
 
 
-class FakeResponse:
-    """Minimal stand-in for the object _OPENER.open returns."""
-
-    def __init__(self, body=b"{}", status=200):
-        self.status = status
-        self.headers = {}
-        self._body = body
-
-    def read(self, *args):
-        return self._body
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-
 class TestClassify:
-    """One verdict, checked throttle-first. Pairing a status-code test with a
-    separate rate_limit_reason call at each site was the same rule written ten
-    times, and the site that forgot the pair silently kept the old answer."""
+    """One verdict, checked throttle-first: a rate limit arrives as 403 as often
+    as 429, so classifying on status alone puts every throttle in FATAL."""
 
     def test_throttle_beats_the_status_code(self):
         # The whole point: a rate limit arrives as 403 as often as 429, so
@@ -3265,6 +3205,9 @@ class TestClassify:
         assert cs.classify(http_error(403, {}, body)) is cs.THROTTLED
 
     def test_bare_auth_errors_are_fatal(self):
+        # 401/403 = the PAT is missing, expired, or under-scoped. 599 is the
+        # synthetic code _http_get raises after a final URLError (GitHub/DNS
+        # unreachable), not "student didn't submit".
         for code in (401, 403, 599):
             assert cs.classify(http_error(code)) is cs.FATAL
 
@@ -3309,7 +3252,7 @@ class TestThrottlePropagatesInsteadOfDegrading:
         def throttled(*a, **k):
             raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
 
-        monkeypatch.setattr(cs, "list_org_repo_names", throttled)
+        monkeypatch.setattr(cs, "list_org_repos", throttled)
         index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
         with pytest.raises(cs.urllib.error.HTTPError):
             index.contains("cs-hw1-alice")
@@ -3318,7 +3261,7 @@ class TestThrottlePropagatesInsteadOfDegrading:
         def soft(*a, **k):
             raise http_error(404, {}, b"nope")
 
-        monkeypatch.setattr(cs, "list_org_repo_names", soft)
+        monkeypatch.setattr(cs, "list_org_repos", soft)
         index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
         assert index.contains("anything") is True
         assert "::warning::" in capsys.readouterr().err
@@ -3331,7 +3274,7 @@ class TestThrottlePropagatesInsteadOfDegrading:
 
         monkeypatch.setattr(cs, "list_team_repo_full_names", throttled)
         with pytest.raises(cs.urllib.error.HTTPError):
-            cs.team_repo_full_names(
+            cs.known_team_repos(
                 "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", "cs"
             )
 
@@ -3396,7 +3339,7 @@ class TestGrantThrottled:
     def test_throttle_reports_progress_and_remainder(self, monkeypatch):
         # 2 assignments x 3 members = 6 targets; the third call is throttled.
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob", "carol"])
-        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
+        monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
         calls: list[str] = []
 
         def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
@@ -3487,9 +3430,9 @@ class TestRepoIndex:
 
         def fake_list(api_url, org, token):
             calls.append(org)
-            return {"cs-hw1-alice", "cs-hw1-bob"}
+            return {"cs-hw1-alice": False, "cs-hw1-bob": False}
 
-        monkeypatch.setattr(cs, "list_org_repo_names", fake_list)
+        monkeypatch.setattr(cs, "list_org_repos", fake_list)
         index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
         assert calls == []  # lazy: nothing read yet
         assert index.contains("cs-hw1-ALICE") is True  # case-insensitive
@@ -3501,7 +3444,7 @@ class TestRepoIndex:
         def fail(*a, **k):
             raise http_error(404, {}, b"nope")
 
-        monkeypatch.setattr(cs, "list_org_repo_names", fail)
+        monkeypatch.setattr(cs, "list_org_repos", fail)
         index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
         assert index.contains("cs-hw1-alice") is True
         assert index.contains("anything-at-all") is True
@@ -3511,7 +3454,7 @@ class TestRepoIndex:
 
     def test_empty_listing_is_unknown_not_empty(self, monkeypatch):
         # A token scoped to zero repos must not silently skip every poll.
-        monkeypatch.setattr(cs, "list_org_repo_names", lambda *a, **k: set())
+        monkeypatch.setattr(cs, "list_org_repos", lambda *a, **k: {})
         index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
         assert index.contains("cs-hw1-alice") is True
 
@@ -3532,7 +3475,7 @@ class TestPassesSkipMissingRepos:
 
     def test_grant_pass_only_touches_existing_repos(self, monkeypatch):
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob"])
-        monkeypatch.setattr(cs, "team_repo_full_names", lambda *a, **k: None)
+        monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
         seen: list[str] = []
 
         def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
@@ -3610,7 +3553,7 @@ class TestBulkAccessCheck:
             raise http_error(404, {}, b"no team")
 
         monkeypatch.setattr(cs, "list_team_repo_full_names", fail)
-        assert cs.team_repo_full_names(
+        assert cs.known_team_repos(
             "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", "cs"
         ) is None
         assert "::warning::" in capsys.readouterr().err
@@ -3621,7 +3564,7 @@ class TestBulkAccessCheck:
 
         monkeypatch.setattr(cs, "list_team_repo_full_names", fail)
         with pytest.raises(cs.urllib.error.HTTPError):
-            cs.team_repo_full_names(
+            cs.known_team_repos(
                 "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", "cs"
             )
 
@@ -3640,6 +3583,100 @@ class TestBulkAccessCheck:
             "pull", "tok", known_repos=None,
         ) is False
         assert checked == ["cs-hw1-alice"]
+
+
+class TestGrantDeferralIsPerClassroom:
+    """A throttled grant pass defers only ITS classroom. A secondary limit clears
+    in about a minute, so a later classroom's grant may well succeed in the same
+    run — skipping the rest would trade real grant freshness for requests the run
+    can afford (the sleep budget is what protects the job timeout)."""
+
+    def _two_classrooms(self, tmp_path):
+        for short in ("cs", "ds"):
+            classroom = tmp_path / short
+            (classroom / ".github").mkdir(parents=True, exist_ok=True)
+            (classroom / "classroom.json").write_text(json.dumps({
+                "schema": cs.CLASSROOM_SCHEMA_V1, "short_name": short,
+                "team": {"id": 1, "slug": f"classroom50-{short}"},
+                "teams": {"ta": {"id": 2, "slug": f"classroom50-{short}-ta"}},
+            }))
+            (classroom / "assignments.json").write_text(json.dumps({
+                "schema": cs.ASSIGNMENTS_SCHEMA_V1,
+                "assignments": [{"slug": "hw1", "mode": "individual"}],
+            }))
+        return tmp_path
+
+    def _run(self, tmp_path, monkeypatch, grant_pass):
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        monkeypatch.setattr(cs, "grant_classroom_team_access", grant_pass)
+        monkeypatch.setattr(cs, "collect_classroom", lambda **k: ([], 0, {}))
+        return cs.main()
+
+    def test_a_throttled_classroom_does_not_skip_the_next(self, tmp_path, monkeypatch, capsys):
+        self._two_classrooms(tmp_path)
+        attempts: list[str] = []
+
+        def flaky(**kwargs):
+            attempts.append(kwargs["classroom_short"])
+            if len(attempts) == 1:
+                raise cs.GrantThrottled("Retry-After: 60s", "classroom50-cs-ta", 3, 97)
+
+        assert self._run(tmp_path, monkeypatch, flaky) == 0
+        # BOTH classrooms attempted: the second is not punished for the first's
+        # throttle, and its grant succeeded.
+        assert len(attempts) == 2
+        err = capsys.readouterr().err
+        assert "::error::" not in err
+        assert "do NOT rotate" in err
+        assert err.count("throttled") == 1  # only the classroom that hit it
+
+    def test_every_classroom_grants_when_nothing_throttles(self, tmp_path, monkeypatch):
+        self._two_classrooms(tmp_path)
+        attempts: list[str] = []
+        assert self._run(
+            tmp_path, monkeypatch,
+            lambda **k: attempts.append(k["classroom_short"]),
+        ) == 0
+        assert len(attempts) == 2
+
+
+class TestTeamMembersReadOnce:
+    def test_both_passes_share_one_student_team_read(self, monkeypatch):
+        reads: list[str] = []
+
+        def fake_list(api_url, org, slug, token):
+            reads.append(slug)
+            return ["alice", "bob"]
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_list)
+        members = cs.TeamMembers("https://api.github.com", "cs50", "tok")
+        assert members.logins("classroom50-cs") == ["alice", "bob"]
+        assert members.logins("classroom50-cs") == ["alice", "bob"]
+        assert reads == ["classroom50-cs"]  # second call served from the cache
+
+    def test_a_failure_is_not_cached(self, monkeypatch):
+        calls: list[int] = []
+
+        def flaky(api_url, org, slug, token):
+            calls.append(1)
+            if len(calls) == 1:
+                raise http_error(404, {}, b"no team")
+            return ["alice"]
+
+        monkeypatch.setattr(cs, "list_team_member_logins", flaky)
+        members = cs.TeamMembers("https://api.github.com", "cs50", "tok")
+        with pytest.raises(cs.urllib.error.HTTPError):
+            members.logins("classroom50-cs")
+        # Each caller keeps its own error handling, so the read is retried.
+        assert members.logins("classroom50-cs") == ["alice"]
+
+    def test_mutating_the_result_does_not_poison_the_cache(self, monkeypatch):
+        monkeypatch.setattr(cs, "list_team_member_logins", lambda *a: ["alice"])
+        members = cs.TeamMembers("https://api.github.com", "cs50", "tok")
+        members.logins("t").append("mallory")
+        assert members.logins("t") == ["alice"]
 
 
 class TestPaginateFieldList:
@@ -3672,14 +3709,20 @@ class TestOrgAndTeamListings:
 
         return fake_get
 
-    def test_org_repo_names_are_lowercased(self, monkeypatch):
+    def test_org_repos_are_lowercased_with_private_flags(self, monkeypatch):
         monkeypatch.setattr(
             cs,
             "_http_get_with_headers",
-            self._fake_page([{"name": "CS-HW1-Alice"}, {"name": "cs-hw2-BOB"}]),
+            self._fake_page([
+                {"name": "CS-HW1-Alice", "private": True},
+                {"name": "cs-hw2-BOB", "private": False},
+                {"name": "starter", "private": "yes"},
+            ]),
         )
-        names = cs.list_org_repo_names("https://api.github.com", "CS50", "tok")
-        assert names == {"cs-hw1-alice", "cs-hw2-bob"}
+        repos = cs.list_org_repos("https://api.github.com", "CS50", "tok")
+        # The private flag rides along from the same bodies, so the grant pass
+        # doesn't re-read each template. Strict boolean: a non-bool is not True.
+        assert repos == {"cs-hw1-alice": True, "cs-hw2-bob": False, "starter": False}
         # type=all keeps private student repos in the listing; without it the
         # index would call every private repo missing and skip its poll.
         assert "type=all" in self.seen_url and "per_page=100" in self.seen_url
@@ -3699,9 +3742,71 @@ class TestOrgAndTeamListings:
         # The end-to-end reason the .lower() matters: a repo GitHub reports as
         # mixed-case must still answer contains() for the lowercased name the
         # repo-name formula produces.
-        monkeypatch.setattr(cs, "list_org_repo_names", lambda *a, **k: {"cs-hw1-alice"})
+        monkeypatch.setattr(cs, "list_org_repos", lambda *a, **k: {"cs-hw1-alice": False})
         index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
         assert index.contains("CS-HW1-Alice") is True
+
+
+class TestTemplatePrivacyFromTheIndex:
+    """The org listing already carried each repo's `private` flag, so resolving
+    template targets must not re-read them one by one."""
+
+    ASSIGNMENTS = {
+        "schema": cs.ASSIGNMENTS_SCHEMA_V1,
+        "assignments": [
+            {"slug": "hw1", "template": {"owner": "cs50", "repo": "priv-tmpl"}},
+            {"slug": "hw2", "template": {"owner": "cs50", "repo": "pub-tmpl"}},
+        ],
+    }
+
+    def test_index_answers_privacy_without_a_per_template_read(self, monkeypatch):
+        monkeypatch.setattr(
+            cs, "list_org_repos",
+            lambda *a, **k: {"priv-tmpl": True, "pub-tmpl": False},
+        )
+        monkeypatch.setattr(
+            cs, "get_repo", lambda *a, **k: pytest.fail("no per-template read expected")
+        )
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        targets = cs.private_template_targets(
+            "https://api.github.com", "cs50", self.ASSIGNMENTS, "tok", repo_index=index
+        )
+        assert targets == [("cs50", "priv-tmpl")]  # public one skipped
+
+    def test_name_absent_from_the_index_falls_back_to_the_read(self, monkeypatch):
+        # An out-of-scope or brand-new template isn't in the listing; the index
+        # says "unknown" and the per-repo read still settles it.
+        read: list[str] = []
+
+        def fake_get_repo(api_url, owner, repo, token):
+            read.append(repo)
+            return {"private": True}
+
+        monkeypatch.setattr(cs, "list_org_repos", lambda *a, **k: {"other": False})
+        monkeypatch.setattr(cs, "get_repo", fake_get_repo)
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        targets = cs.private_template_targets(
+            "https://api.github.com", "cs50",
+            {"schema": cs.ASSIGNMENTS_SCHEMA_V1,
+             "assignments": [{"slug": "hw1", "template": {"owner": "cs50", "repo": "priv-tmpl"}}]},
+            "tok", repo_index=index,
+        )
+        assert targets == [("cs50", "priv-tmpl")]
+        assert read == ["priv-tmpl"]
+
+    def test_no_index_keeps_the_per_template_read(self, monkeypatch):
+        read: list[str] = []
+
+        def fake_get_repo(api_url, owner, repo, token):
+            read.append(repo)
+            return {"private": repo == "priv-tmpl"}
+
+        monkeypatch.setattr(cs, "get_repo", fake_get_repo)
+        targets = cs.private_template_targets(
+            "https://api.github.com", "cs50", self.ASSIGNMENTS, "tok"
+        )
+        assert targets == [("cs50", "priv-tmpl")]
+        assert read == ["priv-tmpl", "pub-tmpl"]
 
 
 class TestRepoIndexLatch:
@@ -3718,7 +3823,7 @@ class TestRepoIndexLatch:
                 raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
             return {"cs-hw1-alice"}
 
-        monkeypatch.setattr(cs, "list_org_repo_names", flaky)
+        monkeypatch.setattr(cs, "list_org_repos", flaky)
         index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
         with pytest.raises(cs.urllib.error.HTTPError):
             index.contains("cs-hw1-alice")
@@ -3734,7 +3839,7 @@ class TestRepoIndexLatch:
             calls.append(1)
             raise http_error(404, {}, b"nope")
 
-        monkeypatch.setattr(cs, "list_org_repo_names", soft)
+        monkeypatch.setattr(cs, "list_org_repos", soft)
         index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
         assert index.contains("a") is True
         assert index.contains("b") is True
@@ -3744,22 +3849,6 @@ class TestRepoIndexLatch:
 class TestIncompleteListingNeverPersists:
     """A truncated listing is indistinguishable from a complete one, so it must
     not be written as truth — the same principle the throttle re-raise added."""
-
-    def test_pagination_loop_raises_incomplete_listing(self, monkeypatch):
-        class LoopHeaders:
-            def get(self, name):
-                if name == "Link":
-                    return '<https://api.github.com/loop?cursor=same>; rel="next"'
-                return None
-
-        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
-            return json.dumps([{"login": "alice"}]).encode(), LoopHeaders()
-
-        monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
-        with pytest.raises(cs.IncompleteListing, match="incomplete"):
-            cs.list_repo_collaborator_logins(
-                "https://api.github.com", "cs50", "cs-project-alice", "tok"
-            )
 
     def test_incomplete_listing_is_a_valueerror_subclass(self):
         # Callers that fall back on ValueError keep working unchanged.

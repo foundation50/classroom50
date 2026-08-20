@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -1175,16 +1176,7 @@ func TestRateLimitMarkersParity_GoVsInlinePython(t *testing.T) {
 	pythonWant := []string{"abuse", "rate limit exceeded", "secondary rate limit"}
 
 	sortedSet := func(items []string) []string {
-		seen := map[string]bool{}
-		var out []string
-		for _, it := range items {
-			if !seen[it] {
-				seen[it] = true
-				out = append(out, it)
-			}
-		}
-		sort.Strings(out)
-		return out
+		return slices.Compact(slices.Sorted(slices.Values(items)))
 	}
 
 	// Go leg: the literals ghutil.IsRateLimited actually matches against the

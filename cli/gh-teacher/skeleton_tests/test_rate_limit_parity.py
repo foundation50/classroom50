@@ -23,8 +23,14 @@ from conftest import github_http_error
 from conftest import probe_token as pt
 from conftest import regrade_repos as rr
 
-# Every module carrying the full ladder (verdict + reason + delay).
+# Every module carrying the classifier ladder (verdict + reason).
 LADDER_MODULES = (("collect_scores", cs), ("regrade_repos", rr), ("probe_token", pt))
+
+# The subset that also carries the run-level throttle-sleep ceiling. A probe
+# issues a handful of requests, so it cannot pile up enough recovered throttles
+# to threaten its own job timeout — the budget would be ceremony there, and
+# demanding uniformity is how a mirror starts dictating the design.
+BUDGET_MODULES = (("collect_scores", cs), ("regrade_repos", rr))
 
 # The subset that also carries the three-way classify() verdict. probe_token
 # only needs the throttle/no-throttle distinction for its scope report, so it
@@ -62,6 +68,25 @@ def _case(code, headers, body):
     return github_http_error(code, dict(headers), body)
 
 
+@pytest.fixture(autouse=True)
+def _reset_throttle_budget():
+    """retry_delay charges a run-level sleep budget, so every case starts from a
+    fresh one — otherwise the first module to ask would spend it for the rest."""
+    for _name, module in BUDGET_MODULES:
+        module._throttle_sleep_spent = 0.0
+    yield
+    for _name, module in BUDGET_MODULES:
+        module._throttle_sleep_spent = 0.0
+
+
+def _delay(module, code, headers, body, attempt):
+    """`retry_delay` for one module with the budget reset, so the comparison
+    across modules isn't order-dependent."""
+    if hasattr(module, "_throttle_sleep_spent"):
+        module._throttle_sleep_spent = 0.0
+    return module.retry_delay(_case(code, headers, body), attempt)
+
+
 @pytest.mark.parametrize("name,code,headers,body", CASES, ids=[c[0] for c in CASES])
 def test_verdict_reason_and_delay_agree_across_scripts(name, code, headers, body):
     verdicts = {
@@ -81,7 +106,7 @@ def test_verdict_reason_and_delay_agree_across_scripts(name, code, headers, body
 
     for attempt in (0, 2):
         delays = {
-            mod_name: module.retry_delay(_case(code, headers, body), attempt)
+            mod_name: _delay(module, code, headers, body, attempt)
             for mod_name, module in LADDER_MODULES
         }
         assert len(set(map(repr, delays.values()))) == 1, (
@@ -108,6 +133,55 @@ def test_marker_tuples_are_identical():
 def test_retry_sleep_cap_is_identical():
     caps = {name: module.MAX_RETRY_SLEEP_SECONDS for name, module in LADDER_MODULES}
     assert len(set(caps.values())) == 1, f"MAX_RETRY_SLEEP_SECONDS drifted: {caps}"
+
+
+def test_body_snippet_read_cap_is_identical():
+    caps = {name: module.BODY_SNIPPET_READ_BYTES for name, module in LADDER_MODULES}
+    assert len(set(caps.values())) == 1, f"BODY_SNIPPET_READ_BYTES drifted: {caps}"
+
+
+def test_transient_retry_cap_is_identical():
+    caps = {name: module.TRANSIENT_RETRY_CAP_SECONDS for name, module in LADDER_MODULES}
+    assert len(set(caps.values())) == 1, f"TRANSIENT_RETRY_CAP_SECONDS drifted: {caps}"
+
+
+def test_total_throttle_sleep_budget_is_identical():
+    caps = {
+        name: module.MAX_TOTAL_THROTTLE_SLEEP_SECONDS for name, module in BUDGET_MODULES
+    }
+    assert len(set(caps.values())) == 1, (
+        f"MAX_TOTAL_THROTTLE_SLEEP_SECONDS drifted: {caps}"
+    )
+
+
+def test_probe_token_deliberately_has_no_sleep_budget():
+    """Pinned so the omission reads as a decision, not an oversight: a probe's
+    handful of requests can't threaten its job timeout."""
+    assert not hasattr(pt, "MAX_TOTAL_THROTTLE_SLEEP_SECONDS")
+    assert not hasattr(pt, "throttle_sleep_budget_spent")
+
+
+def test_sleep_budget_stops_retrying_in_every_script():
+    """The ceiling that turns a job-killing pile of recovered throttles into a
+    named error must hold in both copies that carry it."""
+    for name, module in BUDGET_MODULES:
+        module._throttle_sleep_spent = 0.0
+        exc = _case(403, {"Retry-After": "60"}, b"")
+        slept = 0.0
+        # Each grant of 60s is charged; once the budget can't cover another, the
+        # ladder declines the retry instead of sleeping.
+        while True:
+            delay = module.retry_delay(exc, 0)
+            if delay is None:
+                break
+            slept += delay
+            assert slept <= module.MAX_TOTAL_THROTTLE_SLEEP_SECONDS, name
+        assert slept > 0, f"{name}: budget declined the very first throttle"
+        assert (
+            slept + module.MAX_RETRY_SLEEP_SECONDS
+            > module.MAX_TOTAL_THROTTLE_SLEEP_SECONDS
+        ), f"{name}: stopped well short of the budget ({slept}s)"
+        module._throttle_sleep_spent = 0.0
 
 
 def test_verdict_literals_are_identical():
