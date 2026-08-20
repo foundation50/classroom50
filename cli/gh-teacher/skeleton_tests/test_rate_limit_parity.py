@@ -1,16 +1,12 @@
 """Parity of the rate-limit classifier hand-mirrored across the embedded scripts.
 
-collect_scores.py, regrade_repos.py and probe_token.py are standalone (each is
-copied into a classroom repo and run by a workflow), so they hand-mirror the
-throttle classifier with no shared module and no compile-time link. The Go leg
-of that mirror is pinned by TestRateLimitMarkersParity_GoVsInlinePython, which
-compares the RATE_LIMIT_BODY_MARKERS tuples against ghutil.IsRateLimited.
+The three scripts are standalone (each is copied into a classroom repo and run by
+a workflow), so they hand-mirror the throttle classifier with no shared module.
+TestRateLimitMarkersParity_GoVsInlinePython pins the marker tuples against Go's
+ghutil.IsRateLimited; this module pins the rest — the verdict ladder — BEHAVIORALLY,
+so editing one script's ladder fails until the edit is mirrored.
 
-That leaves the rest of the mirror unguarded: the verdict ladder itself. This
-module pins it BEHAVIORALLY — the same response must produce the same verdict,
-reason and delay in every copy — so editing one script's ladder fails until the
-edit is mirrored. The failure it prevents is silent and expensive in one
-direction: a copy that stops recognizing a throttle reports it as an
+The failure it prevents: a copy that stops recognizing a throttle reports it as an
 under-scoped token and tells the operator to rotate a healthy credential.
 """
 
@@ -28,13 +24,12 @@ LADDER_MODULES = (("collect_scores", cs), ("regrade_repos", rr), ("probe_token",
 
 # The subset that also carries the run-level throttle-sleep ceiling. A probe
 # issues a handful of requests, so it cannot pile up enough recovered throttles
-# to threaten its own job timeout — the budget would be ceremony there, and
-# demanding uniformity is how a mirror starts dictating the design.
+# to threaten its own job timeout — demanding uniformity is how a mirror starts
+# dictating the design.
 BUDGET_MODULES = (("collect_scores", cs), ("regrade_repos", rr))
 
-# The subset that also carries the three-way classify() verdict. probe_token
-# only needs the throttle/no-throttle distinction for its scope report, so it
-# deliberately has no classify().
+# The subset carrying the three-way classify() verdict. probe_token needs only
+# the throttle/no-throttle distinction for its scope report.
 CLASSIFY_MODULES = (("collect_scores", cs), ("regrade_repos", rr))
 
 # Responses that must classify identically everywhere: each of the three

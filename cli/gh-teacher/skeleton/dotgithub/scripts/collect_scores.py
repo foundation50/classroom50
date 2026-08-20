@@ -85,16 +85,14 @@ SUBMIT_TAG_PREFIX = "submit/"
 # so only the non-owner staff teams — head-TA and TA — need a grant).
 STAFF_TEAM_PERMISSIONS = {"hta": "pull", "ta": "pull"}
 
-# Body markers that identify a rate-limit response. GitHub words the secondary
-# limit and the abuse detector differently, and neither always ships a
-# Retry-After header — see rate_limit_verdict. "abuse" is the bare stem on
-# purpose: it catches every "abuse detection mechanism" phrasing.
+# Body markers that identify a rate-limit response, for the cases no header
+# names: GitHub words the secondary limit and the abuse detector differently.
+# "abuse" is the bare stem on purpose — it catches every "abuse detection
+# mechanism" phrasing.
 #
-# The first two mirror the canonical Go classifier, ghutil.IsRateLimited
-# (cli/shared/ghutil/ghutil.go). "rate limit exceeded" is a DELIBERATE
-# Python-only extra — the primary limit's body phrase, normally caught by the
-# X-RateLimit-Remaining check that runs first, kept as a fallback for a response
-# whose headers a proxy stripped. Go relies on the header alone there.
+# The first two mirror Go's ghutil.IsRateLimited; "rate limit exceeded" is a
+# DELIBERATE Python-only extra, a fallback for a primary-limit response whose
+# headers a proxy stripped (Go relies on the header alone).
 # TestRateLimitMarkersParity_GoVsInlinePython pins both sets exactly.
 RATE_LIMIT_BODY_MARKERS = (
     "secondary rate limit",
@@ -102,36 +100,29 @@ RATE_LIMIT_BODY_MARKERS = (
     "abuse",
 )
 
-# Longest a single retry sleeps. A secondary rate limit clears in about a
-# minute (GitHub documents that as the minimum wait); the primary hourly budget
-# is not waited out at all — retry_delay declines it.
+# Longest a single retry sleeps: GitHub documents a minute as the secondary
+# limit's minimum wait.
 MAX_RETRY_SLEEP_SECONDS = 60
 
-# Retry-After cap for a plain transient (5xx, or a 429 with no throttle
-# signal). Deliberately tighter than the throttle cap: nothing about a 500 says
-# a full minute is the right wait.
+# Retry-After cap for a plain transient. Tighter than the throttle cap on
+# purpose: nothing about a 500 says a full minute is the right wait.
 TRANSIENT_RETRY_CAP_SECONDS = 30
 
-# How long the whole run may spend asleep waiting out throttles. A throttled
-# request that RECOVERS raises nothing, so without a ceiling a few dozen of
-# them silently consume the workflow's `timeout-minutes` and the job is killed
-# mid-run: no summary, no scores.json write, and no diagnosis — the exact
-# outcome this file's throttle handling exists to prevent. Spending the budget
-# instead surfaces the throttle through the normal THROTTLED path, which names
-# the cause and says not to rotate the token.
+# How long the whole run may spend asleep waiting out throttles. A throttle that
+# RECOVERS raises nothing, so without a ceiling a few dozen of them silently
+# spend the workflow's `timeout-minutes` and the job is killed mid-run — no
+# summary, no scores.json, no diagnosis. Spending the budget instead surfaces
+# the throttle through the named THROTTLED path.
 MAX_TOTAL_THROTTLE_SLEEP_SECONDS = 300
 
-# Seconds this run has already slept waiting out throttles.
 _throttle_sleep_spent = 0.0
 
-# Cap on the error body read for diagnosis. Only the first 300 characters are
-# kept, and a body can arrive from a proxy or the asset redirect rather than
-# GitHub's own small errors.
+# Bounded read for the error-body snippet: only 300 characters are kept, and a
+# body can come from a proxy or the asset redirect rather than GitHub.
 BODY_SNIPPET_READ_BYTES = 4096
 
-# The three verdicts classify() returns — the single vocabulary every HTTP
-# error handler in this file branches on. Plain strings (not an Enum) so the
-# hand-mirrored copy in regrade_repos.py stays a literal-for-literal mirror.
+# The vocabulary every HTTP error handler branches on. Plain strings, not an
+# Enum, so the hand-mirrored copy in regrade_repos.py stays literal-for-literal.
 THROTTLED = "throttled"
 FATAL = "fatal"
 SKIPPABLE = "skippable"
@@ -248,9 +239,9 @@ def main() -> int:
             failed_classrooms.append(classroom_short)
             continue
 
-        # One per classroom: the two passes below ask for the same student team,
-        # and a per-run cache could serve a stale roster to a later classroom
-        # that shares a team slug.
+        # One per classroom: both passes below ask for the same student team, and
+        # a per-run cache could serve a stale roster to a later classroom sharing
+        # a team slug.
         team_members = TeamMembers(api_url, org, service_token)
 
         # Staff-team grant is a SEPARATE, non-fatal pass: it needs Administration
@@ -269,12 +260,10 @@ def main() -> int:
                 team_members=team_members,
             )
         except GrantThrottled as exc:
-            # NOT a failure. Collection is untouched, the pass is idempotent,
-            # and the token is healthy — reporting this as an under-scoped token
-            # sends the operator to rotate a working credential and paints the
-            # nightly run red for a cosmetic reason. Each classroom is retried
-            # on its own: a secondary limit clears in about a minute, so a later
-            # classroom's grant may well succeed in this same run.
+            # NOT a failure: collection is untouched, the pass is idempotent, and
+            # the token is healthy. Each classroom is still retried on its own —
+            # a secondary limit clears in about a minute, so a later grant may
+            # well succeed in this same run.
             warn_grant_deferred(classroom_short, str(exc))
         except urllib.error.HTTPError as exc:
             throttle_reason = rate_limit_reason(exc)
@@ -510,27 +499,21 @@ def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str
 
 
 class RepoIndex:
-    """The org's repo names, read once per run and only when something asks.
+    """The org's repos (lowercased name -> `private`), read once per run and only
+    when something asks.
 
-    Both passes below walk the (team member × assignment) product, which grows
-    as members × assignments and reaches the thousands for an ordinary course —
-    of which only the accepted repos exist. Collection swallows the misses
-    quietly (a 404 on /releases reads as "not submitted"), but the staff-team
-    grant spends two requests on each one and warns per repo, which is what
-    pushes the pass into GitHub's secondary rate limit.
+    Both passes walk the (team member × assignment) product — thousands of names
+    for an ordinary course, of which only the accepted ones exist. Collection
+    absorbs the misses quietly (a 404 on /releases reads as "not submitted"), but
+    the grant pass spends two requests and a warning on each, which is what trips
+    GitHub's secondary limit.
 
-    A fine-grained PAT lists exactly the repos it is scoped to — the same set it
-    could grant on or read anyway — so skipping a name absent here drops only a
-    call that was going to 404.
-
-    That premise is load-bearing, and the one failure it cannot detect is a
-    listing that looks complete but omits a repo the token can actually read:
-    collection would then read a real submission as "not submitted". The two
-    detectable shapes are handled — an empty listing reads as unknown, and a
-    truncated walk raises IncompleteListing — so a name is only ever skipped
-    from a listing that paginated to a clean end.
-
-    Lazy on purpose: a run with nothing to collect issues no request at all.
+    Skipping a name absent from the listing is safe because a fine-grained PAT
+    lists exactly the repos it is scoped to, so that name was going to 404. The
+    premise is load-bearing: a listing that looks complete but omits a readable
+    repo would read a real submission as "not submitted". Both detectable shapes
+    fail open instead — empty reads as unknown, truncated raises
+    IncompleteListing.
     """
 
     def __init__(self, api_url: str, org: str, token: str) -> None:
@@ -541,14 +524,12 @@ class RepoIndex:
         self._loaded = False
 
     def _load(self) -> dict[str, bool] | None:
-        """Lowercased name -> `private` flag, or None when the listing could not
-        be read. The listing runs once; a soft failure warns once and stays None.
+        """The repos, or None when the listing could not be read. Reads once; a
+        soft failure warns once and stays None.
 
-        A THROTTLED or FATAL failure PROPAGATES rather than degrading, and
-        leaves the read UNLATCHED: falling back to per-repo probing would issue
-        the thousands of requests this index exists to avoid while GitHub is
-        actively rate limiting, so a caller that survives the throttle (the
-        grant pass defers it) retries the listing instead."""
+        A THROTTLED or FATAL failure propagates and leaves the read UNLATCHED, so
+        a caller that survives it (the grant pass defers a throttle) retries
+        rather than spending the run on the degraded answer."""
         if self._loaded:
             return self._repos
         self._repos = self._read()
@@ -556,8 +537,7 @@ class RepoIndex:
         return self._repos
 
     def _read(self) -> dict[str, bool] | None:
-        """One attempt at the org listing: the repos, or None when they could
-        not be read."""
+        """One attempt at the org listing."""
         try:
             repos = list_org_repos(self._api_url, self._org, self._token)
         except urllib.error.HTTPError as exc:
@@ -576,25 +556,23 @@ class RepoIndex:
                 f"falling back to probing every (member, assignment) repo name."
             )
             return None
-        # An empty listing reads as "unknown", not "nothing exists": a token
-        # scoped to zero repos must not silently skip every poll.
+        # Unknown, not "nothing exists": a token scoped to zero repos must not
+        # silently skip every poll.
         if not repos:
             return None
         print(f"{self._org}: {len(repos)} repo(s) visible to the service token")
         return repos
 
     def contains(self, repo_name: str) -> bool:
-        """Whether `repo_name` exists. True whenever the listing is unknown, so
-        an unreadable index never hides a repo from either pass — both fall back
-        to probing per repo: slower and noisier, never less complete."""
+        """Whether `repo_name` exists — True whenever the listing is unknown, so
+        an unreadable index never hides a repo from either pass."""
         repos = self._load()
         return repos is None or repo_name.lower() in repos
 
     def is_private(self, repo_name: str) -> bool | None:
-        """Whether `repo_name` is private, or None when the index can't say —
-        the listing was unreadable, or the name isn't in it. The flag comes from
-        the listing this index already read, so a caller that gets True/False
-        here saves a per-repo read."""
+        """Whether `repo_name` is private, or None when the index can't say (the
+        listing was unreadable, or the name isn't in it). Answers from the
+        listing already read, saving the caller a per-repo request."""
         repos = self._load()
         if repos is None:
             return None
@@ -667,16 +645,14 @@ def all_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
 
 
 class TeamMembers:
-    """Team member logins, read once per team per run.
+    """Team member logins, read once per team per classroom.
 
-    Both passes ask for the same student team: the grant pass to build its
-    target product, collection to build the poll roster. On a large course that
-    listing is several paginated requests, and issuing them twice is pure waste
-    against the limiter this run is trying to stay under.
+    Both passes ask for the same student team — the grant pass to build its
+    target product, collection to build the poll roster — and on a large course
+    that listing is several paginated requests.
 
-    Only successful reads are cached, so a caller that raises still sees the
-    failure on its own terms (the grant pass warns and skips; collection
-    propagates a hard error)."""
+    Failures are not cached, so each caller still handles them on its own terms
+    (the grant pass warns and skips; collection propagates a hard error)."""
 
     def __init__(self, api_url: str, org: str, token: str) -> None:
         self._api_url = api_url
@@ -685,8 +661,8 @@ class TeamMembers:
         self._by_slug: dict[str, list[str]] = {}
 
     def logins(self, team_slug: str) -> list[str]:
-        """`team_slug`'s members. Raises whatever list_team_member_logins raises,
-        uncached, so each caller keeps its own error handling."""
+        """`team_slug`'s members. Propagates whatever list_team_member_logins
+        raises."""
         cached = self._by_slug.get(team_slug)
         if cached is not None:
             return list(cached)
@@ -889,10 +865,9 @@ def collect_classroom(
         mode_flip_repos: list[str] = []
         for username in team_usernames:
             repo_name = assignment_repo_name(classroom_short, slug, username)
-            # A name the org listing doesn't know has no repo, so its release
-            # poll would 404 and read as "not submitted" anyway — same outcome,
-            # one request less. An unknown index answers True and nothing is
-            # skipped.
+            # A name the index doesn't know has no repo, so its release poll
+            # would 404 and read as "not submitted" anyway — same outcome, one
+            # request less.
             if repo_index is not None and not repo_index.contains(repo_name):
                 continue
 
@@ -1005,9 +980,9 @@ def collect_classroom(
                         api_url, org, repo_name, username, service_token, roster_logins
                     )
                 except IncompleteListing as exc:
-                    # A partial collaborator list must not be written as if it
-                    # were whole: skipping the repo leaves its previous
-                    # gradebook entry (and its credited teammates) intact.
+                    # A partial list must not be written as if it were whole:
+                    # skipping the repo leaves its previous gradebook entry (and
+                    # its credited teammates) intact.
                     emit_warning(
                         f"{org}/{repo_name}: group collaborator listing is "
                         f"incomplete ({exc}); skipping this repo so its existing "
@@ -1247,10 +1222,8 @@ def grant_classroom_team_access(
 
     usernames = _dedupe_logins(team_logins)
 
-    # Targets are resolved once rather than per staff role: the student product
-    # narrowed to repos that exist, plus the private in-org templates. Knowing
-    # the full list up front is also what lets a throttled pass say how much is
-    # left for the next run.
+    # Resolved once rather than per staff role. Knowing the full list up front is
+    # also what lets a throttled pass say how much is left for the next run.
     targets: list[tuple[str, str]] = []
     for slug in slugs:
         for username in usernames:
@@ -1267,10 +1240,9 @@ def grant_classroom_team_access(
         return
 
     for team_slug, permission in grant_slugs:
-        # The team's current repos, read once, replace grant_team_repo's
-        # per-repo access check: after the first run nearly every target is
-        # already granted, so that check — not the PUT — is the request that
-        # dominates. None means "unknown" and each grant asks for itself.
+        # One bulk read replaces grant_team_repo's per-repo access check: after
+        # the first run nearly every target is already granted, so that check —
+        # not the PUT — is the request that dominates. None means "unknown".
         known_repos = known_team_repos(
             api_url, org, team_slug, service_token, classroom_short
         )
@@ -1289,9 +1261,8 @@ def grant_classroom_team_access(
                 ):
                     granted += 1
             except urllib.error.HTTPError as exc:
-                # One ladder walk, not classify() followed by rate_limit_reason():
-                # the tuple carries the reason GrantThrottled needs, already
-                # typed as str.
+                # One ladder walk: the tuple already carries the reason
+                # GrantThrottled needs, typed as str.
                 throttle = rate_limit_verdict(exc)
                 if throttle is not None:
                     raise GrantThrottled(
@@ -1328,10 +1299,9 @@ def private_template_targets(
     `repo_index` already knows each in-org repo's `private` flag from the org
     listing, so the per-template read only happens when it can't say."""
     targets: list[tuple[str, str]] = []
-    # Seen on the REF, not on the kept targets: assignments commonly share one
-    # starter template, and only the private ones end up in `targets`, so
-    # deduping on the output would re-read every public or unreadable template
-    # once per assignment that names it.
+    # Deduped on the REF, not the kept targets: assignments commonly share one
+    # starter template, and only private ones are kept — so deduping on the
+    # output would re-read every public template once per assignment.
     seen: set[tuple[str, str]] = set()
     for entry in assignments.get("assignments") or []:
         ref = assignment_template_ref(entry) if isinstance(entry, dict) else None
@@ -1913,9 +1883,9 @@ def all_submit_releases(
 
 class IncompleteListing(ValueError):
     """A paginated walk that could not be completed — a looping `Link` chain or
-    the page cap. Distinct from a malformed body so callers can tell "this list
-    is partial" from "this response wasn't a list": a partial list must never be
-    persisted as if it were the whole set."""
+    the page cap. Distinct from a malformed body so callers can tell a partial
+    list from a non-list: a partial list must never be persisted as the whole
+    set."""
 
 
 def _next_page_link(link_header: str | None) -> str | None:
@@ -1987,9 +1957,8 @@ def _paginate_objects(
         next_url = _next_page_link(link_header)
         if next_url:
             next_url = _assert_same_host(next_url, api_url)
-            # What we hold at this point is a TRUNCATED listing, and returning
-            # it would be indistinguishable from a complete one. Raise instead;
-            # callers turn it into "unknown", which fails open.
+            # A truncated listing would be indistinguishable from a complete
+            # one. Raise instead; callers turn it into "unknown", failing open.
             if next_url in seen_next:
                 raise IncompleteListing(
                     f"{resource_label}: pagination Link loops back to a page "
@@ -2501,33 +2470,30 @@ def rate_limit_verdict(
     rather than refusing, else None. `seconds` is None for a throttle that must
     NOT be waited out.
 
-    GitHub returns rate limits as 403 as often as 429, and the only thing
-    separating that from a genuinely under-scoped token is the response itself:
-    a Retry-After header, an exhausted X-RateLimit-Remaining, or a body naming
-    the limit. Reason and delay come from ONE ladder so they cannot disagree;
-    rate_limit_reason and retry_delay are its two views."""
+    A rate limit arrives as 403 as often as 429, and only the response tells it
+    apart from an under-scoped token: a Retry-After header, an exhausted
+    X-RateLimit-Remaining, or a body naming the limit. One ladder decides reason
+    and delay together so they cannot disagree; rate_limit_reason and retry_delay
+    are its two views."""
     if exc.code not in (403, 429):
         return None
     headers = exc.headers or {}
     retry_after = _retry_after_seconds(headers)
     if retry_after is not None:
-        # GitHub named a wait; honour it, but bounded so a mistaken or hostile
-        # header can't park the job.
+        # Bounded, so a mistaken or hostile header can't park the job.
         return (
             f"Retry-After: {retry_after}s",
             min(int(retry_after), MAX_RETRY_SLEEP_SECONDS),
         )
     if (headers.get("X-RateLimit-Remaining") or "").strip() == "0":
-        # The PRIMARY hourly budget: its window runs up to an hour, so a named
-        # error beats a sleeping job — never retried.
+        # The primary hourly budget: its window runs up to an hour, so a named
+        # error beats a sleeping job.
         reset = (headers.get("X-RateLimit-Reset") or "").strip()
         window = f", resets at {epoch_to_iso(reset)}" if reset.isdigit() else ""
         return (f"X-RateLimit-Remaining: 0{window}", None)
     body = error_body_snippet(exc).lower()
     for marker in RATE_LIMIT_BODY_MARKERS:
         if marker in body:
-            # A secondary limit with no header: GitHub documents a minute as
-            # the minimum wait.
             return (
                 f'response body names the "{marker}"',
                 MAX_RETRY_SLEEP_SECONDS,
@@ -2558,12 +2524,12 @@ def epoch_to_iso(value: str) -> str:
 
 
 def throttle_sleep_budget_spent(delay: float) -> bool:
-    """Whether waiting `delay` would exceed the run's total throttle-sleep
-    budget; charges it against the budget when it fits.
+    """Whether waiting `delay` would exceed the run's throttle-sleep budget;
+    charges it when it fits.
 
-    A recovering throttle raises nothing, so the sleeps are invisible until the
-    job timeout kills the run. This is the ceiling that converts "killed while
-    sleeping" into the named THROTTLED error."""
+    A recovering throttle raises nothing, so the sleeps stay invisible until the
+    job timeout kills the run. This ceiling converts that into the named
+    THROTTLED error instead."""
     global _throttle_sleep_spent
     if _throttle_sleep_spent + delay > MAX_TOTAL_THROTTLE_SLEEP_SECONDS:
         return True
@@ -2573,8 +2539,7 @@ def throttle_sleep_budget_spent(delay: float) -> bool:
 
 def _retry_after_seconds(headers: Any) -> str | None:
     """The Retry-After header when it names plain delta-seconds, else None.
-    Callers apply their own cap — the throttle path and the transient path
-    deliberately differ."""
+    Callers apply their own cap."""
     value = (headers.get("Retry-After") or "").strip() if headers else ""
     return value if value.isdigit() else None
 
@@ -2583,15 +2548,10 @@ def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
     """Seconds to wait before retrying `exc`, or None when it must not be
     retried.
 
-    A throttle waits what rate_limit_verdict decided (None for the primary
-    budget, whose window runs up to an hour — a named error beats a sleeping
-    job), and only while the run's sleep budget lasts: see
-    throttle_sleep_budget_spent, which turns a job-killing pile of recoveries
-    into a named error. Everything else keeps the previous contract: 5xx honour
-    Retry-After (capped at TRANSIENT_RETRY_CAP_SECONDS, deliberately tighter
-    than the throttle cap) or back off exponentially, and a bare 429 — one with
-    no throttle signal at all — takes that same path. Any other status is
-    terminal."""
+    A throttle waits what rate_limit_verdict decided, while the run's sleep
+    budget lasts. Anything else keeps the previous contract: 5xx and a
+    signal-less 429 honour Retry-After (capped) or back off exponentially; any
+    other status is terminal."""
     verdict = rate_limit_verdict(exc)
     if verdict is not None:
         delay = verdict[1]
@@ -2607,20 +2567,16 @@ def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
 
 
 def classify(exc: urllib.error.HTTPError) -> str:
-    """The ONE verdict every error handler branches on.
+    """The ONE verdict every error handler branches on, throttle checked FIRST.
 
-    THROTTLED — GitHub is rate limiting. The token is healthy; the work is
-        deferrable and must never be reported as a scope problem.
+    THROTTLED — GitHub is rate limiting. The token is healthy and the work is
+        deferrable; never report it as a scope problem.
     FATAL     — 401/403 (bad or under-scoped token) or 599 (synthetic
-        "network unavailable" after retries). Aborts the run: treating these as
-        per-student "not submitted" would report a broken run as success while
-        collecting nothing.
-    SKIPPABLE — everything else (404 = repo not accepted yet, 422 = not
-        org-owned, ...). Warn and move on.
+        network-unavailable after retries). Aborts the run: treating these as
+        per-student "not submitted" would report a broken run as success.
+    SKIPPABLE — everything else (404 = not accepted yet, 422 = not org-owned).
 
-    The throttle is checked FIRST (see rate_limit_verdict).
-
-    NOTE a throttle is NOT fatal, so this is not a "propagate?" test by itself:
+    NOTE a throttle is NOT fatal, so this alone is not a "propagate?" test:
     handlers that warn-and-skip must re-raise a throttle too, which is why they
     ask `classify(exc) is not SKIPPABLE`.
     """

@@ -73,26 +73,19 @@ CONFIG_REPO = "classroom50"
 # Schema sentinel for a classroom.json — keep aligned with collect_scores.py.
 CLASSROOM_SCHEMA_V1 = "classroom50/classroom/v1"
 
-# Rate-limit body markers and the longest a single retry sleeps. Mirrors
-# collect_scores.py, which documents the set; all copies are pinned by
-# TestRateLimitMarkersParity_GoVsInlinePython.
+# Throttle classifier constants, hand-mirrored from collect_scores.py (which
+# documents them); pinned by TestRateLimitMarkersParity_GoVsInlinePython.
 #
-# This file needs the distinction MOST: it is the script a teacher runs to ask
-# "is my token healthy?", so reporting a throttled 403 as a missing scope sends
-# them to rotate a working credential — with this script's authority behind the
-# advice.
+# This file needs the distinction MOST: it is what a teacher runs to ask "is my
+# token healthy?", so reporting a throttled 403 as a missing scope sends them to
+# rotate a working credential with this script's authority behind the advice.
 RATE_LIMIT_BODY_MARKERS = (
     "secondary rate limit",
     "rate limit exceeded",
     "abuse",
 )
-
 MAX_RETRY_SLEEP_SECONDS = 60
-
-# Retry-After cap for a plain transient; see collect_scores.py.
 TRANSIENT_RETRY_CAP_SECONDS = 30
-
-# Cap on the error body read for diagnosis; see collect_scores.py.
 BODY_SNIPPET_READ_BYTES = 4096
 
 

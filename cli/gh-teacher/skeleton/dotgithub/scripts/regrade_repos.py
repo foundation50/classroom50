@@ -73,33 +73,23 @@ ASSIGNMENTS_SCHEMA_V1 = "classroom50/assignments/v1"
 # prefix aligned with autograde-runner.yaml and collect_scores.py.
 SUBMIT_TAG_PREFIX = "submit/"
 
-# Rate-limit body markers and the longest a single retry sleeps. Mirrors
-# collect_scores.py, which documents the set and its relationship to Go's
-# ghutil.IsRateLimited; this file shares that transport.
+# Throttle classifier constants, hand-mirrored from collect_scores.py — which
+# documents each one and the marker set's relationship to Go's
+# ghutil.IsRateLimited. This file shares that transport.
 RATE_LIMIT_BODY_MARKERS = (
     "secondary rate limit",
     "rate limit exceeded",
     "abuse",
 )
-
 MAX_RETRY_SLEEP_SECONDS = 60
-
-# Retry-After cap for a plain transient; see collect_scores.py.
 TRANSIENT_RETRY_CAP_SECONDS = 30
-
-# Ceiling on the run's total throttle sleep; see collect_scores.py.
 MAX_TOTAL_THROTTLE_SLEEP_SECONDS = 300
-
-# Seconds this run has already slept waiting out throttles.
-_throttle_sleep_spent = 0.0
-
-# Cap on the error body read for diagnosis; see collect_scores.py.
 BODY_SNIPPET_READ_BYTES = 4096
-
-# The three verdicts classify() returns. Mirrors collect_scores.py.
 THROTTLED = "throttled"
 FATAL = "fatal"
 SKIPPABLE = "skippable"
+
+_throttle_sleep_spent = 0.0
 
 # Fallback submission branch when a repo's default branch can't be read.
 # Submissions grade off the repo's default branch (the autograde shim's

@@ -3246,9 +3246,8 @@ class TestEpochToIso:
 
 class TestThrottlePropagatesInsteadOfDegrading:
     def test_repo_index_reraises_a_throttle(self, monkeypatch, capsys):
-        # Falling back to per-repo probing means issuing the thousands of
-        # requests the index exists to avoid — while GitHub is actively rate
-        # limiting. The listing failure must propagate instead.
+        # Falling back to per-repo probing would issue the thousands of requests
+        # the index exists to avoid, mid-throttle.
         def throttled(*a, **k):
             raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
 
@@ -3586,10 +3585,9 @@ class TestBulkAccessCheck:
 
 
 class TestGrantDeferralIsPerClassroom:
-    """A throttled grant pass defers only ITS classroom. A secondary limit clears
-    in about a minute, so a later classroom's grant may well succeed in the same
-    run — skipping the rest would trade real grant freshness for requests the run
-    can afford (the sleep budget is what protects the job timeout)."""
+    """A throttled grant pass defers only ITS classroom: a secondary limit clears
+    in about a minute, so a later grant may well succeed in the same run. The
+    sleep budget, not skipping classrooms, is what protects the job timeout."""
 
     def _two_classrooms(self, tmp_path):
         for short in ("cs", "ds"):
@@ -3697,10 +3695,9 @@ class TestPaginateFieldList:
 
 
 class TestOrgAndTeamListings:
-    """The two bulk listings the request-volume fix depends on. Both are
-    stubbed by every other test, so their lowercasing — which RepoIndex.contains
-    relies on to not read a real submission as "not submitted" — is only
-    asserted here."""
+    """The bulk listings the request-volume fix depends on. Every other test stubs
+    them, so their lowercasing — which RepoIndex.contains needs to not read a real
+    submission as "not submitted" — is asserted only here."""
 
     def _fake_page(self, payload):
         def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
@@ -3811,10 +3808,8 @@ class TestTemplatePrivacyFromTheIndex:
 
 class TestRepoIndexLatch:
     def test_propagated_throttle_does_not_latch_unknown(self, monkeypatch):
-        # A throttle raises, but the grant pass defers it and the run continues.
         # If the failure latched, every later lookup would answer True and
-        # collection would fan out the per-repo probes the index exists to
-        # avoid — mid-throttle.
+        # collection would fan out the per-repo probes — mid-throttle.
         calls: list[int] = []
 
         def flaky(*a, **k):

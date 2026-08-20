@@ -1152,27 +1152,21 @@ func keys(m map[string]string) []string {
 	return out
 }
 
-// TestRateLimitMarkersParity_GoVsInlinePython pins the rate-limit body
-// markers across the Go classifier and all three embedded Python scripts.
+// TestRateLimitMarkersParity_GoVsInlinePython pins the rate-limit body markers
+// across the Go classifier and all three embedded Python scripts.
 //
-// ghutil.IsRateLimited is the canonical classifier; collect_scores.py,
-// regrade_repos.py and probe_token.py each hand-mirror its marker set with no
-// compile-time link — plus one deliberate Python-only extra, "rate limit
-// exceeded": the primary limit's body phrase, kept as a fallback for a
-// response whose rate-limit headers a proxy stripped (Go relies on the
-// X-RateLimit-Remaining header alone there). Drift is silent and expensive in
-// one direction: a marker matched in Go but missing in Python means Python
-// reads a THROTTLED response as an under-scoped token and tells the operator
-// to rotate a healthy service token.
+// ghutil.IsRateLimited is canonical; the scripts hand-mirror its marker set with
+// no compile-time link, plus one deliberate extra ("rate limit exceeded", a
+// fallback for a response whose headers a proxy stripped). Drift is silent and
+// expensive in one direction: a marker matched in Go but missing in Python reads
+// a throttle as an under-scoped token and tells the operator to rotate a healthy
+// service token.
 //
-// Both sides are read from SOURCE and compared as exact sets, so the test
-// fails whichever side moves: a marker added to or removed from ghutil.go,
-// and a marker added to or removed from any script — undocumented supersets
-// included.
+// Both sides are read from SOURCE and compared as exact sets, so the test fails
+// whichever side moves — undocumented supersets included.
 func TestRateLimitMarkersParity_GoVsInlinePython(t *testing.T) {
 	goWant := []string{"abuse", "secondary rate limit"}
-	// The documented Python-only extra; see the doc comment above and the
-	// RATE_LIMIT_BODY_MARKERS comment in collect_scores.py.
+	// The documented Python-only extra; see collect_scores.py.
 	pythonWant := []string{"abuse", "rate limit exceeded", "secondary rate limit"}
 
 	sortedSet := func(items []string) []string {
