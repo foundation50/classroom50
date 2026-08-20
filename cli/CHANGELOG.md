@@ -17,6 +17,14 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.32.0](https://github.com/foundation50/classroom50/compare/cli-v1.31.0...cli-v1.32.0) (2026-08-20)
+
+
+### Features
+
+* **cli:** drop nightly score collection as the default ([#670](https://github.com/foundation50/classroom50/issues/670)) ([604f7f0](https://github.com/foundation50/classroom50/commit/604f7f097a53594d61564f59b58298eab0eb3adb))
+* **web:** request delete_repo on demand instead of at every sign-in ([#667](https://github.com/foundation50/classroom50/issues/667)) ([a9ddca8](https://github.com/foundation50/classroom50/commit/a9ddca812006145f37a2f656520bf4cd052f9846))
+
 ## [1.31.0](https://github.com/foundation50/classroom50/compare/cli-v1.30.0...cli-v1.31.0) (2026-08-18)
 
 
