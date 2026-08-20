@@ -73,12 +73,10 @@ ASSIGNMENTS_SCHEMA_V1 = "classroom50/assignments/v1"
 # prefix aligned with autograde-runner.yaml and collect_scores.py.
 SUBMIT_TAG_PREFIX = "submit/"
 
-# Body markers that identify a rate-limit response, and the longest a single
-# retry sleeps. Mirrors collect_scores.py verbatim (which documents the
-# relationship to Go's ghutil.IsRateLimited: its two markers plus the
-# deliberate "rate limit exceeded" extra) — GitHub returns throttling as 403
-# as often as 429, and this file shares that transport (and shared the bug:
-# any 403 read as an under-scoped token).
+# Rate-limit body markers and the longest a single retry sleeps. Mirrors
+# collect_scores.py, which documents the set and its relationship to Go's
+# ghutil.IsRateLimited; this file shares that transport, and shared the bug
+# (any 403 read as an under-scoped token).
 RATE_LIMIT_BODY_MARKERS = (
     "secondary rate limit",
     "rate limit exceeded",
@@ -522,9 +520,12 @@ def rerun_workflow_run(
     try:
         _http_request("POST", url, token, body=b"{}", accept="application/vnd.github+json")
     except urllib.error.HTTPError as exc:
-        # 403 here means "this run can't be re-run right now" (in progress, or
-        # too old); treat as a benign per-repo skip rather than a token error.
-        if exc.code == 403:
+        # A plain 403 here means "this run can't be re-run right now" (in
+        # progress, or too old) — a benign per-repo skip. The throttle check
+        # comes FIRST: GitHub returns a rate limit as 403 too, and swallowing
+        # that one as "not re-runnable" would exit green on an incomplete
+        # regrade while the fan-out keeps hammering an active limiter.
+        if exc.code == 403 and classify(exc) is not THROTTLED:
             emit_warning(
                 f"{org}/{repo}: latest autograde run {run_id} can't be re-run "
                 f"right now (in progress or expired); skipping"
@@ -1057,7 +1058,7 @@ def _http_send(
     """The single transport core: issue `method url` with bearer auth and return
     (body, response headers). Retries 5xx/429 and throttled 403s with backoff
     (see retry_delay), wraps a read-phase stall into a synthetic 599 so
-    is_hard_http_error aborts the run, and routes through _OPENER so a
+    classify() reports FATAL and the run aborts, and routes through _OPENER so a
     cross-host redirect strips Authorization. Mirrors collect_scores.py's
     transport."""
     headers = {
@@ -1160,9 +1161,7 @@ def rate_limit_reason(exc: urllib.error.HTTPError) -> str | None:
 def epoch_to_iso(value: str) -> str:
     """Unix epoch seconds (X-RateLimit-Reset) as an RFC 3339 UTC timestamp, or
     the raw value when it doesn't name a representable time. Mirrors
-    collect_scores.py: a millisecond epoch overflows datetime, and this runs
-    inside an `except HTTPError` block, so raising here would surface the
-    throttle as a traceback."""
+    collect_scores.py."""
     try:
         return datetime.datetime.fromtimestamp(
             int(value), tz=datetime.timezone.utc
@@ -1173,10 +1172,7 @@ def epoch_to_iso(value: str) -> str:
 
 def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
     """Seconds to wait before retrying `exc`, or None when it must not be
-    retried. Mirrors collect_scores.py: throttles carrying Retry-After wait
-    that long (capped), a secondary limit without one waits a minute, an
-    exhausted primary budget is not waited out at all, and 429/5xx keep the
-    previous backoff."""
+    retried. Mirrors collect_scores.py."""
     verdict = rate_limit_verdict(exc)
     if verdict is not None:
         return verdict[1]
@@ -1197,20 +1193,13 @@ def classify(exc: urllib.error.HTTPError) -> str:
         network-unavailable after retries). Aborts the run.
     SKIPPABLE — everything else; a per-repo 404/422 warns and skips.
 
-    The throttle is checked FIRST. Checking the status code first — as this
-    file did, with the rate-limit test nested INSIDE the hard-error branch —
-    meant a throttled 429 was never "hard", so it fell through to the generic
-    per-repo warning and never reached its "do NOT rotate" message."""
+    The throttle is checked FIRST: a rate limit arrives as 403 as often as 429,
+    so a status-code-first test never reaches the "do NOT rotate" message."""
     if rate_limit_verdict(exc) is not None:
         return THROTTLED
     if exc.code in (401, 403, 599):
         return FATAL
     return SKIPPABLE
-
-
-def is_hard_http_error(exc: urllib.error.HTTPError) -> bool:
-    """Whether `exc` must abort the whole run. The FATAL view of classify()."""
-    return classify(exc) is FATAL
 
 
 # Workflow-command output -----------------------------------------------------

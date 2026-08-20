@@ -1883,7 +1883,7 @@ class TestErrorClassification:
                 hdrs=None,
                 fp=None,
             )
-            assert cs.is_hard_http_error(exc) is True
+            assert cs.classify(exc) is cs.FATAL
 
     def test_network_error_is_a_hard_failure(self):
         # _http_get raises synthetic 599 on final URLError —
@@ -1895,7 +1895,7 @@ class TestErrorClassification:
             hdrs=None,
             fp=None,
         )
-        assert cs.is_hard_http_error(exc) is True
+        assert cs.classify(exc) is cs.FATAL
 
     def test_non_auth_http_errors_are_per_repo_warnings(self):
         # Transient/per-repo failures warn-and-skip at the call
@@ -1908,7 +1908,7 @@ class TestErrorClassification:
                 hdrs=None,
                 fp=None,
             )
-            assert cs.is_hard_http_error(exc) is False
+            assert cs.classify(exc) is not cs.FATAL
 
     def test_missing_result_asset_has_its_own_exception_type(self):
         # Missing result.json is a malformed release, not an HTTP
@@ -2995,7 +2995,7 @@ class TestGrantTeamRepo:
 
     def test_hard_error_on_precheck_propagates(self, monkeypatch):
         # A 403 (token lacks Administration) on the pre-check must propagate so
-        # main() aborts the run — is_hard_http_error treats 403 as hard.
+        # main() aborts the run — classify() reports FATAL for a bare 403.
         def fake_send(method, url, token, *, accept, body, _retries=3):
             raise cs.urllib.error.HTTPError(url=url, code=403, msg="forbidden", hdrs=None, fp=None)
 
@@ -3005,7 +3005,7 @@ class TestGrantTeamRepo:
                 "https://api.github.com", "cs50", "classroom50-cs-ta", "cs50", "cs-hw-alice", "pull", "tok"
             )
         assert ei.value.code == 403
-        assert cs.is_hard_http_error(ei.value)
+        assert cs.classify(ei.value) is cs.FATAL
 
 
 class TestGrantClassroomTeamAccess:
@@ -3277,11 +3277,11 @@ class TestClassify:
         # warn-and-skip contract rather than aborting the run.
         assert cs.classify(http_error(429)) is cs.SKIPPABLE
 
-    def test_is_hard_http_error_is_the_fatal_view(self):
-        assert cs.is_hard_http_error(http_error(403)) is True
-        # ...and a THROTTLED 403 is NOT hard, so handlers that warn-and-skip
-        # must ask classify(), not this.
-        assert cs.is_hard_http_error(http_error(403, {"Retry-After": "5"})) is False
+    def test_a_bare_403_is_fatal_a_throttled_one_is_not(self):
+        assert cs.classify(http_error(403)) is cs.FATAL
+        # ...and a THROTTLED 403 is NOT fatal, which is why handlers that
+        # warn-and-skip ask `classify(exc) is not SKIPPABLE`.
+        assert cs.classify(http_error(403, {"Retry-After": "5"})) is cs.THROTTLED
 
 
 class TestEpochToIso:
@@ -3657,3 +3657,201 @@ class TestPaginateFieldList:
             field="name",
         )
         assert got == ["a", "b"]
+
+
+class TestOrgAndTeamListings:
+    """The two bulk listings the request-volume fix depends on. Both are
+    stubbed by every other test, so their lowercasing — which RepoIndex.contains
+    relies on to not read a real submission as "not submitted" — is only
+    asserted here."""
+
+    def _fake_page(self, payload):
+        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            self.seen_url = url
+            return json.dumps(payload).encode(), {}
+
+        return fake_get
+
+    def test_org_repo_names_are_lowercased(self, monkeypatch):
+        monkeypatch.setattr(
+            cs,
+            "_http_get_with_headers",
+            self._fake_page([{"name": "CS-HW1-Alice"}, {"name": "cs-hw2-BOB"}]),
+        )
+        names = cs.list_org_repo_names("https://api.github.com", "CS50", "tok")
+        assert names == {"cs-hw1-alice", "cs-hw2-bob"}
+        # type=all keeps private student repos in the listing; without it the
+        # index would call every private repo missing and skip its poll.
+        assert "type=all" in self.seen_url and "per_page=100" in self.seen_url
+
+    def test_team_repo_full_names_are_lowercased(self, monkeypatch):
+        monkeypatch.setattr(
+            cs,
+            "_http_get_with_headers",
+            self._fake_page([{"full_name": "CS50/CS-HW1-Alice"}]),
+        )
+        full = cs.list_team_repo_full_names(
+            "https://api.github.com", "CS50", "classroom50-cs-ta", "tok"
+        )
+        assert full == {"cs50/cs-hw1-alice"}
+
+    def test_mixed_case_listing_still_matches_the_index(self, monkeypatch):
+        # The end-to-end reason the .lower() matters: a repo GitHub reports as
+        # mixed-case must still answer contains() for the lowercased name the
+        # repo-name formula produces.
+        monkeypatch.setattr(cs, "list_org_repo_names", lambda *a, **k: {"cs-hw1-alice"})
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        assert index.contains("CS-HW1-Alice") is True
+
+
+class TestRepoIndexLatch:
+    def test_propagated_throttle_does_not_latch_unknown(self, monkeypatch):
+        # A throttle raises, but the grant pass defers it and the run continues.
+        # If the failure latched, every later lookup would answer True and
+        # collection would fan out the per-repo probes the index exists to
+        # avoid — mid-throttle.
+        calls: list[int] = []
+
+        def flaky(*a, **k):
+            calls.append(1)
+            if len(calls) == 1:
+                raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+            return {"cs-hw1-alice"}
+
+        monkeypatch.setattr(cs, "list_org_repo_names", flaky)
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        with pytest.raises(cs.urllib.error.HTTPError):
+            index.contains("cs-hw1-alice")
+        # The retry reads the listing for real instead of returning "unknown".
+        assert index.contains("cs-hw1-alice") is True
+        assert index.contains("cs-hw1-carol") is False
+        assert len(calls) == 2
+
+    def test_soft_failure_still_latches_and_warns_once(self, monkeypatch):
+        calls: list[int] = []
+
+        def soft(*a, **k):
+            calls.append(1)
+            raise http_error(404, {}, b"nope")
+
+        monkeypatch.setattr(cs, "list_org_repo_names", soft)
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        assert index.contains("a") is True
+        assert index.contains("b") is True
+        assert len(calls) == 1  # read once, warned once
+
+
+class TestIncompleteListingNeverPersists:
+    """A truncated listing is indistinguishable from a complete one, so it must
+    not be written as truth — the same principle the throttle re-raise added."""
+
+    def test_pagination_loop_raises_incomplete_listing(self, monkeypatch):
+        class LoopHeaders:
+            def get(self, name):
+                if name == "Link":
+                    return '<https://api.github.com/loop?cursor=same>; rel="next"'
+                return None
+
+        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            return json.dumps([{"login": "alice"}]).encode(), LoopHeaders()
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
+        with pytest.raises(cs.IncompleteListing, match="incomplete"):
+            cs.list_repo_collaborator_logins(
+                "https://api.github.com", "cs50", "cs-project-alice", "tok"
+            )
+
+    def test_incomplete_listing_is_a_valueerror_subclass(self):
+        # Callers that fall back on ValueError keep working unchanged.
+        assert issubclass(cs.IncompleteListing, ValueError)
+
+    def test_attribute_group_members_propagates_incomplete(self, monkeypatch):
+        def incomplete(*a, **k):
+            raise cs.IncompleteListing("orgs/x: the listing is incomplete")
+
+        monkeypatch.setattr(cs, "list_repo_collaborator_logins", incomplete)
+        with pytest.raises(cs.IncompleteListing):
+            cs.attribute_group_members(
+                "https://api.github.com", "cs50", "cs-project-alice", "alice", "tok", {"alice", "bob"}
+            )
+
+    def test_attribute_group_members_propagates_a_throttle(self, monkeypatch):
+        # Degrading here would PERSIST owner-only crediting to scores.json,
+        # silently uncrediting real teammates over a transient rate limit.
+        def throttled(*a, **k):
+            raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+
+        monkeypatch.setattr(cs, "list_repo_collaborator_logins", throttled)
+        with pytest.raises(cs.urllib.error.HTTPError):
+            cs.attribute_group_members(
+                "https://api.github.com", "cs50", "cs-project-alice", "alice", "tok", {"alice", "bob"}
+            )
+
+    def test_malformed_body_still_degrades_to_owner_only(self, monkeypatch):
+        # No usable list to be partial about — the owner is the only
+        # defensible credit, and this path keeps its warning.
+        def malformed(*a, **k):
+            raise ValueError("expected JSON array, got dict")
+
+        monkeypatch.setattr(cs, "list_repo_collaborator_logins", malformed)
+        members, warning = cs.attribute_group_members(
+            "https://api.github.com", "cs50", "cs-project-alice", "alice", "tok", {"alice"}
+        )
+        assert members == ["alice"]
+        assert warning is not None and "malformed" in warning
+
+    def test_collection_skips_the_repo_and_keeps_prior_credit(self, monkeypatch, capsys):
+        # The repo is skipped entirely, so no entry is produced for it and its
+        # existing scores.json record (with real teammates) survives.
+        def incomplete(*a, **k):
+            raise cs.IncompleteListing("collaborators: the listing is incomplete")
+
+        monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [{
+            "tag_name": "submit/2026-09-16T04-00-00Z",
+            "assets": [{"name": "result.json", "url": "https://api.github.com/assets/1"}],
+        }])
+        monkeypatch.setattr(
+            cs, "download_result_asset",
+            lambda *a, **k: make_result(classroom="cs-principles", assignment="project",
+                                        username="alice", assignment_type="group"),
+        )
+        stub_team_members(monkeypatch, ["alice"])
+        monkeypatch.setattr(cs, "attribute_group_members", incomplete)
+
+        results, _flips, _collected = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50",
+            classroom_short="cs-principles", classroom_meta={},
+            assignments={"schema": cs.ASSIGNMENTS_SCHEMA_V1,
+                         "assignments": [{"slug": "project", "mode": "group", "max_group_size": 3}]},
+            service_token="tok",
+        )
+        assert results == []
+        err = capsys.readouterr().err
+        assert "incomplete" in err and "preserved" in err
+
+
+class TestMainThrottleBranches:
+    """main()-level coverage for the throttle verdicts: a deferral must stay
+    green and never advise rotation; collection must fail loudly but named."""
+
+    def test_raw_throttled_httperror_from_grant_pass_defers(self, tmp_path, monkeypatch, capsys):
+        # A throttle that hits the grant pass BEFORE its first repo arrives as a
+        # bare HTTPError, not GrantThrottled — the same deferral verdict applies.
+        classroom = write_minimal_classroom(tmp_path)
+        (classroom / "classroom.json").write_text(json.dumps(TestGrantThrottled.META))
+
+        def throttled_pass(**kwargs):
+            raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        monkeypatch.setattr(cs, "grant_classroom_team_access", throttled_pass)
+        monkeypatch.setattr(cs, "collect_classroom", lambda **k: ([], 0, {}))
+
+        assert cs.main() == 0
+        err = capsys.readouterr().err
+        assert "::error::" not in err
+        line = next(ln for ln in err.splitlines() if "throttled" in ln)
+        assert "do NOT rotate" in line
+        assert "rotate-service-token" not in line

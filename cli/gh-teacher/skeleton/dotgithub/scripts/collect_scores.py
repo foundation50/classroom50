@@ -85,18 +85,17 @@ SUBMIT_TAG_PREFIX = "submit/"
 # so only the non-owner staff teams — head-TA and TA — need a grant).
 STAFF_TEAM_PERMISSIONS = {"hta": "pull", "ta": "pull"}
 
-# Body markers that identify a rate-limit response. GitHub words the
-# secondary limit and the abuse detector differently, and neither always ships
-# a Retry-After header — see rate_limit_verdict. "abuse" is the bare stem on
-# purpose: it catches every "abuse detection mechanism" phrasing. The first
-# two entries mirror the canonical Go classifier, ghutil.IsRateLimited
-# (cli/shared/ghutil/ghutil.go); "rate limit exceeded" is a DELIBERATE
-# Python-only extra — the primary limit's body phrase ("API rate limit
-# exceeded for ..."), normally caught by the X-RateLimit-Remaining check that
-# runs before the marker scan, kept as a fallback for a response whose
-# headers a proxy stripped. Go relies on the header alone there.
-# TestRateLimitMarkersParity_GoVsInlinePython pins both sets exactly, the
-# extra included.
+# Body markers that identify a rate-limit response. GitHub words the secondary
+# limit and the abuse detector differently, and neither always ships a
+# Retry-After header — see rate_limit_verdict. "abuse" is the bare stem on
+# purpose: it catches every "abuse detection mechanism" phrasing.
+#
+# The first two mirror the canonical Go classifier, ghutil.IsRateLimited
+# (cli/shared/ghutil/ghutil.go). "rate limit exceeded" is a DELIBERATE
+# Python-only extra — the primary limit's body phrase, normally caught by the
+# X-RateLimit-Remaining check that runs first, kept as a fallback for a response
+# whose headers a proxy stripped. Go relies on the header alone there.
+# TestRateLimitMarkersParity_GoVsInlinePython pins both sets exactly.
 RATE_LIMIT_BODY_MARKERS = (
     "secondary rate limit",
     "rate limit exceeded",
@@ -477,22 +476,20 @@ def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str
 class RepoIndex:
     """The org's repo names, read once per run and only when something asks.
 
-    Both passes below walk the (team member × assignment) product, so the
-    number of names grows as members × assignments and reaches the thousands
-    for an ordinary course, of which only the accepted ones exist. Collection
-    swallows the misses quietly (a 404 on /releases reads as "not submitted"),
-    but the staff-team grant spends two requests on each one — the access check
-    and a PUT that 404s — and warns per repo. That volume is also what pushes
-    the pass into GitHub's secondary rate limit.
+    Both passes below walk the (team member × assignment) product, which grows
+    as members × assignments and reaches the thousands for an ordinary course —
+    of which only the accepted repos exist. Collection swallows the misses
+    quietly (a 404 on /releases reads as "not submitted"), but the staff-team
+    grant spends two requests on each one and warns per repo, which is what
+    pushes the pass into GitHub's secondary rate limit.
 
-    A fine-grained PAT lists exactly the repos it is scoped to, which is the
-    same set it could grant on or read anyway, so skipping a name that is
-    absent here drops only a call that was going to 404. When the listing
-    can't be read, `contains` answers True for everything and both passes fall
-    back to probing per repo — slower and noisier, never less complete.
+    A fine-grained PAT lists exactly the repos it is scoped to — the same set it
+    could grant on or read anyway — so skipping a name absent here drops only a
+    call that was going to 404. When the listing can't be read, `contains`
+    answers True for everything and both passes fall back to probing per repo:
+    slower and noisier, never less complete.
 
-    Lazy on purpose: a run with nothing to collect (or one whose collection is
-    stubbed) issues no request at all.
+    Lazy on purpose: a run with nothing to collect issues no request at all.
     """
 
     def __init__(self, api_url: str, org: str, token: str) -> None:
@@ -506,14 +503,21 @@ class RepoIndex:
         """The lowercased repo names, or None when they could not be read. The
         listing runs once; a soft failure warns once and stays None.
 
-        A THROTTLED or FATAL listing failure PROPAGATES instead of degrading:
-        falling back to per-repo probing means issuing the thousands of
-        requests this index exists to avoid, and doing that while GitHub is
-        actively rate limiting is the worst possible response to a rate
-        limit."""
+        A THROTTLED or FATAL failure PROPAGATES rather than degrading: falling
+        back to per-repo probing means issuing the thousands of requests this
+        index exists to avoid, while GitHub is actively rate limiting. That path
+        also leaves the read UNLATCHED, so a caller that survives the throttle
+        (the grant pass defers it) retries the listing instead of spending the
+        rest of the run on the degraded "unknown" answer."""
         if self._loaded:
             return self._names
+        self._names = self._read()
         self._loaded = True
+        return self._names
+
+    def _read(self) -> set[str] | None:
+        """One attempt at the org listing: the names, or None when they could
+        not be read and both passes should fall back to per-repo probing."""
         try:
             names = list_org_repo_names(self._api_url, self._org, self._token)
         except urllib.error.HTTPError as exc:
@@ -537,8 +541,7 @@ class RepoIndex:
         if not names:
             return None
         print(f"{self._org}: {len(names)} repo(s) visible to the service token")
-        self._names = names
-        return self._names
+        return names
 
     def contains(self, repo_name: str) -> bool:
         """Whether `repo_name` exists. True whenever the listing is unknown, so
@@ -913,9 +916,20 @@ def collect_classroom(
             # right after `owner` in the written JSON key order.
             members: list[str] | None = None
             if is_group:
-                members, degraded_warning = attribute_group_members(
-                    api_url, org, repo_name, username, service_token, roster_logins
-                )
+                try:
+                    members, degraded_warning = attribute_group_members(
+                        api_url, org, repo_name, username, service_token, roster_logins
+                    )
+                except IncompleteListing as exc:
+                    # A partial collaborator list must not be written as if it
+                    # were whole: skipping the repo leaves its previous
+                    # gradebook entry (and its credited teammates) intact.
+                    emit_warning(
+                        f"{org}/{repo_name}: group collaborator listing is "
+                        f"incomplete ({exc}); skipping this repo so its existing "
+                        f"member credit is preserved. Re-run to collect it."
+                    )
+                    continue
                 if degraded_warning is not None:
                     group_attribution_degraded += 1
                     emit_warning(degraded_warning)
@@ -1793,6 +1807,13 @@ def all_submit_releases(
     )
 
 
+class IncompleteListing(ValueError):
+    """A paginated walk that could not be completed — a looping `Link` chain or
+    the page cap. Distinct from a malformed body so callers can tell "this list
+    is partial" from "this response wasn't a list": a partial list must never be
+    persisted as if it were the whole set."""
+
+
 def _next_page_link(link_header: str | None) -> str | None:
     """The `rel="next"` URL from a GitHub `Link` header, or None when there's no
     next page (or no header). GitHub's guidance is to follow this URL rather
@@ -1841,16 +1862,16 @@ def _paginate_field_list(
     per_page/page formatting). Only the first page uses it; subsequent pages
     follow GitHub's `Link: rel="next"`, host-pinned via _assert_same_host so a
     crafted Link can't pivot the token. When no Link header is present, falls
-    back to page+1 and stops on a short page (len < per_page). A self/looping
-    rel="next" is bounded by seen_next.
+    back to page+1 and stops on a short page (len < per_page).
 
     Raises urllib.error.HTTPError on any non-2xx (including 404) so the caller
     can choose soft fallback vs. hard failure; raises ValueError on a non-array
-    body or on hitting the page cap.
+    body, and IncompleteListing (a ValueError) when the walk can't be completed
+    — a self/looping rel="next" or the page cap.
     """
     per_page = 100
     max_pages = 100
-    logins: list[str] = []
+    values: list[str] = []
     url = page_url(1)
     seen_next: set[str] = set()
     for page in range(1, max_pages + 1):
@@ -1867,20 +1888,16 @@ def _paginate_field_list(
                 continue
             value = item.get(field)
             if isinstance(value, str) and value:
-                logins.append(value)
+                values.append(value)
         link_header = headers.get("Link") if headers else None
         next_url = _next_page_link(link_header)
         if next_url:
             next_url = _assert_same_host(next_url, api_url)
-            # A server pointing back at an already-fetched page (self/looping
-            # rel="next") bounds a crafted or buggy Link chain — but what we
-            # hold is a TRUNCATED listing, and returning it would be
-            # indistinguishable from a complete one. RepoIndex would then read
-            # the missing names as "no repo" and mark real submissions as not
-            # submitted, silently. Raise for the same reason the page cap does:
-            # every caller turns ValueError into "unknown", which fails open.
+            # What we hold at this point is a TRUNCATED listing, and returning
+            # it would be indistinguishable from a complete one. Raise instead;
+            # callers turn it into "unknown", which fails open.
             if next_url in seen_next:
-                raise ValueError(
+                raise IncompleteListing(
                     f"{resource_label}: pagination Link loops back to a page "
                     f"already fetched ({next_url}); the listing is incomplete"
                 )
@@ -1888,9 +1905,9 @@ def _paginate_field_list(
             url = next_url
             continue
         if link_header or len(batch) < per_page:
-            return logins
+            return values
         url = page_url(page + 1)
-    raise ValueError(
+    raise IncompleteListing(
         f"{resource_label}: too many entries to enumerate "
         f"(hit the {max_pages}-page cap)"
     )
@@ -2058,10 +2075,16 @@ def attribute_group_members(
     runner/student-supplied list — and `warning` is a message the caller should
     emit and count as a degraded attribution.
 
-    A THROTTLE is NOT such a failure and propagates: degrading here PERSISTS an
-    owner-only member list into scores.json, so a rate-limit burst mid-run
-    would silently uncredit real teammates and then blame the token in the
-    aggregate warning. Better to fail the run and re-collect.
+    Two failures are NOT degraded but propagated, because degrading here
+    PERSISTS an owner-only member list into scores.json — silently uncrediting
+    real teammates and then blaming the token in the aggregate warning:
+
+      * a THROTTLE (a rate-limit burst mid-run), and
+      * an INCOMPLETE listing (looping Link / page cap), where the collaborator
+        set we hold is partial and indistinguishable from a complete one.
+
+    A malformed body still degrades: there is no usable list to be partial
+    about, and the owner is the only defensible credit.
     """
     try:
         return group_member_usernames(api_url, org, repo, owner_username, token, roster_logins), None
@@ -2074,6 +2097,8 @@ def attribute_group_members(
             f"repo owner {owner_username!r} only. Ensure CLASSROOM50_SERVICE_TOKEN "
             f"can read repository collaborators (see the service-token wiki)."
         )
+    except IncompleteListing:
+        raise
     except (json.JSONDecodeError, ValueError) as exc:
         return [owner_username], (
             f"{org}/{repo}: group collaborator listing malformed "
@@ -2202,7 +2227,7 @@ def _http_get_with_headers(
             # OSError) which is NOT a URLError — so a stalled response body would
             # otherwise escape this retry path and crash past main()'s HTTPError
             # handler. Catch all three so a read-phase stall retries and wraps
-            # into the synthetic 599 that is_hard_http_error treats as hard.
+            # into the synthetic 599 that classify() treats as FATAL.
             if attempt < _retries - 1:
                 time.sleep(2 ** attempt)
                 continue
@@ -2298,7 +2323,7 @@ def grant_team_repo(
     PUT /orgs/{org}/teams/{slug}/repos/{owner}/{repo}, skipping the write when
     the team already has any access (idempotent). Returns whether a new grant was
     applied. Mirrors Go's grantTeamRepo. A 403 (token lacks Administration) or
-    599 propagates so main() aborts the run (is_hard_http_error); a 404/422 (repo
+    599 propagates so main() aborts the run (classify -> FATAL); a 404/422 (repo
     absent / not org-owned) is left for the caller to warn-and-skip.
 
     `known_repos` is the team's repos already read in bulk (lowercased
@@ -2363,12 +2388,8 @@ def rate_limit_verdict(
     GitHub returns rate limits as 403 as often as 429, and the only thing
     separating that from a genuinely under-scoped token is the response itself:
     a Retry-After header, an exhausted X-RateLimit-Remaining, or a body naming
-    the limit. Treating every 403 as a scope problem is what made this script
-    tell operators to rotate healthy service tokens.
-
-    Reason and delay are decided in ONE ladder so they can't disagree: the two
-    questions ("is this a throttle?" and "how long do we wait?") are answered by
-    the same branch. rate_limit_reason and retry_delay are its two views."""
+    the limit. Reason and delay come from ONE ladder so they cannot disagree;
+    rate_limit_reason and retry_delay are its two views."""
     if exc.code not in (403, 429):
         return None
     headers = exc.headers or {}
@@ -2409,11 +2430,9 @@ def epoch_to_iso(value: str) -> str:
     """Unix epoch seconds (X-RateLimit-Reset) as an RFC 3339 UTC timestamp, or
     the raw value when it doesn't name a representable time.
 
-    `.isdigit()` is not enough of a guard: GitHub occasionally sends a
-    MILLISECOND epoch, and datetime raises ValueError/OverflowError past year
-    9999. This runs inside an `except HTTPError` block, so an exception here
-    escapes every throttle handler as a traceback — the run would crash on the
-    header that exists to explain the throttle."""
+    `.isdigit()` is not guard enough: GitHub occasionally sends a MILLISECOND
+    epoch, which overflows datetime. This runs inside an `except HTTPError`
+    block, so raising here would surface the throttle as a traceback."""
     try:
         return datetime.datetime.fromtimestamp(
             int(value), tz=datetime.timezone.utc
@@ -2426,11 +2445,9 @@ def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
     """Seconds to wait before retrying `exc`, or None when it must not be
     retried.
 
-    Throttles come first: a 403/429 carrying Retry-After waits that long
-    (capped), a secondary limit without one waits a minute — GitHub's
-    documented minimum — and an exhausted PRIMARY budget is deliberately not
-    retried, because its window runs up to an hour and a named error beats a
-    sleeping job. Everything else keeps the previous contract: 429/5xx honour
+    A throttle waits what rate_limit_verdict decided (None for the primary
+    budget, whose window runs up to an hour — a named error beats a sleeping
+    job). Everything else keeps the previous contract: 429/5xx honour
     Retry-After (capped at 30s) or back off exponentially; any other status is
     terminal."""
     verdict = rate_limit_verdict(exc)
@@ -2456,26 +2473,18 @@ def classify(exc: urllib.error.HTTPError) -> str:
         org-owned, ...). Warn and move on.
 
     The throttle is checked FIRST, which is the whole point: a rate limit
-    arrives as 403 as often as 429, so classifying by status code alone put
-    every throttle in FATAL and sent operators to rotate a working credential.
-    Pairing a status check with a separate rate_limit_reason call at each site
-    was the same rule written ten times — one site forgetting the pair (as the
-    429 path did) silently got the old, wrong answer.
+    arrives as 403 as often as 429, so classifying by status alone puts every
+    throttle in FATAL and sends operators to rotate a working credential.
+
+    NOTE a throttle is NOT fatal, so this is not a "propagate?" test by itself:
+    handlers that warn-and-skip must re-raise a throttle too, which is why they
+    ask `classify(exc) is not SKIPPABLE`.
     """
     if rate_limit_verdict(exc) is not None:
         return THROTTLED
     if exc.code in (401, 403, 599):
         return FATAL
     return SKIPPABLE
-
-
-def is_hard_http_error(exc: urllib.error.HTTPError) -> bool:
-    """Whether `exc` must abort the whole run. The FATAL view of classify().
-
-    NOTE a throttle is NOT fatal, so this alone is not a "propagate?" test:
-    handlers that warn-and-skip must re-raise THROTTLED as well, which is why
-    they ask `classify(exc) is not SKIPPABLE` rather than calling this."""
-    return classify(exc) is FATAL
 
 
 # Workflow-command output -----------------------------------------------------

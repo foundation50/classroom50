@@ -52,11 +52,11 @@ def test_build_submit_tag_shape():
     assert "T" in tag and tag.count("-") >= 3
 
 
-def test_is_hard_http_error():
+def test_classify_fatal_view():
     for code in (401, 403, 599):
-        assert rr.is_hard_http_error(_http_error(code))
+        assert rr.classify(_http_error(code)) is rr.FATAL
     for code in (404, 422, 500):
-        assert not rr.is_hard_http_error(_http_error(code))
+        assert rr.classify(_http_error(code)) is not rr.FATAL
 
 
 # regrade_repo decision logic -------------------------------------------------
@@ -160,6 +160,19 @@ def test_rerun_workflow_run_403_raises_skiprepo(monkeypatch):
     monkeypatch.setattr(rr, "_http_request", fake_request)
     with pytest.raises(rr._SkipRepo):
         rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+
+
+def test_rerun_workflow_run_throttled_403_is_not_a_benign_skip(monkeypatch):
+    # A throttle also arrives as 403. Swallowing it as "not re-runnable" would
+    # count the repo as skipped and exit green on an incomplete regrade, while
+    # the fan-out keeps hammering an active limiter.
+    def fake_request(method, url, token, *, accept, body=None, _retries=3):
+        raise github_http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+
+    monkeypatch.setattr(rr, "_http_request", fake_request)
+    with pytest.raises(rr.urllib.error.HTTPError) as ei:
+        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+    assert rr.classify(ei.value) is rr.THROTTLED
 
 
 def test_main_head_sha_returns_none_on_404(monkeypatch):
@@ -400,6 +413,40 @@ def test_main_soft_http_error_skips_and_exits_1(monkeypatch):
     monkeypatch.setattr(rr, "regrade_repo", fake_regrade)
     # One repo failed (appended to failed[]) but the other regraded -> exit 1.
     assert rr.main() == 1
+
+
+def test_main_per_repo_throttle_aborts_named_without_rotate_advice(monkeypatch, capsys):
+    # A throttle is fatal for regrade (the pass can't defer), but the operator
+    # must not be sent to rotate a healthy token.
+    _set_main_env(monkeypatch)
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
+    seen: list[str] = []
+
+    def fake_regrade(api_url, org, repo, token, tag_mode, submission_tags=None):
+        seen.append(repo)
+        raise github_http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+
+    monkeypatch.setattr(rr, "regrade_repo", fake_regrade)
+    assert rr.main() == 1
+    assert seen == ["cs50-hello-alice"]  # aborts on the first repo
+    err = capsys.readouterr().err
+    assert "throttling" in err and "do NOT rotate" in err
+    assert "rotate-service-token" not in err
+
+
+def test_main_team_listing_throttle_aborts_named_without_rotate_advice(monkeypatch, capsys):
+    # Same verdict on the team read, which previously hit the FATAL branch and
+    # advised re-scoping the PAT.
+    _set_main_env(monkeypatch)
+
+    def throttled_roster(*a, **k):
+        raise github_http_error(429, {"Retry-After": "60"})
+
+    monkeypatch.setattr(rr, "load_roster", throttled_roster)
+    assert rr.main() == 1
+    err = capsys.readouterr().err
+    assert "throttling" in err and "do NOT rotate" in err
+    assert "rotate-service-token" not in err
 
 
 def test_main_load_roster_hard_http_error_reports_token_scope(monkeypatch, capsys):

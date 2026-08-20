@@ -73,11 +73,9 @@ CONFIG_REPO = "classroom50"
 # Schema sentinel for a classroom.json — keep aligned with collect_scores.py.
 CLASSROOM_SCHEMA_V1 = "classroom50/classroom/v1"
 
-# Body markers that identify a rate-limit response, and the longest a single
-# retry sleeps. Hand-mirrored from collect_scores.py / regrade_repos.py, which
-# carry Go's ghutil.IsRateLimited markers plus the deliberate "rate limit
-# exceeded" extra (documented in collect_scores.py); all four copies are
-# pinned exactly by TestRateLimitMarkersParity_GoVsInlinePython.
+# Rate-limit body markers and the longest a single retry sleeps. Mirrors
+# collect_scores.py, which documents the set; all copies are pinned by
+# TestRateLimitMarkersParity_GoVsInlinePython.
 #
 # This file needs the distinction MOST: it is the script a teacher runs to ask
 # "is my token healthy?", so reporting a throttled 403 as a missing scope sends
@@ -245,10 +243,9 @@ class Check:
 def _classify_repo_read(exc: urllib.error.HTTPError) -> str:
     """Short human cause for a failed repo/org read.
 
-    The THROTTLE check comes first and is the reason this function exists in
-    this shape: GitHub returns a rate limit as 403 as often as 429, so reading
-    the status code alone made this probe report a healthy, rate-limited token
-    as under-scoped — the one verdict a token probe must never get wrong."""
+    The THROTTLE check comes first: GitHub returns a rate limit as 403 as often
+    as 429, and reporting a healthy, rate-limited token as under-scoped is the
+    one verdict a token probe must never get wrong."""
     throttled = rate_limit_reason(exc)
     if throttled is not None:
         return (
