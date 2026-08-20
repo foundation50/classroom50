@@ -73,15 +73,22 @@ warns and asks for confirmation before proceeding. See
 | `workflow` | Committing the `classroom50` repository's workflow files during `init` (GitHub 404s the write without it). |
 
 > [!NOTE]
-> **Why the web app's sign-in asks for "Delete repositories".** Signing in at
-> classroom50.org requests `delete_repo` in addition to the set above. It is
-> used by exactly one feature: **Tear down organization** (org settings →
-> Danger zone), which resets an org by deleting the repositories Classroom 50
-> manages — and it only runs when you type an explicit confirmation. Nothing
-> else deletes repositories. Classroom 50 has no server: the token stays in
-> your browser, so nobody but you can act on your org with it. If you prefer,
-> the CLIs never request `delete_repo` unless you opt in with
-> `gh teacher login -s delete_repo`.
+> **Tearing down an organization needs an extra permission.** Signing in does
+> not request `delete_repo`. Exactly one feature needs it: **Tear down
+> organization**, in the organization's settings under **Danger zone**. It
+> resets an organization by deleting **every** repository in it, not only the
+> ones Classroom 50 created. When you use it, Classroom 50 asks you to request
+> that permission and sign in again, and teardown still runs only after you type
+> an explicit confirmation. Nothing else deletes repositories. Classroom 50 has
+> no server: the token stays in your browser, so nobody but you can act on your
+> organization with it. The CLIs work the same way: they never request
+> `delete_repo` unless you opt in with `gh teacher login -s delete_repo`.
+>
+> **If you signed in with a personal access token**, Classroom 50 can't add the
+> permission for you — a token's permissions are fixed when you create it on
+> GitHub. Create one that allows deleting repositories (the `delete_repo` scope
+> on a classic token, or **Administration: read and write** on a fine-grained
+> one) and sign in again.
 
 ### 3. Student authentication
 
@@ -154,10 +161,9 @@ gh api -X PUT /repos/<org>/classroom50/actions/permissions/access \
 
 ### 6. Score collection
 
-The `collect-scores.yaml` workflow runs nightly (`17 4 * * *` UTC) across every
-classroom. Trigger it manually, optionally scoped to one classroom or a single
-assignment (the same scoped run the web app's per-assignment **Sync now**
-button dispatches):
+Trigger the `collect-scores.yaml` workflow from the Actions tab, optionally
+scoped to one classroom or a single assignment (the same scoped run the web
+app's per-assignment **Sync now** button dispatches):
 
 ```sh
 gh workflow run collect-scores.yaml --repo <org>/classroom50
@@ -180,6 +186,66 @@ gh workflow run probe-token.yaml --repo <org>/classroom50
 
 A green run confirms every scope; a red run's log names the missing scope(s).
 Side-effect free.
+
+---
+
+## Permissions and access
+
+Classroom 50 has no server. Whatever you authorize is a GitHub token that lives
+only in your browser (web app) or your local `gh` credential store (CLI) —
+nobody but you can act on your account with it. Sign-in requests **one scope set
+for everyone** — a deliberate simplicity choice, not a technical requirement.
+Teachers and students share a single flow because one person can be both (a
+teacher testing an assignment as a student, a TA who also takes the course), so
+the app asks for the union of what any role might need rather than making you
+declare a role up front. A student's grant is therefore broader than what a
+student actually uses. Capabilities are gated after sign-in by your role in the
+organization and classroom, not by the scopes on your token.
+
+The scopes below are GitHub's own. The table lists what each one grants across
+your whole account, why Classroom 50 needs it, and who actually exercises it.
+
+| Scope | Access it grants | Why Classroom 50 needs it | Who uses it |
+|---|---|---|---|
+| `read:user` | Reads your public profile. | Identifies who you are after sign-in. | Everyone. |
+| `read:org` | Reads your organization and team memberships. | Confirms membership and resolves your classroom role; a student accepts their own org invitation. | Everyone. |
+| `repo` | **Full control of all your repositories** — public and private, in every organization, not only the classroom one. GitHub offers no way to narrow it to a single org. | Creating student repositories, committing config and setup files, reading grades (private-repo Releases), and managing repo collaborators. | Everyone. |
+| `workflow` | Commit files under `.github/workflows/` in repositories you can write. | Landing the autograder workflow — teachers during `init`, students when the browser commits the autograde shim on accept. | Everyone (students only for default-autograder accepts). |
+| `admin:org` | Administer organizations you own — invite/remove members, manage teams, change org settings. | Inviting and removing students, managing classroom teams, and locking down org policy. Implies `read:org`. | Teachers only. |
+| `delete_repo` | **Permanently delete repositories.** | Not requested at sign-in. One feature needs it — **Tear down organization** — and Classroom 50 asks for it on demand, then only after an explicit typed confirmation (see the [teacher-authentication note](#2-teacher-authentication) above). | Teachers only, on demand. |
+
+### What a student actually needs versus a teacher
+
+A student's flow only ever exercises three scopes: `read:user` (identify
+themselves), `read:org` (accept their own organization invitation and read
+their own memberships), and `repo` (generate their assignment repository, commit
+their work, add a teammate as a collaborator on a group repository, and read
+their own grades). Default-autograder assignments also need `workflow`, because
+the browser commits the autograde workflow file on accept; template-less and
+no-autograder assignments don't. That's the whole student footprint.
+
+A student never uses `admin:org` or `delete_repo`. Those are organization-owner
+powers — a plain member's token can't perform them on an org they don't own,
+even though the shared grant nominally includes `admin:org`. The app requests
+them because the sign-in flow is shared with teachers, not because a student
+needs them. So the grant is broader than the footprint: the token *can* touch
+all your repositories, but Classroom 50 only ever acts on classroom ones. This
+matches the GitHub CLI's behavior, where `gh teacher login` and `gh student
+login` share one scope set for the same reason.
+
+### Reducing what you grant
+
+The one lever that actually narrows the grant is a **fine-grained personal
+access token**, which is scoped to a single organization instead of your whole
+account. On the sign-in card, open **Other sign-in methods** and pick **Use a
+personal access token (fine-grained)**; you name the org (it becomes the token's
+resource owner) and set Repository access to **All repositories**. See
+[If the proxy domain is blocked](#if-the-proxy-domain-is-blocked) for the full
+walkthrough. A classic OAuth sign-in can't be scoped this way — the `repo` scope
+is all-or-nothing — so the fine-grained token is the tighter-security path for
+anyone who wants to grant less. Why classic OAuth can't be scoped per
+organization, and why sign-in doesn't ask you to pick a teacher or student role,
+are recorded in [Known Limitations](Known-Limitations#requested-but-architecturally-hard).
 
 ---
 
@@ -327,7 +393,7 @@ release` for tags and Releases, and fetches unauthenticated from Pages:
 | File | Triggers | Purpose |
 |------|----------|---------|
 | `publish-pages.yaml` | Push to default branch, `workflow_dispatch` | Deploy `assignments.json`, autograders, shims, `runner.py`, and bundles to Pages. |
-| `collect-scores.yaml` | `workflow_dispatch`, nightly cron | Aggregate `result.json` into `*/scores.json`. |
+| `collect-scores.yaml` | `workflow_dispatch` | Aggregate `result.json` into `*/scores.json`. |
 | `regrade.yaml` | `workflow_dispatch` | Push regrade tags to student repos for an assignment. |
 | `probe-token.yaml` | `workflow_dispatch` | Read-only service-token scope check. |
 | `autograde-runner.yaml` (reusable) | Called by each student's `autograde.yaml` | Grade, publish, update the latest pointer. |

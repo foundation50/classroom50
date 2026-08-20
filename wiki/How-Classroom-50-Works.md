@@ -47,7 +47,7 @@ hosted service can. As a result:
   team name or re-checking organization settings. Some upkeep occurs only
   after an owner signs in and loads the page.
 - **Background jobs require setup.** Score collection and regrading run as
-  GitHub Actions on a schedule, but only after you provision the
+  GitHub Actions, but only after you provision the
   [service token](#the-service-token) that lets them act while you are offline.
 
 For teachers, this means administering Classroom 50 is closer to administering
@@ -71,7 +71,7 @@ read it:
 - **CLI writes** (`roster add`, `staff add`, `assignment add`, …) update the
   `classroom50` repository and GitHub teams immediately, but only for the thing they
   change — they don't run the web app's broader sync.
-- **Scores** refresh only when collection runs: nightly, or on demand with
+- **Scores** refresh only when collection runs: on demand with
   **Sync now** / `collect-scores.yaml`.
 
 `gh teacher roster sync <org> <classroom> --write` is the one CLI command that
@@ -377,8 +377,8 @@ against them generally work the same as they did with GitHub Classroom.
 
 The **service token** is a fine-grained personal access token stored as a secret
 in your `classroom50` repository. The background workflows (score collection, regrade) use it
-to read and update student repositories across the org — work that can't run as
-"you" because it happens on a schedule when you're not online. It's the same
+to read and update student repositories across the org — work that runs as the
+token, not as your interactive session. It's the same
 token whether you set it up in the web app or the CLI, and you need only one per
 organization. See [the service-token setup](CLI-Teacher-Guide#create-the-service-token).
 

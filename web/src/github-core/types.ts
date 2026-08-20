@@ -277,8 +277,8 @@ export type GitHubWorkflowRun = {
   // Human title of the run (often the head commit subject). Present on the list
   // endpoint; used to label a run when the workflow file isn't mapped.
   display_title?: string
-  // Who triggered the run (a teacher's token, or the Actions bot for cron). Used
-  // for actor attribution in the activity timeline.
+  // Who triggered the run (a teacher's token, or the Actions bot for a
+  // scheduled run). Used for actor attribution in the activity timeline.
   triggering_actor?: {
     login: string
     avatar_url?: string

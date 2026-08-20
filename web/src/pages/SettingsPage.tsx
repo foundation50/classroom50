@@ -10,7 +10,7 @@ import {
   cx,
 } from "@/components/ui"
 import { useTranslation } from "react-i18next"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import useGetOrgs from "@/hooks/useGetOrgs"
 import {
   isOwnedReadyOrg,
@@ -24,6 +24,12 @@ import { TokenHealthChip } from "@/components/status/TokenHealthChip"
 import { useReducedMotion, type MotionPref } from "@/hooks/useReducedMotion"
 import { useTheme, type ThemePref } from "@/hooks/useTheme"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
+import {
+  useDeleteRepoScopeState,
+  useCanElevateInApp,
+} from "@/context/github/GitHubProvider"
+import { ElevatedAccessModal } from "@/auth/ElevatedAccessModal"
+import { RevokeAccessLink } from "@/auth/RevokeAccessLink"
 
 // Owned + Classroom 50-ready orgs are the only ones with a manageable service
 // token (a non-owner can't read/set it). The section reads token health for
@@ -111,6 +117,88 @@ function ServiceTokensSection({ highlighted }: { highlighted?: boolean }) {
         </ul>
       )}
     </SettingsSectionCard>
+  )
+}
+
+// Rendered only for owners of a Classroom 50 org, the only people who can run
+// teardown. Students share this Settings page, and offering them the very scope
+// #655 removed would widen the blast radius of a stolen token for no benefit.
+//
+// Rendered as actions, not a preference switch: each direction is a full re-auth
+// the user can abandon, so a switch would misreport state.
+function ElevatedPermissionsSection({
+  highlighted,
+}: {
+  highlighted?: boolean
+}) {
+  const { t } = useTranslation()
+  const scopeState = useDeleteRepoScopeState()
+  const canElevateInApp = useCanElevateInApp()
+  const [elevate, setElevate] = useState<null | boolean>(null)
+  const { data: orgs = [] } = useGetOrgs()
+
+  const ownsReadyOrg = useMemo(() => orgs.some(isOwnedReadyOrg), [orgs])
+  if (!ownsReadyOrg) return null
+
+  return (
+    <>
+      <SettingsSectionCard
+        id="elevated-permissions"
+        heading={t("settings.elevatedScope.heading")}
+        subheading={t("settings.elevatedScope.subheading")}
+        highlighted={highlighted}
+      >
+        <div className="flex flex-col items-start gap-2">
+          <p className="text-sm text-base-content/70">
+            {t(`settings.elevatedScope.status.${scopeState}`)}
+          </p>
+          {canElevateInApp ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="warning"
+                  size="sm"
+                  // Nothing to request when the permission is already observed. Stays
+                  // enabled on "unknown" so a session we can't read can still ask.
+                  disabled={scopeState === "granted"}
+                  onClick={() => setElevate(true)}
+                >
+                  {t("settings.elevatedScope.requestButton")}
+                </Button>
+                {scopeState === "granted" && (
+                  // Only offer this once observed: an unknown session must not be
+                  // told it holds a permission we couldn't read.
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setElevate(false)}
+                  >
+                    {t("settings.elevatedScope.removeButton")}
+                  </Button>
+                )}
+              </div>
+              {/* Always reachable: signing in again only narrows this browser's
+                  token, so GitHub is the only place the grant itself goes away —
+                  and it's needed most right after the local narrowing, when the
+                  state is no longer "granted". */}
+              <RevokeAccessLink />
+            </>
+          ) : (
+            // A token's permissions are fixed when it's created on GitHub, so
+            // there is nothing to request here; running the OAuth flow would
+            // replace this session with a different kind of token.
+            <p className="text-sm text-base-content/70">
+              {t("settings.elevatedScope.patNote")}
+            </p>
+          )}
+        </div>
+      </SettingsSectionCard>
+      <ElevatedAccessModal
+        open={elevate !== null}
+        elevated={elevate ?? true}
+        onClose={() => setElevate(null)}
+      />
+    </>
   )
 }
 
@@ -390,6 +478,9 @@ const SettingsPage = () => {
           <HiddenOrgsSection highlighted={highlightedId === "hidden-orgs"} />
           <ServiceTokensSection
             highlighted={highlightedId === "service-tokens"}
+          />
+          <ElevatedPermissionsSection
+            highlighted={highlightedId === "elevated-permissions"}
           />
         </SettingsGroup>
 

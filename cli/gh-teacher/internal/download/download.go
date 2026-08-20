@@ -121,7 +121,7 @@ func NewCmd() *cobra.Command {
 			"<classroom>-<assignment>_submissions_<timestamp>/. Pass -d/--dir to\n" +
 			"override (value used literally, no timestamp). Existing clones on disk\n" +
 			"are skipped on the clone step, but result.json is still refreshed so a\n" +
-			"re-run after the nightly collect picks up the newest scores.",
+			"re-run after the next collect run picks up the newest scores.",
 		Example: "  gh teacher download cs50-fall-2026 cs-principles hello\n" +
 			"  gh teacher download -d submissions cs50-fall-2026 cs-principles hello\n" +
 			"  gh teacher download --by-pattern cs50-fall-2026 cs-principles hello",

@@ -24,14 +24,75 @@ import {
 import { getRepo } from "@/github-core/repoReads"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { mapWithConcurrency } from "@/util/concurrency"
+import { DELETE_REPO_SCOPE } from "@/auth/constants"
+import {
+  describeLocalizedMessage,
+  type LocalizedMessage,
+} from "@/types/localizedMessage"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("mutations:teardown")
 
-export class TeardownScopeError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "TeardownScopeError"
+// An abort that stopped the run partway. Carries the progress at that moment: a
+// wall can arrive after some repositories are already permanently deleted, so a
+// bare "you need permission" message would hide the data loss. The partial/plain
+// key choice lives here so no subclass can forget it.
+export class TeardownAbortError extends Error {
+  readonly localized: LocalizedMessage
+  readonly deleted: string[]
+  readonly failed: string[]
+
+  constructor(
+    name: string,
+    keys: { plain: string; partial: string },
+    deleted: string[],
+    failed: string[],
+  ) {
+    const localized: LocalizedMessage =
+      deleted.length > 0
+        ? { key: keys.partial, params: { count: deleted.length } }
+        : { key: keys.plain }
+    super(describeLocalizedMessage(localized))
+    this.name = name
+    this.localized = localized
+    this.deleted = deleted
+    this.failed = failed
+  }
+}
+
+export class TeardownScopeError extends TeardownAbortError {
+  constructor(deleted: string[], failed: string[]) {
+    super(
+      "TeardownScopeError",
+      {
+        plain: "orgSettings.teardown.needsDeleteScope",
+        partial: "orgSettings.teardown.needsDeleteScopePartial",
+      },
+      deleted,
+      failed,
+    )
+  }
+}
+
+// A 403 that is not a scope gap: an SSO-gated organization, or a refusal whose
+// headers prove the token's scopes are sufficient. Distinct from
+// TeardownScopeError so the UI doesn't offer an elevation that can't help.
+export class TeardownForbiddenError extends TeardownAbortError {
+  constructor(kind: "sso" | "other", deleted: string[], failed: string[]) {
+    super(
+      "TeardownForbiddenError",
+      kind === "sso"
+        ? {
+            plain: "orgSettings.teardown.ssoRequired",
+            partial: "orgSettings.teardown.ssoRequiredPartial",
+          }
+        : {
+            plain: "orgSettings.teardown.forbidden",
+            partial: "orgSettings.teardown.forbiddenPartial",
+          },
+      deleted,
+      failed,
+    )
   }
 }
 
@@ -42,18 +103,30 @@ export class TeardownMarkerError extends Error {
   }
 }
 
+// Partial progress carried by an abort, if any, so a caller doesn't have to know
+// which of the abort subclasses it caught: an abort that deleted nothing (a
+// marker re-check failure, a network error) reports none, so callers can skip
+// cache work for a run that changed nothing.
+export function teardownProgressOf(
+  err: unknown,
+): { deleted: string[]; failed: string[] } | undefined {
+  if (!(err instanceof TeardownAbortError)) return undefined
+  return { deleted: err.deleted, failed: err.failed }
+}
+
 // A secondary rate limit aborted the run. Distinct from TeardownScopeError so
 // the UI can offer a retry, and carries partial progress for reporting.
-export class TeardownRateLimitError extends Error {
-  deleted: string[]
-  failed: string[]
+export class TeardownRateLimitError extends TeardownAbortError {
   constructor(deleted: string[], failed: string[]) {
     super(
-      "Hit a GitHub rate limit while deleting repositories. Some repositories may already be deleted; wait a moment and re-run teardown to finish.",
+      "TeardownRateLimitError",
+      {
+        plain: "orgSettings.teardown.rateLimited",
+        partial: "orgSettings.teardown.rateLimitedPartial",
+      },
+      deleted,
+      failed,
     )
-    this.name = "TeardownRateLimitError"
-    this.deleted = deleted
-    this.failed = failed
   }
 }
 
@@ -161,9 +234,6 @@ export type TeardownResult = {
 }
 
 const MAX_DELETE_ATTEMPTS = 4
-
-const DELETE_SCOPE_MESSAGE =
-  "Deleting repositories was forbidden (403). Teardown needs the `delete_repo` OAuth scope, which is not granted by default. Re-authenticate with that scope, or archive repositories instead."
 
 // "1 repository" / "3 repositories" — count + correctly-pluralized noun.
 function countLabel(count: number, singular: string, plural: string): string {
@@ -333,9 +403,20 @@ export async function executeTeardown(
   })
 
   let scopeWall = false
+  let ssoWall = false
+  let otherForbidden = false
   let rateLimited = false
 
   const tryDelete = async (repo: string) => {
+    // A scope/SSO wall or a throttle is a property of the token, not the repo, so
+    // every remaining delete is guaranteed to fail the same way. Stop issuing
+    // them: on a large org that is hundreds of doomed requests burning rate
+    // limit before the run aborts anyway. `otherForbidden` is deliberately not
+    // here — an org policy or protected repo is genuinely per-repo.
+    if (scopeWall || ssoWall || rateLimited) {
+      failed.push(repo)
+      return
+    }
     try {
       const outcome = await deleteRepoWithRetry(client, plan.org, repo)
       if (outcome === "deleted") {
@@ -354,9 +435,31 @@ export async function executeTeardown(
         failed.push(repo)
       }
     } catch (err) {
-      // deleteRepoWithRetry only throws for an unretryable scope 403.
+      // deleteRepoWithRetry only throws for an unretryable 403. Not every 403 is
+      // a scope gap: an SSO-gated org or a secondary rate limit carrying neither
+      // a remaining=0 nor a Retry-After also lands here, and calling those a
+      // scope wall sends the teacher to an elevation flow that can't help (they
+      // may already hold delete_repo), looping on the same failure.
       if (err instanceof GitHubAPIError && err.isForbidden) {
-        scopeWall = true
+        if (err.isSsoRequired) {
+          ssoWall = true
+        } else if (
+          err.isScopeGap ||
+          err.oauthScopes === null ||
+          !err.grantsScope(DELETE_REPO_SCOPE)
+        ) {
+          // A proven gap, a 403 whose scope headers GitHub didn't send, or one
+          // whose granted scopes visibly lack delete_repo. The last case matters
+          // because GitHub often sends an empty X-Accepted-OAuth-Scopes, which
+          // makes isScopeGap unprovable even for a token that plainly can't
+          // delete — misreporting that as an org-policy problem would send the
+          // teacher to settings instead of the elevation that actually fixes it.
+          scopeWall = true
+        } else {
+          // delete_repo is granted, so the refusal is something else: an org
+          // policy or a protected repository.
+          otherForbidden = true
+        }
       }
       log.error("teardown: repo delete errored", {
         org: plan.org,
@@ -372,6 +475,20 @@ export async function executeTeardown(
   // A scope 403 is unrecoverable; a throttle is retryable. Both abort before
   // the marker so the run stays re-runnable.
   const abortIfBlocked = () => {
+    if (ssoWall || otherForbidden) {
+      log.error("teardown aborted: forbidden (not a scope gap)", {
+        org: plan.org,
+        sso: ssoWall,
+        deleted: deleted.length,
+        failed: failed.length,
+        record: true,
+      })
+      throw new TeardownForbiddenError(
+        ssoWall ? "sso" : "other",
+        deleted,
+        failed,
+      )
+    }
     if (scopeWall) {
       log.error("teardown aborted: missing delete_repo scope", {
         org: plan.org,
@@ -379,7 +496,7 @@ export async function executeTeardown(
         failed: failed.length,
         record: true,
       })
-      throw new TeardownScopeError(DELETE_SCOPE_MESSAGE)
+      throw new TeardownScopeError(deleted, failed)
     }
     if (rateLimited) {
       log.warn("teardown aborted: rate limited (re-runnable)", {

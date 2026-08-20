@@ -13,17 +13,18 @@ import { Alert, Button, HelpTooltip, Input } from "@/components/ui"
 // The classic-PAT scopes to request, derived from REQUIRED_SCOPES (the same
 // source missingScopes() validates against) so the tooltip list and the
 // pre-checked token URL can't drift from DEFAULT_GITHUB_SCOPE. We request the
-// full OAuth scope set verbatim (including read:org, even though admin:org
-// implies it) so a token created via this link grants exactly what the OAuth
-// flow would. Ordered to match GitHub's token page; scopes without an explicit
-// rank sort to the end so a newly added required scope still appears.
+// full base OAuth scope set verbatim (including read:org, even though admin:org
+// implies it) so a token created via this link grants exactly what a normal
+// OAuth sign-in would. delete_repo is elevated-only and intentionally excluded;
+// a teacher who needs teardown requests elevated permissions separately (#655).
+// Ordered to match GitHub's token page; scopes without an explicit rank sort to
+// the end so a newly added required scope still appears.
 const PAT_SCOPE_ORDER = [
   "repo",
   "workflow",
   "admin:org",
   "read:org",
   "read:user",
-  "delete_repo",
 ]
 const REQUIRED_PAT_SCOPES = [...REQUIRED_SCOPES].sort((a, b) => {
   const ai = PAT_SCOPE_ORDER.indexOf(a)

@@ -25,7 +25,7 @@ see [Managing Actions cost](Managing-Actions-Cost).
    commit also gets a `classroom50/autograde` commit status, and the student's
    **View grade** link opens the Release.
 5. The **score-collection** workflow gathers the **collected scores**
-   (`scores.json` in your `classroom50` repository) — nightly, or on demand with
+   (`scores.json` in your `classroom50` repository) — on demand with
    **Sync now** on the submissions page. That's what the web app's submissions
    page and both CSV exports read. See [Reading results](#reading-results).
 
@@ -345,7 +345,7 @@ Every graded submission produces the same three records:
 | **Collected score** | `scores.json` in the `classroom50` repository, after collection | What the submissions page and the CSV exports read: score, submission time, links, late flag, and full attempt history. |
 
 Releases and statuses appear the moment grading finishes. The collected scores
-lag until **collection** runs — nightly, or on demand with **Sync now** on the
+lag until **collection** runs — on demand with **Sync now** on the
 submissions page (`gh workflow run collect-scores.yaml` from the shell). If a
 student says "I submitted" and you see no score, sync first.
 

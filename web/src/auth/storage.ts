@@ -1,5 +1,6 @@
 import { GITHUB_AUTH_SESSION, GITHUB_AUTH_STORAGE } from "./constants"
 import { isSafeReturnTo } from "./returnTo"
+import type { AuthMethod } from "./types"
 
 function canUseBrowserStorage() {
   return typeof window !== "undefined"
@@ -20,21 +21,42 @@ export function getStoredGithubScope() {
   return localStorage.getItem(GITHUB_AUTH_STORAGE.SCOPE_GRANTED) ?? ""
 }
 
+// How the stored session signed in, or null when unknowable: a session persisted
+// before this key existed, or a value localStorage no longer recognizes (it is
+// user-writable, so an unrecognized string must not be trusted as a method).
+export function getStoredAuthMethod(): AuthMethod | null {
+  if (!canUseBrowserStorage()) return null
+  const stored = localStorage.getItem(GITHUB_AUTH_STORAGE.AUTH_METHOD)
+  return stored === "oauth" || stored === "pat" ? stored : null
+}
+
 export function persistGithubClientId(clientId: string) {
   if (!canUseBrowserStorage()) return
   localStorage.setItem(GITHUB_AUTH_STORAGE.CLIENT_ID, clientId)
 }
 
-export function persistGithubToken(token: string, scope = "") {
+export function persistGithubToken(
+  token: string,
+  scope = "",
+  authMethod?: AuthMethod,
+) {
   if (!canUseBrowserStorage()) return
   localStorage.setItem(GITHUB_AUTH_STORAGE.TOKEN, token)
   localStorage.setItem(GITHUB_AUTH_STORAGE.SCOPE_GRANTED, scope)
+  // Remove rather than leave a stale value: a caller that doesn't know the
+  // method must produce "unknown", not inherit the previous session's.
+  if (authMethod) {
+    localStorage.setItem(GITHUB_AUTH_STORAGE.AUTH_METHOD, authMethod)
+  } else {
+    localStorage.removeItem(GITHUB_AUTH_STORAGE.AUTH_METHOD)
+  }
 }
 
 export function clearGithubToken() {
   if (!canUseBrowserStorage()) return
   localStorage.removeItem(GITHUB_AUTH_STORAGE.TOKEN)
   localStorage.removeItem(GITHUB_AUTH_STORAGE.SCOPE_GRANTED)
+  localStorage.removeItem(GITHUB_AUTH_STORAGE.AUTH_METHOD)
 }
 
 export function saveOAuthSession(input: {

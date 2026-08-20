@@ -4,17 +4,26 @@ import { Trans, useTranslation } from "react-i18next"
 import { TriangleAlert } from "lucide-react"
 
 import { ConfirmModal } from "@/components/modals"
-import { Button, MonoLtr } from "@/components/ui"
+import { Button, HelpTooltip, MonoLtr, cx } from "@/components/ui"
 import {
   formatTeardownResult,
+  TeardownAbortError,
   TeardownMarkerError,
-  TeardownRateLimitError,
   TeardownScopeError,
   type TeardownPlan,
 } from "@/domain/teardown"
+import {
+  localizedMessageOf,
+  resolveLocalizedMessage,
+} from "@/types/localizedMessage"
 import { usePlanTeardown } from "@/hooks/mutations/usePlanTeardown"
 import { useExecuteTeardown } from "@/hooks/mutations/useExecuteTeardown"
 import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
+import {
+  useHasDeleteRepoScope,
+  useCanElevateInApp,
+} from "@/context/github/GitHubProvider"
+import { ElevatedAccessModal } from "@/auth/ElevatedAccessModal"
 import SettingsSection from "./SettingsSection"
 import { CalloutDiv, CalloutText } from "@/lib/motionComponents"
 import { logger } from "@/lib/logger"
@@ -38,10 +47,18 @@ const TeardownSection = ({
 }) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const hasDeleteRepo = useHasDeleteRepoScope()
+  const canElevateInApp = useCanElevateInApp()
+  const [elevateOpen, setElevateOpen] = useState(false)
 
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState<TeardownPlan | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // `canElevate` rides with the message so the callout can only offer elevation
+  // for the wall elevation actually fixes; the two are always written together.
+  const [error, setError] = useState<{
+    message: string
+    canElevate: boolean
+  } | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
   const openMutation = usePlanTeardown(org)
@@ -54,11 +71,13 @@ const TeardownSection = ({
       },
       onError: (err) => {
         log.warn("teardown plan failed", { org, err })
-        setError(
-          err instanceof TeardownMarkerError
-            ? err.message
-            : t("orgSettings.teardown.prepareError"),
-        )
+        setError({
+          message:
+            err instanceof TeardownMarkerError
+              ? err.message
+              : t("orgSettings.teardown.prepareError"),
+          canElevate: false,
+        })
       },
     })
 
@@ -84,27 +103,82 @@ const TeardownSection = ({
       }
     >
       {error && (
-        <CalloutDiv className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
-          {error}
+        <CalloutDiv className="flex flex-col items-start gap-2 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+          <span>{error.message}</span>
+          {error.canElevate &&
+            (canElevateInApp ? (
+              // The message names elevation as the remedy, so make it reachable.
+              <Button
+                variant="warning"
+                size="sm"
+                onClick={() => setElevateOpen(true)}
+              >
+                {t("orgSettings.teardown.grantButton")}
+              </Button>
+            ) : (
+              // A PAT's permissions are fixed at creation, so the only fix is a
+              // replacement token — the elevation flow would swap their session.
+              <span>{t("orgSettings.teardown.needsDeleteScopePat")}</span>
+            ))}
         </CalloutDiv>
       )}
       {done && (
         <CalloutText className="text-sm text-success">{done}</CalloutText>
       )}
 
-      <Button
-        variant="error"
-        size="sm"
-        className={error || done ? "mt-4" : ""}
-        disabled={openMutation.isPending}
-        onClick={() => {
-          if (!openMutation.isPending) openTeardown()
-        }}
-      >
-        {openMutation.isPending
-          ? t("orgSettings.teardown.preparing")
-          : t("orgSettings.teardown.button")}
-      </Button>
+      {hasDeleteRepo ? (
+        <Button
+          variant="error"
+          size="sm"
+          className={error || done ? "mt-4" : ""}
+          disabled={openMutation.isPending}
+          onClick={() => {
+            if (!openMutation.isPending) openTeardown()
+          }}
+        >
+          {openMutation.isPending
+            ? t("orgSettings.teardown.preparing")
+            : t("orgSettings.teardown.button")}
+        </Button>
+      ) : (
+        // Offer the elevation up front rather than after a failed attempt (#655).
+        <div
+          className={cx(
+            "flex flex-wrap items-center gap-2",
+            error || done ? "mt-4" : "",
+          )}
+        >
+          <span className="inline-flex items-center gap-1 text-sm text-base-content/70">
+            {t("orgSettings.teardown.insufficientPermission")}
+            <HelpTooltip
+              position="top"
+              help={
+                canElevateInApp
+                  ? t("orgSettings.teardown.insufficientPermissionHelp")
+                  : t("orgSettings.teardown.insufficientPermissionHelpPat")
+              }
+            />
+          </span>
+          {canElevateInApp ? (
+            <Button
+              variant="warning"
+              size="sm"
+              onClick={() => setElevateOpen(true)}
+            >
+              {t("orgSettings.teardown.grantButton")}
+            </Button>
+          ) : (
+            <span className="text-sm text-base-content/70">
+              {t("orgSettings.teardown.needsDeleteScopePat")}
+            </span>
+          )}
+        </div>
+      )}
+
+      <ElevatedAccessModal
+        open={elevateOpen}
+        onClose={() => setElevateOpen(false)}
+      />
 
       <ConfirmModal
         open={open}
@@ -199,11 +273,25 @@ const TeardownSection = ({
               },
             })
           } catch (err) {
-            if (
-              err instanceof TeardownScopeError ||
-              err instanceof TeardownRateLimitError
-            ) {
-              throw err
+            // Backstop: the up-front gate should have caught the scope case, but
+            // a token that lost the scope mid-session still 403s.
+            const localized = localizedMessageOf(err)
+            if (localized) {
+              const message = resolveLocalizedMessage(t, localized)
+              // Hoist the message out of the confirmation whenever it is the only
+              // record of real data loss, or whenever elevation is the remedy the
+              // message names. The modal's inline error dies with the modal, and
+              // stacking the elevation dialog over it would hide it (that
+              // dialog's first button navigates the page away).
+              const isScopeWall = err instanceof TeardownScopeError
+              const lostData =
+                err instanceof TeardownAbortError && err.deleted.length > 0
+              if (isScopeWall || lostData) {
+                setOpen(false)
+                setError({ message, canElevate: isScopeWall })
+                return
+              }
+              throw new Error(message, { cause: err })
             }
             throw new Error(t("orgSettings.teardown.executeError"), {
               cause: err,

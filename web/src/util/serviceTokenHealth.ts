@@ -4,7 +4,7 @@ import type { ServiceTokenExpiry } from "@/github-core/queries"
 // UI turns this into a status chip and folds the set into an
 // "N of M orgs need attention" summary.
 //
-// - `expired` / `missing`: the nightly collect is (or will be) failing now.
+// - `expired` / `missing`: collection is (or will be) failing now.
 // - `expiringSoon`: rotate before the window closes.
 // - `expiryUntracked`: the token is set but no expiry was recorded (rotated via
 //   the CLI, provisioned before we tracked expiry, or a swallowed variable

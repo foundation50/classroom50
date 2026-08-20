@@ -119,10 +119,10 @@ export async function archiveRepo(
   )
 }
 
-// DELETE /repos/{owner}/{repo}. Needs the delete_repo OAuth scope. A token
-// granted before delete_repo was requested (an older session) still 403s, so
-// callers wanting "delete if possible, else archive" should catch the 403.
-// 404 = success.
+// DELETE /repos/{owner}/{repo}. Needs the delete_repo OAuth scope, which normal
+// sign-in does not request (#655) — so a base-scope session 403s here and only
+// an elevated one succeeds. Callers wanting "delete if possible, else archive"
+// should catch the 403. 404 = success.
 export async function deleteRepo(
   client: GitHubClient,
   input: { owner: string; repo: string },

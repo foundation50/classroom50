@@ -503,7 +503,7 @@ on state without parsing output:
 | `1` | An error, or a degraded read left the pass incomplete. Nothing was removed and no invite team was deleted; re-run once GitHub is healthy. |
 | `2` | A dry run found changes pending. |
 
-A nightly check that only reports what's outstanding:
+A scheduled check that only reports what's outstanding:
 
 ```sh
 gh teacher roster sync "$ORG" "$CLASSROOM"
@@ -635,9 +635,9 @@ assignment's bucket in `scores.json` gets a `collected_at` UTC timestamp, so
 you (and the web app's freshness strip) can tell when each assignment was last
 walked; a scoped run leaves sibling assignments' buckets untouched.
 
-The workflow also runs nightly (`17 4 * * *` UTC) across **every** classroom,
-so scores land daily even if you never trigger it. To disable that, comment out
-the `schedule:` block in `.github/workflows/collect-scores.yaml`.
+Run collection from the Actions tab on `<org>/classroom50`, from your shell, or
+with the web app's per-assignment **Sync now** button. Scores refresh when you
+(or Sync now) trigger a run.
 
 <details>
 <summary>What each collection run does</summary>

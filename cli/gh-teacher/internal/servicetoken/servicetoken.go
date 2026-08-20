@@ -113,7 +113,7 @@ func SecretExists(client githubapi.Client, owner, repo string) (bool, error) {
 // /orgs/{org}/teams/{slug}/repos/... — a scope not implied by Contents), AND
 // org Members: Read (collection is team-driven and lists the classroom team's
 // members — also not implied by any repository permission). Catches a
-// misconfigured PAT at provisioning time rather than as an opaque cron 403.
+// misconfigured PAT at provisioning time rather than as an opaque collect-time 403.
 func ValidateToken(token []byte, org string) error {
 	return ValidateTokenVerbose(token, org, io.Discard)
 }
@@ -122,7 +122,7 @@ func ValidateToken(token []byte, org string) error {
 // the org-members probe is INCONCLUSIVE (401/5xx/timeout after a proven-live
 // repo read), validation still passes (fail-open) but warns to `out` so the
 // teacher knows Members: Read wasn't positively confirmed and should run the
-// `probe-token` workflow before relying on the nightly collect.
+// `probe-token` workflow before relying on collection.
 func ValidateTokenVerbose(token []byte, org string, out io.Writer) error {
 	tokenClient, err := githubapi.NewClient(githubapi.ClientOptions{
 		AuthToken: string(token),
@@ -175,7 +175,7 @@ func validateTokenWithClient(tokenClient githubapi.Client, org string, out io.Wr
 
 	// Contents is proven, but collect grants staff teams repo access, needing
 	// Administration (not implied by Contents); reject an admin-less PAT here
-	// rather than as a cron 403 on the first grant.
+	// rather than as a collect-time 403 on the first grant.
 	if !repo.Permissions.Admin {
 		return fmt.Errorf("the supplied token can read and write %s/%s but lacks admin access (Administration: write) — collecting scores grants staff teams (e.g., TAs) read access to student repos, which needs the Administration permission. Re-create the fine-grained PAT with Resource owner = %q, Repository access = All repositories, and Repository permissions -> Contents: Read and write AND Actions: Read and write AND Administration: Read and write", org, configrepo.ConfigRepoName, org)
 	}
@@ -194,7 +194,7 @@ func validateTokenWithClient(tokenClient githubapi.Client, org string, out io.Wr
 		// proceed but WARN — Members: Read wasn't confirmed, and an
 		// unconfirmed Members-less token 403s at collect time. Point at
 		// probe-token.
-		_, _ = fmt.Fprintf(out, "Warning: couldn't confirm the token's Organization -> Members: Read scope (%v). Proceeding, since the repo read proved the token live, but if it in fact lacks Members: Read, the nightly collect will 403 and skip. Run the `probe-token` workflow to verify all scopes before the first collect.\n", err)
+		_, _ = fmt.Fprintf(out, "Warning: couldn't confirm the token's Organization -> Members: Read scope (%v). Proceeding, since the repo read proved the token live, but if it in fact lacks Members: Read, collection will 403 and skip. Run the `probe-token` workflow to verify all scopes before the first collect.\n", err)
 	}
 	return nil
 }

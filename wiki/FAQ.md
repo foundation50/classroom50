@@ -237,10 +237,9 @@ GitHub's side.
 
 A few common reasons:
 
-- **Scores haven't been collected yet.** Collection runs nightly; click
-  **Sync now** on the submissions page to pull this assignment's latest
-  results immediately (the sync is scoped to the assignment you're viewing, so
-  it's fast even in a big classroom).
+- **Scores haven't been collected yet.** Click **Sync now** on the submissions
+  page to pull this assignment's latest results (the sync is scoped to the
+  assignment you're viewing, so it's fast even in a big classroom).
 - **GitHub Pages is still deploying.** Right after a config change, published
   files can take a few minutes to go live.
 - **The student's repo predates a workflow update.** If you updated Classroom 50
@@ -334,13 +333,33 @@ git operations against those repos generally carry over.
 Classroom 50 authenticates the same way the GitHub CLI does, using GitHub's
 `repo` scope. That scope is all-or-nothing — GitHub provides no way to limit it
 to a single organization's repositories — so the grant covers your repos even
-though Classroom 50 only acts on classroom ones. This matches the CLI's behavior.
+though Classroom 50 only acts on classroom ones. This matches the CLI's
+behavior. For what every scope grants and why, see
+[Permissions and access](GitHub-Integration#permissions-and-access);
+if you want to grant less, a fine-grained token scoped to one organization is
+the tighter path (see
+[Reducing what you grant](GitHub-Integration#reducing-what-you-grant)).
 
-### Why does signing in ask for permission to "Delete repositories"?
+### Do teachers and students grant the same access?
 
-One feature uses it: **Tear down organization**, which resets an organization
-by deleting the repositories Classroom 50 manages, and only after you type an
-explicit confirmation. Nothing else ever deletes a repository. See
+Yes. Sign-in requests one scope set for everyone, on purpose: one person can be
+both a teacher and a student (a teacher testing an assignment, a TA who also
+takes the course), so Classroom 50 never asks you to declare a role at sign-in.
+What you can *do* is decided afterward by your role in the organization and
+classroom, not by your token — a student's grant is broader than what a student
+actually uses (they never exercise the organization-administration or
+repository-deletion powers). To grant less than the default, sign in with a
+fine-grained token scoped to one organization. Why per-organization classic
+sign-in and separate teacher/student profiles aren't offered is recorded in
+[Known Limitations](Known-Limitations#requested-but-architecturally-hard).
+
+### Why does tearing down an organization ask for an extra permission?
+
+Signing in does not request permission to delete repositories. One feature needs
+it: **Tear down organization**, which resets an organization by deleting every
+repository in it, and only after you type an explicit confirmation. When you use
+it, Classroom 50 asks you to request that permission and sign in again. Nothing
+else ever deletes a repository. See
 [the full explanation](GitHub-Integration#2-teacher-authentication) in GitHub
 Integration.
 

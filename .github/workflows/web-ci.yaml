@@ -122,15 +122,21 @@ jobs:
 
       # On a cache hit the browser binary is present but its OS deps may not be.
       # `install-deps` shells out to apt, so it can hang on a transient
-      # mirror/network blip — give it its own short timeout and a couple of
-      # retries so one flaky apt call fails fast and self-heals instead of
-      # burning the whole job budget and cancelling the lane (a hung apt here
-      # once ate all 10 minutes and failed the release CI).
+      # mirror/network blip — retry so one flaky apt call self-heals instead of
+      # failing the lane (a hung apt here once ate all 10 minutes and failed the
+      # release CI).
+      #
+      # The per-attempt `timeout` is what makes the retries reachable: a
+      # step-level timeout-minutes kills the whole loop, so a hang — the exact
+      # failure mode above — never reaches attempt 2. Bounding each attempt turns
+      # a stall into a non-zero exit the loop can act on. The step ceiling stays
+      # above 3 attempts plus backoff (3*100s + 30s) so the loop reports the
+      # failure itself rather than being cancelled mid-retry.
       - name: Install Playwright browser deps
-        timeout-minutes: 4
+        timeout-minutes: 6
         run: |
           for attempt in 1 2 3; do
-            if npx playwright install-deps chromium; then
+            if timeout 100s npx playwright install-deps chromium; then
               exit 0
             fi
             echo "playwright install-deps failed (attempt $attempt); retrying..." >&2

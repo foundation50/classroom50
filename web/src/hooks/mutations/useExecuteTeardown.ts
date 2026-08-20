@@ -5,7 +5,7 @@ import {
 } from "@tanstack/react-query"
 import {
   executeTeardown,
-  TeardownRateLimitError,
+  teardownProgressOf,
   type TeardownPlan,
 } from "@/domain/teardown"
 import { githubKeys } from "@/github-core/queries"
@@ -25,15 +25,18 @@ function forgetSetupState(queryClient: QueryClient, org: string) {
 }
 
 // Execute a teardown (delete every repo + classroom team, marker deleted last).
-// Refreshes the org list on every outcome; only forgets the setup-gating caches
-// when the marker (config repo) was actually deleted — a retained marker (any
-// partial run, including the rate-limit abort) leaves the org still set up, so
-// evicting would flash the wizard back to step 1. Does NOT swallow the error —
+// Refreshes the org list on every completed run; only forgets the setup-gating
+// caches when the marker (config repo) was actually deleted — a retained marker
+// (any partial run, including the rate-limit abort) leaves the org still set up,
+// so evicting would flash the wizard back to step 1. Does NOT swallow the error —
 // mutateAsync still REJECTS so the caller's ConfirmModal shows the failure
 // inline; the clean-run home-redirect stays at the call site (see ./README.md).
 export function useExecuteTeardown(plan: TeardownPlan | null) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
+
+  const refreshOrgs = () =>
+    void queryClient.invalidateQueries({ queryKey: ["orgs"] })
 
   return useMutation({
     mutationFn: async () => {
@@ -42,15 +45,15 @@ export function useExecuteTeardown(plan: TeardownPlan | null) {
     },
     onSuccess: (result) => {
       if (!plan) return
-      void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      refreshOrgs()
       if (result?.markerDeleted) forgetSetupState(queryClient, plan.org)
     },
     onError: (err) => {
-      // A rate-limit abort may have deleted some repos (marker always retained),
-      // so refresh the org view. Rejection still propagates to the caller.
-      if (err instanceof TeardownRateLimitError) {
-        void queryClient.invalidateQueries({ queryKey: ["orgs"] })
-      }
+      // Only refresh when the run actually deleted something: an abort that
+      // changed nothing (marker re-check, network failure) would otherwise
+      // discard the org cache and make the next dashboard visit refetch every
+      // org summary for no reason. Rejection still propagates.
+      if (teardownProgressOf(err)?.deleted.length) refreshOrgs()
     },
   })
 }

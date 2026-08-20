@@ -286,7 +286,7 @@ def test_staff_team_404_is_skip_not_fail(monkeypatch):
 
 def test_staff_team_403_fails_the_green_while_red_gap(monkeypatch):
     # A secret/invisible staff team the token can't see -> the grant would
-    # silently grant TAs nothing at cron. The probe must fail RED here.
+    # silently grant TAs nothing at collect time. The probe must fail RED here.
     def boom(*a, **k):
         raise _http_error(403)
 

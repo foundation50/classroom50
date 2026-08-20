@@ -83,7 +83,7 @@ pre-filled GitHub page set up the required permissions for you; the full
 permission table is in
 [GitHub Integration](GitHub-Integration#4-fine-grained-pat-for-score-collection).
 Classroom 50 stores it as the `CLASSROOM50_SERVICE_TOKEN` secret in your
-`classroom50` repository, where the daily score-collection workflow uses it.
+`classroom50` repository, where the score-collection workflow uses it.
 
 ![Service token setup](images/web_pat.png)
 
@@ -474,8 +474,8 @@ taken to the accept page:
 
 Accepting creates a repository named `<CLASSROOM>-<ASSIGNMENT>-<USERNAME>`.
 Pushing to it triggers autograding, which builds a Release containing a
-`result.json` file. The score-collection workflow (which runs daily, or on
-demand) aggregates those results into the classroom's scores.
+`result.json` file. The score-collection workflow (run on demand)
+aggregates those results into the classroom's scores.
 
 ![Accept success](images/web_accept_assignment_success.png)
 
@@ -483,8 +483,8 @@ demand) aggregates those results into the classroom's scores.
 
 ![Assignment with submissions](images/web_viewing_assignment_submissions.png)
 
-Scores update when collection runs: the nightly workflow
-covers every classroom, or click **Sync now** in the freshness strip at the top
+Scores update when collection runs: click **Sync now** in the freshness strip
+at the top
 of the submissions page (also **Collect now** in the **Actions** menu). Both
 are **scoped to the current assignment** — they walk only this assignment's
 repositories, so a sync is fast even in a large classroom and doesn't rebuild
