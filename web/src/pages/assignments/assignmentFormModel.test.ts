@@ -719,6 +719,26 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.template_repo).toBe("acme/starter")
   })
 
+  it("surfaces a non-main stored template branch as owner/repo@branch (#673)", () => {
+    const custom = assignmentToFormValues({
+      slug: "hw",
+      name: "HW",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "acme", repo: "starter", branch: "spring-2026" },
+    })
+    expect(custom.template_repo).toBe("acme/starter@spring-2026")
+    // The overwhelming default ("main") is omitted so the common case stays clean.
+    const mainBranch = assignmentToFormValues({
+      slug: "hw2",
+      name: "HW2",
+      mode: "individual",
+      autograder: "default",
+      template: { owner: "acme", repo: "starter", branch: "main" },
+    })
+    expect(mainBranch.template_repo).toBe("acme/starter")
+  })
+
   it("include_all_branches passes through for a template source, clears otherwise", () => {
     const templated = toSubmitValues({
       ...base,
