@@ -14,17 +14,17 @@ import (
 )
 
 func TestParseTemplateRef_HappyPaths(t *testing.T) {
-	// Empty branch is the sentinel for "use template's default_branch"
-	// (resolveTemplateBranch fills it in).
+	// A `@branch` is tolerated but ignored (#673): it parses to owner/repo with
+	// the branch captured in IgnoredBranch (the caller warns; the assignment
+	// uses the template's default branch).
 	cases := []struct {
-		in         string
-		wantOwner  string
-		wantRepo   string
-		wantBranch string
+		in            string
+		wantOwner     string
+		wantRepo      string
+		wantIgnoredBr string
 	}{
 		{"cs50/hello-template", "cs50", "hello-template", ""},
 		{"cs50/hello-template@main", "cs50", "hello-template", "main"},
-		// Branch with `/` is legal — refs/heads/feature/foo is valid.
 		{"cs50/hello-template@feature/foo", "cs50", "hello-template", "feature/foo"},
 		{"cs50/hello-template@v0.1-beta", "cs50", "hello-template", "v0.1-beta"},
 	}
@@ -34,9 +34,10 @@ func TestParseTemplateRef_HappyPaths(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseTemplateRef(%q): %v", tc.in, err)
 			}
-			if got.Owner != tc.wantOwner || got.Repo != tc.wantRepo || got.Branch != tc.wantBranch {
-				t.Errorf("parseTemplateRef(%q) = %#v, want owner=%q repo=%q branch=%q",
-					tc.in, got, tc.wantOwner, tc.wantRepo, tc.wantBranch)
+			if got.Owner != tc.wantOwner || got.Repo != tc.wantRepo ||
+				got.IgnoredBranch != tc.wantIgnoredBr {
+				t.Errorf("parseTemplateRef(%q) = %#v, want owner=%q repo=%q ignoredBranch=%q",
+					tc.in, got, tc.wantOwner, tc.wantRepo, tc.wantIgnoredBr)
 			}
 		})
 	}
@@ -54,6 +55,7 @@ func TestParseTemplateRef_Rejects(t *testing.T) {
 		{"empty repo", "cs50/", "expected"},
 		{"empty repo with branch", "cs50/@main", "expected"},
 		{"too many slashes outside branch", "cs50/foo/bar", "expected"},
+		// A `@branch` is tolerated, but a MALFORMED `@` is still rejected.
 		{"empty branch after @", "cs50/hello-template@", "branch is empty"},
 		{"double @", "cs50/hello-template@main@v2", "@"},
 	}
@@ -170,10 +172,12 @@ func TestResolveTemplateBranch(t *testing.T) {
 	// Each row covers one branch of the post-HTTP decision tree so a
 	// change to validateTemplateRepo's response handling can't
 	// silently drop a guard: not-a-template, empty-template,
-	// explicit-@branch retention, default_branch fallback,
-	// empty-default_branch error. Emptiness is now an input (hasCommits);
-	// the fork exemption (#528) and the size-0 branches probe (#544) are
-	// resolved by templateHasCommits and covered by TestTemplateHasCommits.
+	// default_branch resolution, empty-default_branch error. A custom
+	// `@branch` is tolerated but ignored (#673) — resolveTemplateBranch never
+	// sees it (parseTemplateRef captures it as IgnoredBranch), so branch always
+	// comes from default_branch. Emptiness is now an input (hasCommits); the
+	// fork exemption (#528) and the size-0 branches probe (#544) are resolved
+	// by templateHasCommits and covered by TestTemplateHasCommits.
 	cases := []struct {
 		name        string
 		arg         templateArg
@@ -208,14 +212,6 @@ func TestResolveTemplateBranch(t *testing.T) {
 			hasCommits: true,
 			defaultBr:  "main",
 			wantRef:    assignment.TemplateRef{Owner: "cs50", Repo: "cross-org-fork-template", Branch: "main"},
-		},
-		{
-			name:       "explicit @branch retained even when default_branch differs",
-			arg:        templateArg{Owner: "cs50", Repo: "hello-template", Branch: "feature/foo"},
-			isTemplate: true,
-			hasCommits: true,
-			defaultBr:  "main",
-			wantRef:    assignment.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "feature/foo"},
 		},
 		{
 			name:       "no @branch falls back to default_branch (master)",

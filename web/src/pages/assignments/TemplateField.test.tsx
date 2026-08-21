@@ -17,9 +17,16 @@ vi.mock("react-i18next", async (importOriginal) => {
 })
 
 const verifyTemplateAccess = vi.fn()
-vi.mock("@/domain/assignments", () => ({
-  verifyTemplateAccess: (...a: unknown[]) => verifyTemplateAccess(...a),
-}))
+vi.mock("@/domain/assignments", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/domain/assignments")>()
+  return {
+    // parseTemplateRef/formatTemplateRef are pure — keep the real ones so
+    // canonicalTemplateRef (used by the rendered picker) resolves owner/repo.
+    parseTemplateRef: actual.parseTemplateRef,
+    formatTemplateRef: actual.formatTemplateRef,
+    verifyTemplateAccess: (...a: unknown[]) => verifyTemplateAccess(...a),
+  }
+})
 
 const teamHasRepoAccess = vi.fn()
 // The field now renders TemplateRepoPicker, which reaches for the org template
@@ -129,6 +136,32 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   __resetGitHubHealthForTest()
+})
+
+describe("TemplateField — custom branch ignored (#673)", () => {
+  const okPublic = {
+    kind: "ok",
+    owner: "acme",
+    repo: "starter",
+    branch: "main",
+    visibility: "public",
+    inOrg: false,
+  }
+
+  it("warns that a typed @branch will be ignored", async () => {
+    verifyTemplateAccess.mockResolvedValue(okPublic)
+    renderField({ field: fakeField("acme/starter@dev") })
+    expect(
+      await screen.findByText("assignments.template.branchIgnored"),
+    ).toBeTruthy()
+  })
+
+  it("shows no branch-ignored warning for a plain owner/repo", async () => {
+    verifyTemplateAccess.mockResolvedValue(okPublic)
+    renderField({ field: fakeField("acme/starter") })
+    await screen.findByText("assignments.template.okPublic", { exact: false })
+    expect(screen.queryByText("assignments.template.branchIgnored")).toBeNull()
+  })
 })
 
 describe("TemplateField — inline Fix template access", () => {

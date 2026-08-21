@@ -1386,6 +1386,89 @@ describe("editAssignment (preserved-entry integration)", () => {
     )
   })
 
+  it("heals a legacy non-default stored branch to the template default on an unchanged-ref edit (#673)", async () => {
+    // A pre-#673 assignment whose stored template.branch is a NON-default
+    // branch (written when @branch was honored). Editing without changing the
+    // ref must re-resolve to the template's CURRENT default branch, not
+    // re-persist the stale one — a custom branch can't be honored.
+    const legacyEntry: Assignment = {
+      slug: SLUG,
+      name: "Homework 1",
+      mode: "individual",
+      autograder: "default",
+      feedback_pr: true,
+      template: { owner: ORG, repo: "hw1", branch: "legacy-branch" },
+    }
+    const assignmentsFile = {
+      schema: "classroom50/assignments/v1",
+      assignments: [legacyEntry],
+    }
+    const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
+    let committed = ""
+    const request = vi.fn(
+      async (url: string, init?: { method?: string; body?: unknown }) => {
+        const method = init?.method ?? "GET"
+        if (/\/repos\/[^/]+\/classroom50$/.test(url))
+          return { default_branch: "main" }
+        if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
+        if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
+        if (url.includes("/contents/cs50/assignments.json")) {
+          return {
+            type: "file",
+            encoding: "base64",
+            content: b64(JSON.stringify(assignmentsFile)),
+          }
+        }
+        // The template repo's LIVE default branch is `main`, not the stored
+        // `legacy-branch`.
+        if (url.includes(`/repos/${ORG}/hw1`) && !url.includes("classroom50")) {
+          return {
+            name: "hw1",
+            full_name: `${ORG}/hw1`,
+            private: false,
+            is_template: true,
+            default_branch: "main",
+          }
+        }
+        if (method === "POST" && url.endsWith("/git/trees")) {
+          committed = (init as { body?: { tree: { content: string }[] } }).body!
+            .tree[0].content
+          return { sha: "newtree" }
+        }
+        if (url.endsWith("/git/commits")) return { sha: "newcommit" }
+        if (url.endsWith("/git/refs/heads/main"))
+          return { object: { sha: "nc" } }
+        throw new Error(`unexpected request: ${method} ${url}`)
+      },
+    )
+    const requestRaw = vi.fn(async () => {
+      throw new GitHubAPIError({
+        status: 404,
+        url: "classroom.json",
+        message: "Not Found",
+        body: null,
+        rateLimit: {
+          limit: null,
+          remaining: null,
+          used: null,
+          reset: null,
+          resource: null,
+          retryAfter: null,
+        },
+      })
+    })
+    const client = { request, requestRaw } as unknown as GitHubClient
+
+    await editAssignment(
+      client,
+      editInput({ slug: SLUG, template_repo: "hw1" }),
+    )
+
+    const written = JSON.parse(committed) as { assignments: Assignment[] }
+    const entry = written.assignments.find((a) => a.slug === SLUG)!
+    expect(entry.template).toEqual({ owner: ORG, repo: "hw1", branch: "main" })
+  })
+
   // buildAssignmentEntry's student_permission branch (clamp group up to admin,
   // omit when it equals the mode default) is exercised through editAssignment's
   // write, asserting the entry that lands in the committed assignments.json —
@@ -2058,7 +2141,6 @@ describe("parseTemplateRef", () => {
     expect(parseTemplateRef("acme/starter", ORG)).toEqual({
       owner: "acme",
       repo: "starter",
-      branch: undefined,
     })
   })
 
@@ -2066,11 +2148,11 @@ describe("parseTemplateRef", () => {
     expect(parseTemplateRef("starter", ORG)).toEqual({
       owner: ORG,
       repo: "starter",
-      branch: undefined,
     })
   })
 
-  it("parses owner/repo@branch", () => {
+  it("accepts owner/repo@branch but carries the branch as advisory (#673)", () => {
+    // Tolerated but ignored — the assignment uses the template's default branch.
     expect(parseTemplateRef("acme/starter@spring-2026", ORG)).toEqual({
       owner: "acme",
       repo: "starter",
@@ -2093,23 +2175,22 @@ describe("parseTemplateRef", () => {
     expect(parseTemplateRef(raw, ORG)).toEqual({
       owner: "acme",
       repo: "starter",
-      branch: undefined,
     })
   })
 
-  it("reads the branch from a /tree/<branch> URL", () => {
+  it("carries a /tree/<branch> URL branch as advisory (tolerated, #673)", () => {
     expect(
       parseTemplateRef("https://github.com/acme/starter/tree/spring-2026", ORG),
     ).toEqual({ owner: "acme", repo: "starter", branch: "spring-2026" })
   })
 
-  it("keeps a slash-bearing branch from a /tree/ URL", () => {
+  it("carries a slash-bearing /tree/ branch as advisory (#673)", () => {
     expect(
       parseTemplateRef("https://github.com/acme/starter/tree/release/1.0", ORG),
     ).toEqual({ owner: "acme", repo: "starter", branch: "release/1.0" })
   })
 
-  it("accepts an @branch suffix on a URL", () => {
+  it("carries an @branch suffix on a URL as advisory (#673)", () => {
     expect(
       parseTemplateRef("https://github.com/acme/starter@spring-2026", ORG),
     ).toEqual({ owner: "acme", repo: "starter", branch: "spring-2026" })
@@ -2168,7 +2249,7 @@ describe("parseTemplateRef", () => {
 
   it("decodes a percent-encoded URL segment to the real name", () => {
     expect(parseTemplateRef("https://github.com/acme/star%2Dter", ORG)).toEqual(
-      { owner: "acme", repo: "star-ter", branch: undefined },
+      { owner: "acme", repo: "star-ter" },
     )
   })
 
@@ -2182,15 +2263,15 @@ describe("parseTemplateRef", () => {
     expect(localizedFor("   ")?.key).toBe("assignments.template.invalid.empty")
   })
 
-  it("localizes a branch containing '@'", () => {
+  it("rejects a multiple-@ ref as a shape error (#673)", () => {
     expect(localizedFor("acme/starter@a@b")?.key).toBe(
-      "assignments.template.invalid.branchHasAt",
+      "assignments.template.invalid.shape",
     )
   })
 
-  it("localizes an empty branch after '@'", () => {
+  it("rejects an empty branch after '@' as a shape error (#673)", () => {
     expect(localizedFor("acme/starter@  ")?.key).toBe(
-      "assignments.template.invalid.branchEmpty",
+      "assignments.template.invalid.shape",
     )
   })
 
@@ -2220,22 +2301,14 @@ describe("formatTemplateRef", () => {
     )
   })
 
-  it("keeps a branch the user typed", () => {
+  it("drops the advisory branch — a custom branch is ignored (#673)", () => {
     expect(
       formatTemplateRef({ owner: "acme", repo: "starter", branch: "dev" }),
-    ).toBe("acme/starter@dev")
+    ).toBe("acme/starter")
   })
 
   it("round-trips through parseTemplateRef", () => {
     const parsed = parseTemplateRef("https://github.com/acme/starter", "cs50")
-    expect(parseTemplateRef(formatTemplateRef(parsed), "cs50")).toEqual(parsed)
-  })
-
-  it("round-trips a branch-bearing ref", () => {
-    const parsed = parseTemplateRef(
-      "https://github.com/acme/starter/tree/dev",
-      "cs50",
-    )
     expect(parseTemplateRef(formatTemplateRef(parsed), "cs50")).toEqual(parsed)
   })
 })

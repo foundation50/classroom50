@@ -151,10 +151,16 @@ export async function withAcceptStep<T>(
 }
 
 // Parse a `--template` ref — `<owner>/<repo>[@<branch>]`, a bare `<repo>`
-// (owner defaults to the org), or a pasted GitHub URL. The `<owner>/<repo>`
-// form mirrors the CLI's parseTemplateRef so both write the same template
-// block; the bare name and the URL form are web-only (the CLI rejects both, and
-// nobody pastes a browser URL into a shell flag).
+// (owner defaults to the org), or a pasted GitHub URL. A `@branch` suffix (or a
+// `/tree/<branch>` URL) is TOLERATED but IGNORED (#673): GitHub's
+// create-from-template API can't select a source branch, and changing the
+// generated repo's default branch is blocked by org branch rulesets — so the
+// assignment always uses the template's own default branch. The parsed
+// `branch` is advisory only (the form warns it will be ignored, and a future
+// release may act on it); resolve/store never use it. To target a different
+// branch today, change the template repo's own default branch. The
+// `<owner>/<repo>` form mirrors the CLI's parseTemplateRef; the bare name and
+// the URL form are web-only.
 export type ParsedTemplate = { owner: string; repo: string; branch?: string }
 
 const GITHUB_URL_HOSTS = new Set(["github.com", "www.github.com"])
@@ -221,17 +227,18 @@ function parseGitHubUrl(raw: string): ParsedTemplate | null {
   if (!owner || !repoSegment) throw urlShapeError
   if (GITHUB_RESERVED_OWNERS.has(owner.toLowerCase())) throw urlShapeError
 
-  // A copied URL sometimes carries the branch as `repo@branch` rather than a
-  // `/tree/` path, so honor that suffix here too.
+  // A `@branch` suffix (or `/tree/<branch>`) is tolerated but ignored — carry
+  // it as an advisory `branch` (see ParsedTemplate, #673). A malformed `@`
+  // (multiple, or empty after `@`) is still a shape error.
   const [repoName, atBranch, ...extraAt] = repoSegment.split("@")
   if (extraAt.length > 0) throw urlShapeError
   const repo = repoName.replace(/\.git$/i, "")
   if (!repo) throw urlShapeError
   if (atBranch !== undefined && !atBranch) throw urlShapeError
 
-  // A branch may itself contain slashes (`release/1.0`), so everything after
-  // `/tree/` is the branch. Any other deep path (blob, pull, issues) isn't a
-  // template ref we can trust.
+  // A branch may contain slashes (`release/1.0`), so everything after `/tree/`
+  // is the branch. Any other deep path (blob, pull, issues) isn't a template
+  // ref we trust.
   let branch = atBranch || undefined
   if (rest.length > 0) {
     if (branch) throw urlShapeError
@@ -270,18 +277,19 @@ export function parseTemplateRef(
   const fromUrl = parseGitHubUrl(trimmed)
   if (fromUrl) return fromUrl
 
+  // Split off a tolerated-but-ignored `@branch` (see ParsedTemplate, #673). A
+  // malformed `@` (multiple, or empty after `@`) is a shape error.
   const [ownerRepo, branch, ...extraAt] = trimmed.split("@")
   if (extraAt.length > 0) {
     throw localizedError({
-      key: "assignments.template.invalid.branchHasAt",
+      key: "assignments.template.invalid.shape",
       params: { raw },
     })
   }
-  // A branch given as `@<whitespace>` is empty after trimming.
   const trimmedBranch = branch?.trim()
   if (trimmed.includes("@") && !trimmedBranch) {
     throw localizedError({
-      key: "assignments.template.invalid.branchEmpty",
+      key: "assignments.template.invalid.shape",
       params: { raw },
     })
   }
@@ -306,11 +314,10 @@ export function parseTemplateRef(
   )
 }
 
-// Render a parsed ref back to field text; the branch is appended only when one
-// is present.
+// Render a parsed ref back to field text. The advisory branch is dropped: a
+// custom branch is ignored (#673), so the canonical form is always owner/repo.
 export function formatTemplateRef(parsed: ParsedTemplate): string {
-  const ref = `${parsed.owner}/${parsed.repo}`
-  return parsed.branch ? `${ref}@${parsed.branch}` : ref
+  return `${parsed.owner}/${parsed.repo}`
 }
 
 // Advisory pre-flight verdict for a template ref: mirrors resolveTemplate's
@@ -527,7 +534,7 @@ export async function verifyTemplateAccess(
     return { kind: "private-out-of-org", ...canonical }
   }
 
-  const branch = parsed.branch || repo.default_branch
+  const branch = repo.default_branch
   if (!branch) {
     return { kind: "no-branch", ...canonical }
   }
@@ -607,10 +614,10 @@ export async function resolveTemplate(
     )
   }
 
-  const branch = parsed.branch || repo.default_branch
+  const branch = repo.default_branch
   if (!branch) {
     throw new Error(
-      `Template "${parsed.owner}/${parsed.repo}" has no default branch — specify one as ${parsed.owner}/${parsed.repo}@<branch>.`,
+      `Template "${parsed.owner}/${parsed.repo}" has no default branch — push a commit to it, then retry.`,
     )
   }
 
@@ -637,8 +644,7 @@ export async function resolveTemplate(
 
 // True when a parsed ref still points at the assignment's stored template, so
 // an edit can reuse the stored block instead of re-resolving live. Owner/repo
-// case-insensitive (per GitHub); an omitted @branch means "keep the stored
-// branch". Edit only.
+// case-insensitive (per GitHub). Edit only.
 export function templateRefUnchanged(
   parsed: ParsedTemplate,
   existing: Assignment["template"] | undefined,
@@ -646,8 +652,7 @@ export function templateRefUnchanged(
   if (!existing) return false
   const sameOwner = parsed.owner.toLowerCase() === existing.owner.toLowerCase()
   const sameRepo = parsed.repo.toLowerCase() === existing.repo.toLowerCase()
-  const sameBranch = !parsed.branch || parsed.branch === existing.branch
-  return sameOwner && sameRepo && sameBranch
+  return sameOwner && sameRepo
 }
 
 // 404 -> false, 200 -> true, else throws. Wraps repoContentsPathExists for the

@@ -532,14 +532,16 @@ async function buildAssignmentEntry(
   if (input.template_repo.trim()) {
     const parsedTemplate = parseTemplateRef(input.template_repo, input.org)
     if (templateRefUnchanged(parsedTemplate, existingTemplate)) {
-      // Ref unchanged, but still re-validate live via resolveTemplate — it
-      // still fails closed before any commit on a template that went truly
-      // unusable (deleted, no longer a template, out-of-org private). Reuse its
-      // needsTeamGrant so an unchanged-ref save re-affirms the (idempotent) team
-      // read: a grant GitHub or a prior failure dropped is repaired on the next
-      // edit, not left stranded.
+      // Ref unchanged, but still re-resolve live via resolveTemplate — it fails
+      // closed before any commit on a template that went truly unusable
+      // (deleted, no longer a template, out-of-org private). Use the RESOLVED
+      // block (not the stored one) so an edit heals a legacy non-default
+      // `branch` down to the template's current default (#673): a custom branch
+      // can't be honored, so an unrelated edit shouldn't re-persist a stale one.
+      // Reuse needsTeamGrant so the unchanged-ref save re-affirms the
+      // (idempotent) team read a prior failure may have dropped.
       const resolved = await resolveTemplate(client, input.org, parsedTemplate)
-      template = existingTemplate!
+      template = resolved.template
       needsTeamGrant = resolved.needsTeamGrant
     } else {
       const resolved = await resolveTemplate(client, input.org, parsedTemplate)
