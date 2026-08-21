@@ -38,8 +38,11 @@ describe("canonicalTemplateRef", () => {
   })
 
   it("never appends the resolved default branch (#673)", () => {
-    // The verdict's branch is `main` here, but the teacher didn't ask for it.
-    expect(canonicalTemplateRef(ok(ORG, "starter"), "cs50/starter")).toBeNull()
+    // The verdict's branch is `main`, but the teacher didn't ask for it — the
+    // rewrite must still change casing without pinning a branch.
+    expect(canonicalTemplateRef(ok(ORG, "Starter"), "starter")).toBe(
+      "cs50/Starter",
+    )
   })
 
   it("returns null when the value is already canonical, so nothing rewrites", () => {

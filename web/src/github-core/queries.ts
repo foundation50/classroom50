@@ -54,9 +54,7 @@ export {
   listOrgTemplateRepos,
   orgTemplateReposQuery,
   filterTemplateRepos,
-  TEMPLATE_LIST_MAX_PAGES,
   type TemplateRepoItem,
-  type TemplateRepoListResult,
 } from "./queries/templateRepoReads"
 export {
   listDefaultBranchCommits,

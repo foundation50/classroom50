@@ -2135,6 +2135,38 @@ describe("parseTemplateRef", () => {
     )
   })
 
+  it("rejects a path-traversal segment rather than building a request path from it", () => {
+    // `..` would otherwise be interpolated into /repos/{owner}/{repo}.
+    expect(localizedFor("../etc")?.key).toBe(
+      "assignments.template.invalid.shape",
+    )
+    expect(localizedFor("acme/..")?.key).toBe(
+      "assignments.template.invalid.shape",
+    )
+    expect(localizedFor("..")?.key).toBe("assignments.template.invalid.shape")
+  })
+
+  it("rejects a segment containing a path or query separator", () => {
+    expect(localizedFor("acme/star ter")?.key).toBe(
+      "assignments.template.invalid.shape",
+    )
+    expect(localizedFor("acme/starter?x=1")?.key).toBe(
+      "assignments.template.invalid.shape",
+    )
+  })
+
+  it("decodes a percent-encoded URL segment to the real name", () => {
+    expect(parseTemplateRef("https://github.com/acme/star%2Dter", ORG)).toEqual(
+      { owner: "acme", repo: "star-ter", branch: undefined },
+    )
+  })
+
+  it("rejects a URL whose encoded segment isn't a legal repo name", () => {
+    expect(localizedFor("https://github.com/acme/a%2Fb")?.key).toBe(
+      "assignments.template.invalid.shape",
+    )
+  })
+
   it("localizes an empty ref", () => {
     expect(localizedFor("   ")?.key).toBe("assignments.template.invalid.empty")
   })

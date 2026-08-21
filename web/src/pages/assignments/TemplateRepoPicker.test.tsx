@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { render, screen, cleanup, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { createElement, type PropsWithChildren } from "react"
+import { createElement, useState, type PropsWithChildren } from "react"
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
@@ -75,6 +75,32 @@ function fakeField(value = ""): StringField {
   } as unknown as StringField
 }
 
+// A stateful host, so typing actually narrows the list — a frozen stub field
+// would let the local-filter tests pass without any filtering happening.
+function StatefulPicker(props: {
+  initialValue?: string
+  org?: string
+  canonicalRef?: string | null
+}) {
+  const [value, setValue] = useState(props.initialValue ?? "")
+  const field = {
+    name: "template_repo",
+    state: { value },
+    handleChange: (next: string) => {
+      handleChange(next)
+      setValue(next)
+    },
+    handleBlur: vi.fn(),
+  } as unknown as StringField
+  return createElement(TemplateRepoPicker, {
+    field,
+    id: "template_repo",
+    org: "org" in props ? props.org : ORG,
+    placeholder: "placeholder",
+    canonicalRef: props.canonicalRef,
+  })
+}
+
 function queryWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -96,6 +122,18 @@ function renderPicker(
     }),
     { wrapper: queryWrapper() },
   )
+}
+
+function renderStateful(
+  props: {
+    initialValue?: string
+    org?: string
+    canonicalRef?: string | null
+  } = {},
+) {
+  return render(createElement(StatefulPicker, props), {
+    wrapper: queryWrapper(),
+  })
 }
 
 const input = () => screen.getByRole("combobox") as HTMLInputElement
@@ -136,15 +174,17 @@ describe("TemplateRepoPicker", () => {
     expect(handleChange).toHaveBeenCalledWith("cs50/ap-cs")
   })
 
-  it("filters locally without re-fetching as the teacher types", async () => {
+  it("filters locally as the teacher types, without re-fetching", async () => {
     const user = userEvent.setup()
-    renderPicker({ value: "ap" })
+    renderStateful()
 
     await user.click(input())
-    await screen.findByText("cs50/ap-cs")
+    await screen.findByText("cs50/starter")
+    await user.type(input(), "ap")
 
+    await waitFor(() => expect(screen.queryByText("cs50/starter")).toBeNull())
+    expect(screen.getByText("cs50/ap-cs")).toBeTruthy()
     // The whole point of listing once: narrowing costs no requests.
-    expect(screen.queryByText("cs50/starter")).toBeNull()
     expect(listOrgTemplateRepos).toHaveBeenCalledTimes(1)
   })
 
@@ -161,9 +201,11 @@ describe("TemplateRepoPicker", () => {
 
   it("says how many of the org's templates are currently shown", async () => {
     const user = userEvent.setup()
-    renderPicker({ value: "ap" })
+    renderStateful()
 
     await user.click(input())
+    await screen.findByText("cs50/starter")
+    await user.type(input(), "ap")
 
     const footer = await screen.findByText(
       /assignments\.template\.search\.showing/,
@@ -216,14 +258,44 @@ describe("TemplateRepoPicker", () => {
 
   it("shows the no-matches hint naming the query", async () => {
     const user = userEvent.setup()
-    renderPicker({ value: "nope" })
+    renderStateful()
 
     await user.click(input())
+    await screen.findByText("cs50/starter")
+    await user.type(input(), "nope")
 
     const empty = await screen.findByText(
       /assignments\.template\.search\.noMatches/,
     )
     expect(empty.textContent).toContain("nope")
+  })
+
+  it("discloses when GitHub never said which repos are templates", async () => {
+    // The list is unfiltered in that case, so the teacher must be told rather
+    // than shown every org repo as if it were a template.
+    listOrgTemplateRepos.mockResolvedValue(
+      listResult({ templateFlagPresent: false }),
+    )
+    const user = userEvent.setup()
+    renderPicker()
+
+    await user.click(input())
+
+    expect(
+      await screen.findByText("assignments.template.search.unfiltered"),
+    ).toBeTruthy()
+  })
+
+  it("says nothing about filtering when GitHub did report templates", async () => {
+    const user = userEvent.setup()
+    renderPicker()
+
+    await user.click(input())
+    await screen.findByText("cs50/starter")
+
+    expect(
+      screen.queryByText("assignments.template.search.unfiltered"),
+    ).toBeNull()
   })
 
   it("shows the no-templates hint when the org has none", async () => {
@@ -258,61 +330,50 @@ describe("TemplateRepoPicker", () => {
 })
 
 describe("TemplateRepoPicker — verified normalization", () => {
-  it("rewrites the field to the confirmed canonical ref when unfocused", () => {
-    renderPicker({ canonicalRef: "cs50/starter" })
+  it("does not rewrite an untouched field, so opening an edit form stays clean", async () => {
+    // Mounting with a stored ref must not dirty the form; only an edit should.
+    renderPicker({ value: "cs50/starter", canonicalRef: "cs50/Starter" })
 
-    expect(handleChange).toHaveBeenCalledWith("cs50/starter")
+    await waitFor(() => expect(handleChange).not.toHaveBeenCalled())
   })
 
-  it("does not rewrite while the teacher is still typing", async () => {
-    const user = userEvent.setup()
-    // Render focused first, then let the verdict arrive: rewriting mid-typing
-    // would fight the cursor.
-    const { rerender } = renderPicker()
-    await user.click(input())
-    handleChange.mockClear()
-
-    rerender(
-      createElement(TemplateRepoPicker, {
-        field: fakeField("starter"),
-        id: "template_repo",
-        org: ORG,
-        placeholder: "placeholder",
-        canonicalRef: "cs50/starter",
-      }),
-    )
-
-    expect(handleChange).not.toHaveBeenCalledWith("cs50/starter")
-  })
-
-  it("rewrites once the field loses focus", async () => {
+  it("rewrites to the confirmed canonical ref after the teacher edits and blurs", async () => {
     const user = userEvent.setup()
     render(
       createElement(
         "div",
         null,
-        createElement(TemplateRepoPicker, {
-          field: fakeField("starter"),
-          id: "template_repo",
-          org: ORG,
-          placeholder: "placeholder",
-          canonicalRef: "cs50/starter",
-        }),
+        createElement(StatefulPicker, { canonicalRef: "cs50/starter" }),
         createElement("button", { type: "button" }, "elsewhere"),
       ),
       { wrapper: queryWrapper() },
     )
 
     await user.click(input())
+    await user.type(input(), "starter")
     handleChange.mockClear()
     await user.click(screen.getByRole("button", { name: "elsewhere" }))
 
-    expect(handleChange).toHaveBeenCalledWith("cs50/starter")
+    await waitFor(() =>
+      expect(handleChange).toHaveBeenCalledWith("cs50/starter"),
+    )
   })
 
-  it("leaves the text alone when nothing was confirmed", () => {
+  it("does not rewrite while the teacher is still typing", async () => {
+    const user = userEvent.setup()
+    renderStateful({ canonicalRef: "cs50/starter" })
+
+    await user.click(input())
+    await user.type(input(), "starter")
+    handleChange.mockClear()
+
+    // Focused: rewriting here would fight the cursor.
+    expect(handleChange).not.toHaveBeenCalledWith("cs50/starter")
+  })
+
+  it("leaves the text alone when nothing was confirmed", async () => {
     renderPicker({ canonicalRef: null })
 
-    expect(handleChange).not.toHaveBeenCalled()
+    await waitFor(() => expect(handleChange).not.toHaveBeenCalled())
   })
 })

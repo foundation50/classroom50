@@ -258,6 +258,71 @@ describe("Combobox", () => {
     expect(comboboxInput().getAttribute("aria-activedescendant")).toBeNull()
   })
 
+  it("reopens when the still-focused input is clicked after Escape", async () => {
+    // Focus alone can't reopen: the input never lost focus, so no focus event
+    // fires on the second click.
+    const user = userEvent.setup()
+    render(<Harness />)
+
+    await user.click(comboboxInput())
+    await user.keyboard("{Escape}")
+    expect(screen.queryByRole("listbox")).toBeNull()
+
+    await user.click(comboboxInput())
+
+    expect(screen.getByRole("listbox")).toBeTruthy()
+    expect(comboboxInput().getAttribute("aria-expanded")).toBe("true")
+  })
+
+  it("reopens after a selection closed the panel", async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+
+    await user.click(comboboxInput())
+    await user.click(screen.getByText("starter-c"))
+    expect(screen.queryByRole("listbox")).toBeNull()
+
+    await user.click(comboboxInput())
+
+    expect(screen.getByRole("listbox")).toBeTruthy()
+  })
+
+  it("does not advertise a listbox it isn't rendering", async () => {
+    // axe requires aria-controls on a combobox, so the listbox stays rendered
+    // and the empty state lives inside it rather than replacing it.
+    const user = userEvent.setup()
+    render(<Harness items={[]} emptyState={<span>No templates</span>} />)
+
+    await user.click(comboboxInput())
+
+    const listboxId = comboboxInput().getAttribute("aria-controls")
+    expect(listboxId).toBeTruthy()
+    expect(document.getElementById(listboxId!)).toBeTruthy()
+    expect(screen.queryByRole("option")).toBeNull()
+  })
+
+  it("has no axe violations open with an empty result set", async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <Harness items={[]} emptyState={<span>No templates</span>} />,
+    )
+    await user.click(comboboxInput())
+    const { axe } = await import("vitest-axe")
+    expect(await axe(container)).toHaveNoViolations()
+  })
+
+  it("keeps focus on the input when the panel's own chrome is clicked", async () => {
+    // A blur here would fire the field's onBlur mid-interaction.
+    const user = userEvent.setup()
+    render(<Harness footer={<span>30 of 4213</span>} />)
+
+    await user.click(comboboxInput())
+    await user.click(screen.getByText("30 of 4213"))
+
+    expect(document.activeElement).toBe(comboboxInput())
+    expect(screen.getByRole("listbox")).toBeTruthy()
+  })
+
   it("has no axe violations closed", async () => {
     const { results } = await renderAndAxe(<Harness />)
     expect(results).toHaveNoViolations()

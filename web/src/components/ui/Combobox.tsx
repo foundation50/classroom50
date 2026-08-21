@@ -45,7 +45,7 @@ export type ComboboxProps<T> = {
   // Shown in place of the listbox when `items` is empty (never an empty
   // listbox, which reads as a broken widget).
   emptyState?: ReactNode
-  // Pinned above the options — e.g. "showing 30 of 4213, keep typing".
+  // Rendered below the options — e.g. "showing 30 of 4213, keep typing".
   footer?: ReactNode
   // Transient state (searching, throttled). Announced politely.
   status?: ReactNode
@@ -196,11 +196,23 @@ export function Combobox<T>({
           openFresh()
           inputProps.onFocus?.(event)
         }}
+        // Focus alone can't reopen the panel: after Escape or a selection the
+        // input is still focused, so clicking it fires no focus event.
+        onPointerDown={() => {
+          if (!open) openFresh()
+        }}
         onKeyDown={onKeyDown}
       />
 
       {open ? (
-        <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-box border border-base-content/10 bg-base-100 shadow-lg">
+        <div
+          // Pointer-down anywhere in the panel chrome would otherwise blur the
+          // input (firing the field's onBlur mid-interaction). Options call
+          // preventDefault themselves before selecting; the scrollable list is
+          // exempted below so scrollbar drags still work.
+          onPointerDown={(event) => event.preventDefault()}
+          className="absolute inset-x-0 top-full z-10 mt-1 rounded-box border border-base-content/5 bg-base-100 shadow"
+        >
           {status ? (
             <div
               role="status"
@@ -210,44 +222,54 @@ export function Combobox<T>({
             </div>
           ) : null}
 
-          {items.length > 0 ? (
-            <ul
-              id={listboxId}
-              role="listbox"
-              aria-label={labelledBy ? undefined : label}
-              aria-labelledby={labelledBy}
-              className="max-h-72 overflow-y-auto py-1"
-            >
-              {items.map((item, index) => {
-                const key = getItemKey(item)
-                const active = key === activeKey
-                return (
-                  <li
-                    key={key}
-                    id={`${optionIdPrefix}-${index}`}
-                    role="option"
-                    aria-selected={active}
-                    aria-label={getItemLabel(item)}
-                    // Pointer-down beats the input's blur, so the selection
-                    // lands before anything can close the panel.
-                    onPointerDown={(event) => {
-                      event.preventDefault()
-                      onSelect(item)
-                      close()
-                    }}
-                    onMouseEnter={() => setActiveKey(key)}
-                    className={cx(
-                      // min-h keeps the row within the target-size audit's floor.
-                      "flex min-h-11 cursor-pointer flex-col justify-center px-3 py-2 text-start",
-                      active && "bg-base-200",
-                    )}
-                  >
-                    {renderItem(item, { active })}
-                  </li>
-                )
-              })}
-            </ul>
-          ) : emptyState ? (
+          {/* The listbox stays mounted while open, even with no options, so the
+              input's `aria-controls` always resolves to a real element. The
+              empty-state message is a sibling: an empty `role="listbox"` may
+              not contain non-option children. */}
+          <ul
+            id={listboxId}
+            role="listbox"
+            aria-label={labelledBy ? undefined : label}
+            aria-labelledby={labelledBy}
+            // Let a scrollbar drag through: the wrapper's preventDefault would
+            // otherwise cancel it.
+            onPointerDown={(event) => event.stopPropagation()}
+            className={cx(
+              "max-h-72 overflow-y-auto",
+              items.length > 0 ? "py-1" : "sr-only",
+            )}
+          >
+            {items.map((item, index) => {
+              const key = getItemKey(item)
+              const active = key === activeKey
+              return (
+                <li
+                  key={key}
+                  id={`${optionIdPrefix}-${index}`}
+                  role="option"
+                  aria-selected={active}
+                  aria-label={getItemLabel(item)}
+                  // Pointer-down beats the input's blur, so the selection
+                  // lands before anything can close the panel.
+                  onPointerDown={(event) => {
+                    event.preventDefault()
+                    onSelect(item)
+                    close()
+                  }}
+                  onMouseEnter={() => setActiveKey(key)}
+                  className={cx(
+                    // min-h keeps the row within the target-size audit's floor.
+                    "flex min-h-11 cursor-pointer flex-col justify-center px-3 py-2 text-start",
+                    active && "bg-base-200",
+                  )}
+                >
+                  {renderItem(item, { active })}
+                </li>
+              )
+            })}
+          </ul>
+
+          {items.length === 0 && emptyState ? (
             <div className="px-3 py-3 text-sm text-base-content/70">
               {emptyState}
             </div>

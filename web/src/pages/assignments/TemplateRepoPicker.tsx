@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Lock, Search } from "lucide-react"
 
@@ -10,11 +10,6 @@ import { normalizeOnBlur, type StringField } from "./formFieldHelpers"
 
 // The template field's input: a combobox over the org's template repositories.
 //
-// The list is loaded once and filtered in the browser, so typing is instant and
-// costs no requests. GitHub's repo-search API would have been the natural fit
-// but can't be called from a browser at all — it answers with a malformed
-// `Access-Control-Allow-Origin: *;` and then 502s.
-//
 // Typing and pasting are never gated by the picker: the field stays a plain text
 // input that happens to offer suggestions, because a teacher may reference a
 // template in another org, or one outside the pages we listed.
@@ -24,7 +19,6 @@ export const TemplateRepoPicker = ({
   describedById,
   org,
   placeholder,
-  labelledBy,
   canonicalRef,
 }: {
   field: StringField
@@ -32,7 +26,6 @@ export const TemplateRepoPicker = ({
   describedById?: string
   org?: string
   placeholder: string
-  labelledBy?: string
   // The canonical `{owner}/{repo}` for the current text once GitHub has
   // confirmed the repo exists, else null. Supplied by TemplateField, which owns
   // the verification query.
@@ -41,6 +34,7 @@ export const TemplateRepoPicker = ({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [focused, setFocused] = useState(false)
+  const edited = useRef(false)
 
   const templates = useOrgTemplateRepos({
     org,
@@ -51,14 +45,15 @@ export const TemplateRepoPicker = ({
   const { items, totalCount } = templates
 
   const select = (item: TemplateRepoItem) => {
+    edited.current = true
     field.handleChange(item.fullName)
   }
 
   // Normalize to `{owner}/{repo}` once verification confirms the repo — never
-  // mid-typing, which would fight the cursor. Verification is debounced, so a
-  // teacher who blurs early gets the rewrite when the verdict lands instead.
+  // mid-typing, which would fight the cursor, and never before the teacher has
+  // touched the field, which would silently dirty an edit form on open.
   useEffect(() => {
-    if (focused || !canonicalRef) return
+    if (!edited.current || focused || !canonicalRef) return
     field.handleChange(canonicalRef)
   }, [focused, canonicalRef, field])
 
@@ -76,7 +71,7 @@ export const TemplateRepoPicker = ({
     <Combobox
       id={id}
       name={field.name}
-      labelledBy={labelledBy}
+      label={t("assignments.template.label")}
       aria-describedby={describedById}
       placeholder={placeholder}
       spellCheck={false}
@@ -84,7 +79,10 @@ export const TemplateRepoPicker = ({
         <Search aria-hidden="true" className="size-4 shrink-0 opacity-60" />
       }
       value={field.state.value}
-      onInputChange={(value) => field.handleChange(value)}
+      onInputChange={(value) => {
+        edited.current = true
+        field.handleChange(value)
+      }}
       onFocus={() => setFocused(true)}
       onBlur={() => {
         setFocused(false)
@@ -107,9 +105,12 @@ export const TemplateRepoPicker = ({
               : t("assignments.template.search.noTemplates")
       }
       footer={
-        // Two different facts, and only when true: how much of a typed filter's
-        // haystack is hidden, and that we didn't list the entire org.
-        totalCount > items.length || templates.truncated ? (
+        // Three different facts, each only when true: how much of a typed
+        // filter's haystack is hidden, that we didn't list the entire org, and
+        // that the host never told us which repos are templates.
+        totalCount > items.length ||
+        templates.truncated ||
+        !templates.templateFlagPresent ? (
           <>
             {totalCount > items.length
               ? t("assignments.template.search.showing", {
@@ -122,6 +123,11 @@ export const TemplateRepoPicker = ({
                 {t("assignments.template.search.truncated", {
                   scanned: templates.scanned,
                 })}
+              </span>
+            ) : null}
+            {!templates.templateFlagPresent ? (
+              <span className="block">
+                {t("assignments.template.search.unfiltered")}
               </span>
             ) : null}
           </>

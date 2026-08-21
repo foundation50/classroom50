@@ -24,7 +24,6 @@ describe("listOrgTemplateRepos", () => {
     const urls: string[] = []
     const request = vi.fn(async (url: string) => {
       urls.push(url)
-      if (typeof pages === "function") (pages as () => never)()
       const page = Number(
         new URL(url, "https://api.github.com").searchParams.get("page"),
       )
@@ -86,19 +85,26 @@ describe("listOrgTemplateRepos", () => {
   })
 
   it("follows pagination while pages come back full", async () => {
-    const full = Array.from({ length: 100 }, (_, i) => repo(`r${i}`))
+    // Non-template filler: a page of 100 templates would satisfy the panel and
+    // legitimately stop the walk early (covered separately below).
+    const full = Array.from({ length: 100 }, (_, i) =>
+      repo(`r${i}`, { is_template: false }),
+    )
     const { client, urls } = fakeClient([full, [repo("last")]])
 
     const result = await listOrgTemplateRepos(client, { org: "cs50" })
 
     expect(urls).toHaveLength(2)
-    expect(result.items).toHaveLength(101)
+    expect(result.items).toHaveLength(1)
+    expect(result.scanned).toBe(101)
     expect(result.truncated).toBe(false)
   })
 
   it("stops at the page budget and reports truncation", async () => {
     // A huge org must not turn the picker into hundreds of sequential requests.
-    const full = Array.from({ length: 100 }, (_, i) => repo(`r${i}`))
+    const full = Array.from({ length: 100 }, (_, i) =>
+      repo(`r${i}`, { is_template: false }),
+    )
     const { client, urls } = fakeClient([full, full, full])
 
     const result = await listOrgTemplateRepos(client, {
@@ -112,7 +118,9 @@ describe("listOrgTemplateRepos", () => {
   })
 
   it("does not report truncation when the last page is short", async () => {
-    const full = Array.from({ length: 100 }, (_, i) => repo(`r${i}`))
+    const full = Array.from({ length: 100 }, (_, i) =>
+      repo(`r${i}`, { is_template: false }),
+    )
     const { client } = fakeClient([full, [repo("last")]])
 
     const result = await listOrgTemplateRepos(client, {
@@ -150,6 +158,59 @@ describe("listOrgTemplateRepos", () => {
 
     expect(result.templateFlagPresent).toBe(true)
     expect(result.items.map((item) => item.name)).toEqual(["tmpl"])
+  })
+
+  it("encodes the org segment instead of interpolating it raw", async () => {
+    const { client, urls } = fakeClient([[repo("starter")]])
+
+    await listOrgTemplateRepos(client, { org: "a b/c" })
+
+    expect(urls[0]).toContain("/orgs/a%20b%2Fc/repos")
+  })
+
+  it("keeps the repos already fetched when a later page fails", async () => {
+    // A late failure must not turn a usable list into an empty picker.
+    const full = Array.from({ length: 100 }, (_, i) => repo(`r${i}`))
+    let call = 0
+    const request = vi.fn(async () => {
+      call += 1
+      if (call === 1) return full
+      throw new Error("boom")
+    })
+
+    const result = await listOrgTemplateRepos(
+      { request } as unknown as GitHubClient,
+      { org: "cs50" },
+    )
+
+    expect(result.items).toHaveLength(100)
+    expect(result.truncated).toBe(true)
+  })
+
+  it("stops once it has collected enough templates to fill the panel", async () => {
+    // A template-rich org shouldn't pay the full page budget.
+    const templates = Array.from({ length: 100 }, (_, i) => repo(`t${i}`))
+    const { client, urls } = fakeClient([templates, templates, templates])
+
+    const result = await listOrgTemplateRepos(client, { org: "cs50" })
+
+    expect(urls.length).toBeLessThan(3)
+    expect(result.truncated).toBe(true)
+  })
+
+  it("keeps paging past non-template repos to find the templates", async () => {
+    // The realistic large-org shape: recency-sorted pages are mostly student
+    // assignment repos, and the templates are deeper in.
+    const students = Array.from({ length: 100 }, (_, i) =>
+      repo(`hw1-student${i}`, { is_template: false }),
+    )
+    const { client, urls } = fakeClient([students, students, [repo("starter")]])
+
+    const result = await listOrgTemplateRepos(client, { org: "cs50" })
+
+    expect(urls).toHaveLength(3)
+    expect(result.items.map((item) => item.name)).toEqual(["starter"])
+    expect(result.scanned).toBe(201)
   })
 
   it("propagates an API error instead of reporting an empty org", async () => {

@@ -3,6 +3,8 @@ import { queryOptions } from "@tanstack/react-query"
 import type { GitHubClient } from "../client"
 import type { GitHubRepo } from "../types"
 import { githubKeys } from "./keys"
+import { retryOnRateLimit } from "./shared"
+import { retryTransientGitHubError } from "../errors"
 
 // One row in the template picker. Deliberately not `GitHubRepo`: the view needs
 // five fields, and the org-listing payload doesn't reliably populate the rest.
@@ -32,10 +34,14 @@ const PER_PAGE = 100
 // browser (it serves a malformed `Access-Control-Allow-Origin: *;` and then
 // 502s), so listing is the only path — but an org can hold tens of thousands of
 // repos, and walking all of it would be hundreds of sequential requests before
-// the picker could render. 10 pages keeps the cost bounded; `sort=updated` makes
-// those 1000 repos the ones a teacher is plausibly reaching for, and an exact
-// ref they type is still resolved directly by the field's own verification.
+// the picker could render.
 export const TEMPLATE_LIST_MAX_PAGES = 10
+
+// Stop early once the panel has more templates than it can show. In a busy org
+// the recency-sorted pages are mostly student assignment repos, so paging until
+// the budget runs out is the common case; stopping at a satisfying yield is what
+// keeps a template-rich org cheap without starving a template-poor one.
+const ENOUGH_TEMPLATES = 60
 
 // List the org's template repositories, most recently updated first.
 //
@@ -47,45 +53,72 @@ export async function listOrgTemplateRepos(
   args: { org: string; maxPages?: number; signal?: AbortSignal },
 ): Promise<TemplateRepoListResult> {
   const maxPages = args.maxPages ?? TEMPLATE_LIST_MAX_PAGES
-  const repos: GitHubRepo[] = []
+  const org = encodeURIComponent(args.org)
+  const candidates: GitHubRepo[] = []
+  let scanned = 0
+  let templateFlagPresent = false
   let page = 1
   let truncated = false
 
   while (page <= maxPages) {
-    const batch = await client.request<GitHubRepo[]>(
-      `/orgs/${args.org}/repos?per_page=${PER_PAGE}&page=${page}&type=all&sort=updated&direction=desc`,
-      { method: "GET", signal: args.signal },
-    )
-    repos.push(...batch)
+    let batch: GitHubRepo[]
+    try {
+      batch = await retryOnRateLimit(() =>
+        client.request<GitHubRepo[]>(
+          `/orgs/${org}/repos?per_page=${PER_PAGE}&page=${page}&type=all&sort=updated&direction=desc`,
+          { method: "GET", signal: args.signal },
+        ),
+      )
+    } catch (err) {
+      // Keep what we already have rather than turning a late failure into an
+      // empty picker; a first-page failure still surfaces as an error, since
+      // there is nothing to show.
+      if (scanned === 0) throw err
+      truncated = true
+      break
+    }
+
+    scanned += batch.length
+    // `is_template` is in the documented list-response schema, but it has
+    // historically been omitted on some hosts. Distinguish "no templates here"
+    // from "this host won't tell us": in the latter case, offering every repo
+    // unfiltered beats an empty picker the teacher can't explain.
+    if (batch.some((repo) => repo.is_template !== undefined)) {
+      templateFlagPresent = true
+    }
+    candidates.push(...batch)
+
+    // A short page is the end of the org — nothing was skipped.
     if (batch.length < PER_PAGE) break
     if (page === maxPages) {
       // A full last page means there is more we chose not to fetch.
       truncated = true
       break
     }
+    if (
+      templateFlagPresent &&
+      candidates.filter((repo) => repo.is_template === true).length >=
+        ENOUGH_TEMPLATES
+    ) {
+      truncated = true
+      break
+    }
     page++
   }
 
-  // `is_template` is in the documented list-response schema, but it has
-  // historically been omitted on some hosts. Distinguish "no templates here"
-  // from "this host won't tell us": in the latter case, offering every repo
-  // unfiltered beats an empty picker the teacher can't explain.
-  const templateFlagPresent = repos.some(
-    (repo) => repo.is_template !== undefined,
-  )
-  const candidates = templateFlagPresent
-    ? repos.filter((repo) => repo.is_template === true)
-    : repos
+  const templates = templateFlagPresent
+    ? candidates.filter((repo) => repo.is_template === true)
+    : candidates
 
   return {
-    items: candidates.map((repo) => ({
+    items: templates.map((repo) => ({
       fullName: repo.full_name,
       name: repo.name,
       description: repo.description ?? undefined,
       private: Boolean(repo.private),
       updatedAt: repo.updated_at ?? undefined,
     })),
-    scanned: repos.length,
+    scanned,
     truncated,
     templateFlagPresent,
   }
@@ -100,10 +133,11 @@ export function orgTemplateReposQuery(
     queryFn: ({ signal }) =>
       listOrgTemplateRepos(client, { org: args.org!, signal }),
     enabled: Boolean(args.org) && (args.enabled ?? true),
-    // The list is many requests, so hold it for the length of a form session;
-    // a teacher opening the picker again pays nothing.
+    // Long enough that reopening the picker or retyping a prefix costs nothing.
     staleTime: 10 * 60 * 1000,
-    retry: false,
+    // A throttled page is already retried inside the walk (retryOnRateLimit);
+    // this covers a transient 5xx the same way every other read in the app does.
+    retry: retryTransientGitHubError,
   })
 }
 

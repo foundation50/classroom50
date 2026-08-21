@@ -1520,6 +1520,7 @@
         "noTemplates": "No template repositories found in this organization. Turn on \"Template repository\" in a repo's settings, or paste a GitHub URL.",
         "showing": "Showing {{shown}} of {{total}} templates.",
         "truncated": "Searched the {{scanned}} most recently updated repositories. If your template isn't listed, type <owner>/<repo>.",
+        "unfiltered": "GitHub didn't report which of these repositories are templates, so all of them are listed. Check the repository's settings if a copy fails.",
         "privateRepo": "Private repository",
         "updated": "Updated {{when}}"
       },

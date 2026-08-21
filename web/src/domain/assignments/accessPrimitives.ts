@@ -14,6 +14,7 @@ import {
   type LocalizedMessage,
 } from "@/types/localizedMessage"
 import { prefixCommit } from "@/util/commit"
+import { isValidRepoSegment, splitFullName } from "@/util/repoFullName"
 import { logger } from "@/lib/logger"
 
 export const log = logger.scope("mutations:assignments")
@@ -150,10 +151,10 @@ export async function withAcceptStep<T>(
 }
 
 // Parse a `--template` ref — `<owner>/<repo>[@<branch>]`, a bare `<repo>`
-// (owner defaults to the org), or a pasted GitHub URL. Mirrors the CLI's
-// parseTemplateRef for the first two so the GUI accepts the same inputs and
-// writes the same template block; URL support is web-only (nobody pastes a
-// browser URL into a shell flag).
+// (owner defaults to the org), or a pasted GitHub URL. The `<owner>/<repo>`
+// form mirrors the CLI's parseTemplateRef so both write the same template
+// block; the bare name and the URL form are web-only (the CLI rejects both, and
+// nobody pastes a browser URL into a shell flag).
 export type ParsedTemplate = { owner: string; repo: string; branch?: string }
 
 const GITHUB_URL_HOSTS = new Set(["github.com", "www.github.com"])
@@ -176,12 +177,11 @@ const GITHUB_RESERVED_OWNERS = new Set([
   "explore",
 ])
 
-// Recognize a pasted repo URL and reduce it to `owner/repo[@branch]` so the rest
-// of the parser sees its normal input. Returns null when `raw` isn't URL-shaped
-// at all (the common `owner/repo` case), and throws when it is a URL we won't
-// silently reinterpret — a non-GitHub host, or a GitHub path that isn't a repo
-// root or a `/tree/<branch>` ref (e.g. a deep blob link).
-function githubUrlToRef(raw: string): string | null {
+// Reduce a pasted repo URL to a parsed ref. Returns null when `raw` isn't
+// URL-shaped at all (the common `owner/repo` case), and throws when it is a URL
+// we won't silently reinterpret — a non-GitHub host, or a GitHub path that isn't
+// a repo root or a `/tree/<branch>` ref (e.g. a deep blob link).
+function parseGitHubUrl(raw: string): ParsedTemplate | null {
   const withScheme = /^https?:\/\//i.test(raw)
     ? raw
     : /^(?:www\.)?github\.com\//i.test(raw)
@@ -210,22 +210,49 @@ function githubUrlToRef(raw: string): string | null {
   })
 
   // The query string and fragment are browser state (?tab=, #readme), never
-  // part of the ref, so URL parsing drops them for us.
-  const segments = url.pathname.split("/").filter(Boolean)
+  // part of the ref, so URL parsing drops them for us. Percent-encoded segments
+  // are decoded here so the ref carries the real name, and dot segments are
+  // already collapsed by the parser before this split.
+  const segments = url.pathname
+    .split("/")
+    .filter(Boolean)
+    .map(decodeURIComponent)
   const [owner, repoSegment, ...rest] = segments
   if (!owner || !repoSegment) throw urlShapeError
   if (GITHUB_RESERVED_OWNERS.has(owner.toLowerCase())) throw urlShapeError
 
-  const repo = repoSegment.replace(/\.git$/i, "")
+  // A copied URL sometimes carries the branch as `repo@branch` rather than a
+  // `/tree/` path, so honor that suffix here too.
+  const [repoName, atBranch, ...extraAt] = repoSegment.split("@")
+  if (extraAt.length > 0) throw urlShapeError
+  const repo = repoName.replace(/\.git$/i, "")
   if (!repo) throw urlShapeError
-  if (rest.length === 0) return `${owner}/${repo}`
+  if (atBranch !== undefined && !atBranch) throw urlShapeError
 
   // A branch may itself contain slashes (`release/1.0`), so everything after
-  // `/tree/` is the branch. Any other deep path (blob, tree of a subdirectory,
-  // pull, issues) isn't a template ref we can trust.
-  const [kind, ...branchParts] = rest
-  if (kind !== "tree" || branchParts.length === 0) throw urlShapeError
-  return `${owner}/${repo}@${branchParts.join("/")}`
+  // `/tree/` is the branch. Any other deep path (blob, pull, issues) isn't a
+  // template ref we can trust.
+  let branch = atBranch || undefined
+  if (rest.length > 0) {
+    if (branch) throw urlShapeError
+    const [kind, ...branchParts] = rest
+    if (kind !== "tree" || branchParts.length === 0) throw urlShapeError
+    branch = branchParts.join("/")
+  }
+
+  return assertParsed({ owner, repo, branch }, raw)
+}
+
+// Reject a segment GitHub could never name, before it reaches a request path
+// built by interpolation.
+function assertParsed(parsed: ParsedTemplate, raw: string): ParsedTemplate {
+  if (!isValidRepoSegment(parsed.owner) || !isValidRepoSegment(parsed.repo)) {
+    throw localizedError({
+      key: "assignments.template.invalid.shape",
+      params: { raw },
+    })
+  }
+  return parsed
 }
 
 export function parseTemplateRef(
@@ -239,11 +266,12 @@ export function parseTemplateRef(
     throw localizedError({ key: "assignments.template.invalid.empty" })
   }
 
-  // A URL carries both `/` and (for `@branch`) `@`, so fold it to the canonical
-  // shape before either split runs.
-  const normalized = githubUrlToRef(trimmed) ?? trimmed
+  // A URL carries both `/` and (for a branch) `@`, so it can't go through the
+  // splitting below — it resolves to a parsed ref directly.
+  const fromUrl = parseGitHubUrl(trimmed)
+  if (fromUrl) return fromUrl
 
-  const [ownerRepo, branch, ...extraAt] = normalized.split("@")
+  const [ownerRepo, branch, ...extraAt] = trimmed.split("@")
   if (extraAt.length > 0) {
     throw localizedError({
       key: "assignments.template.invalid.branchHasAt",
@@ -252,7 +280,7 @@ export function parseTemplateRef(
   }
   // A branch given as `@<whitespace>` is empty after trimming.
   const trimmedBranch = branch?.trim()
-  if (normalized.includes("@") && !trimmedBranch) {
+  if (trimmed.includes("@") && !trimmedBranch) {
     throw localizedError({
       key: "assignments.template.invalid.branchEmpty",
       params: { raw },
@@ -262,11 +290,10 @@ export function parseTemplateRef(
   const parts = ownerRepo.split("/").map((part) => part.trim())
   if (parts.length === 1 && parts[0]) {
     // Bare repo name → owner defaults to the org (the form's hint).
-    return {
-      owner: defaultOwner,
-      repo: parts[0],
-      branch: trimmedBranch || undefined,
-    }
+    return assertParsed(
+      { owner: defaultOwner, repo: parts[0], branch: trimmedBranch },
+      raw,
+    )
   }
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
     throw localizedError({
@@ -274,23 +301,10 @@ export function parseTemplateRef(
       params: { raw },
     })
   }
-  return {
-    owner: parts[0],
-    repo: parts[1],
-    branch: trimmedBranch || undefined,
-  }
-}
-
-// Split a GitHub `full_name` ("owner/repo") into its halves. Null when the shape
-// is anything else, so a caller falls back rather than inventing a name. The
-// migration layer has its own copy; domain can't import it (leaf/layer rule) and
-// a shared util would be a one-line indirection for two unrelated readers.
-function splitFullName(
-  fullName: string | undefined,
-): { owner: string; repo: string } | null {
-  const parts = fullName?.split("/")
-  if (!parts || parts.length !== 2 || !parts[0] || !parts[1]) return null
-  return { owner: parts[0], repo: parts[1] }
+  return assertParsed(
+    { owner: parts[0], repo: parts[1], branch: trimmedBranch },
+    raw,
+  )
 }
 
 // Render a parsed ref back to the canonical field text. The branch is appended

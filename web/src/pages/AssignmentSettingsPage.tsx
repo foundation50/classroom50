@@ -24,6 +24,7 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import { isClassroomArchived } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Trans, useTranslation } from "react-i18next"
+import { errorText } from "@/types/localizedMessage"
 
 const EditAssignmentFormStudent = ({
   org,
@@ -236,7 +237,7 @@ const AssignmentSettingsPage = () => {
               setEditError("")
             }}
             onError={(error) => {
-              setEditError(error.message)
+              setEditError(errorText(t, error))
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
             onSuccess={(result) => {
