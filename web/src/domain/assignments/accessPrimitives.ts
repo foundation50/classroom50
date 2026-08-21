@@ -281,6 +281,29 @@ export function parseTemplateRef(
   }
 }
 
+// Split a GitHub `full_name` ("owner/repo") into its halves. Null when the shape
+// is anything else, so a caller falls back rather than inventing a name. The
+// migration layer has its own copy; domain can't import it (leaf/layer rule) and
+// a shared util would be a one-line indirection for two unrelated readers.
+function splitFullName(
+  fullName: string | undefined,
+): { owner: string; repo: string } | null {
+  const parts = fullName?.split("/")
+  if (!parts || parts.length !== 2 || !parts[0] || !parts[1]) return null
+  return { owner: parts[0], repo: parts[1] }
+}
+
+// Render a parsed ref back to the canonical field text. The branch is appended
+// only when one was explicitly given: a resolved default branch is not part of
+// what the teacher typed, and echoing it back would silently pin the assignment
+// to today's default (#673).
+export function formatTemplateRef(
+  parsed: Pick<ParsedTemplate, "owner" | "repo"> & { branch?: string },
+): string {
+  const ref = `${parsed.owner}/${parsed.repo}`
+  return parsed.branch ? `${ref}@${parsed.branch}` : ref
+}
+
 // Advisory pre-flight verdict for a template ref: mirrors resolveTemplate's
 // checks but returns a verdict instead of throwing. Uses the teacher's OAuth
 // token — the same one students use at accept time.
@@ -463,28 +486,41 @@ export async function verifyTemplateAccess(
   if (!repo) {
     return { kind: "not-visible", owner: parsed.owner, repo: parsed.repo }
   }
+
+  // Past this point GitHub has told us the repo's real name, so prefer it over
+  // what was typed: `full_name` carries the canonical casing, which is what the
+  // form field displays back to the teacher. Falls back to the parsed values if
+  // a response ever omits it.
+  const canonical = splitFullName(repo.full_name) ?? {
+    owner: parsed.owner,
+    repo: parsed.repo,
+  }
+
   if (!repo.is_template) {
-    return { kind: "not-template", owner: parsed.owner, repo: parsed.repo }
+    return { kind: "not-template", ...canonical }
   }
   // Caught before no-branch (a commitless repo reports a phantom default_branch).
   // Fail open: isConfirmedEmptyTemplate only returns true on a corroborated
   // empty — this advisory path must never be stricter than accept.
-  if (await isConfirmedEmptyTemplate(client, repo, parsed.owner, parsed.repo)) {
-    return { kind: "empty-template", owner: parsed.owner, repo: parsed.repo }
+  if (
+    await isConfirmedEmptyTemplate(
+      client,
+      repo,
+      canonical.owner,
+      canonical.repo,
+    )
+  ) {
+    return { kind: "empty-template", ...canonical }
   }
 
-  const inOrg = parsed.owner.toLowerCase() === org.toLowerCase()
+  const inOrg = canonical.owner.toLowerCase() === org.toLowerCase()
   if (repo.private && !inOrg) {
-    return {
-      kind: "private-out-of-org",
-      owner: parsed.owner,
-      repo: parsed.repo,
-    }
+    return { kind: "private-out-of-org", ...canonical }
   }
 
   const branch = parsed.branch || repo.default_branch
   if (!branch) {
-    return { kind: "no-branch", owner: parsed.owner, repo: parsed.repo }
+    return { kind: "no-branch", ...canonical }
   }
   const visibility = repo.private ? "private" : "public"
 
@@ -492,15 +528,14 @@ export async function verifyTemplateAccess(
   // readable, but generate may still be blocked by app restrictions.
   const isOwnAccount =
     viewerLogin !== undefined &&
-    parsed.owner.toLowerCase() === viewerLogin.toLowerCase()
+    canonical.owner.toLowerCase() === viewerLogin.toLowerCase()
   if (!inOrg && !isOwnAccount) {
     return {
       kind: "ok-verify",
-      owner: parsed.owner,
-      repo: parsed.repo,
+      ...canonical,
       branch,
       visibility,
-      policyUrl: githubOrgOAuthPolicyUrl(parsed.owner),
+      policyUrl: githubOrgOAuthPolicyUrl(canonical.owner),
     }
   }
 
@@ -513,8 +548,7 @@ export async function verifyTemplateAccess(
   if (fork.isRiskyPrivateFork) {
     return {
       kind: "private-fork",
-      owner: parsed.owner,
-      repo: parsed.repo,
+      ...canonical,
       branch,
       parent: fork.parent,
       parentInOrg: fork.parentInOrg,
@@ -523,8 +557,7 @@ export async function verifyTemplateAccess(
 
   return {
     kind: "ok",
-    owner: parsed.owner,
-    repo: parsed.repo,
+    ...canonical,
     branch,
     visibility,
     inOrg,

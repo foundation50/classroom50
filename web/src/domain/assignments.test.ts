@@ -10,6 +10,7 @@ import {
   copyAssignmentToClassroom,
   createAssignmentRepo,
   editAssignment,
+  formatTemplateRef,
   founderPermission,
   nextAvailableSlug,
   parseTemplateRef,
@@ -2169,6 +2170,33 @@ describe("parseTemplateRef", () => {
   })
 })
 
+describe("formatTemplateRef", () => {
+  it("renders owner/repo", () => {
+    expect(formatTemplateRef({ owner: "acme", repo: "starter" })).toBe(
+      "acme/starter",
+    )
+  })
+
+  it("keeps a branch the user typed", () => {
+    expect(
+      formatTemplateRef({ owner: "acme", repo: "starter", branch: "dev" }),
+    ).toBe("acme/starter@dev")
+  })
+
+  it("round-trips through parseTemplateRef", () => {
+    const parsed = parseTemplateRef("https://github.com/acme/starter", "cs50")
+    expect(parseTemplateRef(formatTemplateRef(parsed), "cs50")).toEqual(parsed)
+  })
+
+  it("round-trips a branch-bearing ref", () => {
+    const parsed = parseTemplateRef(
+      "https://github.com/acme/starter/tree/dev",
+      "cs50",
+    )
+    expect(parseTemplateRef(formatTemplateRef(parsed), "cs50")).toEqual(parsed)
+  })
+})
+
 describe("verifyTemplateAccess", () => {
   const ORG = "cs50"
 
@@ -2233,6 +2261,88 @@ describe("verifyTemplateAccess", () => {
     if (result.kind === "ok") {
       expect(result.branch).toBe("main")
       expect(result.inOrg).toBe(true)
+    }
+  })
+
+  it("canonicalizes owner/repo from full_name so the field can display GitHub's casing", async () => {
+    const client = clientReturning({
+      name: "Starter",
+      full_name: "ACME/Starter",
+      private: false,
+      is_template: true,
+      default_branch: "main",
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "acme/starter")
+
+    // Out-of-org and not the viewer's own account, so the verdict is ok-verify;
+    // what matters here is that both halves carry GitHub's casing.
+    expect(result.kind).toBe("ok-verify")
+    if (result.kind === "ok-verify") {
+      expect(result.owner).toBe("ACME")
+      expect(result.repo).toBe("Starter")
+    }
+  })
+
+  it("canonicalizes a bare name against the org", async () => {
+    const client = clientReturning({
+      name: "Starter",
+      full_name: `${ORG}/Starter`,
+      private: false,
+      is_template: true,
+      default_branch: "main",
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "starter")
+
+    expect(result.kind).toBe("ok")
+    if (result.kind === "ok") {
+      expect(result.owner).toBe(ORG)
+      expect(result.repo).toBe("Starter")
+      // Casing differs from the typed value but it's still the classroom org.
+      expect(result.inOrg).toBe(true)
+    }
+  })
+
+  it("canonicalizes casing on a non-ok verdict that still resolved the repo", async () => {
+    const client = clientReturning({
+      name: "Starter",
+      full_name: "ACME/Starter",
+      private: false,
+      is_template: false,
+      default_branch: "main",
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "acme/starter")
+
+    expect(result.kind).toBe("not-template")
+    if (result.kind === "not-template") {
+      expect(result.owner).toBe("ACME")
+      expect(result.repo).toBe("Starter")
+    }
+  })
+
+  it("keeps the typed casing when the repo never resolved", async () => {
+    // No repo object means no canonical name to prefer — echoing the typed
+    // value is what lets the teacher recognize their own typo.
+    const client = clientReturning(() => {
+      throw new GitHubAPIError({
+        status: 404,
+        url: `https://api.github.com/repos/ACME/Starter`,
+        message: "Not Found",
+        body: { message: "Not Found" },
+        rateLimit: emptyRateLimit,
+        acceptedScopes: null,
+        oauthScopes: null,
+      })
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "ACME/Starter")
+
+    expect(result.kind).toBe("not-visible")
+    if (result.kind === "not-visible") {
+      expect(result.owner).toBe("ACME")
+      expect(result.repo).toBe("Starter")
     }
   })
 
