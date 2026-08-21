@@ -291,7 +291,7 @@ export type Assignment = {
   // gate behavior on the field being PRESENT: absence is the wire default, not
   // a legacy or version marker. buildAssignmentEntry collapses every-push away
   // like the CLI, so an entry saved here matches one `gh teacher assignment
-  // add` wrote; web-v1.28..v1.32 wrote it explicitly, and those files still
+  // add` wrote; earlier releases wrote it explicitly, and those files still
   // read as every-push. In lockstep with the CLI's assignments-v1 schema enum
   // (`submission_mode`).
   submission_mode?: SubmissionMode

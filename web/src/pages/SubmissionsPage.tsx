@@ -1195,10 +1195,7 @@ const SubmissionsPageContent = () => {
             // are never rewritten, and a no_autograder assignment has no shim
             // to retrofit (skipsGrading). Reconciles existing repos with the
             // assignment's submission_mode (baked into shims at accept time).
-            // Requires a RESOLVED assignmentInfo: isDefaultAutograder(undefined)
-            // is true, so gating on the optional chain alone would enable the
-            // action while the assignments query loads (or after it fails) and
-            // retrofit shims to the fallback every-push mode.
+            // Requires a resolved entry — see assignmentResolved.
             onBulkTrigger={
               isOwner &&
               !isGroupAssignment &&
@@ -1274,10 +1271,7 @@ const SubmissionsPageContent = () => {
         emptyRepo={skipsGrading}
         // Per-row trigger retrofit: owner + default-autograder only (teacher-
         // authored shims are never rewritten). Mirrors the bulk-action gate,
-        // including the resolved-assignmentInfo requirement: while the
-        // assignments query loads, isDefaultAutograder(undefined) is true and
-        // the ?? fallback would arm the action with "every-push" — clicking it
-        // would rewrite a tag-mode repo's shim to the wrong trigger.
+        // including assignmentResolved.
         submissionMode={
           isOwner &&
           !skipsGrading &&
@@ -1488,17 +1482,25 @@ const SubmissionsPageContent = () => {
         owners={acceptedOwners}
         students={students}
       />
-      <BulkSubmissionTriggerModal
-        open={bulkTriggerOpen}
-        onClose={() => setBulkTriggerOpen(false)}
-        org={org}
-        classroom={classroom}
-        assignment={assignment}
-        submissionMode={assignmentInfo?.submission_mode ?? "every-push"}
-        submissionTags={assignmentInfo?.submission_tags}
-        owners={acceptedOwners}
-        students={students}
-      />
+      {/* Mounted only once resolved: the retrofit reconciles every repo's shim
+          toward the STORED mode, and the `?? "every-push"` fallback below would
+          otherwise hand it the default while the assignments query loads (or
+          after it fails) — rewriting a tag-mode repo's shim to the wrong
+          trigger. The opener is already gated; this keeps the payload from
+          depending on that. */}
+      {assignmentResolved && (
+        <BulkSubmissionTriggerModal
+          open={bulkTriggerOpen}
+          onClose={() => setBulkTriggerOpen(false)}
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+          submissionMode={assignmentInfo.submission_mode ?? "every-push"}
+          submissionTags={assignmentInfo.submission_tags}
+          owners={acceptedOwners}
+          students={students}
+        />
+      )}
       <BulkAutogradeStateModal
         open={bulkPauseOpen}
         onClose={() => setBulkPauseOpen(false)}

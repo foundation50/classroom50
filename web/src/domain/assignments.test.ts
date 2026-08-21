@@ -1145,13 +1145,25 @@ describe("editAssignment (preserved-entry integration)", () => {
   // collapses to no field at all, mirroring the CLI's wire form so a form save
   // can't add a key `gh teacher assignment add` would have omitted. Junk is
   // rejected before a file the CLI would refuse to parse can be written.
+  // The STORED value is part of the table, not just the input: the field is
+  // classroom50-owned, so an edit rebuilds it rather than preserving it, and
+  // the rows that matter are the ones where the two disagree — normalizing a
+  // v1.28..v1.32 explicit every-push away, and a real tag -> every-push
+  // downgrade that must not silently keep tag.
   it("writes tag explicitly and collapses every-push to an absent field", async () => {
-    for (const [input, want] of [
-      ["tag", "tag"],
-      ["every-push", undefined],
-      [undefined, undefined],
+    for (const [stored, input, want] of [
+      [undefined, "tag", "tag"],
+      [undefined, "every-push", undefined],
+      [undefined, undefined, undefined],
+      ["every-push", "every-push", undefined],
+      ["tag", "every-push", undefined],
+      ["tag", "tag", "tag"],
     ] as const) {
-      const { client, committedContent } = makeClient()
+      const { client, committedContent } = makeClient(
+        stored === undefined
+          ? existingEntry
+          : { ...existingEntry, submission_mode: stored },
+      )
       await editAssignment(client, editInput({ submission_mode: input }))
       const written = JSON.parse(committedContent()) as {
         assignments: Assignment[]
