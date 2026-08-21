@@ -29,6 +29,12 @@ export const githubKeys = {
 
   orgRepos: (org: string) => [...githubKeys.all, "org-repos", org] as const,
 
+  // Server-side template search (GET /search/repositories). Keyed by the query
+  // text because each keystroke's debounced result is its own cache entry —
+  // distinct from `orgRepos`, which is the whole-org listing.
+  orgTemplateRepoSearch: (org: string | undefined, query: string) =>
+    [...githubKeys.all, "org-template-repo-search", org, query] as const,
+
   orgMembers: (org: string) => ["orgs", "list", "members", org] as const,
 
   // Distinct from `orgMembers` (page-1 via listOrgMembers): this keys the
