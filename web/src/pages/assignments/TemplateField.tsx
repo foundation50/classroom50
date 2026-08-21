@@ -32,6 +32,7 @@ import {
 } from "@/components/InlineNote"
 import { Button, FormField } from "@/components/ui"
 import { TemplateRepoPicker } from "./TemplateRepoPicker"
+import { canonicalTemplateRef } from "./templateRefNormalize"
 import { templateForkNoteView } from "./templateNoteView"
 
 // Advisory, non-blocking pre-flight for the Template Repository field: checks
@@ -153,6 +154,7 @@ export const TemplateField = ({
             describedById={describedById}
             org={org}
             placeholder={t("assignments.template.placeholder")}
+            canonicalRef={canonicalTemplateRef(verification, rawValue)}
           />
         )}
       </FormField>

@@ -58,6 +58,7 @@ export type ComboboxProps<T> = {
   | "invalid"
   | "inputSize"
   | "name"
+  | "onFocus"
   | "onBlur"
   | "spellCheck"
   | "aria-describedby"
@@ -191,7 +192,10 @@ export function Combobox<T>({
           onInputChange(event.target.value)
           if (!open) onOpenChange(true)
         }}
-        onFocus={openFresh}
+        onFocus={(event) => {
+          openFresh()
+          inputProps.onFocus?.(event)
+        }}
         onKeyDown={onKeyDown}
       />
 

@@ -75,20 +75,26 @@ function fakeField(value = ""): StringField {
   } as unknown as StringField
 }
 
-function renderPicker(props: { value?: string; org?: string } = {}) {
+function queryWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  const wrapper = ({ children }: PropsWithChildren) =>
+  return ({ children }: PropsWithChildren) =>
     createElement(QueryClientProvider, { client: queryClient }, children)
+}
+
+function renderPicker(
+  props: { value?: string; org?: string; canonicalRef?: string | null } = {},
+) {
   return render(
     createElement(TemplateRepoPicker, {
       field: fakeField(props.value ?? ""),
       id: "template_repo",
       org: "org" in props ? props.org : ORG,
       placeholder: "placeholder",
+      canonicalRef: props.canonicalRef,
     }),
-    { wrapper },
+    { wrapper: queryWrapper() },
   )
 }
 
@@ -248,5 +254,65 @@ describe("TemplateRepoPicker", () => {
     await user.type(input(), "a")
 
     expect(handleChange).toHaveBeenCalledWith("a")
+  })
+})
+
+describe("TemplateRepoPicker — verified normalization", () => {
+  it("rewrites the field to the confirmed canonical ref when unfocused", () => {
+    renderPicker({ canonicalRef: "cs50/starter" })
+
+    expect(handleChange).toHaveBeenCalledWith("cs50/starter")
+  })
+
+  it("does not rewrite while the teacher is still typing", async () => {
+    const user = userEvent.setup()
+    // Render focused first, then let the verdict arrive: rewriting mid-typing
+    // would fight the cursor.
+    const { rerender } = renderPicker()
+    await user.click(input())
+    handleChange.mockClear()
+
+    rerender(
+      createElement(TemplateRepoPicker, {
+        field: fakeField("starter"),
+        id: "template_repo",
+        org: ORG,
+        placeholder: "placeholder",
+        canonicalRef: "cs50/starter",
+      }),
+    )
+
+    expect(handleChange).not.toHaveBeenCalledWith("cs50/starter")
+  })
+
+  it("rewrites once the field loses focus", async () => {
+    const user = userEvent.setup()
+    render(
+      createElement(
+        "div",
+        null,
+        createElement(TemplateRepoPicker, {
+          field: fakeField("starter"),
+          id: "template_repo",
+          org: ORG,
+          placeholder: "placeholder",
+          canonicalRef: "cs50/starter",
+        }),
+        createElement("button", { type: "button" }, "elsewhere"),
+      ),
+      { wrapper: queryWrapper() },
+    )
+
+    await user.click(input())
+    handleChange.mockClear()
+    await user.click(screen.getByRole("button", { name: "elsewhere" }))
+
+    expect(handleChange).toHaveBeenCalledWith("cs50/starter")
+  })
+
+  it("leaves the text alone when nothing was confirmed", () => {
+    renderPicker({ canonicalRef: null })
+
+    expect(handleChange).not.toHaveBeenCalled()
   })
 })

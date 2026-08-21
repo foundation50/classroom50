@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Lock, Search } from "lucide-react"
 
@@ -25,6 +25,7 @@ export const TemplateRepoPicker = ({
   org,
   placeholder,
   labelledBy,
+  canonicalRef,
 }: {
   field: StringField
   id: string
@@ -32,9 +33,14 @@ export const TemplateRepoPicker = ({
   org?: string
   placeholder: string
   labelledBy?: string
+  // The canonical `{owner}/{repo}` for the current text once GitHub has
+  // confirmed the repo exists, else null. Supplied by TemplateField, which owns
+  // the verification query.
+  canonicalRef?: string | null
 }) => {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
 
   const templates = useOrgTemplateRepos({
     org,
@@ -47,6 +53,14 @@ export const TemplateRepoPicker = ({
   const select = (item: TemplateRepoItem) => {
     field.handleChange(item.fullName)
   }
+
+  // Normalize to `{owner}/{repo}` once verification confirms the repo — never
+  // mid-typing, which would fight the cursor. Verification is debounced, so a
+  // teacher who blurs early gets the rewrite when the verdict lands instead.
+  useEffect(() => {
+    if (focused || !canonicalRef) return
+    field.handleChange(canonicalRef)
+  }, [focused, canonicalRef, field])
 
   // One line above the options, and only when it says something the list itself
   // doesn't.
@@ -71,7 +85,11 @@ export const TemplateRepoPicker = ({
       }
       value={field.state.value}
       onInputChange={(value) => field.handleChange(value)}
-      onBlur={normalizeOnBlur(field)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => {
+        setFocused(false)
+        normalizeOnBlur(field)()
+      }}
       open={open}
       onOpenChange={setOpen}
       items={items}
