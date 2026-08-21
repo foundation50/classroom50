@@ -1141,15 +1141,15 @@ describe("editAssignment (preserved-entry integration)", () => {
 
   // The write path's submission_mode branches (buildAssignmentEntry is not
   // exported — assert through editAssignment, like the sibling tests above):
-  // The saved entry always states the submission definition the teacher saw,
-  // so "tag" and "every-push" both land verbatim and an absent input defaults
-  // to an explicit "every-push"; junk is rejected before a file the CLI would
-  // refuse to parse can be written.
-  it("always writes submission_mode explicitly", async () => {
+  // "tag" lands verbatim, while every-push — explicit or absent in the input —
+  // collapses to no field at all, mirroring the CLI's wire form so a form save
+  // can't add a key `gh teacher assignment add` would have omitted. Junk is
+  // rejected before a file the CLI would refuse to parse can be written.
+  it("writes tag explicitly and collapses every-push to an absent field", async () => {
     for (const [input, want] of [
       ["tag", "tag"],
-      ["every-push", "every-push"],
-      [undefined, "every-push"],
+      ["every-push", undefined],
+      [undefined, undefined],
     ] as const) {
       const { client, committedContent } = makeClient()
       await editAssignment(client, editInput({ submission_mode: input }))
@@ -1158,6 +1158,9 @@ describe("editAssignment (preserved-entry integration)", () => {
       }
       const edited = written.assignments.find((a) => a.slug === SLUG)!
       expect(edited.submission_mode).toBe(want)
+      // Collapsed means the key is gone, not present-and-null: the CLI decodes
+      // strictly and a null would fail the enum.
+      expect("submission_mode" in edited).toBe(want !== undefined)
     }
   })
 

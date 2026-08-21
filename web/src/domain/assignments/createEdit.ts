@@ -795,20 +795,22 @@ async function buildAssignmentEntry(
     }
   }
 
-  // submission_mode: written explicitly, every-push included, so the saved
-  // entry states the submission definition the teacher just saw. The schema
-  // permits that and the CLI's collapsed form means the same thing to every
-  // reader. Validate against the enum so a bad value can't produce a file
-  // the CLI refuses to parse. Permitted for every repo shape (including
-  // empty_repo / no_autograder): with no shim it carries no trigger, but it
-  // still defines what the submissions page counts as a submission.
+  // submission_mode: validate, then collapse the wire default away like the CLI
+  // (assignment.go, submissionmode.go) so an every-push entry saved here stays
+  // byte-identical to one `gh teacher assignment add` wrote — editing a
+  // CLI-created assignment must not add a field the teacher never touched.
+  // Absence IS every-push, so no intent is lost. Permitted for every repo shape
+  // (including empty_repo / no_autograder): with no shim it carries no trigger,
+  // but it still defines what the submissions page counts as a submission.
   const resolvedSubmissionMode = input.submission_mode ?? "every-push"
   if (!SUBMISSION_MODES.includes(resolvedSubmissionMode)) {
     throw new Error(
       `submission_mode: must be one of ${SUBMISSION_MODES.join(", ")} (got "${resolvedSubmissionMode}").`,
     )
   }
-  entry.submission_mode = resolvedSubmissionMode
+  if (resolvedSubmissionMode !== "every-push") {
+    entry.submission_mode = resolvedSubmissionMode
+  }
 
   // submission_tags: omit when empty (no milestone tags — today's behavior),
   // mirroring the CLI's omitempty. Validate so a bad pattern can't produce a
