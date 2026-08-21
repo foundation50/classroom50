@@ -310,12 +310,10 @@ describe("useDetectedSubmissions — fan-out contract", () => {
     expect(result.current.isPending).toBe(false)
   })
 
-  // Regression for #654: while the assignment query is unresolved the caller
-  // passes an undefined mode AND enabled:false. If the disabled gate ever leaked,
-  // the undefined mode would resolve to every-push and count a tag-mode
-  // assignment in branch mode. The gate must win — no read fires at all.
+  // Regression for #654: an unresolved assignment passes mode:undefined with
+  // enabled:false. The disabled gate must win before the undefined mode could
+  // resolve to every-push and count a tag-mode assignment in branch mode.
   it("does not fetch while unresolved (mode undefined + disabled)", () => {
-    request.mockImplementation(branchClient({ defaultBranch: "main" }))
     const { result } = renderHook(
       () =>
         useDetectedSubmissions({

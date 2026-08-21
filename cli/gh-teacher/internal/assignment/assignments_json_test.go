@@ -89,23 +89,19 @@ func TestSubmissionModeEnumParity(t *testing.T) {
 	}
 }
 
-// TestSubmissionModeReaderRuleParity guards the PROSE reader rule that the enum
-// parity test above does not: absence is the wire default (resolve to
-// every-push) and no reader may gate behavior on the field being present. That
-// rule lives only as hand-synced free text in three places — the schema
-// submission_mode.description, the Go contract.go comment, and the web
-// types/classroom.ts comment — so an edit to one that silently drops or
-// contradicts it in another is exactly the #654 defect in a new form. Enum
-// values are pinned separately; this pins the invariant's wording. On a
-// reworded rule, update all three copies so the shared phrases survive.
+// TestSubmissionModeReaderRuleParity pins the PROSE reader rule (absence is the
+// wire default; never gate on the field being present) across its three
+// hand-synced copies — the schema submission_mode.description, contract.go, and
+// the web types/classroom.ts comment. Enum parity pins the values, not this
+// wording, and a one-sided drop reintroduces the #654 ambiguity. Update all
+// three copies in lockstep so the shared phrases survive.
 func TestSubmissionModeReaderRuleParity(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
 	if err != nil {
 		t.Fatalf("resolve repo root: %v", err)
 	}
 
-	// The two load-bearing clauses of the rule, in the wording all three copies
-	// share. Both must survive verbatim in every mirror.
+	// The load-bearing clauses every copy shares, in their common wording.
 	wantPhrases := []string{
 		"gate behavior on the field being PRESENT",
 		"absence is the wire default",
