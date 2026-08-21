@@ -43,6 +43,7 @@ export const TemplateRepoPicker = ({
   })
 
   const { items, totalCount } = templates
+  const typed = field.state.value.trim()
 
   const select = (item: TemplateRepoItem) => {
     edited.current = true
@@ -57,15 +58,37 @@ export const TemplateRepoPicker = ({
     field.handleChange(canonicalRef)
   }, [focused, canonicalRef, field])
 
-  // One line above the options, and only when it says something the list itself
-  // doesn't.
-  const status = templates.isLoadingList
-    ? t("assignments.template.search.loading")
-    : templates.isError
-      ? t("assignments.template.search.unavailable")
-      : null
+  const status = () => {
+    if (templates.isLoadingList) return t("assignments.template.search.loading")
+    if (templates.isError) return t("assignments.template.search.unavailable")
+    return null
+  }
 
-  const typed = field.state.value.trim()
+  const emptyState = () => {
+    if (templates.isLoadingList) return null
+    if (templates.isError) return t("assignments.template.search.typeInstead")
+    if (typed) {
+      return t("assignments.template.search.noMatches", { query: typed })
+    }
+    return t("assignments.template.search.noTemplates")
+  }
+
+  // Each caveat only when it's true: how much of a typed filter's haystack is
+  // hidden, that the whole org wasn't listed, and that GitHub never said which
+  // repos are templates.
+  const footerLines = [
+    totalCount > items.length &&
+      t("assignments.template.search.showing", {
+        shown: items.length,
+        total: totalCount,
+      }),
+    templates.truncated &&
+      t("assignments.template.search.truncated", {
+        scanned: templates.scanned,
+      }),
+    !templates.templateFlagPresent &&
+      t("assignments.template.search.unfiltered"),
+  ].filter((line): line is string => Boolean(line))
 
   return (
     <Combobox
@@ -94,44 +117,16 @@ export const TemplateRepoPicker = ({
       getItemKey={(item) => item.fullName}
       getItemLabel={(item) => item.fullName}
       onSelect={select}
-      status={status}
-      emptyState={
-        templates.isLoadingList
-          ? null
-          : templates.isError
-            ? t("assignments.template.search.typeInstead")
-            : typed
-              ? t("assignments.template.search.noMatches", { query: typed })
-              : t("assignments.template.search.noTemplates")
-      }
+      status={status()}
+      emptyState={emptyState()}
       footer={
-        // Three different facts, each only when true: how much of a typed
-        // filter's haystack is hidden, that we didn't list the entire org, and
-        // that the host never told us which repos are templates.
-        totalCount > items.length ||
-        templates.truncated ||
-        !templates.templateFlagPresent ? (
-          <>
-            {totalCount > items.length
-              ? t("assignments.template.search.showing", {
-                  shown: items.length,
-                  total: totalCount,
-                })
-              : null}
-            {templates.truncated ? (
-              <span className="block">
-                {t("assignments.template.search.truncated", {
-                  scanned: templates.scanned,
-                })}
+        footerLines.length > 0
+          ? footerLines.map((line) => (
+              <span key={line} className="block">
+                {line}
               </span>
-            ) : null}
-            {!templates.templateFlagPresent ? (
-              <span className="block">
-                {t("assignments.template.search.unfiltered")}
-              </span>
-            ) : null}
-          </>
-        ) : null
+            ))
+          : null
       }
       renderItem={(item) => (
         <>
@@ -150,7 +145,7 @@ export const TemplateRepoPicker = ({
             </span>
           ) : null}
           {item.updatedAt ? (
-            <span className="text-xs text-base-content/45">
+            <span className="text-xs text-base-content/50">
               {t("assignments.template.search.updated", {
                 when: formatRelativeToNow(new Date(item.updatedAt)),
               })}

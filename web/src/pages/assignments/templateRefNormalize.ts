@@ -4,6 +4,18 @@ import {
   type TemplateAccessVerification,
 } from "@/domain/assignments"
 
+// The cache identity of a template ref: the same repo typed bare, as
+// `owner/repo`, or pasted as a URL must not verify twice, because the verdict is
+// derived from the parsed ref alone. An unparseable ref keeps its raw text — the
+// `invalid` verdict quotes it.
+export function templateVerifyKey(typed: string, defaultOwner: string): string {
+  try {
+    return formatTemplateRef(parseTemplateRef(typed, defaultOwner))
+  } catch {
+    return typed
+  }
+}
+
 // Verdict kinds that got a repo object back from GitHub, and therefore carry a
 // canonical `owner`/`repo` worth writing into the field. The excluded kinds
 // (`not-visible`, `restricted`, `rate-limited`, `unknown`, `invalid`, `empty`)

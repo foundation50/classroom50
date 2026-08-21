@@ -243,8 +243,7 @@ function parseGitHubUrl(raw: string): ParsedTemplate | null {
   return assertParsed({ owner, repo, branch }, raw)
 }
 
-// Reject a segment GitHub could never name, before it reaches a request path
-// built by interpolation.
+// Reject a segment GitHub could never name.
 function assertParsed(parsed: ParsedTemplate, raw: string): ParsedTemplate {
   if (!isValidRepoSegment(parsed.owner) || !isValidRepoSegment(parsed.repo)) {
     throw localizedError({
@@ -307,13 +306,9 @@ export function parseTemplateRef(
   )
 }
 
-// Render a parsed ref back to the canonical field text. The branch is appended
-// only when one was explicitly given: a resolved default branch is not part of
-// what the teacher typed, and echoing it back would silently pin the assignment
-// to today's default (#673).
-export function formatTemplateRef(
-  parsed: Pick<ParsedTemplate, "owner" | "repo"> & { branch?: string },
-): string {
+// Render a parsed ref back to field text; the branch is appended only when one
+// is present.
+export function formatTemplateRef(parsed: ParsedTemplate): string {
   const ref = `${parsed.owner}/${parsed.repo}`
   return parsed.branch ? `${ref}@${parsed.branch}` : ref
 }

@@ -32,7 +32,7 @@ import {
 } from "@/components/InlineNote"
 import { Button, FormField } from "@/components/ui"
 import { TemplateRepoPicker } from "./TemplateRepoPicker"
-import { canonicalTemplateRef } from "./templateRefNormalize"
+import { canonicalTemplateRef, templateVerifyKey } from "./templateRefNormalize"
 import { templateForkNoteView } from "./templateNoteView"
 
 // Advisory, non-blocking pre-flight for the Template Repository field: checks
@@ -69,7 +69,15 @@ export const TemplateField = ({
   const enabled = Boolean(client && org && debouncedValue && !isLoadingUser)
 
   const verificationQuery = useQuery({
-    queryKey: ["template-access", org, viewerLogin, debouncedValue],
+    // Keyed on the parsed identity, not the raw text: the canonical rewrite
+    // below changes the text without changing the repo, and re-keying would buy
+    // a second round trip for the same verdict.
+    queryKey: [
+      "template-access",
+      org,
+      viewerLogin,
+      templateVerifyKey(debouncedValue, org ?? ""),
+    ],
     queryFn: () =>
       verifyTemplateAccess(client!, org!, debouncedValue, viewerLogin),
     enabled,

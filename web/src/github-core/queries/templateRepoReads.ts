@@ -35,7 +35,7 @@ const PER_PAGE = 100
 // 502s), so listing is the only path — but an org can hold tens of thousands of
 // repos, and walking all of it would be hundreds of sequential requests before
 // the picker could render.
-export const TEMPLATE_LIST_MAX_PAGES = 10
+const MAX_PAGES = 10
 
 // Stop early once the panel has more templates than it can show. In a busy org
 // the recency-sorted pages are mostly student assignment repos, so paging until
@@ -43,19 +43,19 @@ export const TEMPLATE_LIST_MAX_PAGES = 10
 // keeps a template-rich org cheap without starving a template-poor one.
 const ENOUGH_TEMPLATES = 60
 
-// List the org's template repositories, most recently updated first.
-//
-// Filtering happens here rather than server-side because no list endpoint takes
-// a template qualifier; the caller filters by name locally, which makes typing
-// instant and costs no requests.
+const isTemplate = (repo: GitHubRepo) => repo.is_template === true
+
+// List the org's template repositories, most recently updated first. No list
+// endpoint takes a template qualifier, so the filtering happens here.
 export async function listOrgTemplateRepos(
   client: GitHubClient,
   args: { org: string; maxPages?: number; signal?: AbortSignal },
 ): Promise<TemplateRepoListResult> {
-  const maxPages = args.maxPages ?? TEMPLATE_LIST_MAX_PAGES
+  const maxPages = args.maxPages ?? MAX_PAGES
   const org = encodeURIComponent(args.org)
   const candidates: GitHubRepo[] = []
   let scanned = 0
+  let templateCount = 0
   let templateFlagPresent = false
   let page = 1
   let truncated = false
@@ -87,6 +87,7 @@ export async function listOrgTemplateRepos(
       templateFlagPresent = true
     }
     candidates.push(...batch)
+    templateCount += batch.filter(isTemplate).length
 
     // A short page is the end of the org — nothing was skipped.
     if (batch.length < PER_PAGE) break
@@ -95,11 +96,7 @@ export async function listOrgTemplateRepos(
       truncated = true
       break
     }
-    if (
-      templateFlagPresent &&
-      candidates.filter((repo) => repo.is_template === true).length >=
-        ENOUGH_TEMPLATES
-    ) {
+    if (templateFlagPresent && templateCount >= ENOUGH_TEMPLATES) {
       truncated = true
       break
     }
@@ -107,7 +104,7 @@ export async function listOrgTemplateRepos(
   }
 
   const templates = templateFlagPresent
-    ? candidates.filter((repo) => repo.is_template === true)
+    ? candidates.filter(isTemplate)
     : candidates
 
   return {
@@ -141,12 +138,10 @@ export function orgTemplateReposQuery(
   })
 }
 
-// Filter the cached list by what the teacher typed. Local and synchronous — the
-// whole reason the list is fetched once instead of per keystroke.
-//
-// Matches on the bare name and on `owner/repo`, so both "starter" and
-// "cs50/star" narrow as expected. A name-position match sorts ahead of a later
-// one, which puts the obvious candidate first.
+// Filter the cached list by what the teacher typed — local and synchronous, so
+// typing costs no requests. Matches on the bare name and on `owner/repo`, so
+// both "starter" and "cs50/star" narrow as expected; a name-position match sorts
+// ahead of a later one, which puts the obvious candidate first.
 export function filterTemplateRepos(
   items: TemplateRepoItem[],
   query: string,

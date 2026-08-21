@@ -1,14 +1,13 @@
 import {
   useCallback,
-  useEffect,
   useId,
   useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
-  type Ref,
 } from "react"
 
+import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
 import { cx } from "./cx"
 import { Input, type InputProps } from "./Input"
 
@@ -24,13 +23,10 @@ import { Input, type InputProps } from "./Input"
 //     `overflow-hidden` (an ancestor that does will truncate it — see Collapse).
 
 export type ComboboxProps<T> = {
-  // Stable id for the input; the listbox and options derive their ids from it so
-  // `aria-activedescendant` can reference them.
+  // Stable id for the input; the listbox id derives from it.
   id: string
-  // Accessible name for the input. Pass the same text as the visible field
-  // label; `labelledBy` is preferred when a real <label> already exists.
+  // Accessible name for the input and the listbox.
   label?: string
-  labelledBy?: string
   value: string
   onInputChange: (value: string) => void
   open: boolean
@@ -42,14 +38,9 @@ export type ComboboxProps<T> = {
   getItemLabel: (item: T) => string
   renderItem: (item: T, state: { active: boolean }) => ReactNode
   onSelect: (item: T) => void
-  // Shown in place of the listbox when `items` is empty (never an empty
-  // listbox, which reads as a broken widget).
   emptyState?: ReactNode
-  // Rendered below the options — e.g. "showing 30 of 4213, keep typing".
   footer?: ReactNode
-  // Transient state (searching, throttled). Announced politely.
   status?: ReactNode
-  inputRef?: Ref<HTMLInputElement>
 } & Pick<
   InputProps,
   | "placeholder"
@@ -68,7 +59,6 @@ export type ComboboxProps<T> = {
 export function Combobox<T>({
   id,
   label,
-  labelledBy,
   value,
   onInputChange,
   open,
@@ -81,7 +71,6 @@ export function Combobox<T>({
   emptyState,
   footer,
   status,
-  inputRef,
   className,
   ...inputProps
 }: ComboboxProps<T>) {
@@ -111,18 +100,8 @@ export function Combobox<T>({
     onOpenChange(true)
   }, [onOpenChange])
 
-  // Pointer-down outside the widget closes it. Click would fire after the
-  // input's blur/refocus dance and reopen it immediately.
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target
-      if (target instanceof Node && wrapperRef.current?.contains(target)) return
-      close()
-    }
-    document.addEventListener("pointerdown", onPointerDown)
-    return () => document.removeEventListener("pointerdown", onPointerDown)
-  }, [open, close])
+  // Pointer-down outside the widget closes it.
+  useDismissOnOutsidePointerDown(wrapperRef, open, close)
 
   const move = (delta: number) => {
     if (items.length === 0) return
@@ -175,8 +154,7 @@ export function Combobox<T>({
         {...inputProps}
         id={id}
         role="combobox"
-        aria-label={labelledBy ? undefined : label}
-        aria-labelledby={labelledBy}
+        aria-label={label}
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         aria-autocomplete="list"
@@ -186,7 +164,6 @@ export function Combobox<T>({
             : undefined
         }
         autoComplete="off"
-        ref={inputRef}
         value={value}
         onChange={(event) => {
           onInputChange(event.target.value)
@@ -229,8 +206,7 @@ export function Combobox<T>({
           <ul
             id={listboxId}
             role="listbox"
-            aria-label={labelledBy ? undefined : label}
-            aria-labelledby={labelledBy}
+            aria-label={label}
             // Let a scrollbar drag through: the wrapper's preventDefault would
             // otherwise cancel it.
             onPointerDown={(event) => event.stopPropagation()}

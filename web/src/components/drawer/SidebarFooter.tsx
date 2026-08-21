@@ -18,7 +18,8 @@ import {
 } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { createPortal } from "react-dom"
-import { type MouseEvent, useEffect, useId, useRef, useState } from "react"
+import { type MouseEvent, useId, useRef, useState } from "react"
+import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import GitHub from "@/assets/github.svg?react"
 import duck from "@/assets/duck.png"
@@ -336,23 +337,7 @@ const AuthedSidebarFooter = () => {
   const { collapsed } = useSidebarCollapse()
   const { isDark, toggleTheme } = useTheme()
 
-  useEffect(() => {
-    if (!menuOpen) return
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!footerRef.current) return
-
-      if (!footerRef.current.contains(event.target as Node)) {
-        setMenuOpen(false)
-      }
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown)
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown)
-    }
-  }, [menuOpen])
+  useDismissOnOutsidePointerDown(footerRef, menuOpen, () => setMenuOpen(false))
 
   return (
     <>
