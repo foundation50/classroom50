@@ -12,6 +12,7 @@ import {
   editAssignment,
   founderPermission,
   nextAvailableSlug,
+  parseTemplateRef,
   permissionSatisfies,
   preserveUnmanagedAssignmentKeys,
   resolveAutograderWorkflow,
@@ -2024,6 +2025,147 @@ describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
     })
 
     expect(result.newCommitSha).toBe("newcommit")
+  })
+})
+
+describe("parseTemplateRef", () => {
+  const ORG = "cs50"
+
+  // Throwing is the only failure channel, so a helper keeps each case to the
+  // assertion that matters: which key the teacher will actually be shown.
+  function localizedFor(raw: string) {
+    try {
+      parseTemplateRef(raw, ORG)
+    } catch (err) {
+      return localizedMessageOf(err)
+    }
+    throw new Error(`expected "${raw}" to be rejected`)
+  }
+
+  it("parses owner/repo", () => {
+    expect(parseTemplateRef("acme/starter", ORG)).toEqual({
+      owner: "acme",
+      repo: "starter",
+      branch: undefined,
+    })
+  })
+
+  it("defaults a bare repo name to the org", () => {
+    expect(parseTemplateRef("starter", ORG)).toEqual({
+      owner: ORG,
+      repo: "starter",
+      branch: undefined,
+    })
+  })
+
+  it("parses owner/repo@branch", () => {
+    expect(parseTemplateRef("acme/starter@spring-2026", ORG)).toEqual({
+      owner: "acme",
+      repo: "starter",
+      branch: "spring-2026",
+    })
+  })
+
+  it.each([
+    "https://github.com/acme/starter",
+    "http://github.com/acme/starter",
+    "https://www.github.com/acme/starter",
+    "https://github.com/acme/starter/",
+    "https://github.com/acme/starter.git",
+    "github.com/acme/starter",
+    "www.github.com/acme/starter",
+    "  https://github.com/acme/starter  ",
+    "https://github.com/acme/starter?tab=readme-ov-file",
+    "https://github.com/acme/starter#readme",
+  ])("normalizes the URL %s to acme/starter", (raw) => {
+    expect(parseTemplateRef(raw, ORG)).toEqual({
+      owner: "acme",
+      repo: "starter",
+      branch: undefined,
+    })
+  })
+
+  it("reads the branch from a /tree/<branch> URL", () => {
+    expect(
+      parseTemplateRef("https://github.com/acme/starter/tree/spring-2026", ORG),
+    ).toEqual({ owner: "acme", repo: "starter", branch: "spring-2026" })
+  })
+
+  it("keeps a slash-bearing branch from a /tree/ URL", () => {
+    expect(
+      parseTemplateRef("https://github.com/acme/starter/tree/release/1.0", ORG),
+    ).toEqual({ owner: "acme", repo: "starter", branch: "release/1.0" })
+  })
+
+  it("accepts an @branch suffix on a URL", () => {
+    expect(
+      parseTemplateRef("https://github.com/acme/starter@spring-2026", ORG),
+    ).toEqual({ owner: "acme", repo: "starter", branch: "spring-2026" })
+  })
+
+  it("rejects a non-GitHub host and names it", () => {
+    expect(localizedFor("https://gitlab.com/acme/starter")).toEqual({
+      key: "assignments.template.invalid.notGithubHost",
+      params: { raw: "https://gitlab.com/acme/starter", host: "gitlab.com" },
+    })
+  })
+
+  it("rejects a GitHub URL with no repo segment", () => {
+    expect(localizedFor("https://github.com/acme")?.key).toBe(
+      "assignments.template.invalid.urlShape",
+    )
+  })
+
+  it("rejects a deep GitHub URL that is not a /tree/ ref", () => {
+    expect(
+      localizedFor("https://github.com/acme/starter/blob/main/README.md")?.key,
+    ).toBe("assignments.template.invalid.urlShape")
+  })
+
+  it("rejects a GitHub org listing URL rather than reading orgs/<org> as owner/repo", () => {
+    expect(localizedFor("https://github.com/orgs/acme/repositories")?.key).toBe(
+      "assignments.template.invalid.urlShape",
+    )
+  })
+
+  it("rejects a /tree/ URL with no branch after it", () => {
+    expect(localizedFor("https://github.com/acme/starter/tree")?.key).toBe(
+      "assignments.template.invalid.urlShape",
+    )
+  })
+
+  it("localizes an empty ref", () => {
+    expect(localizedFor("   ")?.key).toBe("assignments.template.invalid.empty")
+  })
+
+  it("localizes a branch containing '@'", () => {
+    expect(localizedFor("acme/starter@a@b")?.key).toBe(
+      "assignments.template.invalid.branchHasAt",
+    )
+  })
+
+  it("localizes an empty branch after '@'", () => {
+    expect(localizedFor("acme/starter@  ")?.key).toBe(
+      "assignments.template.invalid.branchEmpty",
+    )
+  })
+
+  it("localizes a malformed owner/repo shape", () => {
+    expect(localizedFor("acme/starter/extra")?.key).toBe(
+      "assignments.template.invalid.shape",
+    )
+  })
+
+  it("carries a diagnostic Error.message alongside the localized message", () => {
+    // describeLocalizedMessage keeps logs and githubHealthStore readable.
+    try {
+      parseTemplateRef("https://gitlab.com/acme/starter", ORG)
+    } catch (err) {
+      expect(err).toBeInstanceOf(Error)
+      expect((err as Error).message).toContain(
+        "assignments.template.invalid.notGithubHost",
+      )
+    }
   })
 })
 

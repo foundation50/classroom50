@@ -21,6 +21,7 @@ import {
 } from "@/domain/assignments"
 import { teamHasRepoAccess } from "@/github-core/queries"
 import { useGitHubHealth } from "@/lib/githubHealth"
+import { resolveLocalizedMessage } from "@/types/localizedMessage"
 import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useReconcileTemplateAccess } from "@/hooks/mutations/useReconcileTemplateAccess"
 import {
@@ -474,7 +475,7 @@ function renderTemplateVerdict({
     case "invalid":
       return (
         <Note tone="error" icon={AlertTriangle}>
-          {verification.message}
+          {resolveLocalizedMessage(t, verification.message)}
         </Note>
       )
 

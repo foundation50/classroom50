@@ -1504,6 +1504,14 @@
       "help": "Optional. Students receive a copy of this repository. Leave blank for a template-less assignment: students get an initialized repository with a README and the autograding files.",
       "checking": "Checking template access…",
       "fallbackOrg": "your org",
+      "invalid": {
+        "empty": "Enter a template repository.",
+        "shape": "\"{{raw}}\" isn't a repository reference. Use <owner>/<repo>, a repository name, or paste a GitHub repository URL.",
+        "urlShape": "\"{{raw}}\" isn't a GitHub repository URL. Link to the repository itself, like https://github.com/<owner>/<repo>.",
+        "notGithubHost": "\"{{raw}}\" is on {{host}}, not github.com. Classroom 50 can only copy templates hosted on GitHub.",
+        "branchHasAt": "\"{{raw}}\" has more than one \"@\". Use <owner>/<repo>@<branch>.",
+        "branchEmpty": "\"{{raw}}\" is missing a branch name after \"@\"."
+      },
       "privateHasAccess": "Private template in {{owner}} (branch <branch>{{branch}}</branch>). The classroom team already has read access — students can copy it.",
       "privateWillGrant": "Private template in {{owner}} (branch <branch>{{branch}}</branch>). The classroom team doesn't have access yet; it'll be added automatically when you create the assignment, so students can copy it.",
       "okPublic": "Public template in {{owner}}, branch <branch>{{branch}}</branch>. Students can access it.",

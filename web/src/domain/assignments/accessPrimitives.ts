@@ -9,6 +9,7 @@ import { githubOrgOAuthPolicyUrl } from "@/auth/constants"
 import { TemplateAccessError } from "@/util/templateAccessError"
 import {
   describeLocalizedMessage,
+  localizedError,
   localizedMessageOf,
   type LocalizedMessage,
 } from "@/types/localizedMessage"
@@ -148,10 +149,85 @@ export async function withAcceptStep<T>(
   }
 }
 
-// Parse a `--template` ref — `<owner>/<repo>[@<branch>]` or bare `<repo>`
-// (owner defaults to the org). Mirrors the CLI's parseTemplateRef so the GUI
-// accepts the same inputs and writes the same template block.
+// Parse a `--template` ref — `<owner>/<repo>[@<branch>]`, a bare `<repo>`
+// (owner defaults to the org), or a pasted GitHub URL. Mirrors the CLI's
+// parseTemplateRef for the first two so the GUI accepts the same inputs and
+// writes the same template block; URL support is web-only (nobody pastes a
+// browser URL into a shell flag).
 export type ParsedTemplate = { owner: string; repo: string; branch?: string }
+
+const GITHUB_URL_HOSTS = new Set(["github.com", "www.github.com"])
+
+// GitHub reserves these first segments for its own pages, so `/orgs/acme/...`
+// is a listing URL, not an `owner/repo`. Without this, an org repo-listing URL
+// would silently parse as the repo "acme" owned by "orgs".
+const GITHUB_RESERVED_OWNERS = new Set([
+  "orgs",
+  "organizations",
+  "settings",
+  "search",
+  "topics",
+  "collections",
+  "sponsors",
+  "users",
+  "apps",
+  "marketplace",
+  "notifications",
+  "explore",
+])
+
+// Recognize a pasted repo URL and reduce it to `owner/repo[@branch]` so the rest
+// of the parser sees its normal input. Returns null when `raw` isn't URL-shaped
+// at all (the common `owner/repo` case), and throws when it is a URL we won't
+// silently reinterpret — a non-GitHub host, or a GitHub path that isn't a repo
+// root or a `/tree/<branch>` ref (e.g. a deep blob link).
+function githubUrlToRef(raw: string): string | null {
+  const withScheme = /^https?:\/\//i.test(raw)
+    ? raw
+    : /^(?:www\.)?github\.com\//i.test(raw)
+      ? `https://${raw}`
+      : null
+  if (!withScheme) return null
+
+  let url: URL
+  try {
+    url = new URL(withScheme)
+  } catch {
+    return null
+  }
+
+  const host = url.hostname.toLowerCase()
+  if (!GITHUB_URL_HOSTS.has(host)) {
+    throw localizedError({
+      key: "assignments.template.invalid.notGithubHost",
+      params: { raw, host },
+    })
+  }
+
+  const urlShapeError = localizedError({
+    key: "assignments.template.invalid.urlShape",
+    params: { raw },
+  })
+
+  // The query string and fragment are browser state (?tab=, #readme), never
+  // part of the ref, so URL parsing drops them for us.
+  const segments = url.pathname.split("/").filter(Boolean)
+  const [owner, repoSegment, ...rest] = segments
+  if (!owner || !repoSegment) throw urlShapeError
+  if (GITHUB_RESERVED_OWNERS.has(owner.toLowerCase())) throw urlShapeError
+
+  const repo = repoSegment.replace(/\.git$/i, "")
+  if (!repo) throw urlShapeError
+  if (rest.length === 0) return `${owner}/${repo}`
+
+  // A branch may itself contain slashes (`release/1.0`), so everything after
+  // `/tree/` is the branch. Any other deep path (blob, tree of a subdirectory,
+  // pull, issues) isn't a template ref we can trust.
+  const [kind, ...branchParts] = rest
+  if (kind !== "tree" || branchParts.length === 0) throw urlShapeError
+  return `${owner}/${repo}@${branchParts.join("/")}`
+}
+
 export function parseTemplateRef(
   raw: string,
   defaultOwner: string,
@@ -160,19 +236,27 @@ export function parseTemplateRef(
   if (!trimmed) {
     // Callers gate on a non-empty ref (template is optional), so this is an
     // internal invariant, not user input.
-    throw new Error("Template ref is empty.")
+    throw localizedError({ key: "assignments.template.invalid.empty" })
   }
 
-  const [ownerRepo, branch, ...extraAt] = trimmed.split("@")
+  // A URL carries both `/` and (for `@branch`) `@`, so fold it to the canonical
+  // shape before either split runs.
+  const normalized = githubUrlToRef(trimmed) ?? trimmed
+
+  const [ownerRepo, branch, ...extraAt] = normalized.split("@")
   if (extraAt.length > 0) {
-    throw new Error(
-      `Invalid template "${raw}": branch contains '@' (expected owner/repo[@branch]).`,
-    )
+    throw localizedError({
+      key: "assignments.template.invalid.branchHasAt",
+      params: { raw },
+    })
   }
   // A branch given as `@<whitespace>` is empty after trimming.
   const trimmedBranch = branch?.trim()
-  if (trimmed.includes("@") && !trimmedBranch) {
-    throw new Error(`Invalid template "${raw}": branch is empty after '@'.`)
+  if (normalized.includes("@") && !trimmedBranch) {
+    throw localizedError({
+      key: "assignments.template.invalid.branchEmpty",
+      params: { raw },
+    })
   }
 
   const parts = ownerRepo.split("/").map((part) => part.trim())
@@ -185,7 +269,10 @@ export function parseTemplateRef(
     }
   }
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
-    throw new Error(`Invalid template "${raw}": expected owner/repo[@branch].`)
+    throw localizedError({
+      key: "assignments.template.invalid.shape",
+      params: { raw },
+    })
   }
   return {
     owner: parts[0],
@@ -199,7 +286,7 @@ export function parseTemplateRef(
 // token — the same one students use at accept time.
 export type TemplateAccessVerification =
   | { kind: "empty" }
-  | { kind: "invalid"; message: string }
+  | { kind: "invalid"; message: LocalizedMessage }
   | { kind: "not-visible"; owner: string; repo: string }
   | { kind: "not-template"; owner: string; repo: string }
   // Template with no commits: GitHub's generate 422s "is empty" at accept.
@@ -325,7 +412,10 @@ export async function verifyTemplateAccess(
   } catch (err) {
     return {
       kind: "invalid",
-      message: err instanceof Error ? err.message : "Invalid template ref.",
+      message: localizedMessageOf(err) ?? {
+        key: "assignments.template.invalid.shape",
+        params: { raw },
+      },
     }
   }
 
