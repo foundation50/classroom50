@@ -3,19 +3,21 @@ import { useTranslation } from "react-i18next"
 import { Lock, Search } from "lucide-react"
 
 import { Combobox, MonoLtr } from "@/components/ui"
-import { GitHubAPIError } from "@/github-core/errors"
-import type { TemplateRepoSearchItem } from "@/github-core/queries"
-import { useSearchOrgTemplateRepos } from "@/hooks/useSearchOrgTemplateRepos"
+import type { TemplateRepoItem } from "@/github-core/queries"
+import { useOrgTemplateRepos } from "@/hooks/useOrgTemplateRepos"
 import { formatRelativeToNow } from "@/util/formatDate"
 import { normalizeOnBlur, type StringField } from "./formFieldHelpers"
 
-// The template field's input: a combobox over the org's template repos, backed
-// by server-side search so an org with tens of thousands of repos costs one
-// request per settled keystroke.
+// The template field's input: a combobox over the org's template repositories.
 //
-// Typing and pasting are never gated by the picker — the field stays a plain
-// text input that happens to offer suggestions, because a teacher may reference
-// a template in another org (or one the search index hasn't caught up with yet).
+// The list is loaded once and filtered in the browser, so typing is instant and
+// costs no requests. GitHub's repo-search API would have been the natural fit
+// but can't be called from a browser at all — it answers with a malformed
+// `Access-Control-Allow-Origin: *;` and then 502s.
+//
+// Typing and pasting are never gated by the picker: the field stays a plain text
+// input that happens to offer suggestions, because a teacher may reference a
+// template in another org, or one outside the pages we listed.
 export const TemplateRepoPicker = ({
   field,
   id,
@@ -34,32 +36,27 @@ export const TemplateRepoPicker = ({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
 
-  const search = useSearchOrgTemplateRepos({
+  const templates = useOrgTemplateRepos({
     org,
     query: field.state.value,
     enabled: open,
   })
 
-  const items = search.data?.items ?? []
-  const totalCount = search.data?.totalCount ?? 0
-  const throttled =
-    search.error instanceof GitHubAPIError && search.error.isRateLimited
+  const { items, totalCount } = templates
 
-  const select = (item: TemplateRepoSearchItem) => {
+  const select = (item: TemplateRepoItem) => {
     field.handleChange(item.fullName)
   }
 
-  // One line above the options, and only when it says something the list
-  // doesn't: still searching, throttled, or a partial index answer.
-  const status = search.isSearching
-    ? t("assignments.template.search.searching")
-    : throttled
-      ? t("assignments.template.search.throttled")
-      : search.isError
-        ? t("assignments.template.search.unavailable")
-        : search.data?.incomplete
-          ? t("assignments.template.search.incomplete")
-          : null
+  // One line above the options, and only when it says something the list itself
+  // doesn't.
+  const status = templates.isLoadingList
+    ? t("assignments.template.search.loading")
+    : templates.isError
+      ? t("assignments.template.search.unavailable")
+      : null
+
+  const typed = field.state.value.trim()
 
   return (
     <Combobox
@@ -83,25 +80,34 @@ export const TemplateRepoPicker = ({
       onSelect={select}
       status={status}
       emptyState={
-        search.isSearching
+        templates.isLoadingList
           ? null
-          : throttled || search.isError
+          : templates.isError
             ? t("assignments.template.search.typeInstead")
-            : field.state.value.trim()
-              ? t("assignments.template.search.noMatches", {
-                  query: field.state.value.trim(),
-                })
+            : typed
+              ? t("assignments.template.search.noMatches", { query: typed })
               : t("assignments.template.search.noTemplates")
       }
       footer={
-        // Only meaningful when the org has more matches than one page shows —
-        // the case the whole search design exists for.
-        totalCount > items.length
-          ? t("assignments.template.search.narrow", {
-              shown: items.length,
-              total: totalCount,
-            })
-          : null
+        // Two different facts, and only when true: how much of a typed filter's
+        // haystack is hidden, and that we didn't list the entire org.
+        totalCount > items.length || templates.truncated ? (
+          <>
+            {totalCount > items.length
+              ? t("assignments.template.search.showing", {
+                  shown: items.length,
+                  total: totalCount,
+                })
+              : null}
+            {templates.truncated ? (
+              <span className="block">
+                {t("assignments.template.search.truncated", {
+                  scanned: templates.scanned,
+                })}
+              </span>
+            ) : null}
+          </>
+        ) : null
       }
       renderItem={(item) => (
         <>

@@ -1513,14 +1513,13 @@
         "branchEmpty": "\"{{raw}}\" is missing a branch name after \"@\"."
       },
       "search": {
-        "searching": "Searching templates…",
-        "throttled": "GitHub is rate-limiting searches for a moment. Type the repository name instead.",
-        "unavailable": "Couldn't search this organization's templates. Type the repository name instead.",
-        "incomplete": "GitHub returned partial results. Keep typing to narrow the search.",
+        "loading": "Loading templates…",
+        "unavailable": "Couldn't load this organization's templates. Type the repository name instead.",
         "typeInstead": "Type a repository name, <owner>/<repo>, or paste a GitHub URL.",
         "noMatches": "No template repositories in this organization match \"{{query}}\". You can still type <owner>/<repo> or paste a GitHub URL.",
         "noTemplates": "No template repositories found in this organization. Turn on \"Template repository\" in a repo's settings, or paste a GitHub URL.",
-        "narrow": "Showing {{shown}} of {{total}} templates. Keep typing to narrow the list.",
+        "showing": "Showing {{shown}} of {{total}} templates.",
+        "truncated": "Searched the {{scanned}} most recently updated repositories. If your template isn't listed, type <owner>/<repo>.",
         "privateRepo": "Private repository",
         "updated": "Updated {{when}}"
       },

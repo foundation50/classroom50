@@ -10,25 +10,31 @@ vi.mock("react-i18next", async (importOriginal) => {
   return {
     ...actual,
     useTranslation: () => ({
-      // Echo interpolation params so a count/query assertion can see them.
+      // Echo interpolation params so count/query assertions can see them.
       t: (key: string, params?: Record<string, unknown>) =>
         params ? `${key} ${JSON.stringify(params)}` : key,
     }),
   }
 })
 
-const searchOrgTemplateRepos = vi.fn()
-vi.mock("@/github-core/queries", () => ({
-  orgTemplateRepoSearchQuery: (
-    _client: unknown,
-    args: { org?: string; query: string; enabled?: boolean },
-  ) => ({
-    queryKey: ["template-search", args.org, args.query],
-    queryFn: () => searchOrgTemplateRepos(args),
-    enabled: Boolean(args.org) && (args.enabled ?? true),
-    retry: false,
-  }),
-}))
+const listOrgTemplateRepos = vi.fn()
+vi.mock("@/github-core/queries", async (importOriginal) => {
+  // filterTemplateRepos is pure and under test elsewhere — exercise the real one
+  // so these tests prove the wiring, not a reimplementation of the filter.
+  const actual = await importOriginal<typeof import("@/github-core/queries")>()
+  return {
+    filterTemplateRepos: actual.filterTemplateRepos,
+    orgTemplateReposQuery: (
+      _client: unknown,
+      args: { org?: string; enabled?: boolean },
+    ) => ({
+      queryKey: ["org-template-repos", args.org],
+      queryFn: () => listOrgTemplateRepos(args),
+      enabled: Boolean(args.org) && (args.enabled ?? true),
+      retry: false,
+    }),
+  }
+})
 
 vi.mock("@/context/github/GitHubProvider", () => ({
   useOptionalGitHubClient: () => ({ request: vi.fn() }),
@@ -36,7 +42,6 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 
 import { TemplateRepoPicker } from "./TemplateRepoPicker"
 import type { StringField } from "./formFieldHelpers"
-import { GitHubAPIError } from "@/github-core/errors"
 
 const ORG = "cs50"
 
@@ -48,12 +53,16 @@ const ITEMS = [
     private: false,
     updatedAt: "2026-08-01T00:00:00Z",
   },
-  {
-    fullName: "cs50/starter-python",
-    name: "starter-python",
-    private: true,
-  },
+  { fullName: "cs50/ap-cs", name: "ap-cs", private: true },
 ]
+
+const listResult = (over: Record<string, unknown> = {}) => ({
+  items: ITEMS,
+  scanned: ITEMS.length,
+  truncated: false,
+  templateFlagPresent: true,
+  ...over,
+})
 
 const handleChange = vi.fn()
 
@@ -87,34 +96,27 @@ const input = () => screen.getByRole("combobox") as HTMLInputElement
 
 beforeEach(() => {
   handleChange.mockClear()
-  searchOrgTemplateRepos.mockReset()
-  searchOrgTemplateRepos.mockResolvedValue({
-    items: ITEMS,
-    totalCount: 2,
-    incomplete: false,
-  })
+  listOrgTemplateRepos.mockReset()
+  listOrgTemplateRepos.mockResolvedValue(listResult())
 })
 
 afterEach(cleanup)
 
 describe("TemplateRepoPicker", () => {
-  it("does not search until the picker is opened", () => {
+  it("does not load the org's repos until the picker is opened", () => {
     renderPicker()
-    // An assignment form sitting idle must not spend the search budget.
-    expect(searchOrgTemplateRepos).not.toHaveBeenCalled()
+    // Listing an org is many requests; an idle form must not pay for them.
+    expect(listOrgTemplateRepos).not.toHaveBeenCalled()
   })
 
-  it("searches with an empty query on open, listing recent templates", async () => {
+  it("lists the org's templates on open", async () => {
     const user = userEvent.setup()
     renderPicker()
 
     await user.click(input())
 
-    await waitFor(() => expect(searchOrgTemplateRepos).toHaveBeenCalled())
-    expect(searchOrgTemplateRepos.mock.calls[0][0]).toMatchObject({
-      org: ORG,
-      query: "",
-    })
+    await waitFor(() => expect(listOrgTemplateRepos).toHaveBeenCalled())
+    expect(listOrgTemplateRepos.mock.calls[0][0]).toMatchObject({ org: ORG })
     expect(await screen.findByText("cs50/starter")).toBeTruthy()
   })
 
@@ -123,9 +125,21 @@ describe("TemplateRepoPicker", () => {
     renderPicker()
 
     await user.click(input())
-    await user.click(await screen.findByText("cs50/starter-python"))
+    await user.click(await screen.findByText("cs50/ap-cs"))
 
-    expect(handleChange).toHaveBeenCalledWith("cs50/starter-python")
+    expect(handleChange).toHaveBeenCalledWith("cs50/ap-cs")
+  })
+
+  it("filters locally without re-fetching as the teacher types", async () => {
+    const user = userEvent.setup()
+    renderPicker({ value: "ap" })
+
+    await user.click(input())
+    await screen.findByText("cs50/ap-cs")
+
+    // The whole point of listing once: narrowing costs no requests.
+    expect(screen.queryByText("cs50/starter")).toBeNull()
+    expect(listOrgTemplateRepos).toHaveBeenCalledTimes(1)
   })
 
   it("marks a private template so a teacher knows students need a grant", async () => {
@@ -139,24 +153,20 @@ describe("TemplateRepoPicker", () => {
     ).toBeTruthy()
   })
 
-  it("tells the teacher to keep typing when the org has more matches than one page", async () => {
-    searchOrgTemplateRepos.mockResolvedValue({
-      items: ITEMS,
-      totalCount: 4213,
-      incomplete: false,
-    })
+  it("says how many of the org's templates are currently shown", async () => {
     const user = userEvent.setup()
-    renderPicker()
+    renderPicker({ value: "ap" })
 
     await user.click(input())
 
     const footer = await screen.findByText(
-      /assignments\.template\.search\.narrow/,
+      /assignments\.template\.search\.showing/,
     )
-    expect(footer.textContent).toContain("4213")
+    expect(footer.textContent).toContain('"shown":1')
+    expect(footer.textContent).toContain('"total":2')
   })
 
-  it("omits the narrowing footer when every match is shown", async () => {
+  it("omits the count when every template is shown", async () => {
     const user = userEvent.setup()
     renderPicker()
 
@@ -164,48 +174,41 @@ describe("TemplateRepoPicker", () => {
     await screen.findByText("cs50/starter")
 
     expect(
-      screen.queryByText(/assignments\.template\.search\.narrow/),
+      screen.queryByText(/assignments\.template\.search\.showing/),
     ).toBeNull()
   })
 
-  it("offers manual entry instead of retrying when search is rate-limited", async () => {
-    // Search has its own 30/min bucket, so a throttle must degrade to typing.
-    searchOrgTemplateRepos.mockRejectedValue(
-      new GitHubAPIError({
-        status: 403,
-        url: "https://api.github.com/search/repositories",
-        message: "API rate limit exceeded",
-        body: null,
-        rateLimit: {
-          limit: 30,
-          remaining: 0,
-          used: 30,
-          reset: null,
-          resource: "search",
-          retryAfter: null,
-        },
-      }),
+  it("discloses that the org was too large to list fully", async () => {
+    listOrgTemplateRepos.mockResolvedValue(
+      listResult({ truncated: true, scanned: 1000 }),
     )
     const user = userEvent.setup()
     renderPicker()
 
     await user.click(input())
 
+    const note = await screen.findByText(
+      /assignments\.template\.search\.truncated/,
+    )
+    expect(note.textContent).toContain("1000")
+  })
+
+  it("offers manual entry when the listing fails", async () => {
+    listOrgTemplateRepos.mockRejectedValue(new Error("boom"))
+    const user = userEvent.setup()
+    renderPicker()
+
+    await user.click(input())
+
     expect(
-      await screen.findByText("assignments.template.search.throttled"),
+      await screen.findByText("assignments.template.search.unavailable"),
     ).toBeTruthy()
     expect(
       screen.getByText("assignments.template.search.typeInstead"),
     ).toBeTruthy()
-    expect(searchOrgTemplateRepos).toHaveBeenCalledTimes(1)
   })
 
   it("shows the no-matches hint naming the query", async () => {
-    searchOrgTemplateRepos.mockResolvedValue({
-      items: [],
-      totalCount: 0,
-      incomplete: false,
-    })
     const user = userEvent.setup()
     renderPicker({ value: "nope" })
 
@@ -217,12 +220,8 @@ describe("TemplateRepoPicker", () => {
     expect(empty.textContent).toContain("nope")
   })
 
-  it("shows the no-templates hint when the org has none and nothing was typed", async () => {
-    searchOrgTemplateRepos.mockResolvedValue({
-      items: [],
-      totalCount: 0,
-      incomplete: false,
-    })
+  it("shows the no-templates hint when the org has none", async () => {
+    listOrgTemplateRepos.mockResolvedValue(listResult({ items: [] }))
     const user = userEvent.setup()
     renderPicker()
 
@@ -233,29 +232,13 @@ describe("TemplateRepoPicker", () => {
     ).toBeTruthy()
   })
 
-  it("surfaces a partial index answer", async () => {
-    searchOrgTemplateRepos.mockResolvedValue({
-      items: ITEMS,
-      totalCount: 2,
-      incomplete: true,
-    })
-    const user = userEvent.setup()
-    renderPicker()
-
-    await user.click(input())
-
-    expect(
-      await screen.findByText("assignments.template.search.incomplete"),
-    ).toBeTruthy()
-  })
-
-  it("never searches without an org", async () => {
+  it("never lists without an org", async () => {
     const user = userEvent.setup()
     renderPicker({ org: undefined })
 
     await user.click(input())
 
-    expect(searchOrgTemplateRepos).not.toHaveBeenCalled()
+    expect(listOrgTemplateRepos).not.toHaveBeenCalled()
   })
 
   it("keeps hand-typing working, reporting each keystroke to the form", async () => {

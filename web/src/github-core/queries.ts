@@ -51,12 +51,13 @@ export {
   listPullRequestsByBaseHead,
 } from "./queries/repoRefReads"
 export {
-  searchOrgTemplateRepos,
-  orgTemplateRepoSearchQuery,
-  TEMPLATE_SEARCH_PER_PAGE,
-  type TemplateRepoSearchItem,
-  type TemplateRepoSearchResult,
-} from "./queries/repoSearchReads"
+  listOrgTemplateRepos,
+  orgTemplateReposQuery,
+  filterTemplateRepos,
+  TEMPLATE_LIST_MAX_PAGES,
+  type TemplateRepoItem,
+  type TemplateRepoListResult,
+} from "./queries/templateRepoReads"
 export {
   listDefaultBranchCommits,
   listRepoTags,
