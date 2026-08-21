@@ -1519,8 +1519,12 @@ function isSubmissionTrackingMigrated(entry: Assignment): boolean {
 }
 
 // Normalize an unmigrated entry into the new canonical shape by writing the
-// fields that pre-1.28 left absent: submission_mode = "tag" and, when grading
-// is absent, an explicit grading: { mode: "auto" } so the file self-documents.
+// one field that pre-1.28 left absent: submission_mode = "tag". Nothing else
+// is stamped on — in particular no explicit grading: { mode: "auto" }: absent
+// reads as auto everywhere, and every writer (CLI omitempty,
+// buildAssignmentEntry above) omits the block for plain auto, so the app's
+// next edit would drop it again and the migration commit would carry a diff
+// nobody asked for.
 // "tag" (NOT "every-push") is what preserves pre-1.28 counting: before 1.28 a
 // submission was a submit/* release, and tag-mode detection counts exactly the
 // always-unioned submit/* namespace — every-push would instead start counting
@@ -1530,25 +1534,18 @@ function isSubmissionTrackingMigrated(entry: Assignment): boolean {
 // entry unchanged when already migrated.
 function normalizeEntryForMigration(entry: Assignment): Assignment {
   if (isSubmissionTrackingMigrated(entry)) return entry
-  const migrated: Assignment = {
-    ...entry,
-    submission_mode: "tag",
-  }
-  if (migrated.grading === undefined) {
-    migrated.grading = { mode: "auto" }
-  }
-  return migrated
+  return { ...entry, submission_mode: "tag" }
 }
 
 // Migrate every eligible assignment in a classroom's assignments.json to the
 // new submission-configuration semantics in ONE commit: write an explicit
-// submission_mode: "tag" (and grading: auto) onto each legacy entry so the
-// detection overlay opts in while PRESERVING pre-1.28 counting — a submission
-// was a submit/* release before 1.28, and tag mode counts exactly the
-// always-unioned submit/* namespace. This is a content normalization WITHIN v1
-// — the schema sentinel is untouched and no version bump occurs. Unknown fields
-// round-trip via the whole-entry spread. Mirrors setAssignmentClosed's no-op
-// short-circuit: an all-migrated file skips the commit.
+// submission_mode: "tag" onto each legacy entry so the detection overlay opts
+// in while PRESERVING pre-1.28 counting — a submission was a submit/* release
+// before 1.28, and tag mode counts exactly the always-unioned submit/*
+// namespace. This is a content normalization WITHIN v1 — the schema sentinel
+// is untouched and no version bump occurs. Unknown fields round-trip via the
+// whole-entry spread. Mirrors setAssignmentClosed's no-op short-circuit: an
+// all-migrated file skips the commit.
 export async function migrateClassroomAssignments(
   client: GitHubClient,
   input: MigrateClassroomAssignmentsInput,

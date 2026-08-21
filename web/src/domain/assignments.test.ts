@@ -4093,12 +4093,9 @@ describe("migrateClassroomAssignments", () => {
     ...extra,
   })
 
-  it("writes explicit submission_mode + grading:auto onto every legacy entry in one commit", async () => {
-    const { client, committed } = makeMigrateClient([
-      legacyEntry("hw1"),
-      legacyEntry("hw2"),
-      legacyEntry("hw3"),
-    ])
+  it("writes explicit submission_mode onto every legacy entry in one commit, nothing else", async () => {
+    const legacy = [legacyEntry("hw1"), legacyEntry("hw2"), legacyEntry("hw3")]
+    const { client, committed } = makeMigrateClient(legacy)
     const result = await migrateClassroomAssignments(client, {
       org: ORG,
       classroom: CLASSROOM,
@@ -4106,10 +4103,12 @@ describe("migrateClassroomAssignments", () => {
     expect(result.migratedCount).toBe(3)
     expect(result.alreadyMigratedCount).toBe(0)
     const written = committed()!
-    // Every entry now carries an explicit tag mode (preserving pre-1.28
-    // submit/*-release counting) and auto grading.
-    expect(written.match(/"submission_mode": "tag"/g)).toHaveLength(3)
-    expect(written.match(/"mode": "auto"/g)).toHaveLength(3)
+    // Each entry gains exactly submission_mode: "tag" (preserving pre-1.28
+    // submit/*-release counting); grading stays absent, as every other writer
+    // leaves it (see normalizeEntryForMigration).
+    expect(JSON.parse(written).assignments).toEqual(
+      legacy.map((e) => ({ ...e, submission_mode: "tag" })),
+    )
   })
 
   it("no-ops when every entry is already migrated (no commit)", async () => {

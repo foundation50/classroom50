@@ -20,10 +20,10 @@ type Phase = "idle" | "working" | "complete" | "error"
 // Greppable tag: MIGRATION(v1.28).
 // Explicit, teacher-triggered migration of a classroom's assignments.json to
 // the new submission-tracking semantics: one confirm writes an explicit
-// submission_mode (+ grading:auto) onto every legacy assignment, opting the
-// submissions-page detection overlay in without changing any grade. Nothing
-// runs until the teacher clicks Migrate. A content normalization within v1 —
-// no schema version bump.
+// submission_mode onto every legacy assignment, opting the submissions-page
+// detection overlay in without changing any grade. Nothing runs until the
+// teacher clicks Migrate. A content normalization within v1 — no schema
+// version bump.
 export function MigrateSubmissionTrackingModal({
   open,
   onClose,
