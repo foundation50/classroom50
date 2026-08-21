@@ -287,8 +287,10 @@ export type Assignment = {
   // later requires retrofitting existing repos' shims (gradebook bulk action or
   // `gh teacher assignment submission-mode`). Permitted on every repo shape,
   // including empty_repo / no_autograder: with no shim it carries no trigger
-  // but still defines what the submissions page counts as a submission. In
-  // lockstep with the CLI's assignments-v1 schema enum (`submission_mode`).
+  // but still defines what the submissions page counts as a submission. Never
+  // gate behavior on the field being PRESENT: absence is the wire default, not
+  // a legacy or version marker. In lockstep with the CLI's assignments-v1
+  // schema enum (`submission_mode`).
   submission_mode?: SubmissionMode
   // Teacher-named milestone tag patterns (e.g. ["phase1", "v*"]) that ALSO
   // count and trigger grading, alongside the always-on canonical submit/*

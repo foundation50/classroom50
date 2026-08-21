@@ -183,6 +183,15 @@ const SubmissionsPageContent = () => {
   const skipsGrading = assignmentInfo
     ? assignmentSkipsGrading(assignmentInfo)
     : false
+  // Whether the assignment entry has actually been read. While the assignments
+  // query loads — and forever after it fails — every derived value falls back
+  // to its default (skipsGrading false, isDefaultAutograder(undefined) true,
+  // `?? "every-push"`), so any gate whose meaning depends on the assignment's
+  // real mode or autograder must require this as well. `const` is load-bearing:
+  // aliased-condition narrowing then narrows assignmentInfo itself at every
+  // gate below, so their property reads need no repeated null check (turn this
+  // into a `let` and each one fails with TS18048).
+  const assignmentResolved = assignmentInfo != null
   // The narrower bare-repo case: no repos worth managing at all. Only the
   // repo-management bulk actions (access/features) key off this — a
   // no_autograder repo is templated and DOES have repos to manage.
@@ -434,19 +443,6 @@ const SubmissionsPageContent = () => {
     enabled: liveCapable,
   })
 
-  // MIGRATION(v1.28): legacy-preserving gate. Safe to simplify (drop the
-  // submissionTrackingMigrated term, always enable) in a future version once no
-  // legacy (submission_mode-absent) files remain. Greppable tag: MIGRATION(v1.28).
-  // The detection overlay is a submission-configuration feature that did not
-  // exist pre-1.28, so a file written before it (no submission_mode field) must
-  // keep its pre-1.28 submit/*-only counts until a teacher explicitly migrates.
-  // The presence of an explicit submission_mode is the opt-in signal the
-  // classroom-wide migration writes; absent = legacy = overlay off. The live
-  // submit/* overlay (useLiveSubmissions) stays on either way, so a legacy
-  // file's owner experience is byte-identical to pre-1.28.
-  const submissionTrackingMigrated =
-    assignmentInfo?.submission_mode !== undefined
-
   // Detection overlay (submission-configuration hybrid model): the same
   // page-scoped owners as the live fan-out, reading each repo's default-branch
   // pushes (branch mode) or git tags (tag mode) so a submission shows even
@@ -462,7 +458,9 @@ const SubmissionsPageContent = () => {
     mode: assignmentInfo?.submission_mode,
     submissionTags: assignmentInfo?.submission_tags,
     repoOwners: livePageOwners,
-    enabled: liveCapable && submissionTrackingMigrated,
+    // Resolved-only: otherwise the fan-out starts with an undefined mode and
+    // counts a tag-mode assignment in branch mode.
+    enabled: liveCapable && assignmentResolved,
   })
 
   // Overlay live presence over the snapshot for a live-capable viewer (snapshot
@@ -1205,7 +1203,7 @@ const SubmissionsPageContent = () => {
               isOwner &&
               !isGroupAssignment &&
               !skipsGrading &&
-              assignmentInfo != null &&
+              assignmentResolved &&
               isDefaultAutograder(assignmentInfo.autograder) &&
               acceptedSet.size > 0
                 ? () => setBulkTriggerOpen(true)
@@ -1219,7 +1217,7 @@ const SubmissionsPageContent = () => {
               isOwner &&
               !isGroupAssignment &&
               !skipsGrading &&
-              assignmentInfo != null &&
+              assignmentResolved &&
               isDefaultAutograder(assignmentInfo.autograder) &&
               acceptedSet.size > 0
                 ? () => setBulkPauseOpen(true)
@@ -1229,7 +1227,7 @@ const SubmissionsPageContent = () => {
               isOwner &&
               !isGroupAssignment &&
               !skipsGrading &&
-              assignmentInfo != null &&
+              assignmentResolved &&
               isDefaultAutograder(assignmentInfo.autograder) &&
               acceptedSet.size > 0
                 ? () => setBulkResumeOpen(true)
@@ -1283,7 +1281,7 @@ const SubmissionsPageContent = () => {
         submissionMode={
           isOwner &&
           !skipsGrading &&
-          assignmentInfo != null &&
+          assignmentResolved &&
           isDefaultAutograder(assignmentInfo.autograder)
             ? (assignmentInfo.submission_mode ?? "every-push")
             : undefined
@@ -1317,7 +1315,7 @@ const SubmissionsPageContent = () => {
               : undefined
             : isOwner &&
                 !skipsGrading &&
-                assignmentInfo != null &&
+                assignmentResolved &&
                 assignmentInfo.grading?.mode !== "off"
               ? {
                   org,
@@ -1336,7 +1334,7 @@ const SubmissionsPageContent = () => {
           isOwner &&
           !isGroupAssignment &&
           !skipsGrading &&
-          assignmentInfo != null &&
+          assignmentResolved &&
           isDefaultAutograder(assignmentInfo.autograder)
         }
         initialLoading={initialLoading}
