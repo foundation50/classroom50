@@ -1148,33 +1148,30 @@ describe("editAssignment (preserved-entry integration)", () => {
   // The STORED value is part of the table, not just the input: the field is
   // classroom50-owned, so an edit rebuilds it rather than preserving it, and
   // the rows that matter are the ones where the two disagree — normalizing a
-  // v1.28..v1.32 explicit every-push away, and a real tag -> every-push
+  // pre-collapse explicit every-push away, and a real tag -> every-push
   // downgrade that must not silently keep tag.
-  it("writes tag explicitly and collapses every-push to an absent field", async () => {
-    for (const [stored, input, want] of [
-      [undefined, "tag", "tag"],
-      [undefined, "every-push", undefined],
-      [undefined, undefined, undefined],
-      ["every-push", "every-push", undefined],
-      ["tag", "every-push", undefined],
-      ["tag", "tag", "tag"],
-    ] as const) {
-      const { client, committedContent } = makeClient(
-        stored === undefined
-          ? existingEntry
-          : { ...existingEntry, submission_mode: stored },
-      )
+  it.each([
+    [undefined, "tag", "tag"],
+    [undefined, "every-push", undefined],
+    [undefined, undefined, undefined],
+    ["every-push", "every-push", undefined],
+    ["tag", "every-push", undefined],
+    ["tag", "tag", "tag"],
+  ] as const)(
+    "writes stored=%s + input=%s as submission_mode=%s",
+    async (stored, input, want) => {
+      const { client, committedContent } = makeClient({
+        ...existingEntry,
+        submission_mode: stored,
+      })
       await editAssignment(client, editInput({ submission_mode: input }))
       const written = JSON.parse(committedContent()) as {
         assignments: Assignment[]
       }
       const edited = written.assignments.find((a) => a.slug === SLUG)!
       expect(edited.submission_mode).toBe(want)
-      // Collapsed means the key is gone, not present-and-null: the CLI decodes
-      // strictly and a null would fail the enum.
-      expect("submission_mode" in edited).toBe(want !== undefined)
-    }
-  })
+    },
+  )
 
   it("rejects an out-of-enum submission_mode before writing", async () => {
     const { client } = makeClient()
