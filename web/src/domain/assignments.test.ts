@@ -21,7 +21,6 @@ import {
   resolveTemplateGrant,
   setAssignmentLock,
   setAssignmentClosed,
-  migrateClassroomAssignments,
   TEMPLATE_READ_STAFF_ROLES,
   verifyTemplateAccess,
 } from "./assignments"
@@ -1144,25 +1143,37 @@ describe("editAssignment (preserved-entry integration)", () => {
 
   // The write path's submission_mode branches (buildAssignmentEntry is not
   // exported — assert through editAssignment, like the sibling tests above):
-  // 1.28+ ALWAYS writes submission_mode explicitly (the migration signal), so
-  // "tag" and "every-push" both land verbatim and an absent input defaults to
-  // an explicit "every-push"; junk is rejected before a file the CLI would
-  // refuse to parse can be written.
-  it("always writes submission_mode explicitly (the 1.28 migration signal)", async () => {
-    for (const [input, want] of [
-      ["tag", "tag"],
-      ["every-push", "every-push"],
-      [undefined, "every-push"],
-    ] as const) {
-      const { client, committedContent } = makeClient()
+  // "tag" lands verbatim, while every-push — explicit or absent in the input —
+  // collapses to no field at all, mirroring the CLI's wire form so a form save
+  // can't add a key `gh teacher assignment add` would have omitted. Junk is
+  // rejected before a file the CLI would refuse to parse can be written.
+  // The STORED value is part of the table, not just the input: the field is
+  // classroom50-owned, so an edit rebuilds it rather than preserving it, and
+  // the rows that matter are the ones where the two disagree — normalizing a
+  // pre-collapse explicit every-push away, and a real tag -> every-push
+  // downgrade that must not silently keep tag.
+  it.each([
+    [undefined, "tag", "tag"],
+    [undefined, "every-push", undefined],
+    [undefined, undefined, undefined],
+    ["every-push", "every-push", undefined],
+    ["tag", "every-push", undefined],
+    ["tag", "tag", "tag"],
+  ] as const)(
+    "writes stored=%s + input=%s as submission_mode=%s",
+    async (stored, input, want) => {
+      const { client, committedContent } = makeClient({
+        ...existingEntry,
+        submission_mode: stored,
+      })
       await editAssignment(client, editInput({ submission_mode: input }))
       const written = JSON.parse(committedContent()) as {
         assignments: Assignment[]
       }
       const edited = written.assignments.find((a) => a.slug === SLUG)!
       expect(edited.submission_mode).toBe(want)
-    }
-  })
+    },
+  )
 
   it("rejects an out-of-enum submission_mode before writing", async () => {
     const { client } = makeClient()
@@ -4297,165 +4308,6 @@ describe("setAssignmentClosed", () => {
     // Already closed: the commit is skipped, so no tree content was captured.
     expect(committed()).toBeUndefined()
     expect(result.updatedRef).toBeUndefined()
-  })
-})
-
-describe("migrateClassroomAssignments", () => {
-  const ORG = "cs50"
-  const CLASSROOM = "cs50"
-  const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
-
-  afterEach(() => vi.restoreAllMocks())
-
-  // A fake config repo serving the classroom-wide migration read-modify-commit
-  // flow. `assignments` is the raw entry array the served assignments.json
-  // carries.
-  function makeMigrateClient(assignments: Record<string, unknown>[]): {
-    client: GitHubClient
-    committed: () => string | undefined
-  } {
-    let committed: string | undefined
-    const assignmentsFile = {
-      schema: "classroom50/assignments/v1",
-      assignments,
-    }
-    const classroomJson = {
-      schema: "classroom50/classroom/v1",
-      short_name: CLASSROOM,
-    }
-
-    const request = vi.fn(
-      async (url: string, init?: { method?: string; body?: unknown }) => {
-        const method = init?.method ?? "GET"
-        if (url.endsWith("/git/trees") && init?.body) {
-          const body = init.body as { tree?: { content?: string }[] }
-          committed = body.tree?.[0]?.content
-        }
-        if (/\/repos\/[^/]+\/classroom50$/.test(url))
-          return { default_branch: "main" }
-        if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
-        if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
-        if (url.includes(`/contents/${CLASSROOM}/classroom.json`)) {
-          return {
-            type: "file",
-            encoding: "base64",
-            content: b64(JSON.stringify(classroomJson)),
-          }
-        }
-        if (url.includes(`/contents/${CLASSROOM}/assignments.json`)) {
-          return {
-            type: "file",
-            encoding: "base64",
-            content: b64(JSON.stringify(assignmentsFile)),
-          }
-        }
-        if (url.endsWith("/git/trees")) return { sha: "newtree" }
-        if (url.endsWith("/git/commits")) return { sha: "newcommit" }
-        if (method === "PATCH" && url.includes("/git/refs/heads/main")) {
-          return { object: { sha: "newcommit" } }
-        }
-        throw new Error(`unexpected request: ${method} ${url}`)
-      },
-    )
-    const requestRaw = vi.fn(async () => JSON.stringify(classroomJson))
-
-    return {
-      client: {
-        request,
-        requestRaw,
-      } as unknown as GitHubClient,
-      committed: () => committed,
-    }
-  }
-
-  const legacyEntry = (slug: string, extra: Record<string, unknown> = {}) => ({
-    slug,
-    name: slug,
-    mode: "individual",
-    autograder: "default",
-    template: { owner: ORG, repo: "tmpl", branch: "main" },
-    ...extra,
-  })
-
-  it("writes explicit submission_mode + grading:auto onto every legacy entry in one commit", async () => {
-    const { client, committed } = makeMigrateClient([
-      legacyEntry("hw1"),
-      legacyEntry("hw2"),
-      legacyEntry("hw3"),
-    ])
-    const result = await migrateClassroomAssignments(client, {
-      org: ORG,
-      classroom: CLASSROOM,
-    })
-    expect(result.migratedCount).toBe(3)
-    expect(result.alreadyMigratedCount).toBe(0)
-    const written = committed()!
-    // Every entry now carries an explicit tag mode (preserving pre-1.28
-    // submit/*-release counting) and auto grading.
-    expect(written.match(/"submission_mode": "tag"/g)).toHaveLength(3)
-    expect(written.match(/"mode": "auto"/g)).toHaveLength(3)
-  })
-
-  it("no-ops when every entry is already migrated (no commit)", async () => {
-    const { client, committed } = makeMigrateClient([
-      legacyEntry("hw1", { submission_mode: "every-push" }),
-      legacyEntry("hw2", { submission_mode: "tag" }),
-    ])
-    const result = await migrateClassroomAssignments(client, {
-      org: ORG,
-      classroom: CLASSROOM,
-    })
-    expect(result.migratedCount).toBe(0)
-    expect(result.alreadyMigratedCount).toBe(2)
-    expect(committed()).toBeUndefined()
-    expect(result.updatedRef).toBeUndefined()
-  })
-
-  it("migrates only the legacy entries, leaving already-migrated ones untouched", async () => {
-    const { client, committed } = makeMigrateClient([
-      legacyEntry("hw1", { submission_mode: "every-push" }),
-      legacyEntry("hw2"),
-    ])
-    const result = await migrateClassroomAssignments(client, {
-      org: ORG,
-      classroom: CLASSROOM,
-    })
-    expect(result.migratedCount).toBe(1)
-    expect(result.alreadyMigratedCount).toBe(1)
-    const written = committed()!
-    // The pre-migrated every-push entry keeps its mode; the legacy one gains
-    // tag mode (the pre-1.28-preserving default), so both survive distinctly.
-    expect(written).toContain(`"submission_mode": "every-push"`)
-    expect(written.match(/"submission_mode": "tag"/g)).toHaveLength(1)
-  })
-
-  it("preserves an entry's grading and unknown fields verbatim", async () => {
-    const { client, committed } = makeMigrateClient([
-      legacyEntry("hw1", {
-        grading: { mode: "manual", max_points: 10 },
-        future_field: "v2-only",
-      }),
-    ])
-    const result = await migrateClassroomAssignments(client, {
-      org: ORG,
-      classroom: CLASSROOM,
-    })
-    expect(result.migratedCount).toBe(1)
-    const written = committed()!
-    // Existing grading is not overwritten with auto; unknown keys round-trip.
-    expect(written).toContain(`"mode": "manual"`)
-    expect(written).toContain(`"max_points": 10`)
-    expect(written).toContain(`"future_field": "v2-only"`)
-    expect(written).not.toContain(`"mode": "auto"`)
-  })
-
-  it("does not bump the schema sentinel", async () => {
-    const { client, committed } = makeMigrateClient([legacyEntry("hw1")])
-    await migrateClassroomAssignments(client, {
-      org: ORG,
-      classroom: CLASSROOM,
-    })
-    expect(committed()).toContain(`"schema": "classroom50/assignments/v1"`)
   })
 })
 

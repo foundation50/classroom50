@@ -43,6 +43,7 @@ import {
   type AutogradingState,
 } from "@/domain/assignments/autogradingState"
 import { deriveFormShape } from "./formShape"
+import { resolveSubmissionMode } from "@/domain/assignments/submissionDetection"
 import type {
   Assignment,
   RepoPermission,
@@ -657,7 +658,7 @@ export const useAssignmentForm = (
       pass_threshold_enabled: defaultValues?.pass_threshold_enabled ?? false,
       pass_threshold: defaultValues?.pass_threshold ?? DEFAULT_PASS_THRESHOLD,
       student_permission: defaultValues?.student_permission ?? "",
-      submission_mode: defaultValues?.submission_mode ?? "every-push",
+      submission_mode: resolveSubmissionMode(defaultValues?.submission_mode),
       submission_tags: defaultValues?.submission_tags || "",
       // Create default is "off" (not graded); the option order is off ->
       // manual -> auto. On edit, assignmentToFormValues supplies the stored
@@ -778,7 +779,7 @@ export const assignmentToFormValues = (
     // path re-omits it. A stored value pins the picker to that level.
     student_permission: assignment.student_permission ?? "",
     // Absent means every-push (the wire default, collapsed by writers).
-    submission_mode: assignment.submission_mode ?? "every-push",
+    submission_mode: resolveSubmissionMode(assignment.submission_mode),
     // Milestone tag patterns, joined one-per-line for the textarea.
     submission_tags: submissionTagsToText(assignment.submission_tags),
     // Grading intent; absent reads as "auto" (today's behavior). A stored

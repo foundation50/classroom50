@@ -20,6 +20,7 @@ import {
   detectBranchSubmissions,
   detectTagSubmissions,
   detectedSubmissionCount,
+  resolveSubmissionMode,
   type DetectedSubmission,
 } from "@/domain/assignments/submissionDetection"
 import { studentRepoName } from "@/util/studentRepo"
@@ -50,7 +51,7 @@ export type UseDetectedSubmissionsArgs = {
   classroom: string | undefined
   assignment: string | undefined
   // The submission definition: "every-push" (branch) or "tag". Absent reads as
-  // branch mode, matching the wire default.
+  // branch mode: the schema's wire default, which writers omit.
   mode: SubmissionMode | undefined
   // Milestone tag patterns for tag mode (union with the always-on submit/*).
   submissionTags?: string[]
@@ -93,7 +94,7 @@ export function useDetectedSubmissions({
     [submissionTags],
   )
 
-  const resolvedMode: SubmissionMode = mode ?? "every-push"
+  const resolvedMode = resolveSubmissionMode(mode)
 
   const active =
     enabled && Boolean(org && classroom && assignment) && repoOwners.length > 0

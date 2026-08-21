@@ -84,27 +84,32 @@ beforeEach(() => {
 })
 
 describe("useDetectedSubmissions — branch mode", () => {
-  it("counts default-branch commits minus the baseline", async () => {
-    request.mockImplementation(
-      branchClient({
-        defaultBranch: "main",
-        baselineCommits: [{ sha: "baseline" }],
-        branchCommits: [{ sha: "c2" }, { sha: "c1" }, { sha: "baseline" }],
-      }),
-    )
-    const { result } = renderHook(
-      () =>
-        useDetectedSubmissions({
-          ...base,
-          mode: "every-push",
-          repoOwners: ["a"],
+  // An absent mode is the schema's wire default, so it must count exactly like
+  // an explicit every-push.
+  it.each(["every-push", undefined] as const)(
+    "counts default-branch commits minus the baseline (mode=%s)",
+    async (mode) => {
+      request.mockImplementation(
+        branchClient({
+          defaultBranch: "main",
+          baselineCommits: [{ sha: "baseline" }],
+          branchCommits: [{ sha: "c2" }, { sha: "c1" }, { sha: "baseline" }],
         }),
-      { wrapper: wrapper(makeClient()) },
-    )
-    await waitFor(() => expect(result.current.isFetching).toBe(false))
-    expect(result.current.detected).toHaveLength(1)
-    expect(result.current.detected[0].count).toBe(2)
-  })
+      )
+      const { result } = renderHook(
+        () =>
+          useDetectedSubmissions({
+            ...base,
+            mode,
+            repoOwners: ["a"],
+          }),
+        { wrapper: wrapper(makeClient()) },
+      )
+      await waitFor(() => expect(result.current.isFetching).toBe(false))
+      expect(result.current.detected).toHaveLength(1)
+      expect(result.current.detected[0].count).toBe(2)
+    },
+  )
 
   it("emits nothing for a not-accepted repo (404 on the repo object)", async () => {
     request.mockImplementation(branchClient({ defaultBranch: null }))
@@ -295,6 +300,25 @@ describe("useDetectedSubmissions — fan-out contract", () => {
         useDetectedSubmissions({
           ...base,
           mode: "every-push",
+          repoOwners: ["a"],
+          enabled: false,
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    expect(request).not.toHaveBeenCalled()
+    expect(result.current.detected).toEqual([])
+    expect(result.current.isPending).toBe(false)
+  })
+
+  // Regression for #654: an unresolved assignment passes mode:undefined with
+  // enabled:false. The disabled gate must win before the undefined mode could
+  // resolve to every-push and count a tag-mode assignment in branch mode.
+  it("does not fetch while unresolved (mode undefined + disabled)", () => {
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: undefined,
           repoOwners: ["a"],
           enabled: false,
         }),

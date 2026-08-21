@@ -25,6 +25,7 @@ import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal
 import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
+import { resolveSubmissionMode } from "@/domain/assignments/submissionDetection"
 import {
   AutogradingBadge,
   SubmissionModeBadge,
@@ -173,6 +174,13 @@ const SubmissionsPageContent = () => {
   // hidden. Students are always shown (a not-yet-accepted student still lists as
   // "not accepted"), unchanged.
   const isGroupAssignment = assignmentInfo?.mode === "group"
+  // Whether the assignment entry has been read. Every value derived from it
+  // falls back to a default while the query loads and after it fails, so any
+  // gate that depends on the real mode or autograder must require this too.
+  // `const` is load-bearing: aliased-condition narrowing then narrows
+  // assignmentInfo at each gate below, so their property reads need no repeated
+  // null check (a `let` makes each one fail with TS18048).
+  const assignmentResolved = assignmentInfo != null
   // Assignments that never autograde (empty_repo bare repos, or no_autograder
   // teacher-supplied CI) produce no submit/* releases. Grading UI (Regrade all,
   // per-row regrade, scores, live polling, the trigger retrofit) is hidden and
@@ -180,7 +188,7 @@ const SubmissionsPageContent = () => {
   // since a collect scoped to this assignment would be skipped by
   // collect_scores.py anyway. Mirrors the Python skips_grading() predicate
   // family.
-  const skipsGrading = assignmentInfo
+  const skipsGrading = assignmentResolved
     ? assignmentSkipsGrading(assignmentInfo)
     : false
   // The narrower bare-repo case: no repos worth managing at all. Only the
@@ -434,19 +442,6 @@ const SubmissionsPageContent = () => {
     enabled: liveCapable,
   })
 
-  // MIGRATION(v1.28): legacy-preserving gate. Safe to simplify (drop the
-  // submissionTrackingMigrated term, always enable) in a future version once no
-  // legacy (submission_mode-absent) files remain. Greppable tag: MIGRATION(v1.28).
-  // The detection overlay is a submission-configuration feature that did not
-  // exist pre-1.28, so a file written before it (no submission_mode field) must
-  // keep its pre-1.28 submit/*-only counts until a teacher explicitly migrates.
-  // The presence of an explicit submission_mode is the opt-in signal the
-  // classroom-wide migration writes; absent = legacy = overlay off. The live
-  // submit/* overlay (useLiveSubmissions) stays on either way, so a legacy
-  // file's owner experience is byte-identical to pre-1.28.
-  const submissionTrackingMigrated =
-    assignmentInfo?.submission_mode !== undefined
-
   // Detection overlay (submission-configuration hybrid model): the same
   // page-scoped owners as the live fan-out, reading each repo's default-branch
   // pushes (branch mode) or git tags (tag mode) so a submission shows even
@@ -462,7 +457,9 @@ const SubmissionsPageContent = () => {
     mode: assignmentInfo?.submission_mode,
     submissionTags: assignmentInfo?.submission_tags,
     repoOwners: livePageOwners,
-    enabled: liveCapable && submissionTrackingMigrated,
+    // Resolved-only: otherwise the fan-out starts with an undefined mode and
+    // counts a tag-mode assignment in branch mode.
+    enabled: liveCapable && assignmentResolved,
   })
 
   // Overlay live presence over the snapshot for a live-capable viewer (snapshot
@@ -968,7 +965,7 @@ const SubmissionsPageContent = () => {
                 {t("submissions.closeSubmission.statusBadge.closed")}
               </Badge>
             )}
-            {assignmentInfo && (
+            {assignmentResolved && (
               <>
                 <SubmissionModeBadge
                   mode={assignmentInfo.submission_mode}
@@ -1197,15 +1194,12 @@ const SubmissionsPageContent = () => {
             // are never rewritten, and a no_autograder assignment has no shim
             // to retrofit (skipsGrading). Reconciles existing repos with the
             // assignment's submission_mode (baked into shims at accept time).
-            // Requires a RESOLVED assignmentInfo: isDefaultAutograder(undefined)
-            // is true, so gating on the optional chain alone would enable the
-            // action while the assignments query loads (or after it fails) and
-            // retrofit shims to the fallback every-push mode.
+            // Requires a resolved entry — see assignmentResolved.
             onBulkTrigger={
               isOwner &&
               !isGroupAssignment &&
               !skipsGrading &&
-              assignmentInfo != null &&
+              assignmentResolved &&
               isDefaultAutograder(assignmentInfo.autograder) &&
               acceptedSet.size > 0
                 ? () => setBulkTriggerOpen(true)
@@ -1219,7 +1213,7 @@ const SubmissionsPageContent = () => {
               isOwner &&
               !isGroupAssignment &&
               !skipsGrading &&
-              assignmentInfo != null &&
+              assignmentResolved &&
               isDefaultAutograder(assignmentInfo.autograder) &&
               acceptedSet.size > 0
                 ? () => setBulkPauseOpen(true)
@@ -1229,7 +1223,7 @@ const SubmissionsPageContent = () => {
               isOwner &&
               !isGroupAssignment &&
               !skipsGrading &&
-              assignmentInfo != null &&
+              assignmentResolved &&
               isDefaultAutograder(assignmentInfo.autograder) &&
               acceptedSet.size > 0
                 ? () => setBulkResumeOpen(true)
@@ -1276,23 +1270,20 @@ const SubmissionsPageContent = () => {
         emptyRepo={skipsGrading}
         // Per-row trigger retrofit: owner + default-autograder only (teacher-
         // authored shims are never rewritten). Mirrors the bulk-action gate,
-        // including the resolved-assignmentInfo requirement: while the
-        // assignments query loads, isDefaultAutograder(undefined) is true and
-        // the ?? fallback would arm the action with "every-push" — clicking it
-        // would rewrite a tag-mode repo's shim to the wrong trigger.
+        // including assignmentResolved.
         submissionMode={
           isOwner &&
           !skipsGrading &&
-          assignmentInfo != null &&
+          assignmentResolved &&
           isDefaultAutograder(assignmentInfo.autograder)
-            ? (assignmentInfo.submission_mode ?? "every-push")
+            ? resolveSubmissionMode(assignmentInfo.submission_mode)
             : undefined
         }
         submissionTags={assignmentInfo?.submission_tags}
         // The assignment's real submission_mode (independent of the autograder
         // gate above) — drives the type-aware submission-details modal and the
         // count wording, which apply regardless of who authored the shim.
-        assignmentMode={assignmentInfo?.submission_mode ?? "every-push"}
+        assignmentMode={resolveSubmissionMode(assignmentInfo?.submission_mode)}
         // Score override: staff may enter/edit scores. Gated on an org OWNER
         // (the same write-capability gate every other mutating control on this
         // page uses — a non-owner can't write the config repo's scores.json, so
@@ -1317,7 +1308,7 @@ const SubmissionsPageContent = () => {
               : undefined
             : isOwner &&
                 !skipsGrading &&
-                assignmentInfo != null &&
+                assignmentResolved &&
                 assignmentInfo.grading?.mode !== "off"
               ? {
                   org,
@@ -1336,7 +1327,7 @@ const SubmissionsPageContent = () => {
           isOwner &&
           !isGroupAssignment &&
           !skipsGrading &&
-          assignmentInfo != null &&
+          assignmentResolved &&
           isDefaultAutograder(assignmentInfo.autograder)
         }
         initialLoading={initialLoading}
@@ -1490,17 +1481,21 @@ const SubmissionsPageContent = () => {
         owners={acceptedOwners}
         students={students}
       />
-      <BulkSubmissionTriggerModal
-        open={bulkTriggerOpen}
-        onClose={() => setBulkTriggerOpen(false)}
-        org={org}
-        classroom={classroom}
-        assignment={assignment}
-        submissionMode={assignmentInfo?.submission_mode ?? "every-push"}
-        submissionTags={assignmentInfo?.submission_tags}
-        owners={acceptedOwners}
-        students={students}
-      />
+      {/* Mounted only once resolved so the retrofit payload can't depend on the
+          opener's gate — see assignmentResolved. */}
+      {assignmentResolved && (
+        <BulkSubmissionTriggerModal
+          open={bulkTriggerOpen}
+          onClose={() => setBulkTriggerOpen(false)}
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+          submissionMode={resolveSubmissionMode(assignmentInfo.submission_mode)}
+          submissionTags={assignmentInfo.submission_tags}
+          owners={acceptedOwners}
+          students={students}
+        />
+      )}
       <BulkAutogradeStateModal
         open={bulkPauseOpen}
         onClose={() => setBulkPauseOpen(false)}
