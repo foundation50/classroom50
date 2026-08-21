@@ -50,7 +50,7 @@ export type UseDetectedSubmissionsArgs = {
   classroom: string | undefined
   assignment: string | undefined
   // The submission definition: "every-push" (branch) or "tag". Absent reads as
-  // branch mode, matching the wire default.
+  // branch mode: the schema's wire default, which writers omit.
   mode: SubmissionMode | undefined
   // Milestone tag patterns for tag mode (union with the always-on submit/*).
   submissionTags?: string[]

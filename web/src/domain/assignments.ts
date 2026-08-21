@@ -24,9 +24,6 @@ export {
   setAssignmentLockWithConflictRetry,
   setAssignmentClosed,
   setAssignmentClosedWithConflictRetry,
-  // MIGRATION(v1.28): remove with the schema-migration flow in createEdit.ts.
-  migrateClassroomAssignments,
-  migrateClassroomAssignmentsWithConflictRetry,
   preserveUnmanagedAssignmentKeys,
   tryGrantTeamTemplateRead,
   resolveTemplateGrant,
@@ -36,9 +33,6 @@ export {
   type SetAssignmentLockResult,
   type SetAssignmentClosedInput,
   type SetAssignmentClosedResult,
-  // MIGRATION(v1.28): remove with the schema-migration flow in createEdit.ts.
-  type MigrateClassroomAssignmentsInput,
-  type MigrateClassroomAssignmentsResult,
 } from "./assignments/createEdit"
 export {
   createAssignmentRepo,

@@ -91,8 +91,12 @@ const (
 	// submission_mode values: every-push = the shim grades every push to the
 	// default branch plus submit/* tags (the wire default — writers omit it);
 	// tag = the shim grades ONLY submit/* tag pushes, which the submit clients
-	// create. Mirrored in the assignments-v1 schema enum and the web
-	// SUBMISSION_MODES; pinned by contract_test.go and the schema-parity tests.
+	// create. Readers resolve an absent field to every-push and must never gate
+	// behavior on the field being PRESENT: absence is the wire default, not a
+	// legacy or version marker. Writers omit every-push, but both wire forms
+	// occur and must read identically. Mirrored in the assignments-v1 schema
+	// enum and the web SUBMISSION_MODES; pinned by contract_test.go and the
+	// schema-parity tests.
 	SubmissionModeEveryPush = "every-push"
 	SubmissionModeTag       = "tag"
 
