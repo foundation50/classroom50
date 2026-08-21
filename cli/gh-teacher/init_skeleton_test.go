@@ -2,17 +2,22 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/cli/go-gh/v2/pkg/api"
 	"gopkg.in/yaml.v3"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/classroom50-cli-shared/ghutil"
 	"github.com/foundation50/gh-teacher/internal/assignment"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 )
@@ -1148,4 +1153,126 @@ func keys(m map[string]string) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// TestRateLimitMarkersParity_GoVsInlinePython pins the rate-limit body markers
+// across the Go classifier and all three embedded Python scripts.
+//
+// ghutil.IsRateLimited is canonical; the scripts hand-mirror its marker set with
+// no compile-time link, plus one deliberate extra ("rate limit exceeded", a
+// fallback for a response whose headers a proxy stripped). Drift is silent and
+// expensive in one direction: a marker matched in Go but missing in Python reads
+// a throttle as an under-scoped token and tells the operator to rotate a healthy
+// service token.
+//
+// Both sides are read from SOURCE and compared as exact sets, so the test fails
+// whichever side moves — undocumented supersets included. Two guards keep that
+// honest: the scrape is scoped to IsRateLimited's own body, and it fails closed
+// when the function tests the message in a way the scrape cannot read (a named
+// constant, another predicate, a regexp). Without them a widened Go classifier
+// would slip through silently, which is the expensive direction.
+func TestRateLimitMarkersParity_GoVsInlinePython(t *testing.T) {
+	goWant := []string{"abuse", "secondary rate limit"}
+	// The documented Python-only extra; see collect_scores.py.
+	pythonWant := []string{"abuse", "rate limit exceeded", "secondary rate limit"}
+
+	sortedSet := func(items []string) []string {
+		return slices.Compact(slices.Sorted(slices.Values(items)))
+	}
+
+	// Go leg: the literals ghutil.IsRateLimited matches against the response
+	// message, read from the function body so an unrelated `msg` elsewhere in
+	// the file can't pollute the set.
+	goSrc, err := os.ReadFile(filepath.Join("..", "shared", "ghutil", "ghutil.go"))
+	if err != nil {
+		t.Fatalf("read ghutil.go: %v", err)
+	}
+	bodyRE := regexp.MustCompile(`(?s)\nfunc IsRateLimited\(err error\) bool \{(.*?)\n\}`)
+	bodyMatch := bodyRE.FindStringSubmatch(string(goSrc))
+	if bodyMatch == nil {
+		t.Fatalf("could not locate func IsRateLimited in ghutil.go — this test can no longer read the canonical marker set")
+	}
+	goBody := bodyMatch[1]
+
+	goMarkerRE := regexp.MustCompile(`strings\.Contains\(msg, "([^"]+)"\)`)
+	var goGot []string
+	for _, m := range goMarkerRE.FindAllStringSubmatch(goBody, -1) {
+		goGot = append(goGot, m[1])
+	}
+	if got := sortedSet(goGot); !reflect.DeepEqual(got, goWant) {
+		t.Errorf("ghutil.IsRateLimited body markers = %q, want %q — the Go classifier changed; mirror the change into all three Python scripts' RATE_LIMIT_BODY_MARKERS and update this test's expected sets", got, goWant)
+	}
+
+	// Fail closed on a marker the scrape above CANNOT read. Counting every
+	// message test in the body and requiring each to be a quoted literal is what
+	// makes a new marker loud: expressed as a named constant, or matched with a
+	// different predicate, it would otherwise widen Go's classification while
+	// this test kept passing and Python silently kept reading that throttle as an
+	// under-scoped token.
+	msgTestRE := regexp.MustCompile(`strings\.(Contains|HasPrefix|HasSuffix|EqualFold|Index)\(msg,`)
+	if n := len(msgTestRE.FindAllString(goBody, -1)); n != len(goGot) {
+		t.Errorf("ghutil.IsRateLimited tests the response message %d time(s) but only %d are readable string literals — a marker added via a named constant or a non-Contains predicate is invisible to this parity check; express it as a literal, or teach this test to read it", n, len(goGot))
+	}
+	if regexp.MustCompile(`\bregexp\.|\bMatchString\(`).MatchString(goBody) {
+		t.Error("ghutil.IsRateLimited now matches the message with a regexp — this parity check reads literals only and can no longer see the marker set")
+	}
+
+	// Behavioral leg: ask the real classifier, so the scraped literals are the
+	// ones that actually decide the verdict.
+	rateLimitErr := func(msg string) error {
+		return &api.HTTPError{
+			StatusCode: http.StatusForbidden,
+			Headers:    http.Header{},
+			Message:    msg,
+		}
+	}
+	for _, marker := range goWant {
+		// Embedded in a realistic body, and upper-cased: IsRateLimited lowercases
+		// the message before matching, so this also pins that it stays
+		// case-insensitive.
+		body := "You have exceeded a " + strings.ToUpper(marker) + " for this endpoint"
+		if !ghutil.IsRateLimited(rateLimitErr(body)) {
+			t.Errorf("ghutil.IsRateLimited did not match %q in the response body, but the scraped literals still claim it does — the classifier and its markers have diverged", marker)
+		}
+	}
+	// The negative case, so the assertion above can't pass by matching anything:
+	// a plain permission denial must NOT read as a throttle.
+	if ghutil.IsRateLimited(rateLimitErr("Resource not accessible by personal access token")) {
+		t.Error("ghutil.IsRateLimited matched a permission-denial body; the marker set has widened to catch real 403s")
+	}
+	// A marker Python carries and Go deliberately does not. If Go ever starts
+	// matching it, the documented divergence is gone and every script's comment
+	// (plus pythonWant below) is stale.
+	if ghutil.IsRateLimited(rateLimitErr("API rate limit exceeded for user")) {
+		t.Error("ghutil.IsRateLimited now matches \"rate limit exceeded\" — that is no longer a Python-only extra; drop it from pythonWant and from the scripts' comments")
+	}
+
+	// Python leg: the RATE_LIMIT_BODY_MARKERS tuple in each embedded script,
+	// compared exactly — a missing marker misreads a throttle as a scope
+	// problem, and an undocumented extra widens classification silently.
+	files, err := skeletonFiles("main")
+	if err != nil {
+		t.Fatalf("skeletonFiles: %v", err)
+	}
+	tupleRE := regexp.MustCompile(`(?s)RATE_LIMIT_BODY_MARKERS = \(([^)]*)\)`)
+	quoteRE := regexp.MustCompile(`"([^"]+)"`)
+	for _, name := range []string{"collect_scores.py", "regrade_repos.py", "probe_token.py"} {
+		path := ".github/scripts/" + name
+		script, ok := files[path]
+		if !ok {
+			t.Fatalf("%s missing from skeleton", path)
+		}
+		tuple := tupleRE.FindStringSubmatch(script)
+		if tuple == nil {
+			t.Errorf("%s no longer defines RATE_LIMIT_BODY_MARKERS — the Go<->Python rate-limit mirror has been dropped", name)
+			continue
+		}
+		var pyGot []string
+		for _, m := range quoteRE.FindAllStringSubmatch(tuple[1], -1) {
+			pyGot = append(pyGot, m[1])
+		}
+		if got := sortedSet(pyGot); !reflect.DeepEqual(got, pythonWant) {
+			t.Errorf("%s RATE_LIMIT_BODY_MARKERS = %q, want %q (ghutil.IsRateLimited's markers plus the documented \"rate limit exceeded\" extra) — a missing marker reports a throttled response as an under-scoped token; an undocumented extra must be justified here and in collect_scores.py's comment", name, got, pythonWant)
+		}
+	}
 }

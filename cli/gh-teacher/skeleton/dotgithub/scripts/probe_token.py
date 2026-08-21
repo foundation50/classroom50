@@ -55,6 +55,7 @@ Exit codes:
 
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import pathlib
@@ -72,6 +73,21 @@ CONFIG_REPO = "classroom50"
 # Schema sentinel for a classroom.json — keep aligned with collect_scores.py.
 CLASSROOM_SCHEMA_V1 = "classroom50/classroom/v1"
 
+# Throttle classifier constants, hand-mirrored from collect_scores.py (which
+# documents them); pinned by TestRateLimitMarkersParity_GoVsInlinePython.
+#
+# This file needs the distinction MOST: it is what a teacher runs to ask "is my
+# token healthy?", so reporting a throttled 403 as a missing scope sends them to
+# rotate a working credential with this script's authority behind the advice.
+RATE_LIMIT_BODY_MARKERS = (
+    "secondary rate limit",
+    "rate limit exceeded",
+    "abuse",
+)
+MAX_RETRY_SLEEP_SECONDS = 60
+TRANSIENT_RETRY_CAP_SECONDS = 30
+BODY_SNIPPET_READ_BYTES = 4096
+
 
 # GitHub API transport --------------------------------------------------------
 
@@ -87,9 +103,9 @@ def _api_url() -> str:
 def http_get(url: str, token: str, *, _retries: int = 3) -> tuple[int, bytes]:
     """GET `url` with bearer auth. Returns (status, body) for a 2xx; raises
     urllib.error.HTTPError for a non-2xx so callers can classify. Retries
-    5xx/429 with exponential backoff (honoring Retry-After), mirroring the
-    collect/regrade transport. The token lives only in the Authorization header
-    — never logged or interpolated into output."""
+    throttles and 5xx/429 with exponential backoff (honoring Retry-After),
+    mirroring the collect/regrade transport. The token lives only in the
+    Authorization header — never logged or interpolated into output."""
     for attempt in range(_retries):
         req = urllib.request.Request(
             url,
@@ -105,13 +121,8 @@ def http_get(url: str, token: str, *, _retries: int = 3) -> tuple[int, bytes]:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return resp.status, resp.read()
         except urllib.error.HTTPError as exc:
-            if exc.code in (429, 500, 502, 503, 504) and attempt < _retries - 1:
-                retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                delay = (
-                    min(int(retry_after), 30)
-                    if (retry_after or "").isdigit()
-                    else 2**attempt
-                )
+            delay = retry_delay(exc, attempt)
+            if delay is not None and attempt < _retries - 1:
                 time.sleep(delay)
                 continue
             raise
@@ -123,6 +134,96 @@ def http_get(url: str, token: str, *, _retries: int = 3) -> tuple[int, bytes]:
                 url=url, code=599, msg=f"network error: {exc}", hdrs=None, fp=None  # type: ignore[arg-type]
             ) from exc
     raise RuntimeError(f"http_get called with _retries={_retries}")
+
+
+def error_body_snippet(exc: urllib.error.HTTPError) -> str:
+    """First 300 characters of an error response body, whitespace-collapsed and
+    cached on the exception so later readers still see it after the one-shot
+    stream is consumed. Mirrors collect_scores.py."""
+    cached = getattr(exc, "_body_snippet", None)
+    if cached is None:
+        try:
+            raw = exc.read(BODY_SNIPPET_READ_BYTES) or b""
+        except (OSError, ValueError, AttributeError):
+            raw = b""
+        cached = " ".join(raw.decode("utf-8", "replace").split())[:300]
+        setattr(exc, "_body_snippet", cached)
+    return cached
+
+
+def epoch_to_iso(value: str) -> str:
+    """Unix epoch seconds (X-RateLimit-Reset) as an RFC 3339 UTC timestamp, or
+    the raw value when it doesn't name a representable time. Mirrors
+    collect_scores.py."""
+    try:
+        return datetime.datetime.fromtimestamp(
+            int(value), tz=datetime.timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (ValueError, OverflowError, OSError):
+        return value
+
+
+def rate_limit_verdict(
+    exc: urllib.error.HTTPError,
+) -> tuple[str, float | None] | None:
+    """`(reason, seconds-to-wait)` when the response says GitHub is THROTTLING
+    rather than refusing, else None; `seconds` is None for a throttle that must
+    NOT be waited out. Mirrors collect_scores.py."""
+    if exc.code not in (403, 429):
+        return None
+    headers = exc.headers or {}
+    retry_after = _retry_after_seconds(headers)
+    if retry_after is not None:
+        return (
+            f"Retry-After: {retry_after}s",
+            min(int(retry_after), MAX_RETRY_SLEEP_SECONDS),
+        )
+    if (headers.get("X-RateLimit-Remaining") or "").strip() == "0":
+        reset = (headers.get("X-RateLimit-Reset") or "").strip()
+        window = f", resets at {epoch_to_iso(reset)}" if reset.isdigit() else ""
+        return (f"X-RateLimit-Remaining: 0{window}", None)
+    body = error_body_snippet(exc).lower()
+    for marker in RATE_LIMIT_BODY_MARKERS:
+        if marker in body:
+            return (
+                f'response body names the "{marker}"',
+                MAX_RETRY_SLEEP_SECONDS,
+            )
+    return None
+
+
+def rate_limit_reason(exc: urllib.error.HTTPError) -> str | None:
+    """What in the response says GitHub is THROTTLING rather than refusing, or
+    None when nothing does. The reason half of rate_limit_verdict."""
+    verdict = rate_limit_verdict(exc)
+    return verdict[0] if verdict is not None else None
+
+
+def _retry_after_seconds(headers: Any) -> str | None:
+    """The Retry-After header when it names plain delta-seconds, else None.
+    Mirrors collect_scores.py."""
+    value = (headers.get("Retry-After") or "").strip() if headers else ""
+    return value if value.isdigit() else None
+
+
+def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
+    """Seconds to wait before retrying `exc`, or None when it must not be
+    retried. Mirrors collect_scores.py: throttles first (an exhausted PRIMARY
+    budget is never waited out), then the 429/5xx backoff this probe already
+    had.
+
+    No run-level sleep ceiling here, unlike collect/regrade: a probe issues a
+    handful of requests, so it cannot pile up enough recovered throttles to
+    threaten its own job timeout."""
+    verdict = rate_limit_verdict(exc)
+    if verdict is not None:
+        return verdict[1]
+    if exc.code in (429, 500, 502, 503, 504):
+        retry_after = _retry_after_seconds(exc.headers)
+        if retry_after is not None:
+            return min(int(retry_after), TRANSIENT_RETRY_CAP_SECONDS)
+        return 2**attempt
+    return None
 
 
 def _repo_url(api_url: str, owner: str, repo: str) -> str:
@@ -150,7 +251,18 @@ class Check:
 
 
 def _classify_repo_read(exc: urllib.error.HTTPError) -> str:
-    """Short human cause for a failed repo/org read."""
+    """Short human cause for a failed repo/org read.
+
+    The THROTTLE check comes first: GitHub returns a rate limit as 403 as often
+    as 429, and reporting a healthy, rate-limited token as under-scoped is the
+    one verdict a token probe must never get wrong."""
+    throttle_reason = rate_limit_reason(exc)
+    if throttle_reason is not None:
+        return (
+            f"HTTP {exc.code} — GitHub is THROTTLING, not refusing ({throttle_reason}); "
+            f"the token is fine, do NOT rotate it. Re-run the probe once the "
+            f"limit resets."
+        )
     if exc.code == 401:
         return "token is invalid, expired, or revoked (401)"
     if exc.code in (403, 404):

@@ -16,8 +16,11 @@ Importing via `importlib` keeps the embedded path canonical — no second copy.
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import pathlib
 import sys
+import urllib.error
 
 _HERE = pathlib.Path(__file__).resolve().parent
 _SCRIPTS_DIR = _HERE.parent / "skeleton" / "dotgithub" / "scripts"
@@ -36,3 +39,40 @@ collect_scores = _load_module("collect_scores", _SCRIPTS_DIR / "collect_scores.p
 materialize_tests = _load_module("materialize_tests", _SCRIPTS_DIR / "materialize_tests.py")
 regrade_repos = _load_module("regrade_repos", _SCRIPTS_DIR / "regrade_repos.py")
 probe_token = _load_module("probe_token", _SCRIPTS_DIR / "probe_token.py")
+
+
+def github_http_error(
+    code: int,
+    headers: dict[str, str] | None = None,
+    body: bytes | dict | None = b"",
+    url: str = "https://api.github.com/x",
+) -> urllib.error.HTTPError:
+    """An HTTPError shaped like GitHub's, for both script test modules.
+
+    `headers` is a plain dict — the real HTTPMessage answers `.get` the same
+    way — and the body is readable exactly ONCE, which is the property the
+    scripts' body caching exists to survive. A dict body is JSON-encoded; None
+    means no body stream at all (an error that can't be read)."""
+    if isinstance(body, dict):
+        body = json.dumps(body).encode("utf-8")
+    fp = io.BytesIO(body) if body is not None else None
+    return urllib.error.HTTPError(url=url, code=code, msg="msg", hdrs=headers, fp=fp)
+
+
+class FakeResponse:
+    """Stand-in for the object the scripts' opener returns. `read(*args)` covers
+    both `resp.read()` and collect's `resp.read(max_bytes)`."""
+
+    def __init__(self, body: bytes = b"{}", status: int = 200):
+        self.status = status
+        self.headers: dict[str, str] = {}
+        self._body = body
+
+    def read(self, *args):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False

@@ -17,6 +17,8 @@ import email.message
 
 import pytest
 
+from conftest import github_http_error
+from conftest import FakeResponse
 from conftest import regrade_repos as rr
 
 
@@ -51,11 +53,11 @@ def test_build_submit_tag_shape():
     assert "T" in tag and tag.count("-") >= 3
 
 
-def test_is_hard_http_error():
+def test_classify_fatal_view():
     for code in (401, 403, 599):
-        assert rr.is_hard_http_error(_http_error(code))
+        assert rr.classify(_http_error(code)) is rr.FATAL
     for code in (404, 422, 500):
-        assert not rr.is_hard_http_error(_http_error(code))
+        assert rr.classify(_http_error(code)) is not rr.FATAL
 
 
 # regrade_repo decision logic -------------------------------------------------
@@ -159,6 +161,19 @@ def test_rerun_workflow_run_403_raises_skiprepo(monkeypatch):
     monkeypatch.setattr(rr, "_http_request", fake_request)
     with pytest.raises(rr._SkipRepo):
         rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+
+
+def test_rerun_workflow_run_throttled_403_is_not_a_benign_skip(monkeypatch):
+    # A throttle also arrives as 403. Swallowing it as "not re-runnable" would
+    # count the repo as skipped and exit green on an incomplete regrade, while
+    # the fan-out keeps hammering an active limiter.
+    def fake_request(method, url, token, *, accept, body=None, _retries=3):
+        raise github_http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+
+    monkeypatch.setattr(rr, "_http_request", fake_request)
+    with pytest.raises(rr.urllib.error.HTTPError) as ei:
+        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+    assert rr.classify(ei.value) is rr.THROTTLED
 
 
 def test_main_head_sha_returns_none_on_404(monkeypatch):
@@ -399,6 +414,40 @@ def test_main_soft_http_error_skips_and_exits_1(monkeypatch):
     monkeypatch.setattr(rr, "regrade_repo", fake_regrade)
     # One repo failed (appended to failed[]) but the other regraded -> exit 1.
     assert rr.main() == 1
+
+
+def test_main_per_repo_throttle_aborts_named_without_rotate_advice(monkeypatch, capsys):
+    # A throttle is fatal for regrade (the pass can't defer), but the operator
+    # must not be sent to rotate a healthy token.
+    _set_main_env(monkeypatch)
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
+    seen: list[str] = []
+
+    def fake_regrade(api_url, org, repo, token, tag_mode, submission_tags=None):
+        seen.append(repo)
+        raise github_http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+
+    monkeypatch.setattr(rr, "regrade_repo", fake_regrade)
+    assert rr.main() == 1
+    assert seen == ["cs50-hello-alice"]  # aborts on the first repo
+    err = capsys.readouterr().err
+    assert "throttling" in err and "do NOT rotate" in err
+    assert "rotate-service-token" not in err
+
+
+def test_main_team_listing_throttle_aborts_named_without_rotate_advice(monkeypatch, capsys):
+    # Same verdict on the team read, which previously hit the FATAL branch and
+    # advised re-scoping the PAT.
+    _set_main_env(monkeypatch)
+
+    def throttled_roster(*a, **k):
+        raise github_http_error(429, {"Retry-After": "60"})
+
+    monkeypatch.setattr(rr, "load_roster", throttled_roster)
+    assert rr.main() == 1
+    err = capsys.readouterr().err
+    assert "throttling" in err and "do NOT rotate" in err
+    assert "rotate-service-token" not in err
 
 
 def test_main_load_roster_hard_http_error_reports_token_scope(monkeypatch, capsys):
@@ -770,8 +819,7 @@ def test_auth_stripping_redirect_drops_authorization_cross_host():
 
 
 def _http_error(code: int, *, body: dict | None = None) -> urllib.error.HTTPError:
-    fp = io.BytesIO(json.dumps(body).encode("utf-8")) if body is not None else None
-    return urllib.error.HTTPError(url="https://api", code=code, msg="x", hdrs=None, fp=fp)
+    return github_http_error(code, body=body)
 
 
 # empty_repo skip -------------------------------------------------------------
@@ -1109,3 +1157,83 @@ def test_latest_autograde_run_id_tag_only_accepts_milestone_runs(monkeypatch):
         "https://api", "cs50", "repo", "tok", tag_only=True,
     )
     assert got == 4
+
+
+# Throttling vs. refusal ------------------------------------------------------
+
+
+class TestClassify:
+    """Mirrors collect_scores.py: a throttled 403/429 must classify as THROTTLED,
+    not as an under-scoped token."""
+
+    def test_throttle_beats_the_status_code(self):
+        assert rr.classify(github_http_error(403, {"Retry-After": "30"})) is rr.THROTTLED
+        assert rr.classify(github_http_error(429, {"Retry-After": "60"})) is rr.THROTTLED
+        body = b'{"message": "You have exceeded a secondary rate limit"}'
+        assert rr.classify(github_http_error(403, {}, body)) is rr.THROTTLED
+
+    def test_bare_auth_errors_are_fatal(self):
+        for code in (401, 403, 599):
+            assert rr.classify(github_http_error(code)) is rr.FATAL
+
+    def test_per_repo_errors_are_skippable(self):
+        for code in (404, 422, 500):
+            assert rr.classify(github_http_error(code)) is rr.SKIPPABLE
+
+    def test_out_of_range_reset_header_does_not_raise(self):
+        # A millisecond epoch overflows datetime; classify() runs inside an
+        # `except HTTPError` block, so raising would surface as a traceback.
+        exc = github_http_error(429, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1787120877000"})
+        assert rr.classify(exc) is rr.THROTTLED
+        assert rr.epoch_to_iso("1787120877000") == "1787120877000"
+
+
+class TestRateLimitClassification:
+    """This file shares collect_scores.py's transport: any 403 counting as an
+    under-scoped token would tell the operator to rotate a healthy credential."""
+
+    def test_retry_after_and_body_marker_are_throttles(self):
+        assert rr.rate_limit_reason(github_http_error(403, {"Retry-After": "30"})) == "Retry-After: 30s"
+        exc = github_http_error(403, {}, b'{"message": "You have exceeded a secondary rate limit"}')
+        assert "secondary rate limit" in (rr.rate_limit_reason(exc) or "")
+
+    def test_plain_403_is_still_a_permission_problem(self):
+        exc = github_http_error(403, {}, b'{"message": "Resource not accessible by personal access token"}')
+        assert rr.rate_limit_reason(exc) is None
+        assert rr.retry_delay(exc, 0) is None
+
+    def test_exhausted_primary_budget_is_named_but_not_slept_on(self):
+        exc = github_http_error(403, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1787120877"})
+        assert "X-RateLimit-Remaining: 0" in (rr.rate_limit_reason(exc) or "")
+        assert rr.retry_delay(exc, 0) is None
+
+    def test_transient_statuses_keep_the_old_backoff(self):
+        assert rr.retry_delay(github_http_error(500), 0) == 1
+        assert rr.retry_delay(github_http_error(503, {"Retry-After": "9999"}), 0) == 30
+        assert rr.retry_delay(github_http_error(404), 0) is None
+
+    def test_throttled_request_is_retried_then_succeeds(self, monkeypatch):
+        slept: list[float] = []
+        attempts: list[int] = []
+
+        def fake_open(req, timeout=None):
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise github_http_error(403, {"Retry-After": "2"}, b"secondary rate limit")
+            return FakeResponse()
+
+        monkeypatch.setattr(rr._OPENER, "open", fake_open)
+        monkeypatch.setattr(rr.time, "sleep", lambda s: slept.append(s))
+
+        body, _ = rr._http_send(
+            "POST", "https://api.github.com/x", "tok", accept="application/vnd.github+json", body=b"{}"
+        )
+        assert body == b"{}"
+        assert len(attempts) == 2 and slept == [2]
+
+    def test_body_snippet_survives_a_second_read(self):
+        exc = github_http_error(403, {}, b'{"message":   "secondary rate  limit"}')
+        first = rr.error_body_snippet(exc)
+        assert "secondary rate limit" in first
+        assert rr.error_body_snippet(exc) == first
+        assert rr.body_note(exc).startswith(" — response: ")
