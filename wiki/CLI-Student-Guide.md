@@ -144,15 +144,18 @@ When submit finishes, it prints two URLs:
 
 **Good to know:**
 
-- **Every push grades (by default).** Each commit on the default branch
-  triggers a graded run with its own tag and Release — except the first commit
-  from accepting, which has nothing to grade and is skipped. The latest
-  Release is always your most recent submission. On a **submit-only**
-  assignment, only `gh student submit` (or a hand-pushed `submit/*` tag)
-  grades; regular pushes save your work without grading it.
+- **Every push grades (by default).** Each push to the default branch
+  triggers one graded run, which tags and Releases the commit it ends on — so
+  a push of several commits grades once, while the submissions page counts
+  each of those commits. The first commit, from accepting, has nothing to
+  grade and is skipped. The latest Release is always your most recent
+  submission. On a **submit-only** assignment, only `gh student submit` (or a
+  hand-pushed `submit/*` tag) grades; regular pushes save your work without
+  grading it.
 - **Pull after teacher-side workflow updates.** If your teacher changes the
-  assignment's autograding trigger, a small commit lands in your repo. Run
-  `git pull` before your next push, or git will report a conflict.
+  assignment's autograding trigger, a small commit lands in your repo. It is
+  neither graded nor counted as a submission. Run `git pull` before your next
+  push, or git will report a conflict.
 - **History is preserved.** Submissions stack as commits; prior commits stay
   reachable for review.
 - **No git config required.** Commits are authored with your GitHub login and

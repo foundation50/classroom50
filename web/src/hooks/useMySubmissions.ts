@@ -10,7 +10,7 @@ import type { SubmissionMode } from "@/types/classroom"
 // to the student's single repo (`<classroom>-<assignment>-<login>`):
 //   - releases: the graded submit/* releases (both modes — they carry grades).
 //   - tags:     tag/tag-group detections (tag mode only).
-//   - pushes:   default-branch commits minus the baseline (every-push only).
+//   - pushes:   the default branch's submission commits (every-push only).
 // The inactive mode's read is disabled (undefined args), so it costs nothing.
 // `isError` folds the ACTIVE-mode submission-list read so a transient/permission
 // failure surfaces rather than rendering a misleading "0 submissions".

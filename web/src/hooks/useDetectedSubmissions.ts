@@ -136,8 +136,8 @@ export function useDetectedSubmissions({
                   ])
                   return dateMilestoneTagEntries(client, org!, repo, entries)
                 }
-                // Branch mode: resolve the default branch, its baseline, and the
-                // commit log, then exclude the baseline commit.
+                // Branch mode: resolve the default branch, its baseline, and
+                // the commit log; detectBranchSubmissions narrows it.
                 const info = await getRepo(client, org!, repo)
                 const branch = info?.default_branch
                 if (!branch) return [] // not accepted / commitless

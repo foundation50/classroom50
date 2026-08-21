@@ -676,6 +676,12 @@ def is_shim_update_commit(workspace: pathlib.Path, head_sha: str) -> bool:
     The acceptance check takes precedence at the call site — the accept commit
     also touches the shim but additionally lands the marker, so the path sets
     never overlap in practice.
+
+    The web's submissions page answers the same question from the commit
+    MESSAGE (`[Classroom 50]` prefix + `[skip ci]`), because the list-commits
+    API carries no per-commit paths. The rules therefore differ at the edge: a
+    student who hand-edits only the shim is skipped here but still counted
+    there.
     """
     if not head_sha:
         return False

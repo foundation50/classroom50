@@ -21,24 +21,12 @@ import { getRepo } from "@/github-core/repoReads"
 import { getBranchRefRepo, getCommitByRepo } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { decodeBase64Utf8 } from "@/util/github"
-import { prefixCommit } from "@/util/commit"
+import { shimUpdateCommitMessage } from "@/util/commit"
 import { safeShimTagPatterns } from "@/util/submissionTags"
 
 // The shim's path in every student repo. Byte-mirror of the CLI's
 // classroomcfg.AutogradeWorkflowPath and runner.py's SHIM_UPDATE_COMMIT_PATHS.
 export const AUTOGRADE_SHIM_PATH = ".github/workflows/autograde.yaml"
-
-// The retrofit commit message. The `[skip ci]` body line is load-bearing: a
-// tag→every-push retrofit commit carries the restored push trigger, and this
-// commit is authored with the teacher's OAuth token (user pushes DO fire
-// workflows). Byte-mirror of contract.ShimUpdateCommitMessage (Go), pinned by
-// TestShimUpdateCommitMessage.
-export function shimUpdateCommitMessage(mode: "every-push" | "tag"): string {
-  return (
-    prefixCommit(`Update autograder trigger to ${mode} (submission-mode)`) +
-    "\n\n[skip ci]"
-  )
-}
 
 // The default shim's `on:` block in any mode/tags combination: an optional
 // branches: line (group 1) followed by the tags line (group 2 — the default

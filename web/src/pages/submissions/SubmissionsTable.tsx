@@ -121,7 +121,7 @@ type OverrideModalRow = {
 }
 
 // Build the type-aware detail items for a row via the shared builder: tag
-// entries in tag mode, default-branch pushes otherwise.
+// entries in tag mode, default-branch commits otherwise.
 //
 // The list is driven by the DETECTED entries (`row.detectedEntries`) — the same
 // source the count chip is bumped from — so it lists exactly what the chip

@@ -228,10 +228,12 @@ section — most assignments never need them:
   changed after creation (edits only affect repositories accepted from now on;
   turning autograding off later makes already-accepted repositories' autograde
   runs fail and drop out of the collected scores).
-- **Submission type** — when the autograder runs. **Every push to the default
-  branch** (the default) grades each push. **A tagged commit** grades only
-  when a student submits (`gh student submit`) or pushes a `submit/*` tag —
-  regular pushes cost no Actions minutes, which matters at scale.
+- **Submission type** — when the autograder runs, and what the submissions
+  page counts. **Every push to the default branch** (the default) grades each
+  push and counts each commit on the branch, so a push of several commits is
+  graded once but counted several times. **A tagged commit** grades and counts
+  only when a student submits (`gh student submit`) or pushes a `submit/*`
+  tag — regular pushes cost no Actions minutes, which matters at scale.
 - **Submission tags** (optional) — tag names such as `phase1`, `phase2`,
   `complete`) that also trigger grading. A student pushes the tag with plain
   git (`git tag phase1 && git push origin phase1`) and that commit grades; the
@@ -599,7 +601,8 @@ already accepted:
 1. Change the trigger in **Assignment settings** and save.
 2. On the submissions page, open the actions menu and click **Update
    autograding triggers**. It rewrites each repository's workflow to match
-   (the commit is marked so it doesn't trigger grading), reports repositories
+   (the commit is marked, so it neither triggers grading nor counts as a
+   submission), reports repositories
    whose workflow was hand-edited (those are left untouched), and skips
    students who haven't accepted. A single repository can also be updated from
    its row's manage dialog.

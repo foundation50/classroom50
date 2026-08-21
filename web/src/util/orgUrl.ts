@@ -63,8 +63,8 @@ export const repoTagsUrl = (org: string, repo: string): string | undefined => {
   )
 }
 
-// A repo's commit page for a sha. Used to link a detected default-branch push
-// (every-push mode) to its commit. safeHttpUrl-guarded; undefined on blank
+// A repo's commit page for a sha. Used to link a detected default-branch commit
+// (every-push mode). safeHttpUrl-guarded; undefined on blank
 // input.
 export const repoCommitUrl = (
   org: string,

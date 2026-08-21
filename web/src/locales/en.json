@@ -1262,7 +1262,7 @@
       },
       "submissionMode": {
         "label": "Submission type",
-        "help": "\"Every push to the default branch\" counts each push after the starter commit. \"A tagged commit\" counts only tagged commits, so ordinary pushes use no Actions minutes; a student submits by pushing a tag or running gh student submit.",
+        "help": "\"Every push to the default branch\" counts each commit after the starter commit. \"A tagged commit\" counts only tagged commits, so ordinary pushes use no Actions minutes; a student submits by pushing a tag or running gh student submit.",
         "editWarning": "Changing this only affects repositories created from now on. Repositories students already accepted keep the old setting until you update them. Use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
         "choices": {
           "everyPush": "Every push to the default branch",
@@ -2387,10 +2387,10 @@
     "dueDate": "Due {{date}}",
     "noDueDate": "No due date",
     "type": {
-      "badgeEveryPush": "Every push to the default branch counts",
+      "badgeEveryPush": "Every commit on the default branch counts",
       "badgeTag": "Submitted by tag",
-      "countEveryPush_one": "{{count}} push to the default branch",
-      "countEveryPush_other": "{{count}} pushes to the default branch",
+      "countEveryPush_one": "{{count}} commit on the default branch",
+      "countEveryPush_other": "{{count}} commits on the default branch",
       "countTag_one": "{{count}} tagged submission",
       "countTag_other": "{{count}} tagged submissions",
       "tagGroupCount_one": "{{pattern}} · {{count}} tag",
@@ -2410,9 +2410,9 @@
       "viewCommit": "View commit",
       "viewGrade": "View grade",
       "unavailable": "Unavailable",
-      "pushEntry": "Push #{{number}}",
+      "pushEntry": "Commit #{{number}}",
       "tagEntry": "Submission #{{number}}",
-      "emptyEveryPush": "No pushes to the default branch yet. The repository still exists — open it to see the code.",
+      "emptyEveryPush": "No commits on the default branch yet. The repository still exists — open it to see the code.",
       "emptyTag": "No tagged submissions yet. The repository still exists — open its tags to see submissions as they arrive.",
       "emptyLinkDefaultBranch": "View repository",
       "emptyLinkTags": "View tags"

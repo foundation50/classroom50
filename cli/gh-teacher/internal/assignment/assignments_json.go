@@ -988,7 +988,7 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 // template carries the workflows), and UNLIKE empty_repo it permits feedback_pr
 // (a templated repo has a baseline commit). submission_mode/submission_tags are
 // PERMITTED — with no shim they carry no trigger, but they still define what the
-// submissions page counts as a submission (branch pushes / milestone tags).
+// submissions page counts as a submission (branch commits / milestone tags).
 // Unlike empty_repo, no_autograder has no `assignment add` flag yet (it is
 // GUI/manifest-set), so error wording names the JSON fields, not a
 // --no-autograder flag; the parse path wraps with the entry context.

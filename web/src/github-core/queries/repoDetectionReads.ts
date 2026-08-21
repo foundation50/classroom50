@@ -12,8 +12,8 @@ import { githubKeys } from "./keys"
 // branch-mode push or a tag-mode git tag even when no Release exists. Both
 // tolerate a 404 (a repo a student hasn't accepted yet) as an empty result.
 
-// The default-branch commit log, newest-first (GitHub's default order). Callers
-// exclude the baseline commit and count the rest as branch-mode submissions.
+// The default-branch commit log, newest-first (GitHub's default order). Raw:
+// callers narrow it to the submissions with submissionCommits.
 export async function listDefaultBranchCommits(
   client: GitHubClient,
   owner: string,

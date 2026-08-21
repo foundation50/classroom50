@@ -10,6 +10,10 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 }))
 
 import { useDetectedSubmissions } from "./useDetectedSubmissions"
+import {
+  FEEDBACK_OPEN_COMMIT_MESSAGE,
+  shimUpdateCommitMessage,
+} from "@/util/commit"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 
 const noRateLimit: GitHubRateLimit = {
@@ -53,7 +57,7 @@ const base = {
 function branchClient(opts: {
   defaultBranch?: string | null
   baselineCommits?: Array<{ sha: string }>
-  branchCommits?: Array<{ sha: string }>
+  branchCommits?: Array<{ sha: string; message?: string }>
 }) {
   return (url: string) => {
     if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
@@ -67,9 +71,9 @@ function branchClient(opts: {
     if (url.includes("/commits?sha=")) {
       return Promise.resolve(
         (opts.branchCommits ?? []).map((c) => ({
-          ...c,
+          sha: c.sha,
           commit: {
-            message: c.sha,
+            message: c.message ?? c.sha,
             committer: { date: "2026-06-20T10:00:00Z" },
           },
         })),
@@ -110,6 +114,32 @@ describe("useDetectedSubmissions — branch mode", () => {
       expect(result.current.detected[0].count).toBe(2)
     },
   )
+
+  it("does not count the tool's own bookkeeping commit as a submission", async () => {
+    request.mockImplementation(
+      branchClient({
+        defaultBranch: "main",
+        baselineCommits: [{ sha: "baseline" }],
+        branchCommits: [
+          { sha: "c1" },
+          { sha: "shim", message: shimUpdateCommitMessage("tag") },
+          { sha: "feedback", message: FEEDBACK_OPEN_COMMIT_MESSAGE },
+          { sha: "baseline" },
+        ],
+      }),
+    )
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "every-push",
+          repoOwners: ["a"],
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.detected[0].count).toBe(1)
+  })
 
   it("emits nothing for a not-accepted repo (404 on the repo object)", async () => {
     request.mockImplementation(branchClient({ defaultBranch: null }))

@@ -57,8 +57,8 @@ export function SubmissionsSubsection({
   )
 }
 
-// The submission definition: branch (every default-branch push) vs tag (on
-// submit only). Always visible. The retrofit edit warning only shows when a
+// The submission definition: branch (every default-branch commit counts, the
+// shim grades every push) vs tag (on submit only). Always visible. The retrofit edit warning only shows when a
 // built-in shim exists (there is a shim to update).
 function SubmissionModeField({
   form,

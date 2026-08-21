@@ -192,7 +192,7 @@ function liveLateness(
 }
 
 // Detected-submission presence for one repo, from the detection subsystem
-// (branch-mode default-branch pushes or tag-mode git tags). Like the live
+// (branch-mode default-branch commits or tag-mode git tags). Like the live
 // overlay, this is count/presence only — grades never come from here (KTD6).
 // `entries` is the per-submission breakdown (tags/commits) the expanded history
 // surfaces as jump-to-tag links; omitted when the caller only needs the count.
@@ -206,7 +206,7 @@ export type DetectedPresence = {
 // overlay, the second overlay on the same snapshot (KTD6). Same discipline as
 // mergeLiveRows: detection can only REVEAL more submissions than are already
 // counted (max wins), never fewer, and never sets a score. A detection-only
-// owner (pushes/tags but no submit/* release and no snapshot entry) becomes a
+// owner (commits/tags but no submit/* release and no snapshot entry) becomes a
 // pending row so the teacher sees the work exists, ungraded — carrying the
 // newest detected submission time (commit dates in branch mode; encoded
 // submit/* timestamps or milestone commit lookups in tag mode) so the "last

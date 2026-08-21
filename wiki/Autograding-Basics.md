@@ -290,7 +290,10 @@ Two guards keep tag mode honest even when a repository's workflow trigger is sta
   `[skip ci]`, so it fires no workflow. As a backstop (for example, a client that
   dropped the marker), the runner also recognizes a tip commit touching ONLY
   `.github/workflows/autograde.yaml` and skips it with the status
-  *"autograder trigger updated — nothing to grade"*.
+  *"autograder trigger updated — nothing to grade"*. The submissions page
+  leaves that commit out of its counts too, along with the empty commit that
+  opens a Feedback PR — the only two commits Classroom 50 writes into a
+  student repository on its own.
 - **Foreign-tag suppression** — a pushed tag matching neither `submit/*` nor
   any configured milestone pattern (possible only with a stale or hand-edited
   workflow) is skipped gracefully with the `classroom50/autograde-skipped`

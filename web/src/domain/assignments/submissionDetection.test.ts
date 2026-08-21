@@ -14,15 +14,19 @@ import {
   submissionModeCountKey,
   submitTagDatetime,
 } from "./submissionDetection"
+import {
+  FEEDBACK_OPEN_COMMIT_MESSAGE,
+  shimUpdateCommitMessage,
+} from "@/util/commit"
 import type { GitHubCommit, GitHubTag } from "@/github-core/types"
 import type { DetectedSubmission } from "./submissionDetection"
 
-function commit(sha: string, date?: string): GitHubCommit {
+function commit(sha: string, date?: string, message = sha): GitHubCommit {
   return {
     sha,
     html_url: `https://x/commit/${sha}`,
     commit: {
-      message: sha,
+      message,
       committer: date ? { date } : undefined,
     },
     author: null,
@@ -51,6 +55,31 @@ describe("detectBranchSubmissions", () => {
     const commits = [commit("c2"), commit("c1")]
     const detected = detectBranchSubmissions(commits, null)
     expect(detectedSubmissionCount(detected)).toBe(2)
+  })
+
+  // Pinned against the writers themselves: if either drops the [skip ci] body
+  // its commit starts counting again, and this fails.
+  it("skips the tool's own bookkeeping commits on the default branch", () => {
+    const commits = [
+      commit("c2"),
+      commit("feedback", undefined, FEEDBACK_OPEN_COMMIT_MESSAGE),
+      commit("shim-tag", undefined, shimUpdateCommitMessage("tag")),
+      commit("shim-push", undefined, shimUpdateCommitMessage("every-push")),
+      commit("c1"),
+    ]
+    const detected = detectBranchSubmissions(commits, null)
+    expect(detected.map((d) => d.sha)).toEqual(["c2", "c1"])
+  })
+
+  it("counts near misses: quoted tool text, and the student's own submit", () => {
+    const detected = detectBranchSubmissions(
+      [
+        commit("c1", undefined, `Fix ${shimUpdateCommitMessage("tag")}`),
+        commit("c2", undefined, "[Classroom 50] Submit hw1"),
+      ],
+      null,
+    )
+    expect(detected.map((d) => d.sha)).toEqual(["c1", "c2"])
   })
 
   it("carries each commit's time (committer date, else author date)", () => {
