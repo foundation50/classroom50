@@ -4093,7 +4093,7 @@ describe("migrateClassroomAssignments", () => {
     ...extra,
   })
 
-  it("writes explicit submission_mode + grading:auto onto every legacy entry in one commit", async () => {
+  it("writes explicit submission_mode onto every legacy entry in one commit, nothing else", async () => {
     const { client, committed } = makeMigrateClient([
       legacyEntry("hw1"),
       legacyEntry("hw2"),
@@ -4107,9 +4107,11 @@ describe("migrateClassroomAssignments", () => {
     expect(result.alreadyMigratedCount).toBe(0)
     const written = committed()!
     // Every entry now carries an explicit tag mode (preserving pre-1.28
-    // submit/*-release counting) and auto grading.
+    // submit/*-release counting). grading stays absent: the schema reads
+    // absent as auto and every other writer omits the block for plain auto,
+    // so stamping an explicit auto here would be the lone writer doing so.
     expect(written.match(/"submission_mode": "tag"/g)).toHaveLength(3)
-    expect(written.match(/"mode": "auto"/g)).toHaveLength(3)
+    expect(written).not.toContain(`"grading"`)
   })
 
   it("no-ops when every entry is already migrated (no commit)", async () => {

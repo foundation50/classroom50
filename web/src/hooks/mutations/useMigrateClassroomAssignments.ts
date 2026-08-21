@@ -13,7 +13,7 @@ import { CONFIG_REPO } from "@/util/configRepo"
 // pre-1.28 assignments.json files. Safe to remove in a future version once no
 // legacy files remain. Greppable tag: MIGRATION(v1.28).
 // Migrate a classroom's assignments.json to the new submission-tracking
-// semantics (write an explicit submission_mode + grading:auto onto every legacy
+// semantics (write an explicit submission_mode onto every legacy
 // entry, opting the detection overlay in without changing behavior). The hook
 // owns the assignments.json listing invalidate (unmount-safe — the migrate
 // banner must clear even if the teacher navigates away). A content
