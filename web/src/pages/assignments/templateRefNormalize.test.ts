@@ -31,9 +31,9 @@ describe("canonicalTemplateRef", () => {
     )
   })
 
-  it("preserves a branch the teacher typed", () => {
+  it("drops a branch the teacher typed (custom branch unsupported, #673)", () => {
     expect(canonicalTemplateRef(ok(ORG, "starter", "dev"), "starter@dev")).toBe(
-      "cs50/starter@dev",
+      "cs50/starter",
     )
   })
 

@@ -325,7 +325,7 @@ func TestRunAssignmentAdd_PreservesLockAndSkipsGrant(t *testing.T) {
 		Classroom:  "dst",
 		Slug:       "hello",
 		Name:       "Hello",
-		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template", Branch: "main"},
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template"},
 		Mode:       assignment.ModeIndividual,
 		Autograder: "default",
 	})
@@ -364,7 +364,7 @@ func TestRunAssignmentAdd_PreservesClosed(t *testing.T) {
 		Classroom:  "dst",
 		Slug:       "hello",
 		Name:       "Hello",
-		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template", Branch: "main"},
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template"},
 		Mode:       assignment.ModeIndividual,
 		Autograder: "default",
 	})
@@ -413,7 +413,7 @@ func TestRunAssignmentAdd_PreservesSubmissionMode(t *testing.T) {
 		Classroom:  "dst",
 		Slug:       "hello",
 		Name:       "Hello",
-		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template", Branch: "main"},
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template"},
 		Mode:       assignment.ModeIndividual,
 		Autograder: "default",
 		// --submission-mode omitted: SubmissionMode is the normalized zero value
@@ -444,7 +444,7 @@ func TestRunAssignmentAdd_ExplicitEveryPushResetsSubmissionMode(t *testing.T) {
 		Classroom:  "dst",
 		Slug:       "hello",
 		Name:       "Hello",
-		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template", Branch: "main"},
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template"},
 		Mode:       assignment.ModeIndividual,
 		Autograder: "default",
 		// An explicit --submission-mode every-push normalizes to "" with
@@ -491,7 +491,7 @@ func TestRunAssignmentAdd_PreservesSubmissionTags(t *testing.T) {
 		Classroom:  "dst",
 		Slug:       "hello",
 		Name:       "Hello",
-		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template", Branch: "main"},
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template"},
 		Mode:       assignment.ModeIndividual,
 		Autograder: "default",
 		// --submission-tag omitted: the prior patterns must carry forward.
@@ -515,7 +515,7 @@ func TestRunAssignmentAdd_PreservesSubmissionTags(t *testing.T) {
 		Classroom:             "dst",
 		Slug:                  "hello",
 		Name:                  "Hello",
-		Tmpl:                  &templateArg{Owner: "o", Repo: "hello-template", Branch: "main"},
+		Tmpl:                  &templateArg{Owner: "o", Repo: "hello-template"},
 		Mode:                  assignment.ModeIndividual,
 		Autograder:            "default",
 		SubmissionTags:        []string{"final"},
@@ -564,7 +564,7 @@ func TestRunAssignmentAdd_PreservesIncludeAllBranches(t *testing.T) {
 		Classroom:  "dst",
 		Slug:       "hello",
 		Name:       "Hello",
-		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template", Branch: "main"},
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template"},
 		Mode:       assignment.ModeIndividual,
 		Autograder: "default",
 	})

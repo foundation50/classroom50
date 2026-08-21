@@ -107,11 +107,13 @@ func assignmentAddCmd() *cobra.Command {
 			"Mutually exclusive with --template, --tests, --feedback-pr,\n" +
 			"--allowed-files, --pass-threshold, --submission-mode, and\n" +
 			"--submission-tag.\n\n" +
-			"--template parses `<owner>/<repo>` or `<owner>/<repo>@<branch>`.\n" +
-			"When the branch is omitted, the template repo's default branch is\n" +
-			"used. The template repo must be marked `is_template: true` (set\n" +
-			"in Settings → \"Template repository\"); if your account can't see\n" +
-			"the repo, the CLI returns the cross-org visibility message.\n\n" +
+			"--template parses `<owner>/<repo>` (or `<owner>/<repo>@<branch>`).\n" +
+			"A custom source branch is tolerated but IGNORED — the assignment\n" +
+			"uses the template repo's default branch. To use a different branch,\n" +
+			"change the template repository's default branch first. The template\n" +
+			"repo must be marked `is_template: true` (set in Settings →\n" +
+			"\"Template repository\"); if your account can't see the repo, the CLI\n" +
+			"returns the cross-org visibility message.\n\n" +
 			"--runtime points at a JSON file describing the runtime\n" +
 			"environment for this assignment's autograde job: which\n" +
 			"runner label(s), optional language toolchains\n" +
@@ -147,7 +149,7 @@ func assignmentAddCmd() *cobra.Command {
 			"      --name \"Hello\" --template cs50/hello-template \\\n" +
 			"      --due 2026-09-15T23:59:00-04:00\n" +
 			"  gh teacher assignment add cs50-fall-2026 cs-principles intro \\\n" +
-			"      --name \"Intro\" --template cs50/intro-template@main\n" +
+			"      --name \"Intro\" --template cs50/intro-template\n" +
 			"  gh teacher assignment add cs50-fall-2026 cs-principles greet \\\n" +
 			"      --name \"Greet\" --template cs50/greet-template \\\n" +
 			"      --runtime ./runtime-c.json",
@@ -247,6 +249,14 @@ func assignmentAddCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				// A `@branch` is tolerated but ignored (#673): the assignment
+				// uses the template's default branch. Warn so a teacher isn't
+				// surprised the branch had no effect.
+				if parsed.IgnoredBranch != "" {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"warning: --template branch %q is ignored — the assignment uses %s/%s's default branch. To use a different branch, change the template repository's default branch.\n",
+						parsed.IgnoredBranch, parsed.Owner, parsed.Repo)
+				}
 				tmplArg = &parsed
 			}
 			runtime, err := assignment.ParseRuntimeFile(strings.TrimSpace(runtimeFile))
@@ -293,7 +303,7 @@ func assignmentAddCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", `Display name written into the assignment entry (e.g., "Hello") (required)`)
-	cmd.Flags().StringVar(&template, "template", "", "Optional template repo as <owner>/<repo> or <owner>/<repo>@<branch>. Omit for a template-less assignment (students get an initialized repo: a README plus the autograding setup).")
+	cmd.Flags().StringVar(&template, "template", "", "Optional template repo as <owner>/<repo> (or <owner>/<repo>@<branch>). Omit for a template-less assignment (students get an initialized repo: a README plus the autograding setup). A custom source branch (@<branch>) is tolerated but ignored — the assignment uses the template's default branch; change the template repo's default branch to use a different one.")
 	cmd.Flags().StringVar(&description, "description", "", "Optional one-line description")
 	cmd.Flags().StringVar(&due, "due", "", "Optional due date (e.g., 2026-09-15T23:59:00-04:00); stored as UTC. Omit the offset to use the machine's local timezone")
 	cmd.Flags().StringVar(&availableFrom, "available-from", "", "Optional release date (e.g., 2026-09-15T00:00:00-04:00); stored as UTC. Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Students who already accepted always see it (listing-only, not access control). Omit the offset to use the machine's local timezone.")
@@ -1052,17 +1062,24 @@ func ensureClassroomActive(client githubapi.Client, org, classroom, ref string) 
 	return nil
 }
 
-// templateArg is the parsed `--template` flag. Branch is empty if `@branch` is
-// omitted; validateTemplateRepo then fills it from default_branch. Kept
-// distinct from assignment.TemplateRef because on-disk Branch must be populated.
+// templateArg is the parsed `--template` flag. A custom `@branch` is TOLERATED
+// but IGNORED (#673 — GitHub's create-from-template API can't select a source
+// branch, and changing a generated repo's default branch is blocked by org
+// branch rulesets); the assignment always uses the template repo's
+// default_branch, resolved by validateTemplateRepo. IgnoredBranch carries a
+// specified branch so the caller can warn it won't take effect. Kept distinct
+// from assignment.TemplateRef because on-disk Branch must be populated.
 type templateArg struct {
-	Owner  string
-	Repo   string
-	Branch string // empty → use the repo's default_branch
+	Owner         string
+	Repo          string
+	IgnoredBranch string // a specified `@branch` we tolerate but ignore; "" when absent
 }
 
-// parseTemplateRef parses `<owner>/<repo>[@branch]`. Rejects empty
-// parts and extra `/` or `@` (e.g., `cs50//hello`, `cs50/hello@@main`).
+// parseTemplateRef parses `<owner>/<repo>[@branch]`. A custom `@branch` is
+// tolerated but ignored (#673) — carried as IgnoredBranch so the caller can
+// warn — and the assignment uses the template's default branch. Rejects an
+// empty ref, a malformed `@` (multiple, or empty after `@`), or a malformed
+// `<owner>/<repo>`.
 func parseTemplateRef(raw string) (templateArg, error) {
 	if raw == "" {
 		return templateArg{}, errors.New("--template must not be empty")
@@ -1079,9 +1096,9 @@ func parseTemplateRef(raw string) (templateArg, error) {
 		return templateArg{}, fmt.Errorf("invalid --template %q: expected <owner>/<repo>[@branch]", raw)
 	}
 	return templateArg{
-		Owner:  parts[0],
-		Repo:   parts[1],
-		Branch: branch,
+		Owner:         parts[0],
+		Repo:          parts[1],
+		IgnoredBranch: branch,
 	}, nil
 }
 
@@ -1221,10 +1238,10 @@ func templateInOrg(templateOwner, org string) bool {
 }
 
 // resolveTemplateBranch picks the final assignment.TemplateRef from
-// --template + repo fields: not-a-template, empty (commitless), explicit
-// @branch, default_branch fallback, or empty-default_branch guard. Emptiness is
-// passed in as a resolved `hasCommits` (the HTTP-aware caller owns the branches
-// probe) so this stays a pure, unit-testable function.
+// --template + repo fields: not-a-template, empty (commitless), or the repo's
+// default_branch (a custom `@branch` is tolerated but ignored — #673). Emptiness
+// is passed in as a resolved `hasCommits` (the HTTP-aware caller owns the
+// branches probe) so this stays a pure, unit-testable function.
 func resolveTemplateBranch(t templateArg, isTemplate, hasCommits bool, defaultBranch string) (assignment.TemplateRef, error) {
 	if !isTemplate {
 		return assignment.TemplateRef{}, fmt.Errorf("`%s/%s` is not a template repository — toggle Settings → \"Template repository\" on the repo, then re-run", t.Owner, t.Repo)
@@ -1238,14 +1255,11 @@ func resolveTemplateBranch(t templateArg, isTemplate, hasCommits bool, defaultBr
 	if !hasCommits {
 		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no commits — add at least one commit (e.g. a README) so students can generate from it, then re-run", t.Owner, t.Repo)
 	}
-	branch := t.Branch
-	if branch == "" {
-		branch = defaultBranch
-	}
+	branch := defaultBranch
 	if branch == "" {
 		// Not expected once size > 0, but a blank on-disk Branch would trip
 		// `student accept`, so guard it anyway.
-		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no default branch — pass --template %s/%s@<branch> explicitly", t.Owner, t.Repo, t.Owner, t.Repo)
+		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no default branch — push a commit to it, then re-run", t.Owner, t.Repo)
 	}
 	return assignment.TemplateRef{Owner: t.Owner, Repo: t.Repo, Branch: branch}, nil
 }

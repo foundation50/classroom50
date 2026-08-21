@@ -50,20 +50,11 @@ export function canonicalTemplateRef(
   const trimmed = typed.trim()
   if (!trimmed) return null
 
-  let typedBranch: string | undefined
-  try {
-    // The branch comes from what was typed, never from the verdict: a verdict's
-    // `branch` may be the repo's resolved default, and echoing that back would
-    // silently pin the assignment to today's default branch (#673).
-    typedBranch = parseTemplateRef(trimmed, verification.owner).branch
-  } catch {
-    return null
-  }
-
+  // A custom source branch isn't supported (#673), so the canonical form is
+  // always just `owner/repo`; the parse rejects any `@branch` before we get here.
   const canonical = formatTemplateRef({
     owner: verification.owner,
     repo: verification.repo,
-    branch: typedBranch,
   })
   // Returning null when nothing changes keeps callers from writing the value
   // back to the form on every render.

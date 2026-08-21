@@ -16,6 +16,7 @@ import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import {
+  parseTemplateRef,
   verifyTemplateAccess,
   type TemplateAccessVerification,
 } from "@/domain/assignments"
@@ -63,6 +64,19 @@ export const TemplateField = ({
   const rawValue = field.state.value
   const trimmedValue = rawValue.trim()
   const debouncedValue = useDebouncedValue(trimmedValue, 500)
+
+  // A `@branch` (or `/tree/<branch>`) suffix is tolerated but ignored (#673):
+  // the assignment uses the template's own default branch. Surface the branch
+  // the teacher typed so the note can warn it won't take effect. Parse is
+  // best-effort — an unparseable ref has no branch to warn about.
+  let ignoredBranch: string | undefined
+  if (org && trimmedValue) {
+    try {
+      ignoredBranch = parseTemplateRef(trimmedValue, org).branch
+    } catch {
+      ignoredBranch = undefined
+    }
+  }
 
   // viewerLogin decides ok vs ok-verify, so wait for it — verifying mid-load
   // would show a verdict that flips once the profile resolves.
@@ -171,6 +185,7 @@ export const TemplateField = ({
         verification={verification}
         pending={pending}
         org={org}
+        ignoredBranch={ignoredBranch}
         teamHasAccess={teamHasAccess}
         onRecheck={() => verificationQuery.refetch()}
         isRechecking={verificationQuery.isFetching}
@@ -244,6 +259,7 @@ const TemplateVerificationNote = ({
   verification,
   pending,
   org,
+  ignoredBranch,
   teamHasAccess,
   onRecheck,
   isRechecking,
@@ -252,6 +268,10 @@ const TemplateVerificationNote = ({
   verification: TemplateAccessVerification | null
   pending: boolean
   org?: string
+  // A `@branch` (or `/tree/<branch>`) the teacher typed. Tolerated but ignored
+  // (#673) — the assignment uses the template's default branch — so warn
+  // without blocking. Undefined when no branch was specified.
+  ignoredBranch?: string
   // For an in-org private template: true if the classroom team already has
   // read, false if granted on create, undefined if N/A or unresolved.
   teamHasAccess?: boolean
@@ -277,6 +297,18 @@ const TemplateVerificationNote = ({
   if (!verification || verification.kind === "empty") return null
 
   const fallbackOrg = org ?? t("assignments.template.fallbackOrg")
+
+  // A typed `@branch` is tolerated but ignored (#673): warn it won't take
+  // effect and the template's default branch is used. Non-blocking.
+  const ignoredBranchNote = ignoredBranch ? (
+    <Note tone="warning" icon={Info}>
+      <Trans
+        i18nKey="assignments.template.branchIgnored"
+        values={{ branch: ignoredBranch }}
+        components={{ branch: <Code /> }}
+      />
+    </Note>
+  ) : null
 
   // Working assumption is `main`. When a verified template resolves to another
   // default branch, the assignment (and student autograding) key off that
@@ -306,10 +338,11 @@ const TemplateVerificationNote = ({
     statusDescription,
   })
 
-  if (!nonMainNote) return verdict
+  if (!nonMainNote && !ignoredBranchNote) return verdict
   return (
     <>
       {verdict}
+      {ignoredBranchNote}
       {nonMainNote}
     </>
   )
@@ -600,14 +633,10 @@ function renderTemplateVerdict({
     case "no-branch":
       return (
         <Note tone="error" icon={AlertTriangle}>
-          <Trans
-            i18nKey="assignments.template.noBranch"
-            values={{ owner: verification.owner, repo: verification.repo }}
-            // The literal @<branch> hint lives in the component (not the
-            // translation value) so its angle brackets never collide with the
-            // Trans tag parser.
-            components={{ hint: <Code>@&lt;branch&gt;</Code> }}
-          />
+          {t("assignments.template.noBranch", {
+            owner: verification.owner,
+            repo: verification.repo,
+          })}
         </Note>
       )
 

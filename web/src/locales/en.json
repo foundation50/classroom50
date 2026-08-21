@@ -1508,9 +1508,7 @@
         "empty": "Enter a template repository.",
         "shape": "\"{{raw}}\" isn't a repository reference. Use <owner>/<repo>, a repository name, or paste a GitHub repository URL.",
         "urlShape": "\"{{raw}}\" isn't a GitHub repository URL. Link to the repository itself, like https://github.com/<owner>/<repo>.",
-        "notGithubHost": "\"{{raw}}\" is on {{host}}, not github.com. Classroom 50 can only copy templates hosted on GitHub.",
-        "branchHasAt": "\"{{raw}}\" has more than one \"@\". Use <owner>/<repo>@<branch>.",
-        "branchEmpty": "\"{{raw}}\" is missing a branch name after \"@\"."
+        "notGithubHost": "\"{{raw}}\" is on {{host}}, not github.com. Classroom 50 can only copy templates hosted on GitHub."
       },
       "search": {
         "loading": "Loading templates…",
@@ -1531,6 +1529,7 @@
       "okPublicInOrg": "Public template, branch <branch>{{branch}}</branch>. Students can access it.",
       "okPrivateInOrg": "Private template, branch <branch>{{branch}}</branch>. Students can access it.",
       "nonMainBranch": "This template's default branch is <branch>{{branch}}</branch>, not \"main\". The assignment will use it, and student autograding keys off that branch.",
+      "branchIgnored": "A custom branch (<branch>{{branch}}</branch>) was specified and will be ignored — the assignment copies the template's default branch. To use a different branch, change the template repository's default branch.",
       "okVerify": "Reachable in {{owner}} (branch <branch>{{branch}}</branch>). If {{owner}} restricts third-party apps, students can't copy it until an owner approves Classroom 50.",
       "notVisible": "{{owner}}/{{repo}} isn't visible to you. Make it public or copy it into {{org}}.",
       "notTemplate": "{{owner}}/{{repo}} isn't a template repo. Enable it in the repo's Settings.",
@@ -1549,7 +1548,7 @@
       "privateForkNoParent": "{{owner}}/{{repo}} is a private fork (branch <branch>{{branch}}</branch>). <important>Important: the fork's upstream org must keep Classroom 50 approved — if that approval is ever removed, students will fail to accept (HTTP 403).</important> To avoid depending on the upstream org, use a fresh (non-fork) repo: create a new repo and copy the fork's contents into it.",
       "unknown": "Couldn't verify {{owner}}/{{repo}} now. It's rechecked when students accept.",
       "privateOutOfOrg": "{{owner}}/{{repo}} is private and outside {{org}}. Make it public or copy it into {{org}}.",
-      "noBranch": "{{owner}}/{{repo}} has no default branch. Push a commit, or add <hint/>.",
+      "noBranch": "{{owner}}/{{repo}} has no default branch. Push a commit to it, then retry.",
       "rateLimited": "GitHub rate limit hit. Try again shortly.",
       "policyLink": "Check {{owner}}'s OAuth app policy",
       "reconcile": {

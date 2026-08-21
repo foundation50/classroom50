@@ -719,7 +719,9 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.template_repo).toBe("acme/starter")
   })
 
-  it("surfaces a non-main stored template branch as owner/repo@branch (#673)", () => {
+  it("surfaces a stored template as owner/repo, dropping any stored branch (#673)", () => {
+    // A custom source branch isn't supported: the edit form always shows just
+    // owner/repo, regardless of the stored (resolved-default) branch.
     const custom = assignmentToFormValues({
       slug: "hw",
       name: "HW",
@@ -727,8 +729,7 @@ describe("toSubmitValues — runtime field clearing", () => {
       autograder: "default",
       template: { owner: "acme", repo: "starter", branch: "spring-2026" },
     })
-    expect(custom.template_repo).toBe("acme/starter@spring-2026")
-    // The overwhelming default ("main") is omitted so the common case stays clean.
+    expect(custom.template_repo).toBe("acme/starter")
     const mainBranch = assignmentToFormValues({
       slug: "hw2",
       name: "HW2",

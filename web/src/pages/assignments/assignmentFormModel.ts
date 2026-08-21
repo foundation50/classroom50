@@ -720,15 +720,10 @@ export const assignmentToFormValues = (
     slug: assignment.slug,
     description: assignment.description ?? "",
     mode: assignment.mode === "group" ? "group" : "individual",
-    // Surface a non-default stored branch as `owner/repo@branch` so an edit
-    // doesn't silently drop it (#673). We can't know the template's live default
-    // branch from stored state, so we omit the suffix only for "main" (GitHub's
-    // overwhelming default, matching the CLI's own non-main warning); any other
-    // stored branch round-trips visibly instead of appearing to reset.
+    // A custom source branch isn't supported (#673); the stored branch is always
+    // the template's own default, so surface just `owner/repo`.
     template_repo: assignment.template
-      ? assignment.template.branch && assignment.template.branch !== "main"
-        ? `${assignment.template.owner}/${assignment.template.repo}@${assignment.template.branch}`
-        : `${assignment.template.owner}/${assignment.template.repo}`
+      ? `${assignment.template.owner}/${assignment.template.repo}`
       : "",
     due_date: utcIsoToDatetimeLocalValue(assignment.due),
     available_from_date: utcIsoToDatetimeLocalValue(assignment.available_from),
