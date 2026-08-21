@@ -1500,8 +1500,8 @@
     },
     "template": {
       "label": "Template repository",
-      "placeholder": "<owner>/<repo>",
-      "help": "Optional. Students receive a copy of this repository. Leave blank for a template-less assignment: students get an initialized repository with a README and the autograding files.",
+      "placeholder": "Search templates, or paste <owner>/<repo>",
+      "help": "Optional. Students receive a copy of this repository. Search your organization's template repositories, or type <owner>/<repo> or paste a GitHub URL to use one from anywhere. Leave blank for a template-less assignment: students get an initialized repository with a README and the autograding files.",
       "checking": "Checking template access…",
       "fallbackOrg": "your org",
       "invalid": {
@@ -1511,6 +1511,18 @@
         "notGithubHost": "\"{{raw}}\" is on {{host}}, not github.com. Classroom 50 can only copy templates hosted on GitHub.",
         "branchHasAt": "\"{{raw}}\" has more than one \"@\". Use <owner>/<repo>@<branch>.",
         "branchEmpty": "\"{{raw}}\" is missing a branch name after \"@\"."
+      },
+      "search": {
+        "searching": "Searching templates…",
+        "throttled": "GitHub is rate-limiting searches for a moment. Type the repository name instead.",
+        "unavailable": "Couldn't search this organization's templates. Type the repository name instead.",
+        "incomplete": "GitHub returned partial results. Keep typing to narrow the search.",
+        "typeInstead": "Type a repository name, <owner>/<repo>, or paste a GitHub URL.",
+        "noMatches": "No template repositories in this organization match \"{{query}}\". You can still type <owner>/<repo> or paste a GitHub URL.",
+        "noTemplates": "No template repositories found in this organization. Turn on \"Template repository\" in a repo's settings, or paste a GitHub URL.",
+        "narrow": "Showing {{shown}} of {{total}} templates. Keep typing to narrow the list.",
+        "privateRepo": "Private repository",
+        "updated": "Updated {{when}}"
       },
       "privateHasAccess": "Private template in {{owner}} (branch <branch>{{branch}}</branch>). The classroom team already has read access — students can copy it.",
       "privateWillGrant": "Private template in {{owner}} (branch <branch>{{branch}}</branch>). The classroom team doesn't have access yet; it'll be added automatically when you create the assignment, so students can copy it.",

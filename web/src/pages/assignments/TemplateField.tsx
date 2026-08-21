@@ -24,17 +24,14 @@ import { useGitHubHealth } from "@/lib/githubHealth"
 import { resolveLocalizedMessage } from "@/types/localizedMessage"
 import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useReconcileTemplateAccess } from "@/hooks/mutations/useReconcileTemplateAccess"
-import {
-  useDebouncedValue,
-  normalizeOnBlur,
-  type StringField,
-} from "./formFieldHelpers"
+import { useDebouncedValue, type StringField } from "./formFieldHelpers"
 import {
   InlineNote,
   InlineCode as Code,
   AutoLinkText,
 } from "@/components/InlineNote"
-import { Button, FormField, Input } from "@/components/ui"
+import { Button, FormField } from "@/components/ui"
+import { TemplateRepoPicker } from "./TemplateRepoPicker"
 import { templateForkNoteView } from "./templateNoteView"
 
 // Advisory, non-blocking pre-flight for the Template Repository field: checks
@@ -149,16 +146,13 @@ export const TemplateField = ({
           </>
         }
       >
-        {({ id }) => (
-          <Input
+        {({ id, describedById }) => (
+          <TemplateRepoPicker
+            field={field}
             id={id}
-            name={field.name}
-            autoComplete="off"
-            spellCheck={false}
+            describedById={describedById}
+            org={org}
             placeholder={t("assignments.template.placeholder")}
-            value={rawValue}
-            onBlur={normalizeOnBlur(field)}
-            onChange={(e) => field.handleChange(e.target.value)}
           />
         )}
       </FormField>

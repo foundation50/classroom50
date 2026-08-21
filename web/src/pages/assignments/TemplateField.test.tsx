@@ -22,8 +22,18 @@ vi.mock("@/domain/assignments", () => ({
 }))
 
 const teamHasRepoAccess = vi.fn()
+// The field now renders TemplateRepoPicker, which reaches for the search query
+// factory. Stub it inert — these tests are about the verification note, and a
+// live search would add unrelated fetches to every case.
 vi.mock("@/github-core/queries", () => ({
   teamHasRepoAccess: (...a: unknown[]) => teamHasRepoAccess(...a),
+  orgTemplateRepoSearchQuery: () => ({
+    queryKey: ["template-search-stub"],
+    queryFn: () =>
+      Promise.resolve({ items: [], totalCount: 0, incomplete: false }),
+    enabled: false,
+    retry: false,
+  }),
 }))
 
 vi.mock("@/context/github/GitHubProvider", () => ({
