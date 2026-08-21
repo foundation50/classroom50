@@ -20,6 +20,7 @@ import {
   detectBranchSubmissions,
   detectTagSubmissions,
   detectedSubmissionCount,
+  resolveSubmissionMode,
   type DetectedSubmission,
 } from "@/domain/assignments/submissionDetection"
 import { studentRepoName } from "@/util/studentRepo"
@@ -93,7 +94,7 @@ export function useDetectedSubmissions({
     [submissionTags],
   )
 
-  const resolvedMode: SubmissionMode = mode ?? "every-push"
+  const resolvedMode = resolveSubmissionMode(mode)
 
   const active =
     enabled && Boolean(org && classroom && assignment) && repoOwners.length > 0

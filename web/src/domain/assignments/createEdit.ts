@@ -74,6 +74,7 @@ import {
 } from "./accessPrimitives"
 import { CONFIG_REPO } from "@/util/configRepo"
 import type { CreateAssignmentInput } from "./repoCreation"
+import { resolveSubmissionMode } from "./submissionDetection"
 
 export type CreateAssignmentResult = CreateClassroomResult & {
   // Set when the assignment saved but the follow-up team read grant on a
@@ -802,7 +803,7 @@ async function buildAssignmentEntry(
   // Absence IS every-push, so no intent is lost. Permitted for every repo shape
   // (including empty_repo / no_autograder): with no shim it carries no trigger,
   // but it still defines what the submissions page counts as a submission.
-  const resolvedSubmissionMode = input.submission_mode ?? "every-push"
+  const resolvedSubmissionMode = resolveSubmissionMode(input.submission_mode)
   if (!SUBMISSION_MODES.includes(resolvedSubmissionMode)) {
     throw new Error(
       `submission_mode: must be one of ${SUBMISSION_MODES.join(", ")} (got "${resolvedSubmissionMode}").`,

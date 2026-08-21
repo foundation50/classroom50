@@ -89,6 +89,87 @@ func TestSubmissionModeEnumParity(t *testing.T) {
 	}
 }
 
+// TestSubmissionModeReaderRuleParity pins the PROSE reader rule (absence is the
+// wire default; never gate on the field being present) across its three
+// hand-synced copies — the schema submission_mode.description, contract.go, and
+// the web types/classroom.ts comment. Enum parity pins the values, not this
+// wording, and a one-sided drop reintroduces the #654 ambiguity. Update all
+// three copies in lockstep so the shared phrases survive.
+func TestSubmissionModeReaderRuleParity(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+
+	// The load-bearing clauses every copy shares, in their common wording.
+	wantPhrases := []string{
+		"gate behavior on the field being PRESENT",
+		"absence is the wire default",
+	}
+
+	// (source label, path relative to repo root, extractor)
+	sources := []struct {
+		label   string
+		relPath string
+		extract func(raw []byte) (string, error)
+	}{
+		{
+			label:   "schema submission_mode.description",
+			relPath: filepath.Join("schemas", "assignments-v1.schema.json"),
+			extract: func(raw []byte) (string, error) {
+				var schema struct {
+					Defs struct {
+						Assignment struct {
+							Properties struct {
+								SubmissionMode struct {
+									Description string `json:"description"`
+								} `json:"submission_mode"`
+							} `json:"properties"`
+						} `json:"assignment"`
+					} `json:"$defs"`
+				}
+				if err := json.Unmarshal(raw, &schema); err != nil {
+					return "", err
+				}
+				return schema.Defs.Assignment.Properties.SubmissionMode.Description, nil
+			},
+		},
+		{
+			label:   "Go contract.go comment",
+			relPath: filepath.Join("cli", "shared", "contract", "contract.go"),
+			extract: func(raw []byte) (string, error) { return string(raw), nil },
+		},
+		{
+			label:   "web types/classroom.ts comment",
+			relPath: filepath.Join("web", "src", "types", "classroom.ts"),
+			extract: func(raw []byte) (string, error) { return string(raw), nil },
+		},
+	}
+
+	for _, src := range sources {
+		raw, err := os.ReadFile(filepath.Join(root, src.relPath))
+		if err != nil {
+			t.Fatalf("read %s (%s): %v", src.label, src.relPath, err)
+		}
+		text, err := src.extract(raw)
+		if err != nil {
+			t.Fatalf("parse %s (%s): %v", src.label, src.relPath, err)
+		}
+		if text == "" {
+			t.Fatalf("%s is empty; did the shape change?", src.label)
+		}
+		// Collapse whitespace (incl. comment-wrap newlines and `//` prefixes) so a
+		// phrase split across two wrapped comment lines still matches.
+		normalized := strings.Join(strings.Fields(strings.ReplaceAll(text, "//", " ")), " ")
+		for _, phrase := range wantPhrases {
+			if !strings.Contains(normalized, phrase) {
+				t.Errorf("submission_mode reader-rule drift: %s is missing %q — update every mirror in lockstep (schema description, Go contract.go, web types/classroom.ts)",
+					src.label, phrase)
+			}
+		}
+	}
+}
+
 // TestGradingModeEnumParity pins the grading.mode allow-list across its
 // hand-mirrored sources: the JSON schema enum (declared source of truth) and
 // the Go contract.GradingModes (what ValidateGrading enforces). The web mirror
