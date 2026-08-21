@@ -26,6 +26,9 @@ export type { InputProps, InputSize } from "./Input"
 export { Select } from "./Select"
 export type { SelectProps, SelectSize } from "./Select"
 
+export { Combobox } from "./Combobox"
+export type { ComboboxProps } from "./Combobox"
+
 export { Textarea } from "./Textarea"
 export type { TextareaProps } from "./Textarea"
 
