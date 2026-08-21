@@ -21,19 +21,18 @@ import {
 } from "@/domain/assignments"
 import { teamHasRepoAccess } from "@/github-core/queries"
 import { useGitHubHealth } from "@/lib/githubHealth"
+import { resolveLocalizedMessage } from "@/types/localizedMessage"
 import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useReconcileTemplateAccess } from "@/hooks/mutations/useReconcileTemplateAccess"
-import {
-  useDebouncedValue,
-  normalizeOnBlur,
-  type StringField,
-} from "./formFieldHelpers"
+import { useDebouncedValue, type StringField } from "./formFieldHelpers"
 import {
   InlineNote,
   InlineCode as Code,
   AutoLinkText,
 } from "@/components/InlineNote"
-import { Button, FormField, Input } from "@/components/ui"
+import { Button, FormField } from "@/components/ui"
+import { TemplateRepoPicker } from "./TemplateRepoPicker"
+import { canonicalTemplateRef, templateVerifyKey } from "./templateRefNormalize"
 import { templateForkNoteView } from "./templateNoteView"
 
 // Advisory, non-blocking pre-flight for the Template Repository field: checks
@@ -70,7 +69,15 @@ export const TemplateField = ({
   const enabled = Boolean(client && org && debouncedValue && !isLoadingUser)
 
   const verificationQuery = useQuery({
-    queryKey: ["template-access", org, viewerLogin, debouncedValue],
+    // Keyed on the parsed identity, not the raw text: the canonical rewrite
+    // below changes the text without changing the repo, and re-keying would buy
+    // a second round trip for the same verdict.
+    queryKey: [
+      "template-access",
+      org,
+      viewerLogin,
+      templateVerifyKey(debouncedValue, org ?? ""),
+    ],
     queryFn: () =>
       verifyTemplateAccess(client!, org!, debouncedValue, viewerLogin),
     enabled,
@@ -148,16 +155,14 @@ export const TemplateField = ({
           </>
         }
       >
-        {({ id }) => (
-          <Input
+        {({ id, describedById }) => (
+          <TemplateRepoPicker
+            field={field}
             id={id}
-            name={field.name}
-            autoComplete="off"
-            spellCheck={false}
+            describedById={describedById}
+            org={org}
             placeholder={t("assignments.template.placeholder")}
-            value={rawValue}
-            onBlur={normalizeOnBlur(field)}
-            onChange={(e) => field.handleChange(e.target.value)}
+            canonicalRef={canonicalTemplateRef(verification, rawValue)}
           />
         )}
       </FormField>
@@ -474,7 +479,7 @@ function renderTemplateVerdict({
     case "invalid":
       return (
         <Note tone="error" icon={AlertTriangle}>
-          {verification.message}
+          {resolveLocalizedMessage(t, verification.message)}
         </Note>
       )
 

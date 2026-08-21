@@ -22,8 +22,24 @@ vi.mock("@/domain/assignments", () => ({
 }))
 
 const teamHasRepoAccess = vi.fn()
+// The field now renders TemplateRepoPicker, which reaches for the org template
+// list. Stub it inert — these tests are about the verification note, and a live
+// listing would add unrelated fetches to every case.
 vi.mock("@/github-core/queries", () => ({
   teamHasRepoAccess: (...a: unknown[]) => teamHasRepoAccess(...a),
+  filterTemplateRepos: () => [],
+  orgTemplateReposQuery: () => ({
+    queryKey: ["org-template-repos-stub"],
+    queryFn: () =>
+      Promise.resolve({
+        items: [],
+        scanned: 0,
+        truncated: false,
+        templateFlagPresent: true,
+      }),
+    enabled: false,
+    retry: false,
+  }),
 }))
 
 vi.mock("@/context/github/GitHubProvider", () => ({

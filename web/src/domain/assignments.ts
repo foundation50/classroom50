@@ -9,6 +9,7 @@ export {
   verifyTemplateAccess,
   resolveTemplate,
   parseTemplateRef,
+  formatTemplateRef,
   repoContentsPathExists,
   type AcceptStepId,
   type AcceptStepStatus,

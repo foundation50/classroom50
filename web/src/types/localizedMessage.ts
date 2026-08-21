@@ -55,6 +55,16 @@ export function localizedMessageOf(err: unknown): LocalizedMessage | undefined {
   return undefined
 }
 
+// The message to show for a failed operation: an error's deferred message when
+// it carries one, else its diagnostic `Error.message`. Every error surface that
+// renders a raw `err.message` needs this — a layer below the view now names its
+// user-facing text with a key, so printing `message` directly would show the key.
+export function errorText(t: TranslateFn, err: unknown): string {
+  const localized = localizedMessageOf(err)
+  if (localized) return resolveLocalizedMessage(t, localized)
+  return err instanceof Error ? err.message : String(err)
+}
+
 // Diagnostic (never rendered) form of a deferred message, used as the `message`
 // of an Error that carries one. Keeps logs and any `err.message` reader useful
 // without assembling English below the view layer.

@@ -25,6 +25,7 @@ import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { parseSubmissionTags } from "@/util/submissionTags"
+import { errorText } from "@/types/localizedMessage"
 
 const log = logger.scope("CreateAssignmentPage")
 
@@ -176,7 +177,7 @@ const CreateAssignmentPage = () => {
                   setErrorContent(
                     outageHint.isOutage(err)
                       ? { kind: "outage" }
-                      : { kind: "message", message: err.message },
+                      : { kind: "message", message: errorText(t, err) },
                   )
                   setErrorShown(true)
                   window.scrollTo({ top: 0, behavior: "smooth" })

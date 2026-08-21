@@ -7,6 +7,7 @@
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import { SHORT_NAME_PATTERN } from "./translate"
+import { splitFullName } from "@/util/repoFullName"
 import type {
   ClassroomAssignmentDetail,
   MigrationItem,
@@ -62,14 +63,6 @@ async function sourceIsTemplate(
     `/repos/${owner}/${repo}`,
   )
   return r.is_template
-}
-
-function splitFullName(
-  fullName: string,
-): { owner: string; repo: string } | null {
-  const parts = fullName.split("/")
-  if (parts.length !== 2 || !parts[0] || !parts[1]) return null
-  return { owner: parts[0], repo: parts[1] }
 }
 
 // Classify one source assignment, read-only. Returns import/reuse/skip with a

@@ -51,6 +51,12 @@ export {
   listPullRequestsByBaseHead,
 } from "./queries/repoRefReads"
 export {
+  listOrgTemplateRepos,
+  orgTemplateReposQuery,
+  filterTemplateRepos,
+  type TemplateRepoItem,
+} from "./queries/templateRepoReads"
+export {
   listDefaultBranchCommits,
   listRepoTags,
   getCommitDatetime,

@@ -29,6 +29,12 @@ export const githubKeys = {
 
   orgRepos: (org: string) => [...githubKeys.all, "org-repos", org] as const,
 
+  // The org's template repos (GET /orgs/{org}/repos, filtered locally). Distinct
+  // from `orgRepos`: this is a bounded, recency-sorted walk cached for the
+  // picker, not the exhaustive listing the submissions signals use.
+  orgTemplateRepos: (org: string | undefined) =>
+    [...githubKeys.all, "org-template-repos", org] as const,
+
   orgMembers: (org: string) => ["orgs", "list", "members", org] as const,
 
   // Distinct from `orgMembers` (page-1 via listOrgMembers): this keys the

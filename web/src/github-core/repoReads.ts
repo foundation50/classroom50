@@ -8,7 +8,10 @@ export async function getRepo(
   repo: string,
 ) {
   return tolerateGitHubError(
-    () => client.request<GitHubRepo>(`/repos/${owner}/${repo}`),
+    () =>
+      client.request<GitHubRepo>(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+      ),
     null,
   )
 }

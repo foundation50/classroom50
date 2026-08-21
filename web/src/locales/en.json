@@ -1500,10 +1500,30 @@
     },
     "template": {
       "label": "Template repository",
-      "placeholder": "<owner>/<repo>",
-      "help": "Optional. Students receive a copy of this repository. Leave blank for a template-less assignment: students get an initialized repository with a README and the autograding files.",
+      "placeholder": "Search templates, or paste <owner>/<repo>",
+      "help": "Optional. Students receive a copy of this repository. Search your organization's template repositories, or type <owner>/<repo> or paste a GitHub URL to use one from anywhere. Leave blank for a template-less assignment: students get an initialized repository with a README and the autograding files.",
       "checking": "Checking template access…",
       "fallbackOrg": "your org",
+      "invalid": {
+        "empty": "Enter a template repository.",
+        "shape": "\"{{raw}}\" isn't a repository reference. Use <owner>/<repo>, a repository name, or paste a GitHub repository URL.",
+        "urlShape": "\"{{raw}}\" isn't a GitHub repository URL. Link to the repository itself, like https://github.com/<owner>/<repo>.",
+        "notGithubHost": "\"{{raw}}\" is on {{host}}, not github.com. Classroom 50 can only copy templates hosted on GitHub.",
+        "branchHasAt": "\"{{raw}}\" has more than one \"@\". Use <owner>/<repo>@<branch>.",
+        "branchEmpty": "\"{{raw}}\" is missing a branch name after \"@\"."
+      },
+      "search": {
+        "loading": "Loading templates…",
+        "unavailable": "Couldn't load this organization's templates. Type the repository name instead.",
+        "typeInstead": "Type a repository name, <owner>/<repo>, or paste a GitHub URL.",
+        "noMatches": "No template repositories in this organization match \"{{query}}\". You can still type <owner>/<repo> or paste a GitHub URL.",
+        "noTemplates": "No template repositories found in this organization. Turn on \"Template repository\" in a repo's settings, or paste a GitHub URL.",
+        "showing": "Showing {{shown}} of {{total}} templates.",
+        "truncated": "Searched the {{scanned}} most recently updated repositories. If your template isn't listed, type <owner>/<repo>.",
+        "unfiltered": "GitHub didn't report which of these repositories are templates, so all of them are listed. Check the repository's settings if a copy fails.",
+        "privateRepo": "Private repository",
+        "updated": "Updated {{when}}"
+      },
       "privateHasAccess": "Private template in {{owner}} (branch <branch>{{branch}}</branch>). The classroom team already has read access — students can copy it.",
       "privateWillGrant": "Private template in {{owner}} (branch <branch>{{branch}}</branch>). The classroom team doesn't have access yet; it'll be added automatically when you create the assignment, so students can copy it.",
       "okPublic": "Public template in {{owner}}, branch <branch>{{branch}}</branch>. Students can access it.",
