@@ -1,20 +1,16 @@
 import type { GitHubRepo } from "@/github-core/types"
 
-// Repo-existence presence for an assignment, read from the already-loaded org
-// repo list. This is the ONLY submission-adjacent signal that list-level screens
-// can derive without a per-repo fan-out, and it deliberately answers a narrower
-// question than the submissions page does: "do repos exist for this assignment?",
-// not "who submitted?".
+// Which repos in the org belong to an assignment — the shared selection rule for
+// every signal derived from the org repo list. Extracted so two readers can't
+// drift on an assignment's repo set (notably the sibling-slug guard, without
+// which `hw1` silently absorbs `hw1-bonus`'s repos).
 //
-// Why not a submitted count here (issue #659): a no_autograder repo is created
-// at ACCEPT time and the tool immediately writes the Feedback-PR commit, so
-// `pushed_at` is set before the student does anything. Counting pushes would
-// report every student who merely accepted as a submitter, and in tag mode it
-// would count a student who pushed but never tagged. The submissions page trims
-// exactly those cases (submissionCommits + detectTagSubmissions), so a
-// push-derived count on a summary screen would contradict the page it links to.
-// Presence routes the teacher to that authoritative count instead of competing
-// with it.
+// Note what this deliberately does NOT do: it is not a submission signal. A repo
+// exists from ACCEPT time (with the tool's own Feedback-PR commit), so repo
+// presence and `pushed_at` cannot distinguish a student who submitted from one
+// who only accepted. Submission counts come from collected detection
+// (scores.json's `detected` list, written by collect_scores.py) or the
+// submissions page's own commit/tag detection.
 
 /**
  * The assignment repos that exist in the org, by repo name. Individual and group
@@ -46,18 +42,4 @@ export function existingAssignmentRepos(
     // A bare prefix with no owner segment is not a student/group repo.
     return name.slice(prefix.length).length > 0
   })
-}
-
-/**
- * How many repos exist for this assignment — the honest "accepted" count for a
- * summary screen. Never presented as a submission count; see the note above.
- */
-export function assignmentRepoCount(
-  repos: GitHubRepo[] | null | undefined,
-  classroom: string,
-  assignment: string,
-  siblingSlugs: string[] = [],
-): number {
-  return existingAssignmentRepos(repos, classroom, assignment, siblingSlugs)
-    .length
 }

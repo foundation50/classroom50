@@ -52,6 +52,21 @@ type AssignmentBucket = {
   // collection last walked THIS assignment (absent on files written before the
   // field existed).
   collected_at?: string
+  // Presence/count records for an assignment that SKIPS GRADING: those repos
+  // publish no submit/* release, so `entries` stays empty and this is the only
+  // submission signal. Never carries a score — see scores-v1's detectedRecord.
+  detected?: DetectedRecord[]
+}
+
+// One repo's detected (ungraded) submissions, written by collect_scores.py for a
+// no_autograder assignment. Count/presence only, by construction.
+type DetectedRecord = {
+  owner: string
+  count: number
+  kind?: "commit" | "tag"
+  latest_datetime?: string
+  late?: boolean
+  member_usernames?: string[]
 }
 
 type ScoresSchema = {
@@ -127,6 +142,21 @@ export type NormalizedScores = {
   // the org-wide workflow-run timestamp: a scoped collect refreshes only its
   // own bucket, so only that bucket's stamp moves.
   collectedAt: Record<string, string>
+  // Slug -> collected DETECTED submitters, for assignments that skip grading.
+  // Separate from `submissions` because these carry no score and must never be
+  // fed to a grade consumer (stats, CSV, ScoreBadge, passing filters). The key
+  // is absent until a collect has walked the bucket, which lets the UI tell
+  // "nobody submitted" apart from "never collected".
+  detected: Record<string, DetectedSubmitter[]>
+}
+
+// One detected submitter as the UI consumes it. Grade-free by construction.
+export type DetectedSubmitter = {
+  owner: string
+  usernames: string[]
+  count: number
+  datetime?: string
+  late?: boolean
 }
 
 // Collapse a bucket's entries to one row each (latest submission first).
@@ -209,6 +239,33 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
     })
 }
 
+// Normalize a bucket's detected records for the UI. Defensive like bucketToRows:
+// a hand-edited file shouldn't blank the view. A record without a positive count
+// is dropped — the collector omits non-submitters rather than writing 0, so the
+// list is exactly the submitter set.
+function bucketToDetected(records: DetectedRecord[]): DetectedSubmitter[] {
+  return records
+    .filter(
+      (record) =>
+        record &&
+        typeof record.owner === "string" &&
+        record.owner !== "" &&
+        typeof record.count === "number" &&
+        record.count > 0,
+    )
+    .map((record) => ({
+      owner: record.owner,
+      usernames:
+        Array.isArray(record.member_usernames) &&
+        record.member_usernames.length > 0
+          ? record.member_usernames
+          : [record.owner],
+      count: record.count,
+      datetime: record.latest_datetime,
+      late: record.late,
+    }))
+}
+
 // Map the canonical nested shape to a slug -> rows map. Returns `null` for a
 // missing/empty file so callers can distinguish "no data yet" from "no
 // submissions".
@@ -219,14 +276,18 @@ export function normalizeScores(
 
   const submissions: Record<string, SubmissionRow[]> = {}
   const collectedAt: Record<string, string> = {}
+  const detected: Record<string, DetectedSubmitter[]> = {}
   for (const [slug, bucket] of Object.entries(data.assignments ?? {})) {
     submissions[slug] = bucketToRows(bucket)
     if (typeof bucket?.collected_at === "string" && bucket.collected_at) {
       collectedAt[slug] = bucket.collected_at
     }
+    if (Array.isArray(bucket?.detected)) {
+      detected[slug] = bucketToDetected(bucket.detected)
+    }
   }
 
-  return { schema: data.schema, submissions, collectedAt }
+  return { schema: data.schema, submissions, collectedAt, detected }
 }
 
 const useGetScores = (

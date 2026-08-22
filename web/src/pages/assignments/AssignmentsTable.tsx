@@ -13,12 +13,10 @@ import {
 } from "lucide-react"
 
 import useGetScores from "@/hooks/useGetScores"
-import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import { assignmentSkipsGrading } from "@/domain/assignments/autogradingState"
-import { assignmentRepoCount } from "@/domain/assignments/assignmentRepoPresence"
 import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { Link } from "@tanstack/react-router"
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { ConfirmModal } from "@/components/modals"
 import { ReuseAssignmentModal } from "@/components/modals/ReuseAssignmentModal"
 import { TemplateAccessModal } from "@/components/modals/TemplateAccessModal"
@@ -360,27 +358,6 @@ const AssignmentsTable = ({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { data: scoresData } = useGetScores(org, classroom)
-  // Assignments that never autograde have a permanently empty scores.json
-  // bucket (collect_scores.py skips them), so the "N / M submitted" fraction
-  // would read 0/M no matter what students did (#659). Those rows show a
-  // repo-presence affordance instead, derived from the org repo list.
-  const needsRepoPresence = useMemo(
-    () => (assignments ?? []).some((a) => assignmentSkipsGrading(a)),
-    [assignments],
-  )
-  // One whole-org read for the entire table, and only when a row actually needs
-  // it — never a per-row fan-out. React Query shares it (same key, 60s stale)
-  // with the submissions page, so opening an assignment doesn't re-paginate.
-  const { data: orgRepos, isPending: orgReposPending } = useGetOrgRepos(
-    org,
-    needsRepoPresence,
-  )
-  // Sibling slugs guard a repo whose assignment slug extends another's
-  // (`hw1-bonus` counting as `hw1`) — see existingAssignmentRepos.
-  const allSlugs = useMemo(
-    () => (assignments ?? []).map((assignment) => assignment.slug),
-    [assignments],
-  )
   const navigate = useNavigate()
   // Mutating row actions require both an unarchived classroom and author rights.
   const canMutate = !archived && canAuthor
@@ -521,42 +498,30 @@ const AssignmentsTable = ({
                   }
                 >
                   {(() => {
-                    // No collected scores will ever exist for an assignment that
-                    // skips grading, so a fraction here would be a permanent
-                    // 0/M (#659). Report what the org repo list can honestly
-                    // support — whether repos exist — and send the teacher to
-                    // the submissions page, which owns the real submission
-                    // count via commit/tag detection. Deliberately NOT a
-                    // submitted count: repo presence is set at accept time, so
-                    // counting it as submissions would contradict that page.
-                    if (assignmentSkipsGrading(assignment)) {
-                      if (orgReposPending) {
-                        return (
-                          <span
-                            aria-hidden="true"
-                            className="skeleton skeleton-shimmer inline-block h-4 w-40 align-middle"
-                          />
-                        )
-                      }
-                      const repos = assignmentRepoCount(
-                        orgRepos,
-                        classroom,
-                        assignment.slug,
-                        allSlugs,
-                      )
+                    // An assignment that skips grading has no collected
+                    // `entries` (collect_scores.py records no score for it), so
+                    // its submitted count comes from the bucket's `detected`
+                    // list instead — commits/tags observed in the student repos.
+                    // Same shape as the graded branch below: a real N / M and
+                    // progress bar, so the two row types read consistently
+                    // (#659). `undefined` means no collect has walked this
+                    // bucket yet, which is NOT "nobody submitted".
+                    const skipsGrading = assignmentSkipsGrading(assignment)
+                    const detectedRows = skipsGrading
+                      ? scoresData?.detected?.[assignment.slug]
+                      : undefined
+                    if (skipsGrading && !detectedRows) {
                       return (
-                        <span className="whitespace-nowrap">
-                          {repos > 0
-                            ? t("assignments.table.reposAccepted", {
-                                count: repos,
-                              })
-                            : t("assignments.table.noReposYet")}
+                        <span className="whitespace-nowrap text-base-content/60">
+                          {t("assignments.table.notCollectedYet")}
                         </span>
                       )
                     }
 
                     const submitted =
-                      scoresData?.submissions?.[assignment.slug]?.length || 0
+                      detectedRows?.length ??
+                      scoresData?.submissions?.[assignment.slug]?.length ??
+                      0
 
                     // Group assignments submit per-repo, not per-student, so a
                     // roster denominator is meaningless — show the count.
