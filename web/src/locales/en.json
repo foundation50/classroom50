@@ -2939,7 +2939,7 @@
       "tableCaption": "Your submission for this assignment",
       "notSubmittedYet": "Not submitted yet",
       "submittedAwaitingGrading": "Submitted — awaiting grading",
-      "statusSubmitted": "Your work is in — last submitted {{relative}}",
+      "statusSubmitted": "Submitted — last submission {{relative}}",
       "statusNotSubmitted": "Nothing submitted yet.",
       "statusNotSubmittedCta": "Show me how to submit",
       "colYourRepo": "Your repository",
