@@ -183,7 +183,9 @@ const ClassesPage = () => {
     <PageShell>
       <PageHeader
         loading={roleLoading}
-        title={isStaff ? t("classes.myClasses") : t("classes.myAssignments")}
+        // Students also land on a classroom list here (their per-classroom
+        // summaries), so the title is "My classrooms" for both roles.
+        title={t("classes.myClasses")}
         subtitle={<p className="max-w-2xl">{t("classes.manageSubtitle")}</p>}
       />
 

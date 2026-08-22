@@ -362,7 +362,6 @@
     "manageGroup": "Manage group",
     "acceptAssignment": "Accept assignment",
     "myClasses": "My classrooms",
-    "myAssignments": "My assignments",
     "published": "Published",
     "members": "Members",
     "activity": "Activity",
@@ -2100,7 +2099,6 @@
     "viewAssignmentsAria": "View assignments for {{classroom}}",
     "githubOrganization": "GitHub organization",
     "myClasses": "My classrooms",
-    "myAssignments": "My assignments",
     "manageSubtitle": "Manage your classrooms and assignments.",
     "newClass": "New classroom",
     "empty": {
