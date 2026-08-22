@@ -195,12 +195,13 @@ export const AllClasses = ({ org }: { org: string }) => {
   )
 }
 
-// Accepts the minimal identity shape so both sources can feed it: the staff
-// classroom.json read (full Classroom) and a student's team-derived record.
+// Accepts a partial identity so both sources can feed it: the staff
+// classroom.json read (full Classroom) and a student's team-derived record
+// (name/term only).
 export const SidebarClassInfo = ({
   classInfo,
 }: {
-  classInfo?: Pick<Classroom, "name" | "short_name" | "term">
+  classInfo?: Partial<Pick<Classroom, "name" | "short_name" | "term">>
 }) => {
   const { classroom } = useParams({ strict: false })
   const { collapsed } = useSidebarCollapse()

@@ -58,14 +58,25 @@ export type { FileDropzoneProps, PickedFile } from "./FileDropzone"
 export { StatCard } from "./StatCard"
 export type { StatCardProps } from "./StatCard"
 
-export { MetricDial } from "./MetricDial"
-export type { MetricDialProps, MetricDialTone } from "./MetricDial"
+export { MetricDial, MetricCount } from "./MetricDial"
+export type {
+  MetricDialProps,
+  MetricCountProps,
+  MetricDialTone,
+} from "./MetricDial"
 
-export { SortableHeader, ariaSort } from "./SortableHeader"
-export type { SortableHeaderProps, SortDirection } from "./SortableHeader"
+export { SortableHeader, SortableTh, ariaSort } from "./SortableHeader"
+export type {
+  SortableHeaderProps,
+  SortableThProps,
+  SortDirection,
+} from "./SortableHeader"
 
 export { SkeletonCell } from "./SkeletonCell"
 export type { SkeletonCellProps } from "./SkeletonCell"
+
+export { TableShell, SkeletonRows } from "./TableShell"
+export type { TableShellProps } from "./TableShell"
 
 export { TablePagination } from "./TablePagination"
 export type { TablePaginationProps } from "./TablePagination"

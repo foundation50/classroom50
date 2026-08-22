@@ -27,7 +27,7 @@ import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
 import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Assignment } from "@/types/classroom"
-import { EnterDiv, ClickableTr } from "@/lib/motionComponents"
+import { ClickableTr } from "@/lib/motionComponents"
 import { blockEnter } from "@/lib/motion"
 import { motion } from "motion/react"
 import type { AssignmentSort } from "@/pages/assignments/assignmentList"
@@ -39,10 +39,11 @@ import {
   Badge,
   Button,
   EmphasisLtr,
+  MetricCount,
   MetricDial,
-  SkeletonCell,
-  SortableHeader,
-  ariaSort,
+  SkeletonRows,
+  SortableTh,
+  TableShell,
 } from "@/components/ui"
 
 const DeleteAssignmentButton = ({
@@ -343,28 +344,21 @@ const ReleaseDateCell = ({ assignment }: { assignment: Assignment }) => {
   )
 }
 
-const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
-  <>
-    {Array.from({ length: rows }).map((_, i) => (
-      // Decorative loading placeholder — hidden from assistive tech so a screen
-      // reader announces the table's busy state, not rows of empty cells.
-      <tr key={i} aria-hidden="true">
-        <SkeletonCell bar="h-4 w-40" />
-        <SkeletonCell bar="h-4 w-24" />
-        <SkeletonCell bar="h-6 w-28" />
-        <SkeletonCell bar="h-6 w-28" />
-        <SkeletonCell bar="h-4 w-32" />
-        <SkeletonCell bar="h-4 w-32" />
-        <SkeletonCell bar="ms-auto h-8 w-16" />
-      </tr>
-    ))}
-  </>
-)
+const SKELETON_BARS = [
+  "h-4 w-40",
+  "h-4 w-24",
+  "h-6 w-28",
+  "h-6 w-28",
+  "h-4 w-32",
+  "h-4 w-32",
+  "ms-auto h-8 w-16",
+]
 
 const AssignmentsTable = ({
   org,
   classroom,
   assignments,
+  allAssignments,
   studentCount,
   loading = false,
   archived = false,
@@ -375,6 +369,11 @@ const AssignmentsTable = ({
   org: string
   classroom: string
   assignments?: Assignment[]
+  // The UNFILTERED assignment list, for the sibling-slug repo-attribution
+  // guard. `assignments` is the visible (searched/filtered) set — deriving
+  // siblings from it would drop a hidden slug-extending sibling and
+  // mis-attribute its repos. Falls back to `assignments` when omitted.
+  allAssignments?: Assignment[]
   // Authoritative student-role count (from useStudentCount), the denominator for
   // the submission ratio. undefined while the count is still resolving.
   studentCount?: number
@@ -400,8 +399,9 @@ const AssignmentsTable = ({
   // repos that exist). Shared react-query cache with the submissions page.
   const { data: orgRepos } = useGetOrgRepos(org)
   // Sibling slugs guard group-repo attribution against a slug-extending
-  // sibling ("hw1-bonus" under "hw1"); see existingGroupRepos.
-  const siblingSlugs = assignments?.map((a) => a.slug) ?? []
+  // sibling ("hw1-bonus" under "hw1") — derived from the full list so a
+  // filtered-out sibling still guards; see existingGroupRepos.
+  const siblingSlugs = (allAssignments ?? assignments)?.map((a) => a.slug) ?? []
   // Raw funnel counts for one row, shared by the Accepted and Submitted cells.
   //
   // `submitted`: an assignment that skips grading records no autograded
@@ -439,378 +439,321 @@ const AssignmentsTable = ({
   const canMutate = !archived && canAuthor
 
   return (
-    <EnterDiv
-      key={loading ? "loading" : "loaded"}
-      className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100"
-    >
-      {/* Default daisyUI row borders (base-content/5) are nearly invisible on
-          base-100, so rows blur together — strengthen the dividers and give
-          cells a bit more vertical padding for at-rest row separation. */}
-      <table
-        className="table [&_tr]:border-base-content/10 [&_tbody_td]:py-4"
-        aria-busy={loading}
-      >
-        <caption className="sr-only">{t("assignments.table.caption")}</caption>
-        <thead>
-          <tr>
-            <th
-              scope="col"
-              aria-sort={ariaSort(
-                sort === "name-asc"
-                  ? "asc"
-                  : sort === "name-desc"
-                    ? "desc"
-                    : null,
-              )}
-            >
-              {onSortChange ? (
-                <SortableHeader
-                  label={t("assignments.table.colAssignment")}
-                  direction={
-                    sort === "name-asc"
-                      ? "asc"
-                      : sort === "name-desc"
-                        ? "desc"
-                        : null
-                  }
-                  onClick={() =>
-                    onSortChange(sort === "name-asc" ? "name-desc" : "name-asc")
-                  }
-                  title={t("assignments.table.sortByName")}
-                />
-              ) : (
-                t("assignments.table.colAssignment")
-              )}
-            </th>
-            <th scope="col">{t("assignments.table.colType")}</th>
-            <th scope="col">{t("assignments.table.colReleaseDate")}</th>
-            <th
-              scope="col"
-              aria-sort={ariaSort(
-                sort === "due-asc"
-                  ? "asc"
-                  : sort === "due-desc"
-                    ? "desc"
-                    : null,
-              )}
-            >
-              {onSortChange ? (
-                <SortableHeader
-                  label={t("assignments.table.colDueDate")}
-                  direction={
-                    sort === "due-asc"
-                      ? "asc"
-                      : sort === "due-desc"
-                        ? "desc"
-                        : null
-                  }
-                  onClick={() =>
-                    onSortChange(sort === "due-asc" ? "due-desc" : "due-asc")
-                  }
-                  title={t("assignments.table.sortByDue")}
-                />
-              ) : (
-                t("assignments.table.colDueDate")
-              )}
-            </th>
-            <th scope="col">{t("assignments.table.colAccepted")}</th>
-            <th scope="col">{t("assignments.table.colSubmitted")}</th>
-            <th scope="col">
-              <span className="sr-only">
-                {t("assignments.table.colActions")}
-              </span>
-            </th>
-          </tr>
-        </thead>
-        {/* Same recipe as the submissions table: the body enters as one block
+    <TableShell key={loading ? "loading" : "loaded"} padded ariaBusy={loading}>
+      <caption className="sr-only">{t("assignments.table.caption")}</caption>
+      <thead>
+        <tr>
+          <SortableTh
+            label={t("assignments.table.colAssignment")}
+            sort={sort}
+            asc="name-asc"
+            desc="name-desc"
+            onSortChange={onSortChange}
+            title={t("assignments.table.sortByName")}
+          />
+          <th scope="col">{t("assignments.table.colType")}</th>
+          <th scope="col">{t("assignments.table.colReleaseDate")}</th>
+          <SortableTh
+            label={t("assignments.table.colDueDate")}
+            sort={sort}
+            asc="due-asc"
+            desc="due-desc"
+            onSortChange={onSortChange}
+            title={t("assignments.table.sortByDue")}
+          />
+          <th scope="col">{t("assignments.table.colAccepted")}</th>
+          <th scope="col">{t("assignments.table.colSubmitted")}</th>
+          <th scope="col">
+            <span className="sr-only">{t("assignments.table.colActions")}</span>
+          </th>
+        </tr>
+      </thead>
+      {/* Same recipe as the submissions table: the body enters as one block
             (blockEnter) and replays when the visible set changes. */}
-        <motion.tbody
-          key={assignments?.map((a) => a.slug).join("|") ?? ""}
-          variants={blockEnter}
-          initial="initial"
-          animate="animate"
-        >
-          {loading && <SkeletonRows />}
-          {!loading && !assignments?.length && (
-            <tr>
-              <td colSpan={7} className="text-center">
-                {t("assignments.table.empty")}
-              </td>
-            </tr>
-          )}
-          {!loading &&
-            assignments?.map((assignment) => (
-              <ClickableTr key={assignment.slug} className="hover:bg-base-200">
-                <td
-                  onClick={() =>
-                    navigate({
-                      to: "/$org/$classroom/assignments/$assignment/submissions",
-                      params: { org, classroom, assignment: assignment.slug },
-                    })
-                  }
-                  className="truncate"
-                >
-                  {/* Real link (not a click-only div) so the row's primary
+      <motion.tbody
+        key={assignments?.map((a) => a.slug).join("|") ?? ""}
+        variants={blockEnter}
+        initial="initial"
+        animate="animate"
+      >
+        {loading && <SkeletonRows bars={SKELETON_BARS} />}
+        {!loading && !assignments?.length && (
+          <tr>
+            <td colSpan={7} className="text-center">
+              {t("assignments.table.empty")}
+            </td>
+          </tr>
+        )}
+        {!loading &&
+          assignments?.map((assignment) => (
+            <ClickableTr key={assignment.slug} className="hover:bg-base-200">
+              <td
+                onClick={() =>
+                  navigate({
+                    to: "/$org/$classroom/assignments/$assignment/submissions",
+                    params: { org, classroom, assignment: assignment.slug },
+                  })
+                }
+                className="truncate"
+              >
+                {/* Real link (not a click-only div) so the row's primary
                       action is keyboard-reachable and exposes a link role; the
                       td onClick stays as a mouse convenience. */}
-                  <Link
-                    to="/$org/$classroom/assignments/$assignment/submissions"
-                    params={{ org, classroom, assignment: assignment.slug }}
-                    aria-label={t("assignments.table.openSubmissionsAria", {
-                      name: name(assignment),
-                    })}
-                    className="font-bold link link-info no-underline"
-                    onClick={(event) => event.stopPropagation()}
+                <Link
+                  to="/$org/$classroom/assignments/$assignment/submissions"
+                  params={{ org, classroom, assignment: assignment.slug }}
+                  aria-label={t("assignments.table.openSubmissionsAria", {
+                    name: name(assignment),
+                  })}
+                  className="font-bold link link-info no-underline"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {assignment.name}
+                </Link>
+                <div className="font-mono text-xs text-base-content/70">
+                  {assignment.slug}
+                </div>
+                {assignment.locked && (
+                  <Badge
+                    tone="warning"
+                    size="sm"
+                    className="mt-1 gap-1 whitespace-nowrap"
+                    title={t("assignments.table.lockedBadgeTitle")}
                   >
-                    {assignment.name}
-                  </Link>
-                  <div className="font-mono text-xs text-base-content/70">
-                    {assignment.slug}
-                  </div>
-                  {assignment.locked && (
-                    <Badge
-                      tone="warning"
-                      size="sm"
-                      className="mt-1 gap-1 whitespace-nowrap"
-                      title={t("assignments.table.lockedBadgeTitle")}
-                    >
-                      <Lock aria-hidden="true" className="size-3" />
-                      {t("assignments.table.lockedBadge")}
-                    </Badge>
-                  )}
-                </td>
-                <td
-                  onClick={() =>
-                    navigate({
-                      to: "/$org/$classroom/assignments/$assignment/submissions",
-                      params: { org, classroom, assignment: assignment.slug },
-                    })
-                  }
-                  className="max-xl:text-xs"
-                >
-                  <ModeBadge mode={assignment.mode} />
-                </td>
-                <td
-                  onClick={() =>
-                    navigate({
-                      to: "/$org/$classroom/assignments/$assignment/submissions",
-                      params: { org, classroom, assignment: assignment.slug },
-                    })
-                  }
-                >
-                  <ReleaseDateCell assignment={assignment} />
-                </td>
-                <td
-                  onClick={() =>
-                    navigate({
-                      to: "/$org/$classroom/assignments/$assignment/submissions",
-                      params: { org, classroom, assignment: assignment.slug },
-                    })
-                  }
-                >
-                  <DueDateCell due={assignment.due} />
-                </td>
-                {/* The funnel cells deep-link to the actionable cohort: who
+                    <Lock aria-hidden="true" className="size-3" />
+                    {t("assignments.table.lockedBadge")}
+                  </Badge>
+                )}
+              </td>
+              <td
+                onClick={() =>
+                  navigate({
+                    to: "/$org/$classroom/assignments/$assignment/submissions",
+                    params: { org, classroom, assignment: assignment.slug },
+                  })
+                }
+                className="max-xl:text-xs"
+              >
+                <ModeBadge mode={assignment.mode} />
+              </td>
+              <td
+                onClick={() =>
+                  navigate({
+                    to: "/$org/$classroom/assignments/$assignment/submissions",
+                    params: { org, classroom, assignment: assignment.slug },
+                  })
+                }
+              >
+                <ReleaseDateCell assignment={assignment} />
+              </td>
+              <td
+                onClick={() =>
+                  navigate({
+                    to: "/$org/$classroom/assignments/$assignment/submissions",
+                    params: { org, classroom, assignment: assignment.slug },
+                  })
+                }
+              >
+                <DueDateCell due={assignment.due} />
+              </td>
+              {/* The funnel cells deep-link to the actionable cohort: who
                     hasn't accepted / hasn't submitted. Groups have no
                     acceptance filter (no roster denominator), so their
                     Accepted cell opens the dashboard unfiltered. */}
-                <td
-                  onClick={() =>
-                    navigate({
-                      to: "/$org/$classroom/assignments/$assignment/submissions",
-                      params: { org, classroom, assignment: assignment.slug },
-                      search:
-                        assignment.mode === "group"
-                          ? undefined
-                          : { status: "not-accepted" },
-                    })
+              <td
+                onClick={() =>
+                  navigate({
+                    to: "/$org/$classroom/assignments/$assignment/submissions",
+                    params: { org, classroom, assignment: assignment.slug },
+                    search:
+                      assignment.mode === "group"
+                        ? undefined
+                        : { status: "not-accepted" },
+                  })
+                }
+              >
+                {(() => {
+                  const { submitted, accepted } = funnelCounts(assignment)
+                  if (accepted === undefined) {
+                    // Org repo list still loading — no acceptance signal yet.
+                    return <span className="text-base-content/60">—</span>
                   }
-                >
-                  {(() => {
-                    const { submitted, accepted } = funnelCounts(assignment)
-                    if (accepted === undefined) {
-                      // Org repo list still loading — no acceptance signal yet.
-                      return <span className="text-base-content/60">—</span>
-                    }
-                    if (assignment.mode === "group") {
-                      // Groups have no roster denominator (any student can
-                      // found one), so acceptance is a bare count — no dial;
-                      // the "groups" context lives in the tooltip.
-                      return (
-                        <Badge
-                          tone="info"
-                          className="min-w-8 justify-center font-bold tabular-nums"
-                          title={t("assignments.table.groupsAcceptedTitle")}
-                        >
-                          {accepted}
-                        </Badge>
-                      )
-                    }
-                    const total = studentCount ?? 0
-                    // Clamp (KTD4-style): a staff/extra repo could push the
-                    // count past the student-role total, and a recorded
-                    // submission implies its repo existed.
-                    const shown = Math.min(
-                      Math.max(accepted, Math.min(submitted, total)),
-                      total,
-                    )
+                  if (assignment.mode === "group") {
+                    // Groups have no roster denominator (any student can
+                    // found one), so acceptance is a bare count — no dial;
+                    // the "groups" context lives in the tooltip.
                     return (
-                      <MetricDial
-                        value={shown}
-                        max={total}
+                      <MetricCount
+                        value={accepted}
                         tone="info"
-                        title={t("assignments.table.acceptedTitle", {
-                          accepted: shown,
-                          total,
-                        })}
+                        title={t("assignments.table.groupsAcceptedTitle")}
                       />
                     )
-                  })()}
-                </td>
-                <td
-                  onClick={() =>
-                    navigate({
-                      to: "/$org/$classroom/assignments/$assignment/submissions",
-                      params: { org, classroom, assignment: assignment.slug },
-                      search: { status: "not-submitted" },
-                    })
                   }
-                >
-                  {(() => {
-                    const { submitted, accepted, notCollected } =
-                      funnelCounts(assignment)
-                    if (notCollected) {
+                  const total = studentCount ?? 0
+                  // Clamp (KTD4-style): a staff/extra repo could push the
+                  // count past the student-role total, and a recorded
+                  // submission implies its repo existed.
+                  const shown = Math.min(
+                    Math.max(accepted, Math.min(submitted, total)),
+                    total,
+                  )
+                  return (
+                    <MetricDial
+                      value={shown}
+                      max={total}
+                      tone="info"
+                      title={t("assignments.table.acceptedTitle", {
+                        accepted: shown,
+                        total,
+                      })}
+                    />
+                  )
+                })()}
+              </td>
+              <td
+                onClick={() =>
+                  navigate({
+                    to: "/$org/$classroom/assignments/$assignment/submissions",
+                    params: { org, classroom, assignment: assignment.slug },
+                    search: { status: "not-submitted" },
+                  })
+                }
+              >
+                {(() => {
+                  const { submitted, accepted, notCollected } =
+                    funnelCounts(assignment)
+                  if (notCollected) {
+                    return (
+                      <span className="whitespace-nowrap text-base-content/60">
+                        {t("assignments.table.notCollectedYet")}
+                      </span>
+                    )
+                  }
+                  if (assignment.mode === "group") {
+                    // Groups submit per-repo, so the only meaningful
+                    // denominator is the number of groups that accepted.
+                    // Until the repo list loads, fall back to the bare count
+                    // rather than a false "N / 0".
+                    if (accepted === undefined) {
                       return (
-                        <span className="whitespace-nowrap text-base-content/60">
-                          {t("assignments.table.notCollectedYet")}
+                        <span className="whitespace-nowrap">
+                          {t("assignments.table.groupsSubmitted", {
+                            count: submitted,
+                          })}
                         </span>
                       )
                     }
-                    if (assignment.mode === "group") {
-                      // Groups submit per-repo, so the only meaningful
-                      // denominator is the number of groups that accepted.
-                      // Until the repo list loads, fall back to the bare count
-                      // rather than a false "N / 0".
-                      if (accepted === undefined) {
-                        return (
-                          <span className="whitespace-nowrap">
-                            {t("assignments.table.groupsSubmitted", {
-                              count: submitted,
-                            })}
-                          </span>
-                        )
-                      }
-                      const shown = Math.min(submitted, accepted)
-                      return (
-                        <MetricDial
-                          value={shown}
-                          max={accepted}
-                          tone="success"
-                          title={t("assignments.table.submittedTitleGroup", {
-                            submitted: shown,
-                            accepted,
-                          })}
-                        />
-                      )
-                    }
-                    // Denominator is the authoritative student-role count, not
-                    // the roster row count (which includes staff). The
-                    // numerator is a repo-count from scores.json with no role
-                    // join, so a submission from a non-student repo could push
-                    // it past the denominator — clamp the displayed fraction
-                    // and the bar to 100% (KTD4). undefined count reads as 0
-                    // until it resolves.
-                    const total = studentCount ?? 0
-                    const shown = Math.min(submitted, total)
+                    const shown = Math.min(submitted, accepted)
                     return (
                       <MetricDial
                         value={shown}
-                        max={total}
+                        max={accepted}
                         tone="success"
-                        title={t("assignments.table.submittedTitle", {
+                        title={t("assignments.table.submittedTitleGroup", {
                           submitted: shown,
-                          total,
+                          accepted,
                         })}
                       />
                     )
-                  })()}
-                </td>
-                <td>
-                  <Link
-                    className="btn btn-circle btn-sm btn-ghost"
-                    to="/$org/$classroom/assignments/$assignment/settings"
-                    params={{
-                      org,
-                      classroom,
-                      assignment: assignment.slug,
-                    }}
-                    title={
-                      canMutate
-                        ? t("assignments.table.editAssignment")
-                        : t("assignments.table.viewAssignment")
-                    }
-                    onClick={(event) => {
-                      event.stopPropagation()
-                    }}
-                  >
-                    {canMutate ? (
-                      <Pencil aria-hidden="true" className="size-4" />
-                    ) : (
-                      <Eye aria-hidden="true" className="size-4" />
-                    )}
-                  </Link>
-                  {!canMutate ? (
-                    // Read-only rows (archived, or viewer can't author): reviewing
-                    // template access (and reaching the source repo) stays
-                    // available; the modal itself owner-gates the re-grant.
-                    assignment.template && (
+                  }
+                  // Denominator is the authoritative student-role count, not
+                  // the roster row count (which includes staff). The
+                  // numerator is a repo-count from scores.json with no role
+                  // join, so a submission from a non-student repo could push
+                  // it past the denominator — clamp the displayed fraction
+                  // and the bar to 100% (KTD4). undefined count reads as 0
+                  // until it resolves.
+                  const total = studentCount ?? 0
+                  const shown = Math.min(submitted, total)
+                  return (
+                    <MetricDial
+                      value={shown}
+                      max={total}
+                      tone="success"
+                      title={t("assignments.table.submittedTitle", {
+                        submitted: shown,
+                        total,
+                      })}
+                    />
+                  )
+                })()}
+              </td>
+              <td>
+                <Link
+                  className="btn btn-circle btn-sm btn-ghost"
+                  to="/$org/$classroom/assignments/$assignment/settings"
+                  params={{
+                    org,
+                    classroom,
+                    assignment: assignment.slug,
+                  }}
+                  title={
+                    canMutate
+                      ? t("assignments.table.editAssignment")
+                      : t("assignments.table.viewAssignment")
+                  }
+                  onClick={(event) => {
+                    event.stopPropagation()
+                  }}
+                >
+                  {canMutate ? (
+                    <Pencil aria-hidden="true" className="size-4" />
+                  ) : (
+                    <Eye aria-hidden="true" className="size-4" />
+                  )}
+                </Link>
+                {!canMutate ? (
+                  // Read-only rows (archived, or viewer can't author): reviewing
+                  // template access (and reaching the source repo) stays
+                  // available; the modal itself owner-gates the re-grant.
+                  assignment.template && (
+                    <TemplateAccessButton
+                      org={org}
+                      classroom={classroom}
+                      assignment={assignment}
+                    />
+                  )
+                ) : (
+                  <>
+                    <ReuseAssignmentButton
+                      org={org}
+                      classroom={classroom}
+                      assignment={assignment}
+                    />
+                    {assignment.template && (
                       <TemplateAccessButton
                         org={org}
                         classroom={classroom}
                         assignment={assignment}
                       />
-                    )
-                  ) : (
-                    <>
-                      <ReuseAssignmentButton
-                        org={org}
-                        classroom={classroom}
-                        assignment={assignment}
-                      />
-                      {assignment.template && (
-                        <TemplateAccessButton
-                          org={org}
-                          classroom={classroom}
-                          assignment={assignment}
-                        />
-                      )}
-                      <LockAssignmentButton
-                        org={org}
-                        classroom={classroom}
-                        assignment={assignment}
-                      />
-                      <DeleteAssignmentButton
-                        org={org}
-                        classroom={classroom}
-                        assignment={assignment}
-                        onDeleteAssignment={() =>
-                          queryClient.invalidateQueries({
-                            queryKey: githubKeys.jsonFile(
-                              org,
-                              CONFIG_REPO,
-                              `${classroom}/assignments.json`,
-                            ),
-                          })
-                        }
-                      />
-                    </>
-                  )}
-                </td>
-              </ClickableTr>
-            ))}
-        </motion.tbody>
-      </table>
-    </EnterDiv>
+                    )}
+                    <LockAssignmentButton
+                      org={org}
+                      classroom={classroom}
+                      assignment={assignment}
+                    />
+                    <DeleteAssignmentButton
+                      org={org}
+                      classroom={classroom}
+                      assignment={assignment}
+                      onDeleteAssignment={() =>
+                        queryClient.invalidateQueries({
+                          queryKey: githubKeys.jsonFile(
+                            org,
+                            CONFIG_REPO,
+                            `${classroom}/assignments.json`,
+                          ),
+                        })
+                      }
+                    />
+                  </>
+                )}
+              </td>
+            </ClickableTr>
+          ))}
+      </motion.tbody>
+    </TableShell>
   )
 }
 

@@ -10,7 +10,14 @@ import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
-import { Alert, Badge, HelpTooltip, MetricDial, Spinner } from "@/components/ui"
+import {
+  Alert,
+  Badge,
+  HelpTooltip,
+  MetricCount,
+  MetricDial,
+  Spinner,
+} from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
 import SubmissionsControls from "@/pages/submissions/SubmissionsControls"
@@ -711,6 +718,13 @@ const SubmissionsPageContent = () => {
     [scopedStudents, acceptedSet],
   )
 
+  // The header funnel's Submitted numerator: PRESENCE, not grades. Unlike
+  // stats.submitted (which excludes `pending` rows so uncollected submissions
+  // don't inflate the graded Metrics summary), the dial must agree with the
+  // table right below it — which lists pending live/detected submitters
+  // (the only signal for no_autograder assignments). Count every scoped row.
+  const submittedPresenceCount = scopedScores.length
+
   // Roster students who accepted (repo exists) but have no submission row.
   // Individual assignments only.
   const acceptedNotSubmittedCount = acceptedAvailable
@@ -1001,13 +1015,11 @@ const SubmissionsPageContent = () => {
                   {t("submissions.funnel.accepted")}
                 </span>
                 {isGroupAssignment ? (
-                  <Badge
+                  <MetricCount
+                    value={groupRepoList.length}
                     tone="info"
-                    className="min-w-8 justify-center font-bold tabular-nums"
                     title={t("submissions.funnel.acceptedTitleGroup")}
-                  >
-                    {groupRepoList.length}
-                  </Badge>
+                  />
                 ) : (
                   <button
                     type="button"
@@ -1052,11 +1064,14 @@ const SubmissionsPageContent = () => {
                     />
                   ) : (
                     <MetricDial
-                      value={Math.min(stats.submitted, stats.rostered)}
+                      value={Math.min(submittedPresenceCount, stats.rostered)}
                       max={stats.rostered}
                       tone="success"
                       title={t("submissions.funnel.submittedTitle", {
-                        submitted: Math.min(stats.submitted, stats.rostered),
+                        submitted: Math.min(
+                          submittedPresenceCount,
+                          stats.rostered,
+                        ),
                         total: stats.rostered,
                       })}
                     />

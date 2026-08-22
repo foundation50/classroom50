@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react"
+import type { CSSProperties, ReactNode } from "react"
 
 import { Badge } from "./Badge"
 
@@ -17,12 +17,32 @@ const RING_CLASS = {
 
 export type MetricDialTone = keyof typeof RING_CLASS
 
-const ringStyle = (value: number) =>
-  ({
-    "--value": value,
-    "--size": "2rem",
-    "--thickness": "3px",
-  }) as CSSProperties
+// Ring geometry as static utility classes; only the arc percentage remains an
+// inline CSS variable, because it's per-render dynamic.
+const RING_GEOMETRY = "[--size:2rem] [--thickness:3px]"
+
+const ringValue = (value: number) => ({ "--value": value }) as CSSProperties
+
+// The dial's count badge on its own — for funnel counts that have no
+// denominator to dial against (e.g. group acceptance). Kept here so the badge
+// recipe has one source and can't drift from the dial's.
+export type MetricCountProps = {
+  value: ReactNode
+  tone: MetricDialTone
+  title?: string
+}
+
+export function MetricCount({ value, tone, title }: MetricCountProps) {
+  return (
+    <Badge
+      tone={tone}
+      className="min-w-8 justify-center font-bold tabular-nums"
+      title={title}
+    >
+      {value}
+    </Badge>
+  )
+}
 
 export type MetricDialProps = {
   value: number
@@ -35,12 +55,7 @@ export function MetricDial({ value, max, tone, title }: MetricDialProps) {
   const pct = max === 0 ? 0 : Math.round((value / max) * 100)
   return (
     <div className="flex items-center gap-2 whitespace-nowrap" title={title}>
-      <Badge
-        tone={tone}
-        className="min-w-8 justify-center font-bold tabular-nums"
-      >
-        {value}
-      </Badge>
+      <MetricCount value={value} tone={tone} />
       <div
         role="progressbar"
         aria-label={title}
@@ -53,13 +68,13 @@ export function MetricDial({ value, max, tone, title }: MetricDialProps) {
             decorative ring, so it must not register with the text-contrast
             coverage guard. */}
         <div
-          className="radial-progress text-base-300"
-          style={ringStyle(100)}
+          className={`radial-progress text-base-300 ${RING_GEOMETRY}`}
+          style={ringValue(100)}
           aria-hidden="true"
         />
         <div
-          className={`radial-progress absolute inset-0 ${RING_CLASS[tone]}`}
-          style={ringStyle(pct)}
+          className={`radial-progress absolute inset-0 ${RING_GEOMETRY} ${RING_CLASS[tone]}`}
+          style={ringValue(pct)}
           aria-hidden="true"
         />
         <span className="absolute inset-0 flex items-center justify-center text-[0.625rem] font-semibold tabular-nums text-base-content">

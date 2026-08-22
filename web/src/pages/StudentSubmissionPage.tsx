@@ -31,7 +31,7 @@ import {
 import type { Assignment, SubmissionMode } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-import { Alert, Badge, Button, Markdown } from "@/components/ui"
+import { Alert, Badge, Button, Markdown, TableShell } from "@/components/ui"
 import {
   SubmissionDetailsModal,
   detailItemsCount,
@@ -317,90 +317,88 @@ const SubmissionBody = ({
       {/* One-row, teacher-style submissions table for the student's own repo.
           The count chip opens the shared details modal (tags or pushes); the
           student column set omits the teacher-only score and management
-          actions. */}
-      <div className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
-        {/* Divider strength matches the teacher tables. */}
-        <table className="table [&_tr]:border-base-content/10">
-          <caption className="sr-only">
-            {t("submissions.student.tableCaption")}
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">{t("submissions.student.colYourRepo")}</th>
-              <th scope="col">{t("submissions.table.colSubmissions")}</th>
-              <th scope="col">{t("submissions.table.colLastSubmitted")}</th>
-              <th scope="col">
-                <span className="sr-only">
-                  {t("submissions.table.colActions")}
-                </span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <Avatar
-                  name={user?.name || user?.login || ""}
-                  initials=""
-                  github={user?.login || ""}
-                  subtitle={
-                    <a
-                      className="link link-hover block max-w-72 truncate font-mono text-xs"
-                      href={repoHref}
-                      target="_blank"
-                      rel="noreferrer"
-                      title={repoName}
-                    >
-                      {repoName}
-                    </a>
-                  }
-                />
-              </td>
-              <td>
-                <SubmissionCountCell
-                  mode={submissionMode}
-                  count={submissionCount}
-                  onOpen={() => setDetailsOpen(true)}
-                />
-              </td>
-              <td>
-                {latestSubmittedAt ? (
-                  <div className="flex flex-wrap items-center gap-x-2">
-                    <LastSubmittedCell datetime={latestSubmittedAt} />
-                    {/* Relative time answers "did my push just register?"
+          actions. The shell's own entrance is off — the surrounding EnterDiv
+          already animates this block. */}
+      <TableShell animate={false}>
+        <caption className="sr-only">
+          {t("submissions.student.tableCaption")}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("submissions.student.colYourRepo")}</th>
+            <th scope="col">{t("submissions.table.colSubmissions")}</th>
+            <th scope="col">{t("submissions.table.colLastSubmitted")}</th>
+            <th scope="col">
+              <span className="sr-only">
+                {t("submissions.table.colActions")}
+              </span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <Avatar
+                name={user?.name || user?.login || ""}
+                initials=""
+                github={user?.login || ""}
+                subtitle={
+                  <a
+                    className="link link-hover block max-w-72 truncate font-mono text-xs"
+                    href={repoHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={repoName}
+                  >
+                    {repoName}
+                  </a>
+                }
+              />
+            </td>
+            <td>
+              <SubmissionCountCell
+                mode={submissionMode}
+                count={submissionCount}
+                onOpen={() => setDetailsOpen(true)}
+              />
+            </td>
+            <td>
+              {latestSubmittedAt ? (
+                <div className="flex flex-wrap items-center gap-x-2">
+                  <LastSubmittedCell datetime={latestSubmittedAt} />
+                  {/* Relative time answers "did my push just register?"
                         without date math. */}
-                    <span className="whitespace-nowrap text-base-content/60">
-                      {formatRelativeToNow(new Date(latestSubmittedAt))}
-                    </span>
-                  </div>
-                ) : submissionCount > 0 ? (
-                  // Submissions exist (e.g. a pushed milestone tag) but none
-                  // has a graded release yet, so there's no timestamp to show.
-                  // "Not submitted yet" beside a positive count would
-                  // contradict itself — say the work is in and awaiting
-                  // grading instead.
-                  <span className="text-base-content/60">
-                    {t("submissions.student.submittedAwaitingGrading")}
+                  <span className="whitespace-nowrap text-base-content/60">
+                    {formatRelativeToNow(new Date(latestSubmittedAt))}
                   </span>
-                ) : (
-                  <span className="text-base-content/60">
-                    {t("submissions.student.notSubmittedYet")}
-                  </span>
-                )}
-              </td>
-              <td>
-                <StudentRowActions
-                  repo={repoName}
-                  repoHref={repoHref}
-                  hasRepo
-                  latestReleaseHref={latestReleaseHref}
-                  onViewSubmissions={() => setDetailsOpen(true)}
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+                </div>
+              ) : submissionCount > 0 ? (
+                // Submissions exist (e.g. a pushed milestone tag) but none
+                // has a graded release yet, so there's no timestamp to show.
+                // "Not submitted yet" beside a positive count would
+                // contradict itself — say the work is in and awaiting
+                // grading instead.
+                <span className="text-base-content/60">
+                  {t("submissions.student.submittedAwaitingGrading")}
+                </span>
+              ) : (
+                <span className="text-base-content/60">
+                  {t("submissions.student.notSubmittedYet")}
+                </span>
+              )}
+            </td>
+            <td>
+              <StudentRowActions
+                repo={repoName}
+                repoHref={repoHref}
+                hasRepo
+                latestReleaseHref={latestReleaseHref}
+                onViewSubmissions={() => setDetailsOpen(true)}
+              />
+            </td>
+          </tr>
+        </tbody>
+      </TableShell>
 
       <SubmitGuidance
         ref={guideRef}

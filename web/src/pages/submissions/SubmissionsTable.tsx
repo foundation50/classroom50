@@ -16,11 +16,11 @@ import Avatar from "@/components/avatar"
 import {
   Badge,
   Button,
-  SkeletonCell,
-  SortableHeader,
+  SkeletonRows,
+  SortableTh,
   Spinner,
   TablePagination,
-  ariaSort,
+  TableShell,
 } from "@/components/ui"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
 import type { SubmissionSort } from "@/pages/submissions/dashboard"
@@ -76,7 +76,7 @@ import {
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import type { Student, SubmissionMode } from "@/types/classroom"
-import { EnterDiv, ClickableTr } from "@/lib/motionComponents"
+import { ClickableTr } from "@/lib/motionComponents"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import { blockEnter } from "@/lib/motion"
 
@@ -230,22 +230,13 @@ function resolveOverrideCell(
   return { hasGrade: true, maxPoints: row["max-score"] }
 }
 
-// Decorative loading placeholder — hidden from assistive tech so a screen
-// reader announces the table's busy state, not rows of empty cells. Same
-// recipe as the assignments table's skeleton.
-const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
-  <>
-    {Array.from({ length: rows }).map((_, i) => (
-      <tr key={i} aria-hidden="true">
-        <SkeletonCell bar="h-4 w-40" />
-        <SkeletonCell bar="h-6 w-20" />
-        <SkeletonCell bar="h-6 w-16" />
-        <SkeletonCell bar="h-4 w-32" />
-        <SkeletonCell bar="h-8 w-24" />
-      </tr>
-    ))}
-  </>
-)
+const SKELETON_BARS = [
+  "h-4 w-40",
+  "h-6 w-20",
+  "h-6 w-16",
+  "h-4 w-32",
+  "h-8 w-24",
+]
 
 const SubmissionsTable = ({
   scores,
@@ -673,324 +664,280 @@ const SubmissionsTable = ({
 
   return (
     <>
-      <EnterDiv className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
-        {/* Divider strength matches the assignments table so the two flagship
-            tables share one at-rest row separation. */}
-        <table
-          className="table [&_tr]:border-base-content/10"
-          aria-busy={initialLoading}
-        >
-          <caption className="sr-only">
-            {isGroup
-              ? t("submissions.table.captionGroup")
-              : t("submissions.table.captionStudent")}
-          </caption>
-          <thead>
-            {/* Width hints so auto layout doesn't dump all slack into the
+      <TableShell
+        ariaBusy={initialLoading}
+        footer={
+          showPager ? (
+            <TablePagination
+              page={bounds.page}
+              pageCount={bounds.pageCount}
+              pageSize={pageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              from={bounds.from}
+              to={bounds.to}
+              total={bounds.total}
+              pages={paginationRange(bounds.page, bounds.pageCount)}
+              onPageChange={onPageChange}
+              onPageSizeChange={onPageSizeChange}
+              className="border-t border-base-content/5"
+            />
+          ) : undefined
+        }
+      >
+        <caption className="sr-only">
+          {isGroup
+            ? t("submissions.table.captionGroup")
+            : t("submissions.table.captionStudent")}
+        </caption>
+        <thead>
+          {/* Width hints so auto layout doesn't dump all slack into the
                 first two columns, stranding Score/Last-submitted/Actions in a
                 clump at the far edge. */}
-            <tr>
-              <th
-                scope="col"
-                className="w-[26%]"
-                aria-sort={ariaSort(
-                  sort === "name-first"
-                    ? "asc"
-                    : sort === "name-last"
-                      ? "desc"
-                      : null,
-                )}
-              >
-                {onSortChange ? (
-                  <SortableHeader
-                    label={
-                      isGroup
-                        ? t("submissions.table.colGroup")
-                        : t("submissions.table.colStudent")
-                    }
-                    direction={
-                      sort === "name-first"
-                        ? "asc"
-                        : sort === "name-last"
-                          ? "desc"
-                          : null
-                    }
-                    onClick={() =>
-                      onSortChange(
-                        sort === "name-first" ? "name-last" : "name-first",
-                      )
-                    }
-                    title={t("submissions.table.sortByName")}
-                  />
-                ) : isGroup ? (
-                  t("submissions.table.colGroup")
-                ) : (
-                  t("submissions.table.colStudent")
-                )}
-              </th>
-              <th scope="col" className="w-[24%]">
-                {t("submissions.table.colSubmissions")}
-              </th>
-              <th scope="col" className="w-[13%]">
-                {t("submissions.table.colScore")}
-              </th>
-              <th
-                scope="col"
-                className="w-[19%]"
-                aria-sort={ariaSort(
-                  sort === "recent" ? "desc" : sort === "oldest" ? "asc" : null,
-                )}
-              >
-                {onSortChange ? (
-                  <SortableHeader
-                    label={t("submissions.table.colLastSubmitted")}
-                    direction={
-                      sort === "recent"
-                        ? "desc"
-                        : sort === "oldest"
-                          ? "asc"
-                          : null
-                    }
-                    onClick={() =>
-                      onSortChange(sort === "recent" ? "oldest" : "recent")
-                    }
-                    title={t("submissions.table.sortByLastSubmitted")}
-                  />
-                ) : (
-                  t("submissions.table.colLastSubmitted")
-                )}
-              </th>
-              <th scope="col" className="w-[18%]">
-                <span className="sr-only">
-                  {t("submissions.table.colActions")}
-                </span>
-              </th>
-            </tr>
-          </thead>
-          <motion.tbody
-            key={`${viewSignature}:${page}`}
-            variants={blockEnter}
-            initial="initial"
-            animate="animate"
-          >
-            {initialLoading && <SkeletonRows />}
-            {!initialLoading &&
-              !scores?.length &&
-              !nonSubmitters.length &&
-              !unsubmittedGroupRepos.length &&
-              !nonSubmittersLoading && (
-                <tr>
-                  <td colSpan={5} className="py-10 text-center">
-                    <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
-                      {filtered ? (
-                        <>
-                          <SearchX
-                            aria-hidden="true"
-                            className="size-8 text-base-content/40"
-                          />
-                          <p className="font-medium">
-                            {t("submissions.table.emptyFilteredTitle")}
-                          </p>
-                          <p className="text-sm text-base-content/70">
-                            {t("submissions.table.emptyFilteredBody")}
-                          </p>
-                          {onClearFilters && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="mt-1"
-                              onClick={onClearFilters}
-                            >
-                              {t("submissions.table.emptyClearFilters")}
-                            </Button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <Inbox
-                            aria-hidden="true"
-                            className="size-8 text-base-content/40"
-                          />
-                          <p className="font-medium">
-                            {t("submissions.table.emptyNoDataTitle")}
-                          </p>
-                          <p className="text-sm text-base-content/70">
-                            {t("submissions.table.emptyNoDataBody")}
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )}
-            {pageItems.map((item) => {
-              if (item.kind === "row") return renderSubmitterRow(item.row)
-              if (item.kind === "nonSubmitter") {
-                const student = item.student
-                // Individual non-submitter: show the same per-repo action
-                // cluster as a submitter, disabled where inapplicable. A repo
-                // exists only if they accepted; a never-accepted student's
-                // repo-scoped actions render disabled. A group non-submitter has
-                // no per-student repo, so no actions (the row shows an em-dash).
-                //
-                // Acceptance is a tri-state: `acceptedUsernames` is undefined
-                // until the org repo list loads. Treat undefined as "unknown"
-                // and fall back to the em-dash (like the neutral "Not submitted"
-                // badge does), so the row never asserts "hasn't accepted" with a
-                // disabled cluster while acceptance is still resolving.
-                const showActions =
-                  !isGroup && Boolean(student.username) && acceptedUsernames
-
-                let actions: React.ReactNode
-                let openManage: (() => void) | undefined
-                if (showActions) {
-                  const repoName = studentRepoName(
-                    classroom,
-                    assignment,
-                    student.username,
-                  )
-                  const repoHref = studentRepoUrl(
-                    org,
-                    classroom,
-                    assignment,
-                    student.username,
-                  )
-                  const accepted = hasAccepted(student.username, showActions)
-                  openManage = () =>
-                    setManageSubmission({
-                      owner: student.username,
-                      isGroup: false,
-                      title:
-                        getName(student.username, students) || student.username,
-                      subtitle: identitySubtitle(
-                        getName(student.username, students),
-                        student.username,
-                        student.section,
-                      ),
-                      repo: repoName,
-                      repoHref,
-                      hasRepo: accepted,
-                      displayName:
-                        getName(student.username, students) || undefined,
-                    })
-                  actions = (
-                    <RepoRowActions
-                      owner={student.username}
-                      skipsGrading={emptyRepo}
-                      header={
-                        <IndividualRowHeader
-                          repo={repoName}
-                          repoHref={repoHref}
-                          hasRepo={accepted}
-                        />
-                      }
-                      onManage={openManage}
-                    />
-                  )
-                }
-                return (
-                  <NonSubmitterRow
-                    key={`missing-${student.username || student.email || student.github_id}`}
-                    student={student}
-                    students={students}
-                    isGroup={isGroup}
-                    acceptedUsernames={acceptedUsernames}
-                    onProfile={setProfileUsername}
-                    actions={actions}
-                    onManage={openManage}
-                    overrideGrade={overrideGrade}
-                    onEditGrade={(username) =>
-                      overrideGrade?.mode === "manual" &&
-                      typeof overrideGrade.maxPoints === "number"
-                        ? setOverrideRow({
-                            owner: username,
-                            displayName:
-                              getName(username, students) || undefined,
-                            hasGrade: false,
-                            score: 0,
-                            overridden: false,
-                            maxPoints: overrideGrade.maxPoints,
-                          })
-                        : undefined
-                    }
-                    thresholdFraction={passBar}
-                    nameMode={nameDisplayMode}
-                  />
-                )
+          <tr>
+            <SortableTh
+              className="w-[26%]"
+              label={
+                isGroup
+                  ? t("submissions.table.colGroup")
+                  : t("submissions.table.colStudent")
               }
-              const { owner, repoName } = item.repo
-              const groupRepoHref = studentRepoUrl(
-                org,
-                classroom,
-                assignment,
-                owner,
-              )
-              const openManage = () =>
-                setManageSubmission({
-                  owner,
-                  isGroup: true,
-                  title: repoName,
-                  repo: repoName,
-                  repoHref: groupRepoHref,
-                  hasRepo: true,
-                })
-              return (
-                <GroupRepoRow
-                  key={`group-${repoName}`}
-                  org={org}
-                  classroom={classroom}
-                  assignment={assignment}
-                  owner={owner}
-                  repoName={repoName}
-                  students={students}
-                  onManage={openManage}
-                  actions={
-                    <RepoRowActions
-                      owner={owner}
-                      skipsGrading={emptyRepo}
-                      header={
-                        <GroupActionControls
-                          repo={repoName}
-                          repoHref={groupRepoHref}
-                        />
-                      }
-                      onManage={openManage}
-                    />
-                  }
-                />
-              )
-            })}
-            {nonSubmittersLoading && (
+              sort={sort}
+              asc="name-first"
+              desc="name-last"
+              onSortChange={onSortChange}
+              title={t("submissions.table.sortByName")}
+            />
+            <th scope="col" className="w-[24%]">
+              {t("submissions.table.colSubmissions")}
+            </th>
+            <th scope="col" className="w-[13%]">
+              {t("submissions.table.colScore")}
+            </th>
+            <SortableTh
+              className="w-[19%]"
+              label={t("submissions.table.colLastSubmitted")}
+              sort={sort}
+              asc="oldest"
+              desc="recent"
+              // A time column activates newest-first.
+              initial="recent"
+              onSortChange={onSortChange}
+              title={t("submissions.table.sortByLastSubmitted")}
+            />
+            <th scope="col" className="w-[18%]">
+              <span className="sr-only">
+                {t("submissions.table.colActions")}
+              </span>
+            </th>
+          </tr>
+        </thead>
+        <motion.tbody
+          key={`${viewSignature}:${page}`}
+          variants={blockEnter}
+          initial="initial"
+          animate="animate"
+        >
+          {initialLoading && <SkeletonRows bars={SKELETON_BARS} />}
+          {!initialLoading &&
+            !scores?.length &&
+            !nonSubmitters.length &&
+            !unsubmittedGroupRepos.length &&
+            !nonSubmittersLoading && (
               <tr>
-                <td
-                  colSpan={5}
-                  className="py-4 text-center text-sm text-base-content/60"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <Spinner size="xs" />
-                    {t("submissions.table.resolvingNonSubmitters")}
-                  </span>
+                <td colSpan={5} className="py-10 text-center">
+                  <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
+                    {filtered ? (
+                      <>
+                        <SearchX
+                          aria-hidden="true"
+                          className="size-8 text-base-content/40"
+                        />
+                        <p className="font-medium">
+                          {t("submissions.table.emptyFilteredTitle")}
+                        </p>
+                        <p className="text-sm text-base-content/70">
+                          {t("submissions.table.emptyFilteredBody")}
+                        </p>
+                        {onClearFilters && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-1"
+                            onClick={onClearFilters}
+                          >
+                            {t("submissions.table.emptyClearFilters")}
+                          </Button>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <Inbox
+                          aria-hidden="true"
+                          className="size-8 text-base-content/40"
+                        />
+                        <p className="font-medium">
+                          {t("submissions.table.emptyNoDataTitle")}
+                        </p>
+                        <p className="text-sm text-base-content/70">
+                          {t("submissions.table.emptyNoDataBody")}
+                        </p>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             )}
-          </motion.tbody>
-        </table>
-        {showPager && (
-          <TablePagination
-            page={bounds.page}
-            pageCount={bounds.pageCount}
-            pageSize={pageSize}
-            pageSizeOptions={PAGE_SIZE_OPTIONS}
-            from={bounds.from}
-            to={bounds.to}
-            total={bounds.total}
-            pages={paginationRange(bounds.page, bounds.pageCount)}
-            onPageChange={onPageChange}
-            onPageSizeChange={onPageSizeChange}
-            className="border-t border-base-content/5"
-          />
-        )}
-      </EnterDiv>
+          {pageItems.map((item) => {
+            if (item.kind === "row") return renderSubmitterRow(item.row)
+            if (item.kind === "nonSubmitter") {
+              const student = item.student
+              // Individual non-submitter: show the same per-repo action
+              // cluster as a submitter, disabled where inapplicable. A repo
+              // exists only if they accepted; a never-accepted student's
+              // repo-scoped actions render disabled. A group non-submitter has
+              // no per-student repo, so no actions (the row shows an em-dash).
+              //
+              // Acceptance is a tri-state: `acceptedUsernames` is undefined
+              // until the org repo list loads. Treat undefined as "unknown"
+              // and fall back to the em-dash (like the neutral "Not submitted"
+              // badge does), so the row never asserts "hasn't accepted" with a
+              // disabled cluster while acceptance is still resolving.
+              const showActions =
+                !isGroup && Boolean(student.username) && acceptedUsernames
+
+              let actions: React.ReactNode
+              let openManage: (() => void) | undefined
+              if (showActions) {
+                const repoName = studentRepoName(
+                  classroom,
+                  assignment,
+                  student.username,
+                )
+                const repoHref = studentRepoUrl(
+                  org,
+                  classroom,
+                  assignment,
+                  student.username,
+                )
+                const accepted = hasAccepted(student.username, showActions)
+                openManage = () =>
+                  setManageSubmission({
+                    owner: student.username,
+                    isGroup: false,
+                    title:
+                      getName(student.username, students) || student.username,
+                    subtitle: identitySubtitle(
+                      getName(student.username, students),
+                      student.username,
+                      student.section,
+                    ),
+                    repo: repoName,
+                    repoHref,
+                    hasRepo: accepted,
+                    displayName:
+                      getName(student.username, students) || undefined,
+                  })
+                actions = (
+                  <RepoRowActions
+                    owner={student.username}
+                    skipsGrading={emptyRepo}
+                    header={
+                      <IndividualRowHeader
+                        repo={repoName}
+                        repoHref={repoHref}
+                        hasRepo={accepted}
+                      />
+                    }
+                    onManage={openManage}
+                  />
+                )
+              }
+              return (
+                <NonSubmitterRow
+                  key={`missing-${student.username || student.email || student.github_id}`}
+                  student={student}
+                  students={students}
+                  isGroup={isGroup}
+                  acceptedUsernames={acceptedUsernames}
+                  onProfile={setProfileUsername}
+                  actions={actions}
+                  onManage={openManage}
+                  overrideGrade={overrideGrade}
+                  onEditGrade={(username) =>
+                    overrideGrade?.mode === "manual" &&
+                    typeof overrideGrade.maxPoints === "number"
+                      ? setOverrideRow({
+                          owner: username,
+                          displayName: getName(username, students) || undefined,
+                          hasGrade: false,
+                          score: 0,
+                          overridden: false,
+                          maxPoints: overrideGrade.maxPoints,
+                        })
+                      : undefined
+                  }
+                  thresholdFraction={passBar}
+                  nameMode={nameDisplayMode}
+                />
+              )
+            }
+            const { owner, repoName } = item.repo
+            const groupRepoHref = studentRepoUrl(
+              org,
+              classroom,
+              assignment,
+              owner,
+            )
+            const openManage = () =>
+              setManageSubmission({
+                owner,
+                isGroup: true,
+                title: repoName,
+                repo: repoName,
+                repoHref: groupRepoHref,
+                hasRepo: true,
+              })
+            return (
+              <GroupRepoRow
+                key={`group-${repoName}`}
+                org={org}
+                classroom={classroom}
+                assignment={assignment}
+                owner={owner}
+                repoName={repoName}
+                students={students}
+                onManage={openManage}
+                actions={
+                  <RepoRowActions
+                    owner={owner}
+                    skipsGrading={emptyRepo}
+                    header={
+                      <GroupActionControls
+                        repo={repoName}
+                        repoHref={groupRepoHref}
+                      />
+                    }
+                    onManage={openManage}
+                  />
+                }
+              />
+            )
+          })}
+          {nonSubmittersLoading && (
+            <tr>
+              <td
+                colSpan={5}
+                className="py-4 text-center text-sm text-base-content/60"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Spinner size="xs" />
+                  {t("submissions.table.resolvingNonSubmitters")}
+                </span>
+              </td>
+            </tr>
+          )}
+        </motion.tbody>
+      </TableShell>
 
       {detailsContext && (
         <SubmissionDetailsModal

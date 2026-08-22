@@ -7,17 +7,17 @@ import { ArrowUpDown, CircleAlert, FilePlus2, ListFilter } from "lucide-react"
 import {
   Alert,
   Badge,
-  SkeletonCell,
-  SortableHeader,
+  SkeletonRows,
+  SortableTh,
+  TableShell,
   Toolbar,
-  ariaSort,
 } from "@/components/ui"
 import {
   DueDateCell,
   ModeBadge,
 } from "@/components/assignments/AssignmentCells"
 import { EmptyState, NoSearchResults } from "@/components/list"
-import { ClickableTr, EnterDiv } from "@/lib/motionComponents"
+import { ClickableTr } from "@/lib/motionComponents"
 import { blockEnter } from "@/lib/motion"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import { useGithubAuth } from "@/auth/useGithubAuth"
@@ -98,49 +98,35 @@ function AssignmentRow({
 }: AssignmentItemProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const openDestination = () => {
-    if (accepted) {
-      void navigate({
+  // The row's ONE destination (view-submission once accepted, else accept
+  // with the capability secret), shared by the row click, the name link, and
+  // the CTA so the three can't drift.
+  const destination = accepted
+    ? ({
         to: "/$org/$classroom/assignments/$assignment/submission",
         params: { org, classroom, assignment: assignment.slug },
-      })
-      return
-    }
-    void navigate({
-      to: "/$org/$classroom/assignments/$assignment/accept",
-      params: { org, classroom, assignment: assignment.slug },
-      search: secret ? { k: secret } : undefined,
-    })
-  }
+      } as const)
+    : ({
+        to: "/$org/$classroom/assignments/$assignment/accept",
+        params: { org, classroom, assignment: assignment.slug },
+        search: secret ? { k: secret } : undefined,
+      } as const)
   return (
     <ClickableTr
       className="hover:bg-base-200"
       onClick={(event) => {
         if (isInteractiveEventTarget(event)) return
-        openDestination()
+        void navigate(destination)
       }}
     >
       <td className="truncate">
-        {accepted ? (
-          <Link
-            to="/$org/$classroom/assignments/$assignment/submission"
-            params={{ org, classroom, assignment: assignment.slug }}
-            className="font-bold link link-info no-underline"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {assignment.name || assignment.slug}
-          </Link>
-        ) : (
-          <Link
-            to="/$org/$classroom/assignments/$assignment/accept"
-            params={{ org, classroom, assignment: assignment.slug }}
-            search={secret ? { k: secret } : undefined}
-            className="font-bold link link-info no-underline"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {assignment.name || assignment.slug}
-          </Link>
-        )}
+        <Link
+          {...destination}
+          className="font-bold link link-info no-underline"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {assignment.name || assignment.slug}
+        </Link>
         <div className="font-mono text-xs text-base-content/70">
           {assignment.slug}
         </div>
@@ -194,41 +180,23 @@ function TableHead({
   return (
     <thead>
       <tr>
-        <th
-          scope="col"
-          aria-sort={ariaSort(
-            sort === "name-asc" ? "asc" : sort === "name-desc" ? "desc" : null,
-          )}
-        >
-          <SortableHeader
-            label={t("assignments.table.colAssignment")}
-            direction={
-              sort === "name-asc" ? "asc" : sort === "name-desc" ? "desc" : null
-            }
-            onClick={() =>
-              onSortChange(sort === "name-asc" ? "name-desc" : "name-asc")
-            }
-            title={t("assignments.table.sortByName")}
-          />
-        </th>
+        <SortableTh
+          label={t("assignments.table.colAssignment")}
+          sort={sort}
+          asc="name-asc"
+          desc="name-desc"
+          onSortChange={onSortChange}
+          title={t("assignments.table.sortByName")}
+        />
         <th scope="col">{t("assignments.table.colType")}</th>
-        <th
-          scope="col"
-          aria-sort={ariaSort(
-            sort === "due-asc" ? "asc" : sort === "due-desc" ? "desc" : null,
-          )}
-        >
-          <SortableHeader
-            label={t("assignments.table.colDueDate")}
-            direction={
-              sort === "due-asc" ? "asc" : sort === "due-desc" ? "desc" : null
-            }
-            onClick={() =>
-              onSortChange(sort === "due-asc" ? "due-desc" : "due-asc")
-            }
-            title={t("assignments.table.sortByDue")}
-          />
-        </th>
+        <SortableTh
+          label={t("assignments.table.colDueDate")}
+          sort={sort}
+          asc="due-asc"
+          desc="due-desc"
+          onSortChange={onSortChange}
+          title={t("assignments.table.sortByDue")}
+        />
         <th scope="col">{t("assignments.discover.colStatus")}</th>
         <th scope="col">
           <span className="sr-only">{t("assignments.discover.colAction")}</span>
@@ -238,22 +206,13 @@ function TableHead({
   )
 }
 
-// Decorative loading placeholder — hidden from assistive tech so a screen
-// reader announces the table's busy state, not rows of empty cells. Same
-// recipe as the teacher assignments table's skeleton.
-const SkeletonRows = ({ rows = 3 }: { rows?: number }) => (
-  <>
-    {Array.from({ length: rows }).map((_, i) => (
-      <tr key={i} aria-hidden="true">
-        <SkeletonCell bar="h-4 w-40" />
-        <SkeletonCell bar="h-4 w-20" />
-        <SkeletonCell bar="h-4 w-28" />
-        <SkeletonCell bar="h-4 w-24" />
-        <SkeletonCell bar="ms-auto h-8 w-28" />
-      </tr>
-    ))}
-  </>
-)
+const SKELETON_BARS = [
+  "h-4 w-40",
+  "h-4 w-20",
+  "h-4 w-28",
+  "h-4 w-24",
+  "ms-auto h-8 w-28",
+]
 
 // Student-relevant toolbar: search, plus status (to-do vs accepted — the axis a
 // student cares about most), type, and an overdue filter, with a due-first sort.
@@ -414,7 +373,7 @@ export function StudentAssignmentList({
     isError,
   } = usePagesAssignments(org, classroom, secret, { enabled: !loadingSecret })
   // Acceptance (the CTA and the red badge) is derived from the org repo list;
-  // fold its load into the gate so a card never paints "Accept" and then
+  // fold its load into the gate so a row never paints "Accept" and then
   // flips to "View my submission" once the repos land.
   const { data: repos, isLoading: loadingRepos } = useGetOrgRepos(org)
   const isLoading = loadingSecret || loadingAssignmentsData || loadingRepos
@@ -462,17 +421,12 @@ export function StudentAssignmentList({
 
   if (isLoading) {
     return (
-      <EnterDiv className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
-        <table
-          className="table [&_tr]:border-base-content/10 [&_tbody_td]:py-4"
-          aria-busy
-        >
-          <TableHead sort={sortKey} onSortChange={changeSort} />
-          <tbody>
-            <SkeletonRows />
-          </tbody>
-        </table>
-      </EnterDiv>
+      <TableShell padded ariaBusy>
+        <TableHead sort={sortKey} onSortChange={changeSort} />
+        <tbody>
+          <SkeletonRows rows={3} bars={SKELETON_BARS} />
+        </tbody>
+      </TableShell>
     )
   }
 
@@ -532,33 +486,31 @@ export function StudentAssignmentList({
       ) : (
         // Same table shell as the teacher assignments list, so the two
         // surfaces read as one design.
-        <EnterDiv className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
-          <table className="table [&_tr]:border-base-content/10 [&_tbody_td]:py-4">
-            <caption className="sr-only">
-              {t("assignments.discover.tableCaption")}
-            </caption>
-            <TableHead sort={sortKey} onSortChange={changeSort} />
-            {/* Same recipe as the teacher table: the body enters as one block
-                (blockEnter) and replays when the visible set changes. */}
-            <motion.tbody
-              key={visible.map((a) => a.slug).join("|")}
-              variants={blockEnter}
-              initial="initial"
-              animate="animate"
-            >
-              {visible.map((assignment) => (
-                <AssignmentRow
-                  key={assignment.slug}
-                  org={org}
-                  classroom={classroom}
-                  assignment={assignment}
-                  accepted={acceptedSlugs.has(assignment.slug)}
-                  secret={secret}
-                />
-              ))}
-            </motion.tbody>
-          </table>
-        </EnterDiv>
+        <TableShell padded>
+          <caption className="sr-only">
+            {t("assignments.discover.tableCaption")}
+          </caption>
+          <TableHead sort={sortKey} onSortChange={changeSort} />
+          {/* Same recipe as the teacher table: the body enters as one block
+              (blockEnter) and replays when the visible set changes. */}
+          <motion.tbody
+            key={visible.map((a) => a.slug).join("|")}
+            variants={blockEnter}
+            initial="initial"
+            animate="animate"
+          >
+            {visible.map((assignment) => (
+              <AssignmentRow
+                key={assignment.slug}
+                org={org}
+                classroom={classroom}
+                assignment={assignment}
+                accepted={acceptedSlugs.has(assignment.slug)}
+                secret={secret}
+              />
+            ))}
+          </motion.tbody>
+        </TableShell>
       )}
     </div>
   )

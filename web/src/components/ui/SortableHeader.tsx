@@ -49,4 +49,56 @@ export function SortableHeader({
   )
 }
 
+// A whole sortable <th>: derives the direction from the active sort vs this
+// column's asc/desc values (once — no per-attribute ternaries at call sites),
+// carries aria-sort, and toggles asc <-> desc on click (an inactive column
+// activates as `initial`, default asc — pass desc for "newest first" time
+// columns). Falls back to a static header when `onSortChange` is omitted.
+export type SortableThProps<S extends string> = {
+  label: ReactNode
+  sort: S | undefined
+  asc: S
+  desc: S
+  initial?: S
+  onSortChange?: (sort: S) => void
+  title?: string
+  className?: string
+}
+
+export function SortableTh<S extends string>({
+  label,
+  sort,
+  asc,
+  desc,
+  initial,
+  onSortChange,
+  title,
+  className,
+}: SortableThProps<S>) {
+  const direction: SortDirection =
+    sort === asc ? "asc" : sort === desc ? "desc" : null
+  return (
+    <th scope="col" className={className} aria-sort={ariaSort(direction)}>
+      {onSortChange ? (
+        <SortableHeader
+          label={label}
+          direction={direction}
+          onClick={() =>
+            onSortChange(
+              direction === null
+                ? (initial ?? asc)
+                : direction === "asc"
+                  ? desc
+                  : asc,
+            )
+          }
+          title={title}
+        />
+      ) : (
+        label
+      )}
+    </th>
+  )
+}
+
 export default SortableHeader

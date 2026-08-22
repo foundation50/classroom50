@@ -13,9 +13,8 @@ import { formatSubmissionDateTime } from "@/util/formatDate"
 import type { SubmissionMode } from "@/types/classroom"
 
 // The mode's submission icon: a tag for tag mode, a commit for every-push.
-// Used by the mode meta item (student page, teacher heading) so the mode
-// iconography stays consistent.
-export const SubmissionModeIcon = ({
+// Used by the teacher heading's mode meta item.
+const SubmissionModeIcon = ({
   mode,
   className = "size-3.5",
 }: {
@@ -73,9 +72,10 @@ export const MetaStrip = ({ items }: { items: ReactNode[] }) => {
   )
 }
 
-// The "what counts as a submission" property, shared by the teacher heading
-// and the student page so their wording can't drift. Grading is described by
-// the separate AutogradingMeta, so this item never claims a grade.
+// The "what counts as a submission" property on the teacher heading (the
+// student page deliberately omits it — how to submit is the guidance box's
+// job there). Grading is described by the separate AutogradingMeta, so this
+// item never claims a grade.
 export const SubmissionModeMeta = ({
   mode,
 }: {
@@ -93,7 +93,7 @@ export const SubmissionModeMeta = ({
 // Label + hover detail per autograding tri-state. Built-in autograding needs
 // no elaboration; the two no-grading states carry the "what's disabled / what
 // still works" detail that used to be a full-width dashboard note.
-const autogradingBadgeContent: Record<
+const autogradingMetaContent: Record<
   AutogradingState,
   { label: string; title?: string }
 > = {
@@ -109,12 +109,13 @@ const autogradingBadgeContent: Record<
 }
 
 // The "how is it graded" property, paired with SubmissionModeMeta on the
-// teacher heading and the student page. Keyed off the autograding tri-state so
-// the 2-mode x 3-grading combinations stay two independent items. The detail
-// is hover text for sighted users and sr-only text for screen readers.
+// teacher heading (omitted from the student page — grading internals aren't
+// actionable there). Keyed off the autograding tri-state so the 2-mode x
+// 3-grading combinations stay two independent items. The detail is hover text
+// for sighted users and sr-only text for screen readers.
 export const AutogradingMeta = ({ state }: { state: AutogradingState }) => {
   const { t } = useTranslation()
-  const { label, title } = autogradingBadgeContent[state]
+  const { label, title } = autogradingMetaContent[state]
   const Icon = state === "built-in" ? Bot : CircleOff
   return (
     <MetaItem title={title ? t(title) : undefined}>
