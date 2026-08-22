@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { COMMIT_PREFIX, prefixCommit } from "./commit"
+import { COMMIT_PREFIX, commitSubject, prefixCommit } from "./commit"
 
 describe("commit prefix", () => {
   // Pins the literal so it can't drift from the CLI's cli/shared/contract
@@ -19,5 +19,12 @@ describe("commit prefix", () => {
     ).toBe(
       "[Classroom 50] Initialize .classroom50.yaml and autograde workflow (gh student accept)",
     )
+  })
+})
+
+describe("commitSubject", () => {
+  it("takes the first line, dropping the body", () => {
+    expect(commitSubject("Subject\n\n[skip ci]")).toBe("Subject")
+    expect(commitSubject("  Subject  ")).toBe("Subject")
   })
 })

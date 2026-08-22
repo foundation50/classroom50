@@ -2,7 +2,12 @@ import type { GitHubCommit, GitHubTag } from "@/github-core/types"
 import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
 import { matchesSubmissionTag } from "@/util/submissionTags"
 import { repoTreeAtRefUrl } from "@/util/orgUrl"
-import type { SubmissionMode } from "@/types/classroom"
+import {
+  commitSubject,
+  FEEDBACK_OPEN_COMMIT_MESSAGE,
+  shimUpdateCommitMessage,
+} from "@/util/commit"
+import { SUBMISSION_MODES, type SubmissionMode } from "@/types/classroom"
 
 // Pure derivation for the submission-detection subsystem (KTD6/KTD7): turn raw
 // repo state (default-branch commits, git tags) plus the submission definition
@@ -31,23 +36,64 @@ export function isGlobPattern(pattern: string): boolean {
   return /[*?+[\]]/.test(pattern)
 }
 
-// Branch mode: every default-branch commit except the baseline counts as a
-// submission (R6, KTD7). `baselineSha` is the oldest commit touching the
-// .classroom50.yaml marker; a null baseline (no marker, e.g. a bare repo) counts
-// every commit. Commits arrive newest-first (GitHub's default order), preserved.
+// The subjects of the commits the tool authors onto a student repo's DEFAULT
+// BRANCH for its own bookkeeping: the empty commit that opens the Feedback PR
+// at accept time and the submission-mode shim retrofit. Neither can ever be
+// graded, so counting one shows a submission no run, tag or Release can follow.
+// ANY further such writer must be added here.
+//
+// Deliberately not "anything carrying `[skip ci]`": a student can write that
+// marker too, and their push is still a submission, it just wasn't graded. So
+// the student's own `[Classroom 50] Submit <slug>` keeps counting.
+//
+// Matching is on the exact commit SUBJECT, not authorship or paths, so a
+// student whose subject is byte-identical to one of these is excluded too. That
+// collision is an accepted trade-off, not a checked guarantee: the subjects are
+// long, tool-specific, and end in a mode token, and a student who forges one
+// only hides their own submission.
+const TOOL_COMMIT_SUBJECTS: ReadonlySet<string> = new Set(
+  [
+    FEEDBACK_OPEN_COMMIT_MESSAGE,
+    ...SUBMISSION_MODES.map(shimUpdateCommitMessage),
+  ].map(commitSubject),
+)
+
+// The default-branch commits that count as student submissions. `baselineSha`
+// is the oldest commit touching the .classroom50.yaml marker (the accept
+// commit); null (no marker, e.g. a bare repo) trims nothing.
+//
+// Everything at or BEFORE the baseline is accept-time setup: on a templated
+// assignment the accept commit sits on top of the template's generated
+// commit(s), which are its ANCESTORS, so `c.sha !== baselineSha` alone would
+// leave those template commits counting. Commits arrive newest-first, so the
+// baseline's index is the cut point.
+export function submissionCommits(
+  commits: GitHubCommit[],
+  baselineSha: string | null,
+): GitHubCommit[] {
+  const baselineIdx = baselineSha
+    ? commits.findIndex((c) => c.sha === baselineSha)
+    : -1
+  const newerThanBaseline =
+    baselineIdx === -1 ? commits : commits.slice(0, baselineIdx)
+  return newerThanBaseline.filter(
+    (c) => !TOOL_COMMIT_SUBJECTS.has(commitSubject(c.commit.message)),
+  )
+}
+
+// Branch mode: every submission commit past the baseline is one submission
+// (R6, KTD7). Commits arrive newest-first (GitHub's default order), preserved.
 export function detectBranchSubmissions(
   commits: GitHubCommit[],
   baselineSha: string | null,
 ): DetectedSubmission[] {
-  return commits
-    .filter((c) => c.sha !== baselineSha)
-    .map((c) => ({
-      kind: "commit" as const,
-      label: c.sha.slice(0, 7),
-      count: 1,
-      sha: c.sha,
-      datetime: c.commit.committer?.date ?? c.commit.author?.date,
-    }))
+  return submissionCommits(commits, baselineSha).map((c) => ({
+    kind: "commit" as const,
+    label: c.sha.slice(0, 7),
+    count: 1,
+    sha: c.sha,
+    datetime: c.commit.committer?.date ?? c.commit.author?.date,
+  }))
 }
 
 // The submission time encoded in a canonical submit/<UTC-ts>-<short-sha> tag
@@ -206,7 +252,7 @@ export function submissionModeBadgeKey(
 }
 
 // The i18n (pluralized) key for a submission count, keyed by mode:
-// "N tagged submissions" vs "N pushes to the default branch". Callers pass
+// "N tagged submissions" vs "N commits on the default branch". Callers pass
 // `{ count }` to t().
 export function submissionModeCountKey(
   mode: SubmissionMode | undefined,

@@ -676,6 +676,10 @@ def is_shim_update_commit(workspace: pathlib.Path, head_sha: str) -> bool:
     The acceptance check takes precedence at the call site — the accept commit
     also touches the shim but additionally lands the marker, so the path sets
     never overlap in practice.
+
+    The web's submissions page answers the same question from the commit
+    SUBJECT, not the touched paths (list-commits carries none), so the two
+    disagree at the edges.
     """
     if not head_sha:
         return False

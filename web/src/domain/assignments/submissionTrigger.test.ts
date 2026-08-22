@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import {
-  rewriteShimTrigger,
-  shimUpdateCommitMessage,
-} from "./submissionTrigger"
+import { rewriteShimTrigger } from "./submissionTrigger"
+import { shimUpdateCommitMessage } from "@/util/commit"
 import { defaultAutograderWorkflow } from "./autograderYaml"
 
 // The CLI-accept shim differs from the web template only in its comment

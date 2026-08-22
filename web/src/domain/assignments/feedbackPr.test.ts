@@ -3,7 +3,6 @@ import { describe, it, expect, vi } from "vitest"
 import ensureFeedbackPrPySource from "../../../../cli/gh-teacher/skeleton/dotgithub/scripts/ensure_feedback_pr.py?raw"
 import {
   FEEDBACK_PR_TITLE,
-  FEEDBACK_OPEN_COMMIT_MESSAGE,
   feedbackLabelForMode,
   feedbackPrBody,
   ensureFeedbackPullRequest,
@@ -12,6 +11,7 @@ import {
   readTemplatePrBody,
 } from "./feedbackPr"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
+import { FEEDBACK_OPEN_COMMIT_MESSAGE } from "@/util/commit"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 

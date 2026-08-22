@@ -10,25 +10,11 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 }))
 
 import { useDetectedSubmissions } from "./useDetectedSubmissions"
-import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
-
-const noRateLimit: GitHubRateLimit = {
-  limit: null,
-  remaining: null,
-  used: null,
-  reset: null,
-  resource: null,
-  retryAfter: null,
-}
-
-const apiError = (status: number) =>
-  new GitHubAPIError({
-    status,
-    url: "https://api.github.com/x",
-    message: `HTTP ${status}`,
-    body: null,
-    rateLimit: noRateLimit,
-  })
+import {
+  FEEDBACK_OPEN_COMMIT_MESSAGE,
+  shimUpdateCommitMessage,
+} from "@/util/commit"
+import { apiError, branchClient } from "@/test/branchDetectionClient"
 
 const makeClient = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -44,39 +30,6 @@ const base = {
   classroom: "cs101",
   assignment: "hw1",
   enabled: true,
-}
-
-// A URL router for the branch-mode reads: repo object (default_branch),
-// the marker commit list (baseline), and the default-branch commit log.
-// Branch commits get a representative `commit` payload (the real list-commits
-// response always carries one) so detection can read the commit time.
-function branchClient(opts: {
-  defaultBranch?: string | null
-  baselineCommits?: Array<{ sha: string }>
-  branchCommits?: Array<{ sha: string }>
-}) {
-  return (url: string) => {
-    if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
-      return opts.defaultBranch === null
-        ? Promise.reject(apiError(404))
-        : Promise.resolve({ default_branch: opts.defaultBranch ?? "main" })
-    }
-    if (url.includes("path=.classroom50.yaml")) {
-      return Promise.resolve(opts.baselineCommits ?? [])
-    }
-    if (url.includes("/commits?sha=")) {
-      return Promise.resolve(
-        (opts.branchCommits ?? []).map((c) => ({
-          ...c,
-          commit: {
-            message: c.sha,
-            committer: { date: "2026-06-20T10:00:00Z" },
-          },
-        })),
-      )
-    }
-    return Promise.resolve([])
-  }
 }
 
 beforeEach(() => {
@@ -110,6 +63,64 @@ describe("useDetectedSubmissions — branch mode", () => {
       expect(result.current.detected[0].count).toBe(2)
     },
   )
+
+  it("does not count the tool's own bookkeeping commit as a submission", async () => {
+    request.mockImplementation(
+      branchClient({
+        defaultBranch: "main",
+        baselineCommits: [{ sha: "baseline" }],
+        branchCommits: [
+          { sha: "c1" },
+          { sha: "shim", message: shimUpdateCommitMessage("tag") },
+          { sha: "feedback", message: FEEDBACK_OPEN_COMMIT_MESSAGE },
+          { sha: "baseline" },
+        ],
+      }),
+    )
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "every-push",
+          repoOwners: ["a"],
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.detected[0].count).toBe(1)
+  })
+
+  // Full realistic topology of a TEMPLATED, every-push assignment before the
+  // student pushes real work: template-init (oldest) -> accept/baseline ->
+  // Feedback-PR opener, then two student commits. Only the two student commits
+  // count — the template commit (older than the baseline), the baseline, and
+  // the Feedback-PR opener are all accept-time setup.
+  it("counts only student commits on a templated repo (excludes template, baseline, feedback opener)", async () => {
+    request.mockImplementation(
+      branchClient({
+        defaultBranch: "main",
+        baselineCommits: [{ sha: "baseline" }],
+        branchCommits: [
+          { sha: "student2" },
+          { sha: "student1" },
+          { sha: "feedback", message: FEEDBACK_OPEN_COMMIT_MESSAGE },
+          { sha: "baseline" },
+          { sha: "template-init" },
+        ],
+      }),
+    )
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "every-push",
+          repoOwners: ["a"],
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.detected[0].count).toBe(2)
+  })
 
   it("emits nothing for a not-accepted repo (404 on the repo object)", async () => {
     request.mockImplementation(branchClient({ defaultBranch: null }))

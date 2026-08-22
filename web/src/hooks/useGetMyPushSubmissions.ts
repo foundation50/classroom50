@@ -8,14 +8,16 @@ import {
 } from "@/github-core/queries"
 import { getRepo } from "@/github-core/repoReads"
 import type { GitHubCommit } from "@/github-core/types"
+import { submissionCommits } from "@/domain/assignments/submissionDetection"
 import { studentRepoName } from "@/util/studentRepo"
 
 // The student's own push submissions for an every-push assignment: the
-// default-branch commits excluding the baseline (the accept commit that created
-// .classroom50.yaml), newest first. Mirrors useDetectedSubmissions' branch path
-// but for a single repo, so the student sees the same submissions the teacher
-// counts. Empty until the first real push. Disabled unless org+repo resolve, so
-// a tag-mode page (which doesn't call this) costs no read.
+// default-branch commits that count as submissions (submissionCommits — the
+// baseline and the tool's own bookkeeping commits excluded), newest first.
+// Shares that filter with useDetectedSubmissions' branch path, for a single
+// repo, so the student sees the same submissions the teacher counts. Empty
+// until the first real push. Disabled unless org+repo resolve, so a tag-mode
+// page (which doesn't call this) costs no read.
 const useGetMyPushSubmissions = (
   org: string | undefined,
   classroom: string | undefined,
@@ -42,7 +44,7 @@ const useGetMyPushSubmissions = (
         ".classroom50.yaml",
       )
       const commits = await listDefaultBranchCommits(client, org!, repo, branch)
-      return commits.filter((c) => c.sha !== baseline)
+      return submissionCommits(commits, baseline)
     },
     enabled: Boolean(org && repo),
     staleTime: 60 * 1000,

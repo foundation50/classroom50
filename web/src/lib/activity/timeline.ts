@@ -7,7 +7,7 @@
 
 import type { ActivityEntry } from "@/lib/activity/activityStore"
 import type { GitHubCommit, GitHubWorkflowRun } from "@/github-core/types"
-import { COMMIT_PREFIX } from "@/util/commit"
+import { COMMIT_PREFIX, commitSubject } from "@/util/commit"
 import { escapeCsvFormulaInjection } from "@/util/csv"
 import { runTimes, trackerPhase, workflowFile } from "@/util/actionActivity"
 
@@ -56,11 +56,15 @@ export type TimelineItem = {
 // Classify a config-repo commit by the verb after the "[Classroom 50] " prefix.
 // Falls back to "config" for anything unrecognized (still a real config change).
 export function classifyConfigCommit(message: string): TimelineType {
-  const firstLine = stripPrefix(message).split("\n")[0].toLowerCase()
-  if (firstLine.includes("assignment")) return "assignment"
-  if (firstLine.includes("classroom")) return "classroom"
-  if (firstLine.includes("student")) return "student"
-  if (firstLine.includes("score")) return "scores"
+  return classifySubject(commitSubject(stripPrefix(message)))
+}
+
+function classifySubject(subject: string): TimelineType {
+  const verb = subject.toLowerCase()
+  if (verb.includes("assignment")) return "assignment"
+  if (verb.includes("classroom")) return "classroom"
+  if (verb.includes("student")) return "student"
+  if (verb.includes("score")) return "scores"
   return "config"
 }
 
@@ -70,11 +74,6 @@ export function classifyConfigCommit(message: string): TimelineType {
 function stripPrefix(message: string): string {
   const p = `${COMMIT_PREFIX} `
   return message.startsWith(p) ? message.slice(p.length) : message
-}
-
-// First line only — commit bodies are noise in a timeline row.
-function firstLine(message: string): string {
-  return message.split("\n")[0].trim()
 }
 
 // Commit author date in epoch ms. GitHub returns config-repo commits
@@ -88,12 +87,12 @@ function commitTimeMs(commit: GitHubCommit): number {
 }
 
 export function commitToItem(commit: GitHubCommit): TimelineItem {
-  const message = commit.commit.message
+  const subject = commitSubject(stripPrefix(commit.commit.message))
   return {
     id: `commit-${commit.sha}`,
     source: "commit",
-    type: classifyConfigCommit(message),
-    label: firstLine(stripPrefix(message)),
+    type: classifySubject(subject),
+    label: subject,
     detail: commit.sha.slice(0, 7),
     detailKind: "sha",
     actor: commit.author?.login ?? commit.commit.author?.name,

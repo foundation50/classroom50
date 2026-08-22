@@ -14,15 +14,19 @@ import {
   submissionModeCountKey,
   submitTagDatetime,
 } from "./submissionDetection"
+import {
+  FEEDBACK_OPEN_COMMIT_MESSAGE,
+  shimUpdateCommitMessage,
+} from "@/util/commit"
 import type { GitHubCommit, GitHubTag } from "@/github-core/types"
 import type { DetectedSubmission } from "./submissionDetection"
 
-function commit(sha: string, date?: string): GitHubCommit {
+function commit(sha: string, date?: string, message = sha): GitHubCommit {
   return {
     sha,
     html_url: `https://x/commit/${sha}`,
     commit: {
-      message: sha,
+      message,
       committer: date ? { date } : undefined,
     },
     author: null,
@@ -47,10 +51,84 @@ describe("detectBranchSubmissions", () => {
     expect(detectedSubmissionCount(detected)).toBe(0)
   })
 
+  // Regression: on a TEMPLATED assignment the accept commit (the baseline) sits
+  // ON TOP OF the template's generated commit(s), which are OLDER than the
+  // baseline. Commits are newest-first, so those template commits appear AFTER
+  // the baseline in the list. They are accept-time setup, not student work, and
+  // must not count — a plain `sha !== baseline` filter would leave them in.
+  it("excludes template commits that predate the baseline", () => {
+    const commits = [
+      commit("student2"),
+      commit("student1"),
+      commit("baseline"),
+      commit("template-init"),
+    ]
+    const detected = detectBranchSubmissions(commits, "baseline")
+    expect(detected.map((d) => d.sha)).toEqual(["student2", "student1"])
+    expect(detectedSubmissionCount(detected)).toBe(2)
+  })
+
+  // A freshly-accepted templated repo with NO student push: the only commits
+  // are the template's "Initial commit" (oldest), the accept/baseline commit,
+  // and the Feedback-PR opener (newest). All three are the tool's — the count
+  // must be 0, not 1 (the pre-fix bug left "Initial commit" counting because it
+  // predates the baseline).
+  it("counts zero for a just-accepted templated repo before any student push", () => {
+    const commits = [
+      commit("feedback", "2026-08-16T17:02:37Z", FEEDBACK_OPEN_COMMIT_MESSAGE),
+      commit("baseline", "2026-08-16T17:02:34Z"),
+      commit("initial", "2026-08-16T17:02:30Z", "Initial commit"),
+    ]
+    const detected = detectBranchSubmissions(commits, "baseline")
+    expect(detected).toEqual([])
+    expect(detectedSubmissionCount(detected)).toBe(0)
+  })
+
   it("counts all commits when the baseline is unknown (null)", () => {
     const commits = [commit("c2"), commit("c1")]
     const detected = detectBranchSubmissions(commits, null)
     expect(detectedSubmissionCount(detected)).toBe(2)
+  })
+
+  // Pinned against the writers themselves: if either drops the [skip ci] body
+  // its commit starts counting again, and this fails.
+  it("skips the tool's own bookkeeping commits on the default branch", () => {
+    const commits = [
+      commit("c2"),
+      commit("feedback", undefined, FEEDBACK_OPEN_COMMIT_MESSAGE),
+      commit("shim-tag", undefined, shimUpdateCommitMessage("tag")),
+      commit("shim-push", undefined, shimUpdateCommitMessage("every-push")),
+      commit("c1"),
+    ]
+    const detected = detectBranchSubmissions(commits, null)
+    expect(detected.map((d) => d.sha)).toEqual(["c2", "c1"])
+  })
+
+  it("counts near misses: quoted tool text, and the student's own submit", () => {
+    const detected = detectBranchSubmissions(
+      [
+        commit("c1", undefined, `Fix ${shimUpdateCommitMessage("tag")}`),
+        commit("c2", undefined, "[Classroom 50] Submit hw1"),
+      ],
+      null,
+    )
+    expect(detected.map((d) => d.sha)).toEqual(["c1", "c2"])
+  })
+
+  // Documents the accepted trade-off (see TOOL_COMMIT_SUBJECTS): matching is by
+  // exact subject, so a student commit whose subject is byte-identical to a
+  // tool subject is dropped. This pins the current behavior — if the match ever
+  // gains a corroborating signal (author/paths), this expectation changes.
+  it("drops a student commit whose subject exactly matches a tool subject", () => {
+    const detected = detectBranchSubmissions(
+      [
+        commit("forged-feedback", undefined, FEEDBACK_OPEN_COMMIT_MESSAGE),
+        commit("forged-shim", undefined, shimUpdateCommitMessage("tag")),
+        commit("real", undefined, "Implement feature"),
+      ],
+      null,
+    )
+    expect(detected.map((d) => d.sha)).toEqual(["real"])
   })
 
   it("carries each commit's time (committer date, else author date)", () => {

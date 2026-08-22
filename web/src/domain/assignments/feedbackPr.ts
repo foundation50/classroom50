@@ -20,7 +20,7 @@ import {
 import { getRepo } from "@/github-core/repoReads"
 import type { AssignmentMode } from "@/types/classroom"
 import { mapWithConcurrency } from "@/util/concurrency"
-import { prefixCommit } from "@/util/commit"
+import { FEEDBACK_OPEN_COMMIT_MESSAGE } from "@/util/commit"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import { logger } from "@/lib/logger"
 // The single canonical Feedback PR body source, shared with the Go contract
@@ -39,16 +39,12 @@ const log = logger.scope("assignments:feedbackPr")
 // copy in lockstep. The runner adopts the accept-time PR purely by base+head
 // branch, so these strings decide whether teachers see ONE coherent Feedback PR
 // or two competing ones. FEEDBACK_BASE_BRANCH lives in @/util/feedbackPr
-// because github-core's ruleset code locks the same branch name.
+// because github-core's ruleset code locks the same branch name, and
+// FEEDBACK_OPEN_COMMIT_MESSAGE in @/util/commit because submission detection
+// reads it too.
 // ---------------------------------------------------------------------------
 
 export const FEEDBACK_PR_TITLE = "Feedback"
-
-// `[skip ci]` is load-bearing: it keeps the autograde shim from running on a
-// commit with nothing to grade.
-export const FEEDBACK_OPEN_COMMIT_MESSAGE = `${prefixCommit(
-  "Open Feedback PR (gh student accept)",
-)}\n\n[skip ci]`
 
 // Mode label + pinned color, mirroring GitHub Classroom's Individual/Group
 // feedback labels. Unknown -> individual.

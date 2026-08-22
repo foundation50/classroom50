@@ -280,14 +280,18 @@ export type Assignment = {
   // truth the Submissions subsection owns, consumed by BOTH the submissions
   // page (detection/counting) and the autograder (when it fires). Absent or
   // "every-push" (the wire default — writers omit it): every default-branch
-  // push (minus the baseline commit) counts as a submission, and the shim
-  // grades each one plus submit/* tags. "tag": only submit/* tag pushes count,
-  // which both submit clients create after the branch push — a plain `git push`
+  // COMMIT past the baseline counts as a submission (the tool's own `[skip ci]`
+  // bookkeeping commits excepted — see submissionCommits), and the shim grades
+  // every push plus submit/* tags — so a push of several commits grades once.
+  // "tag": only submit/* tag pushes count, which both submit clients create
+  // after the branch push — a plain `git push`
   // does not count or grade. Baked into the shim at accept time; changing it
   // later requires retrofitting existing repos' shims (gradebook bulk action or
   // `gh teacher assignment submission-mode`). Permitted on every repo shape,
   // including empty_repo / no_autograder: with no shim it carries no trigger
-  // but still defines what the submissions page counts as a submission. Never
+  // but still defines what the submissions page counts as a submission — the
+  // student's own view detects, while the teacher page suppresses live
+  // detection for these shapes and renders the collected snapshot. Never
   // gate behavior on the field being PRESENT: absence is the wire default, not
   // a legacy or version marker. buildAssignmentEntry collapses every-push away
   // like the CLI, so an entry saved here matches one `gh teacher assignment
