@@ -2426,13 +2426,8 @@
     "lateBadge_one": "{{count}} late",
     "lateBadge_other": "{{count}} late",
     "funnel": {
-      "accepted": "Accepted",
-      "submitted": "Submitted",
-      "acceptedTitle": "{{accepted}} of {{total}} students accepted the assignment",
       "submittedTitle": "{{submitted}} of {{total}} students submitted",
-      "acceptedTitleGroup": "Groups that accepted — group repositories that exist",
       "submittedTitleGroup": "{{submitted}} of {{accepted}} groups submitted",
-      "showNotAccepted": "Show students who haven't accepted",
       "showNotSubmitted": "Show who hasn't submitted"
     },
     "downloadCsv": "Download scores (CSV)",

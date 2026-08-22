@@ -10,14 +10,7 @@ import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
-import {
-  Alert,
-  Badge,
-  HelpTooltip,
-  MetricCount,
-  MetricBar,
-  Spinner,
-} from "@/components/ui"
+import { Alert, Badge, HelpTooltip, MetricBar, Spinner } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
 import SubmissionsControls from "@/pages/submissions/SubmissionsControls"
@@ -725,6 +718,18 @@ const SubmissionsPageContent = () => {
   // (the only signal for no_autograder assignments). Count every scoped row.
   const submittedPresenceCount = scopedScores.length
 
+  // The header bar's submission share: over the student-role roster for
+  // individual assignments, over existing group repos for group ones. Clamped
+  // (KTD4-style) so a staff/extra repo can't push the share past 100%.
+  const funnelTotal = stats.rostered
+  const submittedShare = Math.min(submittedPresenceCount, funnelTotal)
+  const submittedGroups = groupRepoList.length - unsubmittedGroupRepos.length
+  // Show the bar once its denominator is real: repo list resolved, and (for
+  // groups) at least one group repo exists.
+  const showSubmissionProgress = isGroupAssignment
+    ? orgRepos != null && groupRepoList.length > 0
+    : acceptedAvailable
+
   // Roster students who accepted (repo exists) but have no submission row.
   // Individual assignments only.
   const acceptedNotSubmittedCount = acceptedAvailable
@@ -742,10 +747,6 @@ const SubmissionsPageContent = () => {
   // so switching away from it never silently drops a hidden acceptance filter.
   const showAcceptedNotSubmitted = () =>
     setFilters({ ...DEFAULT_FILTERS, submission: "not-submitted" })
-  // The header's Accepted bar jumps to the students who never accepted —
-  // the cohort that bar exists to surface.
-  const showNotAccepted = () =>
-    setFilters({ ...DEFAULT_FILTERS, accepted: "not-accepted" })
 
   // Rows actually rendered. When acceptance data isn't loaded, neutralize the
   // accepted axis so a transient empty repo list can't flip the visible set.
@@ -1000,98 +1001,39 @@ const SubmissionsPageContent = () => {
       )}
       <PageHeader
         title={assignmentInfo?.name}
-        // High-level funnel in the header's right slot, mirroring the
-        // assignments table's Accepted / Submitted bars so the two surfaces
-        // read the same. Hidden until the org repo list resolves (acceptance
-        // is derived from repo existence), and hidden for a group assignment
-        // with no repos yet — there's no denominator to measure until the
-        // first group forms. Group acceptance is a bare count — no roster
-        // denominator — and the group submitted bar measures against existing
-        // group repos. Each bar doubles as a one-click filter shortcut to the
-        // cohort it surfaces.
-        action={
-          (
-            isGroupAssignment
-              ? orgRepos != null && groupRepoList.length > 0
-              : acceptedAvailable
-          ) ? (
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-base-content/70">
-                  {t("submissions.funnel.accepted")}
-                </span>
-                {isGroupAssignment ? (
-                  <MetricCount
-                    value={groupRepoList.length}
-                    tone="info"
-                    title={t("submissions.funnel.acceptedTitleGroup")}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="-m-1 cursor-pointer rounded-btn p-1 hover:bg-base-200"
-                    onClick={showNotAccepted}
-                    title={t("submissions.funnel.showNotAccepted")}
-                  >
-                    <MetricBar
-                      value={Math.min(acceptedCount, stats.rostered)}
-                      max={stats.rostered}
-                      tone="info"
-                      title={t("submissions.funnel.acceptedTitle", {
-                        accepted: Math.min(acceptedCount, stats.rostered),
-                        total: stats.rostered,
-                      })}
-                    />
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-base-content/70">
-                  {t("submissions.funnel.submitted")}
-                </span>
-                <button
-                  type="button"
-                  className="-m-1 cursor-pointer rounded-btn p-1 hover:bg-base-200"
-                  onClick={showAcceptedNotSubmitted}
-                  title={t("submissions.funnel.showNotSubmitted")}
-                >
-                  {isGroupAssignment ? (
-                    <MetricBar
-                      value={
-                        groupRepoList.length - unsubmittedGroupRepos.length
-                      }
-                      max={groupRepoList.length}
-                      tone="success"
-                      title={t("submissions.funnel.submittedTitleGroup", {
-                        submitted:
-                          groupRepoList.length - unsubmittedGroupRepos.length,
-                        accepted: groupRepoList.length,
-                      })}
-                    />
-                  ) : (
-                    <MetricBar
-                      value={Math.min(submittedPresenceCount, stats.rostered)}
-                      max={stats.rostered}
-                      tone="success"
-                      title={t("submissions.funnel.submittedTitle", {
-                        submitted: Math.min(
-                          submittedPresenceCount,
-                          stats.rostered,
-                        ),
-                        total: stats.rostered,
-                      })}
-                    />
-                  )}
-                </button>
-              </div>
-            </div>
-          ) : undefined
-        }
         subtitle={
           // Property items are quiet meta text; only genuine states (overdue,
-          // approaching deadline, late, closed) keep toned badges.
+          // approaching deadline, late, closed) keep toned badges. The
+          // submission-progress bar leads the strip — the page's headline
+          // number — and doubles as a one-click jump to who hasn't submitted.
           <MetaStrip
             items={[
+              showSubmissionProgress && (
+                <button
+                  type="button"
+                  onClick={showAcceptedNotSubmitted}
+                  title={t("submissions.funnel.showNotSubmitted")}
+                  className="-m-1 cursor-pointer rounded-btn p-1 hover:bg-base-200"
+                >
+                  <MetricBar
+                    value={isGroupAssignment ? submittedGroups : submittedShare}
+                    max={isGroupAssignment ? groupRepoList.length : funnelTotal}
+                    tone="success"
+                    showNumbers={false}
+                    title={
+                      isGroupAssignment
+                        ? t("submissions.funnel.submittedTitleGroup", {
+                            submitted: submittedGroups,
+                            accepted: groupRepoList.length,
+                          })
+                        : t("submissions.funnel.submittedTitle", {
+                            submitted: submittedShare,
+                            total: funnelTotal,
+                          })
+                    }
+                  />
+                </button>
+              ),
               dueDate ? (
                 <span className="inline-flex items-center gap-2">
                   {dueOverdue ? (

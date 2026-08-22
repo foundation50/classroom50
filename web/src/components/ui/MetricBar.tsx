@@ -39,9 +39,18 @@ export type MetricBarProps = {
   max: number
   tone: MetricTone
   title: string
+  // Omit the ratio/percentage row under the bar — for tight spots (the
+  // submissions header strip) where the tooltip carries the numbers.
+  showNumbers?: boolean
 }
 
-export function MetricBar({ value, max, tone, title }: MetricBarProps) {
+export function MetricBar({
+  value,
+  max,
+  tone,
+  title,
+  showNumbers = true,
+}: MetricBarProps) {
   const pct = max === 0 ? 0 : Math.round((value / max) * 100)
   return (
     <div className="inline-flex w-28 flex-col gap-0.5" title={title}>
@@ -53,12 +62,14 @@ export function MetricBar({ value, max, tone, title }: MetricBarProps) {
         max={100}
         aria-label={title}
       />
-      <div className="flex items-baseline justify-between gap-2 text-xs tabular-nums">
-        <span className="font-semibold">
-          {value} / {max}
-        </span>
-        <span className="text-base-content/60">{pct}%</span>
-      </div>
+      {showNumbers && (
+        <div className="flex items-baseline justify-between gap-2 text-xs tabular-nums">
+          <span className="font-semibold">
+            {value} / {max}
+          </span>
+          <span className="text-base-content/60">{pct}%</span>
+        </div>
+      )}
     </div>
   )
 }
