@@ -148,7 +148,9 @@ When submit finishes, it prints two URLs:
   triggers one graded run, which tags and Releases the commit it ends on — so
   a push of several commits grades once, while the submissions page counts
   each of those commits. The first commit, from accepting, has nothing to
-  grade and is skipped. The latest Release is always your most recent
+  grade and is skipped; the empty commit that opens your Feedback PR at accept
+  time is likewise neither graded nor counted. The latest Release is always
+  your most recent
   submission. On a **submit-only** assignment, only `gh student submit` (or a
   hand-pushed `submit/*` tag) grades; regular pushes save your work without
   grading it.

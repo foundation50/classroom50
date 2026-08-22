@@ -145,8 +145,11 @@ submission.
 
 #### Submission
 
-A push to a student's assignment repository. Each submission
-is tagged, graded, and published as a GitHub Release.
+A push to a student's assignment repository triggers one graded run, which
+tags and publishes a GitHub Release — so grading is per push. The submissions
+page, however, counts per commit: each student commit past the starter commit
+on the default branch (excluding the tool's own bookkeeping commits), so a push
+of several commits is graded once but counted several times.
 
 #### Feedback pull request
 

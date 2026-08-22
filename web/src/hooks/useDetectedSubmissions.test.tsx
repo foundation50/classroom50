@@ -141,6 +141,38 @@ describe("useDetectedSubmissions — branch mode", () => {
     expect(result.current.detected[0].count).toBe(1)
   })
 
+  // Full realistic topology of a TEMPLATED, every-push assignment before the
+  // student pushes real work: template-init (oldest) -> accept/baseline ->
+  // Feedback-PR opener, then two student commits. Only the two student commits
+  // count — the template commit (older than the baseline), the baseline, and
+  // the Feedback-PR opener are all accept-time setup.
+  it("counts only student commits on a templated repo (excludes template, baseline, feedback opener)", async () => {
+    request.mockImplementation(
+      branchClient({
+        defaultBranch: "main",
+        baselineCommits: [{ sha: "baseline" }],
+        branchCommits: [
+          { sha: "student2" },
+          { sha: "student1" },
+          { sha: "feedback", message: FEEDBACK_OPEN_COMMIT_MESSAGE },
+          { sha: "baseline" },
+          { sha: "template-init" },
+        ],
+      }),
+    )
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "every-push",
+          repoOwners: ["a"],
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.detected[0].count).toBe(2)
+  })
+
   it("emits nothing for a not-accepted repo (404 on the repo object)", async () => {
     request.mockImplementation(branchClient({ defaultBranch: null }))
     const { result } = renderHook(

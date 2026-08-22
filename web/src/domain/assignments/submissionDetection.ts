@@ -46,6 +46,14 @@ export function isGlobPattern(pattern: string): boolean {
 // a student can write that too, and their push is still a submission, it just
 // wasn't graded. The student's own `[Classroom 50] Submit <slug>` carries the
 // prefix but is not in this set, so submit-flow work keeps counting.
+//
+// Matching is on the exact commit SUBJECT (first line), not authorship or
+// paths, so a student whose commit subject is byte-identical to one of these
+// is excluded too. That collision is an accepted trade-off, not a checked
+// guarantee: the subjects are long, tool-specific, and end in a mode token, so
+// hitting one by accident is implausible, and a student who forges one only
+// hides their own submission. `submissionCommits` never reads the `[skip ci]`
+// body — the body marker is the runner's grading gate, not this counter's.
 const TOOL_COMMIT_SUBJECTS: ReadonlySet<string> = new Set(
   [
     FEEDBACK_OPEN_COMMIT_MESSAGE,
@@ -53,19 +61,32 @@ const TOOL_COMMIT_SUBJECTS: ReadonlySet<string> = new Set(
   ].map(commitSubject),
 )
 
-// `baselineSha` is the oldest commit touching the .classroom50.yaml marker; a
-// null baseline (no marker, e.g. a bare repo) excludes nothing. Exported so the
-// student's own view counts the identical set (useGetMyPushSubmissions) instead
-// of re-deriving it. Anything not in that set still counts — an unrecognized
-// commit is a submission, never a silent skip.
+// `baselineSha` is the oldest commit touching the .classroom50.yaml marker (the
+// accept commit); a null baseline (no marker, e.g. a bare repo) excludes
+// nothing. Everything at or BEFORE the baseline is accept-time setup, not
+// student work: on a templated assignment the accept commit sits on top of the
+// template's generated commit(s), which are older than the baseline, so a plain
+// `c.sha !== baselineSha` would leave those template commits counting. Commits
+// arrive newest-first, so we drop the baseline and every commit after its
+// position in the list (its ancestors), then drop the tool's own bookkeeping
+// commits (the Feedback-PR opener, the shim retrofit) that land ABOVE the
+// baseline. Exported so the student's own view counts the identical set
+// (useGetMyPushSubmissions) instead of re-deriving it. Anything left still
+// counts — an unrecognized commit is a submission, never a silent skip.
 export function submissionCommits(
   commits: GitHubCommit[],
   baselineSha: string | null,
 ): GitHubCommit[] {
-  return commits.filter(
-    (c) =>
-      c.sha !== baselineSha &&
-      !TOOL_COMMIT_SUBJECTS.has(commitSubject(c.commit.message)),
+  // Commits are newest-first, so the baseline and everything after it (older)
+  // is accept-time setup. Keep only the commits before the baseline's index; a
+  // baseline not present in the list (or null) trims nothing.
+  const baselineIdx = baselineSha
+    ? commits.findIndex((c) => c.sha === baselineSha)
+    : -1
+  const pastBaseline =
+    baselineIdx === -1 ? commits : commits.slice(0, baselineIdx)
+  return pastBaseline.filter(
+    (c) => !TOOL_COMMIT_SUBJECTS.has(commitSubject(c.commit.message)),
   )
 }
 

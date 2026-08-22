@@ -289,7 +289,9 @@ export type Assignment = {
   // later requires retrofitting existing repos' shims (gradebook bulk action or
   // `gh teacher assignment submission-mode`). Permitted on every repo shape,
   // including empty_repo / no_autograder: with no shim it carries no trigger
-  // but still defines what the submissions page counts as a submission. Never
+  // but still defines what the submissions page counts as a submission — the
+  // student's own view detects, while the teacher page suppresses live
+  // detection for these shapes and renders the collected snapshot. Never
   // gate behavior on the field being PRESENT: absence is the wire default, not
   // a legacy or version marker. buildAssignmentEntry collapses every-push away
   // like the CLI, so an entry saved here matches one `gh teacher assignment

@@ -1262,7 +1262,7 @@
       },
       "submissionMode": {
         "label": "Submission type",
-        "help": "\"Every push to the default branch\" counts each commit after the starter commit. \"A tagged commit\" counts only tagged commits, so ordinary pushes use no Actions minutes; a student submits by pushing a tag or running gh student submit.",
+        "help": "\"Every push to the default branch\" counts each student commit after the starter commit (the tool's own accept and autograding-update commits don't count). \"A tagged commit\" counts only tagged commits, so ordinary pushes use no Actions minutes; a student submits by pushing a tag or running gh student submit.",
         "editWarning": "Changing this only affects repositories created from now on. Repositories students already accepted keep the old setting until you update them. Use \"Update autograding triggers\" on the submissions page or gh teacher assignment submission-mode. Students must pull after the update.",
         "choices": {
           "everyPush": "Every push to the default branch",

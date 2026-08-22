@@ -230,7 +230,8 @@ section — most assignments never need them:
   runs fail and drop out of the collected scores).
 - **Submission type** — when the autograder runs, and what the submissions
   page counts. **Every push to the default branch** (the default) grades each
-  push and counts each commit on the branch, so a push of several commits is
+  push and counts each student commit on the branch (the tool's own accept and
+  autograding-update commits are excluded), so a push of several commits is
   graded once but counted several times. **A tagged commit** grades and counts
   only when a student submits (`gh student submit`) or pushes a `submit/*`
   tag — regular pushes cost no Actions minutes, which matters at scale.
