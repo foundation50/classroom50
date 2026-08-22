@@ -19,9 +19,10 @@ import type { GitHubRepo } from "@/github-core/types"
 /**
  * The assignment repos that exist in the org, by repo name. Individual and group
  * repos share the `<classroom>-<assignment>-` prefix; a sibling assignment whose
- * slug extends this one (`hw1-bonus` under `hw1`) is excluded, matching
- * latestAssignmentPush's guard. `siblingSlugs` is the other assignment slugs in
- * the classroom.
+ * slug extends this one (`hw1-bonus` under `hw1`) is excluded, the same guard
+ * existingGroupRepos applies. `siblingSlugs` is the other assignment slugs in
+ * the classroom. Shared by every repo-list-derived signal (presence counts and
+ * latestAssignmentPush) so they can't disagree on an assignment's repo set.
  */
 export function existingAssignmentRepos(
   repos: GitHubRepo[] | null | undefined,
