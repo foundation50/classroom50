@@ -76,10 +76,13 @@ export const blockEnter: Variants = {
   },
 }
 
-// Hover affordance for clickable list rows: a subtle lift + shadow (the former
-// `clickable-row` CSS utility). Pair with a `bg` hover via className.
+// Hover affordance for clickable list rows: a subtle lift (the former
+// `clickable-row` CSS utility). Pair with a `bg` hover via className — the bg
+// carries the affordance. No shadow tween: animating box-shadow repaints the
+// row every frame, a visible stutter cost on long tables for a barely
+// perceptible 1px shadow.
 export const rowHover = {
-  whileHover: { y: -1, boxShadow: "0 1px 3px rgb(0 0 0 / 0.08)" },
+  whileHover: { y: -1 },
   transition: { duration: DURATION.base, ease: EASE_OUT },
 } as const
 

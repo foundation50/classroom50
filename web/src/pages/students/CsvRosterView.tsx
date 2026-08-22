@@ -2,7 +2,7 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Info } from "lucide-react"
 
-import { Alert, Toolbar } from "@/components/ui"
+import { Alert, SkeletonRows, Toolbar } from "@/components/ui"
 import { RoleBadges } from "./RoleBadges"
 import { StudentSortSelect } from "./StudentSortSelect"
 import { coerceImportRole } from "./rosterImportParse"
@@ -26,7 +26,16 @@ function displayName(student: Student): string {
 // isn't on the classroom's secret student team, so the team-members API 403s for
 // them — roster.csv (readable via config-repo access) is the stand-in:
 // teacher-maintained, not live, no invites or management actions.
-const CsvRosterView = ({ students }: { students: Student[] }) => {
+const CsvRosterView = ({
+  students,
+  loading = false,
+}: {
+  students: Student[]
+  // Hold skeleton rows while roster.csv loads — the empty-while-loading array
+  // is indistinguishable from a genuinely empty roster, so rendering on it
+  // flashes the "empty roster" row.
+  loading?: boolean
+}) => {
   const { t } = useTranslation()
   const [sortMode, setSortMode] =
     useState<StudentSortMode>(DEFAULT_STUDENT_SORT)
@@ -50,7 +59,7 @@ const CsvRosterView = ({ students }: { students: Student[] }) => {
       ) : null}
 
       <div className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
-        <table className="table">
+        <table className="table" aria-busy={loading || undefined}>
           <caption className="sr-only">
             {t("students.csvRoster.caption")}
           </caption>
@@ -62,7 +71,9 @@ const CsvRosterView = ({ students }: { students: Student[] }) => {
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {loading ? (
+              <SkeletonRows rows={3} bars={["w-40", "w-16", "w-20"]} />
+            ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={3} className="text-center">
                   {t("students.csvRoster.empty")}

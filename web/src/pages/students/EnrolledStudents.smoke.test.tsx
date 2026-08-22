@@ -125,14 +125,15 @@ afterEach(() => {
 })
 
 describe("EnrolledStudents — rendered phase views", () => {
-  it("shows the loading spinner while the roster loads", () => {
+  it("shows skeleton rows while the roster loads", () => {
     useTeamRoster.mockReturnValue({
       ...emptyRoster,
       isLoading: true,
       isEmpty: false,
     })
-    render(renderView())
-    expect(screen.getByText("students.loadingRoster")).not.toBeNull()
+    const { container } = render(renderView())
+    expect(container.querySelector("[aria-busy='true']")).not.toBeNull()
+    expect(container.querySelector(".skeleton")).not.toBeNull()
   })
 
   it("shows the empty state when the roster has no rows", () => {

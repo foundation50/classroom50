@@ -225,7 +225,7 @@ const CsvRosterContent = ({
   classroom: string
 }) => {
   const { t } = useTranslation()
-  const { students } = useGetStudents(org, classroom)
+  const { students, isLoading } = useGetStudents(org, classroom)
 
   return (
     <>
@@ -241,7 +241,7 @@ const CsvRosterContent = ({
           </span>
         }
       />
-      <CsvRosterView students={students} />
+      <CsvRosterView students={students} loading={isLoading} />
     </>
   )
 }

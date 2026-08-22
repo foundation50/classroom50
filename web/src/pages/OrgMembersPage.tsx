@@ -19,7 +19,7 @@ import {
   Select,
   rtlFlip,
 } from "@/components/ui"
-import { SkeletonRows } from "@/components/list"
+import { ListSkeletonRows } from "@/components/list"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -457,7 +457,7 @@ const OrgMembersPage = () => {
 
           <Card className="mt-4 w-full overflow-hidden" aria-busy={isLoading}>
             {isLoading ? (
-              <SkeletonRows rows={6} />
+              <ListSkeletonRows rows={6} />
             ) : isError ? (
               <div className="px-6 py-10 text-center text-sm text-error">
                 {t("orgMembers.loadError")}

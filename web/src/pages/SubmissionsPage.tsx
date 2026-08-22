@@ -365,6 +365,10 @@ const SubmissionsPageContent = () => {
     setLastViewSignature(viewSignature)
     setPage(0)
   }
+  // The animation signature drops the search text: re-keying the rows on every
+  // keystroke would remount and replay the whole tbody entrance while typing.
+  // Filter/sort/size/assignment changes still re-stagger.
+  const animationSignature = `${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}`
 
   // Section filtering: distinct sections for the dropdown, plus a username ->
   // section lookup so submitted rows (which carry only logins) can be matched.
@@ -1473,9 +1477,10 @@ const SubmissionsPageContent = () => {
           onPageSizeChange={setPageSize}
           sort={sort}
           onSortChange={setSort}
-          // Re-stagger the row entrance whenever the visible set changes (search/
-          // filter/sort/size/assignment). Combined with `page` inside the table.
-          viewSignature={viewSignature}
+          // Re-stagger the row entrance whenever the view changes (filter/sort/
+          // size/assignment — search deliberately excluded). Combined with
+          // `page` inside the table.
+          viewSignature={animationSignature}
           // The current page's live/detected data is still resolving, so the
           // count + last-submitted cells shimmer until they settle. Gated on
           // overlayCapable so a snapshot-only view never shows a settling

@@ -365,6 +365,7 @@ const AssignmentsTable = ({
   canAuthor = false,
   sort,
   onSortChange,
+  viewSignature = "",
 }: {
   org: string
   classroom: string
@@ -391,6 +392,10 @@ const AssignmentsTable = ({
   // render as static text.
   sort?: AssignmentSort
   onSortChange?: (sort: AssignmentSort) => void
+  // A signature of the current view (filter/sort — NOT the search text, which
+  // changes per keystroke and would remount the rows mid-typing). Keys the row
+  // container so the rows replay their entrance when the view changes.
+  viewSignature?: string
 }) => {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -439,7 +444,10 @@ const AssignmentsTable = ({
   const canMutate = !archived && canAuthor
 
   return (
-    <TableShell key={loading ? "loading" : "loaded"} padded ariaBusy={loading}>
+    // The shell's own entrance is off: the page-level PageTransition already
+    // animates navigation, and the tbody blockEnter below is the data-arrival
+    // cue — a third nested entrance reads as a double pop.
+    <TableShell animate={false} padded ariaBusy={loading}>
       <caption className="sr-only">{t("assignments.table.caption")}</caption>
       <thead>
         <tr>
@@ -469,9 +477,10 @@ const AssignmentsTable = ({
         </tr>
       </thead>
       {/* Same recipe as the submissions table: the body enters as one block
-            (blockEnter) and replays when the visible set changes. */}
+            (blockEnter) and replays when the view changes (data arrival, filter,
+            sort — not per search keystroke, which the signature excludes). */}
       <motion.tbody
-        key={assignments?.map((a) => a.slug).join("|") ?? ""}
+        key={`${loading}:${viewSignature}`}
         variants={blockEnter}
         initial="initial"
         animate="animate"

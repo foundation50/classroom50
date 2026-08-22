@@ -346,9 +346,10 @@ const SubmissionsTable = ({
   // toggles recent/oldest). Omitted, the headers render as static text and
   // the toolbar select stays the only sort control.
   onSortChange?: (sort: SubmissionSort) => void
-  // A signature of the current view (search/filter/sort/size/assignment) from
-  // the page. Combined with `page` it keys the row container, so the rows
-  // re-stagger their entrance whenever the visible set changes. Empty (the
+  // A signature of the current view (filter/sort/size/assignment — NOT the
+  // search text, which changes per keystroke and would remount the rows mid-
+  // typing) from the page. Combined with `page` it keys the row container, so
+  // the rows re-stagger their entrance whenever the view changes. Empty (the
   // default) means the container never re-keys — fine for tests that render a
   // single static page.
   viewSignature?: string
@@ -664,7 +665,10 @@ const SubmissionsTable = ({
 
   return (
     <>
+      {/* The shell's own entrance is off: PageTransition already animates
+          navigation and the tbody blockEnter is the data-arrival cue. */}
       <TableShell
+        animate={false}
         ariaBusy={initialLoading}
         footer={
           showPager ? (

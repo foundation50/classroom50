@@ -6,9 +6,9 @@ import {
   Badge,
   Button,
   Card,
-  Spinner,
   Toolbar,
 } from "@/components/ui"
+import { ListSkeletonRows } from "@/components/list"
 import type { Student } from "@/types/classroom"
 import { useQueryClient } from "@tanstack/react-query"
 import type { RosterCsvProblem } from "@/domain/students"
@@ -644,12 +644,11 @@ const EnrolledStudents = ({
       ) : null}
 
       {/* The list card. */}
-      <Card className="w-full overflow-hidden">
+      <Card className="w-full overflow-hidden" aria-busy={isLoading}>
         {isLoading ? (
-          <div className="flex items-center justify-center gap-3 px-6 py-12 text-base-content/70">
-            <Spinner size="md" />
-            <span className="text-sm">{t("students.loadingRoster")}</span>
-          </div>
+          // Skeleton rows shaped like the roster rows, so content fades into
+          // place instead of jumping in to replace a centered spinner.
+          <ListSkeletonRows className="divide-y divide-base-300" />
         ) : isError ? (
           <div
             role="alert"

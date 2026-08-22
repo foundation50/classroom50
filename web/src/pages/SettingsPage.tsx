@@ -57,9 +57,15 @@ function ServiceTokensSection({ highlighted }: { highlighted?: boolean }) {
       highlighted={highlighted}
     >
       {isLoading ? (
-        <p className="text-sm text-base-content/60">
-          {t("settings.serviceTokens.loading")}
-        </p>
+        <ul className="flex flex-col gap-2" aria-busy="true">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <li
+              key={i}
+              aria-hidden="true"
+              className="skeleton skeleton-shimmer h-16 rounded-lg"
+            />
+          ))}
+        </ul>
       ) : ownedReady.length === 0 ? (
         <p className="text-sm text-base-content/60">
           {t("settings.serviceTokens.empty")}
