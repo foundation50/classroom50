@@ -5,6 +5,7 @@
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/github-core/types"
 import { latestDetectedAt } from "@/domain/assignments/submissionDetection"
+import { existingAssignmentRepos } from "@/domain/assignments/assignmentRepoPresence"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import type { Student } from "@/types/classroom"
 import type { BadgeTone } from "@/components/ui"
@@ -324,31 +325,24 @@ function latestCommitDetectedAt(
 // means scores.json is (probably) out of date.
 //
 // Reads the already-loaded org repo list (`pushed_at` from `GET
-// /orgs/{org}/repos`), so it costs NO extra API call. Individual and group
-// repos share the `<classroom>-<assignment>-` prefix; sibling assignments whose
-// slug extends this one (`hw1-bonus` under `hw1`) are excluded like
-// existingGroupRepos guards them. Returns the winning repo's ISO `pushed_at`.
+// /orgs/{org}/repos`), so it costs NO extra API call. Repo selection (prefix
+// match, sibling-slug guard) is shared with existingAssignmentRepos so the two
+// repo-list-derived signals can never disagree on which repos belong to an
+// assignment. Returns the winning repo's ISO `pushed_at`.
 export function latestAssignmentPush(
   repos: GitHubRepo[] | null | undefined,
   classroom: string,
   assignment: string,
   siblingSlugs: string[] = [],
 ): string | null {
-  if (!repos) return null
-  const prefix = `${classroom}-${assignment}-`.toLowerCase()
-  const overlapPrefixes = siblingSlugs
-    .map((slug) => slug.toLowerCase())
-    .filter((slug) => slug !== assignment.toLowerCase())
-    .map((slug) => `${classroom}-${slug}-`.toLowerCase())
-    .filter((siblingPrefix) => siblingPrefix.startsWith(prefix))
-
   let latest: number | null = null
   let latestIso: string | null = null
-  for (const repo of repos) {
-    const name = repo.name.toLowerCase()
-    if (!name.startsWith(prefix)) continue
-    if (overlapPrefixes.some((sibling) => name.startsWith(sibling))) continue
-    if (name.slice(prefix.length).length === 0) continue // bare prefix, no owner
+  for (const repo of existingAssignmentRepos(
+    repos,
+    classroom,
+    assignment,
+    siblingSlugs,
+  )) {
     const pushed = repo.pushed_at
     if (!pushed) continue
     const ms = new Date(pushed).getTime()

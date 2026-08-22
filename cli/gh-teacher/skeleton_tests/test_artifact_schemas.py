@@ -436,6 +436,56 @@ class TestScoresSchema:
             })
             assert _errs(SCORES_V, doc) != []
 
+    def test_bucket_detected_accepted(self):
+        # An assignment that skips grading keeps `entries` empty and records
+        # presence/count in `detected` — never a score.
+        doc = _scores({
+            "manual": {
+                "type": "individual",
+                "entries": [],
+                "detected": [
+                    {"owner": "alice", "count": 3, "kind": "commit",
+                     "latest_datetime": "2026-06-01T15:00:00Z", "late": False},
+                    {"owner": "bob", "count": 1},
+                ],
+                "collected_at": "2026-06-01T15:00:00Z",
+            },
+            "team": {
+                "type": "group",
+                "entries": [],
+                "detected": [
+                    {"owner": "alice", "count": 2, "kind": "tag",
+                     "member_usernames": ["alice", "bob"]},
+                ],
+            },
+        })
+        assert _errs(SCORES_V, doc) == []
+
+    def test_bucket_detected_malformed_rejected(self):
+        bad_records = [
+            {"count": 1},                                  # no owner
+            {"owner": "alice"},                            # no count
+            {"owner": "", "count": 1},                     # empty owner
+            {"owner": "alice", "count": 0},                # a non-submitter is omitted, not 0
+            {"owner": "alice", "count": -1},               # negative
+            {"owner": "alice", "count": "3"},              # string, not integer
+            {"owner": "alice", "count": 1, "kind": "push"},  # not a known kind
+            {"owner": "alice", "count": 1, "latest_datetime": "2026-06-01"},  # not UTC-Z
+            {"owner": "alice", "count": 1, "member_usernames": []},  # minItems 1
+        ]
+        for bad in bad_records:
+            doc = _scores({
+                "manual": {"type": "individual", "entries": [], "detected": [bad]},
+            })
+            assert _errs(SCORES_V, doc) != [], f"expected rejection for {bad}"
+
+    def test_bucket_detected_must_be_array(self):
+        doc = _scores({
+            "manual": {"type": "individual", "entries": [],
+                       "detected": {"alice": 3}},
+        })
+        assert _errs(SCORES_V, doc) != []
+
     @pytest.mark.parametrize("doc", [
         {"schema": "classroom50/scores/v2", "assignments": {}},        # bad sentinel
         {"schema": "classroom50/scores/v1", "assignments": []},        # array, not an object map

@@ -62,7 +62,7 @@ const ratioText = () =>
 
 beforeEach(() => {
   scores.mockReset()
-  scores.mockReturnValue({ data: { submissions: {} } })
+  scores.mockReturnValue({ data: { submissions: {}, detected: {} } })
 })
 
 afterEach(cleanup)
@@ -231,5 +231,134 @@ describe("AssignmentsTable — Release date column", () => {
     )
     expect(screen.queryByText("assignments.table.releaseNotSet")).toBeNull()
     expect(screen.queryByText("assignments.table.scheduled")).toBeNull()
+  })
+})
+
+// An assignment that skips grading records no graded `entries`, so its count
+// comes from the collected `detected` list instead (#659). The cell renders the
+// same N / M + progress bar as an autograded row, so the two read consistently.
+describe("AssignmentsTable — assignments that skip grading", () => {
+  const detected = (owners: string[]) =>
+    owners.map((owner) => ({ owner, usernames: [owner], count: 1 }))
+
+  it("shows a real ratio and progress bar from collected detection", () => {
+    scores.mockReturnValue({
+      data: { submissions: {}, detected: { hw1: detected(["alice", "bob"]) } },
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ no_autograder: true })]}
+        studentCount={3}
+      />,
+    )
+    expect(ratioText()).toContain("2 / 3")
+    expect(document.querySelector("progress")).toBeTruthy()
+  })
+
+  it("shows 0 / N once collected with no submitters", () => {
+    // An empty `detected` list means the bucket WAS walked and nobody has
+    // submitted — an honest zero, unlike the permanent 0/N this replaced.
+    scores.mockReturnValue({
+      data: { submissions: {}, detected: { hw1: [] } },
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ no_autograder: true })]}
+        studentCount={3}
+      />,
+    )
+    expect(ratioText()).toContain("0 / 3")
+  })
+
+  it("says not collected yet when no collect has walked the bucket", () => {
+    // The key is absent, which is NOT "nobody submitted" — showing 0/N here is
+    // exactly the bug (#659), so the cell must not imply a count.
+    scores.mockReturnValue({ data: { submissions: {}, detected: {} } })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ no_autograder: true })]}
+        studentCount={3}
+      />,
+    )
+    expect(screen.getByText("assignments.table.notCollectedYet")).toBeTruthy()
+    expect(ratioText()).not.toContain("0 / 3")
+    expect(document.querySelector("progress")).toBeNull()
+  })
+
+  it("applies to a bare empty_repo assignment too", () => {
+    // empty_repo is never detected (no submission definition), so it keeps the
+    // entries-based count rather than waiting for a `detected` list no writer
+    // produces — otherwise it would read "not collected yet" forever.
+    scores.mockReturnValue({
+      data: { submissions: { hw1: [{}] }, detected: {} },
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ empty_repo: true })]}
+        studentCount={2}
+      />,
+    )
+    expect(ratioText()).toContain("1 / 2")
+    expect(screen.queryByText("assignments.table.notCollectedYet")).toBeNull()
+  })
+
+  it("keeps hand-entered grades visible when detection finds fewer", () => {
+    // A teacher can hand-grade a no_autograder assignment, which writes real
+    // entries. An empty or partial detection must not hide them.
+    scores.mockReturnValue({
+      data: { submissions: { hw1: [{}, {}, {}] }, detected: { hw1: [] } },
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ no_autograder: true })]}
+        studentCount={4}
+      />,
+    )
+    expect(ratioText()).toContain("3 / 4")
+  })
+
+  it("never reads detection for a normally autograded assignment", () => {
+    // A graded row's count must keep coming from `submissions`; a stray
+    // `detected` bucket must not override it.
+    scores.mockReturnValue({
+      data: {
+        submissions: { hw1: [{}] },
+        detected: { hw1: detected(["a", "b", "c"]) },
+      },
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment()]}
+        studentCount={4}
+      />,
+    )
+    expect(ratioText()).toContain("1 / 4")
+  })
+
+  it("counts detected group submissions per repo", () => {
+    scores.mockReturnValue({
+      data: { submissions: {}, detected: { hw1: detected(["team-1"]) } },
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ no_autograder: true, mode: "group" })]}
+        studentCount={5}
+      />,
+    )
+    expect(screen.getByText("assignments.table.groupsSubmitted")).toBeTruthy()
   })
 })

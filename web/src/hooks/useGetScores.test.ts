@@ -138,3 +138,87 @@ describe("normalizeScores — per-bucket collected_at", () => {
     expect(normalized?.collectedAt).toEqual({})
   })
 })
+
+describe("normalizeScores — detected (ungraded) submissions", () => {
+  it("surfaces a bucket's detected submitters", () => {
+    const normalized = normalizeScores({
+      schema: "classroom50/scores/v1",
+      assignments: {
+        manual: {
+          type: "individual",
+          entries: [],
+          detected: [
+            {
+              owner: "alice",
+              count: 3,
+              kind: "commit",
+              latest_datetime: "2026-06-02T10:00:00Z",
+              late: true,
+            },
+          ],
+        },
+      },
+    } as never)
+    expect(normalized?.detected.manual).toEqual([
+      {
+        owner: "alice",
+        usernames: ["alice"],
+        count: 3,
+        datetime: "2026-06-02T10:00:00Z",
+        late: true,
+      },
+    ])
+    // A detected assignment produces no graded rows.
+    expect(normalized?.submissions.manual).toEqual([])
+  })
+
+  it("distinguishes never-collected from collected-with-nobody", () => {
+    // The absent key must not read as an empty list: 0/N for a bucket that was
+    // never walked is exactly the bug this fixes (#659).
+    const normalized = normalizeScores({
+      schema: "classroom50/scores/v1",
+      assignments: {
+        walked: { type: "individual", entries: [], detected: [] },
+        never: { type: "individual", entries: [] },
+      },
+    } as never)
+    expect(normalized?.detected.walked).toEqual([])
+    expect(normalized?.detected.never).toBeUndefined()
+  })
+
+  it("credits group members when present", () => {
+    const normalized = normalizeScores({
+      schema: "classroom50/scores/v1",
+      assignments: {
+        team: {
+          type: "group",
+          entries: [],
+          detected: [
+            { owner: "team-1", count: 1, member_usernames: ["alice", "bob"] },
+          ],
+        },
+      },
+    } as never)
+    expect(normalized?.detected.team[0].usernames).toEqual(["alice", "bob"])
+  })
+
+  it("drops malformed or zero-count records", () => {
+    const normalized = normalizeScores({
+      schema: "classroom50/scores/v1",
+      assignments: {
+        manual: {
+          type: "individual",
+          entries: [],
+          detected: [
+            { owner: "alice", count: 1 },
+            { owner: "", count: 2 },
+            { owner: "bob", count: 0 },
+            { owner: "carol" },
+            { count: 5 },
+          ],
+        },
+      },
+    } as never)
+    expect(normalized?.detected.manual.map((d) => d.owner)).toEqual(["alice"])
+  })
+})

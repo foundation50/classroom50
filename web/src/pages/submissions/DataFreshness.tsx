@@ -12,8 +12,10 @@ import { Alert, Button, cx } from "@/components/ui"
 // to flag that the snapshot is out of date; otherwise it's a quiet "Refresh
 // submissions". Following data-freshness UX guidance: never let
 // stale data look authoritative, and give the user a direct way to refresh it.
-// Assignments that skip built-in grading have no collect/freshness at all —
-// the page omits this component and the header's grading badge explains why.
+// A bare empty_repo assignment has no collect at all — the page omits this
+// component and the header's grading badge explains why. A no_autograder
+// assignment IS collected (its submissions are detected rather than graded), so
+// it keeps this surface.
 export type DataFreshnessProps = {
   // Relative "x ago" of the last completed collect run — when the submission
   // data was produced org-wide. Null when never collected.

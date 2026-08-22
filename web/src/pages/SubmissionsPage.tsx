@@ -366,6 +366,19 @@ const SubmissionsPageContent = () => {
   // from the collected snapshot.
   const liveCapable = isOwner && !skipsGrading
 
+  // Detection is a SEPARATE capability from live presence, and deliberately
+  // wider: it reads raw repo state (commits/tags), so it works for a
+  // no_autograder assignment, which produces no submit/* release and which
+  // collect_scores.py skips outright — leaving scores.json permanently empty
+  // (issue #659). Only a bare empty_repo is excluded: it carries no submission
+  // definition to detect against.
+  const detectionCapable = isOwner && !isEmptyRepoAssignment
+
+  // Either overlay makes the view more than a replay of the collected snapshot,
+  // so the affordances that describe "we're still resolving rows beyond the
+  // snapshot" key off this union rather than live alone.
+  const overlayCapable = liveCapable || detectionCapable
+
   // Live submission presence for THIS assignment comes from student repos'
   // submit/* releases, so a student who pushed but hasn't been collected yet
   // still shows as submitted (issue #347). The fan-out spine is always built
@@ -457,46 +470,56 @@ const SubmissionsPageContent = () => {
     mode: assignmentInfo?.submission_mode,
     submissionTags: assignmentInfo?.submission_tags,
     repoOwners: livePageOwners,
-    // Resolved-only: otherwise the fan-out starts with an undefined mode and
-    // counts a tag-mode assignment in branch mode.
-    enabled: liveCapable && assignmentResolved,
+    // Owner-only and detection-capable (no_autograder included) — see
+    // detectionCapable. Resolved-only: otherwise the fan-out starts with an
+    // undefined mode and counts a tag-mode assignment in branch mode.
+    enabled: detectionCapable && assignmentResolved,
   })
 
   // Overlay live presence over the snapshot for a live-capable viewer (snapshot
   // wins per owner for GRADES; live adds a pending row for an as-yet-uncollected
   // submitter and bumps stale counts), then overlay detection the same way (a
-  // second count/presence-only overlay on the same snapshot — KTD6). A
-  // non-capable viewer (TA/HTA) uses the collected snapshot ALONE. Then
-  // roster-scope, gated on a resolved roster so a transient failure falls back
-  // to unscoped rows rather than blanking a populated gradebook.
+  // second count/presence-only overlay on the same snapshot — KTD6). A viewer
+  // with NEITHER overlay (TA/HTA) uses the collected snapshot ALONE. The two
+  // overlays are independent: a no_autograder assignment is detection-capable
+  // but not live-capable, and detection alone is what makes its submissions
+  // visible at all (issue #659). Then roster-scope, gated on a resolved roster
+  // so a transient failure falls back to unscoped rows rather than blanking a
+  // populated gradebook.
   const scoresInfo = useMemo(() => {
-    if (!liveCapable) {
+    if (!overlayCapable) {
       return rosterReady
         ? rosterScopedRows(snapshotRows, students)
         : snapshotRows
     }
-    const withLive = mergeLiveRows(
-      snapshotRows,
-      liveSubmissions.map((s) => ({
-        owner: s.owner,
-        datetime: s.submittedAt,
-        release: s.releaseUrl,
-        submissionCount: s.submissionCount,
-      })),
-      assignmentInfo?.due,
-    )
-    const merged = mergeDetectedSubmissions(
-      withLive,
-      detectedSubmissions.map((d) => ({
-        owner: d.owner,
-        count: d.count,
-        entries: d.entries,
-      })),
-      assignmentInfo?.due,
-    )
+    const withLive = liveCapable
+      ? mergeLiveRows(
+          snapshotRows,
+          liveSubmissions.map((s) => ({
+            owner: s.owner,
+            datetime: s.submittedAt,
+            release: s.releaseUrl,
+            submissionCount: s.submissionCount,
+          })),
+          assignmentInfo?.due,
+        )
+      : snapshotRows
+    const merged = detectionCapable
+      ? mergeDetectedSubmissions(
+          withLive,
+          detectedSubmissions.map((d) => ({
+            owner: d.owner,
+            count: d.count,
+            entries: d.entries,
+          })),
+          assignmentInfo?.due,
+        )
+      : withLive
     return rosterReady ? rosterScopedRows(merged, students) : merged
   }, [
+    overlayCapable,
     liveCapable,
+    detectionCapable,
     snapshotRows,
     liveSubmissions,
     detectedSubmissions,
@@ -520,15 +543,17 @@ const SubmissionsPageContent = () => {
   // them. Gated on scores having loaded — until then scoresInfo is empty and
   // would flag the whole roster.
   // Hold the "not submitted" list until every source that can still reclassify
-  // a student settles (snapshot, group-member reconciliation) — else a submitter
-  // flashes "not submitted" before its row resolves.
+  // a student settles (snapshot, live presence, detection, group-member
+  // reconciliation) — else a submitter flashes "not submitted" before its row
+  // resolves. detectedPending matters on its own for a no_autograder
+  // assignment, where detection is the ONLY thing that can credit a submitter.
   const scoresLoaded = scoresData !== undefined
   // Empty rows before the snapshot+roster land mean "loading", not "empty" —
   // gate the empty state on this so it doesn't flash on first paint. A
   // background refetch keeps scoresLoaded true, so Refresh never blanks the table.
   const initialLoading = !scoresLoaded || rosterLoading
   const nonSubmittersReady =
-    scoresLoaded && !livePending && !groupMembersPending
+    scoresLoaded && !livePending && !detectedPending && !groupMembersPending
   const nonSubmitters = useMemo(() => {
     if (!nonSubmittersReady) return []
     return reconcileNonSubmitters(students, scoresInfo, groupRepoFounders)
@@ -554,11 +579,11 @@ const SubmissionsPageContent = () => {
     setFilters({ ...DEFAULT_FILTERS })
   }
 
-  // Honest note for a live-capable viewer whose sort/filter can hide a
-  // not-yet-collected (live-only) submitter from the page-scoped fan-out (a time
-  // sort, or a grade-implying status/passing filter). We keep every control live
-  // and surface this instead of hiding Sort + Status.
-  const showPendingHiddenHint = pendingMayHide(liveCapable, sort, filters)
+  // Honest note for a viewer whose sort/filter can hide a not-yet-collected
+  // overlay row (live-only or detection-only) from the page-scoped fan-out (a
+  // time sort, or a grade-implying status/passing filter). We keep every control
+  // live and surface this instead of hiding Sort + Status.
+  const showPendingHiddenHint = pendingMayHide(overlayCapable, sort, filters)
 
   // Deterministic acceptance from the org repo list (see acceptedUsernames);
   // individual assignments only, so gated on acceptedAvailable.
@@ -838,8 +863,12 @@ const SubmissionsPageContent = () => {
   const lastCollectedLabel = effectiveLastCollectedAt
     ? formatRelativeToNow(new Date(effectiveLastCollectedAt))
     : null
+  // Staleness applies wherever a collect exists. A no_autograder assignment is
+  // collected (detected submissions), so a push after the last run means its
+  // snapshot is out of date too; only a bare empty_repo has nothing to collect.
   const snapshotStale =
-    !skipsGrading && snapshotIsStale(latestPush, effectiveLastCollectedAt)
+    !isEmptyRepoAssignment &&
+    snapshotIsStale(latestPush, effectiveLastCollectedAt)
 
   // Refresh scores + last-run timestamp + org repo list once a manual collection
   // finishes, so the freshness line re-derives (the collect just consumed the
@@ -1109,10 +1138,11 @@ const SubmissionsPageContent = () => {
             />
           ) : undefined
         }
-        // No collect/freshness exists for assignments that skip built-in
-        // grading — the header's grading badge explains why.
+        // A bare empty_repo assignment has no collect at all. A no_autograder
+        // assignment IS collected now (its submissions are detected rather than
+        // graded), so it keeps the freshness line and the re-collect button.
         leading={
-          skipsGrading ? undefined : (
+          isEmptyRepoAssignment ? undefined : (
             <DataFreshness
               lastCollectedLabel={lastCollectedLabel}
               stale={snapshotStale}
@@ -1132,6 +1162,8 @@ const SubmissionsPageContent = () => {
                       refetchOrgRepos()
                       if (liveCapable) {
                         refetchLive()
+                      }
+                      if (detectionCapable) {
                         refetchDetected()
                       }
                     }
@@ -1147,9 +1179,13 @@ const SubmissionsPageContent = () => {
             canRegradeAll={canRegradeAll}
             emptyRoster={emptyRoster.show}
             emptyRepo={skipsGrading}
-            // Metrics summarizes the graded snapshot; hide it when live (the
-            // overlay adds ungraded pending rows the stats don't model).
-            onMetrics={liveCapable ? undefined : () => setMetricsOpen(true)}
+            // Metrics summarizes the GRADED snapshot, and computeStats skips
+            // every `pending` row — so hide it whenever an overlay is adding
+            // those rows, live or detection. Keying this on liveCapable alone
+            // left it reachable for a no_autograder assignment, where detection
+            // supplies every row: the modal would report 0 submitted while the
+            // table listed detected submitters right next to it.
+            onMetrics={overlayCapable ? undefined : () => setMetricsOpen(true)}
             onCollect={() => collectScores.collect()}
             onRegradeAll={() => setRegradeConfirmOpen(true)}
             // Bulk-open Feedback PRs: owner-only (needs admin on every repo,
@@ -1346,9 +1382,10 @@ const SubmissionsPageContent = () => {
         viewSignature={viewSignature}
         // The current page's live/detected data is still resolving, so the
         // count + last-submitted cells shimmer until they settle. Gated on
-        // liveCapable so non-live views never show a settling affordance;
-        // detectedPending is already false unless detection is enabled.
-        settling={liveCapable && (livePending || detectedPending)}
+        // overlayCapable so a snapshot-only view never shows a settling
+        // affordance; each pending flag is already false unless its own overlay
+        // is enabled, so a detection-only view (no_autograder) still shimmers.
+        settling={overlayCapable && (livePending || detectedPending)}
       />
       <ConfirmModal
         open={regradeConfirmOpen}
@@ -1416,7 +1453,7 @@ const SubmissionsPageContent = () => {
         onClose={() => setLockConfirmOpen(false)}
       />
       <MetricsModal
-        open={metricsOpen && !liveCapable}
+        open={metricsOpen && !overlayCapable}
         onClose={() => setMetricsOpen(false)}
         isGroup={isGroupAssignment}
         submitted={stats.submitted}
