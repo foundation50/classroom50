@@ -90,7 +90,7 @@ func assignmentAddCmd() *cobra.Command {
 		Short: "Add or upsert an assignment in assignments.json",
 		Long: "Register an assignment — its template repo and the autograder it\n" +
 			"runs against — in <org>/classroom50/<classroom>/assignments.json.\n\n" +
-			"`<slug>` must match ^[a-z0-9][a-z0-9-]{1,38}$ (the same shape as\n" +
+			"`<slug>` must match ^[a-z0-9][a-z0-9-]{1,99}$ (the same shape as\n" +
 			"classroom short-names) because student repos are named\n" +
 			"`<classroom>-<slug>-<username>`. Only --name is required;\n" +
 			"--template is optional (omit it for a template-less assignment).\n" +

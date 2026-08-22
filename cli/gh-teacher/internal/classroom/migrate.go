@@ -57,7 +57,7 @@ func classroomMigrateCmd() *cobra.Command {
 			"--short-name overrides the auto-derived classroom directory\n" +
 			"name. Migrate slugifies the source classroom name (lowercase,\n" +
 			"non-alnum → '-', collapsed, trimmed) and validates against\n" +
-			"^[a-z0-9][a-z0-9-]{1,38}$. Pass --short-name explicitly if\n" +
+			"^[a-z0-9][a-z0-9-]{1,99}$. Pass --short-name explicitly if\n" +
 			"the derived value fails validation.\n\n" +
 			"--template-suffix appends a string to every target template\n" +
 			"repo name (e.g., --template-suffix migrated → readability-migrated).\n" +

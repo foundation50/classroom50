@@ -789,10 +789,10 @@ func SlugExistsFold(entries []AssignmentEntry, slug string) bool {
 	return false
 }
 
-// slugMaxLen is the max slug length validate.ShortName accepts (39 chars).
+// slugMaxLen is the max slug length validate.ShortName accepts (100 chars).
 // Duplicated here (not imported) so the pure data layer stays free of the
 // command seam.
-const slugMaxLen = 39
+const slugMaxLen = 100
 
 // slugSuffixRe splits a slug into base + optional trailing `-N` (N >= 1):
 // `hello` → ("hello", 0); `hello-2` → ("hello", 2).

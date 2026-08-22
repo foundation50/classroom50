@@ -67,7 +67,8 @@
   "$defs": {
     "shortName": {
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9-]{1,38}$"
+      "description": "URL/path-safe slug (2-100 chars). The cap matches GitHub's repo-name limit; it is per-segment, not a guarantee that the derived `<classroom>-<assignment>-<username>` student-repo name stays under 100 — budgeting the three against each other is an open question (foundation50/classroom50#691).",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,99}$"
     },
     "teamRef": {
       "type": "object",

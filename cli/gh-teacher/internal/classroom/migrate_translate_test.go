@@ -26,7 +26,7 @@ func TestDeriveShortName(t *testing.T) {
 		{"real-export name 2", "CS50 Stress Test-classroom-1", "cs50-stress-test-classroom-1", false},
 		{"slashes and spaces", "Intro to CS / Section 1", "intro-to-cs-section-1", false},
 		{"apostrophe + em-dash", "Spring '26 — Honors", "spring-26-honors", false},
-		{"too long, truncates cleanly", "abcdefghij-abcdefghij-abcdefghij-abcdefghij", "abcdefghij-abcdefghij-abcdefghij-abcdef", false},
+		{"too long, truncates cleanly", strings.Repeat("abcdefghij-", 10), strings.Repeat("abcdefghij-", 9) + "a", false},
 		{"leading and trailing punctuation", "—Hello—", "hello", false},
 		{"empty", "", "", true},
 		{"whitespace only", "   ", "", true},

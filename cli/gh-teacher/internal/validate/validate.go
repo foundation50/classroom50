@@ -15,11 +15,18 @@ import (
 // ShortNamePattern: classroom short-names and assignment slugs both flow into
 // student-repo names and the contents/tree API. Exposed for the few call sites
 // that match directly; most callers should use ShortName for the standard error.
-var ShortNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,38}$`)
+//
+// The cap is 100 per segment, matching GitHub's repo-name limit. It is NOT a
+// full guarantee: `<classroom>-<assignment>-<username>` can exceed 100 even
+// though each part is legal, and nothing here budgets the three against each
+// other. Deciding that split (a combined pre-flight check, an asymmetric cap,
+// or a shorter derived repo name) is open — see foundation50/classroom50#691.
+// Until then an overflow surfaces as a legible "name too long" error at accept.
+var ShortNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,99}$`)
 
 // ShortNamePatternDescription: human-readable summary of ShortNamePattern,
 // embedded in every "invalid <thing>" error.
-const ShortNamePatternDescription = "^[a-z0-9][a-z0-9-]{1,38}$ (2-39 chars, lowercase letters/digits/hyphens, starting with a letter or digit)"
+const ShortNamePatternDescription = "^[a-z0-9][a-z0-9-]{1,99}$ (2-100 chars, lowercase letters/digits/hyphens, starting with a letter or digit)"
 
 // ShortName checks name against ShortNamePattern with a label-prefixed error.
 // Same rule for classroom short-names and slugs (both flow into repo names) and
