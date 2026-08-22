@@ -59,20 +59,29 @@ export const ActionIconLink = ({
       rel="noreferrer"
       aria-label={label}
       title={title}
+      // The row behind this link opens the manage modal on click; never let
+      // the link's click double as a row click.
+      onClick={(event) => event.stopPropagation()}
     >
       <Icon className="size-4" />
     </Button>
   ) : (
+    // Inert anchor rather than a native disabled button: daisyUI turns off
+    // pointer events on :disabled buttons, which also suppresses the
+    // explanatory tooltip and cursor. `disabled` on the anchor variant drops
+    // the href and sets aria-disabled, so it can't navigate.
     <Button
+      as="a"
       variant="ghost"
       size="sm"
       shape="square"
-      className="text-base-content/30"
+      className="cursor-not-allowed text-base-content/30 hover:bg-transparent"
       disabled
       aria-label={emptyLabel}
       title={emptyTitle}
+      onClick={(event) => event.stopPropagation()}
     >
-      <Icon className="size-4" />
+      <Icon className="size-4 opacity-50" />
     </Button>
   )
 
@@ -99,8 +108,15 @@ const NonSubmitterStatusBadge = ({
       )
     case "not-accepted":
       return (
-        <Badge ghost className="whitespace-nowrap">
+        <Badge
+          ghost
+          className="whitespace-nowrap"
+          title={t("submissions.table.notAcceptedTitle")}
+        >
           {t("submissions.table.notAccepted")}
+          <span className="sr-only">
+            {t("submissions.table.notAcceptedTitle")}
+          </span>
         </Badge>
       )
     case "no-group":
@@ -313,11 +329,12 @@ export const NonSubmitterRow = ({
         )}
       </td>
       <td>—</td>
-      <td>
+      {/* Quarantined from the row's manage click — see the submitter row. */}
+      <td onClick={(event) => event.stopPropagation()}>
         {actions ? (
-          <div className="flex items-center gap-1">{actions}</div>
+          <div className="flex items-center justify-end gap-1">{actions}</div>
         ) : (
-          "—"
+          <div className="text-end">—</div>
         )}
       </td>
     </>
@@ -383,8 +400,9 @@ export const GroupRepoRow = ({
       </td>
       <td>—</td>
       <td>—</td>
-      <td>
-        <div className="flex items-center gap-1">{actions}</div>
+      {/* Quarantined from the row's manage click — see the submitter row. */}
+      <td onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-end gap-1">{actions}</div>
       </td>
     </>
   )

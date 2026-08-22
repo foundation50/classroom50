@@ -61,6 +61,9 @@ export type { StatCardProps } from "./StatCard"
 export { MetricDial } from "./MetricDial"
 export type { MetricDialProps, MetricDialTone } from "./MetricDial"
 
+export { SortableHeader, ariaSort } from "./SortableHeader"
+export type { SortableHeaderProps, SortDirection } from "./SortableHeader"
+
 export { SkeletonCell } from "./SkeletonCell"
 export type { SkeletonCellProps } from "./SkeletonCell"
 

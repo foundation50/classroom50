@@ -13,8 +13,8 @@ import { formatSubmissionDateTime } from "@/util/formatDate"
 import type { SubmissionMode } from "@/types/classroom"
 
 // The mode's submission icon: a tag for tag mode, a commit for every-push.
-// Shared by the count chip and the two mode badges (student page, teacher
-// heading) so the mode iconography stays consistent.
+// Used by the mode meta item (student page, teacher heading) so the mode
+// iconography stays consistent.
 export const SubmissionModeIcon = ({
   mode,
   className = "size-3.5",
@@ -154,13 +154,18 @@ export const SubmissionCountCell = ({
       fallback={<div className="skeleton skeleton-shimmer h-5 w-16" />}
     >
       <div className="flex items-center gap-1.5">
+        {/* Success-toned like the Submitted funnel dials: a green chip = a
+            submission exists. Hover deepens the fill as the click affordance. */}
         <button
           type="button"
-          className="badge max-xl:text-xs whitespace-nowrap gap-1 hover:badge-neutral cursor-pointer"
-          title={t("submissions.table.viewSubmissionsTitle")}
+          className="badge badge-sm badge-success badge-soft whitespace-nowrap gap-1 hover:bg-success/20 cursor-pointer"
+          title={t(
+            mode === "tag"
+              ? "submissions.table.viewSubmissionsTitleTag"
+              : "submissions.table.viewSubmissionsTitleEveryPush",
+          )}
           onClick={onOpen}
         >
-          <SubmissionModeIcon mode={mode} />
           {t(submissionModeCountKey(mode), { count })}
         </button>
         {staleCount ? (

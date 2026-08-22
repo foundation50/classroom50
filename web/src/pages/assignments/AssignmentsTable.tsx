@@ -30,12 +30,15 @@ import type { Assignment } from "@/types/classroom"
 import { EnterDiv, ClickableTr } from "@/lib/motionComponents"
 import { blockEnter } from "@/lib/motion"
 import { motion } from "motion/react"
+import type { AssignmentSort } from "@/pages/assignments/assignmentList"
 import {
   Badge,
   Button,
   EmphasisLtr,
   MetricDial,
   SkeletonCell,
+  SortableHeader,
+  ariaSort,
 } from "@/components/ui"
 
 const DeleteAssignmentButton = ({
@@ -326,8 +329,7 @@ const ReleaseDateCell = ({ assignment }: { assignment: Assignment }) => {
   return (
     <Badge
       tone="warning"
-      size="md"
-      className="max-xl:text-xs xl:text-sm whitespace-nowrap"
+      className="whitespace-nowrap"
       title={t("assignments.table.linkOnlyTitle")}
     >
       {t("assignments.table.scheduled", {
@@ -363,6 +365,8 @@ const AssignmentsTable = ({
   loading = false,
   archived = false,
   canAuthor = false,
+  sort,
+  onSortChange,
 }: {
   org: string
   classroom: string
@@ -379,6 +383,11 @@ const AssignmentsTable = ({
   // shape as the archived case. GitHub also 403s a TA's config-repo write, so
   // this is the UX guard, not the enforcer.
   canAuthor?: boolean
+  // Column-header sorting (Assignment toggles name asc/desc, Due date toggles
+  // due asc/desc), sharing the toolbar select's sort state. Omitted, headers
+  // render as static text.
+  sort?: AssignmentSort
+  onSortChange?: (sort: AssignmentSort) => void
 }) => {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -440,10 +449,66 @@ const AssignmentsTable = ({
         <caption className="sr-only">{t("assignments.table.caption")}</caption>
         <thead>
           <tr>
-            <th scope="col">{t("assignments.table.colAssignment")}</th>
+            <th
+              scope="col"
+              aria-sort={ariaSort(
+                sort === "name-asc"
+                  ? "asc"
+                  : sort === "name-desc"
+                    ? "desc"
+                    : null,
+              )}
+            >
+              {onSortChange ? (
+                <SortableHeader
+                  label={t("assignments.table.colAssignment")}
+                  direction={
+                    sort === "name-asc"
+                      ? "asc"
+                      : sort === "name-desc"
+                        ? "desc"
+                        : null
+                  }
+                  onClick={() =>
+                    onSortChange(sort === "name-asc" ? "name-desc" : "name-asc")
+                  }
+                  title={t("assignments.table.sortByName")}
+                />
+              ) : (
+                t("assignments.table.colAssignment")
+              )}
+            </th>
             <th scope="col">{t("assignments.table.colType")}</th>
             <th scope="col">{t("assignments.table.colReleaseDate")}</th>
-            <th scope="col">{t("assignments.table.colDueDate")}</th>
+            <th
+              scope="col"
+              aria-sort={ariaSort(
+                sort === "due-asc"
+                  ? "asc"
+                  : sort === "due-desc"
+                    ? "desc"
+                    : null,
+              )}
+            >
+              {onSortChange ? (
+                <SortableHeader
+                  label={t("assignments.table.colDueDate")}
+                  direction={
+                    sort === "due-asc"
+                      ? "asc"
+                      : sort === "due-desc"
+                        ? "desc"
+                        : null
+                  }
+                  onClick={() =>
+                    onSortChange(sort === "due-asc" ? "due-desc" : "due-asc")
+                  }
+                  title={t("assignments.table.sortByDue")}
+                />
+              ) : (
+                t("assignments.table.colDueDate")
+              )}
+            </th>
             <th scope="col">{t("assignments.table.colAccepted")}</th>
             <th scope="col">{t("assignments.table.colSubmitted")}</th>
             <th scope="col">

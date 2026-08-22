@@ -17,8 +17,10 @@ import {
   Badge,
   Button,
   SkeletonCell,
+  SortableHeader,
   Spinner,
   TablePagination,
+  ariaSort,
 } from "@/components/ui"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
 import type { SubmissionSort } from "@/pages/submissions/dashboard"
@@ -273,6 +275,7 @@ const SubmissionsTable = ({
   onPageChange = () => {},
   onPageSizeChange = () => {},
   sort = "name-first",
+  onSortChange,
   viewSignature = "",
   settling = false,
 }: {
@@ -348,6 +351,10 @@ const SubmissionsTable = ({
   // name order under a name sort (the live-eligible view); a time sort renders
   // the sorted submitted rows then non-submitters (a static snapshot view).
   sort?: SubmissionSort
+  // Column-header sorting (Student toggles first/last name, Last submitted
+  // toggles recent/oldest). Omitted, the headers render as static text and
+  // the toolbar select stays the only sort control.
+  onSortChange?: (sort: SubmissionSort) => void
   // A signature of the current view (search/filter/sort/size/assignment) from
   // the page. Combined with `page` it keys the row container, so the rows
   // re-stagger their entrance whenever the visible set changes. Empty (the
@@ -629,8 +636,12 @@ const SubmissionsTable = ({
             settling={settling}
           />
         </td>
-        <td>
-          <div className="flex items-center gap-1">
+        {/* The actions cell is quarantined from the row's manage click: a
+            near-miss around a small icon (or a disabled icon's retargeted
+            click) must not yank the hub open over the action the user aimed
+            at — most visibly the repo link's navigation. */}
+        <td onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-center justify-end gap-1">
             {isGroup ? (
               <RepoRowActions
                 owner={rest.owner}
@@ -663,7 +674,12 @@ const SubmissionsTable = ({
   return (
     <>
       <EnterDiv className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
-        <table className="table" aria-busy={initialLoading}>
+        {/* Divider strength matches the assignments table so the two flagship
+            tables share one at-rest row separation. */}
+        <table
+          className="table [&_tr]:border-base-content/10"
+          aria-busy={initialLoading}
+        >
           <caption className="sr-only">
             {isGroup
               ? t("submissions.table.captionGroup")
@@ -674,10 +690,43 @@ const SubmissionsTable = ({
                 first two columns, stranding Score/Last-submitted/Actions in a
                 clump at the far edge. */}
             <tr>
-              <th scope="col" className="w-[26%]">
-                {isGroup
-                  ? t("submissions.table.colGroup")
-                  : t("submissions.table.colStudent")}
+              <th
+                scope="col"
+                className="w-[26%]"
+                aria-sort={ariaSort(
+                  sort === "name-first"
+                    ? "asc"
+                    : sort === "name-last"
+                      ? "desc"
+                      : null,
+                )}
+              >
+                {onSortChange ? (
+                  <SortableHeader
+                    label={
+                      isGroup
+                        ? t("submissions.table.colGroup")
+                        : t("submissions.table.colStudent")
+                    }
+                    direction={
+                      sort === "name-first"
+                        ? "asc"
+                        : sort === "name-last"
+                          ? "desc"
+                          : null
+                    }
+                    onClick={() =>
+                      onSortChange(
+                        sort === "name-first" ? "name-last" : "name-first",
+                      )
+                    }
+                    title={t("submissions.table.sortByName")}
+                  />
+                ) : isGroup ? (
+                  t("submissions.table.colGroup")
+                ) : (
+                  t("submissions.table.colStudent")
+                )}
               </th>
               <th scope="col" className="w-[24%]">
                 {t("submissions.table.colSubmissions")}
@@ -685,11 +734,36 @@ const SubmissionsTable = ({
               <th scope="col" className="w-[13%]">
                 {t("submissions.table.colScore")}
               </th>
-              <th scope="col" className="w-[19%]">
-                {t("submissions.table.colLastSubmitted")}
+              <th
+                scope="col"
+                className="w-[19%]"
+                aria-sort={ariaSort(
+                  sort === "recent" ? "desc" : sort === "oldest" ? "asc" : null,
+                )}
+              >
+                {onSortChange ? (
+                  <SortableHeader
+                    label={t("submissions.table.colLastSubmitted")}
+                    direction={
+                      sort === "recent"
+                        ? "desc"
+                        : sort === "oldest"
+                          ? "asc"
+                          : null
+                    }
+                    onClick={() =>
+                      onSortChange(sort === "recent" ? "oldest" : "recent")
+                    }
+                    title={t("submissions.table.sortByLastSubmitted")}
+                  />
+                ) : (
+                  t("submissions.table.colLastSubmitted")
+                )}
               </th>
               <th scope="col" className="w-[18%]">
-                {t("submissions.table.colActions")}
+                <span className="sr-only">
+                  {t("submissions.table.colActions")}
+                </span>
               </th>
             </tr>
           </thead>

@@ -243,6 +243,8 @@ export const TeacherAssignmentsView = ({
           loading={assignmentsLoading}
           archived={archived}
           canAuthor={canAuthor}
+          sort={sort}
+          onSortChange={setSort}
         />
       )}
     </div>
