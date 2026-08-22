@@ -258,6 +258,7 @@ def main() -> int:
                 service_token=service_token,
                 repo_index=repo_index,
                 team_members=team_members,
+                assignment_filter=assignment_filter,
             )
         except GrantThrottled as exc:
             # NOT a failure: collection is untouched, the pass is idempotent, and
@@ -1316,6 +1317,7 @@ def grant_classroom_team_access(
     service_token: str,
     repo_index: RepoIndex | None = None,
     team_members: "TeamMembers | None" = None,
+    assignment_filter: str = "",
 ) -> None:
     """Grant each classroom staff team its mapped repo permission (see
     STAFF_TEAM_PERMISSIONS) on every EXISTING student assignment repo and on each
@@ -1330,6 +1332,12 @@ def grant_classroom_team_access(
     main() aborts; a throttle raises GrantThrottled, which main() reports as a
     deferral rather than a failure. A classroom with no mapped staff team is a
     no-op.
+
+    A staff team with no members is skipped per-slug (its grants would benefit
+    nobody), so an empty ta team still lets a populated hta team grant.
+
+    `assignment_filter` scopes the grant to one assignment (its student repos
+    and its private template); blank grants every assignment as before.
     """
     role_slugs = resolve_staff_team_slugs(classroom_meta)
     grant_slugs = [
@@ -1344,6 +1352,13 @@ def grant_classroom_team_access(
     # skipped by collection but their student repos still exist and staff
     # still need access to review them.
     slugs = all_assignment_slugs(assignments)
+    if assignment_filter:
+        # Skip a classroom lacking the slug silently, like collect_classroom:
+        # main()'s run-level guard owns the single loud "no such slug" error,
+        # so warning here would spam once per non-matching classroom.
+        if assignment_filter not in slugs:
+            return
+        slugs = [assignment_filter]
     if not slugs:
         return
 
@@ -1382,13 +1397,41 @@ def grant_classroom_team_access(
             targets.append((org, repo_name))
     targets.extend(
         private_template_targets(
-            api_url, org, assignments, service_token, repo_index=repo_index
+            api_url, org, assignments, service_token, repo_index=repo_index,
+            assignment_filter=assignment_filter,
         )
     )
     if not targets:
         return
 
     for team_slug, permission in grant_slugs:
+        # Read this staff team's members to skip it when empty (see docstring).
+        # Same SKIPPABLE-warn-and-skip contract as the student read above: any
+        # non-401/403/599/throttle (404 = team not created yet, 422, …) skips
+        # this team for the run; the add-only pass re-affirms it next run.
+        try:
+            staff_logins = (
+                team_members.logins(team_slug)
+                if team_members is not None
+                else list_team_member_logins(api_url, org, team_slug, service_token)
+            )
+        except urllib.error.HTTPError as exc:
+            if classify(exc) is not SKIPPABLE:
+                raise
+            emit_warning(
+                f"{classroom_short}: could not read staff team {team_slug!r} members: "
+                f"HTTP {exc.code} ({exc.reason or 'no reason'}); skipping its grant this run."
+            )
+            continue
+        except (json.JSONDecodeError, ValueError) as exc:
+            emit_warning(
+                f"{classroom_short}: staff team {team_slug!r} member listing malformed "
+                f"({exc}); skipping its grant this run."
+            )
+            continue
+        if not staff_logins:
+            continue
+
         # One bulk read replaces grant_team_repo's per-repo access check: after
         # the first run nearly every target is already granted, so that check —
         # not the PUT — is the request that dominates. None means "unknown".
@@ -1436,6 +1479,7 @@ def private_template_targets(
     assignments: dict[str, Any],
     service_token: str,
     repo_index: RepoIndex | None = None,
+    assignment_filter: str = "",
 ) -> list[tuple[str, str]]:
     """The private, in-org assignment templates (starter code the staff team
     should also be able to read), as (owner, repo) pairs.
@@ -1446,14 +1490,20 @@ def private_template_targets(
     once for all staff roles — the read doesn't depend on the team.
 
     `repo_index` already knows each in-org repo's `private` flag from the org
-    listing, so the per-template read only happens when it can't say."""
+    listing, so the per-template read only happens when it can't say.
+
+    `assignment_filter` scopes to one assignment's template; blank keeps all."""
     targets: list[tuple[str, str]] = []
     # Deduped on the REF, not the kept targets: assignments commonly share one
     # starter template, and only private ones are kept — so deduping on the
     # output would re-read every public template once per assignment.
     seen: set[tuple[str, str]] = set()
     for entry in assignments.get("assignments") or []:
-        ref = assignment_template_ref(entry) if isinstance(entry, dict) else None
+        if not isinstance(entry, dict):
+            continue
+        if assignment_filter and entry.get("slug") != assignment_filter:
+            continue
+        ref = assignment_template_ref(entry)
         if ref is None:
             continue
         t_owner, t_repo = ref
