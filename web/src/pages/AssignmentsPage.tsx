@@ -246,6 +246,9 @@ export const TeacherAssignmentsView = ({
           canAuthor={canAuthor}
           sort={sort}
           onSortChange={setSort}
+          // Replay the row entrance on filter/sort changes; search is excluded
+          // so typing doesn't remount the rows on every keystroke.
+          viewSignature={`${JSON.stringify(filters)}|${sort}`}
         />
       )}
     </div>

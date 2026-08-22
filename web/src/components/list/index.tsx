@@ -103,11 +103,13 @@ export function NoSearchResults({
   )
 }
 
-// Placeholder rows for a list/table body while its data loads. Shared so list
-// pages skeleton-in consistently (content fades into place) instead of a
-// centered spinner that content then jumps to replace. Decorative — hidden from
+// Placeholder rows for a list body while its data loads. Shared so list pages
+// skeleton-in consistently (content fades into place) instead of a centered
+// spinner that content then jumps to replace. Decorative — hidden from
 // assistive tech; the surrounding container carries the aria-busy signal.
-export function SkeletonRows({
+// Named ListSkeletonRows to keep it distinct from the <tr>-based SkeletonRows
+// in components/ui/TableShell.
+export function ListSkeletonRows({
   rows = 5,
   className = "divide-y divide-base-200",
 }: {

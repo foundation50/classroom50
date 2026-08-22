@@ -241,10 +241,20 @@ function ClassroomResources({
 }) {
   const { t } = useTranslation()
   const base = pagesBaseUrl(org)
-  const { data: classroomData } = useGetClassroom(org, classroom)
+  const { data: classroomData, isLoading: classroomLoading } = useGetClassroom(
+    org,
+    classroom,
+  )
   const secret = classroomData?.secret
-  const { data: assignments } = usePagesAssignments(org, classroom, secret)
+  // Gate on the classroom read: fetching before the secret resolves would hit
+  // the unprotected path and 404 a protected classroom.
+  const { data: assignments, isPending: assignmentsPending } =
+    usePagesAssignments(org, classroom, secret, { enabled: !classroomLoading })
   const [open, setOpen] = useState(true)
+
+  // Hold skeletons until both reads settle so the resource rows and the "N
+  // resources" count don't pop in one by one as each query resolves.
+  const loading = classroomLoading || assignmentsPending
 
   // When protected, everything is served under the capability-URL segment; else
   // the plain classroom path. Same segment builder the Pages URL helpers use.
@@ -301,6 +311,7 @@ function ClassroomResources({
       initial="initial"
       animate="animate"
       transition={staggerTransition(index)}
+      aria-busy={loading || undefined}
     >
       <button
         type="button"
@@ -311,7 +322,12 @@ function ClassroomResources({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="truncate font-semibold">{classroom}</h3>
-            {secret ? (
+            {loading ? (
+              <span
+                aria-hidden="true"
+                className="skeleton skeleton-shimmer h-5 w-16 rounded-full"
+              />
+            ) : secret ? (
               <Badge tone="warning" className="gap-1">
                 <ShieldAlert aria-hidden="true" className="size-3" />
                 {t("published.unlisted")}
@@ -321,8 +337,17 @@ function ClassroomResources({
             )}
           </div>
           <p className="text-xs text-base-content/70">
-            {t("published.resourceCount", { count: resources.length })}
-            {secret ? t("published.servedUnlistedNote") : ""}
+            {loading ? (
+              <span
+                aria-hidden="true"
+                className="skeleton skeleton-shimmer inline-block h-3 w-32 align-middle"
+              />
+            ) : (
+              <>
+                {t("published.resourceCount", { count: resources.length })}
+                {secret ? t("published.servedUnlistedNote") : ""}
+              </>
+            )}
           </p>
         </div>
         <ChevronDown
@@ -334,18 +359,30 @@ function ClassroomResources({
       </button>
       {open && (
         <div className="flex flex-col gap-3 border-t border-base-200 p-5">
-          {secret && (
-            <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-base-content/70">
-              <ShieldAlert
+          {loading ? (
+            Array.from({ length: 2 }).map((_, i) => (
+              <div
+                key={i}
                 aria-hidden="true"
-                className="mt-0.5 size-4 shrink-0 text-warning"
+                className="skeleton skeleton-shimmer h-24 rounded-xl"
               />
-              <span>{t("published.unlistedWarning")}</span>
-            </div>
+            ))
+          ) : (
+            <>
+              {secret && (
+                <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-base-content/70">
+                  <ShieldAlert
+                    aria-hidden="true"
+                    className="mt-0.5 size-4 shrink-0 text-warning"
+                  />
+                  <span>{t("published.unlistedWarning")}</span>
+                </div>
+              )}
+              {resources.map((r) => (
+                <ResourceRow key={r.url} resource={r} />
+              ))}
+            </>
           )}
-          {resources.map((r) => (
-            <ResourceRow key={r.url} resource={r} />
-          ))}
         </div>
       )}
     </motion.div>
@@ -355,7 +392,7 @@ function ClassroomResources({
 export const PublishedResourcesPane = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   const base = pagesBaseUrl(org)
-  const { classes } = useGetClasses(org)
+  const { classes, isLoading: classesLoading } = useGetClasses(org)
 
   // Org-level resources are classroom-independent: the public index and the two
   // generic engine scripts served at the Pages site root.
@@ -424,7 +461,20 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
         <p className="mt-1 text-sm text-base-content/70">
           {t("published.perClassroomDescription")}
         </p>
-        {classes.length === 0 ? (
+        {/* Hold the skeleton while the class list loads — the empty-while-
+            loading array is indistinguishable from a genuinely empty org, so
+            rendering on it flashes the "no classrooms" empty state. */}
+        {classesLoading ? (
+          <div className="mt-4 flex flex-col gap-4" aria-busy="true">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div
+                key={i}
+                aria-hidden="true"
+                className="skeleton skeleton-shimmer h-20 rounded-2xl"
+              />
+            ))}
+          </div>
+        ) : classes.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-base-300 bg-base-100 p-6 text-center text-sm text-base-content/70">
             {t("published.noClassrooms")}
           </div>

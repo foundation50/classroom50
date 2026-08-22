@@ -421,7 +421,8 @@ export function StudentAssignmentList({
 
   if (isLoading) {
     return (
-      <TableShell padded ariaBusy>
+      // animate={false}: PageTransition already animates the page in.
+      <TableShell animate={false} padded ariaBusy>
         <TableHead sort={sortKey} onSortChange={changeSort} />
         <tbody>
           <SkeletonRows rows={3} bars={SKELETON_BARS} />
@@ -485,16 +486,18 @@ export function StudentAssignmentList({
         />
       ) : (
         // Same table shell as the teacher assignments list, so the two
-        // surfaces read as one design.
-        <TableShell padded>
+        // surfaces read as one design. Its entrance is off — the tbody
+        // blockEnter below is the data-arrival cue.
+        <TableShell animate={false} padded>
           <caption className="sr-only">
             {t("assignments.discover.tableCaption")}
           </caption>
           <TableHead sort={sortKey} onSortChange={changeSort} />
           {/* Same recipe as the teacher table: the body enters as one block
-              (blockEnter) and replays when the visible set changes. */}
+              (blockEnter) and replays when the view changes (filter/sort — not
+              per search keystroke, which would remount the rows mid-typing). */}
           <motion.tbody
-            key={visible.map((a) => a.slug).join("|")}
+            key={`${JSON.stringify(filters)}|${sortKey}`}
             variants={blockEnter}
             initial="initial"
             animate="animate"

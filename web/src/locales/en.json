@@ -548,7 +548,6 @@
     "resendFailed": "Re-sending the invite for {{username}} failed ({{error}}).",
     "resend": "Re-send",
     "dismiss": "Dismiss",
-    "loadingRoster": "Loading roster...",
     "rosterLoadError": "Couldn't load the roster from GitHub. The enrolled list may be incomplete — this is a load error, not an empty classroom.",
     "rosterRetry": "Retry",
     "rosterParseError": "roster.csv is malformed and couldn't be fully read. Fix these lines so the roster stays accurate:",
@@ -1045,7 +1044,6 @@
     "serviceTokens": {
       "heading": "Manage Service Tokens",
       "subheading": "Service-token status across every organization you own. Rotate a token before it expires so score collection keeps working.",
-      "loading": "Checking your organizations…",
       "empty": "No organizations with Classroom 50 set up yet.",
       "expires": "Expires {{date}}",
       "manage": "Manage"
@@ -1762,7 +1760,6 @@
     "serviceToken": {
       "title": "Service token",
       "help": "A fine-grained GitHub token that lets Classroom 50 collect scores and regrade across your student repositories. Stored as a secret on your classroom50 repository.",
-      "checking": "Checking…",
       "statusPresent": "Token set",
       "statusMissing": "No service token set",
       "expiresOn": "Expires {{date}}",

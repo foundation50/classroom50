@@ -8,7 +8,7 @@ import { Activity } from "lucide-react"
 import { AnimatedAlert, Card, Button } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
-import { EmptyState, SkeletonRows } from "@/components/list"
+import { EmptyState, ListSkeletonRows } from "@/components/list"
 import RequireRole from "@/components/RequireRole"
 import { DiagnosticsDialog } from "@/components/DiagnosticsDialog"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -155,7 +155,7 @@ const OrgActivityPage = () => {
         {items.length === 0 ? (
           loading ? (
             <Card className="mt-4 w-full overflow-hidden" aria-busy>
-              <SkeletonRows rows={6} />
+              <ListSkeletonRows rows={6} />
             </Card>
           ) : (
             <EmptyState

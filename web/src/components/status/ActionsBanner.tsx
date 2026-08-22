@@ -1,10 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import {
-  AnimatePresence,
-  motion,
-  useMotionValue,
-  useMotionValueEvent,
-} from "motion/react"
+import { AnimatePresence, motion } from "motion/react"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -341,10 +336,10 @@ export function ActionsBanner() {
   const showList = canExpand && expanded
 
   // Reserve body padding equal to banner height so it PUSHES the app down
-  // rather than overlaying it (the fixed bar is out of normal flow). During
-  // enter/exit, padding = height + y tracks the banner's bottom edge frame-for-
-  // frame so the app slides with it. Height is measured from the inner content
-  // (unaffected by the slide) via a ResizeObserver so expanding stays in sync.
+  // rather than overlaying it (the fixed bar is out of normal flow). The
+  // padding transitions in step with the banner's slide so the app moves with
+  // it. Height is measured from the inner content (unaffected by the slide)
+  // via a ResizeObserver so expanding stays in sync.
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [bannerHeight, setBannerHeight] = useState(0)
   useLayoutEffect(() => {
@@ -357,24 +352,32 @@ export function ActionsBanner() {
     return () => observer.disconnect()
   }, [visible])
 
-  // `y` (animated on enter/exit) drives body padding = height + y. onExitComplete
-  // below hard-clears the gap so a reduced-motion or interrupted exit can't
-  // strand a permanent top gap.
-  const y = useMotionValue(-bannerHeight)
-  useMotionValueEvent(y, "change", (value) => {
-    const px = Math.max(0, bannerHeight + value)
-    document.body.style.paddingTop = px > 0 ? `${px}px` : ""
-  })
+  // The padding animates via a CSS transition timed to the banner's slide —
+  // NOT per-frame JS writes (the previous motion-value listener wrote
+  // body.style.paddingTop every animation frame, forcing a full-page style
+  // recalc + layout per frame). The reduced-motion safety net in index.css
+  // collapses this transition alongside the Motion slide. onExitComplete below
+  // hard-clears the gap so an interrupted exit can't strand a permanent top gap.
   useEffect(() => {
-    if (!visible) return
-    const px = Math.max(0, bannerHeight + y.get())
-    document.body.style.paddingTop = px > 0 ? `${px}px` : ""
+    const body = document.body
+    if (!visible || bannerHeight <= 0) return
+    body.style.transitionProperty = "padding-top"
+    body.style.transitionTimingFunction = "var(--ease-out-soft)"
+    body.style.transitionDuration = `${DURATION.slow}s`
+    body.style.paddingTop = `${bannerHeight}px`
     return () => {
-      document.body.style.paddingTop = ""
+      // Exit (or a height change, which immediately re-applies): transition
+      // back at the banner's exit pace.
+      body.style.transitionDuration = `${DURATION.base}s`
+      body.style.paddingTop = ""
     }
-  }, [visible, bannerHeight, y])
+  }, [visible, bannerHeight])
   const clearReservedGap = () => {
-    document.body.style.paddingTop = ""
+    const body = document.body
+    body.style.paddingTop = ""
+    body.style.transitionProperty = ""
+    body.style.transitionTimingFunction = ""
+    body.style.transitionDuration = ""
   }
 
   const body = (
@@ -418,7 +421,6 @@ export function ActionsBanner() {
       <AnimatePresence onExitComplete={clearReservedGap}>
         {visible && bannerHeight > 0 && (
           <motion.div
-            style={{ y }}
             initial={{ y: -bannerHeight }}
             animate={{
               y: 0,

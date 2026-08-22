@@ -499,9 +499,19 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
       className={sectionHighlightClass(highlighted ?? false)}
     >
       {tokenStatusLoading ? (
-        <p className="text-sm text-base-content/60">
-          {t("orgSettings.serviceToken.checking")}
-        </p>
+        <div
+          className="flex flex-wrap items-center justify-between gap-3"
+          aria-busy="true"
+        >
+          <span
+            aria-hidden="true"
+            className="skeleton skeleton-shimmer h-5 w-48"
+          />
+          <span
+            aria-hidden="true"
+            className="skeleton skeleton-shimmer h-8 w-24 rounded-field"
+          />
+        </div>
       ) : !present ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="inline-flex items-center gap-2 text-sm text-error">
