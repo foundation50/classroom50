@@ -1333,14 +1333,11 @@ def grant_classroom_team_access(
     deferral rather than a failure. A classroom with no mapped staff team is a
     no-op.
 
-    A staff team with no members is skipped (its grants would benefit nobody),
-    so an empty ta/hta team no longer sweeps every student repo — the common
-    case behind the "granting to repos that don't exist" reports. The skip is
-    per-slug: a classroom with TAs but no HTAs still grants the TA team.
+    A staff team with no members is skipped per-slug (its grants would benefit
+    nobody), so an empty ta team still lets a populated hta team grant.
 
     `assignment_filter` scopes the grant to one assignment (its student repos
-    and its private template) so a per-assignment "Sync now" doesn't sweep the
-    whole classroom; blank grants every assignment as before.
+    and its private template); blank grants every assignment as before.
     """
     role_slugs = resolve_staff_team_slugs(classroom_meta)
     grant_slugs = [
@@ -1356,12 +1353,9 @@ def grant_classroom_team_access(
     # still need access to review them.
     slugs = all_assignment_slugs(assignments)
     if assignment_filter:
-        # A per-assignment run touches only that assignment's repos/template.
-        # Skip a classroom that lacks the slug SILENTLY, mirroring
-        # collect_classroom's per-classroom skip — main()'s run-level
-        # assignment_filter_matched guard owns the single loud "no classroom
-        # has this slug" failure, so warning here would spam N-1 times in a
-        # multi-classroom org where the slug lives in one classroom.
+        # Skip a classroom lacking the slug silently, like collect_classroom:
+        # main()'s run-level guard owns the single loud "no such slug" error,
+        # so warning here would spam once per non-matching classroom.
         if assignment_filter not in slugs:
             return
         slugs = [assignment_filter]
@@ -1411,12 +1405,10 @@ def grant_classroom_team_access(
         return
 
     for team_slug, permission in grant_slugs:
-        # Skip a staff team that has no members: its grants would benefit
-        # nobody, and an empty ta/hta team otherwise sweeps every student repo
-        # (the "granting to repos that don't exist" reports). Follows the same
-        # SKIPPABLE-warn-and-skip contract as the student-team read above —
-        # any non-401/403/599/throttle (404 = team not created yet, 422, …)
-        # skips this team for the run; the add-only pass re-affirms next run.
+        # Read this staff team's members to skip it when empty (see docstring).
+        # Same SKIPPABLE-warn-and-skip contract as the student read above: any
+        # non-401/403/599/throttle (404 = team not created yet, 422, …) skips
+        # this team for the run; the add-only pass re-affirms it next run.
         try:
             staff_logins = (
                 team_members.logins(team_slug)
@@ -1500,8 +1492,7 @@ def private_template_targets(
     `repo_index` already knows each in-org repo's `private` flag from the org
     listing, so the per-template read only happens when it can't say.
 
-    `assignment_filter` scopes to one assignment's template (mirrors the
-    student-repo scoping in grant_classroom_team_access); blank keeps them all."""
+    `assignment_filter` scopes to one assignment's template; blank keeps all."""
     targets: list[tuple[str, str]] = []
     # Deduped on the REF, not the kept targets: assignments commonly share one
     # starter template, and only private ones are kept — so deduping on the
