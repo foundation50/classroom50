@@ -356,7 +356,8 @@ func AssignmentRepoName(classroom, assignment, username string) string {
 // ci]` body line keeps the autograde shim from running on it; if GitHub ever
 // stopped honoring the token the run would be noisy but harmless (the runner
 // grades an unchanged tree). Hand-mirrored with NO compile-time link in the
-// web GUI (web/src/domain/assignments/feedbackPr.ts) — keep byte-identical.
+// web GUI (web/src/util/commit.ts, FEEDBACK_OPEN_COMMIT_MESSAGE) — keep
+// byte-identical.
 func FeedbackOpenCommitMessage() string {
 	return PrefixCommit("Open Feedback PR (gh student accept)") + "\n\n[skip ci]"
 }
@@ -423,7 +424,7 @@ func BuildSubmitTag(now time.Time, sha string) string {
 // without it the shim would grade the retrofit commit itself (pushes with a
 // user OAuth token DO fire workflows). The runner's shim-update detection is
 // the backstop. Hand-mirrored with NO compile-time link in the web GUI
-// (web/src/domain/assignments/submissionTrigger.ts) — keep byte-identical.
+// (web/src/util/commit.ts, shimUpdateCommitMessage) — keep byte-identical.
 func ShimUpdateCommitMessage(mode string) string {
 	return PrefixCommit("Update autograder trigger to "+mode+" (submission-mode)") + "\n\n[skip ci]"
 }

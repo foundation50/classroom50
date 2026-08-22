@@ -678,12 +678,8 @@ def is_shim_update_commit(workspace: pathlib.Path, head_sha: str) -> bool:
     never overlap in practice.
 
     The web's submissions page answers the same question from the commit
-    SUBJECT (first line): it excludes a fixed set of the tool's own commit
-    subjects, and does NOT read the `[skip ci]` body or the touched paths,
-    because the list-commits API carries no per-commit paths. The rules
-    therefore differ at the edge: a student who hand-edits only the shim is
-    skipped here but still counted there, and a student whose commit subject
-    exactly matches a tool subject is excluded there but graded here.
+    SUBJECT, not the touched paths (list-commits carries none), so the two
+    disagree at the edges.
     """
     if not head_sha:
         return False

@@ -14,6 +14,7 @@ import {
   FEEDBACK_OPEN_COMMIT_MESSAGE,
   shimUpdateCommitMessage,
 } from "@/util/commit"
+import { branchClient } from "@/test/branchDetectionClient"
 
 const makeClient = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -23,39 +24,6 @@ const wrapper =
   ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   )
-
-// The same branch-mode read router the teacher hook's test uses: repo object
-// (default_branch), the marker commit list (baseline), and the default-branch
-// commit log. This hook resolves the repo name itself from
-// classroom/assignment/username, so any repo-shaped URL is answered.
-function branchClient(opts: {
-  defaultBranch?: string | null
-  baselineCommits?: Array<{ sha: string }>
-  branchCommits?: Array<{ sha: string; message?: string }>
-}) {
-  return (url: string) => {
-    if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
-      return opts.defaultBranch === null
-        ? Promise.resolve(null)
-        : Promise.resolve({ default_branch: opts.defaultBranch ?? "main" })
-    }
-    if (url.includes("path=.classroom50.yaml")) {
-      return Promise.resolve(opts.baselineCommits ?? [])
-    }
-    if (url.includes("/commits?sha=")) {
-      return Promise.resolve(
-        (opts.branchCommits ?? []).map((c) => ({
-          sha: c.sha,
-          commit: {
-            message: c.message ?? c.sha,
-            committer: { date: "2026-06-20T10:00:00Z" },
-          },
-        })),
-      )
-    }
-    return Promise.resolve([])
-  }
-}
 
 beforeEach(() => {
   request.mockReset()

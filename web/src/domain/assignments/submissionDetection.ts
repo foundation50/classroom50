@@ -39,53 +39,44 @@ export function isGlobPattern(pattern: string): boolean {
 // The subjects of the commits the tool authors onto a student repo's DEFAULT
 // BRANCH for its own bookkeeping: the empty commit that opens the Feedback PR
 // at accept time and the submission-mode shim retrofit. Neither can ever be
-// graded — both carry `[skip ci]`, and the runner skips them anyway — so
-// counting one shows a submission no run, tag or Release can follow. Taken
-// from the writers' own strings so the two can't drift; ANY further such
-// writer must be added here. Deliberately not "anything carrying `[skip ci]`":
-// a student can write that too, and their push is still a submission, it just
-// wasn't graded. The student's own `[Classroom 50] Submit <slug>` carries the
-// prefix but is not in this set, so submit-flow work keeps counting.
+// graded, so counting one shows a submission no run, tag or Release can follow.
+// ANY further such writer must be added here.
 //
-// Matching is on the exact commit SUBJECT (first line), not authorship or
-// paths, so a student whose commit subject is byte-identical to one of these
-// is excluded too. That collision is an accepted trade-off, not a checked
-// guarantee: the subjects are long, tool-specific, and end in a mode token, so
-// hitting one by accident is implausible, and a student who forges one only
-// hides their own submission. `submissionCommits` never reads the `[skip ci]`
-// body — the body marker is the runner's grading gate, not this counter's.
+// Deliberately not "anything carrying `[skip ci]`": a student can write that
+// marker too, and their push is still a submission, it just wasn't graded. So
+// the student's own `[Classroom 50] Submit <slug>` keeps counting.
+//
+// Matching is on the exact commit SUBJECT, not authorship or paths, so a
+// student whose subject is byte-identical to one of these is excluded too. That
+// collision is an accepted trade-off, not a checked guarantee: the subjects are
+// long, tool-specific, and end in a mode token, and a student who forges one
+// only hides their own submission.
 const TOOL_COMMIT_SUBJECTS: ReadonlySet<string> = new Set(
   [
     FEEDBACK_OPEN_COMMIT_MESSAGE,
-    ...SUBMISSION_MODES.map((mode) => shimUpdateCommitMessage(mode)),
+    ...SUBMISSION_MODES.map(shimUpdateCommitMessage),
   ].map(commitSubject),
 )
 
-// `baselineSha` is the oldest commit touching the .classroom50.yaml marker (the
-// accept commit); a null baseline (no marker, e.g. a bare repo) excludes
-// nothing. Everything at or BEFORE the baseline is accept-time setup, not
-// student work: on a templated assignment the accept commit sits on top of the
-// template's generated commit(s), which are older than the baseline, so a plain
-// `c.sha !== baselineSha` would leave those template commits counting. Commits
-// arrive newest-first, so we drop the baseline and every commit after its
-// position in the list (its ancestors), then drop the tool's own bookkeeping
-// commits (the Feedback-PR opener, the shim retrofit) that land ABOVE the
-// baseline. Exported so the student's own view counts the identical set
-// (useGetMyPushSubmissions) instead of re-deriving it. Anything left still
-// counts — an unrecognized commit is a submission, never a silent skip.
+// The default-branch commits that count as student submissions. `baselineSha`
+// is the oldest commit touching the .classroom50.yaml marker (the accept
+// commit); null (no marker, e.g. a bare repo) trims nothing.
+//
+// Everything at or BEFORE the baseline is accept-time setup: on a templated
+// assignment the accept commit sits on top of the template's generated
+// commit(s), which are its ANCESTORS, so `c.sha !== baselineSha` alone would
+// leave those template commits counting. Commits arrive newest-first, so the
+// baseline's index is the cut point.
 export function submissionCommits(
   commits: GitHubCommit[],
   baselineSha: string | null,
 ): GitHubCommit[] {
-  // Commits are newest-first, so the baseline and everything after it (older)
-  // is accept-time setup. Keep only the commits before the baseline's index; a
-  // baseline not present in the list (or null) trims nothing.
   const baselineIdx = baselineSha
     ? commits.findIndex((c) => c.sha === baselineSha)
     : -1
-  const pastBaseline =
+  const newerThanBaseline =
     baselineIdx === -1 ? commits : commits.slice(0, baselineIdx)
-  return pastBaseline.filter(
+  return newerThanBaseline.filter(
     (c) => !TOOL_COMMIT_SUBJECTS.has(commitSubject(c.commit.message)),
   )
 }

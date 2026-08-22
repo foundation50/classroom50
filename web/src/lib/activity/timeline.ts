@@ -56,11 +56,15 @@ export type TimelineItem = {
 // Classify a config-repo commit by the verb after the "[Classroom 50] " prefix.
 // Falls back to "config" for anything unrecognized (still a real config change).
 export function classifyConfigCommit(message: string): TimelineType {
-  const firstLine = commitSubject(stripPrefix(message)).toLowerCase()
-  if (firstLine.includes("assignment")) return "assignment"
-  if (firstLine.includes("classroom")) return "classroom"
-  if (firstLine.includes("student")) return "student"
-  if (firstLine.includes("score")) return "scores"
+  return classifySubject(commitSubject(stripPrefix(message)))
+}
+
+function classifySubject(subject: string): TimelineType {
+  const verb = subject.toLowerCase()
+  if (verb.includes("assignment")) return "assignment"
+  if (verb.includes("classroom")) return "classroom"
+  if (verb.includes("student")) return "student"
+  if (verb.includes("score")) return "scores"
   return "config"
 }
 
@@ -83,12 +87,12 @@ function commitTimeMs(commit: GitHubCommit): number {
 }
 
 export function commitToItem(commit: GitHubCommit): TimelineItem {
-  const message = commit.commit.message
+  const subject = commitSubject(stripPrefix(commit.commit.message))
   return {
     id: `commit-${commit.sha}`,
     source: "commit",
-    type: classifyConfigCommit(message),
-    label: commitSubject(stripPrefix(message)),
+    type: classifySubject(subject),
+    label: subject,
     detail: commit.sha.slice(0, 7),
     detailKind: "sha",
     actor: commit.author?.login ?? commit.commit.author?.name,

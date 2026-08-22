@@ -4,6 +4,8 @@
 // skeleton collect-scores.yaml workflow — no compile-time link across the three,
 // so update every copy in lockstep.
 
+import type { SubmissionMode } from "@/types/classroom"
+
 export const COMMIT_PREFIX = "[Classroom 50]"
 
 // prefixCommit prepends COMMIT_PREFIX, producing "[Classroom 50] <message>".
@@ -12,9 +14,13 @@ export function prefixCommit(message: string): string {
   return `${COMMIT_PREFIX} ${message}`
 }
 
-// A commit's subject: the first line of its message, trimmed.
+// A commit's subject: the first line of its message, trimmed. Callers want the
+// subject rather than the whole message because bodies carry noise they must
+// not match on or display — the tool's `[skip ci]` marker lives in the body,
+// and a timeline row has no space for one.
 export function commitSubject(message: string): string {
-  return message.split("\n")[0].trim()
+  const newline = message.indexOf("\n")
+  return (newline === -1 ? message : message.slice(0, newline)).trim()
 }
 
 // The two commits the tool authors onto a STUDENT repo's default branch for its
@@ -31,7 +37,7 @@ export const FEEDBACK_OPEN_COMMIT_MESSAGE = `${prefixCommit(
   "Open Feedback PR (gh student accept)",
 )}\n\n[skip ci]`
 
-export function shimUpdateCommitMessage(mode: "every-push" | "tag"): string {
+export function shimUpdateCommitMessage(mode: SubmissionMode): string {
   return (
     prefixCommit(`Update autograder trigger to ${mode} (submission-mode)`) +
     "\n\n[skip ci]"

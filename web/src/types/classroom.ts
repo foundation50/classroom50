@@ -283,8 +283,8 @@ export type Assignment = {
   // COMMIT past the baseline counts as a submission (the tool's own `[skip ci]`
   // bookkeeping commits excepted — see submissionCommits), and the shim grades
   // every push plus submit/* tags — so a push of several commits grades once.
-  // "tag": only submit/* tag pushes count,
-  // which both submit clients create after the branch push — a plain `git push`
+  // "tag": only submit/* tag pushes count, which both submit clients create
+  // after the branch push — a plain `git push`
   // does not count or grade. Baked into the shim at accept time; changing it
   // later requires retrofitting existing repos' shims (gradebook bulk action or
   // `gh teacher assignment submission-mode`). Permitted on every repo shape,
