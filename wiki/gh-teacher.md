@@ -169,7 +169,7 @@ gh teacher classroom add <org> <short-name> [--name "<full name>"] [--term <term
 gh teacher classroom add cs50-fall-2026 cs-principles --name "CS Principles" --term Fall-2026
 ```
 
-**Short-name rules:** `^[a-z0-9][a-z0-9-]{1,38}$` — 2–39 characters, lowercase
+**Short-name rules:** `^[a-z0-9][a-z0-9-]{1,99}$` — 2–100 characters, lowercase
 letters/digits/hyphens, starting with a letter or digit. It becomes part of
 student repo names (`<short-name>-<assignment>-<username>`).
 
@@ -581,7 +581,7 @@ gh teacher assignment add cs50-fall-2026 cs-principles actions-lab --name "Actio
 
 Registers or upserts one assignment. Re-running with the same slug replaces the
 entry wholesale (dropping tests or a template you don't re-pass — the CLI warns).
-The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
+The slug must match `^[a-z0-9][a-z0-9-]{1,99}$`.
 
 **Required:** `--name`.
 

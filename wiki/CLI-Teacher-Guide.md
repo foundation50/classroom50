@@ -231,7 +231,7 @@ gh teacher classroom add <org> <short-name> --name "<full name>" --term <term>
 gh teacher classroom add cs50-fall-2026 cs-principles --name "CS Principles" --term Fall-2026
 ```
 
-The `<short-name>` must match `^[a-z0-9][a-z0-9-]{1,38}$` (2–39 characters,
+The `<short-name>` must match `^[a-z0-9][a-z0-9-]{1,99}$` (2–100 characters,
 lowercase letters/digits/hyphens, starting with a letter or digit), because it
 becomes part of student repo names like `<short-name>-<assignment>-<username>`.
 `--name` and `--term` are optional but recommended.
@@ -536,7 +536,7 @@ gh teacher assignment add cs50-fall-2026 cs-principles reflection --name "Reflec
 
 **`--name` is required; `--template` is optional.** Omit `--template` for a
 template-less assignment (students get an initialized repository with a README
-and the autograding setup). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
+and the autograding setup). The slug must match `^[a-z0-9][a-z0-9-]{1,99}$`.
 
 **Optional flags:**
 
