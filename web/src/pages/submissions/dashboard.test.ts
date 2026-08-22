@@ -254,6 +254,24 @@ describe("computeStats", () => {
     expect(computeStats(rows, 1, 1).failing).toBe(1)
   })
 
+  it("reports zero submitted for an all-pending (overlay-only) row set", () => {
+    // Every overlay row — live presence or detection — is `pending`, and the
+    // graded tallies skip those by design. So on an assignment whose rows come
+    // ONLY from an overlay (a no_autograder assignment, where scores.json holds
+    // no entries), these stats are structurally 0 submitted out of the whole
+    // roster. That is why SubmissionsPage hides Metrics whenever an overlay is
+    // active (overlayCapable, not liveCapable): offering it there would show 0
+    // submitted beside a table listing detected submitters.
+    const rows = [
+      row({ pending: true, score: 0, "max-score": 0 }),
+      row({ owner: "bob", pending: true, score: 0, "max-score": 0 }),
+    ]
+    const stats = computeStats(rows, 2, 0.7)
+    expect(stats.submitted).toBe(0)
+    expect(stats.ungraded).toBe(0)
+    expect(stats.rostered).toBe(2)
+  })
+
   it("counts everything as ungraded (no passing/failing) when threshold is null", () => {
     const rows = [
       row({ score: 10, "max-score": 10 }),

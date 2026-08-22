@@ -1179,9 +1179,13 @@ const SubmissionsPageContent = () => {
             canRegradeAll={canRegradeAll}
             emptyRoster={emptyRoster.show}
             emptyRepo={skipsGrading}
-            // Metrics summarizes the graded snapshot; hide it when live (the
-            // overlay adds ungraded pending rows the stats don't model).
-            onMetrics={liveCapable ? undefined : () => setMetricsOpen(true)}
+            // Metrics summarizes the GRADED snapshot, and computeStats skips
+            // every `pending` row — so hide it whenever an overlay is adding
+            // those rows, live or detection. Keying this on liveCapable alone
+            // left it reachable for a no_autograder assignment, where detection
+            // supplies every row: the modal would report 0 submitted while the
+            // table listed detected submitters right next to it.
+            onMetrics={overlayCapable ? undefined : () => setMetricsOpen(true)}
             onCollect={() => collectScores.collect()}
             onRegradeAll={() => setRegradeConfirmOpen(true)}
             // Bulk-open Feedback PRs: owner-only (needs admin on every repo,
@@ -1449,7 +1453,7 @@ const SubmissionsPageContent = () => {
         onClose={() => setLockConfirmOpen(false)}
       />
       <MetricsModal
-        open={metricsOpen && !liveCapable}
+        open={metricsOpen && !overlayCapable}
         onClose={() => setMetricsOpen(false)}
         isGroup={isGroupAssignment}
         submitted={stats.submitted}
