@@ -764,8 +764,7 @@ const SubmissionsTable = ({
                       owner: student.username,
                       isGroup: false,
                       title:
-                        getName(student.username, students) ||
-                        student.username,
+                        getName(student.username, students) || student.username,
                       subtitle: identitySubtitle(
                         getName(student.username, students),
                         student.username,

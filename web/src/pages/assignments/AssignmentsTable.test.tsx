@@ -59,11 +59,18 @@ const assignment = (over: Partial<Assignment> = {}): Assignment =>
 const inOrgTemplate = { owner: "acme", repo: "tmpl", branch: "main" }
 const ACCESS_ARIA = "assignments.template.accessModal.triggerAria"
 
-// The submission cell renders "<submitted> / <denominator>" as sibling text
-// nodes; read the row's textContent to assert the rendered ratio.
+// Table-wide text (count badges, percentages, fallback strings).
 const ratioText = () =>
-  screen.getByText("assignments.table.colSubmissions").closest("table")
+  screen.getByText("assignments.table.colSubmitted").closest("table")
     ?.textContent ?? ""
+
+// The metric dials carry the exact value/denominator as ARIA; the visible
+// cell shows only a count badge plus the percentage inside the dial.
+const dials = () =>
+  [...document.querySelectorAll('[role="progressbar"]')].map((el) => ({
+    value: el.getAttribute("aria-valuenow"),
+    max: el.getAttribute("aria-valuemax"),
+  }))
 
 beforeEach(() => {
   scores.mockReset()
@@ -86,7 +93,7 @@ describe("AssignmentsTable submission denominator", () => {
       />,
     )
     // 3 submitted out of 11 students (not the 14 roster rows).
-    expect(ratioText()).toContain("3 / 11")
+    expect(dials()).toEqual([{ value: "3", max: "11" }])
   })
 
   it("clamps so a non-student submission can't push the ratio above 100%", () => {
@@ -102,11 +109,11 @@ describe("AssignmentsTable submission denominator", () => {
         studentCount={3}
       />,
     )
-    expect(ratioText()).toContain("3 / 3")
-    expect(ratioText()).not.toContain("5 / 3")
+    expect(dials()).toEqual([{ value: "3", max: "3" }])
+    expect(ratioText()).toContain("100%")
   })
 
-  it("renders 0 / 0 without dividing by zero when there are no students", () => {
+  it("renders an empty 0% dial without dividing by zero when there are no students", () => {
     scores.mockReturnValue({ data: { submissions: { hw1: [{}] } } })
     wrap(
       <AssignmentsTable
@@ -116,7 +123,34 @@ describe("AssignmentsTable submission denominator", () => {
         studentCount={0}
       />,
     )
-    expect(ratioText()).toContain("0 / 0")
+    expect(dials()).toEqual([{ value: "0", max: "0" }])
+    expect(ratioText()).toContain("0%")
+  })
+
+  it("shows the accepted column from existing repos once the repo list loads", () => {
+    scores.mockReturnValue({ data: { submissions: { hw1: [{}, {}] } } })
+    orgRepos.mockReturnValue({
+      data: [
+        { name: "cs101-hw1-alice" },
+        { name: "cs101-hw1-bob" },
+        { name: "cs101-hw1-carol" },
+        { name: "cs101-hw1-dave" },
+        { name: "cs101-hw2-erin" }, // another assignment's repo — excluded
+      ],
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment()]}
+        studentCount={5}
+      />,
+    )
+    // Accepted 4 of 5 and submitted 2 of 5, each with its own dial.
+    expect(dials()).toEqual([
+      { value: "4", max: "5" },
+      { value: "2", max: "5" },
+    ])
   })
 
   it("falls back to a bare submitted count while the org repo list loads", () => {
@@ -130,7 +164,7 @@ describe("AssignmentsTable submission denominator", () => {
       />,
     )
     expect(ratioText()).toContain("assignments.table.groupsSubmitted")
-    expect(ratioText()).not.toContain("/ 11")
+    expect(dials()).toEqual([])
   })
 
   it("uses existing group repos as the group denominator once repos load", () => {
@@ -151,9 +185,13 @@ describe("AssignmentsTable submission denominator", () => {
         studentCount={11}
       />,
     )
-    expect(ratioText()).toContain("2 / 3")
-    expect(document.querySelector("progress")).toBeTruthy()
-    expect(ratioText()).not.toContain("/ 11")
+    // Accepted is a bare count (no roster denominator for groups; the tooltip
+    // carries the "groups" context); the submitted dial measures against the
+    // 3 existing group repos.
+    expect(
+      screen.getByTitle("assignments.table.groupsAcceptedTitle").textContent,
+    ).toBe("3")
+    expect(dials()).toEqual([{ value: "2", max: "3" }])
   })
 
   it("clamps the group ratio so a stale submission can't exceed the repo count", () => {
@@ -169,8 +207,7 @@ describe("AssignmentsTable submission denominator", () => {
         studentCount={11}
       />,
     )
-    expect(ratioText()).toContain("2 / 2")
-    expect(ratioText()).not.toContain("3 / 2")
+    expect(dials()).toEqual([{ value: "2", max: "2" }])
   })
 })
 
@@ -282,13 +319,13 @@ describe("AssignmentsTable — Release date column", () => {
 })
 
 // An assignment that skips grading records no graded `entries`, so its count
-// comes from the collected `detected` list instead (#659). The cell renders the
-// same N / M + progress bar as an autograded row, so the two read consistently.
+// comes from the collected `detected` list instead (#659). The cell renders
+// the same count + dial as an autograded row, so the two read consistently.
 describe("AssignmentsTable — assignments that skip grading", () => {
   const detected = (owners: string[]) =>
     owners.map((owner) => ({ owner, usernames: [owner], count: 1 }))
 
-  it("shows a real ratio and progress bar from collected detection", () => {
+  it("shows a real ratio and dial from collected detection", () => {
     scores.mockReturnValue({
       data: { submissions: {}, detected: { hw1: detected(["alice", "bob"]) } },
     })
@@ -300,11 +337,10 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         studentCount={3}
       />,
     )
-    expect(ratioText()).toContain("2 / 3")
-    expect(document.querySelector("progress")).toBeTruthy()
+    expect(dials()).toEqual([{ value: "2", max: "3" }])
   })
 
-  it("shows 0 / N once collected with no submitters", () => {
+  it("shows an honest zero once collected with no submitters", () => {
     // An empty `detected` list means the bucket WAS walked and nobody has
     // submitted — an honest zero, unlike the permanent 0/N this replaced.
     scores.mockReturnValue({
@@ -318,7 +354,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         studentCount={3}
       />,
     )
-    expect(ratioText()).toContain("0 / 3")
+    expect(dials()).toEqual([{ value: "0", max: "3" }])
   })
 
   it("says not collected yet when no collect has walked the bucket", () => {
@@ -334,8 +370,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
       />,
     )
     expect(screen.getByText("assignments.table.notCollectedYet")).toBeTruthy()
-    expect(ratioText()).not.toContain("0 / 3")
-    expect(document.querySelector("progress")).toBeNull()
+    expect(dials()).toEqual([])
   })
 
   it("applies to a bare empty_repo assignment too", () => {
@@ -353,7 +388,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         studentCount={2}
       />,
     )
-    expect(ratioText()).toContain("1 / 2")
+    expect(dials()).toEqual([{ value: "1", max: "2" }])
     expect(screen.queryByText("assignments.table.notCollectedYet")).toBeNull()
   })
 
@@ -371,7 +406,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         studentCount={4}
       />,
     )
-    expect(ratioText()).toContain("3 / 4")
+    expect(dials()).toEqual([{ value: "3", max: "4" }])
   })
 
   it("never reads detection for a normally autograded assignment", () => {
@@ -391,7 +426,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         studentCount={4}
       />,
     )
-    expect(ratioText()).toContain("1 / 4")
+    expect(dials()).toEqual([{ value: "1", max: "4" }])
   })
 
   it("counts detected group submissions per repo", () => {

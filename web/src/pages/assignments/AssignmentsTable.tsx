@@ -17,6 +17,7 @@ import { isNoAutograderAssignment } from "@/domain/assignments/autogradingState"
 import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
+import type { CSSProperties } from "react"
 import { ConfirmModal } from "@/components/modals"
 import { ReuseAssignmentModal } from "@/components/modals/ReuseAssignmentModal"
 import { TemplateAccessModal } from "@/components/modals/TemplateAccessModal"
@@ -331,6 +332,71 @@ const ReleaseDateCell = ({ assignment }: { assignment: Assignment }) => {
   )
 }
 
+// Ring geometry for MetricCell: sized so the inner percentage stays legible
+// while the row keeps a compact height.
+const ringStyle = (value: number) =>
+  ({
+    "--value": value,
+    "--size": "2rem",
+    "--thickness": "3px",
+  }) as CSSProperties
+
+// One high-level funnel metric (Accepted / Submitted columns): the absolute
+// count as a toned badge (tabular numerals, fixed slot so the column aligns
+// down the rows), then a radial dial with the percentage inside. The
+// denominator lives in the tooltip wording rather than the cell — the dial
+// already expresses "out of how many" as a fraction of the circle. A faint
+// 100% track sits under the value ring so a low percentage still reads as a
+// dial rather than a floating number. Callers keep value <= max so the dial
+// can never contradict its count. One `tone` drives badge and ring together:
+// info = accepted, success = submitted.
+const METRIC_RING_CLASS = { info: "text-info", success: "text-success" }
+const MetricCell = ({
+  value,
+  max,
+  tone,
+  title,
+}: {
+  value: number
+  max: number
+  tone: "info" | "success"
+  title: string
+}) => {
+  const pct = max === 0 ? 0 : Math.round((value / max) * 100)
+  return (
+    <div className="flex items-center gap-2 whitespace-nowrap" title={title}>
+      <Badge
+        tone={tone}
+        className="min-w-8 justify-center font-bold tabular-nums"
+      >
+        {value}
+      </Badge>
+      <div
+        role="progressbar"
+        aria-label={title}
+        aria-valuemin={0}
+        aria-valuemax={max}
+        aria-valuenow={value}
+        className="relative"
+      >
+        <div
+          className="radial-progress text-base-content/10"
+          style={ringStyle(100)}
+          aria-hidden="true"
+        />
+        <div
+          className={`radial-progress absolute inset-0 ${METRIC_RING_CLASS[tone]}`}
+          style={ringStyle(pct)}
+          aria-hidden="true"
+        />
+        <span className="absolute inset-0 flex items-center justify-center text-[0.625rem] font-semibold tabular-nums text-base-content">
+          {pct}%
+        </span>
+      </div>
+    </div>
+  )
+}
+
 const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
   <>
     {Array.from({ length: rows }).map((_, i) => (
@@ -341,7 +407,8 @@ const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
         <SkeletonCell bar="h-4 w-24" />
         <SkeletonCell bar="h-6 w-28" />
         <SkeletonCell bar="h-6 w-28" />
-        <SkeletonCell bar="h-4 w-56" />
+        <SkeletonCell bar="h-4 w-32" />
+        <SkeletonCell bar="h-4 w-32" />
         <SkeletonCell bar="ms-auto h-8 w-16" />
       </tr>
     ))}
@@ -382,6 +449,38 @@ const AssignmentsTable = ({
   // Sibling slugs guard group-repo attribution against a slug-extending
   // sibling ("hw1-bonus" under "hw1"); see existingGroupRepos.
   const siblingSlugs = assignments?.map((a) => a.slug) ?? []
+  // Raw funnel counts for one row, shared by the Accepted and Submitted cells.
+  //
+  // `submitted`: an assignment that skips grading records no autograded
+  // `entries`, so its count comes from the bucket's `detected` list —
+  // commits/tags collect_scores.py observed in the student repos. Only
+  // no_autograder is detected; a bare empty_repo has no submission definition,
+  // so it keeps the entries-based count rather than waiting for a `detected`
+  // list no writer produces. And a teacher can hand-grade a no_autograder
+  // assignment, which DOES write entries — so take whichever signal credits
+  // more owners instead of letting an empty detection hide real grades (#659).
+  //
+  // `notCollected`: a `detected` key that is absent (not `[]`) means no
+  // collect has walked the bucket yet, which is NOT "nobody submitted".
+  //
+  // `accepted`: this assignment's existing repos, reverse-parsed from the org
+  // repo list — individual student repos and group repos share the
+  // <classroom>-<slug>-<owner> name shape, so one parse serves both modes.
+  // undefined while the repo list is still loading.
+  const funnelCounts = (assignment: Assignment) => {
+    const graded = scoresData?.submissions?.[assignment.slug]?.length ?? 0
+    const detectedRows = isNoAutograderAssignment(assignment)
+      ? scoresData?.detected?.[assignment.slug]
+      : undefined
+    const notCollected =
+      isNoAutograderAssignment(assignment) && !detectedRows && graded === 0
+    const submitted = Math.max(graded, detectedRows?.length ?? 0)
+    const accepted = orgRepos
+      ? existingGroupRepos(orgRepos, classroom, assignment.slug, siblingSlugs)
+          .length
+      : undefined
+    return { submitted, accepted, notCollected }
+  }
   const navigate = useNavigate()
   // Mutating row actions require both an unarchived classroom and author rights.
   const canMutate = !archived && canAuthor
@@ -405,7 +504,8 @@ const AssignmentsTable = ({
             <th scope="col">{t("assignments.table.colType")}</th>
             <th scope="col">{t("assignments.table.colReleaseDate")}</th>
             <th scope="col">{t("assignments.table.colDueDate")}</th>
-            <th scope="col">{t("assignments.table.colSubmissions")}</th>
+            <th scope="col">{t("assignments.table.colAccepted")}</th>
+            <th scope="col">{t("assignments.table.colSubmitted")}</th>
             <th scope="col">
               <span className="sr-only">
                 {t("assignments.table.colActions")}
@@ -424,17 +524,14 @@ const AssignmentsTable = ({
           {loading && <SkeletonRows />}
           {!loading && !assignments?.length && (
             <tr>
-              <td colSpan={6} className="text-center">
+              <td colSpan={7} className="text-center">
                 {t("assignments.table.empty")}
               </td>
             </tr>
           )}
           {!loading &&
             assignments?.map((assignment) => (
-              <ClickableTr
-                key={assignment.slug}
-                className="hover:bg-base-200"
-              >
+              <ClickableTr key={assignment.slug} className="hover:bg-base-200">
                 <td
                   onClick={() =>
                     navigate({
@@ -539,52 +636,70 @@ const AssignmentsTable = ({
                   }
                 >
                   {(() => {
-                    // An assignment that skips grading records no autograded
-                    // `entries`, so its count comes from the bucket's `detected`
-                    // list — commits/tags collect_scores.py observed in the
-                    // student repos. Same shape as the graded branch below (a
-                    // real N / M and progress bar) so the two read consistently
-                    // (#659).
-                    //
-                    // Only no_autograder is detected; a bare empty_repo has no
-                    // submission definition, so it keeps the entries-based count
-                    // rather than waiting for a `detected` list no writer
-                    // produces. And a teacher can hand-grade a no_autograder
-                    // assignment, which DOES write entries — so take whichever
-                    // signal credits more owners instead of letting an empty
-                    // detection hide real overridden grades.
-                    const graded =
-                      scoresData?.submissions?.[assignment.slug]?.length ?? 0
-                    const detectedRows = isNoAutograderAssignment(assignment)
-                      ? scoresData?.detected?.[assignment.slug]
-                      : undefined
-                    // Absent (not `[]`) means no collect has walked this bucket
-                    // yet, which is NOT "nobody submitted" — showing 0 / M there
-                    // is the bug (#659). With no graded rows either, say so.
-                    if (
-                      isNoAutograderAssignment(assignment) &&
-                      !detectedRows &&
-                      graded === 0
-                    ) {
+                    const { submitted, accepted } = funnelCounts(assignment)
+                    if (accepted === undefined) {
+                      // Org repo list still loading — no acceptance signal yet.
+                      return <span className="text-base-content/60">—</span>
+                    }
+                    if (assignment.mode === "group") {
+                      // Groups have no roster denominator (any student can
+                      // found one), so acceptance is a bare count — no dial;
+                      // the "groups" context lives in the tooltip.
+                      return (
+                        <Badge
+                          tone="info"
+                          className="min-w-8 justify-center font-bold tabular-nums"
+                          title={t("assignments.table.groupsAcceptedTitle")}
+                        >
+                          {accepted}
+                        </Badge>
+                      )
+                    }
+                    const total = studentCount ?? 0
+                    // Clamp (KTD4-style): a staff/extra repo could push the
+                    // count past the student-role total, and a recorded
+                    // submission implies its repo existed.
+                    const shown = Math.min(
+                      Math.max(accepted, Math.min(submitted, total)),
+                      total,
+                    )
+                    return (
+                      <MetricCell
+                        value={shown}
+                        max={total}
+                        tone="info"
+                        title={t("assignments.table.acceptedTitle", {
+                          accepted: shown,
+                          total,
+                        })}
+                      />
+                    )
+                  })()}
+                </td>
+                <td
+                  onClick={() =>
+                    navigate({
+                      to: "/$org/$classroom/assignments/$assignment/submissions",
+                      params: { org, classroom, assignment: assignment.slug },
+                    })
+                  }
+                >
+                  {(() => {
+                    const { submitted, accepted, notCollected } =
+                      funnelCounts(assignment)
+                    if (notCollected) {
                       return (
                         <span className="whitespace-nowrap text-base-content/60">
                           {t("assignments.table.notCollectedYet")}
                         </span>
                       )
                     }
-
-                    const submitted = Math.max(
-                      graded,
-                      detectedRows?.length ?? 0,
-                    )
-
-                    // Group assignments submit per-repo, not per-student, so
-                    // the denominator is the number of group repos that exist
-                    // (accepted groups), derived from the org repo list. Until
-                    // that list loads there's no denominator, so fall back to
-                    // the bare count rather than a false "N / 0".
                     if (assignment.mode === "group") {
-                      if (!orgRepos) {
+                      // Groups submit per-repo, so the only meaningful
+                      // denominator is the number of groups that accepted.
+                      // Until the repo list loads, fall back to the bare count
+                      // rather than a false "N / 0".
+                      if (accepted === undefined) {
                         return (
                           <span className="whitespace-nowrap">
                             {t("assignments.table.groupsSubmitted", {
@@ -593,55 +708,38 @@ const AssignmentsTable = ({
                           </span>
                         )
                       }
-                      const groupCount = existingGroupRepos(
-                        orgRepos,
-                        classroom,
-                        assignment.slug,
-                        siblingSlugs,
-                      ).length
-                      // Same 100% clamp as the individual branch (KTD4): a
-                      // stale submission row for a deleted repo must not push
-                      // the ratio past the bar.
-                      const shownGroups = Math.min(submitted, groupCount)
+                      const shown = Math.min(submitted, accepted)
                       return (
-                        <span
-                          className="whitespace-nowrap"
-                          title={t("assignments.table.groupsRatioTitle")}
-                        >
-                          {shownGroups} / {groupCount}{" "}
-                          <progress
-                            className="progress progress-info w-56"
-                            value={
-                              groupCount === 0
-                                ? 0
-                                : (shownGroups / groupCount) * 100
-                            }
-                            max="100"
-                          ></progress>
-                        </span>
+                        <MetricCell
+                          value={shown}
+                          max={accepted}
+                          tone="success"
+                          title={t("assignments.table.submittedTitleGroup", {
+                            submitted: shown,
+                            accepted,
+                          })}
+                        />
                       )
                     }
-
                     // Denominator is the authoritative student-role count, not
                     // the roster row count (which includes staff). The
                     // numerator is a repo-count from scores.json with no role
                     // join, so a submission from a non-student repo could push
-                    // it past the denominator — clamp the displayed fraction and
-                    // the bar to 100% (KTD4). undefined count reads as 0 until it
-                    // resolves.
-                    const denominator = studentCount ?? 0
-                    const shown = Math.min(submitted, denominator)
+                    // it past the denominator — clamp the displayed fraction
+                    // and the bar to 100% (KTD4). undefined count reads as 0
+                    // until it resolves.
+                    const total = studentCount ?? 0
+                    const shown = Math.min(submitted, total)
                     return (
-                      <>
-                        {shown} / {denominator}{" "}
-                        <progress
-                          className="progress progress-info w-56"
-                          value={
-                            denominator === 0 ? 0 : (shown / denominator) * 100
-                          }
-                          max="100"
-                        ></progress>
-                      </>
+                      <MetricCell
+                        value={shown}
+                        max={total}
+                        tone="success"
+                        title={t("assignments.table.submittedTitle", {
+                          submitted: shown,
+                          total,
+                        })}
+                      />
                     )
                   })()}
                 </td>
