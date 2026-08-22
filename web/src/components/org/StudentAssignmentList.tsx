@@ -38,13 +38,13 @@ function ModeBadge({ mode }: { mode: Assignment["mode"] }) {
   const { t } = useTranslation()
   if (mode === "group") {
     return (
-      <Badge ghost className="gap-1">
+      <Badge tone="secondary" className="w-20 justify-center">
         {t("assignments.discover.modeGroup")}
       </Badge>
     )
   }
   return (
-    <Badge ghost className="gap-1">
+    <Badge tone="info" className="w-20 justify-center">
       {t("assignments.discover.modeIndividual")}
     </Badge>
   )

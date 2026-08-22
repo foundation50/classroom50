@@ -444,14 +444,20 @@ const AssignmentsTable = ({
                   className="max-xl:text-xs"
                 >
                   {assignment.mode === "individual" && (
-                    <div className="flex gap-2 h-full">
+                    <Badge
+                      tone="info"
+                      className="w-20 justify-center max-xl:w-16"
+                    >
                       {t("assignments.table.individual")}
-                    </div>
+                    </Badge>
                   )}
                   {assignment.mode === "group" && (
-                    <div className="flex gap-2 h-full">
+                    <Badge
+                      tone="secondary"
+                      className="w-20 justify-center max-xl:w-16"
+                    >
                       {t("assignments.table.group")}
-                    </div>
+                    </Badge>
                   )}
                 </td>
                 <td
