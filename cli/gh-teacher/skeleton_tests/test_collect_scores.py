@@ -3376,7 +3376,11 @@ class TestGrantClassroomTeamAccess:
 
     def test_grants_private_in_org_template_skips_public_and_out_of_org(self, monkeypatch):
         grants = self._capture_grants(monkeypatch)
-        monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: [])  # no students
+        # No students, but the TA team has a member — templates must still be
+        # granted so a TA can read the starter code before anyone accepts.
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": [], "classroom50-cs-ta": ["ta1"]}
+        )
         assignments = {
             "schema": cs.ASSIGNMENTS_SCHEMA_V1,
             "assignments": [
@@ -3452,6 +3456,167 @@ class TestGrantClassroomTeamAccess:
                 service_token="tok",
             )
         assert ei.value.code == 403
+
+    # --- empty-staff-team skip (change 1) ---
+
+    META_TA_HTA = {
+        "schema": cs.CLASSROOM_SCHEMA_V1,
+        "short_name": "cs",
+        "team": {"id": 1, "slug": "classroom50-cs"},
+        "teams": {
+            "ta": {"id": 2, "slug": "classroom50-cs-ta"},
+            "hta": {"id": 3, "slug": "classroom50-cs-hta"},
+        },
+    }
+
+    def test_empty_staff_team_grants_nothing_and_stays_green(self, monkeypatch, capsys):
+        # A ta team with no members must not sweep any student repo. The bulk
+        # known_team_repos read and every PUT are skipped, and the run is green.
+        grants = self._capture_grants(monkeypatch)
+        known_read = {"hit": False}
+
+        def fake_known(*a, **k):
+            known_read["hit"] = True
+            return None
+
+        monkeypatch.setattr(cs, "known_team_repos", fake_known)
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice", "bob"], "classroom50-cs-ta": []}
+        )
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert grants == []
+        assert known_read["hit"] is False  # no bulk read for an empty team
+
+    def test_empty_team_skip_is_per_slug_not_all_or_nothing(self, monkeypatch):
+        # ta is empty, hta is populated: the hta team still gets its grants.
+        grants = self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(
+            monkeypatch,
+            {
+                "classroom50-cs": ["alice"],
+                "classroom50-cs-ta": [],
+                "classroom50-cs-hta": ["prof"],
+            },
+        )
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META_TA_HTA, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        granted_teams = {team for team, _, _, _ in grants}
+        assert granted_teams == {"classroom50-cs-hta"}  # ta skipped, hta granted
+
+    def test_non_404_skippable_staff_read_skips_that_team(self, monkeypatch, capsys):
+        # A 422 (not 401/403/599/throttle) reading staff membership is SKIPPABLE:
+        # skip that team for the run without failing, and don't grant.
+        grants = self._capture_grants(monkeypatch)
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs-ta":
+                raise cs.urllib.error.HTTPError(url="u", code=422, msg="unproc", hdrs=None, fp=None)
+            return ["alice"]
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert grants == []
+        assert "::warning::" in capsys.readouterr().err
+
+    def test_hard_error_on_staff_read_propagates(self, monkeypatch):
+        # A 403 (missing Members scope) reading staff membership is FATAL and
+        # must abort so main() reports it.
+        self._capture_grants(monkeypatch)
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs-ta":
+                raise cs.urllib.error.HTTPError(url="u", code=403, msg="forbidden", hdrs=None, fp=None)
+            return ["alice"]
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        with pytest.raises(cs.urllib.error.HTTPError) as ei:
+            cs.grant_classroom_team_access(
+                api_url="https://api.github.com", org="cs50", classroom_short="cs",
+                classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+            )
+        assert ei.value.code == 403
+
+    def test_throttled_staff_read_propagates_for_deferral(self, monkeypatch):
+        # A throttle reading staff membership is NOT SKIPPABLE, so it re-raises;
+        # main() turns a raw throttled HTTPError from the grant pass into a
+        # deferral (see test_raw_throttled_httperror_from_grant_pass_defers).
+        self._capture_grants(monkeypatch)
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs-ta":
+                raise http_error(403, {"Retry-After": "30"})
+            return ["alice"]
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        with pytest.raises(cs.urllib.error.HTTPError) as ei:
+            cs.grant_classroom_team_access(
+                api_url="https://api.github.com", org="cs50", classroom_short="cs",
+                classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+            )
+        assert cs.classify(ei.value) is cs.THROTTLED
+
+    def test_malformed_staff_member_listing_warns_and_skips(self, monkeypatch, capsys):
+        grants = self._capture_grants(monkeypatch)
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs-ta":
+                raise ValueError("bad JSON")
+            return ["alice"]
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert grants == []
+        assert "::warning::" in capsys.readouterr().err
+
+    # --- per-assignment scoping (change 2) ---
+
+    def test_assignment_filter_scopes_student_repos_and_template(self, monkeypatch):
+        grants = self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice"], "classroom50-cs-ta": ["ta1"]}
+        )
+        assignments = {
+            "schema": cs.ASSIGNMENTS_SCHEMA_V1,
+            "assignments": [
+                {"slug": "hw1", "mode": "individual", "template": {"owner": "cs50", "repo": "hw1-tmpl"}},
+                {"slug": "hw2", "mode": "individual", "template": {"owner": "cs50", "repo": "hw2-tmpl"}},
+            ],
+        }
+        monkeypatch.setattr(cs, "get_repo", lambda *a, **k: {"private": True})
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=assignments, service_token="tok",
+            assignment_filter="hw1",
+        )
+        repos = {repo for _, _, repo, _ in grants}
+        assert repos == {"cs-hw1-alice", "hw1-tmpl"}  # hw2 repo + template untouched
+
+    def test_assignment_filter_unknown_slug_is_a_silent_noop(self, monkeypatch, capsys):
+        # Mirrors collect_classroom: a classroom lacking the scoped slug is
+        # skipped silently (main's run-level guard owns the single loud error),
+        # so a multi-classroom Sync now doesn't spam per-classroom warnings.
+        grants = self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice"], "classroom50-cs-ta": ["ta1"]}
+        )
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+            assignment_filter="does-not-exist",
+        )
+        assert grants == []
+        assert "::warning::" not in capsys.readouterr().err
 
 
 # Throttling vs. refusal ------------------------------------------------------
@@ -4147,6 +4312,21 @@ class TestTemplatePrivacyFromTheIndex:
         )
         assert targets == [("cs50", "priv-tmpl")]
         assert read == ["priv-tmpl", "pub-tmpl"]
+
+    def test_assignment_filter_limits_to_one_assignments_template(self, monkeypatch):
+        read: list[str] = []
+
+        def fake_get_repo(api_url, owner, repo, token):
+            read.append(repo)
+            return {"private": True}
+
+        monkeypatch.setattr(cs, "get_repo", fake_get_repo)
+        targets = cs.private_template_targets(
+            "https://api.github.com", "cs50", self.ASSIGNMENTS, "tok",
+            assignment_filter="hw1",
+        )
+        assert targets == [("cs50", "priv-tmpl")]  # hw2's template not read at all
+        assert read == ["priv-tmpl"]
 
 
 class TestRepoIndexLatch:
