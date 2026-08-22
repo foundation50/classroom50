@@ -864,6 +864,23 @@ func is422AlreadyExists(httpErr *githubapi.HTTPError) bool {
 	return has422Message(httpErr, "already exists")
 }
 
+// is422NameTooLong matches GitHub's 422 for a repo name over its 100-char
+// limit. The composed `<classroom>-<assignment>-<username>` name can exceed 100
+// even when each part is individually legal (foundation50/classroom50#691), so
+// it must be told apart from the "already exists" 422 (whose recovery GET would
+// otherwise 404 on the never-created repo).
+func is422NameTooLong(httpErr *githubapi.HTTPError) bool {
+	return has422Message(httpErr, "too long")
+}
+
+// repoNameTooLongError names the cause and the fix (a shorter classroom or
+// assignment slug) rather than surfacing GitHub's raw validation error.
+func repoNameTooLongError(repoName string, cause error) error {
+	return fmt.Errorf("the repository name %q is %d characters, over GitHub's 100-character "+
+		"limit, so it couldn't be created. Ask your teacher to shorten the classroom or "+
+		"assignment slug, then run accept again: %w", repoName, len(repoName), cause)
+}
+
 // has422Message gates httpErrorMentions on a 422 status, so a caller that isn't
 // already switching on the status can't accept the same wording arriving from an
 // unrelated failure.
@@ -1204,6 +1221,9 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 		if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok {
 			switch httpErr.StatusCode {
 			case http.StatusUnprocessableEntity:
+				if is422NameTooLong(httpErr) {
+					return "", "", "", false, repoNameTooLongError(newRepoName, err)
+				}
 				if is422AlreadyExists(httpErr) {
 					getPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
 					if getErr := client.Get(getPath, &created); getErr != nil {
@@ -1329,6 +1349,9 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 		if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok {
 			switch httpErr.StatusCode {
 			case http.StatusUnprocessableEntity:
+				if is422NameTooLong(httpErr) {
+					return "", "", "", false, repoNameTooLongError(newRepoName, err)
+				}
 				if is422AlreadyExists(httpErr) {
 					getPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
 					if getErr := client.Get(getPath, &created); getErr != nil {
