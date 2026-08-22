@@ -104,6 +104,33 @@ export function forkParentRestrictedError(
   )
 }
 
+// GitHub rejects a repo name over its 100-char limit with a 422. The composed
+// student-repo name `<classroom>-<assignment>-<username>` can exceed 100 even
+// when each part is individually legal (foundation50/classroom50#691), so name
+// the cause and the fix (shorter classroom/assignment slug) rather than letting
+// it fall through to a confusing not-found from the "already exists" recovery.
+export function repoNameTooLongError(
+  repoName: string,
+  status: number,
+  githubMessage?: string,
+): TemplateAccessError {
+  return new TemplateAccessError(
+    {
+      key: "accept.templateErrors.repoNameTooLong",
+      params: {
+        name: repoName,
+        length: repoName.length,
+        status,
+        detail: githubSaid(githubMessage),
+      },
+    },
+    {
+      key: "accept.templateErrors.repoNameTooLongStep",
+      params: { name: repoName, length: repoName.length },
+    },
+  )
+}
+
 // The one 403 message GitHub was observed to return when the *destination* org
 // refuses the create (issue #413). Matched as a substring, case-insensitively.
 const ORG_REPO_CREATION_DENIED_SIGNATURE = "admin access to the organization"

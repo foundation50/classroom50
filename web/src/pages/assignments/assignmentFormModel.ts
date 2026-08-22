@@ -1,6 +1,11 @@
 import { useForm } from "@tanstack/react-form"
 import type { TFunction } from "i18next"
 import { slugify } from "@/util/slug"
+import {
+  SHORT_NAME_PATTERN,
+  SHORT_NAME_PATTERN_DESCRIPTION,
+  isCanonicalTeamShortName,
+} from "@/util/shortName"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
   DEFAULT_SETUP_TIMEOUT_SECONDS,
@@ -260,6 +265,15 @@ export function validateAssignmentForm(
     const slug = slugify(value.slug)
     if (!slug) {
       errors.slug = t("assignments.form.validation.slugRequired")
+    } else if (
+      !SHORT_NAME_PATTERN.test(slug) ||
+      !isCanonicalTeamShortName(slug)
+    ) {
+      // Same cross-tool short-name contract as classroom slugs (both become
+      // repo path segments); the write path historically skipped it.
+      errors.slug = t("assignments.form.validation.slugInvalid", {
+        description: SHORT_NAME_PATTERN_DESCRIPTION,
+      })
     } else if (
       (slugContext?.takenSlugs ?? []).some(
         (s) => s.trim().toLowerCase() === slug.toLowerCase(),

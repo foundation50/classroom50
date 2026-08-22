@@ -3335,7 +3335,8 @@ describe("createAssignmentRepo", () => {
             new GitHubAPIError({
               status: 422,
               url: path,
-              message: "Unprocessable",
+              message:
+                "Repository creation failed: name already exists on this account",
               body: null,
               rateLimit: {
                 limit: null,
@@ -3825,14 +3826,14 @@ describe("createAssignmentRepo destination-org refusal (#413)", () => {
     ).rejects.toMatchObject({ name: "GitHubAPIError", status: 403 })
   })
 
-  it("still returns already-accepted on a 422 for both paths", async () => {
+  it("still returns already-accepted on an already-exists 422 for both paths", async () => {
     const templated = await createAssignmentRepo({
       client: clientRejecting(
         generatePath,
         new GitHubAPIError({
           status: 422,
           url: generatePath,
-          message: "Unprocessable",
+          message: "Repository creation failed: name already exists on this account",
           body: null,
           rateLimit: {
             limit: null,
@@ -3858,7 +3859,7 @@ describe("createAssignmentRepo destination-org refusal (#413)", () => {
         new GitHubAPIError({
           status: 422,
           url: orgReposPath,
-          message: "Unprocessable",
+          message: "Repository creation failed: name already exists on this account",
           body: null,
           rateLimit: {
             limit: null,
@@ -3876,6 +3877,45 @@ describe("createAssignmentRepo destination-org refusal (#413)", () => {
       bare: true,
     })
     expect(templateless.kind).toBe("already-accepted")
+  })
+
+  it("throws a name-too-long error on a 'too long' 422 for both paths", async () => {
+    const tooLong = (url: string) =>
+      new GitHubAPIError({
+        status: 422,
+        url,
+        message: "name is too long (maximum is 100 characters)",
+        body: null,
+        rateLimit: {
+          limit: null,
+          remaining: null,
+          used: null,
+          reset: null,
+          resource: null,
+          retryAfter: null,
+        },
+      })
+
+    await expect(
+      createAssignmentRepo({
+        client: clientRejecting(generatePath, tooLong(generatePath)),
+        templateOwner: "tpl",
+        templateRepo: "starter",
+        owner: "cs50",
+        name: "hw1-alice",
+        fallbackBranch: "main",
+      }),
+    ).rejects.toMatchObject({ name: "TemplateAccessError" })
+
+    await expect(
+      createAssignmentRepo({
+        client: clientRejecting(orgReposPath, tooLong(orgReposPath)),
+        owner: "cs50",
+        name: "hw1-alice",
+        fallbackBranch: "main",
+        bare: true,
+      }),
+    ).rejects.toMatchObject({ name: "TemplateAccessError" })
   })
 })
 

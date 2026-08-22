@@ -6,7 +6,22 @@
 import type { Assignment, DueMeta, MigratedFrom } from "@/types/classroom"
 import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
 import { localizedError } from "@/types/localizedMessage"
+import {
+  SHORT_NAME_PATTERN,
+  SHORT_NAME_PATTERN_DESCRIPTION,
+  assertValidShortName,
+  isCanonicalTeamShortName,
+} from "@/util/shortName"
 import type { ClassroomAssignmentDetail, ClassroomDetail } from "./types"
+
+// Re-exported from the shared leaf so migration importers keep their path; the
+// pattern itself now lives in @/util/shortName (used by the create forms too).
+export {
+  SHORT_NAME_PATTERN,
+  SHORT_NAME_PATTERN_DESCRIPTION,
+  assertValidShortName,
+  isCanonicalTeamShortName,
+}
 
 // The only migrated_from.source value today.
 export const MIGRATE_SOURCE_GITHUB_CLASSROOM = "github_classroom"
@@ -29,17 +44,8 @@ export function clampMigratedGroupSize(maxTeams: number | null): number {
 }
 
 // classroom short-names and assignment slugs both flow into repo/team names.
-// Byte-mirror of the CLI's validate.ShortNamePattern.
-export const SHORT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,38}$/
-export const SHORT_NAME_PATTERN_DESCRIPTION =
-  "2-39 chars, lowercase letters/digits/hyphens, starting with a letter or digit"
-
-// A short-name with consecutive/trailing hyphens slugifies to something other
-// than `classroom50-<short>`, breaking the team slug. Mirrors the CLI's
-// CanonicalTeamSlugShortName / the web isCanonicalTeamShortName.
-export function isCanonicalTeamShortName(shortName: string): boolean {
-  return !shortName.endsWith("-") && !shortName.includes("--")
-}
+// The pattern + canonical-team guard live in @/util/shortName (re-exported
+// above); this module keeps only the migration-specific derivation.
 
 // classroom-level migrated_from block for classroom.json. (The web Classroom
 // type doesn't type this field, so it rides through as an extra key on write.)
@@ -68,7 +74,7 @@ export function classroomMigratedFrom(
 
 // Slugify a free-form classroom name into a valid short-name, or throw asking
 // for an explicit one. lowercase -> non-alnum to '-' -> collapse -> trim ->
-// truncate to 39 -> validate pattern AND canonical-team-slug. Mirrors the CLI's
+// truncate to 100 -> validate pattern AND canonical-team-slug. Mirrors the CLI's
 // deriveShortName plus the up-front canonical-team-slug guard.
 export function deriveShortName(rawName: string): string {
   const lowered = rawName.trim().toLowerCase()
@@ -76,37 +82,11 @@ export function deriveShortName(rawName: string): string {
     throw localizedError({ key: "migration.error.classroomNameEmpty" })
   }
   let slug = lowered.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-  if (slug.length > 39) {
-    slug = slug.slice(0, 39).replace(/-+$/g, "")
+  if (slug.length > 100) {
+    slug = slug.slice(0, 100).replace(/-+$/g, "")
   }
   assertValidShortName(slug, rawName)
   return slug
-}
-
-// Validate a short-name (derived or user-supplied) for both the schema pattern
-// and the team-slug canonical form. Throws an actionable error otherwise.
-export function assertValidShortName(
-  shortName: string,
-  rawName?: string,
-): void {
-  if (!SHORT_NAME_PATTERN.test(shortName)) {
-    throw localizedError({
-      key: rawName
-        ? "migration.error.shortNameInvalidFrom"
-        : "migration.error.shortNameInvalid",
-      params: {
-        shortName,
-        rawName: rawName ?? "",
-        description: SHORT_NAME_PATTERN_DESCRIPTION,
-      },
-    })
-  }
-  if (!isCanonicalTeamShortName(shortName)) {
-    throw localizedError({
-      key: "migration.error.shortNameNotCanonical",
-      params: { shortName },
-    })
-  }
 }
 
 // A deadline is kept only if it parses as RFC 3339 WITH an explicit offset

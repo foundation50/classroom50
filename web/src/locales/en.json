@@ -892,6 +892,7 @@
     "classroomNameRequired": "Classroom name is required.",
     "classroomSlugRequired": "Classroom slug is required.",
     "classroomSlugTaken": "Classroom slug is already taken.",
+    "classroomSlugInvalid": "Classroom slug must be {{description}}.",
     "assignmentSlugTaken": "An assignment \"{{slug}}\" already exists in this classroom.",
     "groupSizeRange": "Group size must be a whole number between {{min}} and {{max}}."
   },
@@ -1371,6 +1372,7 @@
       "validation": {
         "nameRequired": "Assignment name is required.",
         "slugRequired": "Assignment slug is required.",
+        "slugInvalid": "Assignment slug must be {{description}}.",
         "maxGroupSizeInvalid": "Max group size must be a valid number.",
         "setupTimeoutRange": "Setup timeout must be 0 or a whole number of seconds from 1 through {{max}}.",
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
@@ -2295,7 +2297,9 @@
       "forkParentRestricted": "Couldn't copy the template {{owner}}/{{repo}} (HTTP {{status}}).{{detail}} This template is a fork of a repository in the {{parentOwner}} organization, and copying a fork is governed by that organization's third-party app restrictions. Ask your teacher to approve the Classroom 50 app for {{parentOwner}}, or to use a fresh (non-fork) template repository, then accept again.",
       "forkParentRestrictedStep": "{{parentOwner}} hasn't approved Classroom 50 for the fork's upstream (HTTP {{status}}).",
       "orgRepoCreationDeniedStep": "{{org}} wouldn't let your repository be created (HTTP {{status}}).",
-      "orgRepoCreationDenied": "{{org}} may not allow members to create private repositories, so your repository couldn't be created (HTTP {{status}}). Ask your teacher to enable it, then accept again."
+      "orgRepoCreationDenied": "{{org}} may not allow members to create private repositories, so your repository couldn't be created (HTTP {{status}}). Ask your teacher to enable it, then accept again.",
+      "repoNameTooLongStep": "The repository name \"{{name}}\" is too long ({{length}} characters).",
+      "repoNameTooLong": "Your repository name \"{{name}}\" is {{length}} characters, over GitHub's 100-character limit, so it couldn't be created (HTTP {{status}}).{{detail}} Ask your teacher to shorten the classroom or assignment slug, then accept again."
     },
     "notFound": {
       "badge": "Assignment unavailable",

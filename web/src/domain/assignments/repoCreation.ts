@@ -6,7 +6,11 @@ import type {
   SubmissionMode,
   Grading,
 } from "@/types/classroom"
-import { GitHubAPIError } from "@/github-core/errors"
+import {
+  GitHubAPIError,
+  is422AlreadyExists,
+  is422NameTooLong,
+} from "@/github-core/errors"
 import { getRepo } from "@/github-core/repoReads"
 import { DEFAULT_BRANCH } from "@/util/configRepo"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
@@ -16,6 +20,7 @@ import {
   isOrgRepoCreationDenied,
   orgRepoCreationDeniedError,
   outOfOrgTemplateError,
+  repoNameTooLongError,
 } from "@/util/templateAccessError"
 import { log } from "./accessPrimitives"
 import { withGitConflictRetry } from "../classrooms"
@@ -129,7 +134,11 @@ export async function createAssignmentRepo(params: {
         throw err
       }
 
-      if (err.status === 422) {
+      if (is422NameTooLong(err)) {
+        throw repoNameTooLongError(name, err.status, err.message)
+      }
+
+      if (is422AlreadyExists(err)) {
         const existing = await client.request<GitHubRepo>(
           `/repos/${owner}/${name}`,
         )
@@ -276,7 +285,11 @@ async function createEmptyAssignmentRepo(params: {
       },
     })
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 422) {
+    if (err instanceof GitHubAPIError && is422NameTooLong(err)) {
+      throw repoNameTooLongError(name, err.status, err.message)
+    }
+
+    if (err instanceof GitHubAPIError && is422AlreadyExists(err)) {
       const existing = await client.request<GitHubRepo>(
         `/repos/${owner}/${name}`,
       )

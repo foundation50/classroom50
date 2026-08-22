@@ -5,6 +5,7 @@ import type { StaffRole } from "@/types/classroom"
 import { STAFF_ROLES } from "@/types/classroom"
 import { createTeam, type TeamNotificationSetting } from "../teamWrites"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { isCanonicalTeamShortName } from "@/util/shortName"
 import { classroomTeamSlug } from "@/util/teamSlug"
 
 // Minimal team identity persisted in classroom.json. The slug is authoritative
@@ -30,12 +31,6 @@ export function isDeletableClassroomTeamRef(
     Number.isInteger(team.id) &&
     (team.id as number) > 0
   )
-}
-
-// A short-name with consecutive/trailing hyphens slugifies to something other
-// than `classroom50-<short>`, breaking team ops that re-derive the slug.
-function isCanonicalTeamShortName(shortName: string): boolean {
-  return !shortName.endsWith("-") && !shortName.includes("--")
 }
 
 // Create (or adopt) a `secret` team by exact name. Idempotent: adopts a

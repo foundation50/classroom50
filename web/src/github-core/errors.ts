@@ -300,6 +300,14 @@ export function is422NoCommitsBetween(err: unknown): boolean {
   return is422Mentioning(err, "no commits between")
 }
 
+// GitHub rejects a repo name over its 100-char limit with a 422 whose body says
+// the name is "too long". Distinct from "already exists" so a slug that composes
+// into an over-long `<classroom>-<assignment>-<username>` repo name surfaces a
+// legible error instead of being mistaken for an already-accepted repo.
+export function is422NameTooLong(err: unknown): boolean {
+  return is422Mentioning(err, "too long")
+}
+
 // The workflow_dispatch 422 for inputs the workflow file doesn't declare
 // ("Unexpected inputs provided") — the signal that the org's config repo
 // carries an older workflow than this app expects.

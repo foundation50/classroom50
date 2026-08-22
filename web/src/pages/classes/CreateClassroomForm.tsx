@@ -10,6 +10,11 @@ import {
   isValidSecret,
 } from "@/util/secret"
 import { slugify } from "@/util/slug"
+import {
+  SHORT_NAME_PATTERN,
+  SHORT_NAME_PATTERN_DESCRIPTION,
+  isCanonicalTeamShortName,
+} from "@/util/shortName"
 import { Button, Card, FormField, Input } from "@/components/ui"
 
 export type CreateClassroomFormValues = {
@@ -58,6 +63,19 @@ const CreateClassroomForm = ({
 
         if (!value.slug.trim()) {
           errors.slug = t("validation.classroomSlugRequired")
+        } else {
+          // Validate the value that will actually be written (post-slugify),
+          // matching the cross-tool short-name contract the CLI and schemas
+          // enforce; the web create path historically skipped this.
+          const slug = slugify(value.slug)
+          if (
+            !SHORT_NAME_PATTERN.test(slug) ||
+            !isCanonicalTeamShortName(slug)
+          ) {
+            errors.slug = t("validation.classroomSlugInvalid", {
+              description: SHORT_NAME_PATTERN_DESCRIPTION,
+            })
+          }
         }
 
         if (classes.find((cl) => cl.path === value.slug.trim())) {

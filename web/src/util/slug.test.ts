@@ -30,4 +30,11 @@ describe("nextAvailableSlug", () => {
   it("matches case-insensitively (slugs are repo path segments)", () => {
     expect(nextAvailableSlug("hw1", ["HW1"])).toBe("hw1-2")
   })
+
+  it("keeps a suffixed candidate within the 100-char cap", () => {
+    const base = "a".repeat(100)
+    const result = nextAvailableSlug(base, [base])
+    expect(result.length).toBeLessThanOrEqual(100)
+    expect(result).toMatch(/-2$/)
+  })
 })
