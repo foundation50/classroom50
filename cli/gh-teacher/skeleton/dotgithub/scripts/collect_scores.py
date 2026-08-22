@@ -54,7 +54,6 @@ from __future__ import annotations
 
 import csv
 import datetime
-import fnmatch
 import json
 import os
 import pathlib
@@ -381,21 +380,33 @@ def main() -> int:
                 slug, {"type": atype, "entries": []}
             )
             bucket["collected_at"] = collected_at
-        # Detected (ungraded) submissions replace the bucket's whole `detected`
-        # list: it is derived wholly from current repo state, so a stale record
-        # for a repo that no longer detects must not survive. `entries` is left
-        # untouched — these assignments never produce a graded entry. An empty
-        # result drops the key rather than writing [], keeping a never-submitted
-        # bucket byte-identical to a freshly scaffolded one.
-        for slug, (atype, records) in detected.items():
+        # Detected (ungraded) submissions are MERGED per owner, not replaced
+        # wholesale: a repo whose read failed this run isn't in `visited`, so its
+        # prior record survives instead of a transient 500 silently deleting a
+        # recorded submitter (the graded path keeps entries the same way). An
+        # owner that WAS visited and detected nothing has its record dropped, so
+        # a withdrawn submission still disappears. `entries` is left untouched —
+        # these assignments never produce a graded entry.
+        for slug, (atype, records, visited) in detected.items():
             bucket = scores["assignments"].setdefault(
                 slug, {"type": atype, "entries": []}
             )
             before = bucket.get("detected")
-            if records:
-                bucket["detected"] = records
-            else:
-                bucket.pop("detected", None)
+            prior = before if isinstance(before, list) else []
+            merged = [
+                rec
+                for rec in prior
+                if isinstance(rec, dict)
+                and isinstance(rec.get("owner"), str)
+                and rec["owner"].lower() not in visited
+            ]
+            merged.extend(records)
+            merged.sort(key=lambda rec: str(rec.get("owner", "")).lower())
+            # Write [] rather than dropping the key when nothing is detected: the
+            # web distinguishes "collected, nobody submitted" (honest 0 / N) from
+            # "never collected" (absent key) — popping it here would make a real
+            # collect that found no submitters look like no collect at all.
+            bucket["detected"] = merged
             if bucket.get("detected") != before:
                 n_changes += 1
         try:
@@ -754,14 +765,16 @@ def collect_detected(
     service_token: str,
     emit_warning: Callable[[str], None],
     classify: Callable[[urllib.error.HTTPError], Any],
-) -> tuple[str, list[dict[str, Any]]]:
+) -> tuple[str, list[dict[str, Any]], set[str]]:
     """Detected submissions for one no_autograder assignment: walk its repos and
-    record presence/count per submitter. Returns (mode, records).
+    record presence/count per submitter. Returns (mode, records, visited owners).
 
     Never records a score — these assignments are not graded. A repo with no
     detections is OMITTED, so the record list is exactly the submitter set. A
     per-repo failure warns and skips (same policy as the graded path) so one
-    unreadable repo can't void the assignment.
+    unreadable repo can't void the assignment; `visited` names the owners whose
+    repo was actually read, so a failed read preserves rather than deletes a
+    prior record.
     """
     raw_mode = entry.get("mode")
     is_group = (raw_mode or "").lower() == "group"
@@ -776,12 +789,21 @@ def collect_detected(
     due = parse_rfc3339(due_raw) if due_raw else None
 
     records: list[dict[str, Any]] = []
+    # Owners whose repo this run actually READ (successfully, or as a definite
+    # "not accepted"). A repo skipped because its read FAILED is not here, so
+    # main() can leave that owner's prior record intact rather than deleting a
+    # recorded submitter over a transient 500 — the same warn-and-keep policy the
+    # graded path applies to entries.
+    visited: set[str] = set()
     # team_usernames is the union across the student team and every staff team,
     # so a login on more than one team appears more than once. Dedupe or the
     # same repo is polled repeatedly and recorded once per membership.
     for username in _dedupe_logins(list(team_usernames)):
         repo_name = assignment_repo_name(classroom_short, slug, username)
         if repo_index is not None and not repo_index.contains(repo_name):
+            # The index says the repo doesn't exist — a definite "not accepted",
+            # not a failed read — so a stale record for it should go.
+            visited.add(username.lower())
             continue
         try:
             detections = detect_repo_submissions(
@@ -805,16 +827,14 @@ def collect_detected(
                 f"{org}/{repo_name}: submission detection malformed ({exc}); skipping"
             )
             continue
+        visited.add(username.lower())
         if not detections:
             continue
-        record = detected_record(username, detections, due)
-        if mode == "tag":
-            record["kind"] = "tag"
-        else:
-            record["kind"] = "commit"
+        record = detected_record(username, detections, due, trust_times=mode != "tag")
+        record["kind"] = "tag" if mode == "tag" else "commit"
         records.append(record)
 
-    return assignment_type, records
+    return assignment_type, records, visited
 
 
 def collect_classroom(
@@ -833,7 +853,7 @@ def collect_classroom(
     list[dict[str, Any]],
     int,
     dict[str, str],
-    dict[str, tuple[str, list[dict[str, Any]]]],
+    dict[str, tuple[str, list[dict[str, Any]], set[str]]],
 ]:
     """Return (validated result payloads for every (student, assignment) pair,
     count of assignments whose only submissions were rejected by validation,
@@ -867,7 +887,7 @@ def collect_classroom(
     # Detected (ungraded) submissions per no_autograder assignment:
     # slug -> (mode, records). Separate from `results` because these carry no
     # score and must never enter the graded `entries` path.
-    detected: dict[str, tuple[str, list[dict[str, Any]]]] = {}
+    detected: dict[str, tuple[str, list[dict[str, Any]], set[str]]] = {}
     # (assignment) buckets where every present submission was rejected by
     # validation (the mode-flip symptom). Returned so main() can suppress its
     # "rotate token" heuristic, which would otherwise misread this as a
@@ -938,7 +958,7 @@ def collect_classroom(
                     f"autograding is disabled; skipping collection"
                 )
                 continue
-            detected_type, detected_records = collect_detected(
+            detected_type, detected_records, detected_visited = collect_detected(
                 api_url=api_url,
                 org=org,
                 classroom_short=classroom_short,
@@ -950,7 +970,7 @@ def collect_classroom(
                 emit_warning=emit_warning,
                 classify=classify,
             )
-            detected[slug] = (detected_type, detected_records)
+            detected[slug] = (detected_type, detected_records, detected_visited)
             collected[slug] = detected_type
             print(
                 f"{classroom_short}/{slug}: no_autograder assignment — "
@@ -2002,14 +2022,70 @@ def submit_tag_datetime(tag_name: str) -> str | None:
     return f"{day}T{hour}:{minute}:{second}Z"
 
 
+def _compile_tag_pattern(pattern: str) -> "re.Pattern[str] | None":
+    """One Actions tag-filter pattern -> an anchored regex, or None when it
+    can't compile (fail closed: matches nothing). Character by character so
+    `.` and other regex metacharacters in the pattern stay literal. Supported
+    subset: literal names, `*` (not crossing `/`), `**` (crossing), `?`/`+`
+    (zero-or-one / one-or-more of the preceding element), `[abc]` classes.
+    """
+    out = ["^"]
+    i = 0
+    while i < len(pattern):
+        ch = pattern[i]
+        if ch == "*":
+            if i + 1 < len(pattern) and pattern[i + 1] == "*":
+                out.append(".*")  # ** crosses /
+                i += 1
+            else:
+                out.append("[^/]*")  # * stops at /
+        elif ch in ("?", "+"):
+            out.append(ch)
+        elif ch == "[":
+            close = pattern.find("]", i + 1)
+            if close != -1:
+                out.append(pattern[i : close + 1])  # class verbatim
+                i = close
+            else:
+                out.append(re.escape(ch))  # unclosed [ is literal
+        else:
+            out.append(re.escape(ch))
+        i += 1
+    out.append("$")
+    try:
+        return re.compile("".join(out))
+    except re.error:
+        return None
+
+
+# The safe-pattern charset — literal-name characters plus the glob
+# metacharacters GitHub Actions tag filters support. Keep in lockstep with Go
+# contract.SubmissionTagCharsetRE and the web SUBMISSION_TAG_PATTERN_RE.
+_TAG_PATTERN = re.compile(r"^[A-Za-z0-9._/*?+\[\]-]+$")
+
+# A leading `?`/`+` (nothing to repeat) or a `+` stacked on another quantifier
+# (`v*+`, `a++`). LOAD-BEARING in a Python mirror: those translate to POSSESSIVE
+# quantifiers, which Python 3.11+ compiles (and matches!) while Go RE2 and JS
+# reject — without this guard the matcher copies diverge on exactly these
+# patterns. Keep in lockstep with Go contract.stackedQuantifierRE and the web.
+_STACKED_QUANTIFIER = re.compile(r"^[?+]|[*?+]\+")
+
+
 def matches_submission_tag(patterns: Iterable[str], tag_name: str) -> bool:
-    """Whether a tag matches any Actions-style tag filter, mirroring the web's
-    matchesSubmissionTag: fnmatch semantics, case-sensitive, `/` not special."""
-    name = tag_name or ""
+    """Whether `tag_name` matches ANY of the Actions tag-filter `patterns`; an
+    empty list matches nothing. By-value copy of Go's
+    contract.MatchesSubmissionTag, the web matchesSubmissionTag, and
+    regrade_repos.py's copy — all pinned to identical output by the shared
+    golden fixture cli/shared/testdata/submission_tag_match_cases.json. The same
+    strings are rendered into the shim's on.push.tags, so this matcher and
+    GitHub's own filter evaluation must agree on what fires. Keep in lockstep."""
     for pattern in patterns:
         if not isinstance(pattern, str) or not pattern:
             continue
-        if fnmatch.fnmatchcase(name, pattern):
+        if not _TAG_PATTERN.fullmatch(pattern) or _STACKED_QUANTIFIER.search(pattern):
+            continue  # fail closed, matching the Go/JS charset+compile guards
+        compiled = _compile_tag_pattern(pattern)
+        if compiled is not None and compiled.fullmatch(tag_name or "") is not None:
             return True
     return False
 
@@ -2162,16 +2238,27 @@ def detected_record(
     owner: str,
     detections: list[dict[str, Any]],
     due: datetime.datetime | None,
+    trust_times: bool = True,
 ) -> dict[str, Any]:
     """Fold one repo's detections into the scores/v1 `detected` record: a count,
-    the newest resolvable instant, and the late flag derived from it. Carries no
-    score — these assignments are never graded."""
+    the newest instant, and the late flag derived from it. Carries no score —
+    these assignments are never graded.
+
+    `trust_times` is False in TAG mode, where the only available instant is
+    decoded from the `submit/<ts>` tag NAME. That name is student-authored, so a
+    student could backdate it to dodge a late flag or forge a "last submitted"
+    time. The web side refuses tag times for lateness for exactly this reason
+    (see latestCommitDetectedAt), so neither `latest_datetime` nor `late` is
+    recorded from one — the count still is, since tag EXISTENCE isn't forgeable.
+    """
     count = sum(int(d.get("count", 1) or 1) for d in detections)
+    record: dict[str, Any] = {"owner": owner, "count": count}
+    if not trust_times:
+        return record
     times = sorted(
         (d["datetime"] for d in detections if isinstance(d.get("datetime"), str)),
         reverse=True,
     )
-    record: dict[str, Any] = {"owner": owner, "count": count}
     if times:
         latest = parse_rfc3339(times[0])
         if latest is not None:

@@ -2519,6 +2519,92 @@ class TestMain:
         )
 
 
+class TestDetectedPersistence:
+    """main()'s `detected` merge: a repo the run couldn't read keeps its prior
+    record, a visited repo with nothing detected loses its record, and an
+    all-clear run still writes [] so "collected, nobody submitted" is
+    distinguishable from "never collected"."""
+
+    def _env(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+
+    def _seed(self, tmp_path, detected):
+        path = tmp_path / "cs-principles" / "scores.json"
+        path.write_text(json.dumps({
+            "schema": "classroom50/scores/v1",
+            "assignments": {
+                "hello": {"type": "individual", "entries": [], "detected": detected}
+            },
+        }))
+        return path
+
+    def _read(self, tmp_path):
+        path = tmp_path / "cs-principles" / "scores.json"
+        return json.loads(path.read_text())["assignments"]["hello"]
+
+    def test_unreadable_repo_keeps_its_prior_record(self, tmp_path, monkeypatch):
+        # bob's repo read failed this run (not in `visited`), so his recorded
+        # submission must NOT be deleted — a transient 500 must not make a
+        # submitter vanish from the gradebook.
+        write_minimal_classroom(tmp_path)
+        self._env(tmp_path, monkeypatch)
+        self._seed(tmp_path, [
+            {"owner": "alice", "count": 1},
+            {"owner": "bob", "count": 2},
+        ])
+        monkeypatch.setattr(
+            cs, "collect_classroom",
+            lambda **kwargs: ([], 0, {}, {
+                "hello": ("individual", [{"owner": "alice", "count": 3}], {"alice"})
+            }),
+        )
+
+        assert cs.main() == 0
+
+        detected = self._read(tmp_path)["detected"]
+        by_owner = {r["owner"]: r for r in detected}
+        assert by_owner["alice"]["count"] == 3   # refreshed
+        assert by_owner["bob"]["count"] == 2     # preserved
+
+    def test_visited_repo_with_no_detection_loses_its_record(
+        self, tmp_path, monkeypatch
+    ):
+        # bob WAS read and detected nothing (he withdrew/force-pushed away his
+        # work), so the stale record goes.
+        write_minimal_classroom(tmp_path)
+        self._env(tmp_path, monkeypatch)
+        self._seed(tmp_path, [{"owner": "bob", "count": 2}])
+        monkeypatch.setattr(
+            cs, "collect_classroom",
+            lambda **kwargs: ([], 0, {}, {
+                "hello": ("individual", [], {"bob"})
+            }),
+        )
+
+        assert cs.main() == 0
+        assert self._read(tmp_path)["detected"] == []
+
+    def test_empty_result_writes_a_list_not_a_missing_key(
+        self, tmp_path, monkeypatch
+    ):
+        # The web reads an ABSENT key as "never collected" and shows a
+        # not-collected label; a real collect that found nobody must write [] so
+        # it renders an honest 0 / N instead.
+        write_minimal_classroom(tmp_path)
+        self._env(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            cs, "collect_classroom",
+            lambda **kwargs: ([], 0, {}, {
+                "hello": ("individual", [], {"alice"})
+            }),
+        )
+
+        assert cs.main() == 0
+        assert self._read(tmp_path)["detected"] == []
+
+
 class TestCollectedAtStamp:
     """Per-bucket `collected_at`: main() stamps every bucket the run actually
     walked (even unchanged/empty), a skipped bucket keeps its old stamp, and
@@ -2847,7 +2933,7 @@ def test_collect_classroom_detects_no_autograder_assignment(monkeypatch, capsys)
     assert results == []
     assert "no_autograder" in capsys.readouterr().out
     # ...but the submitter is recorded, with a count and the newest instant.
-    atype, records = detected["ci-lab"]
+    atype, records, _visited = detected["ci-lab"]
     assert atype == "individual"
     assert records == [
         {
@@ -2994,6 +3080,97 @@ def test_no_autograder_detection_skips_unreadable_repo(monkeypatch, capsys):
 
     assert [r["owner"] for r in detected["ci-lab"][1]] == ["alice"]
     assert "detection failed" in capsys.readouterr().err
+
+
+def test_matches_submission_tag_shared_fixture_parity():
+    # The collector's copy of the matcher joins the same lockstep as Go's
+    # contract.MatchesSubmissionTag, the web matchesSubmissionTag, and
+    # regrade_repos.py — pinned to one golden fixture. Detection must claim the
+    # same tags the shim actually triggers on, or the collected counts and the
+    # submissions page disagree for exactly the tag-mode assignments this
+    # feature targets.
+    fixture = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "shared"
+        / "testdata"
+        / "submission_tag_match_cases.json"
+    )
+    doc = json.loads(fixture.read_text())
+    cases = doc["cases"]
+    assert cases, "shared fixture has no cases; did the file move?"
+    for case in cases:
+        got = cs.matches_submission_tag(case["patterns"], case["tag"])
+        assert got is case["matches"], (
+            f"matches_submission_tag({case['patterns']}, {case['tag']!r}) = {got}, "
+            f"want {case['matches']}"
+        )
+
+
+def test_matches_submission_tag_fails_closed_on_bad_pattern():
+    assert cs.matches_submission_tag(["[z-a]"], "m") is False
+    assert cs.matches_submission_tag(["[z-a]", "good"], "good") is True
+
+
+def test_no_autograder_detection_tag_mode_does_not_trust_tag_times(monkeypatch):
+    # A submit/<ts> tag NAME is student-authored, so it can be backdated to dodge
+    # a late flag or forge a "last submitted" instant. The web refuses tag times
+    # for lateness for the same reason; the count still stands (tag existence
+    # isn't forgeable).
+    monkeypatch.setattr(
+        cs,
+        "detect_repo_submissions",
+        lambda *a, **k: [{"count": 1, "datetime": "2020-01-01T00:00:00Z"}],
+    )
+    stub_team_members(monkeypatch, ["alice"])
+
+    _, _, _, detected = cs.collect_classroom(
+        api_url="https://api.github.com",
+        org="cs50",
+        classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={
+            "assignments": [
+                {
+                    "slug": "ci-lab",
+                    "no_autograder": True,
+                    "submission_mode": "tag",
+                    "due": "2026-06-01T00:00:00Z",
+                }
+            ]
+        },
+        service_token="token",
+    )
+
+    (record,) = detected["ci-lab"][1]
+    assert record["count"] == 1
+    assert "late" not in record
+    assert "latest_datetime" not in record
+
+
+def test_no_autograder_detection_reports_visited_owners(monkeypatch):
+    # `visited` names owners whose repo was actually read, so main() can tell a
+    # failed read apart from "nothing detected" and preserve the prior record.
+    def flaky(api_url, org, repo_name, token, mode, tags):
+        if "bob" in repo_name:
+            raise http_error(500, "Server Error")
+        return [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}]
+
+    monkeypatch.setattr(cs, "detect_repo_submissions", flaky)
+    stub_team_members(monkeypatch, ["alice", "bob"])
+
+    _, _, _, detected = cs.collect_classroom(
+        api_url="https://api.github.com",
+        org="cs50",
+        classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "ci-lab", "no_autograder": True}]},
+        service_token="token",
+    )
+
+    _, _, visited = detected["ci-lab"]
+    assert "alice" in visited
+    # bob's read failed, so he is NOT visited — his prior record must survive.
+    assert "bob" not in visited
 
 
 def test_collect_classroom_skips_empty_repo_assignment(monkeypatch, capsys):

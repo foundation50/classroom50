@@ -292,8 +292,11 @@ describe("AssignmentsTable — assignments that skip grading", () => {
   })
 
   it("applies to a bare empty_repo assignment too", () => {
+    // empty_repo is never detected (no submission definition), so it keeps the
+    // entries-based count rather than waiting for a `detected` list no writer
+    // produces — otherwise it would read "not collected yet" forever.
     scores.mockReturnValue({
-      data: { submissions: {}, detected: { hw1: detected(["alice"]) } },
+      data: { submissions: { hw1: [{}] }, detected: {} },
     })
     wrap(
       <AssignmentsTable
@@ -304,6 +307,24 @@ describe("AssignmentsTable — assignments that skip grading", () => {
       />,
     )
     expect(ratioText()).toContain("1 / 2")
+    expect(screen.queryByText("assignments.table.notCollectedYet")).toBeNull()
+  })
+
+  it("keeps hand-entered grades visible when detection finds fewer", () => {
+    // A teacher can hand-grade a no_autograder assignment, which writes real
+    // entries. An empty or partial detection must not hide them.
+    scores.mockReturnValue({
+      data: { submissions: { hw1: [{}, {}, {}] }, detected: { hw1: [] } },
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ no_autograder: true })]}
+        studentCount={4}
+      />,
+    )
+    expect(ratioText()).toContain("3 / 4")
   })
 
   it("never reads detection for a normally autograded assignment", () => {

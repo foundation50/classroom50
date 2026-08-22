@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 
 import useGetScores from "@/hooks/useGetScores"
-import { assignmentSkipsGrading } from "@/domain/assignments/autogradingState"
+import { isNoAutograderAssignment } from "@/domain/assignments/autogradingState"
 import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
@@ -498,19 +498,33 @@ const AssignmentsTable = ({
                   }
                 >
                   {(() => {
-                    // An assignment that skips grading has no collected
-                    // `entries` (collect_scores.py records no score for it), so
-                    // its submitted count comes from the bucket's `detected`
-                    // list instead — commits/tags observed in the student repos.
-                    // Same shape as the graded branch below: a real N / M and
-                    // progress bar, so the two row types read consistently
-                    // (#659). `undefined` means no collect has walked this
-                    // bucket yet, which is NOT "nobody submitted".
-                    const skipsGrading = assignmentSkipsGrading(assignment)
-                    const detectedRows = skipsGrading
+                    // An assignment that skips grading records no autograded
+                    // `entries`, so its count comes from the bucket's `detected`
+                    // list — commits/tags collect_scores.py observed in the
+                    // student repos. Same shape as the graded branch below (a
+                    // real N / M and progress bar) so the two read consistently
+                    // (#659).
+                    //
+                    // Only no_autograder is detected; a bare empty_repo has no
+                    // submission definition, so it keeps the entries-based count
+                    // rather than waiting for a `detected` list no writer
+                    // produces. And a teacher can hand-grade a no_autograder
+                    // assignment, which DOES write entries — so take whichever
+                    // signal credits more owners instead of letting an empty
+                    // detection hide real overridden grades.
+                    const graded =
+                      scoresData?.submissions?.[assignment.slug]?.length ?? 0
+                    const detectedRows = isNoAutograderAssignment(assignment)
                       ? scoresData?.detected?.[assignment.slug]
                       : undefined
-                    if (skipsGrading && !detectedRows) {
+                    // Absent (not `[]`) means no collect has walked this bucket
+                    // yet, which is NOT "nobody submitted" — showing 0 / M there
+                    // is the bug (#659). With no graded rows either, say so.
+                    if (
+                      isNoAutograderAssignment(assignment) &&
+                      !detectedRows &&
+                      graded === 0
+                    ) {
                       return (
                         <span className="whitespace-nowrap text-base-content/60">
                           {t("assignments.table.notCollectedYet")}
@@ -518,10 +532,10 @@ const AssignmentsTable = ({
                       )
                     }
 
-                    const submitted =
-                      detectedRows?.length ??
-                      scoresData?.submissions?.[assignment.slug]?.length ??
-                      0
+                    const submitted = Math.max(
+                      graded,
+                      detectedRows?.length ?? 0,
+                    )
 
                     // Group assignments submit per-repo, not per-student, so a
                     // roster denominator is meaningless — show the count.
