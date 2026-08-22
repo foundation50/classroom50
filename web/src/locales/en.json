@@ -2579,6 +2579,8 @@
       "colActions": "Actions",
       "emptyNoDataTitle": "No submissions collected yet",
       "emptyNoDataBody": "Once students accept and push, their submissions appear here. Use Collect now to pull the latest.",
+      "emptyNoGroupsTitle": "No groups yet",
+      "emptyNoGroupsBody": "A group repository is created when its founder accepts the assignment. Groups appear here as they form.",
       "emptyFilteredTitle": "No submissions match your filters",
       "emptyFilteredBody": "Try a different search or clear the filters to see everyone.",
       "emptyClearFilters": "Clear filters",

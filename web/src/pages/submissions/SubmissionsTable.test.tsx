@@ -189,6 +189,24 @@ describe("SubmissionsTable initial loading", () => {
     expect(screen.getByText("submissions.table.emptyNoDataTitle")).toBeTruthy()
     expect(document.querySelector("tr[aria-hidden='true']")).toBeNull()
   })
+
+  it("shows the no-groups empty state for a groupless group assignment", () => {
+    // Group mode renders group rows only; the reconciled "no group"
+    // non-submitters never appear as rows, so they must not suppress the
+    // empty state — a groupless class previously got a silent blank table.
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        isGroup
+        nonSubmitters={[student(), student({ username: "bob" })]}
+        initialLoading={false}
+      />,
+    )
+    expect(
+      screen.getByText("submissions.table.emptyNoGroupsTitle"),
+    ).toBeTruthy()
+    expect(screen.getByText("submissions.table.emptyNoGroupsBody")).toBeTruthy()
+  })
 })
 
 describe("SubmissionsTable settling", () => {

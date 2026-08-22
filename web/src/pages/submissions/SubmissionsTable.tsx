@@ -738,9 +738,13 @@ const SubmissionsTable = ({
           animate="animate"
         >
           {initialLoading && <SkeletonRows bars={SKELETON_BARS} />}
+          {/* Group mode renders group rows only — the reconciled "no group"
+              non-submitters never appear as rows here — so they must not
+              suppress the empty state (a groupless class would otherwise get
+              a silent blank table). */}
           {!initialLoading &&
             !scores?.length &&
-            !nonSubmitters.length &&
+            (isGroup || !nonSubmitters.length) &&
             !unsubmittedGroupRepos.length &&
             !nonSubmittersLoading && (
               <tr>
@@ -776,10 +780,14 @@ const SubmissionsTable = ({
                           className="size-8 text-base-content/40"
                         />
                         <p className="font-medium">
-                          {t("submissions.table.emptyNoDataTitle")}
+                          {isGroup
+                            ? t("submissions.table.emptyNoGroupsTitle")
+                            : t("submissions.table.emptyNoDataTitle")}
                         </p>
                         <p className="text-sm text-base-content/70">
-                          {t("submissions.table.emptyNoDataBody")}
+                          {isGroup
+                            ? t("submissions.table.emptyNoGroupsBody")
+                            : t("submissions.table.emptyNoDataBody")}
                         </p>
                       </>
                     )}
