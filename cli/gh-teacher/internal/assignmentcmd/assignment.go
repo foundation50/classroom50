@@ -993,6 +993,16 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			"Warning: %s/%s/%s is %d bytes — approaching GitHub's ~1 MiB contents-API ceiling. Past that, the API returns encoding:\"none\" and future `gh teacher assignment add/remove` calls will fail to read the file. Consider splitting the classroom or shrinking per-entry fields.\n",
 			org, configrepo.ConfigRepoName, assignmentsFilePath(classroom), lastEncodedSize)
 	}
+	// #691: the classroom+slug can each be individually valid yet compose into
+	// a `<classroom>-<assignment>-<username>` student-repo name past GitHub's
+	// 100-char limit, which fails at every student's accept. Warn the teacher
+	// now — nothing budgets the segments against each other, so this is the
+	// only pre-accept signal.
+	if worst, overflows := validate.ComposedRepoNameOverflows(classroom, slug); overflows {
+		_, _ = fmt.Fprintf(errOut,
+			"Warning: student repos are named `<classroom>-<assignment>-<username>`; %q + %q reaches %d characters with a 39-char username, over GitHub's %d-char repo-name limit. Students with long usernames won't be able to accept. Shorten the classroom short-name or the assignment slug.\n",
+			classroom, slug, worst, validate.GitHubRepoNameMaxLen)
+	}
 	_, _ = fmt.Fprintf(errOut, "Students can now run: gh student accept %s %s %s\n", org, classroom, slug)
 	return nil
 }

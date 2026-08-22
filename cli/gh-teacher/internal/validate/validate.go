@@ -75,6 +75,28 @@ func OrgClassroom(args []string) (org, classroom string, err error) {
 	return org, classroom, nil
 }
 
+// GitHubRepoNameMaxLen is GitHub's hard limit on a repository name. The
+// student-repo name is `<classroom>-<assignment>-<username>`, so a classroom
+// and slug that each individually pass ShortName can still compose past this.
+const GitHubRepoNameMaxLen = 100
+
+// GitHubLoginMaxLen is GitHub's maximum account/org login length, used as the
+// worst-case `<username>` when budgeting the composed student-repo name.
+const GitHubLoginMaxLen = 39
+
+// ComposedRepoNameOverflows reports whether the longest student-repo name a
+// classroom+assignment pair can produce — `<classroom>-<assignment>-<username>`
+// with a worst-case 39-char username and the two joining hyphens — exceeds
+// GitHub's repo-name limit. Both parts can be individually valid yet compose
+// past the ceiling (foundation50/classroom50#691); callers warn the teacher at
+// create time rather than letting every student's accept fail. Returns the
+// worst-case length alongside the boolean so the caller can report it.
+func ComposedRepoNameOverflows(classroom, slug string) (worstCase int, overflows bool) {
+	// classroom + "-" + slug + "-" + <=39-char username.
+	worstCase = len(classroom) + 1 + len(slug) + 1 + GitHubLoginMaxLen
+	return worstCase, worstCase > GitHubRepoNameMaxLen
+}
+
 // ScopeListContains reports whether the comma-separated OAuth scope
 // list (an X-OAuth-Scopes header value) includes want.
 func ScopeListContains(scopes, want string) bool {

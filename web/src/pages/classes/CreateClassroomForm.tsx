@@ -64,9 +64,12 @@ const CreateClassroomForm = ({
         if (!value.slug.trim()) {
           errors.slug = t("validation.classroomSlugRequired")
         } else {
-          // Validate the value that will actually be written (post-slugify),
-          // matching the cross-tool short-name contract the CLI and schemas
-          // enforce; the web create path historically skipped this.
+          // Validate and check collisions against the value that will actually
+          // be written (post-slugify), matching the cross-tool short-name
+          // contract; the create path historically skipped the shape check and
+          // compared the raw input for collisions, so a raw value slugifying to
+          // an existing classroom (e.g. "CS 50" -> "cs-50") slipped past and
+          // overwrote its roster/scores. One slug value drives all three.
           const slug = slugify(value.slug)
           if (
             !SHORT_NAME_PATTERN.test(slug) ||
@@ -75,11 +78,11 @@ const CreateClassroomForm = ({
             errors.slug = t("validation.classroomSlugInvalid", {
               description: SHORT_NAME_PATTERN_DESCRIPTION,
             })
+          } else if (
+            classes.find((cl) => cl.path.toLowerCase() === slug.toLowerCase())
+          ) {
+            errors.slug = t("validation.classroomSlugTaken")
           }
-        }
-
-        if (classes.find((cl) => cl.path === value.slug.trim())) {
-          errors.slug = t("validation.classroomSlugTaken")
         }
 
         // Only validate the secret when protection is on; a disabled toggle
