@@ -3833,7 +3833,8 @@ describe("createAssignmentRepo destination-org refusal (#413)", () => {
         new GitHubAPIError({
           status: 422,
           url: generatePath,
-          message: "Repository creation failed: name already exists on this account",
+          message:
+            "Repository creation failed: name already exists on this account",
           body: null,
           rateLimit: {
             limit: null,
@@ -3859,7 +3860,8 @@ describe("createAssignmentRepo destination-org refusal (#413)", () => {
         new GitHubAPIError({
           status: 422,
           url: orgReposPath,
-          message: "Repository creation failed: name already exists on this account",
+          message:
+            "Repository creation failed: name already exists on this account",
           body: null,
           rateLimit: {
             limit: null,
