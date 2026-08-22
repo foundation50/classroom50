@@ -1,13 +1,9 @@
 import { localizedError } from "@/types/localizedMessage"
 
 // Classroom short-names and assignment slugs both flow into repo/team names.
-// Byte-mirror of the CLI's validate.ShortNamePattern.
-//
-// The cap is 100 per segment, matching GitHub's repo-name limit. It is NOT a
-// full guarantee: `<classroom>-<assignment>-<username>` can exceed 100 even
-// though each part is legal, and nothing here budgets the three against each
-// other. Deciding that split is open — see foundation50/classroom50#691. Until
-// then an overflow surfaces as a legible "name too long" error at accept.
+// Byte-mirror of the CLI's validate.ShortNamePattern (2-100 chars). The cap is
+// per-segment, not a guarantee the composed repo name fits GitHub's 100-char
+// limit — see foundation50/classroom50#691.
 export const SHORT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,99}$/
 export const SHORT_NAME_PATTERN_DESCRIPTION =
   "2-100 chars, lowercase letters/digits/hyphens, starting with a letter or digit"
@@ -19,9 +15,8 @@ export function isCanonicalTeamShortName(shortName: string): boolean {
   return !shortName.endsWith("-") && !shortName.includes("--")
 }
 
-// Whether a short-name is well-shaped for both the schema pattern and the
-// team-slug canonical form. The boolean form the create-form validators need
-// (assertValidShortName throws a localized error, which they can't consume).
+// Boolean well-shaped check (pattern + canonical-team form) for the create-form
+// validators, which can't consume assertValidShortName's thrown localized error.
 export function isValidShortName(shortName: string): boolean {
   return (
     SHORT_NAME_PATTERN.test(shortName) && isCanonicalTeamShortName(shortName)

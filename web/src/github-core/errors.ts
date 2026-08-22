@@ -300,10 +300,10 @@ export function is422NoCommitsBetween(err: unknown): boolean {
   return is422Mentioning(err, "no commits between")
 }
 
-// GitHub rejects a repo name over its 100-char limit with a 422 whose body says
-// the name is "too long". Distinct from "already exists" so a slug that composes
-// into an over-long `<classroom>-<assignment>-<username>` repo name surfaces a
-// legible error instead of being mistaken for an already-accepted repo.
+// GitHub rejects an over-100-char repo name with a "too long" 422. Distinct
+// from "already exists" so an over-long composed
+// `<classroom>-<assignment>-<username>` surfaces a legible error instead of
+// being mistaken for an already-accepted repo (foundation50/classroom50#691).
 export function is422NameTooLong(err: unknown): boolean {
   return is422Mentioning(err, "too long")
 }

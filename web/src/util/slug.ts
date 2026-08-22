@@ -12,9 +12,8 @@ export function slugify(value: string) {
     .replace(/^-+|-+$/g, "")
 }
 
-// Max slug length, matching validate.ShortNamePattern's cap (2-100 chars). A
-// derived `-<n>` suffix must not push a candidate past it, so the stem is
-// trimmed to leave room. The write path re-checks authoritatively.
+// Max slug length, mirroring validate.ShortNamePattern's cap. A derived `-<n>`
+// suffix must not push a candidate past it, so the stem is trimmed to fit.
 const SLUG_MAX_LEN = 100
 
 // First slug not in `taken`, suffixing `-2`, `-3`, … A base ending in `-<n>`

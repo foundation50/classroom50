@@ -864,11 +864,9 @@ func is422AlreadyExists(httpErr *githubapi.HTTPError) bool {
 	return has422Message(httpErr, "already exists")
 }
 
-// is422NameTooLong matches GitHub's 422 for a repo name over its 100-char
-// limit. The composed `<classroom>-<assignment>-<username>` name can exceed 100
-// even when each part is individually legal (foundation50/classroom50#691), so
-// it must be told apart from the "already exists" 422 (whose recovery GET would
-// otherwise 404 on the never-created repo).
+// is422NameTooLong matches GitHub's 422 for an over-100-char repo name. Told
+// apart from the "already exists" 422 whose recovery GET would otherwise 404 on
+// the never-created repo (foundation50/classroom50#691).
 func is422NameTooLong(httpErr *githubapi.HTTPError) bool {
 	return has422Message(httpErr, "too long")
 }

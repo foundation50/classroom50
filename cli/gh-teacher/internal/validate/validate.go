@@ -16,12 +16,11 @@ import (
 // student-repo names and the contents/tree API. Exposed for the few call sites
 // that match directly; most callers should use ShortName for the standard error.
 //
-// The cap is 100 per segment, matching GitHub's repo-name limit. It is NOT a
-// full guarantee: `<classroom>-<assignment>-<username>` can exceed 100 even
-// though each part is legal, and nothing here budgets the three against each
-// other. Deciding that split (a combined pre-flight check, an asymmetric cap,
-// or a shorter derived repo name) is open — see foundation50/classroom50#691.
-// Until then an overflow surfaces as a legible "name too long" error at accept.
+// The cap is 100 per segment, matching GitHub's repo-name limit — NOT a full
+// guarantee: `<classroom>-<assignment>-<username>` can exceed 100 even when each
+// part is legal. Budgeting the segments against each other is open work
+// (foundation50/classroom50#691); until then an overflow surfaces as a legible
+// "name too long" error at accept.
 var ShortNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,99}$`)
 
 // ShortNamePatternDescription: human-readable summary of ShortNamePattern,
@@ -75,22 +74,18 @@ func OrgClassroom(args []string) (org, classroom string, err error) {
 	return org, classroom, nil
 }
 
-// GitHubRepoNameMaxLen is GitHub's hard limit on a repository name. The
-// student-repo name is `<classroom>-<assignment>-<username>`, so a classroom
-// and slug that each individually pass ShortName can still compose past this.
+// GitHubRepoNameMaxLen is GitHub's hard limit on a repository name; the
+// student-repo name `<classroom>-<assignment>-<username>` is measured against it.
 const GitHubRepoNameMaxLen = 100
 
-// GitHubLoginMaxLen is GitHub's maximum account/org login length, used as the
-// worst-case `<username>` when budgeting the composed student-repo name.
+// GitHubLoginMaxLen is GitHub's maximum login length — the worst-case
+// `<username>` when budgeting the composed student-repo name.
 const GitHubLoginMaxLen = 39
 
 // ComposedRepoNameOverflows reports whether the longest student-repo name a
-// classroom+assignment pair can produce — with a worst-case 39-char username —
-// exceeds GitHub's repo-name limit. Both parts can be individually valid yet
-// compose past the ceiling (foundation50/classroom50#691); callers warn the
-// teacher at create time rather than letting every student's accept fail. The
-// name shape is single-sourced through contract.AssignmentRepoPrefix so it can't
-// drift from the real one. Returns the worst-case length alongside the boolean.
+// classroom+assignment pair can produce (worst-case 39-char username) exceeds
+// GitHub's repo-name limit; see ShortNamePattern and #691. The name shape comes
+// from contract.AssignmentRepoPrefix so it can't drift from the real one.
 func ComposedRepoNameOverflows(classroom, slug string) (worstCase int, overflows bool) {
 	worstCase = len(contract.AssignmentRepoPrefix(classroom, slug)) + GitHubLoginMaxLen
 	return worstCase, worstCase > GitHubRepoNameMaxLen

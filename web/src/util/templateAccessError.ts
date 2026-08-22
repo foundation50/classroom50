@@ -104,11 +104,10 @@ export function forkParentRestrictedError(
   )
 }
 
-// GitHub rejects a repo name over its 100-char limit with a 422. The composed
-// student-repo name `<classroom>-<assignment>-<username>` can exceed 100 even
-// when each part is individually legal (foundation50/classroom50#691), so name
-// the cause and the fix (shorter classroom/assignment slug) rather than letting
-// it fall through to a confusing not-found from the "already exists" recovery.
+// An over-100-char composed `<classroom>-<assignment>-<username>` repo name is
+// rejected with a 422 (foundation50/classroom50#691). Name the cause and the
+// fix rather than letting it fall through to the "already exists" recovery's
+// confusing not-found.
 export function repoNameTooLongError(
   repoName: string,
   status: number,

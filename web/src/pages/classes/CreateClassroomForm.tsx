@@ -63,12 +63,10 @@ const CreateClassroomForm = ({
         if (!value.slug.trim()) {
           errors.slug = t("validation.classroomSlugRequired")
         } else {
-          // Validate and check collisions against the value that will actually
-          // be written (post-slugify), matching the cross-tool short-name
-          // contract; the create path historically skipped the shape check and
-          // compared the raw input for collisions, so a raw value slugifying to
-          // an existing classroom (e.g. "CS 50" -> "cs-50") slipped past and
-          // overwrote its roster/scores. One slug value drives all three.
+          // Validate AND collision-check the slugified value (what actually
+          // gets written): comparing the raw input for collisions let a raw
+          // value slugifying onto an existing classroom (e.g. "CS 50" ->
+          // "cs-50") slip past and overwrite its roster/scores.
           const slug = slugify(value.slug)
           if (!isValidShortName(slug)) {
             errors.slug = t("validation.classroomSlugInvalid", {
