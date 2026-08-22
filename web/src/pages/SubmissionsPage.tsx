@@ -863,8 +863,12 @@ const SubmissionsPageContent = () => {
   const lastCollectedLabel = effectiveLastCollectedAt
     ? formatRelativeToNow(new Date(effectiveLastCollectedAt))
     : null
+  // Staleness applies wherever a collect exists. A no_autograder assignment is
+  // collected (detected submissions), so a push after the last run means its
+  // snapshot is out of date too; only a bare empty_repo has nothing to collect.
   const snapshotStale =
-    !skipsGrading && snapshotIsStale(latestPush, effectiveLastCollectedAt)
+    !isEmptyRepoAssignment &&
+    snapshotIsStale(latestPush, effectiveLastCollectedAt)
 
   // Refresh scores + last-run timestamp + org repo list once a manual collection
   // finishes, so the freshness line re-derives (the collect just consumed the
@@ -1134,10 +1138,11 @@ const SubmissionsPageContent = () => {
             />
           ) : undefined
         }
-        // No collect/freshness exists for assignments that skip built-in
-        // grading — the header's grading badge explains why.
+        // A bare empty_repo assignment has no collect at all. A no_autograder
+        // assignment IS collected now (its submissions are detected rather than
+        // graded), so it keeps the freshness line and the re-collect button.
         leading={
-          skipsGrading ? undefined : (
+          isEmptyRepoAssignment ? undefined : (
             <DataFreshness
               lastCollectedLabel={lastCollectedLabel}
               stale={snapshotStale}
