@@ -1,7 +1,8 @@
+import { Fragment, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Bot, CircleOff, GitCommitHorizontal, Tag } from "lucide-react"
 
-import { Badge, type BadgeSize } from "@/components/ui"
+import { Badge } from "@/components/ui"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import {
   submissionModeBadgeKey,
@@ -27,22 +28,65 @@ export const SubmissionModeIcon = ({
     <GitCommitHorizontal aria-hidden="true" className={className} />
   )
 
-// The "what counts as a submission" mode badge, shared by the teacher heading
+// ── Assignment-property meta strip ──────────────────────────────────────────
+// The teacher heading and student page describe assignment properties (mode,
+// grading, due date, template) as one quiet GitHub-style meta line: icon +
+// muted text per item, thin dividers between items. Properties are text;
+// only genuine states (overdue, late, closed) keep toned badges.
+
+/** One quiet property item: icon + muted text (+ optional hover detail). */
+export const MetaItem = ({
+  title,
+  children,
+}: {
+  title?: string
+  children: ReactNode
+}) => (
+  <span
+    className="inline-flex items-center gap-1.5 whitespace-nowrap text-base-content/70"
+    title={title}
+  >
+    {children}
+  </span>
+)
+
+/** Thin vertical rule between meta items. */
+export const MetaDivider = () => (
+  <span aria-hidden="true" className="h-4 w-px shrink-0 bg-base-content/20" />
+)
+
+/** The strip itself: filters out absent items and interleaves dividers, so
+ *  callers list items declaratively without divider bookkeeping. */
+export const MetaStrip = ({ items }: { items: ReactNode[] }) => {
+  const present = items.filter(
+    (item) => item !== null && item !== undefined && item !== false,
+  )
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      {present.map((item, i) => (
+        <Fragment key={i}>
+          {i > 0 && <MetaDivider />}
+          {item}
+        </Fragment>
+      ))}
+    </div>
+  )
+}
+
+// The "what counts as a submission" property, shared by the teacher heading
 // and the student page so their wording can't drift. Grading is described by
-// the separate AutogradingBadge, so this badge never claims a grade.
-export const SubmissionModeBadge = ({
+// the separate AutogradingMeta, so this item never claims a grade.
+export const SubmissionModeMeta = ({
   mode,
-  size,
 }: {
   mode: SubmissionMode | undefined
-  size?: BadgeSize
 }) => {
   const { t } = useTranslation()
   return (
-    <Badge ghost size={size} className="gap-1">
+    <MetaItem>
       <SubmissionModeIcon mode={mode} />
       {t(submissionModeBadgeKey(mode))}
-    </Badge>
+    </MetaItem>
   )
 }
 
@@ -64,31 +108,20 @@ const autogradingBadgeContent: Record<
   },
 }
 
-// The "how is it graded" badge, paired with SubmissionModeBadge on the teacher
-// heading and the student page. Keyed off the autograding tri-state so the
-// 2-mode x 3-grading combinations stay two independent badges. The detail is
-// hover text for sighted users and sr-only text for screen readers.
-export const AutogradingBadge = ({
-  state,
-  size,
-}: {
-  state: AutogradingState
-  size?: BadgeSize
-}) => {
+// The "how is it graded" property, paired with SubmissionModeMeta on the
+// teacher heading and the student page. Keyed off the autograding tri-state so
+// the 2-mode x 3-grading combinations stay two independent items. The detail
+// is hover text for sighted users and sr-only text for screen readers.
+export const AutogradingMeta = ({ state }: { state: AutogradingState }) => {
   const { t } = useTranslation()
   const { label, title } = autogradingBadgeContent[state]
   const Icon = state === "built-in" ? Bot : CircleOff
   return (
-    <Badge
-      ghost
-      size={size}
-      className="gap-1"
-      title={title ? t(title) : undefined}
-    >
+    <MetaItem title={title ? t(title) : undefined}>
       <Icon aria-hidden="true" className="size-3.5" />
       {t(label)}
       {title && <span className="sr-only">{t(title)}</span>}
-    </Badge>
+    </MetaItem>
   )
 }
 

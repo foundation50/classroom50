@@ -13,7 +13,13 @@ import {
 import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
 import { repoCommitUrl } from "@/util/orgUrl"
 import Avatar from "@/components/avatar"
-import { Badge, Button, Spinner, TablePagination } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  SkeletonCell,
+  Spinner,
+  TablePagination,
+} from "@/components/ui"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
 import type { SubmissionSort } from "@/pages/submissions/dashboard"
 import {
@@ -221,6 +227,23 @@ function resolveOverrideCell(
   if (!(row["max-score"] > 0)) return null
   return { hasGrade: true, maxPoints: row["max-score"] }
 }
+
+// Decorative loading placeholder — hidden from assistive tech so a screen
+// reader announces the table's busy state, not rows of empty cells. Same
+// recipe as the assignments table's skeleton.
+const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
+  <>
+    {Array.from({ length: rows }).map((_, i) => (
+      <tr key={i} aria-hidden="true">
+        <SkeletonCell bar="h-4 w-40" />
+        <SkeletonCell bar="h-6 w-20" />
+        <SkeletonCell bar="h-6 w-16" />
+        <SkeletonCell bar="h-4 w-32" />
+        <SkeletonCell bar="h-8 w-24" />
+      </tr>
+    ))}
+  </>
+)
 
 const SubmissionsTable = ({
   scores,
@@ -640,23 +663,34 @@ const SubmissionsTable = ({
   return (
     <>
       <EnterDiv className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
-        <table className="table">
+        <table className="table" aria-busy={initialLoading}>
           <caption className="sr-only">
             {isGroup
               ? t("submissions.table.captionGroup")
               : t("submissions.table.captionStudent")}
           </caption>
           <thead>
+            {/* Width hints so auto layout doesn't dump all slack into the
+                first two columns, stranding Score/Last-submitted/Actions in a
+                clump at the far edge. */}
             <tr>
-              <th scope="col">
+              <th scope="col" className="w-[26%]">
                 {isGroup
                   ? t("submissions.table.colGroup")
                   : t("submissions.table.colStudent")}
               </th>
-              <th scope="col">{t("submissions.table.colSubmissions")}</th>
-              <th scope="col">{t("submissions.table.colScore")}</th>
-              <th scope="col">{t("submissions.table.colLastSubmitted")}</th>
-              <th scope="col">{t("submissions.table.colActions")}</th>
+              <th scope="col" className="w-[24%]">
+                {t("submissions.table.colSubmissions")}
+              </th>
+              <th scope="col" className="w-[13%]">
+                {t("submissions.table.colScore")}
+              </th>
+              <th scope="col" className="w-[19%]">
+                {t("submissions.table.colLastSubmitted")}
+              </th>
+              <th scope="col" className="w-[18%]">
+                {t("submissions.table.colActions")}
+              </th>
             </tr>
           </thead>
           <motion.tbody
@@ -665,18 +699,7 @@ const SubmissionsTable = ({
             initial="initial"
             animate="animate"
           >
-            {initialLoading && (
-              <tr>
-                <td colSpan={5} className="py-10 text-center">
-                  <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
-                    <Spinner size="md" />
-                    <p className="text-sm text-base-content/70">
-                      {t("submissions.table.loading")}
-                    </p>
-                  </div>
-                </td>
-              </tr>
-            )}
+            {initialLoading && <SkeletonRows />}
             {!initialLoading &&
               !scores?.length &&
               !nonSubmitters.length &&

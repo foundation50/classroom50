@@ -17,7 +17,6 @@ import { isNoAutograderAssignment } from "@/domain/assignments/autogradingState"
 import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
-import type { CSSProperties } from "react"
 import { ConfirmModal } from "@/components/modals"
 import { ReuseAssignmentModal } from "@/components/modals/ReuseAssignmentModal"
 import { TemplateAccessModal } from "@/components/modals/TemplateAccessModal"
@@ -31,7 +30,13 @@ import type { Assignment } from "@/types/classroom"
 import { EnterDiv, ClickableTr } from "@/lib/motionComponents"
 import { blockEnter } from "@/lib/motion"
 import { motion } from "motion/react"
-import { Badge, Button, EmphasisLtr, SkeletonCell } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  EmphasisLtr,
+  MetricDial,
+  SkeletonCell,
+} from "@/components/ui"
 
 const DeleteAssignmentButton = ({
   org,
@@ -332,71 +337,6 @@ const ReleaseDateCell = ({ assignment }: { assignment: Assignment }) => {
   )
 }
 
-// Ring geometry for MetricCell: sized so the inner percentage stays legible
-// while the row keeps a compact height.
-const ringStyle = (value: number) =>
-  ({
-    "--value": value,
-    "--size": "2rem",
-    "--thickness": "3px",
-  }) as CSSProperties
-
-// One high-level funnel metric (Accepted / Submitted columns): the absolute
-// count as a toned badge (tabular numerals, fixed slot so the column aligns
-// down the rows), then a radial dial with the percentage inside. The
-// denominator lives in the tooltip wording rather than the cell — the dial
-// already expresses "out of how many" as a fraction of the circle. A faint
-// 100% track sits under the value ring so a low percentage still reads as a
-// dial rather than a floating number. Callers keep value <= max so the dial
-// can never contradict its count. One `tone` drives badge and ring together:
-// info = accepted, success = submitted.
-const METRIC_RING_CLASS = { info: "text-info", success: "text-success" }
-const MetricCell = ({
-  value,
-  max,
-  tone,
-  title,
-}: {
-  value: number
-  max: number
-  tone: "info" | "success"
-  title: string
-}) => {
-  const pct = max === 0 ? 0 : Math.round((value / max) * 100)
-  return (
-    <div className="flex items-center gap-2 whitespace-nowrap" title={title}>
-      <Badge
-        tone={tone}
-        className="min-w-8 justify-center font-bold tabular-nums"
-      >
-        {value}
-      </Badge>
-      <div
-        role="progressbar"
-        aria-label={title}
-        aria-valuemin={0}
-        aria-valuemax={max}
-        aria-valuenow={value}
-        className="relative"
-      >
-        <div
-          className="radial-progress text-base-content/10"
-          style={ringStyle(100)}
-          aria-hidden="true"
-        />
-        <div
-          className={`radial-progress absolute inset-0 ${METRIC_RING_CLASS[tone]}`}
-          style={ringStyle(pct)}
-          aria-hidden="true"
-        />
-        <span className="absolute inset-0 flex items-center justify-center text-[0.625rem] font-semibold tabular-nums text-base-content">
-          {pct}%
-        </span>
-      </div>
-    </div>
-  )
-}
-
 const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
   <>
     {Array.from({ length: rows }).map((_, i) => (
@@ -627,11 +567,19 @@ const AssignmentsTable = ({
                     </span>
                   )}
                 </td>
+                {/* The funnel cells deep-link to the actionable cohort: who
+                    hasn't accepted / hasn't submitted. Groups have no
+                    acceptance filter (no roster denominator), so their
+                    Accepted cell opens the dashboard unfiltered. */}
                 <td
                   onClick={() =>
                     navigate({
                       to: "/$org/$classroom/assignments/$assignment/submissions",
                       params: { org, classroom, assignment: assignment.slug },
+                      search:
+                        assignment.mode === "group"
+                          ? undefined
+                          : { status: "not-accepted" },
                     })
                   }
                 >
@@ -664,7 +612,7 @@ const AssignmentsTable = ({
                       total,
                     )
                     return (
-                      <MetricCell
+                      <MetricDial
                         value={shown}
                         max={total}
                         tone="info"
@@ -681,6 +629,7 @@ const AssignmentsTable = ({
                     navigate({
                       to: "/$org/$classroom/assignments/$assignment/submissions",
                       params: { org, classroom, assignment: assignment.slug },
+                      search: { status: "not-submitted" },
                     })
                   }
                 >
@@ -710,7 +659,7 @@ const AssignmentsTable = ({
                       }
                       const shown = Math.min(submitted, accepted)
                       return (
-                        <MetricCell
+                        <MetricDial
                           value={shown}
                           max={accepted}
                           tone="success"
@@ -731,7 +680,7 @@ const AssignmentsTable = ({
                     const total = studentCount ?? 0
                     const shown = Math.min(submitted, total)
                     return (
-                      <MetricCell
+                      <MetricDial
                         value={shown}
                         max={total}
                         tone="success"

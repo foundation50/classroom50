@@ -58,6 +58,9 @@ export type { FileDropzoneProps, PickedFile } from "./FileDropzone"
 export { StatCard } from "./StatCard"
 export type { StatCardProps } from "./StatCard"
 
+export { MetricDial } from "./MetricDial"
+export type { MetricDialProps, MetricDialTone } from "./MetricDial"
+
 export { SkeletonCell } from "./SkeletonCell"
 export type { SkeletonCellProps } from "./SkeletonCell"
 

@@ -2396,8 +2396,8 @@
     "dueDate": "Due {{date}}",
     "noDueDate": "No due date",
     "type": {
-      "badgeEveryPush": "Every commit on the default branch counts",
-      "badgeTag": "Submitted by tag",
+      "badgeEveryPush": "Submits on every push",
+      "badgeTag": "Submits by tag",
       "countEveryPush_one": "{{count}} commit on the default branch",
       "countEveryPush_other": "{{count}} commits on the default branch",
       "countTag_one": "{{count}} tagged submission",
@@ -2407,7 +2407,7 @@
     },
     "grading": {
       "badgeBuiltIn": "Autograded",
-      "badgeNoAutograder": "No built-in autograding",
+      "badgeNoAutograder": "Custom autograding",
       "titleNoAutograder": "The teacher supplies their own CI in the template. Built-in scores and regrading are disabled; the feedback pull request still works when enabled.",
       "badgeEmptyRepo": "No autograding",
       "titleEmptyRepo": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. The table shows who has accepted."
@@ -2428,6 +2428,14 @@
     },
     "lateBadge_one": "{{count}} late",
     "lateBadge_other": "{{count}} late",
+    "funnel": {
+      "accepted": "Accepted",
+      "submitted": "Submitted",
+      "acceptedTitle": "{{accepted}} of {{total}} students accepted the assignment",
+      "submittedTitle": "{{submitted}} of {{total}} students submitted",
+      "acceptedTitleGroup": "Groups that accepted — group repositories that exist",
+      "submittedTitleGroup": "{{submitted}} of {{accepted}} groups submitted"
+    },
     "downloadCsv": "Download scores (CSV)",
     "viewSourceRepo": "View template",
     "lockedNotice": "This assignment is locked. Students can't accept or open it, and if it uses a private template the student team's access to that template has been removed. Existing repositories and their submissions are unaffected. Unlock it from the Actions menu (or the assignments list) to reopen it.",
@@ -2603,7 +2611,6 @@
       "noDetails": "No details yet",
       "noGradingTitle": "Autograding is disabled for this assignment",
       "resolvingNonSubmitters": "Checking who hasn't submitted yet…",
-      "loading": "Loading submissions…",
       "pendingGrade": "Pending",
       "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Sync submissions now\" to collect it.",
       "overridden": "Manual",

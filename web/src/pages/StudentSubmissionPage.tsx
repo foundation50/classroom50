@@ -40,10 +40,12 @@ import {
   type PushSubmission,
 } from "@/components/submissions/submissionDetailItems"
 import {
-  AutogradingBadge,
+  AutogradingMeta,
   LastSubmittedCell,
+  MetaItem,
+  MetaStrip,
   SubmissionCountCell,
-  SubmissionModeBadge,
+  SubmissionModeMeta,
 } from "@/components/submissions/SubmissionRowCells"
 import { StudentRowActions } from "@/pages/submissions/StudentRowActions"
 import SubmitGuidance from "@/components/SubmitGuidance"
@@ -100,30 +102,41 @@ const AssignmentMeta = ({
   const overdue = due ? isPastDue(due) : false
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
-      {assignment.mode === "group" ? (
-        <Badge ghost className="gap-1">
-          <UsersRound aria-hidden="true" className="size-3.5" />{" "}
-          {t("submissions.student.modeGroup")}
-        </Badge>
-      ) : assignment.mode === "individual" ? (
-        <Badge ghost className="gap-1">
-          <UserRound aria-hidden="true" className="size-3.5" />{" "}
-          {t("submissions.student.modeIndividual")}
-        </Badge>
-      ) : null}
-      <SubmissionModeBadge mode={submissionMode} />
-      <AutogradingBadge state={deriveAutogradingState(assignment)} />
-      <Badge
-        tone={overdue ? "error" : "neutral"}
-        ghost={!overdue}
-        className="gap-1"
-      >
-        <CalendarClock aria-hidden="true" className="size-3.5" />
-        {due
-          ? t("submissions.dueDate", { date: formatDueDateTime(due) })
-          : t("submissions.noDueDate")}
-      </Badge>
+    <div className="mt-2">
+      <MetaStrip
+        items={[
+          assignment.mode === "group" ? (
+            <MetaItem>
+              <UsersRound aria-hidden="true" className="size-3.5" />
+              {t("submissions.student.modeGroup")}
+            </MetaItem>
+          ) : assignment.mode === "individual" ? (
+            <MetaItem>
+              <UserRound aria-hidden="true" className="size-3.5" />
+              {t("submissions.student.modeIndividual")}
+            </MetaItem>
+          ) : null,
+          <SubmissionModeMeta mode={submissionMode} />,
+          <AutogradingMeta state={deriveAutogradingState(assignment)} />,
+          // Overdue is a state, so it keeps the error badge; a normal or
+          // absent due date is a quiet property like the rest of the strip.
+          overdue ? (
+            <Badge tone="error" className="gap-1">
+              <CalendarClock aria-hidden="true" className="size-3.5" />
+              {due
+                ? t("submissions.dueDate", { date: formatDueDateTime(due) })
+                : t("submissions.noDueDate")}
+            </Badge>
+          ) : (
+            <MetaItem title={due ? formatDueDateTime(due) : undefined}>
+              <CalendarClock aria-hidden="true" className="size-3.5" />
+              {due
+                ? t("submissions.dueDate", { date: formatDueDateTime(due) })
+                : t("submissions.noDueDate")}
+            </MetaItem>
+          ),
+        ]}
+      />
     </div>
   )
 }

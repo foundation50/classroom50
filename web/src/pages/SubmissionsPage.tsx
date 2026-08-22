@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { CircleAlert } from "lucide-react"
+import { CalendarClock, CircleAlert } from "lucide-react"
 import Papa from "papaparse"
 
 import { useQueryClient } from "@tanstack/react-query"
-import { useParams, Navigate } from "@tanstack/react-router"
+import { useParams, useSearch, Navigate } from "@tanstack/react-router"
 
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
-import { Alert, Badge, HelpTooltip, Spinner } from "@/components/ui"
+import { Alert, Badge, HelpTooltip, MetricDial, Spinner } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
 import SubmissionsControls from "@/pages/submissions/SubmissionsControls"
@@ -27,8 +27,10 @@ import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTr
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
 import { resolveSubmissionMode } from "@/domain/assignments/submissionDetection"
 import {
-  AutogradingBadge,
-  SubmissionModeBadge,
+  AutogradingMeta,
+  MetaItem,
+  MetaStrip,
+  SubmissionModeMeta,
 } from "@/components/submissions/SubmissionRowCells"
 import {
   assignmentSkipsGrading,
@@ -41,6 +43,7 @@ import {
   DEFAULT_PAGE_SIZE,
   acceptedRosterCount,
   acceptedUsernames,
+  applyStatusSelection,
   assignmentRepoNames,
   buildScoresCsvRows,
   buildSectionLookup,
@@ -323,7 +326,24 @@ const SubmissionsPageContent = () => {
   // it reads only the repos on the page you're viewing (see livePageOwners), so
   // the page/size/filters must be known before it runs.
   const [query, setQuery] = useState("")
-  const [filters, setFilters] = useState<SubmissionFilters>(DEFAULT_FILTERS)
+  // ?status= deep-links a pre-filtered cohort (e.g. the assignments table's
+  // Accepted cell links here with "not-accepted"). Applied as the filter
+  // state's initial value, then re-applied if the param changes in place
+  // (cohort link while already mounted) — render-purely, like the page reset
+  // below, so no setState-in-effect.
+  const { status: statusParam } = useSearch({ strict: false })
+  const [filters, setFilters] = useState<SubmissionFilters>(() =>
+    statusParam
+      ? applyStatusSelection(DEFAULT_FILTERS, statusParam)
+      : DEFAULT_FILTERS,
+  )
+  const [lastStatusParam, setLastStatusParam] = useState(statusParam)
+  if (statusParam !== lastStatusParam) {
+    setLastStatusParam(statusParam)
+    if (statusParam) {
+      setFilters((current) => applyStatusSelection(current, statusParam))
+    }
+  }
   // Client-side table pagination over the display list. `page` is 0-based;
   // clamped at render (pageBounds) so a filter that shrinks the list can't
   // strand the view on an empty page.
@@ -962,62 +982,136 @@ const SubmissionsPageContent = () => {
       )}
       <PageHeader
         title={assignmentInfo?.name}
-        subtitle={
-          <div className="flex flex-wrap items-center gap-2">
-            {dueDate ? (
-              <>
-                <Badge
-                  tone={dueOverdue ? "error" : "info"}
-                  size="md"
-                  title={formatDueDateTime(dueDate)}
-                >
-                  {t("submissions.dueDate", {
-                    date: formatDueDateTime(dueDate),
-                  })}
-                </Badge>
-                {dueRelative && (
-                  <Badge tone={dueOverdue ? "error" : "warning"} size="md">
-                    {dueRelative}
+        // High-level funnel in the header's right slot, mirroring the
+        // assignments table's Accepted / Submitted dials so the two surfaces
+        // read the same. Hidden until the org repo list resolves (acceptance
+        // is derived from repo existence). Group acceptance is a bare count —
+        // no roster denominator — and the group submitted dial measures
+        // against existing group repos.
+        action={
+          (isGroupAssignment ? orgRepos != null : acceptedAvailable) ? (
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-base-content/70">
+                  {t("submissions.funnel.accepted")}
+                </span>
+                {isGroupAssignment ? (
+                  <Badge
+                    tone="info"
+                    className="min-w-8 justify-center font-bold tabular-nums"
+                    title={t("submissions.funnel.acceptedTitleGroup")}
+                  >
+                    {groupRepoList.length}
                   </Badge>
+                ) : (
+                  <MetricDial
+                    value={Math.min(acceptedCount, stats.rostered)}
+                    max={stats.rostered}
+                    tone="info"
+                    title={t("submissions.funnel.acceptedTitle", {
+                      accepted: Math.min(acceptedCount, stats.rostered),
+                      total: stats.rostered,
+                    })}
+                  />
                 )}
-              </>
-            ) : (
-              <span>{t("submissions.noDueDate")}</span>
-            )}
-            {lateCount > 0 && (
-              <Badge tone="error" size="sm">
-                {t("submissions.lateBadge", { count: lateCount })}
-              </Badge>
-            )}
-            {isClosedAssignment && (
-              <Badge tone="warning" size="md">
-                {t("submissions.closeSubmission.statusBadge.closed")}
-              </Badge>
-            )}
-            {assignmentResolved && (
-              <>
-                <SubmissionModeBadge
-                  mode={assignmentInfo.submission_mode}
-                  size="md"
-                />
-                <AutogradingBadge
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-base-content/70">
+                  {t("submissions.funnel.submitted")}
+                </span>
+                {isGroupAssignment ? (
+                  <MetricDial
+                    value={groupRepoList.length - unsubmittedGroupRepos.length}
+                    max={groupRepoList.length}
+                    tone="success"
+                    title={t("submissions.funnel.submittedTitleGroup", {
+                      submitted:
+                        groupRepoList.length - unsubmittedGroupRepos.length,
+                      accepted: groupRepoList.length,
+                    })}
+                  />
+                ) : (
+                  <MetricDial
+                    value={Math.min(stats.submitted, stats.rostered)}
+                    max={stats.rostered}
+                    tone="success"
+                    title={t("submissions.funnel.submittedTitle", {
+                      submitted: Math.min(stats.submitted, stats.rostered),
+                      total: stats.rostered,
+                    })}
+                  />
+                )}
+              </div>
+            </div>
+          ) : undefined
+        }
+        subtitle={
+          // Property items are quiet meta text; only genuine states (overdue,
+          // approaching deadline, late, closed) keep toned badges.
+          <MetaStrip
+            items={[
+              dueDate ? (
+                <span className="inline-flex items-center gap-2">
+                  {dueOverdue ? (
+                    <Badge
+                      tone="error"
+                      size="md"
+                      title={formatDueDateTime(dueDate)}
+                    >
+                      {t("submissions.dueDate", {
+                        date: formatDueDateTime(dueDate),
+                      })}
+                    </Badge>
+                  ) : (
+                    <MetaItem title={formatDueDateTime(dueDate)}>
+                      <CalendarClock aria-hidden="true" className="size-3.5" />
+                      {t("submissions.dueDate", {
+                        date: formatDueDateTime(dueDate),
+                      })}
+                    </MetaItem>
+                  )}
+                  {dueRelative && (
+                    <Badge tone={dueOverdue ? "error" : "warning"} size="md">
+                      {dueRelative}
+                    </Badge>
+                  )}
+                </span>
+              ) : (
+                <span className="text-base-content/60">
+                  {t("submissions.noDueDate")}
+                </span>
+              ),
+              lateCount > 0 && (
+                <Badge tone="error" size="sm">
+                  {t("submissions.lateBadge", { count: lateCount })}
+                </Badge>
+              ),
+              isClosedAssignment && (
+                <Badge tone="warning" size="md">
+                  {t("submissions.closeSubmission.statusBadge.closed")}
+                </Badge>
+              ),
+              assignmentResolved && (
+                <SubmissionModeMeta mode={assignmentInfo.submission_mode} />
+              ),
+              assignmentResolved && (
+                <AutogradingMeta
                   state={deriveAutogradingState(assignmentInfo)}
-                  size="md"
                 />
-              </>
-            )}
-            {assignmentInfo?.template && (
-              <GitHubLink
-                href={githubTemplateRepoUrl(
-                  assignmentInfo.template.owner,
-                  assignmentInfo.template.repo,
-                  assignmentInfo.template.branch,
-                )}
-                label={t("submissions.viewSourceRepo")}
-                title={`${assignmentInfo.template.owner}/${assignmentInfo.template.repo}`}
-              />
-            )}
-          </div>
+              ),
+              assignmentInfo?.template && (
+                <GitHubLink
+                  href={githubTemplateRepoUrl(
+                    assignmentInfo.template.owner,
+                    assignmentInfo.template.repo,
+                    assignmentInfo.template.branch,
+                  )}
+                  label={t("submissions.viewSourceRepo")}
+                  title={`${assignmentInfo.template.owner}/${assignmentInfo.template.repo}`}
+                />
+              ),
+            ]}
+          />
         }
       />
 
@@ -1118,275 +1212,285 @@ const SubmissionsPageContent = () => {
           )}
         </>
       )}
-      <SubmissionsControls
-        query={query}
-        onQueryChange={setQuery}
-        filters={filters}
-        onFiltersChange={setFilters}
-        sort={sort}
-        onSortChange={setSort}
-        isGroup={isGroupAssignment}
-        acceptedAvailable={acceptedAvailable}
-        passingAvailable={passingEnabled}
-        sections={sections}
-        onShare={() => setAcceptOpen(true)}
-        sortHint={
-          showPendingHiddenHint ? (
-            <HelpTooltip
-              help={t("submissions.filters.pendingHiddenHint")}
-              icon={CircleAlert}
-            />
-          ) : undefined
-        }
-        // A bare empty_repo assignment has no collect at all. A no_autograder
-        // assignment IS collected now (its submissions are detected rather than
-        // graded), so it keeps the freshness line and the re-collect button.
-        leading={
-          isEmptyRepoAssignment ? undefined : (
-            <DataFreshness
-              lastCollectedLabel={lastCollectedLabel}
-              stale={snapshotStale}
-              collecting={collecting}
-              errorCount={liveErrorCount}
-              onRefresh={
-                collecting || emptyRoster.show
-                  ? undefined
-                  : () => {
-                      // Sync = re-collect (rebuild scores.json). Re-read the org
-                      // repo list too so the staleness line re-derives against the
-                      // newest pushes (latestPush would otherwise stay frozen at
-                      // page load), and re-run the live fan-out for a live-capable
-                      // viewer so presence refreshes alongside the dispatched
-                      // collect.
-                      collectScores.collect()
-                      refetchOrgRepos()
-                      if (liveCapable) {
-                        refetchLive()
+      {/* Toolbar + table read as one unit: tighter gap than the page's
+          section rhythm so the controls visually belong to the table. */}
+      <div className="flex flex-col gap-3">
+        <SubmissionsControls
+          query={query}
+          onQueryChange={setQuery}
+          filters={filters}
+          onFiltersChange={setFilters}
+          sort={sort}
+          onSortChange={setSort}
+          isGroup={isGroupAssignment}
+          acceptedAvailable={acceptedAvailable}
+          passingAvailable={passingEnabled}
+          sections={sections}
+          onShare={() => setAcceptOpen(true)}
+          sortHint={
+            showPendingHiddenHint ? (
+              <HelpTooltip
+                help={t("submissions.filters.pendingHiddenHint")}
+                icon={CircleAlert}
+              />
+            ) : undefined
+          }
+          // A bare empty_repo assignment has no collect at all. A no_autograder
+          // assignment IS collected now (its submissions are detected rather than
+          // graded), so it keeps the freshness line and the re-collect button.
+          leading={
+            isEmptyRepoAssignment ? undefined : (
+              <DataFreshness
+                lastCollectedLabel={lastCollectedLabel}
+                stale={snapshotStale}
+                collecting={collecting}
+                errorCount={liveErrorCount}
+                onRefresh={
+                  collecting || emptyRoster.show
+                    ? undefined
+                    : () => {
+                        // Sync = re-collect (rebuild scores.json). Re-read the org
+                        // repo list too so the staleness line re-derives against the
+                        // newest pushes (latestPush would otherwise stay frozen at
+                        // page load), and re-run the live fan-out for a live-capable
+                        // viewer so presence refreshes alongside the dispatched
+                        // collect.
+                        collectScores.collect()
+                        refetchOrgRepos()
+                        if (liveCapable) {
+                          refetchLive()
+                        }
+                        if (detectionCapable) {
+                          refetchDetected()
+                        }
                       }
-                      if (detectionCapable) {
-                        refetchDetected()
-                      }
-                    }
-              }
-            />
-          )
-        }
-        trailing={
-          <SubmissionsActionsMenu
-            collecting={collecting}
-            regrading={regrading}
-            regradeAllActive={regradeAllActive}
-            canRegradeAll={canRegradeAll}
-            emptyRoster={emptyRoster.show}
-            emptyRepo={skipsGrading}
-            // Metrics summarizes the GRADED snapshot, and computeStats skips
-            // every `pending` row — so hide it whenever an overlay is adding
-            // those rows, live or detection. Keying this on liveCapable alone
-            // left it reachable for a no_autograder assignment, where detection
-            // supplies every row: the modal would report 0 submitted while the
-            // table listed detected submitters right next to it.
-            onMetrics={overlayCapable ? undefined : () => setMetricsOpen(true)}
-            onCollect={() => collectScores.collect()}
-            onRegradeAll={() => setRegradeConfirmOpen(true)}
-            // Bulk-open Feedback PRs: owner-only (needs admin on every repo,
-            // like the live reads), never for empty_repo (no PRs). A
-            // no_autograder repo is templated and PERMITS the Feedback PR, so
-            // it is gated on empty_repo only, not on skipsGrading.
-            onOpenAllPrs={
-              isOwner && !isEmptyRepoAssignment && allAssignmentRepos.length > 0
-                ? () => setOpenAllPrsOpen(true)
-                : undefined
-            }
-            viewHref={viewRun?.html_url || viewWorkflowUrl}
-            viewLabel={viewLabel}
-            onDownloadCsv={downloadScoresCsv}
-            downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
-            onDownloadAll={() => setDownloadAllOpen(true)}
-            downloadAllDisabled={downloadableOwners.length === 0}
-            // Bulk set student repo access: owner-only (needs admin on every
-            // repo), individual assignments only (a group repo's membership is
-            // founder-managed), never empty_repo, and only when repos exist.
-            onBulkAccess={
-              isOwner &&
-              !isGroupAssignment &&
-              !isEmptyRepoAssignment &&
-              acceptedSet.size > 0
-                ? () => setBulkAccessOpen(true)
-                : undefined
-            }
-            // Bulk set repo features: same gate as bulk access. Reconciles
-            // existing repos with the assignment's repo_features (which apply at
-            // accept-time only).
-            onBulkFeatures={
-              isOwner &&
-              !isGroupAssignment &&
-              !isEmptyRepoAssignment &&
-              acceptedSet.size > 0
-                ? () => setBulkFeaturesOpen(true)
-                : undefined
-            }
-            // Bulk retrofit autograding triggers: same gate as bulk features
-            // plus default-autograder only — teacher-authored (custom) shims
-            // are never rewritten, and a no_autograder assignment has no shim
-            // to retrofit (skipsGrading). Reconciles existing repos with the
-            // assignment's submission_mode (baked into shims at accept time).
-            // Requires a resolved entry — see assignmentResolved.
-            onBulkTrigger={
-              isOwner &&
-              !isGroupAssignment &&
-              !skipsGrading &&
-              assignmentResolved &&
-              isDefaultAutograder(assignmentInfo.autograder) &&
-              acceptedSet.size > 0
-                ? () => setBulkTriggerOpen(true)
-                : undefined
-            }
-            // Pause / Resume autograding across every accepted repo — flips each
-            // autograde workflow's Actions state (no file edit). Same gate as
-            // the trigger retrofit (owner + individual + resolved default
-            // autograder + accepted repos exist).
-            onBulkPause={
-              isOwner &&
-              !isGroupAssignment &&
-              !skipsGrading &&
-              assignmentResolved &&
-              isDefaultAutograder(assignmentInfo.autograder) &&
-              acceptedSet.size > 0
-                ? () => setBulkPauseOpen(true)
-                : undefined
-            }
-            onBulkResume={
-              isOwner &&
-              !isGroupAssignment &&
-              !skipsGrading &&
-              assignmentResolved &&
-              isDefaultAutograder(assignmentInfo.autograder) &&
-              acceptedSet.size > 0
-                ? () => setBulkResumeOpen(true)
-                : undefined
-            }
-            locked={isLockedAssignment}
-            lockPending={setLock.isPending}
-            // Lock/unlock is an authoring-tier action (teacher|hta), same gate
-            // as Regrade all; a plain TA doesn't see it (GitHub 403s them too).
-            onLockToggle={
-              canRegradeAll ? () => setLockConfirmOpen(true) : undefined
-            }
-            closed={isClosedAssignment}
-            // Close/reopen submission: authoring tier + individual, non-empty
-            // repo shape (a group repo's membership is founder-managed). Unlike
-            // bulk access it does NOT require acceptedSet.size > 0 — closing
-            // still blocks future accepts when no one has accepted yet.
-            onCloseToggle={
-              canRegradeAll &&
-              isOwner &&
-              !isGroupAssignment &&
-              !isEmptyRepoAssignment
-                ? () => setCloseSubmissionOpen(true)
-                : undefined
-            }
-          />
-        }
-      />
-      <SubmissionsTable
-        scores={visibleRows}
-        students={students}
-        nonSubmitters={visibleNonSubmitters}
-        unsubmittedGroupRepos={visibleGroupRepos}
-        isGroup={isGroupAssignment}
-        org={org}
-        classroom={classroom}
-        assignment={assignment}
-        assignmentName={assignmentInfo?.name}
-        maxGroupSize={assignmentInfo?.max_group_size}
-        acceptedUsernames={acceptedAvailable ? acceptedSet : undefined}
-        thresholdFraction={thresholdFraction}
-        filtered={hasActiveFilter}
-        onClearFilters={clearFilters}
-        emptyRepo={skipsGrading}
-        // Per-row trigger retrofit: owner + default-autograder only (teacher-
-        // authored shims are never rewritten). Mirrors the bulk-action gate,
-        // including assignmentResolved.
-        submissionMode={
-          isOwner &&
-          !skipsGrading &&
-          assignmentResolved &&
-          isDefaultAutograder(assignmentInfo.autograder)
-            ? resolveSubmissionMode(assignmentInfo.submission_mode)
-            : undefined
-        }
-        submissionTags={assignmentInfo?.submission_tags}
-        // The assignment's real submission_mode (independent of the autograder
-        // gate above) — drives the type-aware submission-details modal and the
-        // count wording, which apply regardless of who authored the shim.
-        assignmentMode={resolveSubmissionMode(assignmentInfo?.submission_mode)}
-        // Score override: staff may enter/edit scores. Gated on an org OWNER
-        // (the same write-capability gate every other mutating control on this
-        // page uses — a non-owner can't write the config repo's scores.json, so
-        // the editor must not appear for them). Two modes:
-        //   - manual: a resolved manual-mode assignment with a valid
-        //     max_points; the modal uses that configured max.
-        //   - auto: a gradable autograded assignment (not off, not skipping
-        //     grading); the modal overrides the autograded result using each
-        //     row's own max-score. `mode` absent reads as auto.
-        // Group entry keys on the founder (row owner).
-        overrideGrade={
-          isOwner && assignmentInfo?.grading?.mode === "manual"
-            ? typeof assignmentInfo.grading.max_points === "number"
-              ? {
-                  org,
-                  classroom,
-                  assignment,
-                  assignmentType: isGroupAssignment ? "group" : "individual",
-                  mode: "manual" as const,
-                  maxPoints: assignmentInfo.grading.max_points,
                 }
-              : undefined
-            : isOwner &&
+              />
+            )
+          }
+          trailing={
+            <SubmissionsActionsMenu
+              collecting={collecting}
+              regrading={regrading}
+              regradeAllActive={regradeAllActive}
+              canRegradeAll={canRegradeAll}
+              emptyRoster={emptyRoster.show}
+              emptyRepo={skipsGrading}
+              // Metrics summarizes the GRADED snapshot, and computeStats skips
+              // every `pending` row — so hide it whenever an overlay is adding
+              // those rows, live or detection. Keying this on liveCapable alone
+              // left it reachable for a no_autograder assignment, where detection
+              // supplies every row: the modal would report 0 submitted while the
+              // table listed detected submitters right next to it.
+              onMetrics={
+                overlayCapable ? undefined : () => setMetricsOpen(true)
+              }
+              onCollect={() => collectScores.collect()}
+              onRegradeAll={() => setRegradeConfirmOpen(true)}
+              // Bulk-open Feedback PRs: owner-only (needs admin on every repo,
+              // like the live reads), never for empty_repo (no PRs). A
+              // no_autograder repo is templated and PERMITS the Feedback PR, so
+              // it is gated on empty_repo only, not on skipsGrading.
+              onOpenAllPrs={
+                isOwner &&
+                !isEmptyRepoAssignment &&
+                allAssignmentRepos.length > 0
+                  ? () => setOpenAllPrsOpen(true)
+                  : undefined
+              }
+              viewHref={viewRun?.html_url || viewWorkflowUrl}
+              viewLabel={viewLabel}
+              onDownloadCsv={downloadScoresCsv}
+              downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
+              onDownloadAll={() => setDownloadAllOpen(true)}
+              downloadAllDisabled={downloadableOwners.length === 0}
+              // Bulk set student repo access: owner-only (needs admin on every
+              // repo), individual assignments only (a group repo's membership is
+              // founder-managed), never empty_repo, and only when repos exist.
+              onBulkAccess={
+                isOwner &&
+                !isGroupAssignment &&
+                !isEmptyRepoAssignment &&
+                acceptedSet.size > 0
+                  ? () => setBulkAccessOpen(true)
+                  : undefined
+              }
+              // Bulk set repo features: same gate as bulk access. Reconciles
+              // existing repos with the assignment's repo_features (which apply at
+              // accept-time only).
+              onBulkFeatures={
+                isOwner &&
+                !isGroupAssignment &&
+                !isEmptyRepoAssignment &&
+                acceptedSet.size > 0
+                  ? () => setBulkFeaturesOpen(true)
+                  : undefined
+              }
+              // Bulk retrofit autograding triggers: same gate as bulk features
+              // plus default-autograder only — teacher-authored (custom) shims
+              // are never rewritten, and a no_autograder assignment has no shim
+              // to retrofit (skipsGrading). Reconciles existing repos with the
+              // assignment's submission_mode (baked into shims at accept time).
+              // Requires a resolved entry — see assignmentResolved.
+              onBulkTrigger={
+                isOwner &&
+                !isGroupAssignment &&
                 !skipsGrading &&
                 assignmentResolved &&
-                assignmentInfo.grading?.mode !== "off"
-              ? {
-                  org,
-                  classroom,
-                  assignment,
-                  assignmentType: isGroupAssignment ? "group" : "individual",
-                  mode: "auto" as const,
-                }
+                isDefaultAutograder(assignmentInfo.autograder) &&
+                acceptedSet.size > 0
+                  ? () => setBulkTriggerOpen(true)
+                  : undefined
+              }
+              // Pause / Resume autograding across every accepted repo — flips each
+              // autograde workflow's Actions state (no file edit). Same gate as
+              // the trigger retrofit (owner + individual + resolved default
+              // autograder + accepted repos exist).
+              onBulkPause={
+                isOwner &&
+                !isGroupAssignment &&
+                !skipsGrading &&
+                assignmentResolved &&
+                isDefaultAutograder(assignmentInfo.autograder) &&
+                acceptedSet.size > 0
+                  ? () => setBulkPauseOpen(true)
+                  : undefined
+              }
+              onBulkResume={
+                isOwner &&
+                !isGroupAssignment &&
+                !skipsGrading &&
+                assignmentResolved &&
+                isDefaultAutograder(assignmentInfo.autograder) &&
+                acceptedSet.size > 0
+                  ? () => setBulkResumeOpen(true)
+                  : undefined
+              }
+              locked={isLockedAssignment}
+              lockPending={setLock.isPending}
+              // Lock/unlock is an authoring-tier action (teacher|hta), same gate
+              // as Regrade all; a plain TA doesn't see it (GitHub 403s them too).
+              onLockToggle={
+                canRegradeAll ? () => setLockConfirmOpen(true) : undefined
+              }
+              closed={isClosedAssignment}
+              // Close/reopen submission: authoring tier + individual, non-empty
+              // repo shape (a group repo's membership is founder-managed). Unlike
+              // bulk access it does NOT require acceptedSet.size > 0 — closing
+              // still blocks future accepts when no one has accepted yet.
+              onCloseToggle={
+                canRegradeAll &&
+                isOwner &&
+                !isGroupAssignment &&
+                !isEmptyRepoAssignment
+                  ? () => setCloseSubmissionOpen(true)
+                  : undefined
+              }
+            />
+          }
+        />
+        <SubmissionsTable
+          scores={visibleRows}
+          students={students}
+          nonSubmitters={visibleNonSubmitters}
+          unsubmittedGroupRepos={visibleGroupRepos}
+          isGroup={isGroupAssignment}
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+          assignmentName={assignmentInfo?.name}
+          maxGroupSize={assignmentInfo?.max_group_size}
+          acceptedUsernames={acceptedAvailable ? acceptedSet : undefined}
+          thresholdFraction={thresholdFraction}
+          filtered={hasActiveFilter}
+          onClearFilters={clearFilters}
+          emptyRepo={skipsGrading}
+          // Per-row trigger retrofit: owner + default-autograder only (teacher-
+          // authored shims are never rewritten). Mirrors the bulk-action gate,
+          // including assignmentResolved.
+          submissionMode={
+            isOwner &&
+            !skipsGrading &&
+            assignmentResolved &&
+            isDefaultAutograder(assignmentInfo.autograder)
+              ? resolveSubmissionMode(assignmentInfo.submission_mode)
               : undefined
-        }
-        // Per-row Pause/Resume autograding: same gate as the bulk pause/resume
-        // (owner + individual + resolved default-autograder). Kept separate from
-        // submissionMode so the row action doesn't inherit the trigger action's
-        // group-assignment reach.
-        canPauseAutograding={
-          isOwner &&
-          !isGroupAssignment &&
-          !skipsGrading &&
-          assignmentResolved &&
-          isDefaultAutograder(assignmentInfo.autograder)
-        }
-        initialLoading={initialLoading}
-        nonSubmittersLoading={
-          !nonSubmittersReady &&
-          students.length > 0 &&
-          showsNonSubmitters(effectiveFilters)
-        }
-        page={page}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-        sort={sort}
-        // Re-stagger the row entrance whenever the visible set changes (search/
-        // filter/sort/size/assignment). Combined with `page` inside the table.
-        viewSignature={viewSignature}
-        // The current page's live/detected data is still resolving, so the
-        // count + last-submitted cells shimmer until they settle. Gated on
-        // overlayCapable so a snapshot-only view never shows a settling
-        // affordance; each pending flag is already false unless its own overlay
-        // is enabled, so a detection-only view (no_autograder) still shimmers.
-        settling={overlayCapable && (livePending || detectedPending)}
-      />
+          }
+          submissionTags={assignmentInfo?.submission_tags}
+          // The assignment's real submission_mode (independent of the autograder
+          // gate above) — drives the type-aware submission-details modal and the
+          // count wording, which apply regardless of who authored the shim.
+          assignmentMode={resolveSubmissionMode(
+            assignmentInfo?.submission_mode,
+          )}
+          // Score override: staff may enter/edit scores. Gated on an org OWNER
+          // (the same write-capability gate every other mutating control on this
+          // page uses — a non-owner can't write the config repo's scores.json, so
+          // the editor must not appear for them). Two modes:
+          //   - manual: a resolved manual-mode assignment with a valid
+          //     max_points; the modal uses that configured max.
+          //   - auto: a gradable autograded assignment (not off, not skipping
+          //     grading); the modal overrides the autograded result using each
+          //     row's own max-score. `mode` absent reads as auto.
+          // Group entry keys on the founder (row owner).
+          overrideGrade={
+            isOwner && assignmentInfo?.grading?.mode === "manual"
+              ? typeof assignmentInfo.grading.max_points === "number"
+                ? {
+                    org,
+                    classroom,
+                    assignment,
+                    assignmentType: isGroupAssignment ? "group" : "individual",
+                    mode: "manual" as const,
+                    maxPoints: assignmentInfo.grading.max_points,
+                  }
+                : undefined
+              : isOwner &&
+                  !skipsGrading &&
+                  assignmentResolved &&
+                  assignmentInfo.grading?.mode !== "off"
+                ? {
+                    org,
+                    classroom,
+                    assignment,
+                    assignmentType: isGroupAssignment ? "group" : "individual",
+                    mode: "auto" as const,
+                  }
+                : undefined
+          }
+          // Per-row Pause/Resume autograding: same gate as the bulk pause/resume
+          // (owner + individual + resolved default-autograder). Kept separate from
+          // submissionMode so the row action doesn't inherit the trigger action's
+          // group-assignment reach.
+          canPauseAutograding={
+            isOwner &&
+            !isGroupAssignment &&
+            !skipsGrading &&
+            assignmentResolved &&
+            isDefaultAutograder(assignmentInfo.autograder)
+          }
+          initialLoading={initialLoading}
+          nonSubmittersLoading={
+            !nonSubmittersReady &&
+            students.length > 0 &&
+            showsNonSubmitters(effectiveFilters)
+          }
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          sort={sort}
+          // Re-stagger the row entrance whenever the visible set changes (search/
+          // filter/sort/size/assignment). Combined with `page` inside the table.
+          viewSignature={viewSignature}
+          // The current page's live/detected data is still resolving, so the
+          // count + last-submitted cells shimmer until they settle. Gated on
+          // overlayCapable so a snapshot-only view never shows a settling
+          // affordance; each pending flag is already false unless its own overlay
+          // is enabled, so a detection-only view (no_autograder) still shimmers.
+          settling={overlayCapable && (livePending || detectedPending)}
+        />
+      </div>
       <ConfirmModal
         open={regradeConfirmOpen}
         title={t("submissions.regradeAll.confirmTitle", {

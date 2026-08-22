@@ -56,14 +56,16 @@ export function DataFreshness({
 
         {onRefresh && (
           // Stale: a red "Sync now" flags the out-of-date snapshot and
-          // re-collects on click. In sync: a bordered "Refresh" that matches the
-          // other toolbar buttons' size and background.
+          // re-collects on click. In sync: a quiet ghost "Refresh" so the
+          // freshness line doesn't outshout the search/filter controls beside
+          // it in the toolbar.
           <Button
-            variant={stale ? "error" : "outline"}
+            variant={stale ? "error" : "ghost"}
             size="sm"
             disabled={collecting}
             onClick={onRefresh}
             aria-live="polite"
+            className={stale ? undefined : "text-base-content/70"}
             title={
               stale
                 ? t("submissions.freshness.syncHelp")
