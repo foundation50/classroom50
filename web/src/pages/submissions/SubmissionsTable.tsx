@@ -68,7 +68,8 @@ import {
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import type { Student, SubmissionMode } from "@/types/classroom"
-import { EnterDiv } from "@/lib/motionComponents"
+import { EnterDiv, ClickableTr } from "@/lib/motionComponents"
+import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import { blockEnter } from "@/lib/motion"
 
 // Score chip: the shared ScoreBadge (one recipe, one source — see
@@ -453,8 +454,49 @@ const SubmissionsTable = ({
           t,
         ),
       })
+    // The row's primary action: the manage-submission modal. Shared by the
+    // actions cluster's manage button and the whole-row click.
+    const openManage = () =>
+      setManageSubmission(
+        isGroup
+          ? {
+              owner: rest.owner,
+              isGroup: true,
+              title: repo,
+              repo,
+              repoHref,
+              hasRepo: true,
+              commit: rest.commit,
+              release: rest.release,
+            }
+          : {
+              owner: rest.owner,
+              isGroup: false,
+              title: getName(rest.owner, students) || rest.owner,
+              subtitle: identitySubtitle(
+                getName(rest.owner, students),
+                rest.owner,
+                getSection(rest.owner, students),
+              ),
+              repo,
+              repoHref,
+              hasRepo: true,
+              commit: rest.commit,
+              release: rest.release,
+              displayName: getName(rest.owner, students) || undefined,
+            },
+      )
     return (
-      <tr key={rest.owner}>
+      <ClickableTr
+        key={rest.owner}
+        className="hover:bg-base-200"
+        // Mouse convenience only — the guard yields to inner buttons/links,
+        // and the actions cluster keeps manage keyboard-reachable.
+        onClick={(event) => {
+          if (isInteractiveEventTarget(event)) return
+          openManage()
+        }}
+      >
         <td>
           {isGroup ? (
             <GroupMembers
@@ -572,18 +614,7 @@ const SubmissionsTable = ({
                 release={rest.release}
                 skipsGrading={emptyRepo}
                 header={<GroupActionControls repo={repo} repoHref={repoHref} />}
-                onManage={() =>
-                  setManageSubmission({
-                    owner: rest.owner,
-                    isGroup: true,
-                    title: repo,
-                    repo,
-                    repoHref,
-                    hasRepo: true,
-                    commit: rest.commit,
-                    release: rest.release,
-                  })
-                }
+                onManage={openManage}
               />
             ) : (
               <RepoRowActions
@@ -597,29 +628,12 @@ const SubmissionsTable = ({
                     hasRepo
                   />
                 }
-                onManage={() =>
-                  setManageSubmission({
-                    owner: rest.owner,
-                    isGroup: false,
-                    title: getName(rest.owner, students) || rest.owner,
-                    subtitle: identitySubtitle(
-                      getName(rest.owner, students),
-                      rest.owner,
-                      getSection(rest.owner, students),
-                    ),
-                    repo,
-                    repoHref,
-                    hasRepo: true,
-                    commit: rest.commit,
-                    release: rest.release,
-                    displayName: getName(rest.owner, students) || undefined,
-                  })
-                }
+                onManage={openManage}
               />
             )}
           </div>
         </td>
-      </tr>
+      </ClickableTr>
     )
   }
 
@@ -731,6 +745,7 @@ const SubmissionsTable = ({
                   !isGroup && Boolean(student.username) && acceptedUsernames
 
                 let actions: React.ReactNode
+                let openManage: (() => void) | undefined
                 if (showActions) {
                   const repoName = studentRepoName(
                     classroom,
@@ -744,6 +759,24 @@ const SubmissionsTable = ({
                     student.username,
                   )
                   const accepted = hasAccepted(student.username, showActions)
+                  openManage = () =>
+                    setManageSubmission({
+                      owner: student.username,
+                      isGroup: false,
+                      title:
+                        getName(student.username, students) ||
+                        student.username,
+                      subtitle: identitySubtitle(
+                        getName(student.username, students),
+                        student.username,
+                        student.section,
+                      ),
+                      repo: repoName,
+                      repoHref,
+                      hasRepo: accepted,
+                      displayName:
+                        getName(student.username, students) || undefined,
+                    })
                   actions = (
                     <RepoRowActions
                       owner={student.username}
@@ -755,25 +788,7 @@ const SubmissionsTable = ({
                           hasRepo={accepted}
                         />
                       }
-                      onManage={() =>
-                        setManageSubmission({
-                          owner: student.username,
-                          isGroup: false,
-                          title:
-                            getName(student.username, students) ||
-                            student.username,
-                          subtitle: identitySubtitle(
-                            getName(student.username, students),
-                            student.username,
-                            student.section,
-                          ),
-                          repo: repoName,
-                          repoHref,
-                          hasRepo: accepted,
-                          displayName:
-                            getName(student.username, students) || undefined,
-                        })
-                      }
+                      onManage={openManage}
                     />
                   )
                 }
@@ -786,6 +801,7 @@ const SubmissionsTable = ({
                     acceptedUsernames={acceptedUsernames}
                     onProfile={setProfileUsername}
                     actions={actions}
+                    onManage={openManage}
                     overrideGrade={overrideGrade}
                     onEditGrade={(username) =>
                       overrideGrade?.mode === "manual" &&
@@ -813,6 +829,15 @@ const SubmissionsTable = ({
                 assignment,
                 owner,
               )
+              const openManage = () =>
+                setManageSubmission({
+                  owner,
+                  isGroup: true,
+                  title: repoName,
+                  repo: repoName,
+                  repoHref: groupRepoHref,
+                  hasRepo: true,
+                })
               return (
                 <GroupRepoRow
                   key={`group-${repoName}`}
@@ -822,6 +847,7 @@ const SubmissionsTable = ({
                   owner={owner}
                   repoName={repoName}
                   students={students}
+                  onManage={openManage}
                   actions={
                     <RepoRowActions
                       owner={owner}
@@ -832,16 +858,7 @@ const SubmissionsTable = ({
                           repoHref={groupRepoHref}
                         />
                       }
-                      onManage={() =>
-                        setManageSubmission({
-                          owner,
-                          isGroup: true,
-                          title: repoName,
-                          repo: repoName,
-                          repoHref: groupRepoHref,
-                          hasRepo: true,
-                        })
-                      }
+                      onManage={openManage}
                     />
                   }
                 />

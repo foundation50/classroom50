@@ -9,6 +9,8 @@ import { nonSubmitterStatus } from "@/pages/submissions/dashboard"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
 import type { ScoreOverrideCapability } from "@/pages/submissions/ScoreOverrideModal"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
+import { ClickableTr } from "@/lib/motionComponents"
+import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import type { Student } from "@/types/classroom"
 import type { StudentSortMode } from "@/util/students"
 
@@ -236,6 +238,7 @@ export const NonSubmitterRow = ({
   acceptedUsernames,
   onProfile,
   actions,
+  onManage,
   overrideGrade,
   onEditGrade,
   thresholdFraction = null,
@@ -247,6 +250,10 @@ export const NonSubmitterRow = ({
   acceptedUsernames?: Set<string>
   onProfile: (username: string) => void
   actions?: React.ReactNode
+  // Row-level click target: the manage-submission modal, same as the actions
+  // cluster's manage button. Absent (group non-submitter — no per-student
+  // repo), the row renders non-clickable.
+  onManage?: () => void
   // When set (individual manual-grade assignment, writable viewer), the score
   // cell offers grade entry for this not-yet-graded student. Autograded
   // assignments have no per-row value to override here, so this is manual-only.
@@ -266,8 +273,8 @@ export const NonSubmitterRow = ({
     typeof overrideGrade.maxPoints === "number" &&
     !isGroup &&
     Boolean(student.username)
-  return (
-    <tr>
+  const cells = (
+    <>
       <td>
         <Avatar
           name={getDisplayName(student.username, students, nameMode)}
@@ -313,7 +320,20 @@ export const NonSubmitterRow = ({
           "—"
         )}
       </td>
-    </tr>
+    </>
+  )
+  // No row action -> a plain row, so the pointer cursor never lies.
+  if (!onManage) return <tr className="hover:bg-base-200">{cells}</tr>
+  return (
+    <ClickableTr
+      className="hover:bg-base-200"
+      onClick={(event) => {
+        if (isInteractiveEventTarget(event)) return
+        onManage()
+      }}
+    >
+      {cells}
+    </ClickableTr>
   )
 }
 
@@ -329,6 +349,7 @@ export const GroupRepoRow = ({
   repoName,
   students,
   actions,
+  onManage,
 }: {
   org: string
   classroom: string
@@ -337,11 +358,14 @@ export const GroupRepoRow = ({
   repoName: string
   students: Student[]
   actions: React.ReactNode
+  // Row-level click target: the manage-submission modal, same as the actions
+  // cluster's manage button.
+  onManage?: () => void
 }) => {
   const { t } = useTranslation()
   const repoHref = studentRepoUrl(org, classroom, assignment, owner)
-  return (
-    <tr>
+  const cells = (
+    <>
       <td>
         <GroupMembers
           org={org}
@@ -362,6 +386,18 @@ export const GroupRepoRow = ({
       <td>
         <div className="flex items-center gap-1">{actions}</div>
       </td>
-    </tr>
+    </>
+  )
+  if (!onManage) return <tr className="hover:bg-base-200">{cells}</tr>
+  return (
+    <ClickableTr
+      className="hover:bg-base-200"
+      onClick={(event) => {
+        if (isInteractiveEventTarget(event)) return
+        onManage()
+      }}
+    >
+      {cells}
+    </ClickableTr>
   )
 }

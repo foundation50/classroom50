@@ -43,7 +43,7 @@ export const RosterRow = ({
 
   return (
     <ClickableRow
-      className="group/row flex cursor-pointer items-center justify-between gap-4 px-6 py-4 hover:bg-base-200"
+      className="group/row flex items-center justify-between gap-4 px-6 py-4 hover:bg-base-200"
       onClick={() => onOpen(row.key)}
     >
       <input

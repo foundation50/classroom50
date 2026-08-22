@@ -79,18 +79,40 @@ export function CalloutText({
   )
 }
 
-/** Clickable list row with a subtle hover lift + shadow. */
+/** Clickable list row with a pointer cursor and a subtle hover lift + shadow. */
 export function ClickableRow({
   children,
+  className,
   ...props
 }: ComponentPropsWithoutRef<typeof motion.li>) {
   return (
     <motion.li
       whileHover={rowHover.whileHover}
       transition={rowHover.transition}
+      className={`cursor-pointer ${className ?? ""}`}
       {...props}
     >
       {children}
     </motion.li>
+  )
+}
+
+/** ClickableRow's <tr> counterpart — the one hover + cursor treatment for
+ *  table data rows (assignments, submissions, …). Pair with a `hover:bg-*`
+ *  class. */
+export function ClickableTr({
+  children,
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof motion.tr>) {
+  return (
+    <motion.tr
+      whileHover={rowHover.whileHover}
+      transition={rowHover.transition}
+      className={`cursor-pointer ${className ?? ""}`}
+      {...props}
+    >
+      {children}
+    </motion.tr>
   )
 }

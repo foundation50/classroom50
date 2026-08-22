@@ -27,7 +27,9 @@ import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
 import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Assignment } from "@/types/classroom"
-import { EnterDiv } from "@/lib/motionComponents"
+import { EnterDiv, ClickableTr } from "@/lib/motionComponents"
+import { blockEnter } from "@/lib/motion"
+import { motion } from "motion/react"
 import { Badge, Button, EmphasisLtr, SkeletonCell } from "@/components/ui"
 
 const DeleteAssignmentButton = ({
@@ -411,7 +413,14 @@ const AssignmentsTable = ({
             </th>
           </tr>
         </thead>
-        <tbody>
+        {/* Same recipe as the submissions table: the body enters as one block
+            (blockEnter) and replays when the visible set changes. */}
+        <motion.tbody
+          key={assignments?.map((a) => a.slug).join("|") ?? ""}
+          variants={blockEnter}
+          initial="initial"
+          animate="animate"
+        >
           {loading && <SkeletonRows />}
           {!loading && !assignments?.length && (
             <tr>
@@ -422,9 +431,9 @@ const AssignmentsTable = ({
           )}
           {!loading &&
             assignments?.map((assignment) => (
-              <tr
+              <ClickableTr
                 key={assignment.slug}
-                className="hover:cursor-pointer hover:bg-base-200"
+                className="hover:bg-base-200"
               >
                 <td
                   onClick={() =>
@@ -707,9 +716,9 @@ const AssignmentsTable = ({
                     </>
                   )}
                 </td>
-              </tr>
+              </ClickableTr>
             ))}
-        </tbody>
+        </motion.tbody>
       </table>
     </EnterDiv>
   )
