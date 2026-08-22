@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import csv
 import datetime
+import fnmatch
 import json
 import os
 import pathlib
@@ -292,7 +293,7 @@ def main() -> int:
                 failed_classrooms.append(classroom_short)
 
         try:
-            updates, mode_flip_assignments, collected = collect_classroom(
+            updates, mode_flip_assignments, collected, detected = collect_classroom(
                 api_url=api_url,
                 org=org,
                 classroom_short=classroom_short,
@@ -380,6 +381,23 @@ def main() -> int:
                 slug, {"type": atype, "entries": []}
             )
             bucket["collected_at"] = collected_at
+        # Detected (ungraded) submissions replace the bucket's whole `detected`
+        # list: it is derived wholly from current repo state, so a stale record
+        # for a repo that no longer detects must not survive. `entries` is left
+        # untouched — these assignments never produce a graded entry. An empty
+        # result drops the key rather than writing [], keeping a never-submitted
+        # bucket byte-identical to a freshly scaffolded one.
+        for slug, (atype, records) in detected.items():
+            bucket = scores["assignments"].setdefault(
+                slug, {"type": atype, "entries": []}
+            )
+            before = bucket.get("detected")
+            if records:
+                bucket["detected"] = records
+            else:
+                bucket.pop("detected", None)
+            if bucket.get("detected") != before:
+                n_changes += 1
         try:
             save_scores(scores_path, scores)
         except ScoresFileError as exc:
@@ -724,6 +742,81 @@ def list_enrolled_logins(
     return _dedupe_logins(logins), {u.strip().lower() for u in student_logins}
 
 
+def collect_detected(
+    *,
+    api_url: str,
+    org: str,
+    classroom_short: str,
+    slug: str,
+    entry: dict[str, Any],
+    team_usernames: list[str],
+    repo_index: "RepoIndex | None",
+    service_token: str,
+    emit_warning: Callable[[str], None],
+    classify: Callable[[urllib.error.HTTPError], Any],
+) -> tuple[str, list[dict[str, Any]]]:
+    """Detected submissions for one no_autograder assignment: walk its repos and
+    record presence/count per submitter. Returns (mode, records).
+
+    Never records a score — these assignments are not graded. A repo with no
+    detections is OMITTED, so the record list is exactly the submitter set. A
+    per-repo failure warns and skips (same policy as the graded path) so one
+    unreadable repo can't void the assignment.
+    """
+    raw_mode = entry.get("mode")
+    is_group = (raw_mode or "").lower() == "group"
+    assignment_type = "group" if is_group else "individual"
+
+    submission_mode = entry.get("submission_mode")
+    mode = "tag" if submission_mode == "tag" else "every-push"
+    raw_tags = entry.get("submission_tags")
+    submission_tags = [t for t in (raw_tags or []) if isinstance(t, str) and t]
+
+    due_raw = entry.get("due")
+    due = parse_rfc3339(due_raw) if due_raw else None
+
+    records: list[dict[str, Any]] = []
+    # team_usernames is the union across the student team and every staff team,
+    # so a login on more than one team appears more than once. Dedupe or the
+    # same repo is polled repeatedly and recorded once per membership.
+    for username in _dedupe_logins(list(team_usernames)):
+        repo_name = assignment_repo_name(classroom_short, slug, username)
+        if repo_index is not None and not repo_index.contains(repo_name):
+            continue
+        try:
+            detections = detect_repo_submissions(
+                api_url,
+                org,
+                repo_name,
+                service_token,
+                mode,
+                submission_tags,
+            )
+        except urllib.error.HTTPError as exc:
+            if classify(exc) is not SKIPPABLE:
+                raise
+            emit_warning(
+                f"{org}/{repo_name}: submission detection failed: HTTP {exc.code} "
+                f"({exc.reason or 'no reason'}); skipping"
+            )
+            continue
+        except (json.JSONDecodeError, ValueError) as exc:
+            emit_warning(
+                f"{org}/{repo_name}: submission detection malformed ({exc}); skipping"
+            )
+            continue
+        if not detections:
+            continue
+        record = detected_record(username, detections, due)
+        if mode == "tag":
+            record["kind"] = "tag"
+        else:
+            record["kind"] = "commit"
+        records.append(record)
+
+    return assignment_type, records
+
+
 def collect_classroom(
     *,
     api_url: str,
@@ -736,17 +829,25 @@ def collect_classroom(
     assignment_filter: str = "",
     repo_index: RepoIndex | None = None,
     team_members: "TeamMembers | None" = None,
-) -> tuple[list[dict[str, Any]], int, dict[str, str]]:
+) -> tuple[
+    list[dict[str, Any]],
+    int,
+    dict[str, str],
+    dict[str, tuple[str, list[dict[str, Any]]]],
+]:
     """Return (validated result payloads for every (student, assignment) pair,
     count of assignments whose only submissions were rejected by validation,
-    slug -> mode map of the assignments actually walked).
+    slug -> mode map of the assignments actually walked, slug -> (mode, detected
+    records) for assignments that skip grading).
     Per-repo failures warn and skip; hard failures (auth 401/403; network 599)
     propagate and main() converts them to exit 1. The second tuple element lets
     main() distinguish a mode-flip-induced empty result (which has its own loud
     warning) from a token-access problem. The third records which buckets this
     run refreshed — main() stamps their `collected_at` — and stays empty when
     collection was skipped wholesale (team unreadable/empty), so a skipped
-    classroom never reads as freshly collected.
+    classroom never reads as freshly collected. The fourth carries DETECTED
+    submissions for no_autograder assignments (presence/count, never a score):
+    those repos publish no submit/* release, so this is their only signal.
 
     `roster_meta` is the best-effort roster join (username -> display metadata,
     see load_roster_metadata); when a collected owner has a matching row its
@@ -763,6 +864,10 @@ def collect_classroom(
     # Assignments this run actually walked (slug -> mode), for `collected_at`
     # stamping. Populated only past the team-read gate below.
     collected: dict[str, str] = {}
+    # Detected (ungraded) submissions per no_autograder assignment:
+    # slug -> (mode, records). Separate from `results` because these carry no
+    # score and must never enter the graded `entries` path.
+    detected: dict[str, tuple[str, list[dict[str, Any]]]] = {}
     # (assignment) buckets where every present submission was rejected by
     # validation (the mode-flip symptom). Returned so main() can suppress its
     # "rotate token" heuristic, which would otherwise misread this as a
@@ -795,20 +900,20 @@ def collect_classroom(
             f"Members: Read (a fine-grained PAT permission) — rotate it with "
             f"`gh teacher rotate-service-token {org}`."
         )
-        return results, mode_flip_assignments, collected
+        return results, mode_flip_assignments, collected, detected
     except (json.JSONDecodeError, ValueError) as exc:
         emit_warning(
             f"{classroom_short}: team {team_slug!r} member listing malformed "
             f"({exc}); skipping collection for this classroom."
         )
-        return results, mode_flip_assignments, collected
+        return results, mode_flip_assignments, collected, detected
 
     if not team_usernames:
         emit_warning(
             f"{classroom_short}: teams {team_slug!r} (and staff teams) have no "
             f"members — no (username, assignment) pairs to poll; skipping."
         )
-        return results, mode_flip_assignments, collected
+        return results, mode_flip_assignments, collected, detected
 
     # Group attribution credits a collaborator only if on a classroom team
     # (owner always credited) — same trust model, team-sourced set. Staff are in
@@ -821,12 +926,36 @@ def collect_classroom(
         if assignment_filter and slug != assignment_filter:
             continue
         # Assignments that never autograde (empty_repo or no_autograder) —
-        # same predicate as valid_assignment_slugs, kept in lockstep.
+        # same predicate as valid_assignment_slugs, kept in lockstep. There are
+        # no submit/* releases to ingest and no scores to record, but a
+        # submission still HAPPENED, so detect it from repo state instead
+        # (presence/count only, never a grade) — issue #659. An empty_repo
+        # assignment has no submission definition at all, so it stays skipped.
         if skips_grading(entry):
-            reason = "empty_repo" if is_empty_repo(entry) else "no_autograder"
+            if is_empty_repo(entry):
+                print(
+                    f"{classroom_short}/{slug}: empty_repo assignment — "
+                    f"autograding is disabled; skipping collection"
+                )
+                continue
+            detected_type, detected_records = collect_detected(
+                api_url=api_url,
+                org=org,
+                classroom_short=classroom_short,
+                slug=slug,
+                entry=entry,
+                team_usernames=team_usernames,
+                repo_index=repo_index,
+                service_token=service_token,
+                emit_warning=emit_warning,
+                classify=classify,
+            )
+            detected[slug] = (detected_type, detected_records)
+            collected[slug] = detected_type
             print(
-                f"{classroom_short}/{slug}: {reason} assignment — autograding "
-                f"is disabled; skipping collection"
+                f"{classroom_short}/{slug}: no_autograder assignment — "
+                f"autograding is disabled; detected "
+                f"{len(detected_records)} submitter(s) from repo state"
             )
             continue
 
@@ -1063,7 +1192,7 @@ def collect_classroom(
             f"lacks the collaborator-read permission — rotate it with `gh teacher rotate-service-token`."
         )
 
-    return results, mode_flip_assignments, collected
+    return results, mode_flip_assignments, collected, detected
 
 
 def assignment_repo_name(classroom: str, assignment: str, username: str) -> str:
@@ -1818,6 +1947,240 @@ def _repo_url(api_url: str, owner: str, repo: str) -> str:
         f"{api_url}/repos/{urllib.parse.quote(owner, safe='')}/"
         f"{urllib.parse.quote(repo, safe='')}"
     )
+
+
+# --- Detected submissions (assignments that skip grading) -------------------
+#
+# An assignment with autograding disabled publishes no submit/* release, so the
+# graded path above has nothing to ingest. These helpers derive submissions from
+# repo state instead — presence and count only, never a score — mirroring the
+# web app's src/domain/assignments/submissionDetection.ts. Keep the two in step:
+# a divergence makes the assignments list and the submissions page disagree.
+
+# The commit subjects the tool itself authors onto a student's default branch
+# (accept's Feedback-PR commit and the submission-mode shim retrofit). Neither is
+# student work, so neither counts as a submission. Hand-mirrored with
+# cli/shared/contract's PrefixCommit forms and the web's TOOL_COMMIT_SUBJECTS.
+TOOL_COMMIT_SUBJECTS = frozenset(
+    {
+        "[Classroom 50] Open Feedback PR (gh student accept)",
+        "[Classroom 50] Update autograder trigger to every-push (submission-mode)",
+        "[Classroom 50] Update autograder trigger to tag (submission-mode)",
+    }
+)
+
+# The in-repo accept marker; its OLDEST commit is the baseline that separates
+# accept-time setup (including the template's own commits, which are its
+# ancestors) from student work. Mirrors contract.MetadataPath.
+ACCEPT_MARKER_PATH = ".classroom50.yaml"
+
+# The canonical submission-tag namespace the shim always triggers on, unioned
+# with any milestone patterns. Mirrors SUBMISSION_TAG_PREFIX.
+SUBMISSION_TAG_PREFIX = "submit/"
+
+_SUBMIT_TAG_TIME_RE = re.compile(
+    r"^submit/(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3])-([0-5]\d)-([0-5]\d)Z-"
+)
+
+
+def commit_subject(message: Any) -> str:
+    """A commit message's first line, trimmed."""
+    if not isinstance(message, str):
+        return ""
+    return message.split("\n", 1)[0].strip()
+
+
+def submit_tag_datetime(tag_name: str) -> str | None:
+    """The instant encoded in a canonical `submit/<UTC-ts>-<short-sha>` tag name
+    (buildSubmitTag replaces the timestamp's colons with dashes to keep the ref
+    valid). None for a milestone or malformed name — the caller then has no free
+    time source and leaves the record dateless."""
+    match = _SUBMIT_TAG_TIME_RE.match(tag_name or "")
+    if not match:
+        return None
+    day, hour, minute, second = match.groups()
+    return f"{day}T{hour}:{minute}:{second}Z"
+
+
+def matches_submission_tag(patterns: Iterable[str], tag_name: str) -> bool:
+    """Whether a tag matches any Actions-style tag filter, mirroring the web's
+    matchesSubmissionTag: fnmatch semantics, case-sensitive, `/` not special."""
+    name = tag_name or ""
+    for pattern in patterns:
+        if not isinstance(pattern, str) or not pattern:
+            continue
+        if fnmatch.fnmatchcase(name, pattern):
+            return True
+    return False
+
+
+def detect_branch_submissions(
+    commits: list[dict[str, Any]], baseline_sha: str | None
+) -> list[dict[str, Any]]:
+    """Branch mode: every default-branch commit past the accept baseline that the
+    tool didn't author is one submission. `commits` is newest-first (GitHub's
+    order), so the baseline's index is the cut point — everything at or before it
+    is accept-time setup, including the template's ancestor commits."""
+    cut = len(commits)
+    if baseline_sha:
+        for index, commit in enumerate(commits):
+            if commit.get("sha") == baseline_sha:
+                cut = index
+                break
+    detected: list[dict[str, Any]] = []
+    for commit in commits[:cut]:
+        payload = commit.get("commit") if isinstance(commit.get("commit"), dict) else {}
+        if commit_subject(payload.get("message")) in TOOL_COMMIT_SUBJECTS:
+            continue
+        committer = payload.get("committer") if isinstance(payload.get("committer"), dict) else {}
+        author = payload.get("author") if isinstance(payload.get("author"), dict) else {}
+        detected.append(
+            {
+                "sha": commit.get("sha"),
+                "datetime": committer.get("date") or author.get("date"),
+            }
+        )
+    return detected
+
+
+def detect_tag_submissions(
+    tags: list[dict[str, Any]], submission_tags: list[str]
+) -> list[dict[str, Any]]:
+    """Tag mode: an EXACT pattern yields one submission per matching tag; a GLOB
+    groups all its matches into one submission set. A tag claimed by an earlier
+    pattern is never double-counted. Mirrors detectTagSubmissions."""
+    detected: list[dict[str, Any]] = []
+    claimed: set[str] = set()
+    for pattern in submission_tags:
+        matches = [
+            tag
+            for tag in tags
+            if isinstance(tag.get("name"), str)
+            and tag["name"] not in claimed
+            and matches_submission_tag([pattern], tag["name"])
+        ]
+        if not matches:
+            continue
+        for tag in matches:
+            claimed.add(tag["name"])
+        if any(ch in pattern for ch in "*?+[]"):
+            # A group's time comes from its newest member by encoded submit/*
+            # timestamp; a milestone glob has no parseable name, so it stays
+            # dateless rather than guessing.
+            dated = [
+                (submit_tag_datetime(tag["name"]), tag)
+                for tag in matches
+                if submit_tag_datetime(tag["name"])
+            ]
+            newest = max(dated, key=lambda pair: pair[0])[0] if dated else None
+            detected.append({"count": len(matches), "datetime": newest})
+        else:
+            for tag in matches:
+                detected.append(
+                    {"count": 1, "datetime": submit_tag_datetime(tag["name"])}
+                )
+    return detected
+
+
+def list_default_branch_commits(
+    api_url: str, owner: str, repo: str, branch: str, token: str
+) -> list[dict[str, Any]]:
+    """Every commit on a repo's default branch, newest first."""
+    return _paginate_objects(
+        lambda page: (
+            f"{_repo_url(api_url, owner, repo)}/commits"
+            f"?sha={urllib.parse.quote(branch, safe='')}&per_page=100&page={page}"
+        ),
+        api_url,
+        token,
+        f"{owner}/{repo} commits",
+    )
+
+
+def oldest_commit_sha_for_path(
+    api_url: str, owner: str, repo: str, path: str, token: str
+) -> str | None:
+    """The oldest commit touching a path — the accept-marker baseline. None when
+    the path has no history (a bare repo), which trims nothing."""
+    commits = _paginate_objects(
+        lambda page: (
+            f"{_repo_url(api_url, owner, repo)}/commits"
+            f"?path={urllib.parse.quote(path, safe='')}&per_page=100&page={page}"
+        ),
+        api_url,
+        token,
+        f"{owner}/{repo} marker history",
+    )
+    if not commits:
+        return None
+    sha = commits[-1].get("sha")
+    return sha if isinstance(sha, str) and sha else None
+
+
+def list_repo_tags(
+    api_url: str, owner: str, repo: str, token: str
+) -> list[dict[str, Any]]:
+    """Every tag on a repo (lightweight refs; carries no dates)."""
+    return _paginate_objects(
+        lambda page: (
+            f"{_repo_url(api_url, owner, repo)}/tags?per_page=100&page={page}"
+        ),
+        api_url,
+        token,
+        f"{owner}/{repo} tags",
+    )
+
+
+def detect_repo_submissions(
+    api_url: str,
+    org: str,
+    repo_name: str,
+    token: str,
+    mode: str,
+    submission_tags: list[str],
+) -> list[dict[str, Any]]:
+    """One repo's detected submissions. Branch mode reads the default branch, its
+    accept-marker baseline and its commit log; tag mode reads its tags. Returns
+    [] for a repo that isn't accepted or is commitless."""
+    if mode == "tag":
+        tags = list_repo_tags(api_url, org, repo_name, token)
+        patterns = [*submission_tags, f"{SUBMISSION_TAG_PREFIX}*"]
+        return detect_tag_submissions(tags, patterns)
+
+    info = get_repo(api_url, org, repo_name, token)
+    branch = (info or {}).get("default_branch")
+    if not isinstance(branch, str) or not branch:
+        return []  # not accepted, or no commits yet
+    baseline = oldest_commit_sha_for_path(
+        api_url, org, repo_name, ACCEPT_MARKER_PATH, token
+    )
+    commits = list_default_branch_commits(api_url, org, repo_name, branch, token)
+    return detect_branch_submissions(commits, baseline)
+
+
+def detected_record(
+    owner: str,
+    detections: list[dict[str, Any]],
+    due: datetime.datetime | None,
+) -> dict[str, Any]:
+    """Fold one repo's detections into the scores/v1 `detected` record: a count,
+    the newest resolvable instant, and the late flag derived from it. Carries no
+    score — these assignments are never graded."""
+    count = sum(int(d.get("count", 1) or 1) for d in detections)
+    times = sorted(
+        (d["datetime"] for d in detections if isinstance(d.get("datetime"), str)),
+        reverse=True,
+    )
+    record: dict[str, Any] = {"owner": owner, "count": count}
+    if times:
+        latest = parse_rfc3339(times[0])
+        if latest is not None:
+            record["latest_datetime"] = latest.astimezone(
+                datetime.timezone.utc
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            if due is not None:
+                record["late"] = latest > due
+    return record
 
 
 def all_submit_releases(
