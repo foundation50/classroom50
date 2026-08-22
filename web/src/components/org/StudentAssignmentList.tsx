@@ -1,19 +1,25 @@
-import { Link } from "@tanstack/react-router"
+import { Link, useNavigate } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  ArrowUpDown,
-  CalendarClock,
-  CircleAlert,
-  FilePlus2,
-  ListFilter,
-  UserRound,
-  UsersRound,
-} from "lucide-react"
+import { motion } from "motion/react"
+import { ArrowUpDown, CircleAlert, FilePlus2, ListFilter } from "lucide-react"
 
-import { Alert, Badge, Card, Toolbar } from "@/components/ui"
-import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
-import { EnterDiv } from "@/lib/motionComponents"
+import {
+  Alert,
+  Badge,
+  SkeletonRows,
+  SortableTh,
+  TableShell,
+  Toolbar,
+} from "@/components/ui"
+import {
+  DueDateCell,
+  ModeBadge,
+} from "@/components/assignments/AssignmentCells"
+import { EmptyState, NoSearchResults } from "@/components/list"
+import { ClickableTr } from "@/lib/motionComponents"
+import { blockEnter } from "@/lib/motion"
+import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
@@ -28,61 +34,9 @@ import {
   type StudentAssignmentSort,
 } from "@/components/org/studentAssignmentFilters"
 import { studentRepoName } from "@/util/studentRepo"
-import {
-  dueDeadlineInstant,
-  formatDueDateTime,
-  formatRelativeToNow,
-  isPastDue,
-} from "@/util/formatDate"
 import type { Assignment } from "@/types/classroom"
 
-function ModeBadge({ mode }: { mode: Assignment["mode"] }) {
-  const { t } = useTranslation()
-  if (mode === "group") {
-    return (
-      <Badge ghost className="gap-1">
-        <UsersRound aria-hidden="true" className="size-3.5" />
-        {t("assignments.discover.modeGroup")}
-      </Badge>
-    )
-  }
-  return (
-    <Badge ghost className="gap-1">
-      <UserRound aria-hidden="true" className="size-3.5" />
-      {t("assignments.discover.modeIndividual")}
-    </Badge>
-  )
-}
-
-function DueBadge({ due }: { due?: string }) {
-  const { t } = useTranslation()
-  const overdue = due ? isPastDue(due) : false
-  // Relative countdown ("in 3 days" / "2 hours ago") next to the absolute date,
-  // reusing the same helper the teacher submissions dashboard uses so the two
-  // agree on bare-date deadline semantics (end-of-local-day).
-  const relative = due
-    ? formatRelativeToNow(dueDeadlineInstant(due) ?? new Date(due))
-    : null
-  return (
-    <Badge
-      tone={overdue ? "error" : "neutral"}
-      ghost={!overdue}
-      className="gap-1"
-    >
-      <CalendarClock aria-hidden="true" className="size-3.5" />
-      {due ? (
-        <>
-          {t("assignments.discover.due", { date: formatDueDateTime(due) })}
-          {relative ? ` (${relative})` : ""}
-        </>
-      ) : (
-        t("assignments.discover.noDue")
-      )}
-    </Badge>
-  )
-}
-
-// The accept/view-submission CTA, shared by the grid card and the list row.
+// The accept/view-submission CTA, the row's primary action.
 function AssignmentCta({
   org,
   classroom,
@@ -123,18 +77,6 @@ function AssignmentCta({
   )
 }
 
-// Shown only for a not-yet-accepted assignment (accepted ones need no badge —
-// the "View my submission" CTA already conveys that state). Red to nudge action.
-function NotAcceptedBadge() {
-  const { t } = useTranslation()
-  return (
-    <Badge tone="error" className="shrink-0 gap-1">
-      <CircleAlert aria-hidden="true" className="size-3.5" />
-      {t("assignments.discover.notAccepted")}
-    </Badge>
-  )
-}
-
 type AssignmentItemProps = {
   org: string
   classroom: string
@@ -143,32 +85,74 @@ type AssignmentItemProps = {
   secret?: string
 }
 
-// Grid layout: a two-per-row card.
-function AssignmentCard({
+// One assignment row, teacher-table style: name + slug, shared type/due
+// cells, an explicit status badge, and the CTA. The whole row is a click
+// target for the CTA's destination (mouse convenience — the name link and CTA
+// keep it keyboard-reachable), with the guard yielding to inner controls.
+function AssignmentRow({
   org,
   classroom,
   assignment,
   accepted,
   secret,
 }: AssignmentItemProps) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  // The row's ONE destination (view-submission once accepted, else accept
+  // with the capability secret), shared by the row click, the name link, and
+  // the CTA so the three can't drift.
+  const destination = accepted
+    ? ({
+        to: "/$org/$classroom/assignments/$assignment/submission",
+        params: { org, classroom, assignment: assignment.slug },
+      } as const)
+    : ({
+        to: "/$org/$classroom/assignments/$assignment/accept",
+        params: { org, classroom, assignment: assignment.slug },
+        search: secret ? { k: secret } : undefined,
+      } as const)
   return (
-    <Card
-      as={EnterDiv}
-      radius="xl"
-      bordered={false}
-      shadow={false}
-      className="col-span-12 border border-base-200 md:col-span-6"
+    <ClickableTr
+      className="hover:bg-base-200"
+      onClick={(event) => {
+        if (isInteractiveEventTarget(event)) return
+        void navigate(destination)
+      }}
     >
-      <Card.Body className="gap-3">
-        <h3 className="min-w-0 truncate text-base font-semibold">
+      <td className="truncate">
+        <Link
+          {...destination}
+          className="font-bold link link-info no-underline"
+          onClick={(event) => event.stopPropagation()}
+        >
           {assignment.name || assignment.slug}
-        </h3>
-        <div className="flex flex-wrap items-center gap-2">
-          {!accepted && <NotAcceptedBadge />}
-          <ModeBadge mode={assignment.mode} />
-          <DueBadge due={assignment.due} />
+        </Link>
+        <div className="font-mono text-xs text-base-content/70">
+          {assignment.slug}
         </div>
-        <Card.Actions className="pt-1">
+      </td>
+      <td className="max-xl:text-xs">
+        <ModeBadge mode={assignment.mode} />
+      </td>
+      <td>
+        <DueDateCell due={assignment.due} relative />
+      </td>
+      <td>
+        {accepted ? (
+          <Badge tone="success" className="whitespace-nowrap">
+            {t("assignments.discover.accepted")}
+          </Badge>
+        ) : (
+          <Badge tone="error" className="shrink-0 gap-1 whitespace-nowrap">
+            <CircleAlert aria-hidden="true" className="size-3.5" />
+            {t("assignments.discover.notAccepted")}
+          </Badge>
+        )}
+      </td>
+      {/* Quarantined from the row click so a near-miss around the CTA never
+          double-navigates. */}
+      <td onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-end">
           <AssignmentCta
             org={org}
             classroom={classroom}
@@ -176,44 +160,59 @@ function AssignmentCard({
             accepted={accepted}
             secret={secret}
           />
-        </Card.Actions>
-      </Card.Body>
-    </Card>
+        </div>
+      </td>
+    </ClickableTr>
   )
 }
 
-// List layout: a full-width row, title + badges on the left, CTA on the right.
-function AssignmentListItem({
-  org,
-  classroom,
-  assignment,
-  accepted,
-  secret,
-}: AssignmentItemProps) {
+// The column headers, shared by the loaded table and the loading skeleton.
+// Assignment and Due date sort via the shared header control, in sync with
+// the toolbar's sort select.
+function TableHead({
+  sort,
+  onSortChange,
+}: {
+  sort: StudentAssignmentSort
+  onSortChange: (sort: StudentAssignmentSort) => void
+}) {
+  const { t } = useTranslation()
   return (
-    <EnterDiv className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-200 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <h3 className="min-w-0 truncate text-base font-semibold">
-          {assignment.name || assignment.slug}
-        </h3>
-        <div className="flex flex-wrap items-center gap-2">
-          {!accepted && <NotAcceptedBadge />}
-          <ModeBadge mode={assignment.mode} />
-          <DueBadge due={assignment.due} />
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center justify-end">
-        <AssignmentCta
-          org={org}
-          classroom={classroom}
-          assignment={assignment}
-          accepted={accepted}
-          secret={secret}
+    <thead>
+      <tr>
+        <SortableTh
+          label={t("assignments.table.colAssignment")}
+          sort={sort}
+          asc="name-asc"
+          desc="name-desc"
+          onSortChange={onSortChange}
+          title={t("assignments.table.sortByName")}
         />
-      </div>
-    </EnterDiv>
+        <th scope="col">{t("assignments.table.colType")}</th>
+        <SortableTh
+          label={t("assignments.table.colDueDate")}
+          sort={sort}
+          asc="due-asc"
+          desc="due-desc"
+          onSortChange={onSortChange}
+          title={t("assignments.table.sortByDue")}
+        />
+        <th scope="col">{t("assignments.discover.colStatus")}</th>
+        <th scope="col">
+          <span className="sr-only">{t("assignments.discover.colAction")}</span>
+        </th>
+      </tr>
+    </thead>
   )
 }
+
+const SKELETON_BARS = [
+  "h-4 w-40",
+  "h-4 w-20",
+  "h-4 w-28",
+  "h-4 w-24",
+  "ms-auto h-8 w-28",
+]
 
 // Student-relevant toolbar: search, plus status (to-do vs accepted — the axis a
 // student cares about most), type, and an overdue filter, with a due-first sort.
@@ -225,8 +224,6 @@ function StudentAssignmentsToolbar({
   onFiltersChange,
   sort,
   onSortChange,
-  viewMode,
-  onViewChange,
 }: {
   query: string
   onQueryChange: (value: string) => void
@@ -234,8 +231,6 @@ function StudentAssignmentsToolbar({
   onFiltersChange: (filters: StudentAssignmentFilters) => void
   sort: StudentAssignmentSort
   onSortChange: (sort: StudentAssignmentSort) => void
-  viewMode: "grid" | "list"
-  onViewChange: (mode: "grid" | "list") => void
 }) {
   const { t } = useTranslation()
   const hasFilterActive =
@@ -343,14 +338,6 @@ function StudentAssignmentsToolbar({
             {t("assignments.discover.toolbar.sortNameDesc")}
           </option>
         </Toolbar.FilterSelect>
-
-        <ViewToggle
-          viewMode={viewMode}
-          onChange={onViewChange}
-          groupLabel={t("assignments.discover.toolbar.view.label")}
-          gridLabel={t("assignments.discover.toolbar.view.gridLabel")}
-          listLabel={t("assignments.discover.toolbar.view.listLabel")}
-        />
       </Toolbar.Trailing>
     </Toolbar>
   )
@@ -374,9 +361,7 @@ export function StudentAssignmentList({
     org,
     classroom,
   )
-  const { viewMode, sortKey, changeView, changeSort } = useListPrefsState(
-    studentAssignmentListPrefs,
-  )
+  const { sortKey, changeSort } = useListPrefsState(studentAssignmentListPrefs)
   const [query, setQuery] = useState("")
   const [filters, setFilters] = useState<StudentAssignmentFilters>({
     ...DEFAULT_STUDENT_FILTERS,
@@ -387,8 +372,11 @@ export function StudentAssignmentList({
     isLoading: loadingAssignmentsData,
     isError,
   } = usePagesAssignments(org, classroom, secret, { enabled: !loadingSecret })
-  const isLoading = loadingSecret || loadingAssignmentsData
-  const { data: repos } = useGetOrgRepos(org)
+  // Acceptance (the CTA and the red badge) is derived from the org repo list;
+  // fold its load into the gate so a row never paints "Accept" and then
+  // flips to "View my submission" once the repos land.
+  const { data: repos, isLoading: loadingRepos } = useGetOrgRepos(org)
+  const isLoading = loadingSecret || loadingAssignmentsData || loadingRepos
 
   const acceptedSlugs = useMemo(() => {
     const set = new Set<string>()
@@ -433,14 +421,12 @@ export function StudentAssignmentList({
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-12 gap-4">
-        {Array.from({ length: 2 }).map((_, i) => (
-          <div
-            key={i}
-            className="skeleton skeleton-shimmer col-span-12 h-36 rounded-xl md:col-span-6"
-          />
-        ))}
-      </div>
+      <TableShell padded ariaBusy>
+        <TableHead sort={sortKey} onSortChange={changeSort} />
+        <tbody>
+          <SkeletonRows rows={3} bars={SKELETON_BARS} />
+        </tbody>
+      </TableShell>
     )
   }
 
@@ -477,7 +463,7 @@ export function StudentAssignmentList({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <StudentAssignmentsToolbar
         query={query}
         onQueryChange={setQuery}
@@ -485,8 +471,6 @@ export function StudentAssignmentList({
         onFiltersChange={setFilters}
         sort={sortKey}
         onSortChange={changeSort}
-        viewMode={viewMode}
-        onViewChange={changeView}
       />
 
       {visible.length === 0 ? (
@@ -500,10 +484,23 @@ export function StudentAssignmentList({
           }}
         />
       ) : (
-        <div className="grid grid-cols-12 gap-4">
-          {visible.map((assignment) =>
-            viewMode === "grid" ? (
-              <AssignmentCard
+        // Same table shell as the teacher assignments list, so the two
+        // surfaces read as one design.
+        <TableShell padded>
+          <caption className="sr-only">
+            {t("assignments.discover.tableCaption")}
+          </caption>
+          <TableHead sort={sortKey} onSortChange={changeSort} />
+          {/* Same recipe as the teacher table: the body enters as one block
+              (blockEnter) and replays when the visible set changes. */}
+          <motion.tbody
+            key={visible.map((a) => a.slug).join("|")}
+            variants={blockEnter}
+            initial="initial"
+            animate="animate"
+          >
+            {visible.map((assignment) => (
+              <AssignmentRow
                 key={assignment.slug}
                 org={org}
                 classroom={classroom}
@@ -511,18 +508,9 @@ export function StudentAssignmentList({
                 accepted={acceptedSlugs.has(assignment.slug)}
                 secret={secret}
               />
-            ) : (
-              <AssignmentListItem
-                key={assignment.slug}
-                org={org}
-                classroom={classroom}
-                assignment={assignment}
-                accepted={acceptedSlugs.has(assignment.slug)}
-                secret={secret}
-              />
-            ),
-          )}
-        </div>
+            ))}
+          </motion.tbody>
+        </TableShell>
       )}
     </div>
   )

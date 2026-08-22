@@ -108,16 +108,17 @@ describe("StudentAssignmentList", () => {
 
     render(<StudentAssignmentList org="acme" classroom="cs" />)
 
-    expect(screen.getByRole("heading", { name: "HW1" })).toBeTruthy()
-    expect(screen.getByRole("heading", { name: "HW2" })).toBeTruthy()
+    expect(screen.getByText("HW1")).toBeTruthy()
+    expect(screen.getByText("HW2")).toBeTruthy()
     // hw1 accepted -> "view submission"; hw2 not -> "accept".
     expect(screen.getByText("assignments.discover.viewSubmission")).toBeTruthy()
     expect(screen.getByText("assignments.discover.accept")).toBeTruthy()
-    // Only the not-accepted assignment gets the red "Not accepted" badge; the
-    // accepted one shows no status badge (the CTA already conveys it).
+    // The Status column: the accepted assignment reads "Accepted", the other
+    // gets the red "Not accepted" badge.
     expect(
       screen.getAllByText("assignments.discover.notAccepted"),
     ).toHaveLength(1)
+    expect(screen.getAllByText("assignments.discover.accepted")).toHaveLength(1)
   })
 
   it("threads the capability secret into the accept link", () => {
@@ -181,7 +182,7 @@ describe("StudentAssignmentList", () => {
     render(<StudentAssignmentList org="acme" classroom="cs" />)
 
     expect(screen.getByText("assignments.discover.linkOnlyTitle")).toBeTruthy()
-    expect(screen.queryByRole("heading", { name: "HW1" })).toBeNull()
+    expect(screen.queryByText("HW1")).toBeNull()
   })
 
   it("always lists an assignment the student accepted, even with no release date", () => {
@@ -194,7 +195,7 @@ describe("StudentAssignmentList", () => {
 
     render(<StudentAssignmentList org="acme" classroom="cs" />)
 
-    expect(screen.getByRole("heading", { name: "HW1" })).toBeTruthy()
+    expect(screen.getByText("HW1")).toBeTruthy()
     expect(screen.getByText("assignments.discover.viewSubmission")).toBeTruthy()
   })
 
@@ -215,10 +216,9 @@ describe("StudentAssignmentList", () => {
     expect(
       screen.getByLabelText("assignments.discover.toolbar.searchAria"),
     ).toBeTruthy()
-    // Due-soonest-first: "Soon" heading appears before "Late".
-    const headings = screen.getAllByRole("heading", { level: 3 })
-    const names = headings.map((h) => h.textContent)
-    expect(names.indexOf("Soon")).toBeLessThan(names.indexOf("Late"))
+    // Due-soonest-first: the "Soon" row's name link appears before "Late".
+    const linkTexts = screen.getAllByRole("link").map((a) => a.textContent)
+    expect(linkTexts.indexOf("Soon")).toBeLessThan(linkTexts.indexOf("Late"))
   })
 
   it("filters to accepted-only via the status control", () => {
@@ -239,13 +239,16 @@ describe("StudentAssignmentList", () => {
       { target: { value: "accepted" } },
     )
 
-    expect(screen.getByRole("heading", { name: "HW1" })).toBeTruthy()
-    expect(screen.queryByRole("heading", { name: "HW2" })).toBeNull()
+    expect(screen.getByText("HW1")).toBeTruthy()
+    expect(screen.queryByText("HW2")).toBeNull()
   })
 
-  it("defaults to list view and switches to grid via the view toggle", () => {
+  it("flips the due-date order from the sortable column header", () => {
     pagesAssignments.mockReturnValue({
-      data: [assignment("hw1", { name: "HW1", due: "2026-06-15" })],
+      data: [
+        assignment("late", { name: "Late", due: "2026-12-01" }),
+        assignment("soon", { name: "Soon", due: "2026-06-15" }),
+      ],
       isLoading: false,
       isError: false,
     })
@@ -253,21 +256,11 @@ describe("StudentAssignmentList", () => {
 
     render(<StudentAssignmentList org="acme" classroom="cs" />)
 
-    const gridBtn = screen.getByLabelText(
-      "assignments.discover.toolbar.view.gridLabel",
-    )
-    const listBtn = screen.getByLabelText(
-      "assignments.discover.toolbar.view.listLabel",
-    )
-    // List is the default.
-    expect(listBtn.getAttribute("aria-pressed")).toBe("true")
-    expect(gridBtn.getAttribute("aria-pressed")).toBe("false")
+    // Default due-asc puts "Soon" first; clicking the Due date header flips
+    // to due-desc, putting "Late" first (in sync with the toolbar select).
+    fireEvent.click(screen.getByTitle("assignments.table.sortByDue"))
 
-    fireEvent.click(gridBtn)
-
-    expect(gridBtn.getAttribute("aria-pressed")).toBe("true")
-    expect(listBtn.getAttribute("aria-pressed")).toBe("false")
-    // Assignment still rendered after the layout switch.
-    expect(screen.getByRole("heading", { name: "HW1" })).toBeTruthy()
+    const linkTexts = screen.getAllByRole("link").map((a) => a.textContent)
+    expect(linkTexts.indexOf("Late")).toBeLessThan(linkTexts.indexOf("Soon"))
   })
 })

@@ -29,6 +29,28 @@ export const StaffSidebarMenu = ({
   return (
     <div className="py-4">
       <ul className="flex flex-col gap-1">
+        {/* Roster leads for staff: it's the roster-first workflow surface
+            (and matches the org-level menu's people-then-content order). A
+            skeleton holds each staff slot while the role resolves so items
+            never flash in then out. */}
+        {!roleResolved ? (
+          <li className="flex px-2 py-2">
+            <span className="skeleton h-4 w-24 bg-neutral-content/10" />
+          </li>
+        ) : (
+          showStaffItems && (
+            <SidebarNavItem label={t("nav.roster")}>
+              <Link to="/$org/$classroom/roster" params={{ org, classroom }}>
+                <SidebarItemBody
+                  label={t("nav.roster")}
+                  icon={<UsersRound aria-hidden="true" />}
+                  active={selected === "roster"}
+                  groupId="staff"
+                />
+              </Link>
+            </SidebarNavItem>
+          )
+        )}
         <SidebarNavItem label={t("nav.assignments")}>
           <Link to="/$org/$classroom/assignments" params={{ org, classroom }}>
             <SidebarItemBody
@@ -40,42 +62,22 @@ export const StaffSidebarMenu = ({
           </Link>
         </SidebarNavItem>
         {!roleResolved ? (
-          <>
-            {[0, 1].map((i) => (
-              <li key={i} className="flex px-2 py-2">
-                <span className="skeleton h-4 w-24 bg-neutral-content/10" />
-              </li>
-            ))}
-          </>
+          <li className="flex px-2 py-2">
+            <span className="skeleton h-4 w-24 bg-neutral-content/10" />
+          </li>
         ) : (
-          showStaffItems && (
-            <>
-              <SidebarNavItem label={t("nav.roster")}>
-                <Link to="/$org/$classroom/roster" params={{ org, classroom }}>
-                  <SidebarItemBody
-                    label={t("nav.roster")}
-                    icon={<UsersRound aria-hidden="true" />}
-                    active={selected === "roster"}
-                    groupId="staff"
-                  />
-                </Link>
-              </SidebarNavItem>
-              {canEditSettings && (
-                <SidebarNavItem label={t("nav.settings")}>
-                  <Link
-                    to="/$org/$classroom/settings"
-                    params={{ org, classroom }}
-                  >
-                    <SidebarItemBody
-                      label={t("nav.settings")}
-                      icon={<Settings aria-hidden="true" />}
-                      active={selected === "settings"}
-                      groupId="staff"
-                    />
-                  </Link>
-                </SidebarNavItem>
-              )}
-            </>
+          showStaffItems &&
+          canEditSettings && (
+            <SidebarNavItem label={t("nav.settings")}>
+              <Link to="/$org/$classroom/settings" params={{ org, classroom }}>
+                <SidebarItemBody
+                  label={t("nav.settings")}
+                  icon={<Settings aria-hidden="true" />}
+                  active={selected === "settings"}
+                  groupId="staff"
+                />
+              </Link>
+            </SidebarNavItem>
           )
         )}
       </ul>

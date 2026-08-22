@@ -24,7 +24,10 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
   const onActivity = selected === "activity"
   if (!org) return null
 
-  const classesLabel = isStaff ? t("nav.myClasses") : t("nav.myAssignments")
+  // One label for staff and students: the /$org page lists CLASSROOMS for
+  // both roles (students get their per-classroom summaries), so calling it
+  // "My assignments" for students mislabeled the destination.
+  const classesLabel = t("nav.myClasses")
 
   return (
     <div className="py-4">

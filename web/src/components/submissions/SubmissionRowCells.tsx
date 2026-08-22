@@ -1,7 +1,8 @@
+import { Fragment, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Bot, CircleOff, GitCommitHorizontal, Tag } from "lucide-react"
 
-import { Badge, type BadgeSize } from "@/components/ui"
+import { Badge } from "@/components/ui"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import {
   submissionModeBadgeKey,
@@ -12,9 +13,8 @@ import { formatSubmissionDateTime } from "@/util/formatDate"
 import type { SubmissionMode } from "@/types/classroom"
 
 // The mode's submission icon: a tag for tag mode, a commit for every-push.
-// Shared by the count chip and the two mode badges (student page, teacher
-// heading) so the mode iconography stays consistent.
-export const SubmissionModeIcon = ({
+// Used by the teacher heading's mode meta item.
+const SubmissionModeIcon = ({
   mode,
   className = "size-3.5",
 }: {
@@ -27,29 +27,73 @@ export const SubmissionModeIcon = ({
     <GitCommitHorizontal aria-hidden="true" className={className} />
   )
 
-// The "what counts as a submission" mode badge, shared by the teacher heading
-// and the student page so their wording can't drift. Grading is described by
-// the separate AutogradingBadge, so this badge never claims a grade.
-export const SubmissionModeBadge = ({
+// ── Assignment-property meta strip ──────────────────────────────────────────
+// The teacher heading and student page describe assignment properties (mode,
+// grading, due date, template) as one quiet GitHub-style meta line: icon +
+// muted text per item, thin dividers between items. Properties are text;
+// only genuine states (overdue, late, closed) keep toned badges.
+
+/** One quiet property item: icon + muted text (+ optional hover detail). */
+export const MetaItem = ({
+  title,
+  children,
+}: {
+  title?: string
+  children: ReactNode
+}) => (
+  <span
+    className="inline-flex items-center gap-1.5 whitespace-nowrap text-base-content/70"
+    title={title}
+  >
+    {children}
+  </span>
+)
+
+/** Thin vertical rule between meta items. */
+export const MetaDivider = () => (
+  <span aria-hidden="true" className="h-4 w-px shrink-0 bg-base-content/20" />
+)
+
+/** The strip itself: filters out absent items and interleaves dividers, so
+ *  callers list items declaratively without divider bookkeeping. */
+export const MetaStrip = ({ items }: { items: ReactNode[] }) => {
+  const present = items.filter(
+    (item) => item !== null && item !== undefined && item !== false,
+  )
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      {present.map((item, i) => (
+        <Fragment key={i}>
+          {i > 0 && <MetaDivider />}
+          {item}
+        </Fragment>
+      ))}
+    </div>
+  )
+}
+
+// The "what counts as a submission" property on the teacher heading (the
+// student page deliberately omits it — how to submit is the guidance box's
+// job there). Grading is described by the separate AutogradingMeta, so this
+// item never claims a grade.
+export const SubmissionModeMeta = ({
   mode,
-  size,
 }: {
   mode: SubmissionMode | undefined
-  size?: BadgeSize
 }) => {
   const { t } = useTranslation()
   return (
-    <Badge ghost size={size} className="gap-1">
+    <MetaItem>
       <SubmissionModeIcon mode={mode} />
       {t(submissionModeBadgeKey(mode))}
-    </Badge>
+    </MetaItem>
   )
 }
 
 // Label + hover detail per autograding tri-state. Built-in autograding needs
 // no elaboration; the two no-grading states carry the "what's disabled / what
 // still works" detail that used to be a full-width dashboard note.
-const autogradingBadgeContent: Record<
+const autogradingMetaContent: Record<
   AutogradingState,
   { label: string; title?: string }
 > = {
@@ -64,31 +108,21 @@ const autogradingBadgeContent: Record<
   },
 }
 
-// The "how is it graded" badge, paired with SubmissionModeBadge on the teacher
-// heading and the student page. Keyed off the autograding tri-state so the
-// 2-mode x 3-grading combinations stay two independent badges. The detail is
-// hover text for sighted users and sr-only text for screen readers.
-export const AutogradingBadge = ({
-  state,
-  size,
-}: {
-  state: AutogradingState
-  size?: BadgeSize
-}) => {
+// The "how is it graded" property, paired with SubmissionModeMeta on the
+// teacher heading (omitted from the student page — grading internals aren't
+// actionable there). Keyed off the autograding tri-state so the 2-mode x
+// 3-grading combinations stay two independent items. The detail is hover text
+// for sighted users and sr-only text for screen readers.
+export const AutogradingMeta = ({ state }: { state: AutogradingState }) => {
   const { t } = useTranslation()
-  const { label, title } = autogradingBadgeContent[state]
+  const { label, title } = autogradingMetaContent[state]
   const Icon = state === "built-in" ? Bot : CircleOff
   return (
-    <Badge
-      ghost
-      size={size}
-      className="gap-1"
-      title={title ? t(title) : undefined}
-    >
+    <MetaItem title={title ? t(title) : undefined}>
       <Icon aria-hidden="true" className="size-3.5" />
       {t(label)}
       {title && <span className="sr-only">{t(title)}</span>}
-    </Badge>
+    </MetaItem>
   )
 }
 
@@ -121,13 +155,18 @@ export const SubmissionCountCell = ({
       fallback={<div className="skeleton skeleton-shimmer h-5 w-16" />}
     >
       <div className="flex items-center gap-1.5">
+        {/* Success-toned like the Submitted progress bars: a green chip = a
+            submission exists. Hover deepens the fill as the click affordance. */}
         <button
           type="button"
-          className="badge max-xl:text-xs whitespace-nowrap gap-1 hover:badge-neutral cursor-pointer"
-          title={t("submissions.table.viewSubmissionsTitle")}
+          className="badge badge-sm badge-success badge-soft whitespace-nowrap gap-1 hover:bg-success/20 cursor-pointer"
+          title={t(
+            mode === "tag"
+              ? "submissions.table.viewSubmissionsTitleTag"
+              : "submissions.table.viewSubmissionsTitleEveryPush",
+          )}
           onClick={onOpen}
         >
-          <SubmissionModeIcon mode={mode} />
           {t(submissionModeCountKey(mode), { count })}
         </button>
         {staleCount ? (

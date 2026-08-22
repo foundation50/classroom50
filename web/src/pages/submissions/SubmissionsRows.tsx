@@ -9,6 +9,8 @@ import { nonSubmitterStatus } from "@/pages/submissions/dashboard"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
 import type { ScoreOverrideCapability } from "@/pages/submissions/ScoreOverrideModal"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
+import { ClickableTr } from "@/lib/motionComponents"
+import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import type { Student } from "@/types/classroom"
 import type { StudentSortMode } from "@/util/students"
 
@@ -57,20 +59,29 @@ export const ActionIconLink = ({
       rel="noreferrer"
       aria-label={label}
       title={title}
+      // The row behind this link opens the manage modal on click; never let
+      // the link's click double as a row click.
+      onClick={(event) => event.stopPropagation()}
     >
       <Icon className="size-4" />
     </Button>
   ) : (
+    // Inert anchor rather than a native disabled button: daisyUI turns off
+    // pointer events on :disabled buttons, which also suppresses the
+    // explanatory tooltip and cursor. `disabled` on the anchor variant drops
+    // the href and sets aria-disabled, so it can't navigate.
     <Button
+      as="a"
       variant="ghost"
       size="sm"
       shape="square"
-      className="text-base-content/30"
+      className="cursor-not-allowed text-base-content/30 hover:bg-transparent"
       disabled
       aria-label={emptyLabel}
       title={emptyTitle}
+      onClick={(event) => event.stopPropagation()}
     >
-      <Icon className="size-4" />
+      <Icon className="size-4 opacity-50" />
     </Button>
   )
 
@@ -97,8 +108,15 @@ const NonSubmitterStatusBadge = ({
       )
     case "not-accepted":
       return (
-        <Badge ghost className="whitespace-nowrap">
+        <Badge
+          ghost
+          className="whitespace-nowrap"
+          title={t("submissions.table.notAcceptedTitle")}
+        >
           {t("submissions.table.notAccepted")}
+          <span className="sr-only">
+            {t("submissions.table.notAcceptedTitle")}
+          </span>
         </Badge>
       )
     case "no-group":
@@ -236,6 +254,7 @@ export const NonSubmitterRow = ({
   acceptedUsernames,
   onProfile,
   actions,
+  onManage,
   overrideGrade,
   onEditGrade,
   thresholdFraction = null,
@@ -247,6 +266,10 @@ export const NonSubmitterRow = ({
   acceptedUsernames?: Set<string>
   onProfile: (username: string) => void
   actions?: React.ReactNode
+  // Row-level click target: the manage-submission modal, same as the actions
+  // cluster's manage button. Absent (group non-submitter — no per-student
+  // repo), the row renders non-clickable.
+  onManage?: () => void
   // When set (individual manual-grade assignment, writable viewer), the score
   // cell offers grade entry for this not-yet-graded student. Autograded
   // assignments have no per-row value to override here, so this is manual-only.
@@ -266,8 +289,8 @@ export const NonSubmitterRow = ({
     typeof overrideGrade.maxPoints === "number" &&
     !isGroup &&
     Boolean(student.username)
-  return (
-    <tr>
+  const cells = (
+    <>
       <td>
         <Avatar
           name={getDisplayName(student.username, students, nameMode)}
@@ -306,14 +329,28 @@ export const NonSubmitterRow = ({
         )}
       </td>
       <td>—</td>
-      <td>
+      {/* Quarantined from the row's manage click — see the submitter row. */}
+      <td onClick={(event) => event.stopPropagation()}>
         {actions ? (
-          <div className="flex items-center gap-1">{actions}</div>
+          <div className="flex items-center justify-end gap-1">{actions}</div>
         ) : (
-          "—"
+          <div className="text-end">—</div>
         )}
       </td>
-    </tr>
+    </>
+  )
+  // No row action -> a plain row, so the pointer cursor never lies.
+  if (!onManage) return <tr className="hover:bg-base-200">{cells}</tr>
+  return (
+    <ClickableTr
+      className="hover:bg-base-200"
+      onClick={(event) => {
+        if (isInteractiveEventTarget(event)) return
+        onManage()
+      }}
+    >
+      {cells}
+    </ClickableTr>
   )
 }
 
@@ -329,6 +366,7 @@ export const GroupRepoRow = ({
   repoName,
   students,
   actions,
+  onManage,
 }: {
   org: string
   classroom: string
@@ -337,11 +375,14 @@ export const GroupRepoRow = ({
   repoName: string
   students: Student[]
   actions: React.ReactNode
+  // Row-level click target: the manage-submission modal, same as the actions
+  // cluster's manage button.
+  onManage?: () => void
 }) => {
   const { t } = useTranslation()
   const repoHref = studentRepoUrl(org, classroom, assignment, owner)
-  return (
-    <tr>
+  const cells = (
+    <>
       <td>
         <GroupMembers
           org={org}
@@ -359,9 +400,22 @@ export const GroupRepoRow = ({
       </td>
       <td>—</td>
       <td>—</td>
-      <td>
-        <div className="flex items-center gap-1">{actions}</div>
+      {/* Quarantined from the row's manage click — see the submitter row. */}
+      <td onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-end gap-1">{actions}</div>
       </td>
-    </tr>
+    </>
+  )
+  if (!onManage) return <tr className="hover:bg-base-200">{cells}</tr>
+  return (
+    <ClickableTr
+      className="hover:bg-base-200"
+      onClick={(event) => {
+        if (isInteractiveEventTarget(event)) return
+        onManage()
+      }}
+    >
+      {cells}
+    </ClickableTr>
   )
 }

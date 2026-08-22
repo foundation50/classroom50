@@ -12,9 +12,9 @@ const useGetOrgRepos = (org: string, enabled = true) => {
     // signal. It's refreshed on explicit Refresh + normal staleness rather than
     // on every tab refocus, which used to re-paginate the entire org on focus.
     staleTime: 60 * 1000,
-    // Callers that only need the list conditionally (e.g. the assignments table,
-    // where no row needs repo presence) opt out so a whole-org pagination isn't
-    // paid for nothing.
+    // Callers that only need the list conditionally opt out via `enabled` so a
+    // whole-org pagination isn't paid for nothing (e.g. the sidebar gating a
+    // staff-only read on role).
     enabled: enabled && Boolean(org),
   })
 }

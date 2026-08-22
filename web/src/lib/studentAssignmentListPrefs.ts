@@ -1,7 +1,9 @@
 // Student per-classroom assignment-list display prefs, persisted per browser.
-// Its own storage keys, separate from the classroom-list and teacher-list prefs.
-// The view mode (grid/list) and sort persist; the search query and filters are
-// session state that should reset on navigation. Defaults: list view, and
+// Its own storage keys, separate from the classroom-list and teacher-list
+// prefs. Only the sort persists now — the grid/list view toggle was removed
+// when the list adopted the teacher-table layout, so the view config below is
+// dormant (createListPrefs requires it; nothing reads it). The search query
+// and filters are session state that should reset on navigation. Default:
 // due-soonest-first.
 
 import { createListPrefs } from "@/lib/listPrefs"

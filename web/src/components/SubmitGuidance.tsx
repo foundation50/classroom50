@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next"
+import type { Ref } from "react"
 
 import { CopyableCode } from "@/components/ui"
 import { isGlobPattern } from "@/domain/assignments/submissionDetection"
@@ -25,10 +26,19 @@ export function SubmitGuidance({
   repoHtmlUrl,
   submissionMode,
   submissionTags,
+  open,
+  onToggle,
+  ref,
 }: {
   repoHtmlUrl: string
   submissionMode?: SubmissionMode
   submissionTags?: string[]
+  // Controlled expansion (optional): the student page opens the guide while
+  // nothing is submitted yet and collapses it once work is in, and its status
+  // callout re-opens it on demand. Omitted, the guide renders always-open.
+  open?: boolean
+  onToggle?: (open: boolean) => void
+  ref?: Ref<HTMLDetailsElement>
 }) {
   const { t } = useTranslation()
   const isTagMode = submissionMode === "tag"
@@ -52,7 +62,12 @@ export function SubmitGuidance({
   )
 
   return (
-    <details open className="group mt-4 rounded-box border border-base-200 p-4">
+    <details
+      ref={ref}
+      open={open ?? true}
+      onToggle={(event) => onToggle?.(event.currentTarget.open)}
+      className="group rounded-box border border-base-200 p-4"
+    >
       <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold marker:content-none">
         <span className="transition-transform group-open:rotate-90">▶</span>
         {t("submissions.student.submitGuide.title")}

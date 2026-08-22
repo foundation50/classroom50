@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { UserRound, UsersRound, CalendarClock } from "lucide-react"
 
@@ -16,7 +16,11 @@ import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
-import { formatDueDateTime, isPastDue } from "@/util/formatDate"
+import {
+  formatDueDateTime,
+  formatRelativeToNow,
+  isPastDue,
+} from "@/util/formatDate"
 import { safeHttpUrl } from "@/util/url"
 import type { GitHubCommit, GitHubRelease } from "@/github-core/types"
 import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
@@ -24,11 +28,10 @@ import {
   submissionModeCountKey,
   latestDetectedAt,
 } from "@/domain/assignments/submissionDetection"
-import { deriveAutogradingState } from "@/domain/assignments/autogradingState"
 import type { Assignment, SubmissionMode } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-import { Alert, Badge, Markdown } from "@/components/ui"
+import { Alert, Badge, Button, Markdown, TableShell } from "@/components/ui"
 import {
   SubmissionDetailsModal,
   detailItemsCount,
@@ -40,10 +43,10 @@ import {
   type PushSubmission,
 } from "@/components/submissions/submissionDetailItems"
 import {
-  AutogradingBadge,
   LastSubmittedCell,
+  MetaItem,
+  MetaStrip,
   SubmissionCountCell,
-  SubmissionModeBadge,
 } from "@/components/submissions/SubmissionRowCells"
 import { StudentRowActions } from "@/pages/submissions/StudentRowActions"
 import SubmitGuidance from "@/components/SubmitGuidance"
@@ -87,43 +90,50 @@ const toPushSubmissions = (
   }))
 }
 
-const AssignmentMeta = ({
-  assignment,
-  submissionMode,
-}: {
-  assignment?: Assignment
-  submissionMode?: SubmissionMode
-}) => {
+const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
   const { t } = useTranslation()
   if (!assignment) return null
   const due = assignment.due
   const overdue = due ? isPastDue(due) : false
 
+  // Deliberately student-scoped: the submission-mode and autograding
+  // indicators the teacher heading shows are plumbing from a student's
+  // perspective — how to submit is the guidance box's job, and grading
+  // internals aren't actionable for them. Only mode and deadline remain.
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
-      {assignment.mode === "group" ? (
-        <Badge ghost className="gap-1">
-          <UsersRound aria-hidden="true" className="size-3.5" />{" "}
-          {t("submissions.student.modeGroup")}
-        </Badge>
-      ) : assignment.mode === "individual" ? (
-        <Badge ghost className="gap-1">
-          <UserRound aria-hidden="true" className="size-3.5" />{" "}
-          {t("submissions.student.modeIndividual")}
-        </Badge>
-      ) : null}
-      <SubmissionModeBadge mode={submissionMode} />
-      <AutogradingBadge state={deriveAutogradingState(assignment)} />
-      <Badge
-        tone={overdue ? "error" : "neutral"}
-        ghost={!overdue}
-        className="gap-1"
-      >
-        <CalendarClock aria-hidden="true" className="size-3.5" />
-        {due
-          ? t("submissions.dueDate", { date: formatDueDateTime(due) })
-          : t("submissions.noDueDate")}
-      </Badge>
+    <div>
+      <MetaStrip
+        items={[
+          assignment.mode === "group" ? (
+            <MetaItem>
+              <UsersRound aria-hidden="true" className="size-3.5" />
+              {t("submissions.student.modeGroup")}
+            </MetaItem>
+          ) : assignment.mode === "individual" ? (
+            <MetaItem>
+              <UserRound aria-hidden="true" className="size-3.5" />
+              {t("submissions.student.modeIndividual")}
+            </MetaItem>
+          ) : null,
+          // Overdue is a state, so it keeps the error badge; a normal or
+          // absent due date is a quiet property like the rest of the strip.
+          overdue ? (
+            <Badge tone="error" className="gap-1">
+              <CalendarClock aria-hidden="true" className="size-3.5" />
+              {due
+                ? t("submissions.dueDate", { date: formatDueDateTime(due) })
+                : t("submissions.noDueDate")}
+            </Badge>
+          ) : (
+            <MetaItem title={due ? formatDueDateTime(due) : undefined}>
+              <CalendarClock aria-hidden="true" className="size-3.5" />
+              {due
+                ? t("submissions.dueDate", { date: formatDueDateTime(due) })
+                : t("submissions.noDueDate")}
+            </MetaItem>
+          ),
+        ]}
+      />
     </div>
   )
 }
@@ -156,6 +166,7 @@ const SubmissionBody = ({
     releasesError,
     releasesErrorObj,
     submissionListError,
+    submissionListLoading,
   } = useMySubmissions(org, classroom, assignment, user?.login, {
     mode: submissionMode,
     submissionTags,
@@ -175,6 +186,13 @@ const SubmissionBody = ({
 
   const [detailsOpen, setDetailsOpen] = useState(false)
 
+  // Guidance expansion: open while nothing is submitted (the student needs the
+  // how-to), collapsed once work is in — but always re-openable, both from the
+  // <details> summary and the status callout's CTA. `null` = the student
+  // hasn't toggled it, so the submission count decides.
+  const [guideToggled, setGuideToggled] = useState<boolean | null>(null)
+  const guideRef = useRef<HTMLDetailsElement>(null)
+
   // Fold graded releases into the submission list: push submissions link the
   // release published at their commit; the newest release is offered as a
   // direct "autograder details" shortcut in the actions cell.
@@ -192,6 +210,9 @@ const SubmissionBody = ({
   // counts its N matches (detailItemsCount), so this stays consistent with the
   // teacher chip for the same tags rather than counting group rows.
   const submissionCount = detailItemsCount(detailItems)
+  // The guide's effective expansion: the student's explicit toggle wins, else
+  // open only while nothing is submitted.
+  const guideOpen = guideToggled ?? submissionCount === 0
 
   // The newest submission's time for the "last submitted" cell: the newest
   // push's commit date in every-push mode; in tag mode the newest detected
@@ -206,9 +227,13 @@ const SubmissionBody = ({
     : (pushSubmissions?.[0]?.commit.committer?.date ??
       pushSubmissions?.[0]?.commit.author?.date)
 
-  if (releasesLoading || repoLoading) {
+  // Render once, settled: gate on every read that shapes the body (repo
+  // existence, graded releases, AND the active-mode submission list) so the
+  // page never first paints "0 submissions / guide expanded" and then flips
+  // when the list lands a beat later.
+  if (releasesLoading || repoLoading || submissionListLoading) {
     return (
-      <div className="mt-8 space-y-4">
+      <div className="space-y-4">
         <div className="skeleton skeleton-shimmer h-24 w-full rounded-box" />
         <div className="skeleton skeleton-shimmer h-40 w-full rounded-box" />
       </div>
@@ -221,7 +246,7 @@ const SubmissionBody = ({
     )
     const message = firstError instanceof Error ? firstError.message : ""
     return (
-      <Alert tone="error" className="mt-6">
+      <Alert tone="error">
         {t("submissions.student.loadError")}
         {message ? ` ${message}` : ""}
       </Alert>
@@ -231,7 +256,7 @@ const SubmissionBody = ({
   // No repo means the student hasn't accepted yet.
   if (!studentRepo) {
     return (
-      <EnterDiv className="alert alert-info alert-soft mt-6">
+      <EnterDiv className="alert alert-info alert-soft">
         <div>
           <Trans
             i18nKey="submissions.student.notAccepted"
@@ -261,83 +286,131 @@ const SubmissionBody = ({
   const repoHref = safeRepoHref ?? rawRepoHref
 
   return (
-    <EnterDiv className="mt-6 space-y-4">
+    <EnterDiv className="space-y-4">
+      {/* The page's headline answer: is my work in? Success once anything is
+          submitted; otherwise an info nudge pointing into the how-to guide. */}
+      {submissionCount > 0 ? (
+        <Alert tone="success" role="status">
+          <span>
+            {latestSubmittedAt
+              ? t("submissions.student.statusSubmitted", {
+                  relative: formatRelativeToNow(new Date(latestSubmittedAt)),
+                })
+              : t("submissions.student.submittedAwaitingGrading")}
+          </span>
+        </Alert>
+      ) : (
+        <Alert tone="info" role="status">
+          <span>{t("submissions.student.statusNotSubmitted")}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setGuideToggled(true)
+              guideRef.current?.scrollIntoView({ block: "nearest" })
+            }}
+          >
+            {t("submissions.student.statusNotSubmittedCta")}
+          </Button>
+        </Alert>
+      )}
       {/* One-row, teacher-style submissions table for the student's own repo.
           The count chip opens the shared details modal (tags or pushes); the
           student column set omits the teacher-only score and management
-          actions. */}
-      <div className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
-        <table className="table">
-          <caption className="sr-only">
-            {t("submissions.student.tableCaption")}
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">{t("submissions.table.colStudent")}</th>
-              <th scope="col">{t("submissions.table.colSubmissions")}</th>
-              <th scope="col">{t("submissions.table.colLastSubmitted")}</th>
-              <th scope="col">{t("submissions.table.colActions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <Avatar
-                  name={user?.name || user?.login || ""}
-                  initials=""
-                  github={user?.login || ""}
-                  subtitle={
-                    <a
-                      className="link link-hover font-mono text-xs"
-                      href={repoHref}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {repoName}
-                    </a>
-                  }
-                />
-              </td>
-              <td>
-                <SubmissionCountCell
-                  mode={submissionMode}
-                  count={submissionCount}
-                  onOpen={() => setDetailsOpen(true)}
-                />
-              </td>
-              <td>
-                {latestSubmittedAt ? (
+          actions. The shell's own entrance is off — the surrounding EnterDiv
+          already animates this block. */}
+      <TableShell animate={false}>
+        <caption className="sr-only">
+          {t("submissions.student.tableCaption")}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("submissions.student.colYourRepo")}</th>
+            <th scope="col">{t("submissions.table.colSubmissions")}</th>
+            <th scope="col">{t("submissions.table.colLastSubmitted")}</th>
+            <th scope="col">
+              <span className="sr-only">
+                {t("submissions.table.colActions")}
+              </span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <Avatar
+                name={user?.name || user?.login || ""}
+                initials=""
+                github={user?.login || ""}
+                subtitle={
+                  <a
+                    className="link link-hover block max-w-72 truncate font-mono text-xs"
+                    href={repoHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={repoName}
+                  >
+                    {repoName}
+                  </a>
+                }
+              />
+            </td>
+            <td>
+              <SubmissionCountCell
+                mode={submissionMode}
+                count={submissionCount}
+                onOpen={() => setDetailsOpen(true)}
+              />
+            </td>
+            <td>
+              {latestSubmittedAt ? (
+                <div className="flex flex-wrap items-center gap-x-2">
                   <LastSubmittedCell datetime={latestSubmittedAt} />
-                ) : submissionCount > 0 ? (
-                  // Submissions exist (e.g. a pushed milestone tag) but none
-                  // has a graded release yet, so there's no timestamp to show.
-                  // "Not submitted yet" beside a positive count would
-                  // contradict itself — say the work is in and awaiting
-                  // grading instead.
-                  <span className="text-base-content/50">
-                    {t("submissions.student.submittedAwaitingGrading")}
+                  {/* Relative time answers "did my push just register?"
+                        without date math. */}
+                  <span className="whitespace-nowrap text-base-content/60">
+                    {formatRelativeToNow(new Date(latestSubmittedAt))}
                   </span>
-                ) : (
-                  <span className="text-base-content/50">
-                    {t("submissions.student.notSubmittedYet")}
-                  </span>
-                )}
-              </td>
-              <td>
-                <StudentRowActions
-                  repo={repoName}
-                  repoHref={repoHref}
-                  hasRepo
-                  latestReleaseHref={latestReleaseHref}
-                  onViewSubmissions={() => setDetailsOpen(true)}
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+                </div>
+              ) : submissionCount > 0 ? (
+                // Submissions exist (e.g. a pushed milestone tag) but none
+                // has a graded release yet, so there's no timestamp to show.
+                // "Not submitted yet" beside a positive count would
+                // contradict itself — say the work is in and awaiting
+                // grading instead.
+                <span className="text-base-content/60">
+                  {t("submissions.student.submittedAwaitingGrading")}
+                </span>
+              ) : (
+                <span className="text-base-content/60">
+                  {t("submissions.student.notSubmittedYet")}
+                </span>
+              )}
+            </td>
+            <td>
+              <StudentRowActions
+                repo={repoName}
+                repoHref={repoHref}
+                hasRepo
+                latestReleaseHref={latestReleaseHref}
+                onViewSubmissions={() => setDetailsOpen(true)}
+              />
+            </td>
+          </tr>
+        </tbody>
+      </TableShell>
 
       <SubmitGuidance
+        ref={guideRef}
+        open={guideOpen}
+        // Chrome fires `toggle` when a <details open> is inserted (and when we
+        // change `open` programmatically), so only a toggle that DIFFERS from
+        // the rendered state is a real user choice — otherwise the initial
+        // auto-open would latch as intent and the guide would never collapse
+        // after the first submission lands.
+        onToggle={(open) => {
+          if (open !== guideOpen) setGuideToggled(open)
+        }}
         repoHtmlUrl={repoHref}
         submissionMode={submissionMode}
         submissionTags={submissionTags}
@@ -390,12 +463,14 @@ const StudentSubmissionPage = () => {
   // from PUBLIC GitHub Pages (source:"pages") — students can't read the private
   // config repo. The capability secret unlocks a protected classroom's Pages
   // path.
-  const { assignment: assignmentData, isError: assignmentError } =
-    useSubmissionAssignment(org, classroom, assignment, {
-      source: "pages",
-      secret,
-    })
-
+  const {
+    assignment: assignmentData,
+    isLoading: assignmentLoading,
+    isError: assignmentError,
+  } = useSubmissionAssignment(org, classroom, assignment, {
+    source: "pages",
+    secret,
+  })
   const description = assignmentDescription(assignmentData)
   const submissionMode = assignmentData?.submission_mode
   const submissionTags = assignmentData?.submission_tags
@@ -404,18 +479,16 @@ const StudentSubmissionPage = () => {
     <PageShell>
       <Breadcrumb endpoint={t("nav.mySubmission")} />
       <PageHeader
+        loading={assignmentLoading}
         title={
           assignmentData?.name ||
           assignment ||
           t("submissions.student.fallbackTitle")
         }
-      />
-      <AssignmentMeta
-        assignment={assignmentData}
-        submissionMode={submissionMode}
+        subtitle={<AssignmentMeta assignment={assignmentData} />}
       />
       {description ? (
-        <div className="mt-3 flex flex-col gap-1">
+        <div className="flex flex-col gap-1">
           <span className="text-sm font-medium text-base-content/70">
             {t("submissions.student.descriptionLabel")}
           </span>
@@ -423,17 +496,24 @@ const StudentSubmissionPage = () => {
         </div>
       ) : null}
       {org && classroom && assignment ? (
-        assignmentError ? (
+        assignmentLoading ? (
+          // Hold the body on the same skeleton the submission reads use until
+          // the assignment metadata (mode, tags, locked) resolves — mounting
+          // SubmissionBody with a default mode would fetch the wrong list and
+          // flash the wrong guidance before flipping.
+          <div className="space-y-4">
+            <div className="skeleton skeleton-shimmer h-24 w-full rounded-box" />
+            <div className="skeleton skeleton-shimmer h-40 w-full rounded-box" />
+          </div>
+        ) : assignmentError ? (
           // A failed Pages metadata read must surface, not silently degrade to
           // the raw slug title + default (push) mode — which would render the
           // wrong guidance for a tag-mode assignment. SubmissionBody would show
           // its own error for the submission reads, but the mode/title come from
           // here, so guard this read too.
-          <Alert tone="error" className="mt-6">
-            {t("submissions.student.loadError")}
-          </Alert>
+          <Alert tone="error">{t("submissions.student.loadError")}</Alert>
         ) : assignmentData?.locked ? (
-          <EnterDiv className="alert alert-warning alert-soft mt-6">
+          <EnterDiv className="alert alert-warning alert-soft">
             <div>{t("submissions.student.locked")}</div>
           </EnterDiv>
         ) : (

@@ -747,14 +747,17 @@ export function nonSubmitterStatus(
 // acceptance axis into one control. Its option ids are a closed literal union
 // (no `${axis}:${value}` string encoding, no `as` casts) so a renamed filter
 // value fails at compile time instead of silently mismatching at runtime.
-export type StatusSelectValue =
-  | "all"
-  | "submitted"
-  | "on-time"
-  | "late"
-  | "not-submitted"
-  | "accepted"
-  | "not-accepted"
+// The runtime list backs the route's ?status= search-param validation.
+export const STATUS_SELECT_VALUES = [
+  "all",
+  "submitted",
+  "on-time",
+  "late",
+  "not-submitted",
+  "accepted",
+  "not-accepted",
+] as const
+export type StatusSelectValue = (typeof STATUS_SELECT_VALUES)[number]
 
 // Which combined value the current filters map to. Submission takes precedence
 // (a submitted row is accepted by definition), then acceptance, else "all".

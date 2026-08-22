@@ -277,7 +277,10 @@ export const RepoRowActions = ({
         size="sm"
         shape="square"
         className="text-base-content/70"
-        onClick={onManage}
+        onClick={(event) => {
+          event.stopPropagation()
+          onManage()
+        }}
         aria-label={t("submissions.manageModal.openAria", { owner })}
         title={t("submissions.manageModal.open")}
       >
@@ -606,7 +609,7 @@ export const IndividualRowHeader = ({
       label={t("submissions.table.openRepoLabel", { repo })}
       title={t("submissions.table.viewRepo")}
       emptyLabel={t("submissions.table.openRepoLabel", { repo })}
-      emptyTitle={t("submissions.table.viewRepo")}
+      emptyTitle={t("submissions.table.noRepoYetTitle")}
     />
   )
 }

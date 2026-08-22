@@ -239,10 +239,13 @@ export const TeacherAssignmentsView = ({
           org={org}
           classroom={classroom}
           assignments={hasAssignments ? visible : sourceAssignments}
+          allAssignments={sourceAssignments}
           studentCount={studentCount}
           loading={assignmentsLoading}
           archived={archived}
           canAuthor={canAuthor}
+          sort={sort}
+          onSortChange={setSort}
         />
       )}
     </div>

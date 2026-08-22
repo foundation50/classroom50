@@ -126,33 +126,36 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
-describe("StudentSubmissionPage grading badge", () => {
-  it("shows the autograded badge for built-in autograding", () => {
+// Submission-mode and autograding indicators are teacher-facing plumbing —
+// from a student's perspective "how to submit" is the guidance box's job — so
+// the student meta strip must NOT render them.
+describe("StudentSubmissionPage hides teacher-facing meta", () => {
+  it("shows no grading indicator regardless of autograding state", () => {
     render(<StudentSubmissionPage />)
-    expect(screen.getByText("submissions.grading.badgeBuiltIn")).toBeTruthy()
+    expect(screen.queryByText("submissions.grading.badgeBuiltIn")).toBeNull()
   })
 
-  it("shows the teacher-CI badge for no_autograder assignments", () => {
+  it("shows none for no_autograder assignments either", () => {
     assignmentData = assignment({ no_autograder: true })
     render(<StudentSubmissionPage />)
     expect(
-      screen.getByText("submissions.grading.badgeNoAutograder"),
-    ).toBeTruthy()
+      screen.queryByText("submissions.grading.badgeNoAutograder"),
+    ).toBeNull()
   })
 
-  it("shows the no-autograding badge for empty_repo assignments", () => {
+  it("shows none for empty_repo assignments either", () => {
     assignmentData = assignment({ empty_repo: true })
     render(<StudentSubmissionPage />)
-    expect(screen.getByText("submissions.grading.badgeEmptyRepo")).toBeTruthy()
+    expect(screen.queryByText("submissions.grading.badgeEmptyRepo")).toBeNull()
   })
 })
 
 describe("StudentSubmissionPage submission type", () => {
-  it("shows the every-push type badge and the push-count chip by default", () => {
+  it("shows the push-count chip without a mode indicator by default", () => {
     assignmentData = assignment({ submission_mode: "every-push" })
     pushData = [commit("aaa", "2026-06-20T10:00:00Z")]
     render(<StudentSubmissionPage />)
-    expect(screen.getByText("submissions.type.badgeEveryPush")).toBeTruthy()
+    expect(screen.queryByText("submissions.type.badgeEveryPush")).toBeNull()
     expect(
       screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
     ).toBeTruthy()
@@ -186,7 +189,7 @@ describe("StudentSubmissionPage submission type", () => {
     })
     taggedData = [{ kind: "tag", label: "phase1", count: 1, sha: "aaa1111" }]
     render(<StudentSubmissionPage />)
-    expect(screen.getByText("submissions.type.badgeTag")).toBeTruthy()
+    expect(screen.queryByText("submissions.type.badgeTag")).toBeNull()
     await user.click(
       screen.getByRole("button", { name: "submissions.type.countTag" }),
     )
@@ -210,9 +213,11 @@ describe("StudentSubmissionPage submission type", () => {
     taggedData = [{ kind: "tag", label: "phase1", count: 1, sha: "aaa1111" }]
     releasesData = []
     render(<StudentSubmissionPage />)
+    // Appears in both the status callout and the last-submitted cell.
     expect(
-      screen.getByText("submissions.student.submittedAwaitingGrading"),
-    ).toBeTruthy()
+      screen.getAllByText("submissions.student.submittedAwaitingGrading")
+        .length,
+    ).toBeGreaterThan(0)
     expect(screen.queryByText("submissions.student.notSubmittedYet")).toBeNull()
   })
 
@@ -245,8 +250,10 @@ describe("StudentSubmissionPage submission type", () => {
     assignmentData = assignment({ submission_mode: "every-push" })
     pushData = [commit("aaa", "2026-06-20T10:00:00Z")]
     render(<StudentSubmissionPage />)
-    // The student view mirrors the teacher table's columns (minus score/manage).
-    expect(screen.getByText("submissions.table.colStudent")).toBeTruthy()
+    // The student view mirrors the teacher table's columns (minus score/
+    // manage), with the identity column labeled from the student's own
+    // perspective.
+    expect(screen.getByText("submissions.student.colYourRepo")).toBeTruthy()
     expect(screen.getByText("submissions.table.colSubmissions")).toBeTruthy()
     expect(screen.getByText("submissions.table.colLastSubmitted")).toBeTruthy()
     expect(screen.getByText("submissions.table.colActions")).toBeTruthy()
