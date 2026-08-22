@@ -155,7 +155,7 @@ export const SubmissionCountCell = ({
       fallback={<div className="skeleton skeleton-shimmer h-5 w-16" />}
     >
       <div className="flex items-center gap-1.5">
-        {/* Success-toned like the Submitted funnel dials: a green chip = a
+        {/* Success-toned like the Submitted progress bars: a green chip = a
             submission exists. Hover deepens the fill as the click affordance. */}
         <button
           type="button"

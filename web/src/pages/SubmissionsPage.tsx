@@ -208,7 +208,11 @@ const SubmissionsPageContent = () => {
   // staleness heuristic). `refetch` is wired to Sync + collect-completion so
   // `latestPush` isn't frozen at page load (else a push after load never flips
   // the freshness line to "out of sync").
-  const { data: orgRepos, refetch: refetchOrgRepos } = useGetOrgRepos(org ?? "")
+  const {
+    data: orgRepos,
+    isLoading: orgReposLoading,
+    refetch: refetchOrgRepos,
+  } = useGetOrgRepos(org ?? "")
   // Sibling slugs guard group-repo attribution against a slug-extending sibling
   // ("hw1-bonus" under "hw1"); see existingGroupRepos.
   const siblingSlugs = useMemo(
@@ -571,7 +575,11 @@ const SubmissionsPageContent = () => {
   // Empty rows before the snapshot+roster land mean "loading", not "empty" —
   // gate the empty state on this so it doesn't flash on first paint. A
   // background refetch keeps scoresLoaded true, so Refresh never blanks the table.
-  const initialLoading = !scoresLoaded || rosterLoading
+  // Group mode additionally waits for the org repo list: its rows (and the
+  // "No groups yet" empty state) are derived from repo existence, so painting
+  // before the list resolves would flash a wrong affirmative claim.
+  const initialLoading =
+    !scoresLoaded || rosterLoading || (isGroupAssignment && orgReposLoading)
   const nonSubmittersReady =
     scoresLoaded && !livePending && !detectedPending && !groupMembersPending
   const nonSubmitters = useMemo(() => {
