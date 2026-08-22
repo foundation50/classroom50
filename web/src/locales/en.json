@@ -1450,6 +1450,8 @@
       "groupsSubmitted_one": "{{count}} group submitted",
       "groupsSubmitted_other": "{{count}} groups submitted",
       "groupsAcceptedTitle": "Groups that accepted — group repositories that exist",
+      "noGroupsYetTitle": "No groups yet — a group repository is created when its founder accepts",
+      "noGroupsYet": "No groups yet",
       "acceptedTitle": "{{accepted}} of {{total}} students accepted the assignment",
       "submittedTitle": "{{submitted}} of {{total}} students submitted",
       "submittedTitleGroup": "{{submitted}} of {{accepted}} groups submitted",

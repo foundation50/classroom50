@@ -58,12 +58,8 @@ export type { FileDropzoneProps, PickedFile } from "./FileDropzone"
 export { StatCard } from "./StatCard"
 export type { StatCardProps } from "./StatCard"
 
-export { MetricDial, MetricCount } from "./MetricDial"
-export type {
-  MetricDialProps,
-  MetricCountProps,
-  MetricDialTone,
-} from "./MetricDial"
+export { MetricBar, MetricCount } from "./MetricBar"
+export type { MetricBarProps, MetricCountProps, MetricTone } from "./MetricBar"
 
 export { SortableHeader, SortableTh, ariaSort } from "./SortableHeader"
 export type {

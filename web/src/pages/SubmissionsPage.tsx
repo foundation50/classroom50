@@ -15,7 +15,7 @@ import {
   Badge,
   HelpTooltip,
   MetricCount,
-  MetricDial,
+  MetricBar,
   Spinner,
 } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -720,7 +720,7 @@ const SubmissionsPageContent = () => {
 
   // The header funnel's Submitted numerator: PRESENCE, not grades. Unlike
   // stats.submitted (which excludes `pending` rows so uncollected submissions
-  // don't inflate the graded Metrics summary), the dial must agree with the
+  // don't inflate the graded Metrics summary), the bar must agree with the
   // table right below it — which lists pending live/detected submitters
   // (the only signal for no_autograder assignments). Count every scoped row.
   const submittedPresenceCount = scopedScores.length
@@ -742,8 +742,8 @@ const SubmissionsPageContent = () => {
   // so switching away from it never silently drops a hidden acceptance filter.
   const showAcceptedNotSubmitted = () =>
     setFilters({ ...DEFAULT_FILTERS, submission: "not-submitted" })
-  // The header's Accepted dial jumps to the students who never accepted —
-  // the cohort that dial exists to surface.
+  // The header's Accepted bar jumps to the students who never accepted —
+  // the cohort that bar exists to surface.
   const showNotAccepted = () =>
     setFilters({ ...DEFAULT_FILTERS, accepted: "not-accepted" })
 
@@ -1001,14 +1001,20 @@ const SubmissionsPageContent = () => {
       <PageHeader
         title={assignmentInfo?.name}
         // High-level funnel in the header's right slot, mirroring the
-        // assignments table's Accepted / Submitted dials so the two surfaces
+        // assignments table's Accepted / Submitted bars so the two surfaces
         // read the same. Hidden until the org repo list resolves (acceptance
-        // is derived from repo existence). Group acceptance is a bare count —
-        // no roster denominator — and the group submitted dial measures
-        // against existing group repos. Each dial doubles as a one-click
-        // filter shortcut to the cohort it surfaces.
+        // is derived from repo existence), and hidden for a group assignment
+        // with no repos yet — there's no denominator to measure until the
+        // first group forms. Group acceptance is a bare count — no roster
+        // denominator — and the group submitted bar measures against existing
+        // group repos. Each bar doubles as a one-click filter shortcut to the
+        // cohort it surfaces.
         action={
-          (isGroupAssignment ? orgRepos != null : acceptedAvailable) ? (
+          (
+            isGroupAssignment
+              ? orgRepos != null && groupRepoList.length > 0
+              : acceptedAvailable
+          ) ? (
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-base-content/70">
@@ -1027,7 +1033,7 @@ const SubmissionsPageContent = () => {
                     onClick={showNotAccepted}
                     title={t("submissions.funnel.showNotAccepted")}
                   >
-                    <MetricDial
+                    <MetricBar
                       value={Math.min(acceptedCount, stats.rostered)}
                       max={stats.rostered}
                       tone="info"
@@ -1050,7 +1056,7 @@ const SubmissionsPageContent = () => {
                   title={t("submissions.funnel.showNotSubmitted")}
                 >
                   {isGroupAssignment ? (
-                    <MetricDial
+                    <MetricBar
                       value={
                         groupRepoList.length - unsubmittedGroupRepos.length
                       }
@@ -1063,7 +1069,7 @@ const SubmissionsPageContent = () => {
                       })}
                     />
                   ) : (
-                    <MetricDial
+                    <MetricBar
                       value={Math.min(submittedPresenceCount, stats.rostered)}
                       max={stats.rostered}
                       tone="success"

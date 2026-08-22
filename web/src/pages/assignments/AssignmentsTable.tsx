@@ -40,7 +40,7 @@ import {
   Button,
   EmphasisLtr,
   MetricCount,
-  MetricDial,
+  MetricBar,
   SkeletonRows,
   SortableTh,
   TableShell,
@@ -579,8 +579,21 @@ const AssignmentsTable = ({
                     return <span className="text-base-content/60">—</span>
                   }
                   if (assignment.mode === "group") {
+                    // A group assignment nobody has started has no repos and
+                    // therefore no denominator to measure — a bare "0" would
+                    // imply one. Muted empty state + tooltip instead.
+                    if (accepted === 0) {
+                      return (
+                        <span
+                          className="inline-block w-28 whitespace-nowrap text-center text-base-content/60"
+                          title={t("assignments.table.noGroupsYetTitle")}
+                        >
+                          {t("assignments.table.noGroupsYet")}
+                        </span>
+                      )
+                    }
                     // Groups have no roster denominator (any student can
-                    // found one), so acceptance is a bare count — no dial;
+                    // found one), so acceptance is a bare count — no bar;
                     // the "groups" context lives in the tooltip.
                     return (
                       <MetricCount
@@ -599,7 +612,7 @@ const AssignmentsTable = ({
                     total,
                   )
                   return (
-                    <MetricDial
+                    <MetricBar
                       value={shown}
                       max={total}
                       tone="info"
@@ -644,9 +657,21 @@ const AssignmentsTable = ({
                         </span>
                       )
                     }
+                    // No groups yet: nothing to measure against — mirror the
+                    // Accepted cell's empty state instead of a false "0 / 0".
+                    if (accepted === 0) {
+                      return (
+                        <span
+                          className="inline-block w-28 text-center text-base-content/60"
+                          title={t("assignments.table.noGroupsYetTitle")}
+                        >
+                          —
+                        </span>
+                      )
+                    }
                     const shown = Math.min(submitted, accepted)
                     return (
-                      <MetricDial
+                      <MetricBar
                         value={shown}
                         max={accepted}
                         tone="success"
@@ -667,7 +692,7 @@ const AssignmentsTable = ({
                   const total = studentCount ?? 0
                   const shown = Math.min(submitted, total)
                   return (
-                    <MetricDial
+                    <MetricBar
                       value={shown}
                       max={total}
                       tone="success"
