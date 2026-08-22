@@ -8,8 +8,6 @@ import {
   Pencil,
   ShieldCheck,
   Trash2,
-  UserRound,
-  UsersRound,
 } from "lucide-react"
 
 import useGetScores from "@/hooks/useGetScores"
@@ -447,16 +445,11 @@ const AssignmentsTable = ({
                 >
                   {assignment.mode === "individual" && (
                     <div className="flex gap-2 h-full">
-                      <UserRound className="max-xl:size-3" aria-hidden="true" />{" "}
                       {t("assignments.table.individual")}
                     </div>
                   )}
                   {assignment.mode === "group" && (
                     <div className="flex gap-2 h-full">
-                      <UsersRound
-                        className="max-xl:size-3"
-                        aria-hidden="true"
-                      />{" "}
                       {t("assignments.table.group")}
                     </div>
                   )}

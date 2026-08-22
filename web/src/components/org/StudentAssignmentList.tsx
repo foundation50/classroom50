@@ -7,8 +7,6 @@ import {
   CircleAlert,
   FilePlus2,
   ListFilter,
-  UserRound,
-  UsersRound,
 } from "lucide-react"
 
 import { Alert, Badge, Card, Toolbar } from "@/components/ui"
@@ -41,14 +39,12 @@ function ModeBadge({ mode }: { mode: Assignment["mode"] }) {
   if (mode === "group") {
     return (
       <Badge ghost className="gap-1">
-        <UsersRound aria-hidden="true" className="size-3.5" />
         {t("assignments.discover.modeGroup")}
       </Badge>
     )
   }
   return (
     <Badge ghost className="gap-1">
-      <UserRound aria-hidden="true" className="size-3.5" />
       {t("assignments.discover.modeIndividual")}
     </Badge>
   )
