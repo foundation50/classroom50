@@ -15,11 +15,17 @@ import (
 // ShortNamePattern: classroom short-names and assignment slugs both flow into
 // student-repo names and the contents/tree API. Exposed for the few call sites
 // that match directly; most callers should use ShortName for the standard error.
-var ShortNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,38}$`)
+//
+// The cap is 100 per segment, matching GitHub's repo-name limit — NOT a full
+// guarantee: `<classroom>-<assignment>-<username>` can exceed 100 even when each
+// part is legal. Budgeting the segments against each other is open work
+// (foundation50/classroom50#691); until then an overflow surfaces as a legible
+// "name too long" error at accept.
+var ShortNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,99}$`)
 
 // ShortNamePatternDescription: human-readable summary of ShortNamePattern,
 // embedded in every "invalid <thing>" error.
-const ShortNamePatternDescription = "^[a-z0-9][a-z0-9-]{1,38}$ (2-39 chars, lowercase letters/digits/hyphens, starting with a letter or digit)"
+const ShortNamePatternDescription = "^[a-z0-9][a-z0-9-]{1,99}$ (2-100 chars, lowercase letters/digits/hyphens, starting with a letter or digit)"
 
 // ShortName checks name against ShortNamePattern with a label-prefixed error.
 // Same rule for classroom short-names and slugs (both flow into repo names) and
@@ -66,6 +72,23 @@ func OrgClassroom(args []string) (org, classroom string, err error) {
 		return "", "", err
 	}
 	return org, classroom, nil
+}
+
+// GitHubRepoNameMaxLen is GitHub's hard limit on a repository name; the
+// student-repo name `<classroom>-<assignment>-<username>` is measured against it.
+const GitHubRepoNameMaxLen = 100
+
+// GitHubLoginMaxLen is GitHub's maximum login length — the worst-case
+// `<username>` when budgeting the composed student-repo name.
+const GitHubLoginMaxLen = 39
+
+// ComposedRepoNameOverflows reports whether the longest student-repo name a
+// classroom+assignment pair can produce (worst-case 39-char username) exceeds
+// GitHub's repo-name limit; see ShortNamePattern and #691. The name shape comes
+// from contract.AssignmentRepoPrefix so it can't drift from the real one.
+func ComposedRepoNameOverflows(classroom, slug string) (worstCase int, overflows bool) {
+	worstCase = len(contract.AssignmentRepoPrefix(classroom, slug)) + GitHubLoginMaxLen
+	return worstCase, worstCase > GitHubRepoNameMaxLen
 }
 
 // ScopeListContains reports whether the comma-separated OAuth scope

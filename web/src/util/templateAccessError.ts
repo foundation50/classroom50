@@ -104,6 +104,32 @@ export function forkParentRestrictedError(
   )
 }
 
+// An over-100-char composed `<classroom>-<assignment>-<username>` repo name is
+// rejected with a 422 (foundation50/classroom50#691). Name the cause and the
+// fix rather than letting it fall through to the "already exists" recovery's
+// confusing not-found.
+export function repoNameTooLongError(
+  repoName: string,
+  status: number,
+  githubMessage?: string,
+): TemplateAccessError {
+  return new TemplateAccessError(
+    {
+      key: "accept.templateErrors.repoNameTooLong",
+      params: {
+        name: repoName,
+        length: repoName.length,
+        status,
+        detail: githubSaid(githubMessage),
+      },
+    },
+    {
+      key: "accept.templateErrors.repoNameTooLongStep",
+      params: { name: repoName, length: repoName.length },
+    },
+  )
+}
+
 // The one 403 message GitHub was observed to return when the *destination* org
 // refuses the create (issue #413). Matched as a substring, case-insensitively.
 const ORG_REPO_CREATION_DENIED_SIGNATURE = "admin access to the organization"

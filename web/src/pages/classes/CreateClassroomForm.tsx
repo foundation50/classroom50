@@ -10,6 +10,10 @@ import {
   isValidSecret,
 } from "@/util/secret"
 import { slugify } from "@/util/slug"
+import {
+  SHORT_NAME_PATTERN_DESCRIPTION,
+  isValidShortName,
+} from "@/util/shortName"
 import { Button, Card, FormField, Input } from "@/components/ui"
 
 export type CreateClassroomFormValues = {
@@ -58,10 +62,21 @@ const CreateClassroomForm = ({
 
         if (!value.slug.trim()) {
           errors.slug = t("validation.classroomSlugRequired")
-        }
-
-        if (classes.find((cl) => cl.path === value.slug.trim())) {
-          errors.slug = t("validation.classroomSlugTaken")
+        } else {
+          // Validate AND collision-check the slugified value (what actually
+          // gets written): comparing the raw input for collisions let a raw
+          // value slugifying onto an existing classroom (e.g. "CS 50" ->
+          // "cs-50") slip past and overwrite its roster/scores.
+          const slug = slugify(value.slug)
+          if (!isValidShortName(slug)) {
+            errors.slug = t("validation.classroomSlugInvalid", {
+              description: SHORT_NAME_PATTERN_DESCRIPTION,
+            })
+          } else if (
+            classes.find((cl) => cl.path.toLowerCase() === slug.toLowerCase())
+          ) {
+            errors.slug = t("validation.classroomSlugTaken")
+          }
         }
 
         // Only validate the secret when protection is on; a disabled toggle

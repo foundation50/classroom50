@@ -228,6 +228,38 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		}
 	})
 
+	// #691: a composed repo name over GitHub's 100-char limit must surface a
+	// legible "too long" error, NOT be mistaken for already-exists (whose
+	// follow-up GET would 404 on the never-created repo).
+	t.Run("422 name-too-long returns an actionable error, no follow-up GET", func(t *testing.T) {
+		var getAttempted bool
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/cs50/hello-template/generate", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"Repository creation failed:","errors":[{"resource":"Repository","field":"name","code":"custom","message":"name is too long (maximum is 100 characters)"}]}`))
+		})
+		mux.HandleFunc("/repos/o/cs-principles-hello-alice", func(w http.ResponseWriter, r *http.Request) {
+			getAttempted = true
+			http.NotFound(w, r)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		client := newTestRESTClient(t, server)
+
+		var out bytes.Buffer
+		_, _, _, already, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false)
+		if err == nil || !strings.Contains(err.Error(), "too long") {
+			t.Fatalf("err = %v, want a 'too long' error", err)
+		}
+		if already {
+			t.Error("alreadyExisted = true, want false on a name-too-long 422")
+		}
+		if getAttempted {
+			t.Error("no follow-up GET should run on the name-too-long path")
+		}
+	})
+
 	t.Run("404 on generate → cross-org visibility message", func(t *testing.T) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/repos/cs50/hello-template/generate", func(w http.ResponseWriter, r *http.Request) {
@@ -461,6 +493,37 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		}
 		if fullName != "o/cs-principles-solo-alice" {
 			t.Errorf("fullName = %q, want the existing repo from the follow-up GET", fullName)
+		}
+	})
+
+	// #691: an over-100-char composed repo name must surface a legible "too
+	// long" error, not be mistaken for already-exists.
+	t.Run("422 name-too-long returns an actionable error, no follow-up GET", func(t *testing.T) {
+		var getAttempted bool
+		mux := http.NewServeMux()
+		mux.HandleFunc("/orgs/o/repos", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"Repository creation failed:","errors":[{"resource":"Repository","field":"name","code":"custom","message":"name is too long (maximum is 100 characters)"}]}`))
+		})
+		mux.HandleFunc("/repos/o/cs-principles-solo-alice", func(w http.ResponseWriter, r *http.Request) {
+			getAttempted = true
+			http.NotFound(w, r)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		client := newTestRESTClient(t, server)
+
+		var out bytes.Buffer
+		_, _, _, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil)
+		if err == nil || !strings.Contains(err.Error(), "too long") {
+			t.Fatalf("err = %v, want a 'too long' error", err)
+		}
+		if already {
+			t.Error("alreadyExisted = true, want false on a name-too-long 422")
+		}
+		if getAttempted {
+			t.Error("no follow-up GET should run on the name-too-long path")
 		}
 	})
 }

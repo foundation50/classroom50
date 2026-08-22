@@ -90,7 +90,7 @@ func assignmentAddCmd() *cobra.Command {
 		Short: "Add or upsert an assignment in assignments.json",
 		Long: "Register an assignment — its template repo and the autograder it\n" +
 			"runs against — in <org>/classroom50/<classroom>/assignments.json.\n\n" +
-			"`<slug>` must match ^[a-z0-9][a-z0-9-]{1,38}$ (the same shape as\n" +
+			"`<slug>` must match ^[a-z0-9][a-z0-9-]{1,99}$ (the same shape as\n" +
 			"classroom short-names) because student repos are named\n" +
 			"`<classroom>-<slug>-<username>`. Only --name is required;\n" +
 			"--template is optional (omit it for a template-less assignment).\n" +
@@ -992,6 +992,15 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		_, _ = fmt.Fprintf(errOut,
 			"Warning: %s/%s/%s is %d bytes — approaching GitHub's ~1 MiB contents-API ceiling. Past that, the API returns encoding:\"none\" and future `gh teacher assignment add/remove` calls will fail to read the file. Consider splitting the classroom or shrinking per-entry fields.\n",
 			org, configrepo.ConfigRepoName, assignmentsFilePath(classroom), lastEncodedSize)
+	}
+	// #691: classroom and slug can each be valid yet compose into a
+	// `<classroom>-<assignment>-<username>` name past GitHub's 100-char limit,
+	// failing every accept. Nothing budgets the segments, so warn here — the
+	// only pre-accept signal.
+	if worst, overflows := validate.ComposedRepoNameOverflows(classroom, slug); overflows {
+		_, _ = fmt.Fprintf(errOut,
+			"Warning: student repos are named `<classroom>-<assignment>-<username>`; %q + %q reaches %d characters with a 39-char username, over GitHub's %d-char repo-name limit. Students with long usernames won't be able to accept. Shorten the classroom short-name or the assignment slug.\n",
+			classroom, slug, worst, validate.GitHubRepoNameMaxLen)
 	}
 	_, _ = fmt.Fprintf(errOut, "Students can now run: gh student accept %s %s %s\n", org, classroom, slug)
 	return nil

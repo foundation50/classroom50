@@ -118,6 +118,11 @@ describe("validateAssignmentForm — required fields", () => {
     })
     expect(errors.slug).toBe("validation.assignmentSlugTaken")
   })
+
+  it("flags a slug over the 100-char cap on create", () => {
+    const errors = validateAssignmentForm({ ...base, slug: "a".repeat(101) }, t)
+    expect(errors.slug).toBe("assignments.form.validation.slugInvalid")
+  })
 })
 
 describe("validateAssignmentForm — group size", () => {

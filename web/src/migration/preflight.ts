@@ -10,7 +10,8 @@ import { GitHubAPIError } from "@/github-core/errors"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { classifyAssignment } from "./classify"
 import { fetchAssignmentsForClassroom, resolveSource } from "./classroomApi"
-import { assertValidShortName, deriveShortName } from "./translate"
+import { deriveShortName } from "./translate"
+import { assertValidShortName } from "@/util/shortName"
 import type {
   MigrationBlocker,
   MigrationItem,

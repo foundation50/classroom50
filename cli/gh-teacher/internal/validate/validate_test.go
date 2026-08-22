@@ -162,3 +162,33 @@ func TestOrgName(t *testing.T) {
 		}
 	}
 }
+
+func TestComposedRepoNameOverflows(t *testing.T) {
+	cases := []struct {
+		name          string
+		classroom     string
+		slug          string
+		wantWorstCase int
+		wantOverflow  bool
+	}{
+		// 2 + 1 + 2 + 1 + 39 = 45, well under 100.
+		{"short pair", "cs", "hw", 45, false},
+		// Exactly at the limit: classroom(30) + 1 + slug(29) + 1 + 39 = 100.
+		{"exactly 100", strings.Repeat("a", 30), strings.Repeat("b", 29), 100, false},
+		// One over: classroom(30) + 1 + slug(30) + 1 + 39 = 101.
+		{"one over", strings.Repeat("a", 30), strings.Repeat("b", 30), 101, true},
+		// Two max-length segments: 100 + 1 + 100 + 1 + 39 = 241.
+		{"both maxed", strings.Repeat("a", 100), strings.Repeat("b", 100), 241, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			worst, overflows := ComposedRepoNameOverflows(tc.classroom, tc.slug)
+			if worst != tc.wantWorstCase {
+				t.Errorf("worstCase = %d, want %d", worst, tc.wantWorstCase)
+			}
+			if overflows != tc.wantOverflow {
+				t.Errorf("overflows = %v, want %v", overflows, tc.wantOverflow)
+			}
+		})
+	}
+}

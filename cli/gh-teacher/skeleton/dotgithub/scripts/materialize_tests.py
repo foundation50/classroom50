@@ -31,7 +31,7 @@ TESTS_FILENAME = "tests.json"
 # Mirror validate.ShortNamePattern in cli/gh-teacher/internal/validate/validate.go.
 # The slug becomes a directory path here, so a traversal-style slug must be
 # rejected before it reaches mkdir.
-SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,38}$")
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,99}$")
 
 
 def materialize(root: pathlib.Path) -> int:

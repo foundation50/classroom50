@@ -12,6 +12,10 @@ export function slugify(value: string) {
     .replace(/^-+|-+$/g, "")
 }
 
+// Max slug length, mirroring validate.ShortNamePattern's cap. A derived `-<n>`
+// suffix must not push a candidate past it, so the stem is trimmed to fit.
+const SLUG_MAX_LEN = 100
+
 // First slug not in `taken`, suffixing `-2`, `-3`, … A base ending in `-<n>`
 // continues from n+1 ("hw1-2" -> "hw1-3", not "hw1-2-2"). Case-insensitive, to
 // match GitHub repo naming and the server-side check. Pure; prefills both the
@@ -33,10 +37,14 @@ export function nextAvailableSlug(
 
   // Bounded defensively; a classroom never has thousands of same-stem slugs.
   for (let i = 0; i < 10000; i++) {
-    const candidate = `${stem}-${n}`
+    const suffix = `-${n}`
+    // Trim the stem to leave room for the suffix; drop a hyphen the trim exposes.
+    const room = SLUG_MAX_LEN - suffix.length
+    const trimmedStem = stem.slice(0, room).replace(/-+$/g, "")
+    const candidate = `${trimmedStem}${suffix}`
     if (isFree(candidate)) return candidate
     n++
   }
   // Unreachable in practice, but never silently return a taken slug.
-  return `${stem}-${Date.now()}`
+  return `${stem}-${Date.now()}`.slice(0, SLUG_MAX_LEN).replace(/-+$/g, "")
 }

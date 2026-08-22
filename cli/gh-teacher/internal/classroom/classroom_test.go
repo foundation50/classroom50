@@ -57,13 +57,14 @@ func TestShortNamePattern(t *testing.T) {
 		{"intro-java", true},
 		{"a1", true},
 		{"0class", true},
-		{"abcdefghijklmnopqrstuvwxyz0123456789-ab", true}, // 39 chars (max)
+		// 100 chars (max): 1 leading alnum + 99 following.
+		{"a" + strings.Repeat("b", 99), true},
 		// Invalid — first char must be alnum.
 		{"-cs50", false},
-		// Invalid — single char (regex requires 2-39).
+		// Invalid — single char (regex requires 2-100).
 		{"a", false},
-		// Invalid — 40 chars.
-		{"abcdefghijklmnopqrstuvwxyz0123456789-abc", false},
+		// Invalid — 101 chars.
+		{"a" + strings.Repeat("b", 100), false},
 		// Invalid — uppercase.
 		{"CS-50", false},
 		{"Cs-principles", false},

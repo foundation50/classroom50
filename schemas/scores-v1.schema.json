@@ -18,7 +18,7 @@
   "$defs": {
     "shortName": {
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9-]{1,38}$"
+      "pattern": "^[a-z0-9][a-z0-9-]{1,99}$"
     },
     "assignmentBucket": {
       "type": "object",

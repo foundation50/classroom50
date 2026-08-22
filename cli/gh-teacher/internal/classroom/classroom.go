@@ -85,8 +85,8 @@ func classroomAddCmd() *cobra.Command {
 		Long: "Create the directory <short-name>/ inside <org>/classroom50\n" +
 			"and populate it with a four-file scaffold: classroom.json,\n" +
 			"assignments.json, roster.csv, and scores.json.\n\n" +
-			"Short-name rules (must match ^[a-z0-9][a-z0-9-]{1,38}$):\n" +
-			"  - 2-39 characters total\n" +
+			"Short-name rules (must match ^[a-z0-9][a-z0-9-]{1,99}$):\n" +
+			"  - 2-100 characters total\n" +
 			"  - lowercase letters, digits, or hyphens\n" +
 			"  - must start with a letter or digit (not a hyphen)\n\n" +
 			"These mirror GitHub's repo-name constraints because the\n" +

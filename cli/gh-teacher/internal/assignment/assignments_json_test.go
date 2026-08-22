@@ -1903,9 +1903,9 @@ func TestNextAvailableSlug(t *testing.T) {
 }
 
 // TestNextAvailableSlug_OverflowsCap pins that an auto-suffix exceeding the
-// 39-char cap returns an actionable error rather than a too-long candidate.
+// 100-char cap returns an actionable error rather than a too-long candidate.
 func TestNextAvailableSlug_OverflowsCap(t *testing.T) {
-	base := strings.Repeat("a", 39) // already at the cap; any "-N" overflows
+	base := strings.Repeat("a", 100) // already at the cap; any "-N" overflows
 	entries := entriesWithSlugs(base)
 	if _, err := NextAvailableSlug(entries, base); err == nil {
 		t.Fatal("expected an over-cap auto-suffix error, got nil")

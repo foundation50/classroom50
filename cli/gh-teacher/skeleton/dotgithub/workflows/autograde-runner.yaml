@@ -177,7 +177,7 @@ jobs:
           import urllib.error, urllib.request
           import yaml
 
-          _SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{1,38}$")
+          _SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{1,99}$")
           _SECRET = re.compile(r"^[a-z0-9]{4,64}$")
           _LANG = re.compile(r"^[A-Za-z0-9._+-]{1,32}$")
           _APT  = re.compile(r"^[a-z0-9][a-z0-9.+-]{0,63}$")

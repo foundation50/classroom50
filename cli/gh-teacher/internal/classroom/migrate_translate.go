@@ -22,7 +22,7 @@ var shortNameDeriveReplace = regexp.MustCompile(`[^a-z0-9]+`)
 
 // deriveShortName slugifies a free-form classroom name into a value that passes
 // ShortNamePattern (lowercase → replace non-alnum with `-` → collapse → trim →
-// truncate to 39 → validate). On failure returns an error asking for an
+// truncate to 100 → validate). On failure returns an error asking for an
 // explicit --short-name.
 func deriveShortName(raw string) (string, error) {
 	lowered := strings.ToLower(strings.TrimSpace(raw))
@@ -31,8 +31,8 @@ func deriveShortName(raw string) (string, error) {
 	}
 	slug := shortNameDeriveReplace.ReplaceAllString(lowered, "-")
 	slug = strings.Trim(slug, "-")
-	if len(slug) > 39 {
-		slug = strings.TrimRight(slug[:39], "-")
+	if len(slug) > 100 {
+		slug = strings.TrimRight(slug[:100], "-")
 	}
 	if !validate.ShortNamePattern.MatchString(slug) {
 		return "", fmt.Errorf("could not derive a valid short-name from %q (got %q after slugify, fails %s) — pass --short-name <name> explicitly", raw, slug, validate.ShortNamePatternDescription)
