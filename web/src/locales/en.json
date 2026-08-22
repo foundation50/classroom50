@@ -1100,11 +1100,11 @@
     "discover": {
       "accept": "Accept assignment",
       "notAccepted": "Not accepted",
+      "accepted": "Accepted",
       "viewSubmission": "View my submission",
-      "modeIndividual": "Individual",
-      "modeGroup": "Group",
-      "due": "Due {{date}}",
-      "noDue": "No due date",
+      "colStatus": "Status",
+      "colAction": "Action",
+      "tableCaption": "Published assignments and your status for each",
       "emptyTitle": "No assignments yet",
       "emptyBody": "When a teacher publishes assignments for this classroom, they'll appear here.",
       "linkOnlyTitle": "Open your invite link to get started",
@@ -1129,12 +1129,7 @@
         "sortDueDesc": "Due latest",
         "sortNameAsc": "Name (A–Z)",
         "sortNameDesc": "Name (Z–A)",
-        "clear": "Clear filters",
-        "view": {
-          "label": "View",
-          "gridLabel": "Grid view",
-          "listLabel": "List view"
-        }
+        "clear": "Clear filters"
       },
       "noResults": {
         "title": "No assignments match your filters",

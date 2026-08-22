@@ -32,6 +32,10 @@ import { blockEnter } from "@/lib/motion"
 import { motion } from "motion/react"
 import type { AssignmentSort } from "@/pages/assignments/assignmentList"
 import {
+  DueDateCell,
+  ModeBadge,
+} from "@/components/assignments/AssignmentCells"
+import {
   Badge,
   Button,
   EmphasisLtr,
@@ -584,22 +588,7 @@ const AssignmentsTable = ({
                   }
                   className="max-xl:text-xs"
                 >
-                  {assignment.mode === "individual" && (
-                    <Badge
-                      tone="info"
-                      className="w-20 justify-center max-xl:w-16"
-                    >
-                      {t("assignments.table.individual")}
-                    </Badge>
-                  )}
-                  {assignment.mode === "group" && (
-                    <Badge
-                      tone="secondary"
-                      className="w-20 justify-center max-xl:w-16"
-                    >
-                      {t("assignments.table.group")}
-                    </Badge>
-                  )}
+                  <ModeBadge mode={assignment.mode} />
                 </td>
                 <td
                   onClick={() =>
@@ -619,18 +608,7 @@ const AssignmentsTable = ({
                     })
                   }
                 >
-                  {assignment.due ? (
-                    <span
-                      className="whitespace-nowrap max-xl:text-xs xl:text-sm"
-                      title={formatDueDateTime(assignment.due)}
-                    >
-                      {formatDueDate(assignment.due)}
-                    </span>
-                  ) : (
-                    <span className="whitespace-nowrap text-base-content/60 max-xl:text-xs xl:text-sm">
-                      {t("assignments.table.noDueDate")}
-                    </span>
-                  )}
+                  <DueDateCell due={assignment.due} />
                 </td>
                 {/* The funnel cells deep-link to the actionable cohort: who
                     hasn't accepted / hasn't submitted. Groups have no
