@@ -19,6 +19,15 @@ export function isCanonicalTeamShortName(shortName: string): boolean {
   return !shortName.endsWith("-") && !shortName.includes("--")
 }
 
+// Whether a short-name is well-shaped for both the schema pattern and the
+// team-slug canonical form. The boolean form the create-form validators need
+// (assertValidShortName throws a localized error, which they can't consume).
+export function isValidShortName(shortName: string): boolean {
+  return (
+    SHORT_NAME_PATTERN.test(shortName) && isCanonicalTeamShortName(shortName)
+  )
+}
+
 // Validate a short-name (derived or user-supplied) for both the schema pattern
 // and the team-slug canonical form. Throws an actionable error otherwise.
 // `rawName`, when given, names the free-form source in the error (the migration

@@ -3,6 +3,7 @@ import {
   SHORT_NAME_PATTERN,
   assertValidShortName,
   isCanonicalTeamShortName,
+  isValidShortName,
 } from "./shortName"
 
 describe("SHORT_NAME_PATTERN", () => {
@@ -30,6 +31,15 @@ describe("isCanonicalTeamShortName", () => {
     expect(isCanonicalTeamShortName("cs-")).toBe(false)
     expect(isCanonicalTeamShortName("cs--50")).toBe(false)
     expect(isCanonicalTeamShortName("cs-50")).toBe(true)
+  })
+})
+
+describe("isValidShortName", () => {
+  it("is true only when the pattern and the canonical-team form both hold", () => {
+    expect(isValidShortName("cs-50")).toBe(true)
+    expect(isValidShortName("a".repeat(101))).toBe(false) // over cap
+    expect(isValidShortName("cs--50")).toBe(false) // non-canonical
+    expect(isValidShortName("CS-50")).toBe(false) // uppercase
   })
 })
 

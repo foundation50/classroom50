@@ -11,9 +11,8 @@ import {
 } from "@/util/secret"
 import { slugify } from "@/util/slug"
 import {
-  SHORT_NAME_PATTERN,
   SHORT_NAME_PATTERN_DESCRIPTION,
-  isCanonicalTeamShortName,
+  isValidShortName,
 } from "@/util/shortName"
 import { Button, Card, FormField, Input } from "@/components/ui"
 
@@ -71,10 +70,7 @@ const CreateClassroomForm = ({
           // an existing classroom (e.g. "CS 50" -> "cs-50") slipped past and
           // overwrote its roster/scores. One slug value drives all three.
           const slug = slugify(value.slug)
-          if (
-            !SHORT_NAME_PATTERN.test(slug) ||
-            !isCanonicalTeamShortName(slug)
-          ) {
+          if (!isValidShortName(slug)) {
             errors.slug = t("validation.classroomSlugInvalid", {
               description: SHORT_NAME_PATTERN_DESCRIPTION,
             })

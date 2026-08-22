@@ -10,18 +10,8 @@ import {
   SHORT_NAME_PATTERN,
   SHORT_NAME_PATTERN_DESCRIPTION,
   assertValidShortName,
-  isCanonicalTeamShortName,
 } from "@/util/shortName"
 import type { ClassroomAssignmentDetail, ClassroomDetail } from "./types"
-
-// Re-exported from the shared leaf so migration importers keep their path; the
-// pattern itself now lives in @/util/shortName (used by the create forms too).
-export {
-  SHORT_NAME_PATTERN,
-  SHORT_NAME_PATTERN_DESCRIPTION,
-  assertValidShortName,
-  isCanonicalTeamShortName,
-}
 
 // The only migrated_from.source value today.
 export const MIGRATE_SOURCE_GITHUB_CLASSROOM = "github_classroom"
@@ -42,10 +32,6 @@ export function clampMigratedGroupSize(maxTeams: number | null): number {
     ? maxTeams
     : GROUP_SIZE_MAX
 }
-
-// classroom short-names and assignment slugs both flow into repo/team names.
-// The pattern + canonical-team guard live in @/util/shortName (re-exported
-// above); this module keeps only the migration-specific derivation.
 
 // classroom-level migrated_from block for classroom.json. (The web Classroom
 // type doesn't type this field, so it rides through as an extra key on write.)

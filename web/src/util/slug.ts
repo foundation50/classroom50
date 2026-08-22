@@ -39,8 +39,7 @@ export function nextAvailableSlug(
   // Bounded defensively; a classroom never has thousands of same-stem slugs.
   for (let i = 0; i < 10000; i++) {
     const suffix = `-${n}`
-    // Trim the stem so stem+suffix stays within the cap; a trailing hyphen left
-    // by the trim is dropped so the result stays a valid slug.
+    // Trim the stem to leave room for the suffix; drop a hyphen the trim exposes.
     const room = SLUG_MAX_LEN - suffix.length
     const trimmedStem = stem.slice(0, room).replace(/-+$/g, "")
     const candidate = `${trimmedStem}${suffix}`

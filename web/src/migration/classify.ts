@@ -6,7 +6,7 @@
 
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
-import { SHORT_NAME_PATTERN } from "./translate"
+import { SHORT_NAME_PATTERN } from "@/util/shortName"
 import { splitFullName } from "@/util/repoFullName"
 import type {
   ClassroomAssignmentDetail,

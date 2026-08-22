@@ -85,15 +85,14 @@ const GitHubRepoNameMaxLen = 100
 const GitHubLoginMaxLen = 39
 
 // ComposedRepoNameOverflows reports whether the longest student-repo name a
-// classroom+assignment pair can produce — `<classroom>-<assignment>-<username>`
-// with a worst-case 39-char username and the two joining hyphens — exceeds
-// GitHub's repo-name limit. Both parts can be individually valid yet compose
-// past the ceiling (foundation50/classroom50#691); callers warn the teacher at
-// create time rather than letting every student's accept fail. Returns the
-// worst-case length alongside the boolean so the caller can report it.
+// classroom+assignment pair can produce — with a worst-case 39-char username —
+// exceeds GitHub's repo-name limit. Both parts can be individually valid yet
+// compose past the ceiling (foundation50/classroom50#691); callers warn the
+// teacher at create time rather than letting every student's accept fail. The
+// name shape is single-sourced through contract.AssignmentRepoPrefix so it can't
+// drift from the real one. Returns the worst-case length alongside the boolean.
 func ComposedRepoNameOverflows(classroom, slug string) (worstCase int, overflows bool) {
-	// classroom + "-" + slug + "-" + <=39-char username.
-	worstCase = len(classroom) + 1 + len(slug) + 1 + GitHubLoginMaxLen
+	worstCase = len(contract.AssignmentRepoPrefix(classroom, slug)) + GitHubLoginMaxLen
 	return worstCase, worstCase > GitHubRepoNameMaxLen
 }
 
