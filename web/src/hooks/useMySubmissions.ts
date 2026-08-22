@@ -30,6 +30,10 @@ export function useMySubmissions(
   // The active-mode submission-list read errored (tags in tag mode, pushes in
   // every-push). Callers fold this into their error branch.
   submissionListError: boolean
+  // The active-mode submission-list read is still in flight. Callers fold this
+  // into their loading gate so the page renders once, settled — not a
+  // "0 submissions" first paint that flips when the list lands.
+  submissionListLoading: boolean
 } {
   const isTagMode = options.mode === "tag"
 
@@ -40,7 +44,11 @@ export function useMySubmissions(
     error: releasesErrorObj,
   } = useGetSubmissionReleases(org, classroom, assignment, username)
 
-  const { data: tags, isError: tagsError } = useGetMyTaggedSubmissions(
+  const {
+    data: tags,
+    isError: tagsError,
+    isLoading: tagsLoading,
+  } = useGetMyTaggedSubmissions(
     isTagMode ? org : undefined,
     isTagMode ? classroom : undefined,
     isTagMode ? assignment : undefined,
@@ -48,7 +56,11 @@ export function useMySubmissions(
     options.submissionTags,
   )
 
-  const { data: pushes, isError: pushesError } = useGetMyPushSubmissions(
+  const {
+    data: pushes,
+    isError: pushesError,
+    isLoading: pushesLoading,
+  } = useGetMyPushSubmissions(
     isTagMode ? undefined : org,
     isTagMode ? undefined : classroom,
     isTagMode ? undefined : assignment,
@@ -63,6 +75,7 @@ export function useMySubmissions(
     releasesError,
     releasesErrorObj,
     submissionListError: isTagMode ? tagsError : pushesError,
+    submissionListLoading: isTagMode ? tagsLoading : pushesLoading,
   }
 }
 
