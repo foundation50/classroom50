@@ -39,6 +39,11 @@ vi.mock("@/hooks/useGetScores", () => ({
   default: (...a: unknown[]) => scores(...a),
 }))
 
+const orgRepos = vi.fn()
+vi.mock("@/hooks/useGetMyOrgRepos", () => ({
+  default: (...a: unknown[]) => orgRepos(...a),
+}))
+
 import AssignmentsTable from "./AssignmentsTable"
 
 const wrap = (ui: ReactNode) => {
@@ -63,6 +68,8 @@ const ratioText = () =>
 beforeEach(() => {
   scores.mockReset()
   scores.mockReturnValue({ data: { submissions: {}, detected: {} } })
+  orgRepos.mockReset()
+  orgRepos.mockReturnValue({ data: undefined })
 })
 
 afterEach(cleanup)
@@ -112,7 +119,7 @@ describe("AssignmentsTable submission denominator", () => {
     expect(ratioText()).toContain("0 / 0")
   })
 
-  it("leaves group assignments as a submitted count, no roster denominator", () => {
+  it("falls back to a bare submitted count while the org repo list loads", () => {
     scores.mockReturnValue({ data: { submissions: { hw1: [{}, {}] } } })
     wrap(
       <AssignmentsTable
@@ -124,6 +131,46 @@ describe("AssignmentsTable submission denominator", () => {
     )
     expect(ratioText()).toContain("assignments.table.groupsSubmitted")
     expect(ratioText()).not.toContain("/ 11")
+  })
+
+  it("uses existing group repos as the group denominator once repos load", () => {
+    scores.mockReturnValue({ data: { submissions: { hw1: [{}, {}] } } })
+    orgRepos.mockReturnValue({
+      data: [
+        { name: "cs101-hw1-team1" },
+        { name: "cs101-hw1-team2" },
+        { name: "cs101-hw1-team3" },
+        { name: "cs101-hw2-team1" }, // another assignment's repo — excluded
+      ],
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ mode: "group" })]}
+        studentCount={11}
+      />,
+    )
+    expect(ratioText()).toContain("2 / 3")
+    expect(document.querySelector("progress")).toBeTruthy()
+    expect(ratioText()).not.toContain("/ 11")
+  })
+
+  it("clamps the group ratio so a stale submission can't exceed the repo count", () => {
+    scores.mockReturnValue({ data: { submissions: { hw1: [{}, {}, {}] } } })
+    orgRepos.mockReturnValue({
+      data: [{ name: "cs101-hw1-team1" }, { name: "cs101-hw1-team2" }],
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ mode: "group" })]}
+        studentCount={11}
+      />,
+    )
+    expect(ratioText()).toContain("2 / 2")
+    expect(ratioText()).not.toContain("3 / 2")
   })
 })
 

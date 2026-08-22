@@ -11,6 +11,8 @@ import {
 } from "lucide-react"
 
 import useGetScores from "@/hooks/useGetScores"
+import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
+import { existingGroupRepos } from "@/pages/submissions/dashboard"
 import { isNoAutograderAssignment } from "@/domain/assignments/autogradingState"
 import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { Link } from "@tanstack/react-router"
@@ -53,7 +55,7 @@ const DeleteAssignmentButton = ({
           e.stopPropagation()
           setOpen(true)
         }}
-        className="text-error"
+        className="text-base-content/60 hover:text-error focus-visible:text-error"
         aria-label={t("assignments.table.deleteAria", {
           name: assignment.name || assignment.slug,
         })}
@@ -285,28 +287,44 @@ const LockAssignmentButton = ({
 const name = (assignment: Assignment): string =>
   assignment.name || assignment.slug
 
-// The Release Date cell. A released assignment (date set and passed) shows the
-// date in a neutral badge like Due date; an unreleased one is warning-toned
-// because it's hidden from students' lists until then (link-only accept),
-// which the tooltip explains. "Not set" is the common link-only default.
-const ReleaseDateBadge = ({ assignment }: { assignment: Assignment }) => {
+// The Release Date cell. Dates are data, not status, so a passed (released)
+// date renders as plain text like the Due date column; only the scheduled
+// state keeps a warning badge, because the assignment is hidden from students'
+// lists until then (link-only accept), which the tooltip explains. "Not set"
+// is the common link-only default, so it stays muted.
+const ReleaseDateCell = ({ assignment }: { assignment: Assignment }) => {
   const { t } = useTranslation()
   const releasesAt = assignment.available_from
-  const released = releasesAt ? isPastDue(releasesAt) : false
+  if (!releasesAt) {
+    return (
+      <span
+        className="whitespace-nowrap text-base-content/60 max-xl:text-xs xl:text-sm"
+        title={t("assignments.table.linkOnlyTitle")}
+      >
+        {t("assignments.table.releaseNotSet")}
+      </span>
+    )
+  }
+  if (isPastDue(releasesAt)) {
+    return (
+      <span
+        className="whitespace-nowrap max-xl:text-xs xl:text-sm"
+        title={formatDueDateTime(releasesAt)}
+      >
+        {formatDueDate(releasesAt)}
+      </span>
+    )
+  }
   return (
     <Badge
-      tone={released ? "neutral" : "warning"}
+      tone="warning"
       size="md"
-      className="max-xl:text-xs xl:text-sm whitespace-nowrap w-full"
-      title={released ? undefined : t("assignments.table.linkOnlyTitle")}
+      className="max-xl:text-xs xl:text-sm whitespace-nowrap"
+      title={t("assignments.table.linkOnlyTitle")}
     >
-      {releasesAt
-        ? released
-          ? formatDueDate(releasesAt)
-          : t("assignments.table.scheduled", {
-              date: formatDueDateTime(releasesAt),
-            })
-        : t("assignments.table.releaseNotSet")}
+      {t("assignments.table.scheduled", {
+        date: formatDueDateTime(releasesAt),
+      })}
     </Badge>
   )
 }
@@ -356,6 +374,12 @@ const AssignmentsTable = ({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { data: scoresData } = useGetScores(org, classroom)
+  // Org repo list, for the group-row denominator (accepted groups = group
+  // repos that exist). Shared react-query cache with the submissions page.
+  const { data: orgRepos } = useGetOrgRepos(org)
+  // Sibling slugs guard group-repo attribution against a slug-extending
+  // sibling ("hw1-bonus" under "hw1"); see existingGroupRepos.
+  const siblingSlugs = assignments?.map((a) => a.slug) ?? []
   const navigate = useNavigate()
   // Mutating row actions require both an unarchived classroom and author rights.
   const canMutate = !archived && canAuthor
@@ -365,7 +389,13 @@ const AssignmentsTable = ({
       key={loading ? "loading" : "loaded"}
       className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100"
     >
-      <table className="table" aria-busy={loading}>
+      {/* Default daisyUI row borders (base-content/5) are nearly invisible on
+          base-100, so rows blur together — strengthen the dividers and give
+          cells a bit more vertical padding for at-rest row separation. */}
+      <table
+        className="table [&_tr]:border-base-content/10 [&_tbody_td]:py-4"
+        aria-busy={loading}
+      >
         <caption className="sr-only">{t("assignments.table.caption")}</caption>
         <thead>
           <tr>
@@ -468,7 +498,7 @@ const AssignmentsTable = ({
                     })
                   }
                 >
-                  <ReleaseDateBadge assignment={assignment} />
+                  <ReleaseDateCell assignment={assignment} />
                 </td>
                 <td
                   onClick={() =>
@@ -478,15 +508,18 @@ const AssignmentsTable = ({
                     })
                   }
                 >
-                  <Badge
-                    tone="neutral"
-                    size="md"
-                    className="max-xl:text-xs xl:text-sm whitespace-nowrap w-full"
-                  >
-                    {assignment.due
-                      ? formatDueDate(assignment.due)
-                      : t("assignments.table.noDueDate")}
-                  </Badge>
+                  {assignment.due ? (
+                    <span
+                      className="whitespace-nowrap max-xl:text-xs xl:text-sm"
+                      title={formatDueDateTime(assignment.due)}
+                    >
+                      {formatDueDate(assignment.due)}
+                    </span>
+                  ) : (
+                    <span className="whitespace-nowrap text-base-content/60 max-xl:text-xs xl:text-sm">
+                      {t("assignments.table.noDueDate")}
+                    </span>
+                  )}
                 </td>
                 <td
                   onClick={() =>
@@ -536,14 +569,46 @@ const AssignmentsTable = ({
                       detectedRows?.length ?? 0,
                     )
 
-                    // Group assignments submit per-repo, not per-student, so a
-                    // roster denominator is meaningless — show the count.
+                    // Group assignments submit per-repo, not per-student, so
+                    // the denominator is the number of group repos that exist
+                    // (accepted groups), derived from the org repo list. Until
+                    // that list loads there's no denominator, so fall back to
+                    // the bare count rather than a false "N / 0".
                     if (assignment.mode === "group") {
+                      if (!orgRepos) {
+                        return (
+                          <span className="whitespace-nowrap">
+                            {t("assignments.table.groupsSubmitted", {
+                              count: submitted,
+                            })}
+                          </span>
+                        )
+                      }
+                      const groupCount = existingGroupRepos(
+                        orgRepos,
+                        classroom,
+                        assignment.slug,
+                        siblingSlugs,
+                      ).length
+                      // Same 100% clamp as the individual branch (KTD4): a
+                      // stale submission row for a deleted repo must not push
+                      // the ratio past the bar.
+                      const shownGroups = Math.min(submitted, groupCount)
                       return (
-                        <span className="whitespace-nowrap">
-                          {t("assignments.table.groupsSubmitted", {
-                            count: submitted,
-                          })}
+                        <span
+                          className="whitespace-nowrap"
+                          title={t("assignments.table.groupsRatioTitle")}
+                        >
+                          {shownGroups} / {groupCount}{" "}
+                          <progress
+                            className="progress progress-info w-56"
+                            value={
+                              groupCount === 0
+                                ? 0
+                                : (shownGroups / groupCount) * 100
+                            }
+                            max="100"
+                          ></progress>
                         </span>
                       )
                     }
