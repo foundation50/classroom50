@@ -9,7 +9,7 @@ import {
   generateSecret,
   isValidSecret,
 } from "@/util/secret"
-import { slugify } from "@/util/slug"
+import { nextAvailableSlug, slugify } from "@/util/slug"
 import {
   SHORT_NAME_PATTERN_DESCRIPTION,
   isValidShortName,
@@ -164,7 +164,18 @@ const CreateClassroomForm = ({
                   onBlur={field.handleBlur}
                   onChange={(e) => {
                     field.handleChange(e.target.value)
-                    form.setFieldValue("slug", slugify(e.target.value))
+                    // Auto-derive a slug that's already within the creation
+                    // cap and free among existing classrooms, so the teacher
+                    // isn't bounced by a submit-time error the form could
+                    // have avoided. Manual slug edits still re-validate.
+                    form.setFieldValue(
+                      "slug",
+                      nextAvailableSlug(
+                        slugify(e.target.value),
+                        classes.map((cl) => cl.path),
+                        CLASSROOM_SHORT_NAME_MAX_LEN,
+                      ),
+                    )
                   }}
                 />
               )}

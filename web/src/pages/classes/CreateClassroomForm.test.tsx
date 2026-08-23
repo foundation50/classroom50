@@ -121,4 +121,31 @@ describe("CreateClassroomForm slug validation", () => {
     await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     expect(onSubmit.mock.calls[0][0].slug).toBe("intro-cs")
   })
+
+  // The auto-derived slug is pre-fixed rather than left to fail at submit:
+  // trimmed to the 40-char creation cap and suffixed past existing classrooms.
+  it("auto-derives a slug trimmed to the creation cap", async () => {
+    const user = userEvent.setup()
+    const { container } = render(<CreateClassroomForm onSubmit={vi.fn()} />)
+
+    await user.type(
+      container.querySelector<HTMLInputElement>("#name")!,
+      "Introduction to Computer Science and Programming",
+    )
+    const derived = slugInput(container).value
+    expect(derived.length).toBeLessThanOrEqual(40)
+    expect(derived).toBe("introduction-to-computer-science-and-pro")
+  })
+
+  it("auto-derives a suffixed slug when the name collides with an existing classroom", async () => {
+    mockClasses = [{ name: "intro-cs", path: "intro-cs", type: "dir" }]
+    const user = userEvent.setup()
+    const { container } = render(<CreateClassroomForm onSubmit={vi.fn()} />)
+
+    await user.type(
+      container.querySelector<HTMLInputElement>("#name")!,
+      "Intro CS",
+    )
+    expect(slugInput(container).value).toBe("intro-cs-2")
+  })
 })
