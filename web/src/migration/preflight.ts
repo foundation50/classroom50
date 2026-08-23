@@ -10,7 +10,7 @@ import { GitHubAPIError } from "@/github-core/errors"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { classifyAssignment } from "./classify"
 import { fetchAssignmentsForClassroom, resolveSource } from "./classroomApi"
-import { deriveShortName } from "./translate"
+import { deriveShortName, resolveImportSlugs } from "./translate"
 import { assertValidShortName } from "@/util/shortName"
 import { CLASSROOM_SHORT_NAME_MAX_LEN } from "@/util/repoNameBudget"
 import { localizedError } from "@/types/localizedMessage"
@@ -29,6 +29,9 @@ export type BuildPreflightInput = {
   shortName?: string
   term?: string
   templateSuffix?: string
+  // Per-assignment import-slug overrides, keyed by SOURCE slug (from the
+  // confirm screen's per-item editor). Validated by resolveImportSlugs.
+  slugOverrides?: Record<string, string>
   includeArchived?: boolean
 }
 
@@ -116,7 +119,16 @@ export async function buildPreflight(
   const term = (input.term ?? "").trim()
   const name = input.name?.trim() ? input.name.trim() : classroom.name
 
-  const assignments = await fetchAssignmentsForClassroom(client, classroom.id)
+  const fetched = await fetchAssignmentsForClassroom(client, classroom.id)
+  // Resolve import slugs before anything is named after them: explicit
+  // overrides win; over-budget slugs auto-trim to the classroom's budget
+  // instead of being skipped (#691), mirroring the CLI. classify probes the
+  // final names, so targetName and every downstream consumer see them.
+  const { assignments, renames } = resolveImportSlugs(
+    fetched,
+    shortName,
+    input.slugOverrides,
+  )
   const items: MigrationItem[] = []
   for (const a of assignments) {
     items.push(
@@ -175,6 +187,7 @@ export async function buildPreflight(
     term,
     templateSuffix,
     items,
+    renames,
     counts,
     blockers,
   }

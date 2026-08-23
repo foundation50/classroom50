@@ -10,9 +10,19 @@ import {
   SHORT_NAME_PATTERN,
   SHORT_NAME_PATTERN_DESCRIPTION,
   assertValidShortName,
+  isValidShortName,
 } from "@/util/shortName"
-import { CLASSROOM_SHORT_NAME_MAX_LEN } from "@/util/repoNameBudget"
-import type { ClassroomAssignmentDetail, ClassroomDetail } from "./types"
+import {
+  CLASSROOM_SHORT_NAME_MAX_LEN,
+  assignmentSlugBudget,
+  composedRepoNameFits,
+} from "@/util/repoNameBudget"
+import { nextAvailableSlug } from "@/util/slug"
+import type {
+  ClassroomAssignmentDetail,
+  ClassroomDetail,
+  MigrationRename,
+} from "./types"
 
 // The only migrated_from.source value today.
 export const MIGRATE_SOURCE_GITHUB_CLASSROOM = "github_classroom"
@@ -32,6 +42,108 @@ export function clampMigratedGroupSize(maxTeams: number | null): number {
     maxTeams <= GROUP_SIZE_MAX
     ? maxTeams
     : GROUP_SIZE_MAX
+}
+
+// Rewrite each source assignment's slug to its import slug, mirroring the
+// CLI's resolveImportSlugs: an explicit override (from the confirm screen)
+// wins and is validated — pattern, composed repo-name budget, batch uniqueness
+// (#691); an over-budget slug auto-trims to the classroom's budget, suffixing
+// past batch collisions (the classroom directory is new, so the batch is the
+// whole collision set). A fitting slug imports verbatim; a pattern-invalid
+// slug is left untouched for classify's skip. Throws a localizedError on an
+// invalid override; auto-trims never throw (a capped short-name leaves >= 19
+// slug chars).
+export function resolveImportSlugs(
+  assignments: ClassroomAssignmentDetail[],
+  shortName: string,
+  overrides?: Record<string, string>,
+): { assignments: ClassroomAssignmentDetail[]; renames: MigrationRename[] } {
+  const sourceSlugs = new Set(assignments.map((a) => a.slug))
+  for (const from of Object.keys(overrides ?? {})) {
+    if (!sourceSlugs.has(from)) {
+      throw localizedError({
+        key: "migration.error.renameUnknown",
+        params: { slug: from },
+      })
+    }
+  }
+
+  const out = assignments.map((a) => ({ ...a }))
+  const renames: MigrationRename[] = []
+
+  // Final import slugs claimed so far (lowercased), seeding the auto-trim
+  // collision set. Verbatim keepers claim first so an override or a trim can
+  // never silently duplicate one regardless of item order.
+  const taken = new Set<string>()
+  const claim = (s: string) => taken.add(s.toLowerCase())
+
+  const needsTrim = (a: ClassroomAssignmentDetail): boolean => {
+    if (overrides?.[a.slug] !== undefined) return false
+    if (!SHORT_NAME_PATTERN.test(a.slug)) return false // classify skips it
+    return !composedRepoNameFits(shortName, a.slug).fits
+  }
+
+  for (const a of assignments) {
+    if (overrides?.[a.slug] === undefined && !needsTrim(a)) claim(a.slug)
+  }
+
+  // Explicit overrides (validated) claim next.
+  for (const [i, source] of assignments.entries()) {
+    const to = overrides?.[source.slug]
+    if (to === undefined) continue
+    if (!isValidShortName(to)) {
+      throw localizedError({
+        key: "migration.error.renameInvalid",
+        params: {
+          from: source.slug,
+          to,
+          description: SHORT_NAME_PATTERN_DESCRIPTION,
+        },
+      })
+    }
+    if (!composedRepoNameFits(shortName, to).fits) {
+      throw localizedError({
+        key: "migration.error.renameOverBudget",
+        params: {
+          from: source.slug,
+          to,
+          budget: assignmentSlugBudget(shortName),
+        },
+      })
+    }
+    if (taken.has(to.toLowerCase())) {
+      throw localizedError({
+        key: "migration.error.renameTaken",
+        params: { from: source.slug, to },
+      })
+    }
+    if (source.slug !== to) {
+      renames.push({ from: source.slug, to, explicit: true })
+    }
+    out[i].slug = to
+    claim(to)
+  }
+
+  // Auto-trim over-budget slugs around the claimed names, in plan order.
+  for (const [i, source] of assignments.entries()) {
+    if (overrides?.[source.slug] !== undefined || !needsTrim(source)) continue
+    const trimmed = nextAvailableSlug(
+      source.slug,
+      taken,
+      assignmentSlugBudget(shortName),
+    )
+    if (!trimmed) {
+      // Unreachable: a capped short-name leaves >= 19 slug characters.
+      throw new Error(
+        `could not derive an import slug for "${source.slug}" in "${shortName}"`,
+      )
+    }
+    renames.push({ from: source.slug, to: trimmed, explicit: false })
+    out[i].slug = trimmed
+    claim(trimmed)
+  }
+
+  return { assignments: out, renames }
 }
 
 // classroom-level migrated_from block for classroom.json. (The web Classroom

@@ -7,6 +7,7 @@ import {
   classroomMigratedFrom,
   deriveShortName,
   migratedDueFields,
+  resolveImportSlugs,
 } from "./translate"
 
 const AT = new Date("2026-07-29T10:00:00Z")
@@ -33,6 +34,95 @@ const detail = (
 })
 
 const target = { owner: "dst", repo: "hw1", branch: "main" }
+
+// Mirrors the CLI's TestResolveImportSlugs: "cs" leaves a 57-char budget
+// (59 - 2), so a 58-char slug must trim.
+describe("resolveImportSlugs", () => {
+  const long = "s".repeat(58)
+  const slugs = (out: ClassroomAssignmentDetail[]) => out.map((a) => a.slug)
+
+  it("imports fitting slugs verbatim with no renames", () => {
+    const { assignments, renames } = resolveImportSlugs(
+      [detail({ slug: "hw1" }), detail({ id: 2, slug: "hw2" })],
+      "cs",
+    )
+    expect(slugs(assignments)).toEqual(["hw1", "hw2"])
+    expect(renames).toEqual([])
+  })
+
+  it("auto-trims an over-budget slug to the budget", () => {
+    const { assignments, renames } = resolveImportSlugs(
+      [detail({ slug: long })],
+      "cs",
+    )
+    expect(slugs(assignments)).toEqual(["s".repeat(57)])
+    expect(renames).toEqual([
+      { from: long, to: "s".repeat(57), explicit: false },
+    ])
+  })
+
+  it("suffixes same-prefix trims apart", () => {
+    const { assignments } = resolveImportSlugs(
+      [detail({ slug: long }), detail({ id: 2, slug: "s".repeat(59) })],
+      "cs",
+    )
+    expect(slugs(assignments)).toEqual(["s".repeat(57), "s".repeat(55) + "-2"])
+  })
+
+  it("trims around a verbatim keeper, regardless of order", () => {
+    const keeper = "s".repeat(57)
+    const { assignments } = resolveImportSlugs(
+      [detail({ slug: long }), detail({ id: 2, slug: keeper })],
+      "cs",
+    )
+    expect(slugs(assignments)).toEqual(["s".repeat(55) + "-2", keeper])
+  })
+
+  it("applies an explicit override, reported explicit", () => {
+    const { assignments, renames } = resolveImportSlugs(
+      [detail({ slug: long })],
+      "cs",
+      { [long]: "hw1" },
+    )
+    expect(slugs(assignments)).toEqual(["hw1"])
+    expect(renames).toEqual([{ from: long, to: "hw1", explicit: true }])
+  })
+
+  it("rejects an override for an unknown source slug", () => {
+    expect(() => resolveImportSlugs([detail()], "cs", { nope: "hw2" })).toThrow(
+      /renameUnknown/,
+    )
+  })
+
+  it("rejects a pattern-invalid override", () => {
+    expect(() =>
+      resolveImportSlugs([detail()], "cs", { hw1: "Bad Slug" }),
+    ).toThrow(/renameInvalid/)
+  })
+
+  it("rejects an over-budget override", () => {
+    expect(() => resolveImportSlugs([detail()], "cs", { hw1: long })).toThrow(
+      /renameOverBudget/,
+    )
+  })
+
+  it("rejects an override colliding with a verbatim keeper", () => {
+    expect(() =>
+      resolveImportSlugs([detail(), detail({ id: 2, slug: "hw2" })], "cs", {
+        hw1: "hw2",
+      }),
+    ).toThrow(/renameTaken/)
+  })
+
+  it("leaves a pattern-invalid source slug for classify's skip", () => {
+    const { assignments, renames } = resolveImportSlugs(
+      [detail({ slug: "Bad Slug" })],
+      "cs",
+    )
+    expect(slugs(assignments)).toEqual(["Bad Slug"])
+    expect(renames).toEqual([])
+  })
+})
 
 describe("deriveShortName", () => {
   it("slugifies a free-form name", () => {

@@ -37,6 +37,12 @@ import {
 import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import { useMigrateClassroom } from "@/hooks/mutations/useMigrateClassroom"
 import { buildPreflight } from "@/migration/preflight"
+import { slugify } from "@/util/slug"
+import {
+  isValidShortName,
+  SHORT_NAME_PATTERN_DESCRIPTION,
+} from "@/util/shortName"
+import { slugBudgetError } from "@/pages/assignments/assignmentFormModel"
 import type {
   ClassroomWithOrg,
   MigrationItemStatus,
@@ -80,6 +86,13 @@ export const ConfirmStep = ({
   const [templateSuffix, setTemplateSuffix] = useState("")
   // Assignment ids the teacher unchecked (importable items default to checked).
   const [deselected, setDeselected] = useState<Set<number>>(new Set())
+  // Per-item import-slug edits (raw field values plus the stable SOURCE slug,
+  // captured at first edit), keyed by assignment id. Only pattern-valid
+  // normalized values feed the preflight; an invalid edit shows inline and
+  // blocks Import without breaking the plan.
+  const [slugEdits, setSlugEdits] = useState<
+    Record<number, { sourceSlug: string; raw: string }>
+  >({})
   // The irreversibility confirmation modal, opened by the Import button.
   const [showConfirm, setShowConfirm] = useState(false)
   // Live per-item status while the import runs (keyed by slug).
@@ -105,6 +118,26 @@ export const ConfirmStep = ({
   const debouncedShortName = useDebouncedValue(shortName, 500)
   const debouncedSuffix = useDebouncedValue(templateSuffix, 500)
 
+  // Serialize the pattern-valid slug overrides for the preflight (keyed by
+  // SOURCE slug). Pattern-invalid or no-op edits stay out — they get an inline
+  // error below without breaking the plan; budget/uniqueness are re-validated
+  // authoritatively by resolveImportSlugs inside the preflight.
+  const overridesKey = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const edit of Object.values(slugEdits)) {
+      const normalized = slugify(edit.raw)
+      if (!normalized || normalized === edit.sourceSlug) continue
+      if (!isValidShortName(normalized)) continue
+      map[edit.sourceSlug] = normalized
+    }
+    return JSON.stringify(
+      Object.fromEntries(
+        Object.entries(map).sort(([a], [b]) => a.localeCompare(b)),
+      ),
+    )
+  }, [slugEdits])
+  const debouncedOverridesKey = useDebouncedValue(overridesKey, 500)
+
   const {
     data: plan,
     isLoading,
@@ -120,6 +153,7 @@ export const ConfirmStep = ({
       targetOrg,
       debouncedShortName ?? "",
       debouncedSuffix,
+      debouncedOverridesKey,
     ],
     queryFn: () =>
       buildPreflight(client, {
@@ -127,6 +161,10 @@ export const ConfirmStep = ({
         targetOrg,
         shortName: debouncedShortName,
         templateSuffix: debouncedSuffix,
+        slugOverrides: JSON.parse(debouncedOverridesKey) as Record<
+          string,
+          string
+        >,
       }),
     placeholderData: keepPreviousData,
     staleTime: 0,
@@ -141,9 +179,56 @@ export const ConfirmStep = ({
 
   // True while the debounce timer hasn't caught up to the latest input.
   const pendingEdit =
-    debouncedShortName !== shortName || debouncedSuffix !== templateSuffix
+    debouncedShortName !== shortName ||
+    debouncedSuffix !== templateSuffix ||
+    debouncedOverridesKey !== overridesKey
 
   const blocked = (plan?.blockers.length ?? 0) > 0
+
+  // Import-slug rewrites by FINAL slug, for the card annotations and for
+  // recovering an item's source slug when an edit starts.
+  const renameByFinal = useMemo(
+    () => new Map((plan?.renames ?? []).map((r) => [r.to, r] as const)),
+    [plan],
+  )
+
+  // Per-item inline validation for pending slug edits, against the CURRENT
+  // plan; resolveImportSlugs re-validates authoritatively inside preflight.
+  const slugErrors = useMemo(() => {
+    const errors: Record<number, string> = {}
+    if (!plan) return errors
+    for (const item of plan.items) {
+      const edit = slugEdits[item.assignment.id]
+      if (!edit) continue
+      const normalized = slugify(edit.raw)
+      if (!normalized || normalized === edit.sourceSlug) continue
+      if (!isValidShortName(normalized)) {
+        errors[item.assignment.id] = t(
+          "assignments.form.validation.slugInvalid",
+          { description: SHORT_NAME_PATTERN_DESCRIPTION },
+        )
+        continue
+      }
+      const budgetError = slugBudgetError(t, plan.shortName, normalized)
+      if (budgetError) {
+        errors[item.assignment.id] = budgetError
+        continue
+      }
+      if (
+        plan.items.some(
+          (other) =>
+            other.assignment.id !== item.assignment.id &&
+            other.assignment.slug.toLowerCase() === normalized.toLowerCase(),
+        )
+      ) {
+        errors[item.assignment.id] = t("validation.assignmentSlugTaken", {
+          slug: normalized,
+        })
+      }
+    }
+    return errors
+  }, [plan, slugEdits, t])
+  const hasInvalidSlugEdit = Object.keys(slugErrors).length > 0
 
   const orgAccessBlocker = plan?.blockers.find(
     (b) => b.kind === "source_org_access",
@@ -217,7 +302,9 @@ export const ConfirmStep = ({
     !blocked &&
     !isLoading &&
     !isFetching &&
+    !isError &&
     !pendingEdit &&
+    !hasInvalidSlugEdit &&
     !running &&
     !done &&
     selectedCount > 0
@@ -489,6 +576,17 @@ export const ConfirmStep = ({
               </Alert>
             )}
 
+            {/* A preflight refetch failure with a previous plan still shown
+                (e.g. an override resolveImportSlugs rejected): surface it
+                inline — the stale plan stays visible but Import is disabled. */}
+            {isError && !controlsDisabled && (
+              <Alert tone="error" className="mt-4 items-start">
+                <span className="text-sm">
+                  {renderError(error, "migration.confirm.preflightError")}
+                </span>
+              </Alert>
+            )}
+
             {/* Non-org-access blockers (e.g. the class name already exists). */}
             {!controlsDisabled &&
               effectivePlan.blockers.map((b) => (
@@ -552,6 +650,8 @@ export const ConfirmStep = ({
                 const selected =
                   !planSkip && !deselected.has(item.assignment.id)
                 const status = (live?.status ?? item.action) as ItemVisualStatus
+                const rename = renameByFinal.get(item.assignment.slug)
+                const edit = slugEdits[item.assignment.id]
                 return (
                   <li key={item.assignment.id}>
                     <MigrationItemCard
@@ -565,6 +665,27 @@ export const ConfirmStep = ({
                       selectable={selectable}
                       selected={selected}
                       onToggle={() => toggleItem(item.assignment.id)}
+                      renamedFrom={rename}
+                      slugEditValue={edit?.raw ?? item.assignment.slug}
+                      onSlugEdit={
+                        selectable
+                          ? (value) =>
+                              setSlugEdits((prev) => ({
+                                ...prev,
+                                [item.assignment.id]: {
+                                  // The source slug is stable: keep the one
+                                  // captured at first edit, else recover it
+                                  // from the plan's rename record.
+                                  sourceSlug:
+                                    prev[item.assignment.id]?.sourceSlug ??
+                                    rename?.from ??
+                                    item.assignment.slug,
+                                  raw: value,
+                                },
+                              }))
+                          : undefined
+                      }
+                      slugError={slugErrors[item.assignment.id]}
                     />
                   </li>
                 )
