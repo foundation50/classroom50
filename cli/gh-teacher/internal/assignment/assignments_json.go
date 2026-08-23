@@ -182,6 +182,16 @@ type AssignmentEntry struct {
 	RepoFeatures       *RepoFeatures    `json:"repo_features,omitempty"`
 	MigratedFrom       *MigratedFromRef `json:"migrated_from,omitempty"`
 
+	// RenamedFrom is the assignment's PREVIOUS slug, recorded by the one-shot
+	// slug rename (offered only to remediate an over-budget composed repo
+	// name; a renamed assignment can't be renamed again, so this is a single
+	// slug, never a chain). Collection grandfathers historical result.json
+	// payloads carrying it, and the value is RESERVED within the classroom —
+	// a new assignment at an old name would sever GitHub's rename redirects
+	// for every student clone. Mirrored in the assignments-v1 schema and the
+	// web Assignment type.
+	RenamedFrom string `json:"renamed_from,omitempty"`
+
 	// Extra holds unknown top-level entry keys, re-emitted verbatim so a
 	// read-modify-write never drops a field a newer binary/GUI added.
 	// Merged in/out by the custom (Un)MarshalJSON below.
@@ -196,6 +206,7 @@ var knownEntryKeys = map[string]struct{}{
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
 	"locked": {}, "closed": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
+	"renamed_from":       {},
 	"student_permission": {}, "submission_mode": {}, "submission_tags": {},
 	"no_autograder":        {},
 	"init_shim":            {},
@@ -789,6 +800,20 @@ func SlugExistsFold(entries []AssignmentEntry, slug string) bool {
 	return false
 }
 
+// SlugReservedFold reports whether `slug` matches any entry's renamed_from
+// (case-insensitively), returning the reserving entry's CURRENT slug. A
+// reserved slug must never be reused: a new assignment there would mint repos
+// at renamed student repos' old names, permanently severing GitHub's automatic
+// redirects for every student clone.
+func SlugReservedFold(entries []AssignmentEntry, slug string) (currentSlug string, reserved bool) {
+	for i := range entries {
+		if entries[i].RenamedFrom != "" && strings.EqualFold(entries[i].RenamedFrom, slug) {
+			return entries[i].Slug, true
+		}
+	}
+	return "", false
+}
+
 // slugMaxLen is the max slug length validate.ShortName accepts (100 chars).
 // Duplicated here (not imported) so the pure data layer stays free of the
 // command seam.
@@ -807,15 +832,23 @@ func trimSlugTo(s string, n int) string {
 	return strings.TrimRight(s, "-")
 }
 
-// NextAvailableSlug returns a slug within maxLen that doesn't collide
-// (case-insensitively): the base is trimmed to maxLen, and a collision
-// auto-suffixes `-2`, `-3`, … with the stem re-trimmed so the candidate stays
-// within maxLen; a base already ending in `-N` increments from N+1. Callers
-// pass the target classroom's composed repo-name budget (#691) — or slugMaxLen
-// when unconstrained; anything larger clamps to the pattern cap. Mirrors the
-// web's nextAvailableSlug so both tools derive the same copy names. Errors
-// only when maxLen can't fit ShortName's 2-char minimum.
+// NextAvailableSlug returns a slug within maxLen that doesn't collide with an
+// existing slug OR a reserved renamed_from (case-insensitively): the base is
+// trimmed to maxLen, and a collision auto-suffixes `-2`, `-3`, … with the stem
+// re-trimmed so the candidate stays within maxLen; a base already ending in
+// `-N` increments from N+1. Callers pass the target classroom's composed
+// repo-name budget (#691) — or slugMaxLen when unconstrained; anything larger
+// clamps to the pattern cap. Mirrors the web's nextAvailableSlug so both tools
+// derive the same copy names. Errors only when maxLen can't fit ShortName's
+// 2-char minimum.
 func NextAvailableSlug(entries []AssignmentEntry, slug string, maxLen int) (string, error) {
+	taken := func(candidate string) bool {
+		if SlugExistsFold(entries, candidate) {
+			return true
+		}
+		_, reserved := SlugReservedFold(entries, candidate)
+		return reserved
+	}
 	if maxLen > slugMaxLen {
 		maxLen = slugMaxLen
 	}
@@ -830,7 +863,7 @@ func NextAvailableSlug(entries []AssignmentEntry, slug string, maxLen int) (stri
 		return "", fmt.Errorf("cannot derive a slug for %q within the %d-character budget (trimming leaves less than the 2-character minimum) — pass an explicit, shorter --slug",
 			slug, maxLen)
 	}
-	if !SlugExistsFold(entries, base) {
+	if !taken(base) {
 		return base, nil
 	}
 	stem := base
@@ -905,6 +938,17 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	}
 	if err := validateAvailableFromFields(entry); err != nil {
 		return err
+	}
+	// renamed_from is written only by the one-shot slug rename; a set value
+	// must be a valid slug distinct from the current one, or the reservation
+	// and collection-grandfather contracts it feeds become unenforceable.
+	if entry.RenamedFrom != "" {
+		if err := validate.ShortName(entry.RenamedFrom, "renamed_from"); err != nil {
+			return err
+		}
+		if strings.EqualFold(entry.RenamedFrom, entry.Slug) {
+			return fmt.Errorf("renamed_from %q must differ from the slug", entry.RenamedFrom)
+		}
 	}
 	if entry.Autograder == "" {
 		return fmt.Errorf("autograder must not be empty (default is %q)", contract.DefaultAutograderName)

@@ -1011,6 +1011,15 @@ def collect_classroom(
         assignment_type = "group" if is_group else "individual"
         collected[slug] = assignment_type
 
+        # One-shot pre-rename slug (see validate_result): a non-string or empty
+        # value reads as absent, matching the additive-schema tolerance rule.
+        raw_renamed_from = entry.get("renamed_from")
+        renamed_from = (
+            raw_renamed_from
+            if isinstance(raw_renamed_from, str) and raw_renamed_from
+            else None
+        )
+
         submitted = 0
         # Staff (non-student-team) members who actually submitted this
         # assignment. They count toward the "X of Y" denominator only when they
@@ -1085,7 +1094,14 @@ def collect_classroom(
                 # a mode-flipped or mis-typed result is rejected here — no
                 # separate assignment_type cross-check needed afterward.
                 try:
-                    validate_result(candidate, classroom_short, slug, username, is_group=is_group)
+                    validate_result(
+                        candidate,
+                        classroom_short,
+                        slug,
+                        username,
+                        is_group=is_group,
+                        renamed_from=renamed_from,
+                    )
                 except ValueError as exc:
                     emit_warning(
                         f"{org}/{repo_name}: invalid result.json for "
@@ -1903,6 +1919,7 @@ def validate_result(
     expected_username: str,
     *,
     is_group: bool = False,
+    renamed_from: str | None = None,
 ) -> None:
     """Raise ValueError if the payload fails the v1 contract. The
     classroom/assignment/owner checks defend against a hostile result.json
@@ -1914,6 +1931,11 @@ def validate_result(
     "individual"/"group" and match the mode implied by `is_group`. No
     `usernames` field: who pushed is `submitted_by`; the credited member list
     is resolved by collection after this check.
+
+    `renamed_from` is the manifest entry's pre-rename slug (one-shot, so a
+    single value): a historical release published before the rename carries it
+    in the immutable result.json, and is accepted so old grades survive the
+    rename. Exactly that value — never an arbitrary third slug.
     """
     if not isinstance(payload, dict):
         raise ValueError(f"top-level value must be an object, got {type(payload).__name__}")
@@ -1925,8 +1947,13 @@ def validate_result(
         raise ValueError(f"classroom = {classroom!r}, want {expected_classroom!r}")
 
     assignment = payload.get("assignment")
-    if assignment != expected_assignment:
-        raise ValueError(f"assignment = {assignment!r}, want {expected_assignment!r}")
+    if assignment != expected_assignment and (
+        renamed_from is None or assignment != renamed_from
+    ):
+        want = repr(expected_assignment)
+        if renamed_from is not None:
+            want += f" (or pre-rename {renamed_from!r})"
+        raise ValueError(f"assignment = {assignment!r}, want {want}")
 
     owner = payload.get("owner")
     if not isinstance(owner, str) or not owner:

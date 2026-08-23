@@ -23,6 +23,9 @@ type UseReuseAssignmentParams = {
   source: Assignment | null
   // Existing slugs in the target, for the auto-suffix + collision check.
   takenSlugs: string[]
+  // Pre-rename slugs (Assignment.renamed_from) reserved in the target; the
+  // auto-suffix dodges them and a manual match is blocked.
+  reservedSlugs: string[]
   // Blocks submit while the target's assignments load, so a collision can't be
   // missed against an empty taken-set.
   takenLoading: boolean
@@ -40,6 +43,7 @@ export function useReuseAssignment({
   targetClassroom,
   source,
   takenSlugs,
+  reservedSlugs,
   takenLoading,
   closeDialog,
 }: UseReuseAssignmentParams) {
@@ -58,14 +62,18 @@ export function useReuseAssignment({
   const slugBudget = assignmentSlugBudget(targetClassroom)
 
   // Auto-suffixed default ("hw1" -> "hw1-2" if taken), trimmed to the target's
-  // budget. Derived, not state, so it stays correct as the target's
-  // assignments load.
+  // budget and dodging reserved pre-rename slugs. Derived, not state, so it
+  // stays correct as the target's assignments load.
   const autoSlug = useMemo(
     () =>
       source
-        ? nextAvailableSlug(slugify(source.slug), takenSlugs, slugBudget)
+        ? nextAvailableSlug(
+            slugify(source.slug),
+            [...takenSlugs, ...reservedSlugs],
+            slugBudget,
+          )
         : "",
-    [source, takenSlugs, slugBudget],
+    [source, takenSlugs, reservedSlugs, slugBudget],
   )
 
   // Default until the teacher edits; `normalizedSlug` is what gets saved.
@@ -82,6 +90,14 @@ export function useReuseAssignment({
     const lower = normalizedSlug.toLowerCase()
     return takenSlugs.some((s) => s.trim().toLowerCase() === lower)
   }, [normalizedSlug, takenSlugs])
+
+  // A renamed assignment's old slug is reserved: a new assignment there would
+  // sever GitHub's redirects for its renamed student repos.
+  const slugReserved = useMemo(() => {
+    if (!normalizedSlug) return false
+    const lower = normalizedSlug.toLowerCase()
+    return reservedSlugs.some((s) => s.trim().toLowerCase() === lower)
+  }, [normalizedSlug, reservedSlugs])
 
   // Synchronous re-entrancy guard: reuse.isPending updates a tick late, so a
   // rapid double-click could start two overlapping copy commits.
@@ -124,6 +140,7 @@ export function useReuseAssignment({
     Boolean(targetClassroom) &&
     Boolean(normalizedSlug) &&
     !slugTaken &&
+    !slugReserved &&
     !slugOverBudget &&
     !takenLoading &&
     !reuse.isPending
@@ -153,6 +170,7 @@ export function useReuseAssignment({
     normalizedSlug,
     slugTouched,
     slugTaken,
+    slugReserved,
     slugOverBudget,
     slugBudget,
     warning,

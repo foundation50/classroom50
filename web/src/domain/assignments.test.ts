@@ -467,6 +467,9 @@ describe("editAssignment (preserved-entry integration)", () => {
       original_slug: "hw1-old",
       migrated_at: "2026-01-02T03:04:05Z",
     },
+    // Slug-rename provenance: carries the reservation + collection-grandfather
+    // contracts, so an edit must ride it through untouched like migrated_from.
+    renamed_from: "homework-one-with-a-legacy-slug",
   }
 
   // Route-table GitHubClient covering exactly the endpoints editAssignment hits
@@ -584,6 +587,9 @@ describe("editAssignment (preserved-entry integration)", () => {
 
     // Unmanaged CLI field rides through the read-modify-write.
     expect(edited.migrated_from).toEqual(existingEntry.migrated_from)
+    // Rename provenance likewise: dropping it would erase the slug
+    // reservation and the collection grandfather rule.
+    expect(edited.renamed_from).toBe(existingEntry.renamed_from)
     // Managed edit wins.
     expect(edited.name).toBe("Homework 1 (edited)")
     // Cleared managed key is not resurrected from the stale existing entry.

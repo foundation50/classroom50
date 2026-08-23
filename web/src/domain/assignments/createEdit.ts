@@ -138,6 +138,9 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   // Written only by the CLI's `migrate`; the form never rebuilds it, so it must
   // ride through a GUI edit untouched.
   migrated_from: "preserved",
+  // Written only by the one-shot slug rename; carries the reservation and
+  // collection-grandfather contracts, so an edit must never drop it.
+  renamed_from: "preserved",
   // Owned by the separate lock/unlock action (useSetAssignmentLock), never the
   // create/edit form, so an edit must preserve it verbatim — otherwise saving
   // an edit would silently unlock a locked assignment.

@@ -4,6 +4,7 @@ import { Trans, useTranslation } from "react-i18next"
 import useGetClasses from "@/hooks/useGetClasses"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import type { Assignment } from "@/types/classroom"
+import { renamedFromSlugs } from "@/types/classroom"
 import { useReuseAssignment } from "@/hooks/mutations/useReuseAssignment"
 import {
   ReuseModalShell,
@@ -51,12 +52,17 @@ export const ReuseAssignmentModal = ({
     () => (targetData?.assignments ?? []).map((a) => a.slug),
     [targetData],
   )
+  const reservedSlugs = useMemo(
+    () => renamedFromSlugs(targetData?.assignments ?? []),
+    [targetData],
+  )
 
   const reuse = useReuseAssignment({
     org,
     targetClassroom,
     source: assignment,
     takenSlugs,
+    reservedSlugs,
     takenLoading: targetLoading,
     closeDialog: () => dialogRef.current?.close(),
   })
@@ -132,6 +138,7 @@ export const ReuseAssignmentModal = ({
                   loading: targetLoading,
                   error: targetError,
                   slugTaken: reuse.slugTaken,
+                  slugReserved: reuse.slugReserved,
                   slugOverBudget: reuse.slugOverBudget,
                   slugBudget: reuse.slugBudget,
                   slugTouched: reuse.slugTouched,
@@ -144,7 +151,7 @@ export const ReuseAssignmentModal = ({
               <FormField
                 label={t("components.modals.reuseAssignment.slugLabel")}
                 error={
-                  reuse.slugTaken || reuse.slugOverBudget
+                  reuse.slugTaken || reuse.slugReserved || reuse.slugOverBudget
                     ? slugStatus
                     : undefined
                 }

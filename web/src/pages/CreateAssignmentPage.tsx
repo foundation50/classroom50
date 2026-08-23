@@ -18,6 +18,7 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import { useTrackPublishDeploy } from "@/hooks/useTrackPublishDeploy"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
+import { renamedFromSlugs } from "@/types/classroom"
 import { logger } from "@/lib/logger"
 import { logWriteFailure } from "@/lib/logWriteFailure"
 import { useOutageHint } from "@/lib/githubHealth"
@@ -52,6 +53,7 @@ const CreateAssignmentPage = () => {
 
   const { data: assignmentsData } = useGetClassroomAssignments(org, classroom)
   const takenSlugs = (assignmentsData?.assignments ?? []).map((a) => a.slug)
+  const reservedSlugs = renamedFromSlugs(assignmentsData?.assignments ?? [])
 
   const emptyRoster = useEmptyRosterWarning(org, classroom)
 
@@ -113,6 +115,7 @@ const CreateAssignmentPage = () => {
           org={org}
           classroom={classroom}
           takenSlugs={takenSlugs}
+          reservedSlugs={reservedSlugs}
           onSubmit={(values) => {
             // Hide the alert but keep its content frozen for the exit collapse;
             // the next failure (if any) replaces the content when it re-shows.

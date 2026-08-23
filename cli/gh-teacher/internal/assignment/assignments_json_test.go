@@ -1788,6 +1788,92 @@ func TestValidateAssignmentEntry_DueMeta(t *testing.T) {
 	})
 }
 
+// TestSlugReservedFold pins the renamed_from reservation lookup: a pre-rename
+// slug matches case-insensitively and reports the reserving entry's CURRENT
+// slug; current slugs and absent renamed_from never reserve anything.
+func TestSlugReservedFold(t *testing.T) {
+	entries := []AssignmentEntry{
+		{Slug: "hw1"},
+		{Slug: "ps3", RenamedFrom: "problem-set-three-with-a-long-slug"},
+	}
+	current, reserved := SlugReservedFold(entries, "Problem-Set-Three-With-A-Long-Slug")
+	if !reserved || current != "ps3" {
+		t.Errorf("SlugReservedFold = (%q,%t), want (ps3,true)", current, reserved)
+	}
+	if _, reserved := SlugReservedFold(entries, "hw1"); reserved {
+		t.Error("a current slug must not read as reserved")
+	}
+	if _, reserved := SlugReservedFold(entries, "ps3"); reserved {
+		t.Error("the renaming entry's own slug must not read as reserved")
+	}
+}
+
+// TestNextAvailableSlug_SkipsReserved: the auto-derive treats a renamed_from
+// value as taken, so a copy can't silently land on a reserved old name.
+func TestNextAvailableSlug_SkipsReserved(t *testing.T) {
+	entries := []AssignmentEntry{{Slug: "ps3", RenamedFrom: "hello"}}
+	got, err := NextAvailableSlug(entries, "hello", slugMaxLen)
+	if err != nil {
+		t.Fatalf("NextAvailableSlug: %v", err)
+	}
+	if got != "hello-2" {
+		t.Errorf("NextAvailableSlug = %q, want %q (reserved base suffixed past)", got, "hello-2")
+	}
+}
+
+// TestAssignmentEntryRenamedFromRoundTrip: the field survives an
+// encode/decode cycle as a known key (not Extra), and write-path validation
+// rejects a malformed or self-referential value.
+func TestAssignmentEntryRenamedFromRoundTrip(t *testing.T) {
+	file := AssignmentsJSON{
+		Schema: contract.AssignmentsSchemaV1,
+		Assignments: []AssignmentEntry{{
+			Slug:        "ps3",
+			Name:        "PS3",
+			Mode:        ModeIndividual,
+			Autograder:  "default",
+			RenamedFrom: "problem-set-three",
+		}},
+	}
+	data, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	parsed, err := ParseAssignments(data)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	got := parsed.Assignments[0]
+	if got.RenamedFrom != "problem-set-three" {
+		t.Errorf("RenamedFrom = %q, want %q", got.RenamedFrom, "problem-set-three")
+	}
+	if _, inExtra := got.Extra["renamed_from"]; inExtra {
+		t.Error("renamed_from must decode onto the struct, not Extra")
+	}
+}
+
+func TestValidateAssignmentEntry_RenamedFrom(t *testing.T) {
+	base := AssignmentEntry{Slug: "ps3", Name: "PS3", Mode: ModeIndividual, Autograder: "default"}
+
+	ok := base
+	ok.RenamedFrom = "problem-set-three"
+	if err := ValidateAssignmentEntry(ok); err != nil {
+		t.Errorf("a valid renamed_from must pass, got %v", err)
+	}
+
+	bad := base
+	bad.RenamedFrom = "Bad Slug"
+	if err := ValidateAssignmentEntry(bad); err == nil {
+		t.Error("a pattern-invalid renamed_from must fail")
+	}
+
+	self := base
+	self.RenamedFrom = "ps3"
+	if err := ValidateAssignmentEntry(self); err == nil || !strings.Contains(err.Error(), "differ") {
+		t.Errorf("a self-referential renamed_from must fail, got %v", err)
+	}
+}
+
 func entriesWithSlugs(slugs ...string) []AssignmentEntry {
 	out := make([]AssignmentEntry, len(slugs))
 	for i, s := range slugs {
