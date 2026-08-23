@@ -189,9 +189,9 @@ const CreateClassroomForm = ({
               field.state.meta.errors.length > 0
                 ? field.state.meta.errors[0]
                 : undefined
-            // Live cap check (#691) so a manual override warns as-you-type
-            // rather than only at submit. The submit validator stays
-            // authoritative (pattern, collision, cap).
+            // Live cap + collision checks (#691) so a manual override warns
+            // as-you-type rather than only at submit. The submit validator
+            // stays authoritative (pattern, cap, collision).
             const liveSlug = slugify(field.state.value)
             const liveError =
               liveSlug.length > CLASSROOM_SHORT_NAME_MAX_LEN
@@ -200,7 +200,12 @@ const CreateClassroomForm = ({
                     max: CLASSROOM_SHORT_NAME_MAX_LEN,
                     limit: GITHUB_REPO_NAME_MAX_LEN,
                   })
-                : undefined
+                : liveSlug &&
+                    classes.some(
+                      (cl) => cl.path.toLowerCase() === liveSlug.toLowerCase(),
+                    )
+                  ? t("validation.classroomSlugTaken")
+                  : undefined
             return (
               <FormField
                 label={t("classes.form.slug")}

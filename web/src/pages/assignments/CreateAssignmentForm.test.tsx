@@ -226,6 +226,19 @@ describe("assignment slug field", () => {
     ).toBeNull()
   })
 
+  // Collisions warn live too, case-insensitively against the taken set.
+  it("create: warns live when a manual slug collides with an existing assignment", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm(
+      <CreateAssignmentForm takenSlugs={["loops"]} onSubmit={() => {}} />,
+    )
+    await user.click(slugInput(container))
+    await user.paste("Loops")
+    expect(screen.getByText("validation.assignmentSlugTaken")).not.toBeNull()
+    await user.type(slugInput(container), "x")
+    expect(screen.queryByText("validation.assignmentSlugTaken")).toBeNull()
+  })
+
   it("create: blurring an emptied slug restores a unique name-derived default", async () => {
     const user = userEvent.setup()
     const { container } = renderForm(

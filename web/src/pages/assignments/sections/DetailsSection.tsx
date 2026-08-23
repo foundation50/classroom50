@@ -95,22 +95,31 @@ export function DetailsSection({
               !edit && field.state.meta.errors.length > 0
                 ? String(field.state.meta.errors[0])
                 : undefined
-            // Live budget check (#691) so a manual override warns as-you-type
-            // rather than only at submit (which stays authoritative). The
-            // auto-fill is already budget-bounded, so this fires only on a
-            // deliberate over-long slug.
+            // Live budget + collision checks (#691) so a manual override warns
+            // as-you-type rather than only at submit (which stays
+            // authoritative). The auto-fill is already budget-bounded and
+            // collision-suffixed, so these fire only on a deliberate override.
             const liveSlug = slugify(field.state.value)
-            const liveError =
+            const liveOverBudget =
               !edit &&
               classroom &&
               slugBudget !== undefined &&
               liveSlug.length > slugBudget
-                ? t("assignments.form.validation.slugOverBudget", {
-                    classroom,
-                    budget: slugBudget,
-                    length: liveSlug.length,
-                    limit: GITHUB_REPO_NAME_MAX_LEN,
-                  })
+            const liveTaken =
+              !edit &&
+              Boolean(liveSlug) &&
+              (takenSlugs ?? []).some(
+                (s) => s.trim().toLowerCase() === liveSlug.toLowerCase(),
+              )
+            const liveError = liveOverBudget
+              ? t("assignments.form.validation.slugOverBudget", {
+                  classroom,
+                  budget: slugBudget,
+                  length: liveSlug.length,
+                  limit: GITHUB_REPO_NAME_MAX_LEN,
+                })
+              : liveTaken
+                ? t("validation.assignmentSlugTaken", { slug: liveSlug })
                 : undefined
             const slugError = submitError ?? liveError
             return (
