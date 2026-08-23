@@ -10,6 +10,18 @@ describe("slugify", () => {
   it("is idempotent on an already-slugified value", () => {
     expect(slugify("loops-assignment")).toBe("loops-assignment")
   })
+
+  it("transliterates Latin-extended diacritics to their base letter", () => {
+    // One sample per mark family: acute, grave, circumflex, umlaut/diaeresis,
+    // caron, ring, tilde, cedilla, ogonek, breve, macron, dot above.
+    expect(slugify("áàâäǎåãçąăāż")).toBe("aaaaaaacaaaz")
+    expect(slugify("Introducción à l'Étude")).toBe("introduccion-a-letude")
+    expect(slugify("Übung für Anfänger")).toBe("ubung-fur-anfanger")
+  })
+
+  it("keeps a diacritic-only word as letters instead of dropping it", () => {
+    expect(slugify("čtení")).toBe("cteni")
+  })
 })
 
 describe("nextAvailableSlug", () => {
