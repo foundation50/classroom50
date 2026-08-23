@@ -1375,6 +1375,7 @@
         "slugRequired": "Assignment slug is required.",
         "slugInvalid": "Assignment slug must be {{description}}.",
         "slugOverBudget": "Student repositories are named \"{{classroom}}-<slug>-<username>\", which GitHub caps at {{limit}} characters — this slug can be at most {{budget}} characters (currently {{length}}).",
+        "slugNoRoom": "The classroom \"{{classroom}}\" leaves no room for any assignment slug — its short-name plus a username can exceed GitHub's {{limit}}-character repository-name cap. Create a classroom with a shorter slug (at most {{max}} characters) and add the assignment there.",
         "maxGroupSizeInvalid": "Max group size must be a valid number.",
         "setupTimeoutRange": "Setup timeout must be 0 or a whole number of seconds from 1 through {{max}}.",
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
@@ -3266,6 +3267,7 @@
           "checkError": "Couldn’t check existing slugs — you can still try; we’ll re-check on save.",
           "taken": "“{{slug}}” is already used in {{classroom}} — pick another.",
           "overBudget": "This slug is {{length}} characters; {{classroom}} leaves room for at most {{budget}} so student repository names stay under GitHub's limit.",
+          "noRoom": "{{classroom}} leaves no room for any assignment slug — its name is too long for GitHub's repository-name limit. Reuse into a classroom with a shorter name.",
           "willBeSaved": "Will be saved as “{{slug}}”."
         }
       },

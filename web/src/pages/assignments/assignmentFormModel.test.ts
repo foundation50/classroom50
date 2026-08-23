@@ -145,6 +145,15 @@ describe("validateAssignmentForm — required fields", () => {
     expect(errors.slug).toBeUndefined()
   })
 
+  // A legacy classroom whose short-name eats the whole budget points at a NEW
+  // classroom, not an impossible "at most -N characters" slug.
+  it("uses the no-room message when the classroom leaves no slug budget", () => {
+    const errors = validateAssignmentForm({ ...base, slug: "hw" }, t, {
+      classroom: "a".repeat(58),
+    })
+    expect(errors.slug).toBe("assignments.form.validation.slugNoRoom")
+  })
+
   it("skips the budget check without a classroom in context", () => {
     const errors = validateAssignmentForm({ ...base, slug: "s".repeat(58) }, t)
     expect(errors.slug).toBeUndefined()

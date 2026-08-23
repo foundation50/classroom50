@@ -1,13 +1,10 @@
 import { useTranslation } from "react-i18next"
 import { nextAvailableSlug, slugify } from "@/util/slug"
-import {
-  GITHUB_REPO_NAME_MAX_LEN,
-  assignmentSlugBudget,
-} from "@/util/repoNameBudget"
+import { assignmentSlugBudget } from "@/util/repoNameBudget"
 import { Alert, FormField, Input, Textarea } from "@/components/ui"
 import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
 import { FieldLabel } from "../AdvancedRuntimeFields"
-import type { AssignmentForm } from "../assignmentFormModel"
+import { slugBudgetError, type AssignmentForm } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
 import { SectionCard } from "./SectionCard"
 
@@ -99,28 +96,24 @@ export function DetailsSection({
             // as-you-type rather than only at submit (which stays
             // authoritative). The auto-fill is already budget-bounded and
             // collision-suffixed, so these fire only on a deliberate override.
+            // The budget message comes from the same recipe as the submit
+            // validator (slugBudgetError) so the two can't drift.
             const liveSlug = slugify(field.state.value)
-            const liveOverBudget =
-              !edit &&
-              classroom &&
-              slugBudget !== undefined &&
-              liveSlug.length > slugBudget
+            const liveBudgetError =
+              !edit && classroom && liveSlug
+                ? slugBudgetError(t, classroom, liveSlug)
+                : undefined
             const liveTaken =
               !edit &&
               Boolean(liveSlug) &&
               (takenSlugs ?? []).some(
                 (s) => s.trim().toLowerCase() === liveSlug.toLowerCase(),
               )
-            const liveError = liveOverBudget
-              ? t("assignments.form.validation.slugOverBudget", {
-                  classroom,
-                  budget: slugBudget,
-                  length: liveSlug.length,
-                  limit: GITHUB_REPO_NAME_MAX_LEN,
-                })
-              : liveTaken
+            const liveError =
+              liveBudgetError ??
+              (liveTaken
                 ? t("validation.assignmentSlugTaken", { slug: liveSlug })
-                : undefined
+                : undefined)
             const slugError = submitError ?? liveError
             return (
               <FormField

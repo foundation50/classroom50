@@ -824,6 +824,12 @@ func NextAvailableSlug(entries []AssignmentEntry, slug string, maxLen int) (stri
 			slug, maxLen, slugMaxLen)
 	}
 	base := trimSlugTo(slug, maxLen)
+	if len(base) < 2 {
+		// A hyphen just inside the cut can trim the base below ShortName's
+		// 2-char minimum even when maxLen >= 2 (e.g. "a-..." at budget 2).
+		return "", fmt.Errorf("cannot derive a slug for %q within the %d-character budget (trimming leaves less than the 2-character minimum) — pass an explicit, shorter --slug",
+			slug, maxLen)
+	}
 	if !SlugExistsFold(entries, base) {
 		return base, nil
 	}
@@ -840,7 +846,7 @@ func NextAvailableSlug(entries []AssignmentEntry, slug string, maxLen int) (stri
 	for n := start; ; n++ {
 		suffix := fmt.Sprintf("-%d", n)
 		room := maxLen - len(suffix)
-		if room < 1 {
+		if room < 1 || len(trimSlugTo(stem, room)) < 1 {
 			return "", fmt.Errorf("cannot auto-suffix slug %q within the %d-character budget — pass an explicit, shorter --slug", slug, maxLen)
 		}
 		candidate := trimSlugTo(stem, room) + suffix

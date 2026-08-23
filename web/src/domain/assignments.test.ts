@@ -423,6 +423,11 @@ describe("nextAvailableSlug", () => {
   it("yields an empty slug on a non-positive budget (caller validates)", () => {
     expect(nextAvailableSlug("hw1", [], 0)).toBe("")
   })
+
+  it("yields an empty slug when trimming lands below the 2-char minimum", () => {
+    // maxLen 2 is nominally viable, but "a-bcd" trims to the 1-char "a".
+    expect(nextAvailableSlug("a-bcd", [], 2)).toBe("")
+  })
 })
 
 describe("editAssignment (preserved-entry integration)", () => {

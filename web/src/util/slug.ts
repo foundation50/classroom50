@@ -32,9 +32,11 @@ export function nextAvailableSlug(
   maxLen: number = SLUG_MAX_LEN,
 ): string {
   // Trim the base itself to the budget; drop a hyphen the trim exposes. A
-  // non-positive budget (a legacy over-long classroom) yields "" — the caller's
-  // validation owns surfacing that.
+  // result below the pattern's 2-char minimum (a non-positive or tiny budget —
+  // a legacy over-long classroom) yields "" — the caller's validation owns
+  // surfacing that.
   base = base.slice(0, Math.max(maxLen, 0)).replace(/-+$/g, "")
+  if (base.length < 2) return ""
 
   const takenSet = new Set(Array.from(taken, (s) => s.trim().toLowerCase()))
   const isFree = (candidate: string) => !takenSet.has(candidate.toLowerCase())
@@ -49,9 +51,11 @@ export function nextAvailableSlug(
   // Bounded defensively; a classroom never has thousands of same-stem slugs.
   for (let i = 0; i < 10000; i++) {
     const suffix = `-${n}`
-    // Trim the stem to leave room for the suffix; drop a hyphen the trim exposes.
+    // Trim the stem to leave room for the suffix; drop a hyphen the trim
+    // exposes. No stem room at all means no valid candidate can exist.
     const room = maxLen - suffix.length
     const trimmedStem = stem.slice(0, Math.max(room, 0)).replace(/-+$/g, "")
+    if (!trimmedStem) return ""
     const candidate = `${trimmedStem}${suffix}`
     if (isFree(candidate)) return candidate
     n++
