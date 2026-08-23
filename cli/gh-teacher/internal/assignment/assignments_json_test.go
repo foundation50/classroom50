@@ -1879,19 +1879,27 @@ func TestNextAvailableSlug(t *testing.T) {
 		name    string
 		entries []AssignmentEntry
 		slug    string
+		maxLen  int
 		want    string
 	}{
-		{"free slug unchanged", entriesWithSlugs("other"), "hello", "hello"},
-		{"first collision -> -2", entriesWithSlugs("hello"), "hello", "hello-2"},
-		{"case-insensitive collision -> -2", entriesWithSlugs("Hello"), "hello", "hello-2"},
-		{"skips taken suffixes", entriesWithSlugs("hello", "hello-2", "hello-3"), "hello", "hello-4"},
-		{"base already -N increments from N+1", entriesWithSlugs("hello-2"), "hello-2", "hello-3"},
-		{"base -N skips taken", entriesWithSlugs("hello-2", "hello-3"), "hello-2", "hello-4"},
-		{"non-suffix trailing number is treated as base", entriesWithSlugs("week1"), "week1", "week1-2"},
+		{"free slug unchanged", entriesWithSlugs("other"), "hello", slugMaxLen, "hello"},
+		{"first collision -> -2", entriesWithSlugs("hello"), "hello", slugMaxLen, "hello-2"},
+		{"case-insensitive collision -> -2", entriesWithSlugs("Hello"), "hello", slugMaxLen, "hello-2"},
+		{"skips taken suffixes", entriesWithSlugs("hello", "hello-2", "hello-3"), "hello", slugMaxLen, "hello-4"},
+		{"base already -N increments from N+1", entriesWithSlugs("hello-2"), "hello-2", slugMaxLen, "hello-3"},
+		{"base -N skips taken", entriesWithSlugs("hello-2", "hello-3"), "hello-2", slugMaxLen, "hello-4"},
+		{"non-suffix trailing number is treated as base", entriesWithSlugs("week1"), "week1", slugMaxLen, "week1-2"},
+		// maxLen carries a classroom's composed repo-name budget (#691);
+		// these mirror the web's nextAvailableSlug golden cases.
+		{"trims the base to maxLen", entriesWithSlugs(), "hello-world", 7, "hello-w"},
+		{"drops a hyphen the trim exposes", entriesWithSlugs(), "hello-world", 6, "hello"},
+		{"suffixed candidate stays within maxLen", entriesWithSlugs("hello-w"), "hello-world", 7, "hello-2"},
+		// At the pattern cap a collision trims the stem instead of erroring.
+		{"at-cap collision trims the stem", entriesWithSlugs(strings.Repeat("a", 100)), strings.Repeat("a", 100), slugMaxLen, strings.Repeat("a", 98) + "-2"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := NextAvailableSlug(tc.entries, tc.slug)
+			got, err := NextAvailableSlug(tc.entries, tc.slug, tc.maxLen)
 			if err != nil {
 				t.Fatalf("NextAvailableSlug(%q): unexpected error %v", tc.slug, err)
 			}
@@ -1902,15 +1910,14 @@ func TestNextAvailableSlug(t *testing.T) {
 	}
 }
 
-// TestNextAvailableSlug_OverflowsCap pins that an auto-suffix exceeding the
-// 100-char cap returns an actionable error rather than a too-long candidate.
-func TestNextAvailableSlug_OverflowsCap(t *testing.T) {
-	base := strings.Repeat("a", 100) // already at the cap; any "-N" overflows
-	entries := entriesWithSlugs(base)
-	if _, err := NextAvailableSlug(entries, base); err == nil {
-		t.Fatal("expected an over-cap auto-suffix error, got nil")
-	} else if !strings.Contains(err.Error(), "--slug") {
-		t.Errorf("error should point at --slug, got %v", err)
+// TestNextAvailableSlug_NoRoom pins that a budget below ShortName's 2-char
+// minimum (a legacy over-long classroom) is an actionable error rather than a
+// degenerate slug.
+func TestNextAvailableSlug_NoRoom(t *testing.T) {
+	if _, err := NextAvailableSlug(entriesWithSlugs(), "hello", 1); err == nil {
+		t.Fatal("expected a no-room error, got nil")
+	} else if !strings.Contains(err.Error(), "shorter short-name") {
+		t.Errorf("error should point at a shorter classroom, got %v", err)
 	}
 }
 

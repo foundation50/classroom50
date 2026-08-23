@@ -92,9 +92,8 @@ func TestRunAssignmentAdd_AllowsReplacingOverBudgetSlug(t *testing.T) {
 	}
 }
 
-// TestRunAssignmentReuse_BlocksOverBudgetSlug: reuse always mints a new slug in
-// the target classroom, so an over-budget --slug is refused inside the build —
-// nothing is committed.
+// TestRunAssignmentReuse_BlocksOverBudgetSlug: an EXPLICIT --slug past the
+// target's budget is refused inside the build — nothing is committed.
 func TestRunAssignmentReuse_BlocksOverBudgetSlug(t *testing.T) {
 	server, fix := newReuseServer(t, reuseServerConfig{
 		sourceAssignments: sourceAssignmentsBody(),
@@ -117,5 +116,41 @@ func TestRunAssignmentReuse_BlocksOverBudgetSlug(t *testing.T) {
 	fix.mu.Unlock()
 	if committed != nil {
 		t.Error("a blocked reuse must not commit anything")
+	}
+}
+
+// TestRunAssignmentReuse_TrimsAutoSlugToBudget: the AUTO-derived slug (no
+// --slug) is trimmed to the target classroom's budget instead of erroring,
+// mirroring the web reuse modals, with a note naming why the copy was renamed.
+func TestRunAssignmentReuse_TrimsAutoSlugToBudget(t *testing.T) {
+	// "dst" (3) leaves 59 - 3 = 56 slug chars; the 57-char source slug trims.
+	longSlug := strings.Repeat("s", 57)
+	sourceBody := `{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    { "slug": "` + longSlug + `", "name": "Long", "mode": "individual", "autograder": "default" }
+  ]
+}`
+	server, fix := newReuseServer(t, reuseServerConfig{
+		sourceAssignments: sourceBody,
+		targetAssignments: emptyAssignmentsBody(),
+		targetClassroom:   targetClassroomBody(nil),
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	params := baseReuseParams()
+	params.SourceSlug = longSlug
+
+	var out, errOut bytes.Buffer
+	if err := runAssignmentReuse(client, &out, &errOut, params); err != nil {
+		t.Fatalf("runAssignmentReuse(auto slug): %v", err)
+	}
+	file := decodeReuse(t, fix)
+	want := strings.Repeat("s", 56)
+	if len(file.Assignments) != 1 || file.Assignments[0].Slug != want {
+		t.Errorf("committed slug = %+v, want %q", file.Assignments, want)
+	}
+	if !strings.Contains(errOut.String(), "past GitHub's") {
+		t.Errorf("errOut = %q, want the budget-trim note", errOut.String())
 	}
 }
