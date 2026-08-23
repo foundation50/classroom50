@@ -883,7 +883,7 @@ func NextAvailableSlug(entries []AssignmentEntry, slug string, maxLen int) (stri
 			return "", fmt.Errorf("cannot auto-suffix slug %q within the %d-character budget — pass an explicit, shorter --slug", slug, maxLen)
 		}
 		candidate := trimSlugTo(stem, room) + suffix
-		if !SlugExistsFold(entries, candidate) {
+		if !taken(candidate) {
 			return candidate, nil
 		}
 	}

@@ -1809,7 +1809,8 @@ func TestSlugReservedFold(t *testing.T) {
 }
 
 // TestNextAvailableSlug_SkipsReserved: the auto-derive treats a renamed_from
-// value as taken, so a copy can't silently land on a reserved old name.
+// value as taken — for the base AND for suffixed candidates, so a copy can't
+// silently land on a reserved old name at any step.
 func TestNextAvailableSlug_SkipsReserved(t *testing.T) {
 	entries := []AssignmentEntry{{Slug: "ps3", RenamedFrom: "hello"}}
 	got, err := NextAvailableSlug(entries, "hello", slugMaxLen)
@@ -1818,6 +1819,21 @@ func TestNextAvailableSlug_SkipsReserved(t *testing.T) {
 	}
 	if got != "hello-2" {
 		t.Errorf("NextAvailableSlug = %q, want %q (reserved base suffixed past)", got, "hello-2")
+	}
+
+	// A SUFFIXED candidate matching a reservation must be skipped too:
+	// "hello" is taken (current slug) and "hello-2" is reserved, so the
+	// derive must land on "hello-3".
+	entries = []AssignmentEntry{
+		{Slug: "hello"},
+		{Slug: "ps3", RenamedFrom: "hello-2"},
+	}
+	got, err = NextAvailableSlug(entries, "hello", slugMaxLen)
+	if err != nil {
+		t.Fatalf("NextAvailableSlug: %v", err)
+	}
+	if got != "hello-3" {
+		t.Errorf("NextAvailableSlug = %q, want %q (reserved suffix skipped)", got, "hello-3")
 	}
 }
 

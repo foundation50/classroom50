@@ -1074,6 +1074,19 @@ export async function createAssignment(
   ) {
     throw new Error(`Assignment already exists: ${assignmentBody.slug}`)
   }
+  // The authoritative reservation counterpart to the form's optimistic check:
+  // a renamed assignment's old slug must never be reused, even when the form's
+  // cached assignments predate a CLI-side rename (see Assignment.renamed_from).
+  const newSlugLower = assignmentBody.slug.toLowerCase()
+  if (
+    currentAssignments.assignments.some(
+      (assignment) => assignment.renamed_from?.toLowerCase() === newSlugLower,
+    )
+  ) {
+    throw new Error(
+      `Slug "${assignmentBody.slug}" is reserved: it is the previous slug of a renamed assignment, and reusing it would break the redirects its renamed student repositories rely on — choose a different slug.`,
+    )
+  }
 
   const nextAssignments: AssignmentsFile = {
     ...currentAssignments,

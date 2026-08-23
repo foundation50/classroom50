@@ -82,6 +82,11 @@ export function buildReusedEntry(
       : undefined,
     tests: source.tests ? source.tests.map((t) => ({ ...t })) : undefined,
   }
+  // renamed_from is source-classroom provenance: the copy has no renamed
+  // student repos, so carrying it would wrongly reserve a slug in the target
+  // and wrongly grandfather old-slug submissions there. Mirrors the CLI's
+  // reuse (which clears RenamedFrom).
+  delete entry.renamed_from
   if (!entry.template) delete entry.template
   if (!entry.due_meta) delete entry.due_meta
   if (entry.runtime && !entry.runtime.container) delete entry.runtime.container
@@ -189,6 +194,18 @@ export async function copyAssignmentToClassroom(
   ) {
     throw new Error(
       `Assignment "${entry.slug}" already exists in classroom "${targetClassroom}" — choose a different slug.`,
+    )
+  }
+  // The authoritative reservation counterpart to the modals' optimistic
+  // check: a renamed assignment's old slug must never be reused, even when
+  // the modal's cached assignments predate a CLI-side rename.
+  if (
+    currentAssignments.assignments.some(
+      (a) => a.renamed_from?.toLowerCase() === entrySlugLower,
+    )
+  ) {
+    throw new Error(
+      `Slug "${entry.slug}" is reserved in classroom "${targetClassroom}": it is the previous slug of a renamed assignment, and reusing it would break the redirects its renamed student repositories rely on — choose a different slug.`,
     )
   }
 

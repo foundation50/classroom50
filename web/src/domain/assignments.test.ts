@@ -105,6 +105,21 @@ describe("buildReusedEntry", () => {
     expect(entry.name).toBe("Homework 1")
   })
 
+  it("clears renamed_from (source-classroom provenance, mirrors the CLI)", () => {
+    // Carrying it would wrongly reserve a slug in the target and wrongly
+    // grandfather old-slug submissions there.
+    const renamedSource: Assignment = {
+      ...fullSource,
+      renamed_from: "hw1-with-a-legacy-slug",
+    }
+    const entry = buildReusedEntry(renamedSource, {
+      slug: "hw1-fall",
+      name: "Homework 1 (Fall)",
+    })
+    expect(entry.renamed_from).toBeUndefined()
+    expect("renamed_from" in entry).toBe(false)
+  })
+
   it("defaults to the source slug/name when overrides match them", () => {
     const entry = buildReusedEntry(fullSource, {
       slug: fullSource.slug,
@@ -2094,6 +2109,60 @@ describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
       grants: () => grants,
     }
   }
+
+  // A renamed assignment's old slug is reserved at the WRITE path too — the
+  // modal's optimistic check can be stale (e.g. a CLI-side rename landed after
+  // its assignments query), so the commit build re-checks authoritatively.
+  it("rejects a slug reserved by a renamed assignment in the target", async () => {
+    const assignmentsFile = {
+      schema: "classroom50/assignments/v1",
+      assignments: [
+        {
+          slug: "ps3",
+          name: "PS3",
+          mode: "individual",
+          autograder: "default",
+          renamed_from: "hw1",
+        },
+      ],
+    }
+    const request = vi.fn(async (url: string) => {
+      if (/\/repos\/[^/]+\/classroom50$/.test(url))
+        return { default_branch: "main" }
+      if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
+      if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
+      if (url.includes("/contents/cs51/assignments.json")) {
+        return {
+          type: "file",
+          encoding: "base64",
+          content: btoa(JSON.stringify(assignmentsFile)),
+        }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    const requestRaw = vi.fn(async () =>
+      JSON.stringify({
+        schema: "classroom50/classroom/v1",
+        short_name: "cs51",
+      }),
+    )
+    const client = { request, requestRaw } as unknown as GitHubClient
+
+    await expect(
+      copyAssignmentToClassroom(client, {
+        org: ORG,
+        source: {
+          slug: "hw1",
+          name: "Homework 1",
+          mode: "individual",
+          autograder: "default",
+          feedback_pr: true,
+        },
+        targetClassroom: "cs51",
+        canGrantTemplateAccess: true,
+      }),
+    ).rejects.toThrow(/reserved/)
+  })
 
   // The real #468 topology: an in-org private fork whose upstream is a private
   // repo in ANOTHER org. Must reuse successfully (generate copies the fork's own
