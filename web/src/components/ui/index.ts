@@ -41,6 +41,9 @@ export type { ModalProps, ModalSize } from "./Modal"
 export { Alert, alertToneClass } from "./Alert"
 export type { AlertProps, AlertTone } from "./Alert"
 
+export { InlineMessage } from "./InlineMessage"
+export type { InlineMessageProps, InlineMessageTone } from "./InlineMessage"
+
 export { AnimatedAlert } from "./AnimatedAlert"
 export type { AnimatedAlertProps } from "./AnimatedAlert"
 

@@ -9,7 +9,12 @@ import { useMemo, useState } from "react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
-import { AlertTriangle, CheckCircle, ExternalLink } from "lucide-react"
+import {
+  AlertTriangle,
+  CheckCircle,
+  ExternalLink,
+  RefreshCw,
+} from "lucide-react"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { githubOAuthGrantUrl, githubOrgOAuthPolicyUrl } from "@/auth/constants"
@@ -18,9 +23,11 @@ import {
   Button,
   Card,
   FormField,
+  InlineMessage,
   Input,
   Modal,
   Spinner,
+  Toolbar,
 } from "@/components/ui"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import {
@@ -174,6 +181,37 @@ export const ConfirmStep = ({
 
   const selectedCount =
     (effectivePlan?.counts.import ?? 0) + (effectivePlan?.counts.reuse ?? 0)
+
+  // Selection derives from the ORIGINAL plan, not the effective one: the
+  // effective plan rewrites a deselected item's action to "skip", so keying the
+  // checkbox off it would make unchecking irreversible (the checkbox would be
+  // replaced by a static "Will skip" badge).
+  const planSkipIds = useMemo(
+    () =>
+      new Set(
+        (plan?.items ?? [])
+          .filter((i) => i.action === "skip")
+          .map((i) => i.assignment.id),
+      ),
+    [plan],
+  )
+  const selectableTotal = plan ? plan.items.length - planSkipIds.size : 0
+
+  const toggleSelectAll = () => {
+    if (!plan) return
+    if (selectedCount === selectableTotal) {
+      setDeselected(
+        new Set(
+          plan.items
+            .filter((i) => i.action !== "skip")
+            .map((i) => i.assignment.id),
+        ),
+      )
+    } else {
+      setDeselected(new Set())
+    }
+  }
+
   const canImport =
     Boolean(effectivePlan) &&
     !blocked &&
@@ -466,21 +504,53 @@ export const ConfirmStep = ({
               </div>
             )}
 
-            {/* Two-column labels above the source -> target rows. */}
-            <div className="mt-3 hidden grid-cols-[1fr_auto_1fr] gap-3 px-1 text-xs font-medium uppercase tracking-wide text-base-content/50 sm:grid">
-              <span>{t("migration.confirm.columnSource")}</span>
-              <span aria-hidden="true" />
-              <span>{t("migration.confirm.columnTarget")}</span>
-            </div>
+            {/* Bulk selection + a live outcome summary (Primer bulk-select /
+                notification-messaging patterns); hidden once the run starts. */}
+            {!controlsDisabled && (
+              <Toolbar className="mt-5 gap-x-4 gap-y-2">
+                {selectableTotal > 0 && (
+                  <Toolbar.Selection
+                    allSelected={selectedCount === selectableTotal}
+                    someSelected={selectedCount > 0}
+                    onToggleSelectAll={toggleSelectAll}
+                    selectAllAriaLabel={t("migration.confirm.selectAll")}
+                    label={t("migration.confirm.selectedOfTotal", {
+                      selected: selectedCount,
+                      total: selectableTotal,
+                    })}
+                  />
+                )}
+                <span className="text-sm text-base-content/60">
+                  {t("migration.confirm.summaryLine", {
+                    importCount: effectivePlan.counts.import,
+                    reuseCount: effectivePlan.counts.reuse,
+                    skipCount: effectivePlan.counts.skip,
+                  })}
+                </span>
+                <Toolbar.Trailing>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => refetch()}
+                    disabled={isFetching || pendingEdit}
+                  >
+                    <RefreshCw aria-hidden="true" className="size-4" />
+                    {t("migration.confirm.recheck")}
+                  </Button>
+                </Toolbar.Trailing>
+              </Toolbar>
+            )}
 
-            <ul className="mt-1 grid gap-2">
+            <ul className="mt-2 grid gap-2">
               {effectivePlan.items.map((item) => {
                 // Before the run: checkboxes on importable/reusable items. During
-                // and after: read live status, no toggles.
+                // and after: read live status, no toggles. Selectability keys off
+                // the ORIGINAL plan action (see planSkipIds).
                 const live = statuses[item.assignment.slug]
-                const selectable = !controlsDisabled && item.action !== "skip"
+                const planSkip = planSkipIds.has(item.assignment.id)
+                const selectable = !controlsDisabled && !planSkip
                 const selected =
-                  item.action !== "skip" && !deselected.has(item.assignment.id)
+                  !planSkip && !deselected.has(item.assignment.id)
                 const status = (live?.status ?? item.action) as ItemVisualStatus
                 return (
                   <li key={item.assignment.id}>
@@ -530,13 +600,15 @@ export const ConfirmStep = ({
                     })}
                   </p>
                   {hadSkips && (
-                    <ul className="mt-2 list-disc ps-5 text-sm">
+                    <ul className="mt-2 grid gap-1">
                       {result.skipped.map((s) => (
                         <li key={s.slug}>
-                          <span className="font-mono">{s.slug}</span>
-                          {s.reason
-                            ? ` — ${t(s.reason.key, s.reason.params)}`
-                            : ""}
+                          <InlineMessage tone="warning">
+                            <span className="font-mono">{s.slug}</span>
+                            {s.reason
+                              ? ` — ${t(s.reason.key, s.reason.params)}`
+                              : ""}
+                          </InlineMessage>
                         </li>
                       ))}
                     </ul>

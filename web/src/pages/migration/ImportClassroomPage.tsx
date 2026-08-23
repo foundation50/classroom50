@@ -111,6 +111,13 @@ export const ImportClassroomPage = () => {
   const [phase, setPhase] = useState<Phase>({ name: "select" })
   // Set once the import reports success, so the final step gets a check.
   const [imported, setImported] = useState(false)
+  // The `?from=` deep link may auto-advance the wizard only ONCE per visit. The
+  // guard must live here, not in SelectSourceStep: that step unmounts on
+  // advance, so a step-local guard resets on Back — and with the classrooms
+  // query still cached and the URL not yet cleared (setFrom's navigate is
+  // async), it would re-pick the same classroom and bounce straight back to
+  // confirm, making Back a no-op and racing any in-flight sidebar navigation.
+  const [picked, setPicked] = useState(false)
 
   // Keep the `?from=<org-slug>` deep link in sync with the selected source, so
   // the URL is shareable/refreshable and reflects the current step.
@@ -168,8 +175,9 @@ export const ImportClassroomPage = () => {
           />
           {phase.name === "select" && (
             <SelectSourceStep
-              preselectOrg={from}
+              preselectOrg={picked ? undefined : from}
               onPick={(source) => {
+                setPicked(true)
                 setFrom(source.orgLogin)
                 setPhase({ name: "confirm", source })
               }}

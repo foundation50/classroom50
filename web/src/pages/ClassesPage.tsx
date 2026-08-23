@@ -37,7 +37,11 @@ const NewClassroomButton = ({ org }: { org: string }) => {
         <Plus aria-hidden="true" className="size-4" />
         {t("classes.empty.createButton")}
       </Link>
-      <div className="dropdown dropdown-end join-item">
+      {/* Not a join-item itself: daisyUI resets the join radius vars for a
+          join-item's children, which would square the inner button's corners.
+          The wrapper still inherits the vars as the join's last child; -ms-px
+          keeps the 1px border overlap join-item would have provided. */}
+      <div className="dropdown dropdown-end -ms-px">
         <Button
           variant="primary"
           tabIndex={0}

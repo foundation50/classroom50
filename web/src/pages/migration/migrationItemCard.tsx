@@ -4,10 +4,26 @@
 // source (GitHub Classroom) -> target (Classroom 50) metadata table, so a
 // teacher can glance across the same rows on both sides.
 
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertCircle, ArrowRight, CheckCircle, MinusCircle } from "lucide-react"
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle,
+  ChevronDown,
+  ExternalLink,
+  MinusCircle,
+} from "lucide-react"
 
-import { Badge, Spinner, rtlFlip, type BadgeTone } from "@/components/ui"
+import {
+  Badge,
+  Collapse,
+  InlineMessage,
+  Spinner,
+  cx,
+  rtlFlip,
+  type BadgeTone,
+} from "@/components/ui"
 import { formatDueDateTime } from "@/util/formatDate"
 import { clampMigratedGroupSize } from "@/migration/translate"
 import type {
@@ -85,6 +101,34 @@ const StatusIcon = ({ icon }: { icon: string }) => {
 // One aligned row in both metadata panels. `value` is already localized text.
 type MetaRow = { labelKey: string; source: string; target: string }
 
+// A skip reason the teacher can act on links straight to the fix: flipping the
+// template bit lives in the starter repo's settings; a name collision is
+// inspected on the existing repo.
+function reasonAction(
+  reason: MigrationReason,
+): { href: string; labelKey: string } | undefined {
+  if (
+    reason.key === "migration.reason.sourceNotTemplate" &&
+    reason.params?.fullName
+  ) {
+    return {
+      href: `https://github.com/${reason.params.fullName}/settings`,
+      labelKey: "migration.item.openRepoSettings",
+    }
+  }
+  if (
+    reason.key === "migration.reason.targetCollision" &&
+    reason.params?.org &&
+    reason.params?.name
+  ) {
+    return {
+      href: `https://github.com/${reason.params.org}/${reason.params.name}`,
+      labelKey: "migration.item.openCollidingRepo",
+    }
+  }
+  return undefined
+}
+
 // A metadata panel: a header (mobile only) + the aligned key/value rows. The
 // same MetaRow[] feeds both panels so the source and target line up row-for-row.
 // Source and target use distinct accent colors so they're easy to tell apart.
@@ -106,7 +150,7 @@ const MetaPanel = ({
   return (
     <div className={`rounded-field border p-3 ${panelClass}`}>
       <div
-        className={`mb-1 text-xs font-medium uppercase tracking-wide sm:hidden ${headerClass}`}
+        className={`mb-1 text-xs font-medium uppercase tracking-wide ${headerClass}`}
       >
         {t(headerKey)}
       </div>
@@ -156,6 +200,10 @@ export const MigrationItemCard = ({
 }) => {
   const { t } = useTranslation()
   const meta = STATUS_BADGE[status]
+  const action = reason ? reasonAction(reason) : undefined
+  // The metadata panels are heavy for long classrooms, so they collapse behind
+  // a per-card toggle; the header keeps a one-line repo summary.
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   const starter = assignment.starter_code_repository
   const targetRepoLabel = targetOrg ? `${targetOrg}/${targetName}` : targetName
@@ -301,30 +349,80 @@ export const MigrationItemCard = ({
         )}
       </div>
 
-      <div className="mt-3 grid items-stretch gap-2 sm:grid-cols-[1fr_auto_1fr] sm:gap-3">
-        <MetaPanel
-          headerKey="migration.item.sourcePanel"
-          rows={rows}
-          side="source"
+      <div className="mt-2 flex min-w-0 items-center gap-1.5 text-sm text-base-content/70">
+        <span className="truncate">{sourceRepoText}</span>
+        <ArrowRight
+          aria-hidden="true"
+          className={`size-3.5 shrink-0 text-base-content/40 ${rtlFlip}`}
         />
-        <div className="flex items-center justify-center">
-          <ArrowRight
-            aria-hidden="true"
-            className={`hidden size-4 text-base-content/40 sm:block ${rtlFlip}`}
-          />
-        </div>
-        <MetaPanel
-          headerKey="migration.item.targetPanel"
-          rows={rows}
-          side="target"
-        />
+        <span className="truncate">{targetRepoText}</span>
       </div>
 
       {reason && !(selectable && !selected) && (
-        <p className="mt-2 text-sm text-warning-content/80">
+        <InlineMessage
+          tone={
+            reason.key === "migration.reason.deselected" ? "neutral" : "warning"
+          }
+          className="mt-2"
+        >
           {t(reason.key, reason.params)}
-        </p>
+          {action && (
+            <>
+              {" "}
+              <a
+                href={action.href}
+                target="_blank"
+                rel="noreferrer"
+                className="link inline-flex items-center gap-1 align-baseline"
+              >
+                {t(action.labelKey)}
+                <ExternalLink aria-hidden="true" className="size-3.5" />
+              </a>
+            </>
+          )}
+        </InlineMessage>
       )}
+
+      <button
+        type="button"
+        aria-expanded={detailsOpen}
+        onClick={() => setDetailsOpen((o) => !o)}
+        className="mt-2 flex cursor-pointer items-center gap-1 text-sm text-base-content/60 hover:text-base-content"
+      >
+        <ChevronDown
+          aria-hidden="true"
+          className={cx(
+            "size-4 transition-transform",
+            detailsOpen && "rotate-180",
+          )}
+        />
+        {t(
+          detailsOpen
+            ? "migration.item.hideDetails"
+            : "migration.item.showDetails",
+        )}
+      </button>
+
+      <Collapse open={detailsOpen}>
+        <div className="grid items-stretch gap-2 pt-3 sm:grid-cols-[1fr_auto_1fr] sm:gap-3">
+          <MetaPanel
+            headerKey="migration.item.sourcePanel"
+            rows={rows}
+            side="source"
+          />
+          <div className="flex items-center justify-center">
+            <ArrowRight
+              aria-hidden="true"
+              className={`hidden size-4 text-base-content/40 sm:block ${rtlFlip}`}
+            />
+          </div>
+          <MetaPanel
+            headerKey="migration.item.targetPanel"
+            rows={rows}
+            side="target"
+          />
+        </div>
+      </Collapse>
     </div>
   )
 }
