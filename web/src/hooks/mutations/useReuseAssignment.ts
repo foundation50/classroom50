@@ -11,6 +11,7 @@ import {
   type CopyAssignmentInput,
 } from "@/domain/assignments"
 import { slugify } from "@/util/slug"
+import { assignmentSlugBudget } from "@/util/repoNameBudget"
 import type { Assignment } from "@/types/classroom"
 
 type UseReuseAssignmentParams = {
@@ -52,16 +53,28 @@ export function useReuseAssignment({
   const [slugTouched, setSlugTouched] = useState(false)
   const [warning, setWarning] = useState<string | null>(null)
 
-  // Auto-suffixed default ("hw1" -> "hw1-2" if taken). Derived, not state, so it
-  // stays correct as the target's assignments load.
+  // The composed repo-name budget for the TARGET classroom (#691): bounds the
+  // auto-suffixed default and blocks an over-budget manual slug.
+  const slugBudget = assignmentSlugBudget(targetClassroom)
+
+  // Auto-suffixed default ("hw1" -> "hw1-2" if taken), trimmed to the target's
+  // budget. Derived, not state, so it stays correct as the target's
+  // assignments load.
   const autoSlug = useMemo(
-    () => (source ? nextAvailableSlug(slugify(source.slug), takenSlugs) : ""),
-    [source, takenSlugs],
+    () =>
+      source
+        ? nextAvailableSlug(slugify(source.slug), takenSlugs, slugBudget)
+        : "",
+    [source, takenSlugs, slugBudget],
   )
 
   // Default until the teacher edits; `normalizedSlug` is what gets saved.
   const displayedSlug = slugTouched ? slugInput : autoSlug
   const normalizedSlug = slugify(displayedSlug)
+
+  // A manually entered slug can still exceed the target's budget; blocked here
+  // (and re-checked by the CLI-mirroring write path 422 handling).
+  const slugOverBudget = normalizedSlug.length > slugBudget
 
   // Optimistic, case-insensitive check; the write path re-checks authoritatively.
   const slugTaken = useMemo(() => {
@@ -111,6 +124,7 @@ export function useReuseAssignment({
     Boolean(targetClassroom) &&
     Boolean(normalizedSlug) &&
     !slugTaken &&
+    !slugOverBudget &&
     !takenLoading &&
     !reuse.isPending
 
@@ -139,6 +153,8 @@ export function useReuseAssignment({
     normalizedSlug,
     slugTouched,
     slugTaken,
+    slugOverBudget,
+    slugBudget,
     warning,
     errorMessage,
     isPending: reuse.isPending,

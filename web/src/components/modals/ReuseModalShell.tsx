@@ -112,14 +112,16 @@ export const ReuseModalShell = ({
 
 export default ReuseModalShell
 
-// Slug-field helper text. `loading`/`error`/`slugTaken` take priority in order;
-// otherwise preview the normalized form or fall back to `uniqueHint`.
-// `classroomLabel`/`uniqueHint` carry each modal's wording.
+// Slug-field helper text. `loading`/`error`/`slugOverBudget`/`slugTaken` take
+// priority in order; otherwise preview the normalized form or fall back to
+// `uniqueHint`. `classroomLabel`/`uniqueHint` carry each modal's wording.
 export const reuseSlugStatus = ({
   t,
   loading,
   error,
   slugTaken,
+  slugOverBudget,
+  slugBudget,
   slugTouched,
   normalizedSlug,
   displayedSlug,
@@ -130,6 +132,8 @@ export const reuseSlugStatus = ({
   loading: boolean
   error: boolean
   slugTaken: boolean
+  slugOverBudget: boolean
+  slugBudget: number
   slugTouched: boolean
   normalizedSlug: string
   displayedSlug: string
@@ -138,6 +142,12 @@ export const reuseSlugStatus = ({
 }): string => {
   if (loading) return t("components.modals.reuseShell.slug.checking")
   if (error) return t("components.modals.reuseShell.slug.checkError")
+  if (slugOverBudget)
+    return t("components.modals.reuseShell.slug.overBudget", {
+      length: normalizedSlug.length,
+      budget: slugBudget,
+      classroom: classroomLabel,
+    })
   if (slugTaken)
     return t("components.modals.reuseShell.slug.taken", {
       slug: normalizedSlug,

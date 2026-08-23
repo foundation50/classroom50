@@ -61,6 +61,27 @@ describe("CreateClassroomForm slug validation", () => {
     ).not.toBeNull()
   })
 
+  // Creation-time budget cap (#691): a pattern-valid slug past 40 chars is
+  // rejected — it prefixes every student repo name in the classroom.
+  it("rejects a slug over the 40-char creation cap and does not submit", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    const { container } = render(<CreateClassroomForm onSubmit={onSubmit} />)
+
+    await user.type(
+      container.querySelector<HTMLInputElement>("#name")!,
+      "Class",
+    )
+    await user.clear(slugInput(container))
+    await user.type(slugInput(container), "a".repeat(41))
+    await user.click(submit())
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(
+      await screen.findByText("validation.classroomSlugTooLong"),
+    ).not.toBeNull()
+  })
+
   // Regression guard: the collision check must compare the SLUGIFIED value, not
   // the raw input. A raw "CS 50" slugifies to "cs-50"; if the check compared the
   // raw string it would miss an existing "cs-50" and overwrite its roster/scores.

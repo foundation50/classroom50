@@ -71,7 +71,7 @@ function makeClient(opts: {
 describe("classifyAssignment", () => {
   it("import when source is a template and target 404s", async () => {
     const { client } = makeClient({ sourceTemplate: true })
-    const item = await classifyAssignment(client, "dst", "", assignment())
+    const item = await classifyAssignment(client, "dst", "", "cs", assignment())
     expect(item.action).toBe("import")
     expect(item.targetName).toBe("hw1")
     expect(item.targetPrivate).toBe(false)
@@ -82,7 +82,7 @@ describe("classifyAssignment", () => {
       sourceTemplate: true,
       target: { is_template: true, default_branch: "trunk", private: true },
     })
-    const item = await classifyAssignment(client, "dst", "", assignment())
+    const item = await classifyAssignment(client, "dst", "", "cs", assignment())
     expect(item.action).toBe("reuse")
     expect(item.branch).toBe("trunk")
     expect(item.targetPrivate).toBe(true)
@@ -93,7 +93,7 @@ describe("classifyAssignment", () => {
       sourceTemplate: true,
       target: { is_template: false, default_branch: "main", private: false },
     })
-    const item = await classifyAssignment(client, "dst", "", assignment())
+    const item = await classifyAssignment(client, "dst", "", "cs", assignment())
     expect(item.action).toBe("skip")
     expect(item.reason?.key).toBe("migration.reason.targetCollision")
   })
@@ -104,6 +104,7 @@ describe("classifyAssignment", () => {
       client,
       "dst",
       "",
+      "cs",
       assignment({ starter_code_repository: null }),
     )
     expect(item.action).toBe("import")
@@ -112,13 +113,13 @@ describe("classifyAssignment", () => {
 
   it("skip when the source is not a template", async () => {
     const { client } = makeClient({ sourceTemplate: false })
-    const item = await classifyAssignment(client, "dst", "", assignment())
+    const item = await classifyAssignment(client, "dst", "", "cs", assignment())
     expect(item.reason?.key).toBe("migration.reason.sourceNotTemplate")
   })
 
   it("skip when the source is not accessible", async () => {
     const { client } = makeClient({ sourceMissing: true })
-    const item = await classifyAssignment(client, "dst", "", assignment())
+    const item = await classifyAssignment(client, "dst", "", "cs", assignment())
     // src/hw1 is a different org than the target "dst" -> org-access reason.
     expect(item.reason?.key).toBe("migration.reason.sourceOrgAccess")
     expect(item.reason?.params?.org).toBe("src")
@@ -127,7 +128,7 @@ describe("classifyAssignment", () => {
   it("uses sourceNotAccessible when the source is in the SAME org as target", async () => {
     const { client } = makeClient({ sourceMissing: true })
     // Target org "src" matches the starter's org, so it's not an app-grant gap.
-    const item = await classifyAssignment(client, "src", "", assignment())
+    const item = await classifyAssignment(client, "src", "", "cs", assignment())
     expect(item.reason?.key).toBe("migration.reason.sourceNotAccessible")
   })
 
@@ -137,15 +138,37 @@ describe("classifyAssignment", () => {
       client,
       "dst",
       "",
+      "cs",
       assignment({ slug: "Bad Slug" }),
     )
     expect(item.reason?.key).toBe("migration.reason.invalidSlug")
     expect(gets).toHaveLength(0)
   })
 
+  it("skip on an over-budget slug without any network call", async () => {
+    const { client, gets } = makeClient({})
+    // "cs" leaves a 57-char budget (59 - 2); 58 exceeds it.
+    const item = await classifyAssignment(
+      client,
+      "dst",
+      "",
+      "cs",
+      assignment({ slug: "s".repeat(58) }),
+    )
+    expect(item.reason?.key).toBe("migration.reason.slugOverBudget")
+    expect(item.reason?.params?.budget).toBe("57")
+    expect(gets).toHaveLength(0)
+  })
+
   it("applies the template-suffix to the probed target name", async () => {
     const { client, gets } = makeClient({ sourceTemplate: true })
-    const item = await classifyAssignment(client, "dst", "sp26", assignment())
+    const item = await classifyAssignment(
+      client,
+      "dst",
+      "sp26",
+      "cs",
+      assignment(),
+    )
     expect(item.targetName).toBe("hw1-sp26")
     expect(gets.some((g) => g.includes("/repos/dst/hw1-sp26"))).toBe(true)
   })
@@ -155,7 +178,7 @@ describe("classifyAssignment", () => {
       sourceTemplate: true,
       target: { is_template: true, default_branch: "main", private: false },
     })
-    await classifyAssignment(client, "dst", "", assignment())
+    await classifyAssignment(client, "dst", "", "cs", assignment())
     expect(gets.every((g) => g.startsWith("GET "))).toBe(true)
   })
 })

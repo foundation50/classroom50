@@ -49,6 +49,20 @@ describe("deriveShortName", () => {
     // here a single char is below the 2-char minimum instead.
     expect(() => deriveShortName("A")).toThrow(/shortNameInvalid/)
   })
+
+  it("truncates a long name to the creation cap, mirroring the CLI", () => {
+    // "abcdefghij-" x10 (110 chars) -> first 40 chars, no dangling hyphen.
+    const derived = deriveShortName("abcdefghij-".repeat(10))
+    expect(derived).toBe("abcdefghij-".repeat(3) + "abcdefg")
+    expect(derived.length).toBeLessThanOrEqual(40)
+  })
+
+  it("drops a trailing hyphen the truncation exposes", () => {
+    // "abcdefghi-" x10: the cut at 40 lands on a hyphen.
+    expect(deriveShortName("abcdefghi-".repeat(10))).toBe(
+      "abcdefghi-".repeat(3) + "abcdefghi",
+    )
+  })
 })
 
 describe("migratedDueFields", () => {

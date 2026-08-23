@@ -123,6 +123,32 @@ describe("validateAssignmentForm — required fields", () => {
     const errors = validateAssignmentForm({ ...base, slug: "a".repeat(101) }, t)
     expect(errors.slug).toBe("assignments.form.validation.slugInvalid")
   })
+
+  // #691: a pattern-valid slug can still compose past GitHub's 100-char repo
+  // name with the classroom prefix and a worst-case username.
+  it("flags a slug over the classroom's composed repo-name budget on create", () => {
+    // "cs" leaves a 57-char budget (59 - 2); 58 exceeds it.
+    const errors = validateAssignmentForm(
+      { ...base, slug: "s".repeat(58) },
+      t,
+      { classroom: "cs" },
+    )
+    expect(errors.slug).toBe("assignments.form.validation.slugOverBudget")
+  })
+
+  it("accepts a slug exactly at the classroom's budget", () => {
+    const errors = validateAssignmentForm(
+      { ...base, slug: "s".repeat(57) },
+      t,
+      { classroom: "cs" },
+    )
+    expect(errors.slug).toBeUndefined()
+  })
+
+  it("skips the budget check without a classroom in context", () => {
+    const errors = validateAssignmentForm({ ...base, slug: "s".repeat(58) }, t)
+    expect(errors.slug).toBeUndefined()
+  })
 })
 
 describe("validateAssignmentForm — group size", () => {

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { nextAvailableSlug, slugify } from "@/util/slug"
+import { assignmentSlugBudget } from "@/util/repoNameBudget"
 import { Alert, FormField, Input, Textarea } from "@/components/ui"
 import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
 import { FieldLabel } from "../AdvancedRuntimeFields"
@@ -18,6 +19,7 @@ export function DetailsSection({
   slugTouched,
   setSlugTouched,
   takenSlugs,
+  classroom,
 }: {
   form: AssignmentForm
   edit: boolean
@@ -27,8 +29,14 @@ export function DetailsSection({
   // Existing assignment slugs, so the create-mode auto-fill can pick a slug
   // that's already unique instead of surfacing a conflict only at submit.
   takenSlugs?: string[]
+  // Classroom short-name; bounds the slug to the composed repo-name budget
+  // (#691) so the auto-fill can't mint a name GitHub would reject at accept.
+  classroom?: string
 }) {
   const { t } = useTranslation()
+  // undefined (no classroom in context) leaves nextAvailableSlug at its
+  // pattern-cap default.
+  const slugBudget = classroom ? assignmentSlugBudget(classroom) : undefined
 
   return (
     <SectionCard title={t("assignments.form.detailsSection")} onReset={onReset}>
@@ -66,6 +74,7 @@ export function DetailsSection({
                           nextAvailableSlug(
                             slugify(e.target.value),
                             takenSlugs ?? [],
+                            slugBudget,
                           ),
                         )
                       }
@@ -118,6 +127,7 @@ export function DetailsSection({
                           nextAvailableSlug(
                             slugify(form.state.values.name),
                             takenSlugs ?? [],
+                            slugBudget,
                           ),
                       )
                       field.handleBlur()

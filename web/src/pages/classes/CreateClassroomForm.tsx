@@ -14,6 +14,10 @@ import {
   SHORT_NAME_PATTERN_DESCRIPTION,
   isValidShortName,
 } from "@/util/shortName"
+import {
+  CLASSROOM_SHORT_NAME_MAX_LEN,
+  GITHUB_REPO_NAME_MAX_LEN,
+} from "@/util/repoNameBudget"
 import { Button, Card, FormField, Input } from "@/components/ui"
 
 export type CreateClassroomFormValues = {
@@ -71,6 +75,14 @@ const CreateClassroomForm = ({
           if (!isValidShortName(slug)) {
             errors.slug = t("validation.classroomSlugInvalid", {
               description: SHORT_NAME_PATTERN_DESCRIPTION,
+            })
+          } else if (slug.length > CLASSROOM_SHORT_NAME_MAX_LEN) {
+            // Creation-time cap (#691): the slug prefixes every student repo
+            // name, so an over-long one starves every future assignment slug.
+            errors.slug = t("validation.classroomSlugTooLong", {
+              length: slug.length,
+              max: CLASSROOM_SHORT_NAME_MAX_LEN,
+              limit: GITHUB_REPO_NAME_MAX_LEN,
             })
           } else if (
             classes.find((cl) => cl.path.toLowerCase() === slug.toLowerCase())

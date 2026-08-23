@@ -2,8 +2,9 @@ import { localizedError } from "@/types/localizedMessage"
 
 // Classroom short-names and assignment slugs both flow into repo/team names.
 // Byte-mirror of the CLI's validate.ShortNamePattern (2-100 chars). The cap is
-// per-segment, not a guarantee the composed repo name fits GitHub's 100-char
-// limit — see foundation50/classroom50#691.
+// per-segment — a READ-side tolerance so pre-cap documents keep validating.
+// Write paths layer the composed repo-name budget on top (#691): see
+// repoNameBudget (CLASSROOM_SHORT_NAME_MAX_LEN, composedRepoNameFits).
 export const SHORT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,99}$/
 export const SHORT_NAME_PATTERN_DESCRIPTION =
   "2-100 chars, lowercase letters/digits/hyphens, starting with a letter or digit"

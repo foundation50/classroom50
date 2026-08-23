@@ -84,6 +84,7 @@ const CreateAssignmentForm = ({
   const form = useAssignmentForm(defaultValues, onSubmit, t, {
     takenSlugs,
     edit,
+    classroom,
   })
   // Auto-prefill slug from name until the teacher edits it directly, so a
   // deliberate slug isn't clobbered by later name edits.
@@ -144,6 +145,7 @@ const CreateAssignmentForm = ({
         const errors = validateAssignmentForm(form.state.values, t, {
           takenSlugs,
           edit,
+          classroom,
         })
         // handleSubmit re-throws an onSubmit rejection (an edit-mode mutateAsync
         // failure); the caller's onError banner already surfaces it, so swallow
@@ -189,6 +191,7 @@ const CreateAssignmentForm = ({
                   slugTouched={slugTouched}
                   setSlugTouched={setSlugTouched}
                   takenSlugs={takenSlugs}
+                  classroom={classroom}
                 />
                 <RepositorySetupSection
                   form={form}
