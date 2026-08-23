@@ -55,7 +55,8 @@ const NewAssignmentButton = ({
           <Plus aria-hidden="true" className="size-4" />{" "}
           {t("assignments.newButton.assignment")}
         </Link>
-        <div className="dropdown dropdown-end join-item">
+        {/* Not a join-item: see NewClassroomButton in ClassesPage.tsx. */}
+        <div className="dropdown dropdown-end -ms-px">
           <Button
             variant="primary"
             size="sm"

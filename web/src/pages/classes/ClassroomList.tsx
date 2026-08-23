@@ -258,7 +258,8 @@ const ClassroomList = ({
             <Plus aria-hidden="true" className="size-4" />
             {t("classes.newClass")}
           </Link>
-          <div className="dropdown dropdown-end join-item">
+          {/* Not a join-item: see NewClassroomButton in ClassesPage.tsx. */}
+          <div className="dropdown dropdown-end -ms-px">
             <Button
               variant="primary"
               size="sm"
