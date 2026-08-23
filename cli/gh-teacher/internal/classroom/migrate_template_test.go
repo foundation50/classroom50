@@ -290,7 +290,7 @@ func TestCopyOneTemplate(t *testing.T) {
 	t.Run("skipped when no starter_code_repository", func(t *testing.T) {
 		var errOut bytes.Buffer
 		detail := classroomAssignmentDetail{ID: 1, Slug: "noop", Type: "individual"}
-		got, err := copyOneTemplate(nil, &errOut, "tgt", "", 42, detail)
+		got, err := copyOneTemplate(nil, &errOut, "tgt", "", "cs", 42, detail)
 		if err != nil {
 			t.Fatalf("copyOneTemplate: %v", err)
 		}
@@ -308,7 +308,7 @@ func TestCopyOneTemplate(t *testing.T) {
 	t.Run("skipped when slug fails shortNamePattern (pre-validation)", func(t *testing.T) {
 		var errOut bytes.Buffer
 		detail := classroomAssignmentDetail{ID: 1, Slug: "Bad-Slug", Type: "individual"}
-		got, err := copyOneTemplate(nil, &errOut, "tgt", "", 42, detail)
+		got, err := copyOneTemplate(nil, &errOut, "tgt", "", "cs", 42, detail)
 		if err != nil {
 			t.Fatalf("copyOneTemplate: %v", err)
 		}
@@ -323,7 +323,7 @@ func TestCopyOneTemplate(t *testing.T) {
 	t.Run("skipped when type is unknown (pre-validation)", func(t *testing.T) {
 		var errOut bytes.Buffer
 		detail := classroomAssignmentDetail{ID: 1, Slug: "hello", Type: "weird"}
-		got, err := copyOneTemplate(nil, &errOut, "tgt", "", 42, detail)
+		got, err := copyOneTemplate(nil, &errOut, "tgt", "", "cs", 42, detail)
 		if err != nil {
 			t.Fatalf("copyOneTemplate: %v", err)
 		}
@@ -332,6 +332,24 @@ func TestCopyOneTemplate(t *testing.T) {
 		}
 		if !strings.Contains(got.SkipReason, "unknown type") {
 			t.Errorf("skip reason = %q, want 'unknown type'", got.SkipReason)
+		}
+	})
+
+	// #691: a slug that composes past GitHub's repo-name limit with the target
+	// short-name is skipped BEFORE any API write, like the other
+	// pre-validation guards. "cs" leaves a 57-char budget; 58 exceeds it.
+	t.Run("skipped when slug exceeds the composed repo-name budget (pre-validation)", func(t *testing.T) {
+		var errOut bytes.Buffer
+		detail := classroomAssignmentDetail{ID: 1, Slug: strings.Repeat("s", 58), Type: "individual"}
+		got, err := copyOneTemplate(nil, &errOut, "tgt", "", "cs", 42, detail)
+		if err != nil {
+			t.Fatalf("copyOneTemplate: %v", err)
+		}
+		if got.Action != templateActionSkipped {
+			t.Errorf("action = %s, want skipped", got.Action)
+		}
+		if !strings.Contains(got.SkipReason, "repo-name limit") {
+			t.Errorf("skip reason = %q, want 'repo-name limit'", got.SkipReason)
 		}
 	})
 
@@ -369,7 +387,7 @@ func TestCopyOneTemplate(t *testing.T) {
 		})
 		defer cleanup()
 		// a.Classroom.ID stays zero; the caller passes 95884.
-		_, err := copyOneTemplate(githubtest.NewTestClient(t, server), io.Discard, "tgt", "", 95884, a("hello", "src/hello", false))
+		_, err := copyOneTemplate(githubtest.NewTestClient(t, server), io.Discard, "tgt", "", "cs", 95884, a("hello", "src/hello", false))
 		if err != nil {
 			t.Fatalf("copyOneTemplate: %v", err)
 		}
@@ -386,7 +404,7 @@ func TestCopyOneTemplate(t *testing.T) {
 		})
 		defer cleanup()
 		var errOut bytes.Buffer
-		got, err := copyOneTemplate(githubtest.NewTestClient(t, server), &errOut, "tgt", "", 42, a("hello", "src/hello", false))
+		got, err := copyOneTemplate(githubtest.NewTestClient(t, server), &errOut, "tgt", "", "cs", 42, a("hello", "src/hello", false))
 		if err != nil {
 			t.Fatalf("copyOneTemplate: %v", err)
 		}
@@ -409,7 +427,7 @@ func TestCopyOneTemplate(t *testing.T) {
 		})
 		defer cleanup()
 		var errOut bytes.Buffer
-		got, err := copyOneTemplate(githubtest.NewTestClient(t, server), &errOut, "tgt", "", 42, a("hello", "src/hello", false))
+		got, err := copyOneTemplate(githubtest.NewTestClient(t, server), &errOut, "tgt", "", "cs", 42, a("hello", "src/hello", false))
 		if err != nil {
 			t.Fatalf("copyOneTemplate: %v", err)
 		}
@@ -435,7 +453,7 @@ func TestCopyOneTemplate(t *testing.T) {
 		})
 		defer cleanup()
 		var errOut bytes.Buffer
-		got, err := copyOneTemplate(githubtest.NewTestClient(t, server), &errOut, "tgt", "", 42, a("hello", "src/hello", false))
+		got, err := copyOneTemplate(githubtest.NewTestClient(t, server), &errOut, "tgt", "", "cs", 42, a("hello", "src/hello", false))
 		if err != nil {
 			t.Fatalf("copyOneTemplate: %v", err)
 		}
@@ -482,7 +500,7 @@ func TestCopyOneTemplate(t *testing.T) {
 		})
 		defer cleanup()
 		var errOut bytes.Buffer
-		got, err := copyOneTemplate(githubtest.NewTestClient(t, server), &errOut, "tgt", "", 42, a("hello", "src/hello", true))
+		got, err := copyOneTemplate(githubtest.NewTestClient(t, server), &errOut, "tgt", "", "cs", 42, a("hello", "src/hello", true))
 		if err != nil {
 			t.Fatalf("copyOneTemplate: %v", err)
 		}
@@ -533,7 +551,7 @@ func TestCopyOneTemplate(t *testing.T) {
 		})
 		defer cleanup()
 		var errOut bytes.Buffer
-		got, err := copyOneTemplate(githubtest.NewTestClient(t, server), &errOut, "tgt", "migrated", 42, a("hello", "src/hello", false))
+		got, err := copyOneTemplate(githubtest.NewTestClient(t, server), &errOut, "tgt", "migrated", "cs", 42, a("hello", "src/hello", false))
 		if err != nil {
 			t.Fatalf("copyOneTemplate: %v", err)
 		}

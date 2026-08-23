@@ -86,13 +86,15 @@ func classroomAddCmd() *cobra.Command {
 			"and populate it with a four-file scaffold: classroom.json,\n" +
 			"assignments.json, roster.csv, and scores.json.\n\n" +
 			"Short-name rules (must match ^[a-z0-9][a-z0-9-]{1,99}$):\n" +
-			"  - 2-100 characters total\n" +
+			"  - 2-40 characters total for a new classroom\n" +
 			"  - lowercase letters, digits, or hyphens\n" +
 			"  - must start with a letter or digit (not a hyphen)\n\n" +
 			"These mirror GitHub's repo-name constraints because the\n" +
 			"short-name flows into student repo names like\n" +
 			"`<short-name>-<assignment>-<username>` (see `gh student\n" +
-			"accept`).\n\n" +
+			"accept`). GitHub caps repo names at 100 characters, so a new\n" +
+			"classroom's short-name is capped at 40 to leave room for the\n" +
+			"assignment slug and any username.\n\n" +
 			"Unlisted resources (opt-in): pass --unlisted to publish this\n" +
 			"classroom's resources at an unguessable URL path segment\n" +
 			"(`<classroom>/<key>/...`) instead of the guessable default. This\n" +
@@ -114,6 +116,12 @@ func classroomAddCmd() *cobra.Command {
 
 			org, shortName, err := parseOrgShortNameArgs(args)
 			if err != nil {
+				return err
+			}
+			// Creation-time cap only (#691): `add` mints the short-name, so it
+			// must leave slug budget; the other subcommands sharing
+			// parseOrgShortNameArgs operate on existing classrooms of any length.
+			if err := validate.ClassroomShortNameBudget(shortName); err != nil {
 				return err
 			}
 

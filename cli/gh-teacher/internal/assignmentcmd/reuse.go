@@ -218,6 +218,12 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		if p.NameWasSet {
 			copied.Name = p.NameOverride
 		}
+		// #691: reuse always mints a new slug in the TARGET classroom, so the
+		// composed repo-name budget is unconditional (unlike add's replace
+		// path). Covers the auto-suffixed slug too — checked after resolution.
+		if err := validate.ComposedRepoNameBudget(p.To, finalSlug); err != nil {
+			return nil, err
+		}
 
 		if err := assignment.ValidateAssignmentEntry(copied); err != nil {
 			return nil, fmt.Errorf("copied assignment is invalid: %w", err)

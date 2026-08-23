@@ -163,7 +163,7 @@ func targetTemplateName(slug, suffix string) string {
 func runTemplateCopy(client githubapi.Client, errOut io.Writer, plan migrationPlan, templateSuffix string) ([]resolvedTemplate, error) {
 	out := make([]resolvedTemplate, 0, len(plan.Assignments))
 	for _, a := range plan.Assignments {
-		r, err := copyOneTemplate(client, errOut, plan.TargetOrg, templateSuffix, plan.Classroom.ID, a)
+		r, err := copyOneTemplate(client, errOut, plan.TargetOrg, templateSuffix, plan.ShortName, plan.Classroom.ID, a)
 		if err != nil {
 			return nil, err
 		}
@@ -182,7 +182,9 @@ func runTemplateCopy(client githubapi.Client, errOut io.Writer, plan migrationPl
 //
 // Skip reasons are recorded on `errOut`. classroomID comes from the discovery
 // context, not `a.Classroom.ID` (unreliable on the assignment-detail response).
-func copyOneTemplate(client githubapi.Client, errOut io.Writer, targetOrg, templateSuffix string, classroomID int64, a classroomAssignmentDetail) (resolvedTemplate, error) {
+// shortName is the TARGET classroom directory, needed for the composed
+// repo-name budget check.
+func copyOneTemplate(client githubapi.Client, errOut io.Writer, targetOrg, templateSuffix, shortName string, classroomID int64, a classroomAssignmentDetail) (resolvedTemplate, error) {
 	skip := func(reason string) resolvedTemplate {
 		_, _ = fmt.Fprintf(errOut, "Skipping %q: %s\n", a.Slug, reason)
 		return resolvedTemplate{Assignment: a, Action: templateActionSkipped, SkipReason: reason}
@@ -192,6 +194,13 @@ func copyOneTemplate(client githubapi.Client, errOut io.Writer, targetOrg, templ
 	// — otherwise a bad slug/mode generates a template repo, then drops the
 	// entry at commit time, orphaning the repo.
 	if err := validate.ShortName(a.Slug, "slug"); err != nil {
+		return skip(err.Error()), nil
+	}
+	// #691: a migrated slug that can't fit the composed repo-name budget would
+	// fail every long-username accept in the new classroom; skip it (the rest
+	// of the migration proceeds) so the teacher can re-add it under a shorter
+	// slug.
+	if err := validate.ComposedRepoNameBudget(shortName, a.Slug); err != nil {
 		return skip(err.Error()), nil
 	}
 	if !assignment.IsValidAssignmentMode(a.Type) {

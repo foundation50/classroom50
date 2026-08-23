@@ -2,6 +2,7 @@ package classroom
 
 import (
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
@@ -42,6 +43,21 @@ func TestValidateShortName(t *testing.T) {
 				t.Fatalf("validate.ShortName(%q) = nil, want error", tc.in)
 			}
 		})
+	}
+}
+
+// TestClassroomAddShortNameCreationCap: `classroom add` mints the short-name,
+// so it enforces the creation cap (#691) in its preflight — before the key
+// prompt, auth, or any network. The other subcommands sharing
+// parseOrgShortNameArgs stay uncapped (they operate on existing classrooms).
+func TestClassroomAddShortNameCreationCap(t *testing.T) {
+	cmd := classroomAddCmd()
+	cmd.SetArgs([]string{"org", strings.Repeat("a", 41)})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "capped at 40") {
+		t.Fatalf("err = %v, want the creation-cap error", err)
 	}
 }
 

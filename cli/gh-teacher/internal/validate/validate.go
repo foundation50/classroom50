@@ -16,11 +16,12 @@ import (
 // student-repo names and the contents/tree API. Exposed for the few call sites
 // that match directly; most callers should use ShortName for the standard error.
 //
-// The cap is 100 per segment, matching GitHub's repo-name limit — NOT a full
-// guarantee: `<classroom>-<assignment>-<username>` can exceed 100 even when each
-// part is legal. Budgeting the segments against each other is open work
-// (foundation50/classroom50#691); until then an overflow surfaces as a legible
-// "name too long" error at accept.
+// The cap is 100 per segment, matching GitHub's repo-name limit — a READ-side
+// tolerance so pre-cap documents keep validating. Write paths layer the
+// composed budget on top (#691): ClassroomShortNameBudget caps a NEW
+// classroom, and ComposedRepoNameBudget gates every path minting a NEW slug;
+// an existing over-budget pair still surfaces a legible "name too long" error
+// at accept.
 var ShortNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,99}$`)
 
 // ShortNamePatternDescription: human-readable summary of ShortNamePattern,
@@ -88,6 +89,39 @@ const (
 func ComposedRepoNameOverflows(classroom, slug string) (worstCase int, overflows bool) {
 	worstCase, fits := contract.ComposedRepoNameFits(classroom, slug)
 	return worstCase, !fits
+}
+
+// ClassroomShortNameBudget rejects a short-name past the CREATION cap
+// (contract.ClassroomShortNameMaxLen): the short-name prefixes every student
+// repo in the classroom, so an over-long one starves every future assignment
+// slug (#691). Creation-time only — existing classrooms up to
+// ShortNamePattern's 100 stay fully operable.
+func ClassroomShortNameBudget(shortName string) error {
+	if len(shortName) > contract.ClassroomShortNameMaxLen {
+		return fmt.Errorf("classroom short-name %q is %d characters; new classrooms are capped at %d because student repos are named `<short-name>-<assignment>-<username>` and GitHub caps repo names at %d characters — a shorter short-name keeps room for assignment slugs and any username",
+			shortName, len(shortName), contract.ClassroomShortNameMaxLen, contract.GitHubRepoNameMaxLen)
+	}
+	return nil
+}
+
+// ComposedRepoNameBudget rejects a classroom+slug pair whose composed
+// student-repo name can exceed GitHub's limit with a worst-case
+// (contract.GitHubLoginMaxLen) username — the hard write-time gate for every
+// path that mints a NEW assignment slug (#691). Existing over-budget
+// assignments are untouched: readers stay tolerant, and a same-slug replace
+// is allowed so legacy entries remain editable.
+func ComposedRepoNameBudget(classroom, slug string) error {
+	worst, fits := contract.ComposedRepoNameFits(classroom, slug)
+	if fits {
+		return nil
+	}
+	budget := contract.AssignmentSlugBudget(classroom)
+	if budget < 2 {
+		return fmt.Errorf("student repos are named `<classroom>-<assignment>-<username>`; %q + %q reaches %d characters with a %d-char username, over GitHub's %d-char repo-name limit — classroom %q leaves no room for any slug, so create a classroom with a shorter short-name (at most %d characters) and add the assignment there",
+			classroom, slug, worst, contract.GitHubLoginMaxLen, contract.GitHubRepoNameMaxLen, classroom, contract.ClassroomShortNameMaxLen)
+	}
+	return fmt.Errorf("student repos are named `<classroom>-<assignment>-<username>`; %q + %q reaches %d characters with a %d-char username, over GitHub's %d-char repo-name limit — use a slug of at most %d characters, or create a classroom with a shorter short-name",
+		classroom, slug, worst, contract.GitHubLoginMaxLen, contract.GitHubRepoNameMaxLen, budget)
 }
 
 // ScopeListContains reports whether the comma-separated OAuth scope

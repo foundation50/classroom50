@@ -3,6 +3,8 @@ package validate
 import (
 	"strings"
 	"testing"
+
+	"github.com/foundation50/classroom50-cli-shared/contract"
 )
 
 func TestScopeListContains(t *testing.T) {
@@ -160,6 +162,44 @@ func TestOrgName(t *testing.T) {
 		if err := OrgName(org); err == nil {
 			t.Errorf("OrgName(%q) = nil, want an error", org)
 		}
+	}
+}
+
+func TestClassroomShortNameBudget(t *testing.T) {
+	if err := ClassroomShortNameBudget(strings.Repeat("a", contract.ClassroomShortNameMaxLen)); err != nil {
+		t.Errorf("a cap-length short-name must pass, got %v", err)
+	}
+	err := ClassroomShortNameBudget(strings.Repeat("a", contract.ClassroomShortNameMaxLen+1))
+	if err == nil {
+		t.Fatal("an over-cap short-name must fail")
+	}
+	// The error must be actionable: name the cap and the reason.
+	if !strings.Contains(err.Error(), "capped at 40") || !strings.Contains(err.Error(), "<short-name>-<assignment>-<username>") {
+		t.Errorf("err = %q, want the cap and the repo-name shape named", err.Error())
+	}
+}
+
+func TestComposedRepoNameBudget(t *testing.T) {
+	// Exactly at the limit: classroom(30) + 1 + slug(29) + 1 + 39 = 100.
+	if err := ComposedRepoNameBudget(strings.Repeat("a", 30), strings.Repeat("b", 29)); err != nil {
+		t.Errorf("an exactly-100 composition must pass, got %v", err)
+	}
+	// One over: the error names the remaining slug budget (59 - 30 = 29).
+	err := ComposedRepoNameBudget(strings.Repeat("a", 30), strings.Repeat("b", 30))
+	if err == nil {
+		t.Fatal("a 101-char worst case must fail")
+	}
+	if !strings.Contains(err.Error(), "at most 29 characters") {
+		t.Errorf("err = %q, want the remaining slug budget (29) named", err.Error())
+	}
+	// A classroom leaving no room for even a 2-char slug points at a new
+	// classroom instead of an impossible shorter slug.
+	err = ComposedRepoNameBudget(strings.Repeat("a", 58), "bb")
+	if err == nil {
+		t.Fatal("a no-room classroom must fail")
+	}
+	if !strings.Contains(err.Error(), "no room for any slug") {
+		t.Errorf("err = %q, want the no-room phrasing", err.Error())
 	}
 }
 
