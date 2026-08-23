@@ -26,7 +26,10 @@ func TestDeriveShortName(t *testing.T) {
 		{"real-export name 2", "CS50 Stress Test-classroom-1", "cs50-stress-test-classroom-1", false},
 		{"slashes and spaces", "Intro to CS / Section 1", "intro-to-cs-section-1", false},
 		{"apostrophe + em-dash", "Spring '26 — Honors", "spring-26-honors", false},
-		{"too long, truncates cleanly", strings.Repeat("abcdefghij-", 10), strings.Repeat("abcdefghij-", 9) + "a", false},
+		// Truncation cap is the CREATION budget (40), not the pattern's 100.
+		{"too long, truncates to the creation cap", strings.Repeat("abcdefghij-", 10), strings.Repeat("abcdefghij-", 3) + "abcdefg", false},
+		// A cut landing on a hyphen is trimmed, not left dangling.
+		{"truncation exposing a trailing hyphen", strings.Repeat("abcdefghi-", 10), strings.Repeat("abcdefghi-", 3) + "abcdefghi", false},
 		{"leading and trailing punctuation", "—Hello—", "hello", false},
 		{"empty", "", "", true},
 		{"whitespace only", "   ", "", true},

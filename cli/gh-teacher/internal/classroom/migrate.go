@@ -56,9 +56,11 @@ func classroomMigrateCmd() *cobra.Command {
 			"doesn't yet exist.\n\n" +
 			"--short-name overrides the auto-derived classroom directory\n" +
 			"name. Migrate slugifies the source classroom name (lowercase,\n" +
-			"non-alnum → '-', collapsed, trimmed) and validates against\n" +
-			"^[a-z0-9][a-z0-9-]{1,99}$. Pass --short-name explicitly if\n" +
-			"the derived value fails validation.\n\n" +
+			"non-alnum → '-', collapsed, trimmed, truncated to 40 chars) and\n" +
+			"validates against ^[a-z0-9][a-z0-9-]{1,99}$. New classrooms are\n" +
+			"capped at 40 characters so `<short-name>-<assignment>-<username>`\n" +
+			"student-repo names stay under GitHub's 100-character limit. Pass\n" +
+			"--short-name explicitly if the derived value fails validation.\n\n" +
 			"--template-suffix appends a string to every target template\n" +
 			"repo name (e.g., --template-suffix migrated → readability-migrated).\n" +
 			"Use to escape collisions with existing target-org repos.\n\n" +
@@ -162,6 +164,12 @@ func discoverMigration(client githubapi.Client, errOut io.Writer, opts migrateOp
 		}
 	}
 	if err := validate.ShortName(shortNameVal, "short-name"); err != nil {
+		return migrationPlan{}, err
+	}
+	// Creation-time cap (#691): migrate mints the classroom, so an explicit
+	// --short-name past the cap fails here, before any template repos are
+	// generated. Auto-derived names are already truncated to the cap.
+	if err := validate.ClassroomShortNameBudget(shortNameVal); err != nil {
 		return migrationPlan{}, err
 	}
 	// A migrated classroom gets a team (classroom50-<short>); reject a
