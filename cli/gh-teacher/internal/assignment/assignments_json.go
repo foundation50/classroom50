@@ -798,32 +798,52 @@ const slugMaxLen = 100
 // `hello` → ("hello", 0); `hello-2` → ("hello", 2).
 var slugSuffixRe = regexp.MustCompile(`^(.*)-([1-9][0-9]*)$`)
 
-// NextAvailableSlug returns a slug that doesn't collide (case-insensitively),
-// auto-suffixing `-2`, `-3`, …; a base already ending in `-N` increments from
-// N+1. Returns the input unchanged when already free.
-//
-// A candidate overflowing slugMaxLen returns an actionable error rather than
-// an over-long slug. A free-but-over-cap input is returned unchanged (the
-// caller's validation surfaces it).
-func NextAvailableSlug(entries []AssignmentEntry, slug string) (string, error) {
-	if !SlugExistsFold(entries, slug) {
-		return slug, nil
+// trimSlugTo cuts s to at most n bytes and drops a trailing hyphen the cut
+// exposes (a valid slug never ends with one).
+func trimSlugTo(s string, n int) string {
+	if len(s) > n {
+		s = s[:n]
 	}
-	base := slug
+	return strings.TrimRight(s, "-")
+}
+
+// NextAvailableSlug returns a slug within maxLen that doesn't collide
+// (case-insensitively): the base is trimmed to maxLen, and a collision
+// auto-suffixes `-2`, `-3`, … with the stem re-trimmed so the candidate stays
+// within maxLen; a base already ending in `-N` increments from N+1. Callers
+// pass the target classroom's composed repo-name budget (#691) — or slugMaxLen
+// when unconstrained; anything larger clamps to the pattern cap. Mirrors the
+// web's nextAvailableSlug so both tools derive the same copy names. Errors
+// only when maxLen can't fit ShortName's 2-char minimum.
+func NextAvailableSlug(entries []AssignmentEntry, slug string, maxLen int) (string, error) {
+	if maxLen > slugMaxLen {
+		maxLen = slugMaxLen
+	}
+	if maxLen < 2 {
+		return "", fmt.Errorf("cannot derive a slug for %q: the target classroom leaves %d characters for a slug (student repo names are capped at %d by GitHub) — reuse into a classroom with a shorter short-name",
+			slug, maxLen, slugMaxLen)
+	}
+	base := trimSlugTo(slug, maxLen)
+	if !SlugExistsFold(entries, base) {
+		return base, nil
+	}
+	stem := base
 	start := 2
-	if m := slugSuffixRe.FindStringSubmatch(slug); m != nil {
-		base = m[1]
+	if m := slugSuffixRe.FindStringSubmatch(base); m != nil {
+		stem = m[1]
 		// m[2] is a non-empty digit run with no leading zero, so Atoi always
 		// succeeds; start one past it.
 		n, _ := strconv.Atoi(m[2])
 		start = n + 1
 	}
+	// Terminates: entries are finite and candidates are distinct per n.
 	for n := start; ; n++ {
-		candidate := fmt.Sprintf("%s-%d", base, n)
-		if len(candidate) > slugMaxLen {
-			return "", fmt.Errorf("cannot auto-suffix slug %q: every candidate (e.g., %q) exceeds the %d-character slug cap — pass an explicit, shorter --slug",
-				slug, candidate, slugMaxLen)
+		suffix := fmt.Sprintf("-%d", n)
+		room := maxLen - len(suffix)
+		if room < 1 {
+			return "", fmt.Errorf("cannot auto-suffix slug %q within the %d-character budget — pass an explicit, shorter --slug", slug, maxLen)
 		}
+		candidate := trimSlugTo(stem, room) + suffix
 		if !SlugExistsFold(entries, candidate) {
 			return candidate, nil
 		}

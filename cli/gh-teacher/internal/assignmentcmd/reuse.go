@@ -198,8 +198,10 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		}
 
 		// Resolve the target slug: an explicit --slug must not collide
-		// (case-insensitive); else auto-suffix off the source slug. Reset each
-		// attempt since build re-runs on a rebase retry.
+		// (case-insensitive); else auto-derive off the source slug — trimmed to
+		// the target's composed repo-name budget (#691) and suffixed past
+		// collisions, mirroring the web reuse modals. Reset each attempt since
+		// build re-runs on a rebase retry.
 		autoSuffixed = false
 		if p.SlugWasSet {
 			if assignment.SlugExistsFold(dstFile.Assignments, p.SlugOverride) {
@@ -208,7 +210,7 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 			}
 			finalSlug = p.SlugOverride
 		} else {
-			finalSlug, err = assignment.NextAvailableSlug(dstFile.Assignments, p.SourceSlug)
+			finalSlug, err = assignment.NextAvailableSlug(dstFile.Assignments, p.SourceSlug, contract.AssignmentSlugBudget(p.To))
 			if err != nil {
 				return nil, err
 			}
@@ -270,7 +272,13 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 			p.Org, configrepo.ConfigRepoName, assignmentsFilePath(p.To), p.SourceSlug, finalSlug, templateDesc, copied.Autograder)
 	}
 	if autoSuffixed {
-		_, _ = fmt.Fprintf(errOut, "Note: slug %q already existed in %q, so the copy was named %q.\n", p.SourceSlug, p.To, finalSlug)
+		// The derived name can differ for two reasons; name the right one.
+		if _, fits := contract.ComposedRepoNameFits(p.To, p.SourceSlug); !fits {
+			_, _ = fmt.Fprintf(errOut, "Note: slug %q would push student repo names past GitHub's %d-char limit in %q, so the copy was named %q.\n",
+				p.SourceSlug, contract.GitHubRepoNameMaxLen, p.To, finalSlug)
+		} else {
+			_, _ = fmt.Fprintf(errOut, "Note: slug %q already existed in %q, so the copy was named %q.\n", p.SourceSlug, p.To, finalSlug)
+		}
 	}
 
 	// Re-apply the target classroom's private in-org template team grant. In
