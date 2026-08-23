@@ -1912,12 +1912,19 @@ func TestNextAvailableSlug(t *testing.T) {
 
 // TestNextAvailableSlug_NoRoom pins that a budget below ShortName's 2-char
 // minimum (a legacy over-long classroom) is an actionable error rather than a
-// degenerate slug.
+// degenerate slug — whether the budget itself is too small or the trim lands
+// just past a hyphen and leaves a single character.
 func TestNextAvailableSlug_NoRoom(t *testing.T) {
 	if _, err := NextAvailableSlug(entriesWithSlugs(), "hello", 1); err == nil {
 		t.Fatal("expected a no-room error, got nil")
 	} else if !strings.Contains(err.Error(), "shorter short-name") {
 		t.Errorf("error should point at a shorter classroom, got %v", err)
+	}
+	// maxLen 2 is nominally viable, but "a-bcd" trims to the 1-char "a".
+	if _, err := NextAvailableSlug(entriesWithSlugs(), "a-bcd", 2); err == nil {
+		t.Fatal("expected a sub-minimum trim error, got nil")
+	} else if !strings.Contains(err.Error(), "--slug") {
+		t.Errorf("error should point at --slug, got %v", err)
 	}
 }
 

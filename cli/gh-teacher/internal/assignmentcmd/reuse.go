@@ -142,8 +142,10 @@ type reuseAssignmentParams struct {
 	AsJSON       bool
 }
 
-// reuseResult is the --json shape. `slug` is the FINAL slug (after any
-// auto-suffix), which is why --json exists — the suffix isn't knowable ahead.
+// reuseResult is the --json shape. `slug` is the FINAL slug — after any
+// auto-suffix or budget trim, which is why --json exists (neither is knowable
+// ahead). `auto_suffixed` is true whenever the final slug differs from the
+// source slug, whether from a collision suffix or a budget trim.
 type reuseResult struct {
 	Org          string                  `json:"org"`
 	Classroom    string                  `json:"classroom"`

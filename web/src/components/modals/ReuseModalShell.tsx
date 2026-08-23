@@ -143,11 +143,17 @@ export const reuseSlugStatus = ({
   if (loading) return t("components.modals.reuseShell.slug.checking")
   if (error) return t("components.modals.reuseShell.slug.checkError")
   if (slugOverBudget)
-    return t("components.modals.reuseShell.slug.overBudget", {
-      length: normalizedSlug.length,
-      budget: slugBudget,
-      classroom: classroomLabel,
-    })
+    // A budget below the 2-char slug minimum means NO slug can fit (a legacy
+    // over-long classroom) — point at a different classroom, not a shorter slug.
+    return slugBudget < 2
+      ? t("components.modals.reuseShell.slug.noRoom", {
+          classroom: classroomLabel,
+        })
+      : t("components.modals.reuseShell.slug.overBudget", {
+          length: normalizedSlug.length,
+          budget: slugBudget,
+          classroom: classroomLabel,
+        })
   if (slugTaken)
     return t("components.modals.reuseShell.slug.taken", {
       slug: normalizedSlug,

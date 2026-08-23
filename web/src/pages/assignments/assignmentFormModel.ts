@@ -6,6 +6,7 @@ import {
   isValidShortName,
 } from "@/util/shortName"
 import {
+  CLASSROOM_SHORT_NAME_MAX_LEN,
   GITHUB_REPO_NAME_MAX_LEN,
   assignmentSlugBudget,
   composedRepoNameFits,
@@ -256,6 +257,33 @@ export type SlugContext = {
   classroom?: string
 }
 
+// The composed repo-name budget error for `slug` in `classroom`, or undefined
+// when it fits (#691). The single recipe shared by the submit validator and
+// the live as-you-type check (DetailsSection). A classroom leaving no room for
+// any slug (a legacy over-long short-name) points at a new classroom instead
+// of an impossible shorter slug, mirroring the CLI's ComposedRepoNameBudget.
+export function slugBudgetError(
+  t: TFunction,
+  classroom: string,
+  slug: string,
+): string | undefined {
+  if (composedRepoNameFits(classroom, slug).fits) return undefined
+  const budget = assignmentSlugBudget(classroom)
+  if (budget < 2) {
+    return t("assignments.form.validation.slugNoRoom", {
+      classroom,
+      max: CLASSROOM_SHORT_NAME_MAX_LEN,
+      limit: GITHUB_REPO_NAME_MAX_LEN,
+    })
+  }
+  return t("assignments.form.validation.slugOverBudget", {
+    classroom,
+    budget,
+    length: slug.length,
+    limit: GITHUB_REPO_NAME_MAX_LEN,
+  })
+}
+
 // Pure submit-time validation, mirroring gh-teacher's write-time rules so a bad
 // value is caught in the form rather than by a failed commit or an unparseable
 // file. Returns a field->message map ({} when valid) so it's testable without a
@@ -280,26 +308,23 @@ export function validateAssignmentForm(
       errors.slug = t("assignments.form.validation.slugInvalid", {
         description: SHORT_NAME_PATTERN_DESCRIPTION,
       })
-    } else if (
-      slugContext?.classroom &&
-      !composedRepoNameFits(slugContext.classroom, slug).fits
-    ) {
+    } else {
       // #691: a NEW slug must fit the composed `<classroom>-<slug>-<username>`
       // budget, or long-username accepts fail with GitHub's 100-char 422.
-      errors.slug = t("assignments.form.validation.slugOverBudget", {
-        classroom: slugContext.classroom,
-        budget: assignmentSlugBudget(slugContext.classroom),
-        length: slug.length,
-        limit: GITHUB_REPO_NAME_MAX_LEN,
-      })
-    } else if (
-      (slugContext?.takenSlugs ?? []).some(
-        (s) => s.trim().toLowerCase() === slug.toLowerCase(),
-      )
-    ) {
-      // Case-insensitive collision (slugs become repo path segments); write
-      // path re-checks authoritatively (nextAvailableSlug).
-      errors.slug = t("validation.assignmentSlugTaken", { slug })
+      const budgetError = slugContext?.classroom
+        ? slugBudgetError(t, slugContext.classroom, slug)
+        : undefined
+      if (budgetError) {
+        errors.slug = budgetError
+      } else if (
+        (slugContext?.takenSlugs ?? []).some(
+          (s) => s.trim().toLowerCase() === slug.toLowerCase(),
+        )
+      ) {
+        // Case-insensitive collision (slugs become repo path segments); write
+        // path re-checks authoritatively (nextAvailableSlug).
+        errors.slug = t("validation.assignmentSlugTaken", { slug })
+      }
     }
   }
   if (!Number(value.max_group_size)) {
