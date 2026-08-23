@@ -2208,6 +2208,70 @@ class TestAllSubmitReleases:
         assert len(releases) == 101
         assert releases[-1]["tag_name"] == "submit/last"
 
+    def test_looping_next_link_raises_instead_of_returning_partial(self, monkeypatch):
+        # A looping Link chain means the listing cannot be completed. Returning
+        # the pages walked so far would persist a TRUNCATED submission history
+        # over the student's richer prior entry — raise IncompleteListing so the
+        # caller's warn-and-skip preserves it instead (same invariant as every
+        # other paginated walk).
+        body = json.dumps(
+            [{"tag_name": f"submit/p-{i}"} for i in range(100)]
+        ).encode("utf-8")
+
+        class LoopHeaders:
+            def get(self, name):
+                if name == "Link":
+                    return '<https://api.github.com/releases?cursor=same>; rel="next"'
+                return None
+
+        monkeypatch.setattr(
+            cs, "_http_get_with_headers", lambda *a, **k: (body, LoopHeaders())
+        )
+        with pytest.raises(cs.IncompleteListing, match="incomplete"):
+            cs.all_submit_releases("https://api.github.com", "o", "r", "token")
+
+
+class TestCommitWalkEarlyStop:
+    def test_stops_paging_once_the_baseline_page_is_reached(self, monkeypatch):
+        # Commits arrive newest-first, so every page past the one carrying the
+        # accept baseline is pre-accept history the caller cuts anyway — the
+        # walk must not spend requests on it.
+        page1 = json.dumps(
+            [{"sha": f"student{i}"} for i in range(100)]
+        ).encode("utf-8")
+        page2 = json.dumps(
+            [{"sha": "baseline"}, {"sha": "template1"}]
+        ).encode("utf-8")
+
+        class Headers:
+            def __init__(self, link):
+                self._link = link
+
+            def get(self, name):
+                return self._link if name == "Link" else None
+
+        calls = {"n": 0}
+
+        def fake(url, token, *, accept, max_bytes=None):
+            calls["n"] += 1
+            if "cursor=two" in url:
+                return page2, Headers(
+                    '<https://api.github.com/x?cursor=three>; rel="next"'
+                )
+            return page1, Headers('<https://api.github.com/x?cursor=two>; rel="next"')
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake)
+        commits = cs.list_default_branch_commits(
+            "https://api.github.com", "o", "r", "main", "token",
+            stop_at_sha="baseline",
+        )
+        assert calls["n"] == 2, "must stop on the baseline's page"
+        # The whole baseline page is returned so the caller cuts precisely.
+        assert commits[-1]["sha"] == "template1"
+        assert cs.detect_branch_submissions(commits, "baseline") == [
+            {"sha": f"student{i}", "datetime": None} for i in range(100)
+        ]
+
 
 # main() hard-failure handling -------------------------------------------------
 
@@ -2682,6 +2746,31 @@ class TestCollectedAtStamp:
         scores = json.loads((classroom / "scores.json").read_text())
         assert scores["assignments"]["sibling"]["collected_at"] == "2026-01-01T00:00:00Z"
         assert "collected_at" in scores["assignments"]["hello"]
+
+    def test_walked_bucket_type_resyncs_without_updates(self, tmp_path, monkeypatch):
+        # A mode flip must reach the bucket `type` even when the walk produced
+        # no entry updates (apply_updates only syncs buckets it touches) — a
+        # detected-only or update-less bucket would otherwise keep the stale
+        # mode forever and the web would render the wrong assignment type.
+        classroom = write_minimal_classroom(tmp_path)
+        (classroom / "scores.json").write_text(
+            json.dumps(
+                {
+                    "schema": cs.SCORES_SCHEMA_V1,
+                    "assignments": {
+                        "hello": {"type": "group", "entries": []},
+                    },
+                }
+            )
+        )
+        self._env(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            cs, "collect_classroom", lambda **kwargs: ([], 0, {"hello": "individual"}, {})
+        )
+
+        assert cs.main() == 0
+        scores = json.loads((classroom / "scores.json").read_text())
+        assert scores["assignments"]["hello"]["type"] == "individual"
 
     def test_skipped_classroom_returns_no_walked_slugs(self, monkeypatch):
         # Team unreadable -> collection skipped wholesale; nothing may be
