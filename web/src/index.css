@@ -110,17 +110,25 @@
 }
 
 /* Sidebar accent tokens. The rail/text follow daisyUI `neutral` (deep neutral
-   gray); the active-border/logo accent is hero GitHub Green (decorative,
-   non-text) and the active/hover surface is a lifted neutral sheet. Light uses
-   the hero green over an opaque slate surface; dark reuses the theme primary
-   over a translucent sheet. Consumed via arbitrary values in
+   gray); the logo mark and the active-row border keep to the neutral family —
+   a soft white derived from the rail's own text color (decorative, non-text) —
+   and the active/hover surface is a lifted neutral sheet. Dark uses the same
+   soft-white accent over a translucent sheet. Consumed via arbitrary values in
    components/drawer. */
 [data-theme="sumi"] {
-  --sidebar-accent: #0fbf3e;
+  --sidebar-accent: color-mix(
+    in oklab,
+    var(--color-neutral-content) 88%,
+    transparent
+  );
   --sidebar-surface: #39424e;
 }
 [data-theme="sumi-dark"] {
-  --sidebar-accent: var(--color-primary);
+  --sidebar-accent: color-mix(
+    in oklab,
+    var(--color-neutral-content) 88%,
+    transparent
+  );
   --sidebar-surface: color-mix(
     in oklch,
     var(--color-neutral-content) 10%,
