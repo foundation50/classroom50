@@ -52,6 +52,7 @@ func NewCmd() *cobra.Command {
 	}
 	cmd.AddCommand(assignmentAddCmd())
 	cmd.AddCommand(assignmentReuseCmd())
+	cmd.AddCommand(assignmentRenameCmd())
 	cmd.AddCommand(assignmentRemoveCmd())
 	cmd.AddCommand(assignmentListCmd())
 	cmd.AddCommand(assignmentLockCmd())
