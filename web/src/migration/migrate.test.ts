@@ -81,6 +81,7 @@ function plan(items: MigrationItem[]): MigrationPreflight {
     term: "Fall-2026",
     templateSuffix: "",
     items,
+    renames: [],
     counts: {
       import: items.filter((i) => i.action === "import").length,
       reuse: items.filter((i) => i.action === "reuse").length,

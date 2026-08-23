@@ -109,6 +109,11 @@ export type MigrationBlocker = {
   params?: Record<string, string>
 }
 
+// One import-slug rewrite: an explicit teacher override or an automatic trim
+// to the composed repo-name budget (#691). `from` is the source slug; `to` is
+// the slug the assignment imports under.
+export type MigrationRename = { from: string; to: string; explicit: boolean }
+
 // The full read-only plan the confirm screen renders and execute consumes.
 export type MigrationPreflight = {
   classroom: ClassroomDetail
@@ -120,6 +125,8 @@ export type MigrationPreflight = {
   term: string
   templateSuffix: string
   items: MigrationItem[]
+  // Import-slug rewrites applied by resolveImportSlugs, for the item cards.
+  renames: MigrationRename[]
   counts: { import: number; reuse: number; skip: number }
   blockers: MigrationBlocker[]
 }

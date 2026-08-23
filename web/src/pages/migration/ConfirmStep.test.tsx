@@ -122,6 +122,7 @@ const plan: MigrationPreflight = {
       targetName: "hw3",
     },
   ],
+  renames: [],
   counts: { import: 2, reuse: 0, skip: 1 },
   blockers: [],
 }

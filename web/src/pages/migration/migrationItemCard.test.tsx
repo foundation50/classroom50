@@ -38,6 +38,70 @@ const assignment: ClassroomAssignmentDetail = {
 }
 
 describe("MigrationItemCard", () => {
+  // #691: an editable import slug on selected items, with the confirm step
+  // owning validation; an automatic budget trim is called out inline.
+  it("renders the import-slug editor for a selected item and fires onSlugEdit", async () => {
+    const user = userEvent.setup()
+    const onSlugEdit = vi.fn()
+    render(
+      <MigrationItemCard
+        assignment={assignment}
+        status="import"
+        targetName="hw1"
+        targetOrg="acme"
+        selectable
+        selected
+        onToggle={() => {}}
+        slugEditValue="hw1"
+        onSlugEdit={onSlugEdit}
+      />,
+    )
+    const input = screen.getByLabelText("migration.item.importAsLabel")
+    await user.type(input, "x")
+    expect(onSlugEdit).toHaveBeenCalledWith("hw1x")
+  })
+
+  it("shows the auto-rename note for an implicit budget trim, not an explicit override", () => {
+    const { rerender } = render(
+      <MigrationItemCard
+        assignment={assignment}
+        status="import"
+        targetName="hw1"
+        targetOrg="acme"
+        renamedFrom={{ from: "hw1-very-long", to: "hw1", explicit: false }}
+      />,
+    )
+    expect(screen.queryByText("migration.item.autoRenamed")).not.toBeNull()
+    rerender(
+      <MigrationItemCard
+        assignment={assignment}
+        status="import"
+        targetName="hw1"
+        targetOrg="acme"
+        renamedFrom={{ from: "hw1-very-long", to: "hw1", explicit: true }}
+      />,
+    )
+    expect(screen.queryByText("migration.item.autoRenamed")).toBeNull()
+  })
+
+  it("shows a slug error inline", () => {
+    render(
+      <MigrationItemCard
+        assignment={assignment}
+        status="import"
+        targetName="hw1"
+        targetOrg="acme"
+        selectable
+        selected
+        onToggle={() => {}}
+        slugEditValue="Bad Slug"
+        onSlugEdit={() => {}}
+        slugError="nope"
+      />,
+    )
+    expect(screen.getByRole("alert").textContent).toBe("nope")
+  })
+
   it("renders a skip reason as a VISIBLE inline warning (regression: the on-fill token painted it invisible)", () => {
     render(
       <MigrationItemCard

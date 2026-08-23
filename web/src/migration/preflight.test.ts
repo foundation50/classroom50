@@ -231,4 +231,30 @@ describe("buildPreflight", () => {
     expect(plan.shortName).toBe("cs50-fall")
     expect(plan.items[0].targetName).toBe("hw1-f26")
   })
+
+  // #691: import-slug overrides resolve BEFORE classification, so the target
+  // probe and every downstream consumer see the final name.
+  it("applies a slug override and probes the overridden target name", async () => {
+    const plan = await buildPreflight(makeClient({}), {
+      source: "1",
+      targetOrg: "dst",
+      slugOverrides: { hw1: "hw2-redux" },
+    })
+    const item = plan.items.find((i) => i.assignment.id === 10)
+    expect(item?.assignment.slug).toBe("hw2-redux")
+    expect(item?.targetName).toBe("hw2-redux")
+    expect(plan.renames).toEqual([
+      { from: "hw1", to: "hw2-redux", explicit: true },
+    ])
+  })
+
+  it("rejects a slug override colliding with another import", async () => {
+    await expect(
+      buildPreflight(makeClient({}), {
+        source: "1",
+        targetOrg: "dst",
+        slugOverrides: { hw1: "hw2" },
+      }),
+    ).rejects.toThrow(/renameTaken/)
+  })
 })

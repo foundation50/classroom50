@@ -19,6 +19,7 @@ import {
   Badge,
   Collapse,
   InlineMessage,
+  Input,
   Spinner,
   cx,
   rtlFlip,
@@ -31,6 +32,7 @@ import type {
   MigrationItemAction,
   MigrationItemStatus,
   MigrationReason,
+  MigrationRename,
 } from "@/migration/types"
 
 // The union of preflight actions and execute statuses this card can render.
@@ -179,9 +181,14 @@ export const MigrationItemCard = ({
   selectable = false,
   selected = false,
   onToggle,
+  renamedFrom,
+  slugEditValue,
+  onSlugEdit,
+  slugError,
 }: {
   // The full source assignment detail — drives the source column and, since the
-  // migration carries these settings across, the target column too.
+  // migration carries these settings across, the target column too. Its `slug`
+  // is the IMPORT slug (post-rename); `renamedFrom` carries the source slug.
   assignment: ClassroomAssignmentDetail
   status: ItemVisualStatus
   reason?: MigrationReason
@@ -197,6 +204,15 @@ export const MigrationItemCard = ({
   selectable?: boolean
   selected?: boolean
   onToggle?: () => void
+  // Set when the import slug differs from the source slug (auto-trim to the
+  // repo-name budget, or the teacher's override).
+  renamedFrom?: MigrationRename
+  // Editable import slug (confirm screen, pre-run only): the raw field value,
+  // the change handler, and the current validation error, all owned by the
+  // confirm step so validation matches the preflight it feeds.
+  slugEditValue?: string
+  onSlugEdit?: (value: string) => void
+  slugError?: string
 }) => {
   const { t } = useTranslation()
   const meta = STATUS_BADGE[status]
@@ -357,6 +373,43 @@ export const MigrationItemCard = ({
         />
         <span className="truncate">{targetRepoText}</span>
       </div>
+
+      {/* Editable import slug (confirm screen, pre-run, selected items only).
+          The confirm step owns validation so the field agrees with the
+          preflight it feeds. */}
+      {onSlugEdit && selectable && selected && (
+        <div className="mt-2">
+          <label className="flex items-center gap-2 text-sm">
+            <span className="shrink-0 text-base-content/60">
+              {t("migration.item.importAsLabel")}
+            </span>
+            <Input
+              inputSize="sm"
+              className="max-w-xs font-mono"
+              invalid={Boolean(slugError)}
+              value={slugEditValue ?? assignment.slug}
+              onChange={(e) => onSlugEdit(e.target.value)}
+              aria-label={t("migration.item.importAsLabel")}
+            />
+          </label>
+          {slugError && (
+            <p className="mt-1 text-sm text-error" role="alert">
+              {slugError}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* An automatic budget trim is called out; an explicit override is the
+          teacher's own edit and needs no note. */}
+      {renamedFrom && !renamedFrom.explicit && !slugError && (
+        <InlineMessage tone="info" className="mt-2">
+          {t("migration.item.autoRenamed", {
+            from: renamedFrom.from,
+            to: renamedFrom.to,
+          })}
+        </InlineMessage>
+      )}
 
       {reason && !(selectable && !selected) && (
         <InlineMessage
