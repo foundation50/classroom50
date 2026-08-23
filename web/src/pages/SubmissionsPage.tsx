@@ -1271,7 +1271,7 @@ const SubmissionsPageContent = () => {
               regradeAllActive={regradeAllActive}
               canRegradeAll={canRegradeAll}
               emptyRoster={emptyRoster.show}
-              emptyRepo={skipsGrading}
+              skipsGrading={skipsGrading}
               // Metrics summarizes the GRADED snapshot, and computeStats skips
               // every `pending` row — so hide it whenever an overlay is adding
               // those rows, live or detection. Keying this on liveCapable alone
@@ -1400,7 +1400,8 @@ const SubmissionsPageContent = () => {
           thresholdFraction={thresholdFraction}
           filtered={hasActiveFilter}
           onClearFilters={clearFilters}
-          emptyRepo={skipsGrading}
+          emptyRepoAssignment={isEmptyRepoAssignment}
+          skipsGrading={skipsGrading}
           // Per-row trigger retrofit: owner + default-autograder only (teacher-
           // authored shims are never rewritten). Mirrors the bulk-action gate,
           // including assignmentResolved.

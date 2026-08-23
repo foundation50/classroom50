@@ -298,9 +298,11 @@ export const RepoRowActions = ({
 //
 // Gating mirrors the old cluster: repo-only actions (Review, access, regrade,
 // download) disable only when no repo exists; submission-only links
-// (commit, details) dim until an attempt lands; assignments that skip built-in
-// grading (empty_repo OR no_autograder — this receives skipsGrading) omit the
-// PR/access/details/regrade actions entirely.
+// (commit, details) dim until an attempt lands. Two distinct omission gates:
+// assignments that skip built-in grading (empty_repo OR no_autograder —
+// skipsGrading) omit the grading actions (details/regrade), while only a bare
+// empty_repo also omits the repo actions (Review/access) — a no_autograder
+// repo is templated and keeps the Feedback PR, matching the page's bulk gates.
 export type SubmissionActionListProps = {
   mode: AssignmentMode
   org: string
@@ -315,7 +317,10 @@ export type SubmissionActionListProps = {
   // snapshot from scores.json and can lag a fresh push. Falls back to `commit`.
   latestCommitHref?: string | null
   release?: string | null
-  emptyRepo: boolean
+  // The assignment never autogrades (empty_repo OR no_autograder).
+  skipsGrading: boolean
+  // The narrower bare-repo case (empty_repo alone).
+  emptyRepoAssignment: boolean
   displayName?: string
   // Opens the individual per-student access editor (stacked on the hub);
   // omitted for group rows (access is managed through the group Members editor).
@@ -345,7 +350,8 @@ export const SubmissionActionList = ({
   commit,
   latestCommitHref,
   release,
-  emptyRepo,
+  skipsGrading,
+  emptyRepoAssignment,
   displayName,
   onManageAccess,
   submissionMode,
@@ -370,7 +376,9 @@ export const SubmissionActionList = ({
         disabled={!commitHref}
         external
       />
-      {!emptyRepo && (
+      {/* Repo actions: any templated repo (incl. no_autograder) keeps the
+          Feedback PR and is worth managing; only a bare empty_repo omits them. */}
+      {!emptyRepoAssignment && (
         <>
           <ReviewButton org={org} repo={repo} mode={mode} noRepo={!hasRepo} />
           {onManageAccess && (
@@ -383,6 +391,12 @@ export const SubmissionActionList = ({
               ariaLabel={t("submissions.table.manageAccessAria", { owner })}
             />
           )}
+        </>
+      )}
+      {/* Grading actions: no submit/* releases exist when grading is skipped,
+          so there's nothing to view or regrade. */}
+      {!skipsGrading && (
+        <>
           <ActionListRow
             icon={ScrollText}
             title={t("submissions.table.viewDetails")}

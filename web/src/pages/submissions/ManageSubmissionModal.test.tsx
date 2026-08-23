@@ -68,7 +68,8 @@ const individualAction = {
   owner: "alice",
   repo: "cs101-hw1-alice",
   hasRepo: true,
-  emptyRepo: false,
+  skipsGrading: false,
+  emptyRepoAssignment: false,
 }
 
 afterEach(() => {

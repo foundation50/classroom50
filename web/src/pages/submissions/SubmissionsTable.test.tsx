@@ -244,7 +244,7 @@ describe("SubmissionsTable empty_repo score cell", () => {
         {...baseProps}
         scores={[scoreRow()]}
         acceptedUsernames={new Set(["alice"])}
-        emptyRepo
+        skipsGrading
       />,
     )
     // The score cell shows the placeholder titled noGradingTitle instead of a
@@ -266,7 +266,7 @@ describe("SubmissionsTable empty_repo score cell", () => {
 
 describe("SubmissionsTable score override on a no-autograder manual assignment", () => {
   // A templated manual-graded assignment is written as no_autograder (the
-  // emptyRepo prop here), so manual grading must win over the no-grading
+  // skipsGrading prop here), so manual grading must win over the no-grading
   // em-dash — otherwise a grade entered via the non-submitter row becomes
   // invisible once the student turns into a submitter row.
   const overrideGrade = {
@@ -278,13 +278,13 @@ describe("SubmissionsTable score override on a no-autograder manual assignment",
     maxPoints: 10,
   }
 
-  it("offers the score-override trigger on a submitter row despite emptyRepo", () => {
+  it("offers the score-override trigger on a submitter row despite skipsGrading", () => {
     render(
       <SubmissionsTable
         {...baseProps}
         scores={[scoreRow()]}
         acceptedUsernames={new Set(["alice"])}
-        emptyRepo
+        skipsGrading
         overrideGrade={overrideGrade}
       />,
     )
@@ -302,19 +302,19 @@ describe("SubmissionsTable score override on a no-autograder manual assignment",
         {...baseProps}
         scores={[scoreRow()]}
         acceptedUsernames={new Set(["alice"])}
-        emptyRepo
+        skipsGrading
       />,
     )
     expect(screen.getByTitle("submissions.table.noGradingTitle")).toBeTruthy()
   })
 
-  it("matches the non-submitter row's Add-grade affordance under emptyRepo", () => {
+  it("matches the non-submitter row's Add-grade affordance under skipsGrading", () => {
     render(
       <SubmissionsTable
         {...baseProps}
         nonSubmitters={[student()]}
         acceptedUsernames={new Set(["alice"])}
-        emptyRepo
+        skipsGrading
         overrideGrade={overrideGrade}
       />,
     )
@@ -357,7 +357,7 @@ describe("SubmissionsTable autograded score override", () => {
         {...baseProps}
         scores={[scoreRow()]}
         acceptedUsernames={new Set(["alice"])}
-        emptyRepo
+        skipsGrading
         overrideGrade={overrideGrade}
       />,
     )
@@ -419,7 +419,8 @@ describe("SubmissionsTable per-row download", () => {
         {...baseProps}
         scores={[scoreRow()]}
         acceptedUsernames={new Set(["alice"])}
-        emptyRepo
+        skipsGrading
+        emptyRepoAssignment
       />,
     )
     await openHub(user)
@@ -519,7 +520,8 @@ describe("SubmissionsTable hub action list", () => {
         {...baseProps}
         nonSubmitters={[student()]}
         acceptedUsernames={new Set(["alice"])}
-        emptyRepo
+        skipsGrading
+        emptyRepoAssignment
       />,
     )
     // The Open-repo shortcut stays inline in the row.
@@ -545,6 +547,32 @@ describe("SubmissionsTable hub action list", () => {
     expect(
       screen.getByRole("button", { name: "submissions.rowDownload.aria" }),
     ).toBeTruthy()
+  })
+
+  it("keeps Review and Manage access in the hub for a no_autograder assignment, hiding only the grading actions", async () => {
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+        skipsGrading
+      />,
+    )
+    await openHub(user)
+    // no_autograder repos are templated: the Feedback PR and repo access are
+    // real, so their actions stay — only the autograding surfaces hide.
+    expect(
+      screen.getByRole("button", { name: "submissions.table.reviewAria" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("button", {
+        name: "submissions.table.manageAccessAria",
+      }),
+    ).toBeTruthy()
+    expect(
+      screen.queryByRole("button", { name: "submissions.rowRegrade.aria" }),
+    ).toBeNull()
   })
 
   it("shows an em-dash (no Manage trigger) while acceptance data is still loading", () => {
