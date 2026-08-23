@@ -188,12 +188,12 @@ export function Combobox<T>({
           // preventDefault themselves before selecting; the scrollable list is
           // exempted below so scrollbar drags still work.
           onPointerDown={(event) => event.preventDefault()}
-          className="absolute inset-x-0 top-full z-10 mt-1 rounded-box border border-base-content/5 bg-base-100 shadow"
+          className="absolute inset-x-0 top-full z-10 mt-1 rounded-box border border-base-300 bg-base-100 shadow"
         >
           {status ? (
             <div
               role="status"
-              className="border-base-content/5 border-b px-3 py-2 text-sm text-base-content/70"
+              className="border-base-300 border-b px-3 py-2 text-sm text-base-content/70"
             >
               {status}
             </div>
@@ -252,7 +252,7 @@ export function Combobox<T>({
           ) : null}
 
           {footer ? (
-            <div className="border-base-content/5 border-t px-3 py-2 text-xs text-base-content/60">
+            <div className="border-base-300 border-t px-3 py-2 text-xs text-base-content/60">
               {footer}
             </div>
           ) : null}

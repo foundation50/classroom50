@@ -26,4 +26,4 @@ export const sidebarTooltip =
 // Interactive icon-button row in the rail (back-links, collapse/expand): tooltip
 // base plus a muted icon that lightens and gains a surface on hover.
 export const sidebarIconButton = (padding: "p-1" | "p-2" = "p-1") =>
-  `${sidebarTooltip} cursor-pointer rounded-md ${padding} text-neutral-content/60 transition-colors hover:bg-[var(--sidebar-surface)] hover:text-neutral-content`
+  `${sidebarTooltip} cursor-pointer rounded-selector ${padding} text-neutral-content/60 transition-colors hover:bg-[var(--sidebar-surface)] hover:text-neutral-content`

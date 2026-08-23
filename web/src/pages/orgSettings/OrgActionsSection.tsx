@@ -47,7 +47,7 @@ const ActionsUsagePanel = ({ org }: { org: string }) => {
   if (!usage && !budget) return null
 
   return (
-    <div className="space-y-3 rounded-lg border border-base-300 bg-base-200/40 p-3">
+    <div className="space-y-3 rounded-field border border-base-300 bg-base-100 p-3">
       {usage && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-2 text-sm">
@@ -238,19 +238,19 @@ const OrgActionsSection = ({
           )}
 
           {paused && !mutation.isPending && (
-            <CalloutDiv className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-base-content/80">
+            <CalloutDiv className="rounded-field border border-warning/30 bg-warning/10 p-3 text-sm text-base-content/80">
               {t("orgSettings.actions.pausedNotice")}
             </CalloutDiv>
           )}
 
           {disabled && !mutation.isPending && (
-            <div className="rounded-lg border border-base-300 bg-base-200/50 p-3 text-sm text-base-content/70">
+            <div className="rounded-field border border-base-300 bg-base-100 p-3 text-sm text-base-content/70">
               {t("orgSettings.actions.disabledNotice")}
             </div>
           )}
 
           {unknown && (
-            <div className="rounded-lg border border-base-300 bg-base-200/50 p-3 text-sm text-base-content/70">
+            <div className="rounded-field border border-base-300 bg-base-100 p-3 text-sm text-base-content/70">
               {t("orgSettings.actions.unknownNotice")}
             </div>
           )}

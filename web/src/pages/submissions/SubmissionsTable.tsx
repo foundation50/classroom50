@@ -683,7 +683,7 @@ const SubmissionsTable = ({
               pages={paginationRange(bounds.page, bounds.pageCount)}
               onPageChange={onPageChange}
               onPageSizeChange={onPageSizeChange}
-              className="border-t border-base-content/5"
+              className="border-t border-base-300"
             />
           ) : undefined
         }

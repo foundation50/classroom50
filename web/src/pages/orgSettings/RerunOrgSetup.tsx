@@ -41,7 +41,7 @@ const SummaryBanner = ({
 }) => (
   <CalloutDiv
     className={cx(
-      "rounded-lg border p-3 text-sm",
+      "rounded-field border p-3 text-sm",
       BANNER_TONE[tone],
       className,
     )}

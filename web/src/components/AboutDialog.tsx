@@ -29,7 +29,7 @@ function SupportLink({
 }) {
   return (
     <a
-      className="flex items-center gap-3 rounded-lg border border-base-300 px-3 py-2 transition-colors hover:border-primary/40 hover:bg-base-200"
+      className="flex items-center gap-3 rounded-field border border-base-300 px-3 py-2 transition-colors hover:border-primary/40 hover:bg-base-200"
       href={href}
       target="_blank"
       rel="noreferrer"

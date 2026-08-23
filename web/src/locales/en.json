@@ -2096,6 +2096,8 @@
     "noStudents": "No students",
     "viewAssignments": "View assignments",
     "viewAssignmentsAria": "View assignments for {{classroom}}",
+    "viewRoster": "View roster",
+    "viewRosterAria": "View roster for {{classroom}}",
     "githubOrganization": "GitHub organization",
     "myClasses": "My classrooms",
     "manageSubtitle": "Manage your classrooms and assignments.",

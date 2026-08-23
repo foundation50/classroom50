@@ -139,7 +139,7 @@ export function ElevatedAccessModal({
       ) : (
         <div className="space-y-5">
           <div className="flex gap-4 border-b border-base-200 pb-5">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
               <ShieldCheck aria-hidden="true" className="size-6" />
             </div>
             <div className="min-w-0">

@@ -78,7 +78,7 @@ export function TimelineRow({ item }: { item: TimelineItem }) {
     <li className="flex items-start gap-3 px-6 py-4">
       <span
         className={cx(
-          "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg",
+          "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-field",
           CHIP_TONE_CLASS[tone],
         )}
       >

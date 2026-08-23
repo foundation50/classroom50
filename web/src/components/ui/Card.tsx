@@ -3,27 +3,18 @@ import type { ComponentPropsWithoutRef, ElementType, ReactNode } from "react"
 import { cx } from "./cx"
 
 // The canonical surface card. Wraps daisyUI `card` with one border/shadow/
-// radius recipe so the ~6 divergent inline recipes converge. Defaults match the
-// most common form/panel card (`bg-base-100 border-base-300 shadow-sm`, box
-// radius); `bordered`/`shadow`/`radius` toggle the variants the audit found
-// (dashed empties, rounded-xl/2xl list cards). `as` swaps the element tag for
+// radius recipe so the ~6 divergent inline recipes converge. Muted gray on the
+// white canvas per GitHub Product UI (`bg-base-200 border-base-300`, box
+// radius); `bordered`/`shadow` toggle the variants the audit found (dashed
+// empties). `as` swaps the element tag for
 // semantics (e.g., `section`). The `className` escape hatch keeps per-site
 // layout utilities (grid spans, `w-full`, `overflow-hidden`).
-
-type CardRadius = "box" | "xl" | "2xl"
-
-const RADIUS_CLASS: Record<CardRadius, string> = {
-  box: "",
-  xl: "rounded-xl",
-  "2xl": "rounded-2xl",
-}
 
 export type CardProps = {
   as?: ElementType
   bordered?: boolean
   dashed?: boolean
   shadow?: boolean
-  radius?: CardRadius
   children?: ReactNode
 } & ComponentPropsWithoutRef<"div">
 
@@ -32,7 +23,6 @@ export function Card({
   bordered = true,
   dashed = false,
   shadow = true,
-  radius = "box",
   className,
   children,
   ...props
@@ -40,8 +30,7 @@ export function Card({
   return (
     <Tag
       className={cx(
-        "card bg-base-100",
-        RADIUS_CLASS[radius],
+        "card bg-base-200",
         bordered &&
           (dashed
             ? "border border-dashed border-base-300"

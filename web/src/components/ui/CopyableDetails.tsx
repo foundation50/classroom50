@@ -38,7 +38,7 @@ export function CopyableDetails({
   return (
     <details
       className={cx(
-        "rounded-lg border border-base-300 bg-base-200/40 p-3 text-sm",
+        "rounded-field border border-base-300 bg-base-200/40 p-3 text-sm",
         className,
       )}
     >
@@ -48,7 +48,7 @@ export function CopyableDetails({
       <div className="mt-3 space-y-3">
         <pre
           className={cx(
-            "overflow-auto rounded-lg bg-base-100 p-3 text-xs whitespace-pre-wrap",
+            "overflow-auto rounded-field bg-base-100 p-3 text-xs whitespace-pre-wrap",
             preClassName,
           )}
         >

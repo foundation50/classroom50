@@ -36,10 +36,7 @@ const OnboardNavbar = () => {
     <div className="navbar bg-base-100 shadow-sm">
       <Link to="/">
         <div className="flex p-6 text-lg font-bold">
-          <GraduationCap
-            aria-hidden="true"
-            className="size-8 text-primary me-2"
-          />{" "}
+          <GraduationCap aria-hidden="true" className="size-8 me-2" />{" "}
           {t("nav.appName")}
         </div>
       </Link>
@@ -49,7 +46,6 @@ const OnboardNavbar = () => {
 
 const OnboardCard = ({ children }: { children: React.ReactNode }) => (
   <Card
-    radius="xl"
     shadow={false}
     className="w-200 max-w-[calc(100vw-2em)] p-8 m-auto mt-10"
   >
@@ -96,9 +92,9 @@ const NotInvited = ({
           </p>
         </div>
 
-        <div className="rounded-2xl border border-base-300 bg-base-200/50 p-5">
+        <div className="rounded-box border border-base-300 bg-base-100 p-5">
           <div className="flex gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-base-300/40 text-base-content/70">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-box bg-base-300/40 text-base-content/70">
               <UserPlus aria-hidden="true" className="size-5" />
             </div>
             <div className="min-w-0">
@@ -151,7 +147,7 @@ const AllSet = ({
             <p className="mt-2 text-sm text-base-content/70">{classroom}</p>
           )}
         </div>
-        <div className="rounded-2xl border border-success/20 bg-success/5 p-5">
+        <div className="rounded-box border border-success/20 bg-success/5 p-5">
           <div className="flex gap-3">
             <CheckCircle2
               aria-hidden="true"

@@ -73,7 +73,9 @@ export const DrawerContent = ({ children }: { children: ReactNode }) => {
     // The base background + full-height live here (not on the per-page frame) so
     // it always covers the viewport even when a page's content is shorter than
     // the window — the page frame (PageShell) only owns padding on top of this.
-    <div className="drawer-content min-h-screen bg-base-200">
+    // White canvas per GitHub Product UI: content sits on base-100 and muted
+    // panels/cards carry the base-200 gray.
+    <div className="drawer-content min-h-screen bg-base-100">
       <a
         href="#main-content"
         className="btn btn-primary btn-sm sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-50"
@@ -137,7 +139,7 @@ export const DrawerSidebar = () => {
       </label>
       <nav
         aria-label={t("nav.primary")}
-        className={`flex flex-col min-h-full bg-neutral text-neutral-content transition-[width] duration-200 ease-out ${
+        className={`flex flex-col min-h-full sidebar-rail text-neutral-content transition-[width] duration-200 ease-out ${
           collapsed
             ? "w-16 min-w-16 [&>div]:px-2"
             : "w-60 min-w-30 [&>div]:px-6"

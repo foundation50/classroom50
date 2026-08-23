@@ -25,16 +25,16 @@ const ClassroomRowButton = ({
     <button
       type="button"
       onClick={() => onPick(classroom)}
-      className="group flex w-full cursor-pointer items-center gap-3 rounded-xl border border-base-300 bg-base-100 p-4 text-start transition hover:border-primary hover:bg-primary/5"
+      className="group flex w-full cursor-pointer items-center gap-3 rounded-box border border-base-300 bg-base-100 p-4 text-start transition hover:border-primary hover:bg-primary/5"
     >
       {classroom.orgAvatarUrl ? (
         <img
           src={classroom.orgAvatarUrl}
           alt=""
-          className="size-9 shrink-0 rounded-lg border border-base-300"
+          className="size-9 shrink-0 rounded-field border border-base-300"
         />
       ) : (
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-base-300 bg-base-200">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-field border border-base-300 bg-base-200">
           <GitHub aria-hidden="true" className="size-5 text-base-content/70" />
         </span>
       )}
@@ -116,9 +116,9 @@ export const SelectSourceStep = ({
             {Array.from({ length: 3 }).map((_, i) => (
               <li
                 key={i}
-                className="flex items-center gap-3 rounded-xl border border-base-300 bg-base-100 p-4"
+                className="flex items-center gap-3 rounded-box border border-base-300 bg-base-100 p-4"
               >
-                <div className="skeleton skeleton-shimmer size-9 rounded-lg" />
+                <div className="skeleton skeleton-shimmer size-9 rounded-field" />
                 <div className="flex-1 space-y-2">
                   <div className="skeleton skeleton-shimmer h-4 w-40 rounded" />
                   <div className="skeleton skeleton-shimmer h-3 w-56 rounded" />
@@ -138,7 +138,7 @@ export const SelectSourceStep = ({
         )}
 
         {data && data.length === 0 && (
-          <div className="mt-4 rounded-xl border border-dashed border-base-300 p-8 text-center">
+          <div className="mt-4 rounded-box border border-dashed border-base-300 p-8 text-center">
             <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-base-200 text-base-content/50">
               <Inbox aria-hidden="true" className="size-6" />
             </div>

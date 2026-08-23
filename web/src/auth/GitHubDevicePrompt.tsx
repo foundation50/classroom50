@@ -74,7 +74,7 @@ export function GitHubDevicePrompt({
             {t("auth.deviceStep1Title")}
           </h2>
 
-          <div className="my-3 select-all rounded-xl border border-base-300 bg-base-200 px-4 py-3 text-center font-mono text-3xl font-bold tracking-[0.2em]">
+          <div className="my-3 select-all rounded-box border border-base-300 bg-base-200 px-4 py-3 text-center font-mono text-3xl font-bold tracking-[0.2em]">
             {device.userCode}
           </div>
 

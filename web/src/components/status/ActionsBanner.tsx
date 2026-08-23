@@ -105,7 +105,7 @@ const TrackerRow = ({
   return (
     <div
       className={`flex items-center gap-2 ${
-        compact ? "" : `rounded-md px-2 py-1.5 ${ROW_TONE[tracker.phase]}`
+        compact ? "" : `rounded-selector px-2 py-1.5 ${ROW_TONE[tracker.phase]}`
       }`}
     >
       <StatusIcon phase={tracker.phase} tinted={!compact} />

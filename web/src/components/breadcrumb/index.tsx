@@ -19,9 +19,14 @@ const Breadcrumb = ({
   if (!org && !classroom) return <div></div>
 
   return (
+    // Primer-style trail: no surface of its own — accent-blue links with the
+    // current page in default ink, sitting directly on the canvas.
     <nav
       aria-label={t("components.breadcrumb.label")}
-      className={cx("breadcrumbs text-sm [&_a]:text-primary", className)}
+      className={cx(
+        "breadcrumbs text-sm [&_a]:text-[var(--color-link)]",
+        className,
+      )}
     >
       <ol>
         {org && (

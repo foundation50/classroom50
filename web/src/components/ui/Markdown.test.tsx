@@ -50,6 +50,8 @@ describe("Markdown", () => {
     )
     expect(container.querySelector("h1")?.className).toContain("text-xl")
     expect(container.querySelector("ul")?.className).toContain("list-disc")
-    expect(container.querySelector("code")?.className).toContain("bg-base-200")
+    expect(container.querySelector("code")?.className).toContain(
+      "bg-base-300/50",
+    )
   })
 })

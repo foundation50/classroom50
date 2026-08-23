@@ -5,8 +5,9 @@ import { SkeletonCell } from "./SkeletonCell"
 import { cx } from "./cx"
 
 // The one table frame for the assignment/submission lists: a scrollable
-// rounded card with the house divider strength (the daisyUI default,
-// base-content/5, is nearly invisible on base-100 — rows blur together).
+// rounded white box with a visible gray frame and muted header row (GitHub
+// Product UI list-box treatment), with the house divider strength (the daisyUI
+// default, base-content/5, is nearly invisible — rows blur together).
 // Extracted so the teacher/student tables can't hand-sync drift apart.
 export type TableShellProps = {
   children: ReactNode
@@ -30,11 +31,11 @@ export function TableShell({
   className,
 }: TableShellProps) {
   const frameClass =
-    "overflow-x-auto rounded-box border border-base-content/5 bg-base-100"
+    "overflow-x-auto rounded-box border border-base-300 bg-base-100"
   const table = (
     <table
       className={cx(
-        "table [&_tr]:border-base-content/10",
+        "table [&_tr]:border-base-content/10 [&_thead_tr]:bg-base-200",
         padded && "[&_tbody_td]:py-4",
         className,
       )}

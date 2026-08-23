@@ -89,7 +89,7 @@ export function LoginLanguageMenu() {
       <ul
         tabIndex={0}
         role="menu"
-        className="dropdown-content menu z-10 mt-1 max-h-80 w-60 flex-nowrap overflow-y-auto rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+        className="dropdown-content menu z-10 mt-1 max-h-80 w-60 flex-nowrap overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow"
       >
         <li className="menu-title text-xs">
           {t("language.switcherInstalled")}

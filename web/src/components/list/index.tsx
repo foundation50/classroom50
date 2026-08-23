@@ -49,15 +49,15 @@ export function ViewToggle({
 }
 
 // The single dashed-border empty-state card. `className` overrides the default
-// shell so the non-uniform call sites keep their own radius/padding (e.g.
-// PublishedResourcesPage's rounded-xl/p-6). NoSearchResults and the zero-data
+// shell so the non-uniform call sites keep their own padding (e.g.
+// PublishedResourcesPage's p-6). NoSearchResults and the zero-data
 // states across the list pages all render through this.
 export function EmptyState({
   icon,
   title,
   body,
   action,
-  className = "rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center",
+  className = "rounded-box border border-dashed border-base-300 bg-base-100 p-8 text-center",
 }: {
   icon?: ReactNode
   title: ReactNode

@@ -45,7 +45,6 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
   return (
     <Card
       as={EnterDiv}
-      radius="2xl"
       bordered={false}
       shadow={false}
       className="relative col-span-12 border border-base-200 md:col-span-6 xl:col-span-4"
@@ -64,7 +63,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
 
       <Card.Body className="gap-4">
         <div className="flex items-center gap-3 pe-8">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
             <BookOpen aria-hidden="true" className="size-5" />
           </div>
           <div className="min-w-0">
@@ -208,7 +207,7 @@ export const OrgRepos = ({
 
   if (writableRepos.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
+      <div className="rounded-box border border-dashed border-base-300 bg-base-100 p-8 text-center">
         <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-base-200">
           <BookOpen
             aria-hidden="true"

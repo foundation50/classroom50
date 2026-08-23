@@ -158,7 +158,7 @@ function ThemeTable({
 }) {
   const { t } = useTranslation()
   return (
-    <Card radius="xl" shadow={false}>
+    <Card shadow={false}>
       <Card.Body className="gap-3 p-4">
         <div className="overflow-x-auto">
           <table className="table table-sm">

@@ -7,13 +7,14 @@ import { Card, CardBody, CardTitle, CardActions } from "./Card"
 afterEach(cleanup)
 
 // Card is the one surface recipe every panel renders through, so these lock the
-// border/shadow/radius toggles and the subcomponent classes.
+// border/shadow toggles and the subcomponent classes. Radius comes solely from
+// daisyUI `card` (the --radius-box token) — no per-card override exists.
 describe("Card", () => {
   it("renders the default bordered + shadow box recipe", () => {
     const { container } = render(<Card>body</Card>)
     const cls = container.firstElementChild?.className ?? ""
     expect(cls).toContain("card")
-    expect(cls).toContain("bg-base-100")
+    expect(cls).toContain("bg-base-200")
     expect(cls).toContain("border-base-300")
     expect(cls).toContain("shadow-sm")
     expect(cls).not.toContain("rounded-")
@@ -33,11 +34,6 @@ describe("Card", () => {
   it("applies the dashed border variant", () => {
     const { container } = render(<Card dashed>x</Card>)
     expect(container.firstElementChild?.className).toContain("border-dashed")
-  })
-
-  it("maps the radius prop", () => {
-    const { container } = render(<Card radius="2xl">x</Card>)
-    expect(container.firstElementChild?.className).toContain("rounded-2xl")
   })
 
   it("appends the className escape hatch last", () => {

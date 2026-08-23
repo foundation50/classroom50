@@ -104,7 +104,7 @@ const MetaPanel = ({
       : "border-success/30 bg-success/5"
   const headerClass = side === "source" ? "text-info" : "text-success"
   return (
-    <div className={`rounded-lg border p-3 ${panelClass}`}>
+    <div className={`rounded-field border p-3 ${panelClass}`}>
       <div
         className={`mb-1 text-xs font-medium uppercase tracking-wide sm:hidden ${headerClass}`}
       >
@@ -261,7 +261,7 @@ export const MigrationItemCard = ({
 
   return (
     <div
-      className={`rounded-xl border border-base-300 bg-base-100 p-4 ${
+      className={`rounded-box border border-base-300 bg-base-200 p-4 ${
         selectable && !selected ? "opacity-60" : ""
       }`}
     >

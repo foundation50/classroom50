@@ -37,10 +37,14 @@ const components: Components = {
   ul: ({ children }) => <ul className="list-disc ps-5">{children}</ul>,
   ol: ({ children }) => <ol className="list-decimal ps-5">{children}</ol>,
   code: ({ children }) => (
-    <code className="rounded bg-base-200 px-1 py-0.5 text-sm">{children}</code>
+    // base-300 tint reads as a code chip on both the white canvas and the
+    // muted gray cards this component renders inside.
+    <code className="rounded bg-base-300/50 px-1 py-0.5 text-sm">
+      {children}
+    </code>
   ),
   pre: ({ children }) => (
-    <pre className="overflow-x-auto rounded-lg bg-base-200 p-3 text-sm">
+    <pre className="overflow-x-auto rounded-field border border-base-300 bg-base-100 p-3 text-sm">
       {children}
     </pre>
   ),

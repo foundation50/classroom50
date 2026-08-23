@@ -250,7 +250,7 @@ export const ConfirmStep = ({
           </Alert>
 
           <ol className="mt-5 grid gap-4">
-            <li className="rounded-xl border border-base-300 bg-base-100 p-4">
+            <li className="rounded-box border border-base-300 bg-base-200 p-4">
               <div className="flex items-start gap-3">
                 <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
                   1
@@ -275,7 +275,7 @@ export const ConfirmStep = ({
               </div>
             </li>
 
-            <li className="rounded-xl border border-base-300 bg-base-100 p-4">
+            <li className="rounded-box border border-base-300 bg-base-200 p-4">
               <div className="flex items-start gap-3">
                 <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-base-300 text-sm font-semibold text-base-content/70">
                   2

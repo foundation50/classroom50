@@ -52,7 +52,7 @@ export function AcceptLinkModal({
   return (
     <Modal open={open} onClose={onClose} size="2xl">
       <div className="flex items-start gap-3">
-        <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
+        <div className="rounded-box bg-primary/10 p-2.5 text-primary">
           <LinkIcon aria-hidden="true" className="size-5" />
         </div>
         <div className="min-w-0 flex-1">

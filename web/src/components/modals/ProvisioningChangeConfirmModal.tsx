@@ -39,7 +39,7 @@ export function ProvisioningChangeConfirmModal({
       aria-labelledby={titleId}
     >
       <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-warning/10 text-warning">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-warning/10 text-warning">
           <TriangleAlert className="size-5" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">

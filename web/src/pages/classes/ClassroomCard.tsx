@@ -475,6 +475,33 @@ export function ClassroomStats({ org, slug }: { org: string; slug: string }) {
   )
 }
 
+function ViewRosterButton({
+  org,
+  slug,
+  classroomName,
+  block,
+}: {
+  org: string
+  slug: string
+  classroomName: string
+  block?: boolean
+}) {
+  const { t } = useTranslation()
+  return (
+    <Link
+      type="button"
+      to="/$org/$classroom/roster"
+      params={{ org, classroom: slug }}
+      aria-label={t("classes.viewRosterAria", {
+        classroom: classroomName,
+      })}
+      className={`btn btn-outline btn-primary btn-sm ${block ? "flex-1" : ""}`}
+    >
+      {t("classes.viewRoster")}
+    </Link>
+  )
+}
+
 function ViewAssignmentsButton({
   org,
   slug,
@@ -495,7 +522,7 @@ function ViewAssignmentsButton({
       aria-label={t("classes.viewAssignmentsAria", {
         classroom: classroomName,
       })}
-      className={`btn btn-outline btn-primary btn-sm ${block ? "w-full" : ""}`}
+      className={`btn btn-outline btn-primary btn-sm ${block ? "flex-1" : ""}`}
     >
       {t("classes.viewAssignments")}
     </Link>
@@ -514,7 +541,6 @@ export function ClassroomCard({
   return (
     <Card
       as={EnterDiv}
-      radius="xl"
       shadow={false}
       className="col-span-12 md:col-span-6 xl:col-span-4"
     >
@@ -531,12 +557,26 @@ export function ClassroomCard({
         </div>
         <h2 className="truncate text-xl font-semibold">{name}</h2>
         <ClassroomStats org={org} slug={summary.path} />
-        <ViewAssignmentsButton
-          org={org}
-          slug={summary.path}
-          classroomName={name}
-          block
-        />
+        {/* Side-by-side actions; each stretches (flex-1), so a student's
+            single Assignments button still fills the row. Roster is
+            staff-only (the route requires it), so students don't get a link
+            into a denied page. */}
+        <div className="flex gap-2">
+          {canManage && (
+            <ViewRosterButton
+              org={org}
+              slug={summary.path}
+              classroomName={name}
+              block
+            />
+          )}
+          <ViewAssignmentsButton
+            org={org}
+            slug={summary.path}
+            classroomName={name}
+            block
+          />
+        </div>
       </Card.Body>
     </Card>
   )
@@ -552,7 +592,7 @@ export function ClassroomRow({
   const name = classroomDisplayName(summary, t("classes.unknownClassName"))
 
   return (
-    <EnterDiv className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <EnterDiv className="col-span-12 flex flex-col gap-3 rounded-box border border-base-300 bg-base-200 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate font-semibold">{name}</span>
@@ -561,6 +601,13 @@ export function ClassroomRow({
         <ClassroomStats org={org} slug={summary.path} />
       </div>
       <div className="flex shrink-0 items-center justify-end gap-2">
+        {canManage && (
+          <ViewRosterButton
+            org={org}
+            slug={summary.path}
+            classroomName={name}
+          />
+        )}
         <ViewAssignmentsButton
           org={org}
           slug={summary.path}

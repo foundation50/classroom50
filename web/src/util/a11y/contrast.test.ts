@@ -28,7 +28,7 @@ describe("contrastRatio — WCAG reference pairs", () => {
     ).toBeCloseTo(1, 5)
   })
 
-  it("sumi ink #232323 on base #fafafa is ~14.9:1 (a known AAA pass)", () => {
+  it("reference pair #232323 on #fafafa is ~14.9:1 (a known AAA pass)", () => {
     // Cross-checked against WebAIM's contrast checker.
     const r = contrastRatio(parseColor("#232323"), parseColor("#fafafa"))
     expect(r).toBeGreaterThan(14.5)
@@ -65,7 +65,7 @@ describe("oklch/oklab parsing", () => {
 })
 
 describe("color-mix — validated against browser-computed values", () => {
-  // The .label override: color-mix(in oklab, #232323 70%, transparent) on #fafafa.
+  // A .label-style override: color-mix(in oklab, #232323 70%, transparent) on #fafafa.
   // Gamma-space composite: 0x23*0.7 + 0xfa*0.3 ~= 99.5 => ~#636363, ~5.9:1.
   it("70% base-content over transparent, flattened on base-100", () => {
     const label = mixColor("oklab", "#232323", 70, "transparent")

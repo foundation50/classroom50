@@ -159,7 +159,7 @@ const OrgActivityPage = () => {
             </Card>
           ) : (
             <EmptyState
-              className="mt-4 rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center"
+              className="mt-4 rounded-box border border-dashed border-base-300 bg-base-100 p-8 text-center"
               icon={
                 <Activity
                   aria-hidden="true"

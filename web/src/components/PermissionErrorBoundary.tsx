@@ -24,7 +24,7 @@ function PermissionDeniedMessage() {
   const { t } = useTranslation()
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-10 text-center">
-      <div className="flex size-16 items-center justify-center rounded-2xl bg-warning/10 text-warning">
+      <div className="flex size-16 items-center justify-center rounded-box bg-warning/10 text-warning">
         <ShieldAlert aria-hidden="true" className="size-8" />
       </div>
       <Alert tone="warning" className="max-w-md flex-col text-center">
