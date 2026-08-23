@@ -7,8 +7,8 @@
 //
 // A class token matches at start-of-string, after whitespace, or after a
 // variant colon, optionally on a logical corner axis (rounded-s-lg,
-// rounded-ee-xl...). Physical axes (rounded-l-*, rounded-tr-*) are already
-// banned by the directional rule.
+// rounded-ee-xl...). Physical corner axes are already banned by the
+// directional rule.
 export const radiusClassPattern =
   "(?:^|[\\s:])rounded(?:-(?:s|e|t|b|ss|se|es|ee))?" +
   "-(?:xs|sm|md|lg|xl|2xl|3xl|4xl)(?![A-Za-z0-9_-])"
