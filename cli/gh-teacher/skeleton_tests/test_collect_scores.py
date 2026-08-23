@@ -468,6 +468,32 @@ class TestValidateResult:
         with pytest.raises(ValueError, match="assignment"):
             cs.validate_result(payload, "cs-principles", "hello", "alice")
 
+    def test_accepts_pre_rename_assignment_via_renamed_from(self):
+        # A one-shot slug rename leaves historical submit/* releases whose
+        # immutable result.json still carries the OLD slug; the manifest's
+        # renamed_from grandfathers exactly that value.
+        payload = make_result(assignment="hello-with-a-very-long-legacy-slug")
+        cs.validate_result(
+            payload,
+            "cs-principles",
+            "hello",
+            "alice",
+            renamed_from="hello-with-a-very-long-legacy-slug",
+        )
+
+    def test_renamed_from_does_not_accept_other_slugs(self):
+        # The grandfather rule is exact: only the recorded previous slug
+        # passes, never an arbitrary third value.
+        payload = make_result(assignment="goodbye")
+        with pytest.raises(ValueError, match="assignment"):
+            cs.validate_result(
+                payload,
+                "cs-principles",
+                "hello",
+                "alice",
+                renamed_from="hello-with-a-very-long-legacy-slug",
+            )
+
     def test_rejects_mismatched_owner(self):
         # owner must match the roster-derived value — that's the link
         # back to scores by student.

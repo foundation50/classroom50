@@ -215,6 +215,11 @@
             "migrated_at": { "type": "string" }
           }
         },
+        "renamed_from": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{1,99}$",
+          "description": "The assignment's PREVIOUS slug, recorded by the one-shot slug rename (offered only to remediate a composed repo-name over GitHub's 100-character limit; a renamed assignment can never be renamed again, so this is always a single slug, never a chain). Two contracts hang off it: (1) score collection accepts a historical result.json whose immutable `assignment` field carries this value (pre-rename submit/* releases keep their grades); (2) the value is RESERVED within the classroom — no new assignment may take it, because creating a repo at a renamed student repo's old name would permanently sever GitHub's automatic redirects for every student clone. Absent on assignments that were never renamed."
+        },
         "student_permission": {
           "enum": ["pull", "triage", "push", "maintain", "admin"],
           "description": "The collaborator role the enrolled student is granted on their OWN assignment repo at accept time (the old GitHub Classroom \"grant students admin access\" checkbox, generalized to GitHub's full ladder). ABSENT means the built-in default: `push` for `individual`, `admin` for `group`. This is accept-time provisioning only — it governs what NEW accepters get; it does not retroactively change repos already accepted (teachers adjust those with the gradebook's per-repo/bulk access controls). Group coherence: a group founder must hold at least `admin` to add teammates via `gh student invite`, so for `mode: group` any configured value below `admin` is clamped up to `admin` by every accept client — prefer omitting it (or writing `admin`) for group assignments. Caution: `admin` lets the student manage the repo's settings and collaborators; changing repo visibility stays blocked by the org-level lockdown setup applies (members_can_change_repo_visibility=false) while that lockdown is intact (verify with the audit)."

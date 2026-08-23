@@ -4,6 +4,7 @@ import { Trans, useTranslation } from "react-i18next"
 import useGetClasses from "@/hooks/useGetClasses"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import { useReuseAssignment } from "@/hooks/mutations/useReuseAssignment"
+import { renamedFromSlugs } from "@/types/classroom"
 import {
   ReuseModalShell,
   reuseSlugStatus,
@@ -59,6 +60,10 @@ export const ReuseFromClassroomModal = ({
     () => (destData?.assignments ?? []).map((a) => a.slug),
     [destData],
   )
+  const reservedSlugs = useMemo(
+    () => renamedFromSlugs(destData?.assignments ?? []),
+    [destData],
+  )
 
   const selectedAssignment = useMemo(
     () => sourceAssignments.find((a) => a.slug === sourceSlug) ?? null,
@@ -70,6 +75,7 @@ export const ReuseFromClassroomModal = ({
     targetClassroom: classroom,
     source: selectedAssignment,
     takenSlugs,
+    reservedSlugs,
     takenLoading: destLoading,
     closeDialog: () => dialogRef.current?.close(),
   })
@@ -195,6 +201,7 @@ export const ReuseFromClassroomModal = ({
                   loading: destLoading,
                   error: destError,
                   slugTaken: reuse.slugTaken,
+                  slugReserved: reuse.slugReserved,
                   slugOverBudget: reuse.slugOverBudget,
                   slugBudget: reuse.slugBudget,
                   slugTouched: reuse.slugTouched,
@@ -211,7 +218,9 @@ export const ReuseFromClassroomModal = ({
                       classroom,
                     })}
                     error={
-                      reuse.slugTaken || reuse.slugOverBudget
+                      reuse.slugTaken ||
+                      reuse.slugReserved ||
+                      reuse.slugOverBudget
                         ? slugStatus
                         : undefined
                     }

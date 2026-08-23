@@ -120,6 +120,7 @@ export const reuseSlugStatus = ({
   loading,
   error,
   slugTaken,
+  slugReserved,
   slugOverBudget,
   slugBudget,
   slugTouched,
@@ -132,6 +133,7 @@ export const reuseSlugStatus = ({
   loading: boolean
   error: boolean
   slugTaken: boolean
+  slugReserved: boolean
   slugOverBudget: boolean
   slugBudget: number
   slugTouched: boolean
@@ -156,6 +158,11 @@ export const reuseSlugStatus = ({
         })
   if (slugTaken)
     return t("components.modals.reuseShell.slug.taken", {
+      slug: normalizedSlug,
+      classroom: classroomLabel,
+    })
+  if (slugReserved)
+    return t("components.modals.reuseShell.slug.reserved", {
       slug: normalizedSlug,
       classroom: classroomLabel,
     })

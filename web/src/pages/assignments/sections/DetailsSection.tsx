@@ -19,6 +19,7 @@ export function DetailsSection({
   slugTouched,
   setSlugTouched,
   takenSlugs,
+  reservedSlugs,
   classroom,
 }: {
   form: AssignmentForm
@@ -29,6 +30,9 @@ export function DetailsSection({
   // Existing assignment slugs, so the create-mode auto-fill can pick a slug
   // that's already unique instead of surfacing a conflict only at submit.
   takenSlugs?: string[]
+  // Pre-rename slugs (Assignment.renamed_from) reserved against new
+  // assignments; the auto-fill dodges them like collisions.
+  reservedSlugs?: string[]
   // Classroom short-name; bounds the slug to the composed repo-name budget
   // (#691) so the auto-fill can't mint a name GitHub would reject at accept.
   classroom?: string
@@ -37,6 +41,9 @@ export function DetailsSection({
   // undefined (no classroom in context) leaves nextAvailableSlug at its
   // pattern-cap default.
   const slugBudget = classroom ? assignmentSlugBudget(classroom) : undefined
+  // The auto-fill's collision set: existing slugs plus reserved pre-rename
+  // slugs, mirroring the Go NextAvailableSlug (which folds both).
+  const unavailableSlugs = [...(takenSlugs ?? []), ...(reservedSlugs ?? [])]
 
   return (
     <SectionCard title={t("assignments.form.detailsSection")} onReset={onReset}>
@@ -73,7 +80,7 @@ export function DetailsSection({
                           "slug",
                           nextAvailableSlug(
                             slugify(e.target.value),
-                            takenSlugs ?? [],
+                            unavailableSlugs,
                             slugBudget,
                           ),
                         )
@@ -109,11 +116,21 @@ export function DetailsSection({
               (takenSlugs ?? []).some(
                 (s) => s.trim().toLowerCase() === liveSlug.toLowerCase(),
               )
+            const liveReserved =
+              !edit &&
+              Boolean(liveSlug) &&
+              (reservedSlugs ?? []).some(
+                (s) => s.trim().toLowerCase() === liveSlug.toLowerCase(),
+              )
             const liveError =
               liveBudgetError ??
               (liveTaken
                 ? t("validation.assignmentSlugTaken", { slug: liveSlug })
-                : undefined)
+                : liveReserved
+                  ? t("assignments.form.validation.slugReserved", {
+                      slug: liveSlug,
+                    })
+                  : undefined)
             const slugError = submitError ?? liveError
             return (
               <FormField
@@ -149,7 +166,7 @@ export function DetailsSection({
                         normalized ||
                           nextAvailableSlug(
                             slugify(form.state.values.name),
-                            takenSlugs ?? [],
+                            unavailableSlugs,
                             slugBudget,
                           ),
                       )

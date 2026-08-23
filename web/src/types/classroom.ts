@@ -328,6 +328,20 @@ export type Assignment = {
   tests?: AssignmentTest[]
   // CLI migrate provenance. The GUI doesn't write it but must round-trip it.
   migrated_from?: MigratedFrom
+  // The assignment's PREVIOUS slug, from the one-shot slug rename (a single
+  // slug, never a chain — a renamed assignment can't be renamed again).
+  // Collection grandfathers historical result.json payloads carrying it, and
+  // the value is RESERVED within the classroom: a new assignment at an old
+  // name would sever GitHub's rename redirects for every student clone. In
+  // lockstep with the assignments-v1 schema and the Go AssignmentEntry.
+  renamed_from?: string
+}
+
+// The renamed_from values of a classroom's assignments — slugs RESERVED
+// against new assignments (see Assignment.renamed_from). The single source
+// for every create/reuse validator's reservation set.
+export function renamedFromSlugs(assignments: Assignment[]): string[] {
+  return assignments.flatMap((a) => (a.renamed_from ? [a.renamed_from] : []))
 }
 
 // Trimmed assignment description, or "" when absent. assignments.json is read

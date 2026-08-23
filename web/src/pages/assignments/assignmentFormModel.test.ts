@@ -158,6 +158,23 @@ describe("validateAssignmentForm — required fields", () => {
     const errors = validateAssignmentForm({ ...base, slug: "s".repeat(58) }, t)
     expect(errors.slug).toBeUndefined()
   })
+
+  // A renamed assignment's old slug is reserved: a new assignment there would
+  // sever GitHub's rename redirects for the renamed student repos.
+  it("flags a reserved (pre-rename) slug on create", () => {
+    const errors = validateAssignmentForm({ ...base, slug: "Old-Slug" }, t, {
+      reservedSlugs: ["old-slug"],
+    })
+    expect(errors.slug).toBe("assignments.form.validation.slugReserved")
+  })
+
+  it("does not apply the reservation in edit mode", () => {
+    const errors = validateAssignmentForm({ ...base, slug: "old-slug" }, t, {
+      reservedSlugs: ["old-slug"],
+      edit: true,
+    })
+    expect(errors.slug).toBeUndefined()
+  })
 })
 
 describe("validateAssignmentForm — group size", () => {

@@ -60,6 +60,9 @@ type CreateAssignmentFormProps = {
   slug?: string
   // Existing assignment slugs, for the create-mode uniqueness check.
   takenSlugs?: string[]
+  // Pre-rename slugs (Assignment.renamed_from), reserved against new
+  // assignments in this classroom.
+  reservedSlugs?: string[]
   // Edit mode: whether any student has already accepted this assignment. Gates
   // the provisioning-change caveats (repo source, built-in autograder) so they
   // only show when a change would actually strand existing repos. Absent/false
@@ -78,6 +81,7 @@ const CreateAssignmentForm = ({
   classroom,
   slug,
   takenSlugs,
+  reservedSlugs,
   hasAcceptedStudents = false,
 }: CreateAssignmentFormProps) => {
   const { t } = useTranslation()
@@ -85,6 +89,7 @@ const CreateAssignmentForm = ({
     takenSlugs,
     edit,
     classroom,
+    reservedSlugs,
   })
   // Auto-prefill slug from name until the teacher edits it directly, so a
   // deliberate slug isn't clobbered by later name edits.
@@ -146,6 +151,7 @@ const CreateAssignmentForm = ({
           takenSlugs,
           edit,
           classroom,
+          reservedSlugs,
         })
         // handleSubmit re-throws an onSubmit rejection (an edit-mode mutateAsync
         // failure); the caller's onError banner already surfaces it, so swallow
@@ -191,6 +197,7 @@ const CreateAssignmentForm = ({
                   slugTouched={slugTouched}
                   setSlugTouched={setSlugTouched}
                   takenSlugs={takenSlugs}
+                  reservedSlugs={reservedSlugs}
                   classroom={classroom}
                 />
                 <RepositorySetupSection

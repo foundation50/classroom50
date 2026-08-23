@@ -193,6 +193,10 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		// always starts with an open window. Locked is carried (it gates the
 		// template grant below); Closed is not.
 		copied.Closed = false
+		// renamed_from is likewise source-classroom provenance: the copy has no
+		// renamed student repos, so carrying it would wrongly reserve a slug in
+		// the target and wrongly grandfather old-slug submissions there.
+		copied.RenamedFrom = ""
 
 		dstFile, err := loadAssignments(client, p.Org, p.To, parentSHA)
 		if err != nil {
@@ -209,6 +213,12 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 			if assignment.SlugExistsFold(dstFile.Assignments, p.SlugOverride) {
 				return nil, fmt.Errorf("slug %q already exists in target classroom %q (case-insensitive) — choose a different --slug",
 					p.SlugOverride, p.To)
+			}
+			// A renamed assignment's old slug is reserved (see SlugReservedFold):
+			// reusing it would sever GitHub's redirects for renamed student repos.
+			if current, reserved := assignment.SlugReservedFold(dstFile.Assignments, p.SlugOverride); reserved {
+				return nil, fmt.Errorf("slug %q is reserved in target classroom %q: it is the pre-rename slug of assignment %q — choose a different --slug",
+					p.SlugOverride, p.To, current)
 			}
 			finalSlug = p.SlugOverride
 		} else {

@@ -250,11 +250,14 @@ export function formValuesToRepoFeatures(
 }
 
 // Create-only: slug uniqueness is not validated in edit mode (no rename).
-// `classroom` (the short-name) enables the composed repo-name budget check.
+// `classroom` (the short-name) enables the composed repo-name budget check;
+// `reservedSlugs` are pre-rename slugs (Assignment.renamed_from) no new
+// assignment may take.
 export type SlugContext = {
   takenSlugs?: string[]
   edit?: boolean
   classroom?: string
+  reservedSlugs?: string[]
 }
 
 // The composed repo-name budget error for `slug` in `classroom`, or undefined
@@ -324,6 +327,15 @@ export function validateAssignmentForm(
         // Case-insensitive collision (slugs become repo path segments); write
         // path re-checks authoritatively (nextAvailableSlug).
         errors.slug = t("validation.assignmentSlugTaken", { slug })
+      } else if (
+        (slugContext?.reservedSlugs ?? []).some(
+          (s) => s.trim().toLowerCase() === slug.toLowerCase(),
+        )
+      ) {
+        // A renamed assignment's old slug is reserved: a new assignment there
+        // would mint repos at renamed student repos' old names, severing
+        // GitHub's redirects for every student clone.
+        errors.slug = t("assignments.form.validation.slugReserved", { slug })
       }
     }
   }
