@@ -96,6 +96,21 @@ describe("CreateClassroomForm slug validation", () => {
     expect(screen.queryByText("validation.classroomSlugTooLong")).toBeNull()
   })
 
+  // Collisions warn live too, comparing the SLUGIFIED value case-insensitively
+  // against existing classrooms.
+  it("warns live when a manual slug collides with an existing classroom", async () => {
+    mockClasses = [{ name: "cs-50", path: "cs-50", type: "dir" }]
+    const user = userEvent.setup()
+    const { container } = render(<CreateClassroomForm onSubmit={vi.fn()} />)
+
+    await user.click(slugInput(container))
+    await user.paste("CS 50")
+    expect(screen.getByText("validation.classroomSlugTaken")).not.toBeNull()
+
+    await user.type(slugInput(container), "x")
+    expect(screen.queryByText("validation.classroomSlugTaken")).toBeNull()
+  })
+
   // Regression guard: the collision check must compare the SLUGIFIED value, not
   // the raw input. A raw "CS 50" slugifies to "cs-50"; if the check compared the
   // raw string it would miss an existing "cs-50" and overwrite its roster/scores.
