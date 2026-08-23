@@ -201,7 +201,12 @@ func newRenameServer(t *testing.T, assignments string, repoNames []string, marke
 
 	for _, name := range repoNames {
 		repo := name
-		marker := markers[repo]
+		marker, reachable := markers[repo]
+		if !reachable {
+			// Listed by the org but no routes: every request 404s — the
+			// "repo disappeared" repoFailed path.
+			continue
+		}
 		mux.HandleFunc("/repos/o/"+repo, func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPatch {
 				body, _ := io.ReadAll(r.Body)
@@ -380,6 +385,39 @@ func TestRunAssignmentRename_ConfirmMismatchAborts(t *testing.T) {
 	defer fix.mu.Unlock()
 	if len(fix.configBlobs) != 0 || len(fix.renamePatches) != 0 {
 		t.Error("an aborted confirmation must write nothing")
+	}
+}
+
+// TestRunAssignmentRename_FailureKeepsLock: with a straggler still unrenamed,
+// the assignment must STAY locked — unlocking would let a student accept into
+// a fresh repo at the new name, permanently 422-ing the straggler's rename.
+func TestRunAssignmentRename_FailureKeepsLock(t *testing.T) {
+	ghost := "cs-" + renameOldSlug + "-ghost"
+	server, fix := newRenameServer(t,
+		renameAssignmentsBody(renameOldSlug, "", false),
+		[]string{renameAliceRepo, ghost},
+		map[string]string{renameAliceRepo: renameMarker(renameOldSlug)},
+	)
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentRename(client, strings.NewReader(""), &out, &errOut, baseRenameParams())
+	if err == nil || !strings.Contains(err.Error(), "re-run") {
+		t.Fatalf("err = %v, want the partial-failure re-run error", err)
+	}
+
+	fix.mu.Lock()
+	defer fix.mu.Unlock()
+	// Alice still landed (best-effort batch)...
+	if got := fix.renamePatches[renameAliceRepo]; got != "cs-ps3-alice" {
+		t.Errorf("alice rename PATCH = %q, want cs-ps3-alice", got)
+	}
+	// ...but the assignment stays locked until a re-run heals the ghost.
+	if !strings.Contains(fix.assignments, `"locked": true`) {
+		t.Errorf("assignment must stay locked with a failed repo, final assignments.json:\n%s", fix.assignments)
+	}
+	if !strings.Contains(errOut.String(), "stays LOCKED") {
+		t.Errorf("errOut = %q, want the stays-locked note", errOut.String())
 	}
 }
 

@@ -265,19 +265,36 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 	for _, repo := range toHeal {
 		results = append(results, renameOneRepo(client, p, repo, oldPrefix, newPrefix, true))
 	}
+	failed := 0
+	for _, r := range results {
+		if r.outcome == repoFailed {
+			failed++
+		}
+	}
 
 	// Restore the lock only when THIS run set it (fresh path, previously
-	// unlocked). On resume the pre-rename lock state is unknowable, so it is
-	// left alone with a note rather than guessed.
+	// unlocked) AND every repo landed: with stragglers still at their old
+	// names, an unlocked assignment lets a student accept into a fresh repo
+	// at the NEW name, permanently 422-ing the straggler's rename. The lock
+	// holds until a re-run heals them. On resume the pre-rename lock state is
+	// unknowable, so it is left alone with a note rather than guessed.
 	if !resume && !prevLocked {
-		if err := setRenamedEntryLocked(client, p, branch, false); err != nil {
+		if failed > 0 {
+			_, _ = fmt.Fprintf(errOut, "Note: %q stays LOCKED while %d repo(s) are unrenamed — an accept now would occupy a new repo name and strand a student's work. Re-run to heal them; the lock is restored when everything lands.\n",
+				p.newSlug, failed)
+		} else if err := setRenamedEntryLocked(client, p, branch, false); err != nil {
 			_, _ = fmt.Fprintf(errOut, "Warning: restoring the lock failed (%v) — unlock manually: gh teacher assignment lock %s %s %s --unlock\n",
 				err, p.org, p.classroom, p.newSlug)
 		}
 	}
 	if resume {
-		_, _ = fmt.Fprintf(errOut, "Note: resumed run — if the original rename locked %q, unlock it with `gh teacher assignment lock %s %s %s --unlock`.\n",
-			p.newSlug, p.org, p.classroom, p.newSlug)
+		if failed == 0 {
+			_, _ = fmt.Fprintf(errOut, "Note: resumed run complete — if the original rename locked %q, unlock it with `gh teacher assignment lock %s %s %s --unlock`.\n",
+				p.newSlug, p.org, p.classroom, p.newSlug)
+		} else {
+			_, _ = fmt.Fprintf(errOut, "Note: %q should stay locked while %d repo(s) are unrenamed — re-run to heal them before unlocking.\n",
+				p.newSlug, failed)
+		}
 	}
 
 	return summarizeRenameResults(out, errOut, p, results)
