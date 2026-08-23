@@ -41,7 +41,7 @@ const RootErrorComponent = ({ error }: { error: Error }) => {
   }, [error])
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-10 text-center">
-      <div className="flex size-16 items-center justify-center rounded-2xl bg-error/10 text-error">
+      <div className="flex size-16 items-center justify-center rounded-box bg-error/10 text-error">
         <TriangleAlert aria-hidden="true" className="size-8" />
       </div>
       <div>

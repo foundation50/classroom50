@@ -82,7 +82,7 @@ export function DownloadsSection() {
       <h2 id="downloads-heading" className="sr-only">
         {t("accessibility.downloads.heading")}
       </h2>
-      <Card radius="xl" shadow={false}>
+      <Card shadow={false}>
         <Card.Body className="divide-y divide-base-300 p-4">
           <DownloadRow
             href="/VPAT.md"

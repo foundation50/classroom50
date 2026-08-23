@@ -514,7 +514,6 @@ export function ClassroomCard({
   return (
     <Card
       as={EnterDiv}
-      radius="xl"
       shadow={false}
       className="col-span-12 md:col-span-6 xl:col-span-4"
     >
@@ -552,7 +551,7 @@ export function ClassroomRow({
   const name = classroomDisplayName(summary, t("classes.unknownClassName"))
 
   return (
-    <EnterDiv className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <EnterDiv className="col-span-12 flex flex-col gap-3 rounded-box border border-base-300 bg-base-200 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate font-semibold">{name}</span>

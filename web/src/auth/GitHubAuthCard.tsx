@@ -48,8 +48,8 @@ export function GitHubAuthCard() {
   const auth = useGithubAuth()
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-base-200 px-4 py-8">
-      <Card as="section" radius="xl" className="relative w-full max-w-lg">
+    <main className="flex min-h-screen items-center justify-center bg-base-100 px-4 py-8">
+      <Card as="section" className="relative w-full max-w-lg">
         <div className="absolute end-3 top-3 z-10">
           <LoginLanguageMenu />
         </div>

@@ -53,7 +53,7 @@ function VpatConformanceTable({
   const rows = criteria.filter((c) => c.principle === activePrinciple)
 
   return (
-    <Card radius="xl" shadow={false}>
+    <Card shadow={false}>
       <Card.Body className="gap-4 p-4">
         <div
           role="tablist"

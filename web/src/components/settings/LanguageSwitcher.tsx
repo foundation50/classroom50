@@ -438,7 +438,7 @@ export const LanguageSwitcher = ({
       )}
 
       {preview && (
-        <div className="flex flex-col gap-3 rounded-box border border-base-300 bg-base-100 p-4">
+        <div className="flex flex-col gap-3 rounded-box border border-base-300 bg-base-200 p-4">
           <div className="flex items-center justify-between">
             <span className="font-bold">
               {t("language.previewTitle", {
@@ -517,7 +517,7 @@ const AccordionSection = ({
   children: React.ReactNode
 }) => (
   <details
-    className="collapse border border-base-300 rounded-box bg-base-100"
+    className="collapse border border-base-300 rounded-box bg-base-200"
     open={open}
   >
     <summary

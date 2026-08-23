@@ -34,6 +34,12 @@ export type Kind = "text" | "nonText"
 export const MODELED_BASE_CONTENT_TIERS = [30, 40, 50, 60, 70, 80, 90] as const
 export const MODELED_NEUTRAL_CONTENT_TIERS = [50, 60, 70] as const
 
+// Rest-dim factor for the sidebar rail (index.css .sidebar-rail): the rail
+// background sits at this % of `neutral` mixed toward black until hovered or
+// focused. The drift guard in contrastSource.test.ts asserts the CSS recipe
+// uses the same factor, so the audited pair can't silently diverge.
+export const SIDEBAR_REST_DIM = 90
+
 // Semantic text tokens modeled as body text on a base surface (the `text-<name>`
 // pairs built in buildTheme). The coverage guard (contrastSource.test.ts) scans
 // src/** for `text-<name>` utilities and fails if a used one is absent here, so
@@ -68,34 +74,36 @@ export type Pair = {
 // engine to read them); the drift guard in contrastSource.test.ts asserts they
 // stay in sync, so the copy can't silently diverge.
 // Light theme "sumi" (base-content and warning darkened per the AAA overrides).
+// Neutral grays follow Primer's light scale; text-role tokens are
+// hue-preserved deeper shades of the Primer role hues to clear the AAA floors.
 export const SUMI = {
-  base100: "#fafafa",
-  base200: "#f1f1f1",
-  base300: "#e3e3e3",
-  baseContent: "#1a1a1a",
-  primary: "#375396",
-  primaryContent: "#fafafa",
-  secondary: "#565656",
-  secondaryContent: "#fafafa",
-  accent: "#923821",
-  accentContent: "#fafafa",
-  neutral: "#232323",
-  neutralContent: "#f1f1f1",
-  info: "#235c66",
-  infoContent: "#fafafa",
-  success: "#305f40",
-  successContent: "#fafafa",
+  base100: "#ffffff",
+  base200: "#f6f8fa",
+  base300: "#d1d9e0",
+  baseContent: "#1f2328",
+  primary: "#065c25",
+  primaryContent: "#ffffff",
+  secondary: "#424a53",
+  secondaryContent: "#ffffff",
+  accent: "#5c1fb8",
+  accentContent: "#ffffff",
+  neutral: "#24292f",
+  neutralContent: "#f6f8fa",
+  info: "#0d43ab",
+  infoContent: "#ffffff",
+  success: "#065c25",
+  successContent: "#ffffff",
   // AAA override: warning darkened for text use AND fill (white label >=4.5).
-  warningText: "#754d11",
-  warningFill: "#754d11",
-  warningContent: "#fafafa",
-  error: "#993229",
-  errorContent: "#fafafa",
-  // Sidebar: opaque charcoal panel over the light canvas.
-  sidebarSurface: "#3a3a3a",
+  warningText: "#6f4300",
+  warningFill: "#6f4300",
+  warningContent: "#ffffff",
+  error: "#9a1b25",
+  errorContent: "#ffffff",
+  // Sidebar: opaque slate panel over the light canvas.
+  sidebarSurface: "#39424e",
   // Per-theme link color and muted-tier opacity floors (index.css overrides).
-  link: "#324d8c",
-  muted: { 30: 78, 40: 78, 50: 78, 60: 82, 70: 86, 80: 90, 90: 92 } as Record<
+  link: "#0d43ab",
+  muted: { 30: 84, 40: 84, 50: 84, 60: 86, 70: 88, 80: 91, 90: 93 } as Record<
     number,
     number
   >,
@@ -105,28 +113,28 @@ export const SUMI = {
 
 // Dark theme "sumi-dark". Exported for the drift guard (see SUMI).
 export const DARK = {
-  base100: "#1b1b1d",
-  base200: "#161618",
-  base300: "#100f11",
-  baseContent: "#ececee",
-  primary: "#90a7d6",
-  primaryContent: "#14181c",
-  secondary: "#a8a8ac",
-  secondaryContent: "#14181c",
-  accent: "#e29279",
-  accentContent: "#14181c",
-  neutral: "#26262a",
-  neutralContent: "#ececee",
-  info: "#6fb8c4",
-  infoContent: "#14181c",
-  success: "#8fb89f",
-  successContent: "#14181c",
-  warning: "#d0ad6e",
-  warningContent: "#14181c",
-  error: "#d5968f",
-  errorContent: "#14181c",
+  base100: "#0d1117",
+  base200: "#151b23",
+  base300: "#30363d",
+  baseContent: "#f0f6fc",
+  primary: "#57cb70",
+  primaryContent: "#0d1117",
+  secondary: "#aab6c2",
+  secondaryContent: "#0d1117",
+  accent: "#c9a2ff",
+  accentContent: "#0d1117",
+  neutral: "#212830",
+  neutralContent: "#f0f6fc",
+  info: "#82c2ff",
+  infoContent: "#0d1117",
+  success: "#57cb70",
+  successContent: "#0d1117",
+  warning: "#d3a637",
+  warningContent: "#0d1117",
+  error: "#ffa198",
+  errorContent: "#0d1117",
   // Per-theme link color and muted-tier opacity floors (index.css overrides).
-  link: "#9bb0dc",
+  link: "#82c2ff",
   muted: { 30: 68, 40: 68, 50: 68, 60: 74, 70: 80, 80: 86, 90: 92 } as Record<
     number,
     number
@@ -135,7 +143,7 @@ export const DARK = {
   sidebarMuted: 85,
 } as const
 
-// The dark sidebar surface is a translucent sheet over base-100, NOT #3a3a3a.
+// The dark sidebar surface is a translucent sheet over base-100, NOT #39424e.
 // --sidebar-surface: color-mix(in oklch, neutral-content 10%, transparent)
 function darkSidebarSurface(): LinearRgb {
   const sheet = mixColor("oklch", DARK.neutralContent, 10, "transparent")
@@ -259,7 +267,7 @@ function buildTheme(theme: Theme): Pair[] {
       `badge-${name}`,
       `${name} soft-badge text`,
       badgeSoftFg(theme, token),
-      softGround(token, T.base100),
+      softGround(token, theme === "sumi" ? T.base200 : T.base100),
       "body",
     )
   }
@@ -267,9 +275,15 @@ function buildTheme(theme: Theme): Pair[] {
   // Semantic text colors used directly as body text on a base surface — an
   // inline `text-error` validation message, a `text-success` confirmation, etc.
   // Distinct from the soft-badge pairs above (nudged token on a tinted ground):
-  // here the raw token sits on the plain base-100 canvas, the realistic worst
-  // case for an inline status message. The coverage guard scans src/** for
-  // `text-<token>` utilities and fails if any used one has no pair here.
+  // here the raw token sits on the worst-case realistic ground for an inline
+  // status message. Since the canvas went white with muted base-200 cards
+  // (GitHub Product UI), the light worst case is base-200; in dark, cards are
+  // DARKER than the canvas, so base-100 stays the worst case there. The
+  // coverage guard scans src/** for `text-<token>` utilities and fails if any
+  // used one has no pair here.
+  const semanticWorstBg =
+    theme === "sumi" ? opaque(T.base200) : opaque(T.base100)
+  const semanticWorstLabel = theme === "sumi" ? "base-200" : "base-100"
   const textSemanticToken: Record<
     (typeof MODELED_TEXT_SEMANTICS)[number],
     string
@@ -286,16 +300,23 @@ function buildTheme(theme: Theme): Pair[] {
   for (const name of MODELED_TEXT_SEMANTICS) {
     add(
       `text-${name}`,
-      `${name} text on base-100`,
+      `${name} text on ${semanticWorstLabel}`,
       opaque(textSemanticToken[name]),
-      opaque(T.base100),
+      semanticWorstBg,
       "body",
     )
   }
 
   // Link text (daisyUI .link / hover:text-primary) uses the per-theme link
-  // color on base-100, body size (index.css --color-link override).
-  add("link", "link on base-100", opaque(T.link), opaque(T.base100), "body")
+  // color, body size (index.css --color-link override), on the same
+  // worst-case ground as the inline semantics.
+  add(
+    "link",
+    `link on ${semanticWorstLabel}`,
+    opaque(T.link),
+    semanticWorstBg,
+    "body",
+  )
 
   // Sidebar (dark rail in both themes). The index.css override remaps every
   // resting muted tier used on the rail (/50, /60, /70) to the same 85% floor,
@@ -317,7 +338,22 @@ function buildTheme(theme: Theme): Pair[] {
     "body",
   )
 
-  // Placeholder and .label both render at the muted-70 floor (index.css).
+  // Rest-dimmed rail (index.css .sidebar-rail): on hover-capable pointers the
+  // rail background darkens to SIDEBAR_REST_DIM% of `neutral` toward black
+  // until hovered or focused. Text stays at the resting 85% tier, so audit
+  // that text over the dimmed surface — the darkest ground rail text ever
+  // sits on.
+  add(
+    "sidebar-rest-dim",
+    `neutral-content resting tiers (rendered ${T.sidebarMuted}%) on rest-dimmed rail`,
+    tierFg(T.neutralContent, T.sidebarMuted),
+    mixColor("oklab", T.neutral, SIDEBAR_REST_DIM, "black"),
+    "body",
+  )
+
+  // Placeholder renders inside the input's own base-100 field; .label sits on
+  // the surrounding surface, so it takes the per-polarity worst-case ground
+  // (base-200 cards in light). Both render at the muted-70 floor (index.css).
   add(
     "placeholder",
     "input placeholder",
@@ -329,7 +365,7 @@ function buildTheme(theme: Theme): Pair[] {
     "label",
     ".label text",
     tierFg(T.baseContent, T.muted[70]),
-    opaque(T.base100),
+    semanticWorstBg,
     "body",
   )
 

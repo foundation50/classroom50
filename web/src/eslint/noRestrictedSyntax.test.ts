@@ -14,6 +14,11 @@ import {
   collapseOverflowTemplateSelector,
   collapseOverflowMessage,
 } from "./collapseOverflowRule"
+import {
+  radiusClassPattern,
+  radiusClassTemplateSelector,
+  radiusClassMessage,
+} from "./radiusClassRule"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -405,5 +410,98 @@ describe("no-restricted-syntax collapse overflow guard", () => {
       }
     `
     expect(await collapseWarningCount(source)).toBe(0)
+  })
+})
+
+// Corner radii are theme-token driven; a raw Tailwind size class hard-codes
+// one corner and re-introduces radius drift (see radiusClassRule.ts).
+describe("no-restricted-syntax raw radius class guard", () => {
+  const pattern = new RegExp(radiusClassPattern)
+
+  const radiusWarningCount = async (source: string) => {
+    const eslint = new ESLint({
+      cwd: projectRoot,
+      overrideConfigFile: configPath,
+    })
+    const [result] = await eslint.lintText(source, {
+      filePath: path.join(projectRoot, "src/pages/Probe.tsx"),
+    })
+    return result.messages.filter(
+      (message) =>
+        message.ruleId === "no-restricted-syntax" &&
+        message.message === radiusClassMessage,
+    ).length
+  }
+
+  it.each([
+    "rounded-sm",
+    "rounded-md",
+    "rounded-lg",
+    "rounded-xl",
+    "rounded-2xl",
+    "rounded-3xl",
+    "hover:rounded-lg",
+    "sm:rounded-2xl",
+    "rounded-s-lg",
+    "rounded-e-md",
+    "rounded-t-xl",
+    "rounded-b-sm",
+    "rounded-ss-lg",
+    "rounded-ee-2xl",
+  ])("pattern matches raw radius size: %s", (cls) => {
+    expect(pattern.test(cls)).toBe(true)
+  })
+
+  it.each([
+    "rounded-box",
+    "rounded-field",
+    "rounded-selector",
+    "rounded-full",
+    "rounded-none",
+    "rounded",
+    "rounded-t-full",
+    "shadow-sm",
+    "blur-lg",
+    "text-xl",
+    "max-w-md",
+  ])("pattern ignores token/lookalike class: %s", (cls) => {
+    expect(pattern.test(cls)).toBe(false)
+  })
+
+  it("warns for a raw radius in a className string literal", async () => {
+    const source = `
+      export function App() {
+        return <div className="border rounded-2xl p-4">x</div>
+      }
+    `
+    expect(await radiusWarningCount(source)).toBe(1)
+  })
+
+  it("warns for a raw radius in a template-literal className chunk", async () => {
+    const source = `
+      export function App({ active }: { active: boolean }) {
+        return <div className={\`rounded-lg \${active ? "shadow" : ""}\`}>x</div>
+      }
+    `
+    expect(await radiusWarningCount(source)).toBe(1)
+    // The template selector must read TemplateElement, not Literal: a
+    // template-literal className has no Literal child.
+    expect(radiusClassTemplateSelector).toContain("TemplateElement")
+  })
+
+  it("does not warn for theme radius tokens in either className form", async () => {
+    const source = `
+      export function App({ active }: { active: boolean }) {
+        return (
+          <div className="rounded-box border">
+            <span className={\`rounded-selector \${active ? "font-bold" : ""}\`}>
+              x
+            </span>
+            <img className="rounded-full" alt="" />
+          </div>
+        )
+      }
+    `
+    expect(await radiusWarningCount(source)).toBe(0)
   })
 })

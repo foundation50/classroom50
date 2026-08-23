@@ -62,7 +62,7 @@ function ServiceTokensSection({ highlighted }: { highlighted?: boolean }) {
             <li
               key={i}
               aria-hidden="true"
-              className="skeleton skeleton-shimmer h-16 rounded-lg"
+              className="skeleton skeleton-shimmer h-16 rounded-field"
             />
           ))}
         </ul>
@@ -81,7 +81,7 @@ function ServiceTokensSection({ highlighted }: { highlighted?: boolean }) {
             return (
               <li
                 key={login}
-                className="flex flex-col gap-2 rounded-lg border border-base-300 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-2 rounded-field border border-base-300 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex min-w-0 flex-col gap-1">
                   <span className="truncate font-mono text-sm font-semibold">
@@ -235,7 +235,7 @@ function PreferenceRadioGroup<T extends string>({
           <label
             key={option.value}
             htmlFor={id}
-            className="flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 px-3 py-2 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+            className="flex cursor-pointer items-start gap-3 rounded-field border border-base-300 px-3 py-2 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
           >
             <input
               id={id}
@@ -279,7 +279,6 @@ function SettingsSectionCard({
   return (
     <Card
       id={id}
-      radius="xl"
       shadow={false}
       className={cx(
         "scroll-mt-24",
@@ -443,7 +442,7 @@ function HiddenOrgsSection({ highlighted }: { highlighted?: boolean }) {
           {hiddenLogins.map((login) => (
             <li
               key={login}
-              className="flex items-center justify-between gap-3 rounded-lg border border-base-300 px-3 py-2"
+              className="flex items-center justify-between gap-3 rounded-field border border-base-300 px-3 py-2"
             >
               <span className="truncate font-mono text-sm font-semibold">
                 {login}

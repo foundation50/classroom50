@@ -15,7 +15,7 @@ export function StatementSection() {
 
   return (
     <section aria-labelledby="statement-heading">
-      <Card radius="xl" shadow={false}>
+      <Card shadow={false}>
         <Card.Body className="max-w-2xl gap-6 p-6">
           <h2
             id="statement-heading"

@@ -257,7 +257,7 @@ export const InitStep = ({
   const settingsUrl = org ? meta.settingsUrl(org) : null
 
   return (
-    <div className="rounded-xl border border-base-300 bg-base-100">
+    <div className="rounded-box border border-base-300 bg-base-200">
       <button
         type="button"
         aria-expanded={open}
@@ -305,7 +305,7 @@ export const InitStep = ({
 
           {needsAttention && (
             <div
-              className={`mt-3 rounded-lg border p-3 ${
+              className={`mt-3 rounded-field border p-3 ${
                 status === "error"
                   ? "border-error/30 bg-error/10"
                   : "border-warning/30 bg-warning/10"

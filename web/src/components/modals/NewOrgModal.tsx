@@ -96,12 +96,12 @@ function OrgPicker({
                   onClick={() =>
                     isFree ? onFreePlan(org.login) : onSelect(org.login)
                   }
-                  className="flex w-full items-center gap-3 rounded-xl border border-base-300 p-3 text-start transition-colors hover:bg-base-200 disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent"
+                  className="flex w-full items-center gap-3 rounded-box border border-base-300 p-3 text-start transition-colors hover:bg-base-200 disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent"
                 >
                   <img
                     src={org.avatar_url}
                     alt=""
-                    className="size-9 shrink-0 rounded-lg border border-base-300"
+                    className="size-9 shrink-0 rounded-field border border-base-300"
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">

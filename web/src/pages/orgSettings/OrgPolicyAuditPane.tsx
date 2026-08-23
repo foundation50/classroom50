@@ -156,7 +156,7 @@ export function ConcernRow({
     unresolvedMessage === undefined
 
   return (
-    <div className="rounded-lg border border-base-300 bg-base-100 p-3">
+    <div className="rounded-field border border-base-300 bg-base-100 p-3">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="text-sm font-semibold">{concern.title}</div>
@@ -248,7 +248,7 @@ function RecommendationRow({
   const { t } = useTranslation()
   const isConfigRepo = rec.id === "configRepoDefaultBranch"
   return (
-    <div className="flex items-start justify-between gap-4 rounded-lg border border-warning/40 bg-warning/5 p-3">
+    <div className="flex items-start justify-between gap-4 rounded-field border border-warning/40 bg-warning/5 p-3">
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 text-sm font-semibold text-base-content/80">
           <TriangleAlert
@@ -318,7 +318,7 @@ function AuditBody({
     <>
       <CalloutDiv
         className={[
-          "mt-4 flex items-start gap-3 rounded-xl border p-4 text-sm",
+          "mt-4 flex items-start gap-3 rounded-box border p-4 text-sm",
           banner.className,
         ].join(" ")}
       >
@@ -388,7 +388,7 @@ function AuditBody({
             {report.manualUnreadable.map((step) => (
               <div
                 key={step.setting}
-                className="flex items-start justify-between gap-4 rounded-lg border border-warning/40 bg-warning/5 p-3"
+                className="flex items-start justify-between gap-4 rounded-field border border-warning/40 bg-warning/5 p-3"
               >
                 <div className="min-w-0">
                   <div className="text-sm text-base-content/80">
@@ -599,7 +599,7 @@ const OrgPolicyAuditPane = ({
       )}
 
       {isError && (
-        <div className="flex items-start gap-2 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+        <div className="flex items-start gap-2 rounded-field border border-error/30 bg-error/10 p-3 text-sm text-error">
           <TriangleAlert
             aria-hidden="true"
             className="mt-0.5 size-4 shrink-0"
@@ -609,7 +609,7 @@ const OrgPolicyAuditPane = ({
       )}
 
       {fixMutation.isError && (
-        <div className="mt-4 flex items-start gap-2 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+        <div className="mt-4 flex items-start gap-2 rounded-field border border-error/30 bg-error/10 p-3 text-sm text-error">
           <TriangleAlert
             aria-hidden="true"
             className="mt-0.5 size-4 shrink-0"
@@ -619,7 +619,7 @@ const OrgPolicyAuditPane = ({
       )}
 
       {renameMutation.isError && (
-        <div className="mt-4 flex items-start gap-2 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+        <div className="mt-4 flex items-start gap-2 rounded-field border border-error/30 bg-error/10 p-3 text-sm text-error">
           <TriangleAlert
             aria-hidden="true"
             className="mt-0.5 size-4 shrink-0"
@@ -629,7 +629,7 @@ const OrgPolicyAuditPane = ({
       )}
 
       {transientNotice && (
-        <div className="mt-4 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
+        <div className="mt-4 flex items-start gap-2 rounded-field border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
           <TriangleAlert
             aria-hidden="true"
             className="mt-0.5 size-4 shrink-0"

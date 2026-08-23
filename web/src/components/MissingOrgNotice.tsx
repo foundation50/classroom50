@@ -25,7 +25,7 @@ function MissingOrgNotice({
   return (
     <details
       open={open}
-      className="group rounded-xl border border-info/20 bg-info/5"
+      className="group rounded-box border border-info/20 bg-info/5"
     >
       <summary
         // React owns `open`; letting the native toggle through too would need
@@ -34,7 +34,7 @@ function MissingOrgNotice({
           e.preventDefault()
           setOpen((wasOpen) => !wasOpen)
         }}
-        className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-4 py-2.5 text-sm hover:bg-info/10"
+        className="flex cursor-pointer list-none items-center gap-2 rounded-box px-4 py-2.5 text-sm hover:bg-info/10"
       >
         <Info aria-hidden="true" className="size-4 shrink-0 text-info" />
         <span className="min-w-0 flex-1 truncate font-medium text-base-content">

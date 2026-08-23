@@ -159,7 +159,7 @@ const ClassroomList = ({
           onCount={handleStudentCount}
         />
       )}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-base-300 bg-base-100 p-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-box border border-base-300 bg-base-200 p-2">
         <Input
           inputSize="sm"
           leadingIcon={
@@ -271,7 +271,7 @@ const ClassroomList = ({
             <ul
               tabIndex={0}
               role="menu"
-              className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+              className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-300 bg-base-100 p-1 shadow"
             >
               {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
               <li>
@@ -293,7 +293,7 @@ const ClassroomList = ({
           onClear={() => setSearch("")}
         />
       ) : emptyFilter ? (
-        <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
+        <div className="rounded-box border border-dashed border-base-300 bg-base-100 p-8 text-center">
           <p className="text-sm text-base-content/70">
             {t(`classes.emptyFilter.${filter}`)}
           </p>

@@ -145,7 +145,7 @@ export function ConfirmModal({
         <div className="flex items-start gap-4">
           <div
             className={[
-              "flex size-11 shrink-0 items-center justify-center rounded-full",
+              "flex size-11 shrink-0 items-center justify-center rounded-box",
               dangerous
                 ? "bg-error/10 text-error"
                 : "bg-warning/10 text-warning",

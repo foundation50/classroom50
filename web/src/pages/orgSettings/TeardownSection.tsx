@@ -103,7 +103,7 @@ const TeardownSection = ({
       }
     >
       {error && (
-        <CalloutDiv className="flex flex-col items-start gap-2 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+        <CalloutDiv className="flex flex-col items-start gap-2 rounded-field border border-error/30 bg-error/10 p-3 text-sm text-error">
           <span>{error.message}</span>
           {error.canElevate &&
             (canElevateInApp ? (

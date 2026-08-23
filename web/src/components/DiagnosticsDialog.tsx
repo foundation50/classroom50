@@ -40,7 +40,7 @@ export function DiagnosticsDialog({
         {t("orgActivity.diagnostics.description")}
       </p>
 
-      <pre className="overflow-auto rounded-lg bg-base-100 p-3 text-xs whitespace-pre-wrap">
+      <pre className="overflow-auto rounded-field bg-base-100 p-3 text-xs whitespace-pre-wrap">
         {text}
       </pre>
 

@@ -95,7 +95,7 @@ const AcceptNavbar = () => {
 
 const AcceptCard = ({ children }: { children: React.ReactNode }) => {
   return (
-    <Card radius="xl" shadow={false} className="w-200 max-w-full p-8">
+    <Card shadow={false} className="w-200 max-w-full p-8">
       {children}
     </Card>
   )
@@ -120,7 +120,7 @@ const UserInfo = ({ user }: { user: GitHubUser | null }) => {
   const displayName = user?.name || user?.login || t("accept.githubUser")
 
   return (
-    <div className="flex gap-4 bg-base-200 p-4 rounded-xl border border-base-300">
+    <div className="flex gap-4 bg-base-100 p-4 rounded-box border border-base-300">
       <div className="avatar avatar-placeholder">
         {user?.avatar_url ? (
           <div className="w-12 rounded-full">
@@ -183,7 +183,7 @@ const AssignmentNotFound = ({
             </p>
           </div>
 
-          <div className="rounded-xl border border-error/20 bg-error/5 p-5">
+          <div className="rounded-box border border-error/20 bg-error/5 p-5">
             <div className="flex items-start gap-4">
               <div className="rounded-full bg-error/10 p-3 text-error">
                 <AlertTriangle aria-hidden="true" className="size-6" />
@@ -198,14 +198,14 @@ const AssignmentNotFound = ({
                   {t("accept.notFound.expectedSlug")}
                 </div>
 
-                <pre className="mt-3 overflow-x-auto rounded-lg bg-base-100 p-3 text-sm">
+                <pre className="mt-3 overflow-x-auto rounded-field bg-base-100 p-3 text-sm">
                   {assignment}
                 </pre>
               </div>
             </div>
           </div>
 
-          <div className="rounded-xl border border-base-300 bg-base-200/40 p-4 text-sm text-base-content/70">
+          <div className="rounded-box border border-base-300 bg-base-100 p-4 text-sm text-base-content/70">
             <Trans
               i18nKey="accept.notFound.checkUrl"
               components={{
@@ -581,7 +581,7 @@ const AcceptProgress = ({ steps }: { steps: StepState }) => {
   }[headerStatus]
 
   return (
-    <div className="rounded-xl border border-base-300 bg-base-200/40">
+    <div className="rounded-box border border-base-300 bg-base-100">
       <button
         type="button"
         onClick={() => setUserOpen(!expanded)}
@@ -653,7 +653,7 @@ const RepairToggle = ({
 }) => {
   const { t } = useTranslation()
   return (
-    <div className="rounded-xl border border-base-300 bg-base-200/40">
+    <div className="rounded-box border border-base-300 bg-base-100">
       <button
         type="button"
         onClick={() => onToggle(!open)}
@@ -955,7 +955,7 @@ const AcceptAssignmentPage = () => {
           <div className="flex flex-col gap-4">
             <UserInfo user={user} />
 
-            <div className="flex gap-2 flex-col bg-base-200 p-4 rounded-xl border border-base-300">
+            <div className="flex gap-2 flex-col bg-base-100 p-4 rounded-box border border-base-300">
               <label className="label text-lg">
                 {repoExistsAlready
                   ? t("accept.repoAlreadyExists")

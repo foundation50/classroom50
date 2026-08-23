@@ -24,7 +24,7 @@ export function StatCard({
   className,
 }: StatCardProps) {
   return (
-    <Card radius="xl" shadow={false} className={className}>
+    <Card shadow={false} className={className}>
       <Card.Body className="gap-1 p-4">
         <span className="text-xs uppercase tracking-wide text-base-content/70">
           {label}

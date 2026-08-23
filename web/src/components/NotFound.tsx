@@ -25,7 +25,7 @@ const NotFound = ({ title, message }: { title?: string; message?: string }) => {
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-10 text-center">
-      <div className="flex size-16 items-center justify-center rounded-2xl bg-base-200 text-base-content/70">
+      <div className="flex size-16 items-center justify-center rounded-box bg-base-200 text-base-content/70">
         <FileQuestion className="size-8" aria-hidden="true" />
       </div>
       <div>

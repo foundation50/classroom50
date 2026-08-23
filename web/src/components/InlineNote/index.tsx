@@ -26,7 +26,7 @@ export const InlineNote = ({
   children: ReactNode
 }) => (
   <div
-    className={`flex items-start gap-2 rounded-lg border p-2.5 text-sm ${TONE_CLASS[tone]} ${className}`}
+    className={`flex items-start gap-2 rounded-field border p-2.5 text-sm ${TONE_CLASS[tone]} ${className}`}
   >
     <Icon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
     <div>{children}</div>

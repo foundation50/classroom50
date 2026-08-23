@@ -23,6 +23,11 @@ import {
   collapseOverflowTemplateSelector,
   collapseOverflowMessage,
 } from "./src/eslint/collapseOverflowRule.ts"
+import {
+  radiusClassLiteralSelector,
+  radiusClassTemplateSelector,
+  radiusClassMessage,
+} from "./src/eslint/radiusClassRule.ts"
 
 export default defineConfig([
   globalIgnores(["dist"]),
@@ -152,6 +157,18 @@ export default defineConfig([
         {
           selector: collapseOverflowTemplateSelector,
           message: collapseOverflowMessage,
+        },
+        // Corner radii are theme-token driven (rounded-box/field/selector) so
+        // the product re-tunes from index.css; a raw Tailwind size hard-codes
+        // one corner and re-introduces radius drift. Two selectors because a
+        // template-literal className has no Literal child.
+        {
+          selector: radiusClassLiteralSelector,
+          message: radiusClassMessage,
+        },
+        {
+          selector: radiusClassTemplateSelector,
+          message: radiusClassMessage,
         },
       ],
     },

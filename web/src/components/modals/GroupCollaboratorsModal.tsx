@@ -356,7 +356,7 @@ export function GroupCollaboratorsModal({
       aria-labelledby={titleId}
     >
       <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
           <UsersRound className="size-5" aria-hidden="true" />
         </div>
 
@@ -427,7 +427,7 @@ export function GroupCollaboratorsModal({
 
             {/* One bordered list for owner + members + pending removals, so it
                   reads as a single roster rather than stacked cards. */}
-            <ul className="divide-y divide-base-200 rounded-2xl border border-base-200">
+            <ul className="divide-y divide-base-200 rounded-box border border-base-200">
               {ownerDisplayLogin && (
                 <li className="flex items-center gap-3 px-4 py-2.5">
                   <GitHub

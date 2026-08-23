@@ -4,53 +4,55 @@
 }
 
 /* ── Light theme: "sumi" ─────────────────────────────────────────────────────
-   Our own custom daisyUI theme (not a stock one). A minimalist, ink-on-paper
-   palette on neutral surfaces: neutral off-white base (no warm tint) — soft,
-   not clinical white; near-black neutral ink for strong text contrast; a single
-   calm indigo accent (#375396). Semantic hues sit at a deliberate mid chroma —
-   saturated enough to read as distinct at a glance, low enough to stay in
-   harmony so the palette never tires the eye (each pairs with a soft tint via
-   daisyUI). A warm vermilion is the secondary pop. Flat, near-square shapes
-   (--depth/--noise 0, small radii) keep the look restrained. */
+   GitHub-flavored palette on Primer's NEUTRAL foundations (primer.style color
+   usage): pure neutral grays for surfaces, borders, and ink — no hue tint — so
+   color is reserved for semantic roles. Roles follow Primer: green for
+   primary/success (the GitHub hero hue), blue for info/links (accent role),
+   purple for accent (done role), gold for warning (attention), red for error
+   (danger), slate for secondary. Where a token doubles as BODY TEXT the raw
+   Primer values are too light for the AAA floor (7:1 on the base-200 card
+   ground), so those use hue-preserved deeper shades. Flat surfaces
+   (--depth/--noise 0) with softly rounded shapes; the radius scale is
+   box > field > selector so nesting reads naturally. */
 @plugin "daisyui/theme" {
   name: "sumi";
   default: true;
   color-scheme: light;
 
-  --color-base-100: #fafafa;
-  --color-base-200: #f1f1f1;
-  --color-base-300: #e3e3e3;
-  --color-base-content: #232323;
+  --color-base-100: #ffffff;
+  --color-base-200: #f6f8fa;
+  --color-base-300: #d1d9e0;
+  --color-base-content: #24292f;
 
-  --color-primary: #375396;
-  --color-primary-content: #fafafa;
-  --color-secondary: #565656;
-  --color-secondary-content: #fafafa;
-  --color-accent: #923821;
-  --color-accent-content: #fafafa;
+  --color-primary: #065c25;
+  --color-primary-content: #ffffff;
+  --color-secondary: #424a53;
+  --color-secondary-content: #ffffff;
+  --color-accent: #5c1fb8;
+  --color-accent-content: #ffffff;
 
-  /* Sidebar rail follows `neutral`: a deep charcoal so the rail reads as a
-     quiet dark panel against the light canvas. */
-  --color-neutral: #232323;
-  --color-neutral-content: #f1f1f1;
+  /* Sidebar rail follows `neutral`: a deep neutral gray, so the rail reads as
+     a quiet dark panel against the light canvas. */
+  --color-neutral: #24292f;
+  --color-neutral-content: #f6f8fa;
 
-  --color-info: #235c66;
-  --color-info-content: #fafafa;
-  --color-success: #305f40;
-  --color-success-content: #fafafa;
-  --color-warning: #a4741d;
+  --color-info: #0d43ab;
+  --color-info-content: #ffffff;
+  --color-success: #065c25;
+  --color-success-content: #ffffff;
+  --color-warning: #db9d00;
   /* Light content so a SOLID warning fill (btn-warning / non-soft badge) reads
-     as white-on-gold like every other semantic fill here — the dark #1b1b1d
-     content it shipped with gave dark-on-gold, failing contrast. Soft badges are
-     unaffected (they use --color-warning as foreground, not the content token).
-     The fill itself is darkened for text use in the AA-override block below. */
-  --color-warning-content: #fafafa;
-  --color-error: #993229;
-  --color-error-content: #fafafa;
+     as white-on-gold like every other semantic fill here — a dark content
+     would give dark-on-gold, failing contrast. Soft badges are unaffected
+     (they use --color-warning as foreground, not the content token). The fill
+     itself is darkened for text use in the AA-override block below. */
+  --color-warning-content: #ffffff;
+  --color-error: #9a1b25;
+  --color-error-content: #ffffff;
 
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.25rem;
+  --radius-selector: 0.375rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
@@ -59,45 +61,47 @@
 }
 
 /* ── Dark theme: "sumi-dark" ──────────────────────────────────────────────────
-   The night side of our custom sumi theme. Neutral dark surfaces with soft
-   off-white ink; the accent and semantics lift to lighter, still-saturated
-   hues (indigo #90a7d6, etc.) so they pop against the dark ground while keeping
-   the same identity — and the same restrained harmony — as light mode. */
+   The night side on Primer's dark neutral scale: #0d1117 canvas with lighter
+   muted panels (#151b23) and visible neutral borders, pure gray with no hue
+   tint. The semantic roles lift to the light ends of the same hues — green
+   primary/success, blue info/links, purple accent, gold warning, red error —
+   so they pop against the dark ground while keeping the same role identity as
+   light mode. */
 @plugin "daisyui/theme" {
   name: "sumi-dark";
   default: false;
   prefersdark: true;
   color-scheme: dark;
 
-  --color-base-100: #1b1b1d;
-  --color-base-200: #161618;
-  --color-base-300: #100f11;
-  --color-base-content: #ececee;
+  --color-base-100: #0d1117;
+  --color-base-200: #151b23;
+  --color-base-300: #30363d;
+  --color-base-content: #f0f6fc;
 
-  --color-primary: #90a7d6;
-  --color-primary-content: #14181c;
-  --color-secondary: #a8a8ac;
-  --color-secondary-content: #14181c;
-  --color-accent: #e29279;
-  --color-accent-content: #14181c;
+  --color-primary: #57cb70;
+  --color-primary-content: #0d1117;
+  --color-secondary: #aab6c2;
+  --color-secondary-content: #0d1117;
+  --color-accent: #c9a2ff;
+  --color-accent-content: #0d1117;
 
   /* Sidebar surface: a slightly lighter panel than base so the rail reads
      as a distinct surface in dark mode. */
-  --color-neutral: #26262a;
-  --color-neutral-content: #ececee;
+  --color-neutral: #212830;
+  --color-neutral-content: #f0f6fc;
 
-  --color-info: #6fb8c4;
-  --color-info-content: #14181c;
-  --color-success: #8fb89f;
-  --color-success-content: #14181c;
-  --color-warning: #d0ad6e;
-  --color-warning-content: #14181c;
-  --color-error: #d5968f;
-  --color-error-content: #14181c;
+  --color-info: #82c2ff;
+  --color-info-content: #0d1117;
+  --color-success: #57cb70;
+  --color-success-content: #0d1117;
+  --color-warning: #d3a637;
+  --color-warning-content: #0d1117;
+  --color-error: #ffa198;
+  --color-error-content: #0d1117;
 
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.25rem;
+  --radius-selector: 0.375rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
@@ -105,14 +109,15 @@
   --noise: 0;
 }
 
-/* Sidebar accent tokens. The rail/text follow daisyUI `neutral` (the ink
-   charcoal); the active-border/logo accent and the active/hover surface don't
-   map to a single theme token, so scope them per theme. Light uses a soft
-   indigo accent over a neutral charcoal surface; dark reuses the theme primary
-   over a translucent sheet. Consumed via arbitrary values in components/drawer. */
+/* Sidebar accent tokens. The rail/text follow daisyUI `neutral` (deep neutral
+   gray); the active-border/logo accent is hero GitHub Green (decorative,
+   non-text) and the active/hover surface is a lifted neutral sheet. Light uses
+   the hero green over an opaque slate surface; dark reuses the theme primary
+   over a translucent sheet. Consumed via arbitrary values in
+   components/drawer. */
 [data-theme="sumi"] {
-  --sidebar-accent: #90a7d6;
-  --sidebar-surface: #3a3a3a;
+  --sidebar-accent: #0fbf3e;
+  --sidebar-surface: #39424e;
 }
 [data-theme="sumi-dark"] {
   --sidebar-accent: var(--color-primary);
@@ -121,6 +126,27 @@
     var(--color-neutral-content) 10%,
     transparent
   );
+}
+
+/* Drawer rest-dim. The rail sits a notch darker than `neutral` while the
+   pointer is elsewhere, so the chrome recedes and page content is the focus;
+   hovering (or keyboard focus landing inside) lifts it back to full. Dimming
+   the SURFACE darker — never the text — is the AAA-safe rendition: light rail
+   text on a darker ground gains contrast, so the guarded resting pairs only
+   improve (contrastModel.ts audits the dimmed rail too). Scoped to
+   hover-capable pointers so touch devices always get the full-brightness rail. */
+.sidebar-rail {
+  background-color: var(--color-neutral);
+}
+@media (hover: hover) {
+  .sidebar-rail {
+    background-color: color-mix(in oklab, var(--color-neutral) 90%, black);
+    transition: background-color var(--duration-slow) var(--ease-out-soft);
+  }
+  .sidebar-rail:hover,
+  .sidebar-rail:focus-within {
+    background-color: var(--color-neutral);
+  }
 }
 
 /* Motion design tokens. One source of truth for animation timing shared by the
@@ -271,29 +297,30 @@ body {
    changed here that drops below the floor fails CI. Hues are preserved
    (lightness moved) to keep the sumi identity. */
 [data-theme="sumi"] {
-  /* Deeper ink lifts every base-content tier toward AAA, still "soft" (was #232323). */
-  --color-base-content: #1a1a1a;
-  --color-warning: #754d11; /* warning-as-text: >=7:1 body on base-100 (AAA) */
-  --color-warning-fill: #754d11; /* solid warning button: white label >=4.5 large */
+  /* Deeper ink lifts every base-content tier toward AAA (was #24292f). */
+  --color-base-content: #1f2328;
+  --color-warning: #6f4300; /* warning-as-text: >=7:1 body on base-200 (AAA) */
+  --color-warning-fill: #6f4300; /* solid warning button: white label >=4.5 large */
 }
 
 /* daisyUI derives .btn-warning / non-soft .badge-warning from --color-warning;
    darkening it for text AAA darkens the fill too — intentional, still reads gold. */
 
 /* Muted opacity tiers (`text-base-content/NN`). At their shipped opacities the
-   low tiers can't reach 7:1 on the darkest realistic surface (base-300). Remap
-   each tier's rendered opacity to an AAA floor while keeping a perceptible
-   ladder, so the muted/primary hierarchy survives. Light needs >=~78% on
-   base-300; dark needs >=~68% on base-100. Utilities are overridden by their
-   generated class so every call site is covered at once. */
+   low tiers can't reach 7:1 on the darkest realistic surface (base-300 — the
+   Primer border gray also serves neutral chips). Remap each tier's rendered
+   opacity to an AAA floor while keeping a perceptible ladder, so the
+   muted/primary hierarchy survives. Light needs >=~84% on base-300; dark needs
+   >=~68% on base-100. Utilities are overridden by their generated class so
+   every call site is covered at once. */
 [data-theme="sumi"] {
-  --muted-30: 78%;
-  --muted-40: 78%;
-  --muted-50: 78%;
-  --muted-60: 82%;
-  --muted-70: 86%;
-  --muted-80: 90%;
-  --muted-90: 92%;
+  --muted-30: 84%;
+  --muted-40: 84%;
+  --muted-50: 84%;
+  --muted-60: 86%;
+  --muted-70: 88%;
+  --muted-80: 91%;
+  --muted-90: 93%;
 }
 [data-theme="sumi-dark"] {
   --muted-30: 68%;
@@ -381,10 +408,10 @@ textarea::placeholder {
    (darker in light, lighter in dark) that clears 7:1 without touching the brand
    primary used for fills and marks. */
 [data-theme="sumi"] {
-  --color-link: #324d8c;
+  --color-link: #0d43ab;
 }
 [data-theme="sumi-dark"] {
-  --color-link: #9bb0dc;
+  --color-link: #82c2ff;
 }
 .link {
   color: var(--color-link);
@@ -411,8 +438,8 @@ textarea::placeholder {
 /* Sidebar muted rows: `text-neutral-content/{50,60,70}` on the rail surface land
    under 7:1. Raise the rendered opacity so resting (non-hover) row/footer text is
    AAA; the hover state already lifts to full neutral-content. 85% clears 7:1 on
-   both the light opaque rail (#3a3a3a -> 7.79:1) and the dark translucent sheet
-   (8.55:1). */
+   both the light opaque rail (#39424e -> 7.44:1) and the dark translucent sheet
+   (10.24:1). */
 [data-theme="sumi"] .text-neutral-content\/50,
 [data-theme="sumi-dark"] .text-neutral-content\/50,
 [data-theme="sumi"] .text-neutral-content\/60,

@@ -194,9 +194,9 @@ export const MembershipError = ({
         </p>
       </div>
 
-      <div className="rounded-2xl border border-info/20 bg-info/5 p-5">
+      <div className="rounded-box border border-info/20 bg-info/5 p-5">
         <div className="flex gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-info/10 text-info">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-box bg-info/10 text-info">
             <UserPlus aria-hidden="true" className="size-5" />
           </div>
           <div className="min-w-0 space-y-3">

@@ -121,7 +121,7 @@ export const TemplateAccessModal = ({
   return (
     <Modal open onClose={onClose} size="lg" aria-labelledby={titleId}>
       <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
           <ShieldCheck className="size-5" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">

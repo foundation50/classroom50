@@ -67,7 +67,6 @@ function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
   return (
     <Card
       as={EnterDiv}
-      radius="xl"
       shadow={false}
       className="col-span-12 border-warning/40 bg-warning/5 md:col-span-6"
     >
@@ -76,7 +75,7 @@ function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
           <img
             src={org.avatar_url}
             alt=""
-            className="size-12 rounded-xl border border-base-300"
+            className="size-12 rounded-box border border-base-300"
           />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -154,7 +153,7 @@ function PendingInvites({ invites }: { invites: GitHubOrgMembership[] }) {
   const { t } = useTranslation()
   if (invites.length === 0) return null
   return (
-    <details className="group rounded-xl border border-warning/40 bg-warning/5">
+    <details className="group rounded-box border border-warning/40 bg-warning/5">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm">
         <MailOpen aria-hidden="true" className="size-4 shrink-0 text-warning" />
         <span className="min-w-0 flex-1 truncate font-medium text-base-content">
@@ -250,7 +249,7 @@ function HideOrgMenu({
         <ul
           tabIndex={0}
           role="menu"
-          className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+          className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-300 bg-base-100 p-1 shadow"
         >
           {canManageToken && (
             <li>
@@ -342,7 +341,6 @@ function OrgCard({
   return (
     <Card
       as={PresenceCardDiv}
-      radius="xl"
       shadow={false}
       className="col-span-12 md:col-span-6"
     >
@@ -352,7 +350,7 @@ function OrgCard({
           <img
             src={org.avatar_url}
             alt=""
-            className="size-12 rounded-xl border border-base-300"
+            className="size-12 rounded-box border border-base-300"
           />
 
           <div className="min-w-0 flex-1">
@@ -409,12 +407,12 @@ function OrgRow({
   const showTokenChip = tokenHealth ? tokenChipVisible(tokenHealth) : false
 
   return (
-    <PresenceCardDiv className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <PresenceCardDiv className="col-span-12 flex flex-col gap-3 rounded-box border border-base-300 bg-base-200 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         <img
           src={org.avatar_url}
           alt=""
-          className="size-9 shrink-0 rounded-lg border border-base-300"
+          className="size-9 shrink-0 rounded-field border border-base-300"
         />
         <div className="min-w-0">
           <div className="flex items-center gap-2">

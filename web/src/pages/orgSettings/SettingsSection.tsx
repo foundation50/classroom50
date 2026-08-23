@@ -32,7 +32,6 @@ const SettingsSection = ({
     <Card
       as="section"
       id={id}
-      radius="2xl"
       shadow={false}
       bordered={!isDanger}
       className={cx(

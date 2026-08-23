@@ -239,7 +239,7 @@ const StaffRoleList = ({
   const isLoading = membersQuery.isLoading
 
   return (
-    <div className="flex flex-col rounded-box border border-base-200 bg-base-100">
+    <div className="flex flex-col rounded-box border border-base-300 bg-base-200">
       <div className="flex flex-col gap-0.5 border-b border-base-200 px-3 py-2.5">
         <div className="flex items-center gap-2">
           <a
@@ -347,7 +347,7 @@ const StaffMemberRow = ({
   const selfTeacherRemoveBlocked = isSelf && isTeacherRole(role)
 
   return (
-    <li className="flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-base-200/60">
+    <li className="flex items-center gap-2 rounded-selector px-2 py-1.5 transition-colors hover:bg-base-300/40">
       <a
         href={member.html_url}
         target="_blank"
@@ -470,7 +470,7 @@ const PendingStaffRow = ({
   const busy = resendMutation.isPending || cancelMutation.isPending
 
   return (
-    <li className="flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-base-200/60">
+    <li className="flex items-center gap-2 rounded-selector px-2 py-1.5 transition-colors hover:bg-base-300/40">
       <span className="flex min-w-0 grow items-center gap-2 text-sm">
         <span className="grid size-6 shrink-0 place-items-center rounded-full bg-base-200 text-base-content/50">
           <Send aria-hidden="true" className="size-3" />

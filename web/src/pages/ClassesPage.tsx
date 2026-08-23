@@ -49,7 +49,7 @@ const NewClassroomButton = ({ org }: { org: string }) => {
         <ul
           tabIndex={0}
           role="menu"
-          className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+          className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-300 bg-base-100 p-1 shadow"
         >
           {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
           <li>
@@ -201,7 +201,7 @@ const ClassesPage = () => {
           {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
-              className="skeleton skeleton-shimmer col-span-6 h-32 rounded-xl xl:col-span-4"
+              className="skeleton skeleton-shimmer col-span-6 h-32 rounded-box xl:col-span-4"
             />
           ))}
         </div>

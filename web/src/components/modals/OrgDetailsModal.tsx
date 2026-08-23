@@ -137,7 +137,7 @@ function OrgDetailsModal({
           <img
             src={org.avatar_url}
             alt=""
-            className="size-12 rounded-xl border border-base-300"
+            className="size-12 rounded-box border border-base-300"
           />
           {isOwner && editing && (
             <a

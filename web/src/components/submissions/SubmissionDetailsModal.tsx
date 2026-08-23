@@ -140,7 +140,7 @@ export function SubmissionDetailsModal({
             return (
               <li
                 key={item.key}
-                className="flex items-center gap-3 rounded-box border border-base-content/5 bg-base-100 px-3 py-2 text-sm"
+                className="flex items-center gap-3 rounded-box border border-base-300 bg-base-100 px-3 py-2 text-sm"
               >
                 <Icon
                   aria-hidden="true"

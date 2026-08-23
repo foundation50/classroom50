@@ -99,7 +99,7 @@ export const ClassroomLogo = () => {
         <button
           type="button"
           onClick={toggle}
-          className={`${sidebarTooltip} cursor-pointer rounded-md p-1 transition-colors hover:bg-[var(--sidebar-surface)]`}
+          className={`${sidebarTooltip} cursor-pointer rounded-selector p-1 transition-colors hover:bg-[var(--sidebar-surface)]`}
           data-tip={t("nav.expandSidebar")}
           aria-label={t("nav.expandSidebar")}
         >
@@ -128,7 +128,7 @@ export const ClassroomLogo = () => {
       <button
         type="button"
         onClick={toggle}
-        className="shrink-0 rounded-md p-1 text-neutral-content/60 transition-colors hover:bg-[var(--sidebar-surface)] hover:text-neutral-content cursor-pointer"
+        className="shrink-0 rounded-selector p-1 text-neutral-content/60 transition-colors hover:bg-[var(--sidebar-surface)] hover:text-neutral-content cursor-pointer"
         aria-label={t("nav.collapseSidebar")}
         title={t("nav.collapseSidebar")}
       >
