@@ -27,6 +27,7 @@ func classroomMigrateCmd() *cobra.Command {
 		shortName       string
 		term            string
 		templateSuffix  string
+		renameFlags     []string
 		includeArchived bool
 		dryRun          bool
 	)
@@ -61,6 +62,14 @@ func classroomMigrateCmd() *cobra.Command {
 			"capped at 40 characters so `<short-name>-<assignment>-<username>`\n" +
 			"student-repo names stay under GitHub's 100-character limit. Pass\n" +
 			"--short-name explicitly if the derived value fails validation.\n\n" +
+			"Assignment slugs import verbatim when they fit. A slug that would\n" +
+			"push composed student-repo names past GitHub's 100-character\n" +
+			"limit is automatically shortened to the classroom's budget\n" +
+			"(suffixed -2, -3, … past collisions), with the mapping reported.\n" +
+			"Pass --rename <source-slug>=<new-slug> (repeatable) to import any\n" +
+			"assignment under a slug of your choice instead; explicit renames\n" +
+			"are validated against the same pattern, budget, and uniqueness\n" +
+			"rules before anything is created.\n\n" +
 			"--template-suffix appends a string to every target template\n" +
 			"repo name (e.g., --template-suffix migrated → readability-migrated).\n" +
 			"Use to escape collisions with existing target-org repos.\n\n" +
@@ -69,7 +78,9 @@ func classroomMigrateCmd() *cobra.Command {
 		Example: "  gh teacher classroom migrate --source 95884 --target cs50-fall-2026 --dry-run\n" +
 			"  gh teacher classroom migrate --source classroom50test --target cs50-fall-2026 --dry-run\n" +
 			"  gh teacher classroom migrate --source 95884 --target cs50-fall-2026 --dry-run \\\n" +
-			"      --short-name cs-principles --term Spring-2026",
+			"      --short-name cs-principles --term Spring-2026\n" +
+			"  gh teacher classroom migrate --source 95884 --target cs50-fall-2026 \\\n" +
+			"      --rename my-very-long-legacy-assignment-prefix=hw1",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
@@ -82,6 +93,10 @@ func classroomMigrateCmd() *cobra.Command {
 			if targetVal == "" {
 				return errors.New("--target is required (destination org owning the classroom50 repository)")
 			}
+			renames, err := parseRenameFlags(renameFlags)
+			if err != nil {
+				return err
+			}
 
 			client, err := githubapi.RequireAuthClient(cmd)
 			if err != nil {
@@ -93,6 +108,7 @@ func classroomMigrateCmd() *cobra.Command {
 				ShortName:       strings.TrimSpace(shortName),
 				Term:            strings.TrimSpace(term),
 				TemplateSuffix:  strings.TrimSpace(templateSuffix),
+				Renames:         renames,
 				IncludeArchived: includeArchived,
 				DryRun:          dryRun,
 			})
@@ -104,18 +120,42 @@ func classroomMigrateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&shortName, "short-name", "", "Override the auto-derived classroom directory name")
 	cmd.Flags().StringVar(&term, "term", "", "Set classroom.json.term (e.g., Spring-2026)")
 	cmd.Flags().StringVar(&templateSuffix, "template-suffix", "", "Suffix appended to every target template repo name (e.g., --template-suffix migrated → readability-migrated)")
+	cmd.Flags().StringArrayVar(&renameFlags, "rename", nil, "Import an assignment under a different slug: <source-slug>=<new-slug> (repeatable; validated against the slug pattern, the repo-name budget, and batch uniqueness)")
 	cmd.Flags().BoolVar(&includeArchived, "include-archived", false, "Include archived classrooms when resolving --source by org name (ignored when --source is a numeric ID)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the discovered migration plan without API writes")
 	return cmd
 }
 
+// parseRenameFlags turns repeated --rename <source>=<new> values into a map,
+// rejecting malformed pairs and duplicate sources.
+func parseRenameFlags(flags []string) (map[string]string, error) {
+	if len(flags) == 0 {
+		return nil, nil
+	}
+	renames := make(map[string]string, len(flags))
+	for _, f := range flags {
+		from, to, ok := strings.Cut(f, "=")
+		from, to = strings.TrimSpace(from), strings.TrimSpace(to)
+		if !ok || from == "" || to == "" {
+			return nil, fmt.Errorf("--rename %q: expected <source-slug>=<new-slug>", f)
+		}
+		if prev, dup := renames[from]; dup {
+			return nil, fmt.Errorf("--rename %s=%s: source slug %q already renamed to %q", from, to, from, prev)
+		}
+		renames[from] = to
+	}
+	return renames, nil
+}
+
 // migrateOptions packages runMigrate's flags so tests can call it directly.
 type migrateOptions struct {
-	Source          string
-	Target          string
-	ShortName       string
-	Term            string
-	TemplateSuffix  string
+	Source         string
+	Target         string
+	ShortName      string
+	Term           string
+	TemplateSuffix string
+	// Import-slug overrides, keyed by source slug (from --rename).
+	Renames         map[string]string
 	IncludeArchived bool
 	DryRun          bool
 }
@@ -185,9 +225,26 @@ func discoverMigration(client githubapi.Client, errOut io.Writer, opts migrateOp
 		return migrationPlan{}, err
 	}
 
+	// Resolve import slugs before anything is named after them: explicit
+	// --rename entries win; over-budget slugs auto-trim to the classroom's
+	// budget instead of being skipped (#691). Surface every rewrite so the
+	// teacher sees the mapping in dry-run and live runs alike.
+	assignments, renames, err := resolveImportSlugs(assignments, shortNameVal, opts.Renames)
+	if err != nil {
+		return migrationPlan{}, err
+	}
+	for _, r := range renames {
+		reason := "over the repo-name budget for classroom " + shortNameVal
+		if r.Explicit {
+			reason = "--rename"
+		}
+		_, _ = fmt.Fprintf(errOut, "Note: importing %q as %q (%s).\n", r.From, r.To, reason)
+	}
+
 	return migrationPlan{
 		Classroom:   detail,
 		Assignments: assignments,
+		Renames:     renames,
 		TargetOrg:   opts.Target,
 		ShortName:   shortNameVal,
 		Term:        opts.Term,
@@ -440,6 +497,11 @@ func printMigrationPlan(out io.Writer, plan migrationPlan) error {
 	if len(plan.Assignments) == 0 {
 		_, _ = fmt.Fprintln(out, "  assignments:   (none)")
 	} else {
+		// Annotate rewritten import slugs so dry-run shows the exact mapping.
+		renamedFrom := make(map[string]string, len(plan.Renames))
+		for _, r := range plan.Renames {
+			renamedFrom[r.To] = r.From
+		}
 		_, _ = fmt.Fprintln(out, "  assignments:")
 		for _, a := range plan.Assignments {
 			starter := "no starter_code_repository — would be skipped"
@@ -451,6 +513,9 @@ func printMigrationPlan(out io.Writer, plan migrationPlan) error {
 				starter = fmt.Sprintf("%s @ %s (%s)", a.StarterCodeRepo.FullName, a.StarterCodeRepo.DefaultBranch, privacy)
 			}
 			line := fmt.Sprintf("    - %-32s mode=%s  starter=%s", a.Slug, a.Type, starter)
+			if from, ok := renamedFrom[a.Slug]; ok {
+				line += "  renamed-from=" + from
+			}
 			if a.Deadline != nil && *a.Deadline != "" {
 				line += "  deadline=" + *a.Deadline
 			}

@@ -64,6 +64,153 @@ func TestDeriveShortName(t *testing.T) {
 	}
 }
 
+func TestResolveImportSlugs(t *testing.T) {
+	// shortName "cs" leaves a 57-char budget (59 - 2).
+	const shortName = "cs"
+	long := strings.Repeat("s", 58)
+	det := func(slug string) classroomAssignmentDetail {
+		return classroomAssignmentDetail{Slug: slug, Type: "individual"}
+	}
+	slugs := func(out []classroomAssignmentDetail) []string {
+		got := make([]string, len(out))
+		for i, a := range out {
+			got[i] = a.Slug
+		}
+		return got
+	}
+
+	t.Run("fitting slugs import verbatim with no renames", func(t *testing.T) {
+		out, renames, err := resolveImportSlugs(
+			[]classroomAssignmentDetail{det("hw1"), det("hw2")}, shortName, nil)
+		if err != nil {
+			t.Fatalf("resolveImportSlugs: %v", err)
+		}
+		if !reflect.DeepEqual(slugs(out), []string{"hw1", "hw2"}) || len(renames) != 0 {
+			t.Errorf("got %v (%d renames), want verbatim", slugs(out), len(renames))
+		}
+	})
+
+	t.Run("over-budget slug auto-trims to the budget", func(t *testing.T) {
+		out, renames, err := resolveImportSlugs(
+			[]classroomAssignmentDetail{det(long)}, shortName, nil)
+		if err != nil {
+			t.Fatalf("resolveImportSlugs: %v", err)
+		}
+		want := strings.Repeat("s", 57)
+		if out[0].Slug != want {
+			t.Errorf("slug = %q, want %q", out[0].Slug, want)
+		}
+		if len(renames) != 1 || renames[0].From != long || renames[0].To != want || renames[0].Explicit {
+			t.Errorf("renames = %+v, want one implicit %q -> %q", renames, long, want)
+		}
+	})
+
+	t.Run("two same-prefix trims suffix apart", func(t *testing.T) {
+		other := strings.Repeat("s", 59)
+		out, _, err := resolveImportSlugs(
+			[]classroomAssignmentDetail{det(long), det(other)}, shortName, nil)
+		if err != nil {
+			t.Fatalf("resolveImportSlugs: %v", err)
+		}
+		first := strings.Repeat("s", 57)
+		second := strings.Repeat("s", 55) + "-2"
+		if !reflect.DeepEqual(slugs(out), []string{first, second}) {
+			t.Errorf("slugs = %v, want [%q, %q]", slugs(out), first, second)
+		}
+	})
+
+	t.Run("trim avoids a verbatim keeper", func(t *testing.T) {
+		keeper := strings.Repeat("s", 57) // fits, imports verbatim
+		out, _, err := resolveImportSlugs(
+			[]classroomAssignmentDetail{det(long), det(keeper)}, shortName, nil)
+		if err != nil {
+			t.Fatalf("resolveImportSlugs: %v", err)
+		}
+		// The keeper claims s*57 first, so the trim suffixes past it.
+		want := strings.Repeat("s", 55) + "-2"
+		if out[0].Slug != want || out[1].Slug != keeper {
+			t.Errorf("slugs = %v, want [%q, %q]", slugs(out), want, keeper)
+		}
+	})
+
+	t.Run("explicit rename wins over auto-trim and is reported explicit", func(t *testing.T) {
+		out, renames, err := resolveImportSlugs(
+			[]classroomAssignmentDetail{det(long)}, shortName,
+			map[string]string{long: "hw1"})
+		if err != nil {
+			t.Fatalf("resolveImportSlugs: %v", err)
+		}
+		if out[0].Slug != "hw1" {
+			t.Errorf("slug = %q, want %q", out[0].Slug, "hw1")
+		}
+		if len(renames) != 1 || !renames[0].Explicit {
+			t.Errorf("renames = %+v, want one explicit", renames)
+		}
+	})
+
+	t.Run("unknown rename source errors", func(t *testing.T) {
+		_, _, err := resolveImportSlugs(
+			[]classroomAssignmentDetail{det("hw1")}, shortName,
+			map[string]string{"nope": "hw2"})
+		if err == nil || !strings.Contains(err.Error(), "no source assignment") {
+			t.Fatalf("err = %v, want unknown-source error", err)
+		}
+	})
+
+	t.Run("over-budget rename target errors", func(t *testing.T) {
+		_, _, err := resolveImportSlugs(
+			[]classroomAssignmentDetail{det("hw1")}, shortName,
+			map[string]string{"hw1": long})
+		if err == nil || !strings.Contains(err.Error(), "repo-name limit") {
+			t.Fatalf("err = %v, want a repo-name limit error", err)
+		}
+	})
+
+	t.Run("rename colliding with a verbatim keeper errors", func(t *testing.T) {
+		_, _, err := resolveImportSlugs(
+			[]classroomAssignmentDetail{det("hw1"), det("hw2")}, shortName,
+			map[string]string{"hw1": "hw2"})
+		if err == nil || !strings.Contains(err.Error(), "already used") {
+			t.Fatalf("err = %v, want a collision error", err)
+		}
+	})
+
+	t.Run("pattern-invalid slug is left for the skip machinery", func(t *testing.T) {
+		out, renames, err := resolveImportSlugs(
+			[]classroomAssignmentDetail{det("Bad Slug")}, shortName, nil)
+		if err != nil {
+			t.Fatalf("resolveImportSlugs: %v", err)
+		}
+		if out[0].Slug != "Bad Slug" || len(renames) != 0 {
+			t.Errorf("got %q (%d renames), want untouched", out[0].Slug, len(renames))
+		}
+	})
+}
+
+// TestParseRenameFlags pins the --rename parsing: well-formed pairs build the
+// map; malformed values and duplicate sources error before any network.
+func TestParseRenameFlags(t *testing.T) {
+	got, err := parseRenameFlags([]string{"a=b", " c = d "})
+	if err != nil {
+		t.Fatalf("parseRenameFlags: %v", err)
+	}
+	if got["a"] != "b" || got["c"] != "d" {
+		t.Errorf("got %v, want a=b and trimmed c=d", got)
+	}
+	if _, err := parseRenameFlags([]string{"nope"}); err == nil {
+		t.Error("malformed pair must error")
+	}
+	if _, err := parseRenameFlags([]string{"a="}); err == nil {
+		t.Error("empty target must error")
+	}
+	if _, err := parseRenameFlags([]string{"a=b", "a=c"}); err == nil {
+		t.Error("duplicate source must error")
+	}
+	if got, err := parseRenameFlags(nil); err != nil || got != nil {
+		t.Errorf("no flags should be a nil map, got %v (%v)", got, err)
+	}
+}
+
 func TestAssignmentToEntry(t *testing.T) {
 	migratedAt := time.Date(2026, time.May, 25, 20, 21, 0, 0, time.UTC)
 	target := assignment.TemplateRef{Owner: "cs50-fall-2026", Repo: "readability", Branch: "main"}

@@ -43,6 +43,110 @@ func deriveShortName(raw string) (string, error) {
 	return slug, nil
 }
 
+// slugRename records one import-slug rewrite for reporting: an explicit
+// --rename or an automatic trim to the composed repo-name budget (#691).
+type slugRename struct {
+	From     string
+	To       string
+	Explicit bool
+}
+
+// resolveImportSlugs rewrites each source assignment's slug to its import
+// slug: an explicit rename (from --rename) wins and is validated (pattern,
+// budget, uniqueness); an over-budget slug auto-trims to the classroom's
+// budget, suffixing past batch collisions (the classroom directory is new, so
+// the batch is the whole collision set) — mirroring the web import and the
+// reuse derivers. A fitting slug imports verbatim; a pattern-invalid slug is
+// left untouched for copyOneTemplate's skip. Returns the rewritten slice and
+// the renames applied, in plan order.
+func resolveImportSlugs(
+	assignments []classroomAssignmentDetail,
+	shortName string,
+	renames map[string]string,
+) ([]classroomAssignmentDetail, []slugRename, error) {
+	bySlug := make(map[string]int, len(assignments))
+	for i, a := range assignments {
+		bySlug[a.Slug] = i
+	}
+	for from := range renames {
+		if _, ok := bySlug[from]; !ok {
+			return nil, nil, fmt.Errorf("--rename %s=%s: no source assignment has slug %q", from, renames[from], from)
+		}
+	}
+
+	out := append([]classroomAssignmentDetail(nil), assignments...)
+	var applied []slugRename
+
+	// Final import slugs claimed so far (lowercased), seeding the auto-trim
+	// collision set: explicit renames and verbatim keepers claim their names
+	// first, then over-budget slugs trim around them in plan order.
+	taken := make(map[string]bool, len(out))
+	claim := func(s string) { taken[strings.ToLower(s)] = true }
+
+	budget := contract.AssignmentSlugBudget(shortName)
+	needsTrim := func(a classroomAssignmentDetail) bool {
+		if _, renamed := renames[a.Slug]; renamed {
+			return false
+		}
+		if !validate.ShortNamePattern.MatchString(a.Slug) {
+			return false // copyOneTemplate skips it with the pattern error
+		}
+		_, fits := contract.ComposedRepoNameFits(shortName, a.Slug)
+		return !fits
+	}
+
+	// Verbatim keepers claim their names first, so an explicit rename or an
+	// auto-trim can never silently duplicate one regardless of slice order.
+	for _, a := range assignments {
+		if _, renamed := renames[a.Slug]; !renamed && !needsTrim(a) {
+			claim(a.Slug)
+		}
+	}
+
+	// Explicit renames (validated) claim next.
+	for i := range out {
+		from := assignments[i].Slug
+		to, ok := renames[from]
+		if !ok {
+			continue
+		}
+		if err := validate.ShortName(to, "--rename target"); err != nil {
+			return nil, nil, fmt.Errorf("--rename %s=%s: %w", from, to, err)
+		}
+		if err := validate.ComposedRepoNameBudget(shortName, to); err != nil {
+			return nil, nil, fmt.Errorf("--rename %s=%s: %w", from, to, err)
+		}
+		if taken[strings.ToLower(to)] {
+			return nil, nil, fmt.Errorf("--rename %s=%s: import slug %q is already used by another assignment in this migration (case-insensitive)", from, to, to)
+		}
+		if from != to {
+			applied = append(applied, slugRename{From: from, To: to, Explicit: true})
+		}
+		out[i].Slug = to
+		claim(to)
+	}
+
+	// Auto-trim over-budget slugs around the claimed names, in plan order.
+	for i := range out {
+		if _, renamed := renames[assignments[i].Slug]; renamed || !needsTrim(assignments[i]) {
+			continue
+		}
+		entries := make([]assignment.AssignmentEntry, 0, len(taken))
+		for s := range taken {
+			entries = append(entries, assignment.AssignmentEntry{Slug: s})
+		}
+		trimmed, err := assignment.NextAvailableSlug(entries, assignments[i].Slug, budget)
+		if err != nil {
+			return nil, nil, fmt.Errorf("assignment %q: %w", assignments[i].Slug, err)
+		}
+		applied = append(applied, slugRename{From: assignments[i].Slug, To: trimmed})
+		out[i].Slug = trimmed
+		claim(trimmed)
+	}
+
+	return out, applied, nil
+}
+
 // classroomMigratedFromFromDetail builds the classroom-level
 // migrated_from block from a source classroom and write timestamp.
 func classroomMigratedFromFromDetail(detail classroomDetail, migratedAt time.Time) *configrepo.MigratedFromRef {
@@ -131,10 +235,13 @@ func assignmentToEntry(
 type migrationPlan struct {
 	Classroom   classroomDetail
 	Assignments []classroomAssignmentDetail
-	TargetOrg   string
-	ShortName   string
-	Term        string
-	MigratedAt  time.Time
+	// Import-slug rewrites applied by resolveImportSlugs (explicit --rename or
+	// budget trims), for the plan printout.
+	Renames    []slugRename
+	TargetOrg  string
+	ShortName  string
+	Term       string
+	MigratedAt time.Time
 }
 
 // countsByMode returns (individual, group, other) tallies.
