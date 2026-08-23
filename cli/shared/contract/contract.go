@@ -350,6 +350,47 @@ func AssignmentRepoName(classroom, assignment, username string) string {
 	return AssignmentRepoPrefix(classroom, assignment) + strings.ToLower(username)
 }
 
+// Repo-name budget: GitHub caps a repository name at 100 characters and a
+// login at 39, so the two slug segments of `<classroom>-<assignment>-<username>`
+// share what's left. Cross-tool with NO compile-time link — mirrored in the web
+// GUI (web/src/util/repoNameBudget.ts) and pinned on both sides by the shared
+// fixture cli/shared/testdata/repo_name_budget_cases.json.
+const (
+	// GitHubRepoNameMaxLen is GitHub's hard limit on a repository name; the
+	// composed student-repo name is measured against it.
+	GitHubRepoNameMaxLen = 100
+
+	// GitHubLoginMaxLen is GitHub's maximum login length — the worst-case
+	// `<username>` segment, used because a teacher can't control who enrolls.
+	GitHubLoginMaxLen = 39
+
+	// RepoNameSlugBudget is what the classroom short-name and assignment slug
+	// may spend TOGETHER: the repo-name cap minus the worst-case login and the
+	// two joining hyphens.
+	RepoNameSlugBudget = GitHubRepoNameMaxLen - GitHubLoginMaxLen - 2
+
+	// ClassroomShortNameMaxLen caps a NEW classroom short-name at creation so
+	// every future assignment keeps a workable slug budget (>= RepoNameSlugBudget
+	// - ClassroomShortNameMaxLen chars). A write-time rule only: existing
+	// classrooms up to ShortNamePattern's 100 stay readable.
+	ClassroomShortNameMaxLen = 40
+)
+
+// AssignmentSlugBudget is how many characters remain for an assignment slug in
+// classroom. Can be <= 0 for a pre-cap over-long classroom.
+func AssignmentSlugBudget(classroom string) int {
+	return RepoNameSlugBudget - len(classroom)
+}
+
+// ComposedRepoNameFits reports whether the longest student-repo name a
+// classroom+slug pair can produce (worst-case GitHubLoginMaxLen username) fits
+// GitHub's repo-name limit. The shape comes from AssignmentRepoPrefix so it
+// can't drift from the real one.
+func ComposedRepoNameFits(classroom, slug string) (worstCase int, fits bool) {
+	worstCase = len(AssignmentRepoPrefix(classroom, slug)) + GitHubLoginMaxLen
+	return worstCase, worstCase <= GitHubRepoNameMaxLen
+}
+
 // FeedbackOpenCommitMessage is the empty commit `gh student accept` / the web
 // accept flow pushes so the accept-time Feedback PR has a commit to hang on
 // (GitHub rejects a zero-diff PR with "No commits between ..."). The `[skip

@@ -74,21 +74,20 @@ func OrgClassroom(args []string) (org, classroom string, err error) {
 	return org, classroom, nil
 }
 
-// GitHubRepoNameMaxLen is GitHub's hard limit on a repository name; the
-// student-repo name `<classroom>-<assignment>-<username>` is measured against it.
-const GitHubRepoNameMaxLen = 100
-
-// GitHubLoginMaxLen is GitHub's maximum login length — the worst-case
-// `<username>` when budgeting the composed student-repo name.
-const GitHubLoginMaxLen = 39
+// GitHubRepoNameMaxLen and GitHubLoginMaxLen alias the single source in
+// cli/shared/contract, kept here so existing call sites read naturally.
+const (
+	GitHubRepoNameMaxLen = contract.GitHubRepoNameMaxLen
+	GitHubLoginMaxLen    = contract.GitHubLoginMaxLen
+)
 
 // ComposedRepoNameOverflows reports whether the longest student-repo name a
 // classroom+assignment pair can produce (worst-case 39-char username) exceeds
-// GitHub's repo-name limit; see ShortNamePattern and #691. The name shape comes
-// from contract.AssignmentRepoPrefix so it can't drift from the real one.
+// GitHub's repo-name limit; see ShortNamePattern and #691. Thin negation of
+// the single source, contract.ComposedRepoNameFits.
 func ComposedRepoNameOverflows(classroom, slug string) (worstCase int, overflows bool) {
-	worstCase = len(contract.AssignmentRepoPrefix(classroom, slug)) + GitHubLoginMaxLen
-	return worstCase, worstCase > GitHubRepoNameMaxLen
+	worstCase, fits := contract.ComposedRepoNameFits(classroom, slug)
+	return worstCase, !fits
 }
 
 // ScopeListContains reports whether the comma-separated OAuth scope

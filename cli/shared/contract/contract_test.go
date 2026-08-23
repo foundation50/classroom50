@@ -250,6 +250,81 @@ func TestAssignmentRepoName_SharedFixtureParity(t *testing.T) {
 	}
 }
 
+// sharedBudgetCasesPath locates the cross-language repo-name-budget fixture,
+// also consumed by the web mirror's vitest (repoNameBudget.test.ts).
+const sharedBudgetCasesPath = "../testdata/repo_name_budget_cases.json"
+
+// TestRepoNameBudget_SharedFixtureParity pins the budget constants and the
+// composed-name math to the shared fixture so the Go source and the web mirror
+// can't drift: a one-sided edit fails on the other language's copy.
+func TestRepoNameBudget_SharedFixtureParity(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Clean(sharedBudgetCasesPath))
+	if err != nil {
+		t.Fatalf("read shared fixture: %v", err)
+	}
+	var doc struct {
+		RepoNameMaxLen        int `json:"github_repo_name_max_len"`
+		LoginMaxLen           int `json:"github_login_max_len"`
+		SlugBudget            int `json:"repo_name_slug_budget"`
+		ClassroomShortNameMax int `json:"classroom_short_name_max_len"`
+		Cases                 []struct {
+			Classroom string `json:"classroom"`
+			Slug      string `json:"slug"`
+			WorstCase int    `json:"worst_case"`
+			Fits      bool   `json:"fits"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse shared fixture: %v", err)
+	}
+	if doc.RepoNameMaxLen != GitHubRepoNameMaxLen {
+		t.Errorf("fixture github_repo_name_max_len = %d, want %d", doc.RepoNameMaxLen, GitHubRepoNameMaxLen)
+	}
+	if doc.LoginMaxLen != GitHubLoginMaxLen {
+		t.Errorf("fixture github_login_max_len = %d, want %d", doc.LoginMaxLen, GitHubLoginMaxLen)
+	}
+	if doc.SlugBudget != RepoNameSlugBudget {
+		t.Errorf("fixture repo_name_slug_budget = %d, want %d", doc.SlugBudget, RepoNameSlugBudget)
+	}
+	if doc.ClassroomShortNameMax != ClassroomShortNameMaxLen {
+		t.Errorf("fixture classroom_short_name_max_len = %d, want %d", doc.ClassroomShortNameMax, ClassroomShortNameMaxLen)
+	}
+	if len(doc.Cases) == 0 {
+		t.Fatal("shared fixture has no cases")
+	}
+	for _, c := range doc.Cases {
+		worst, fits := ComposedRepoNameFits(c.Classroom, c.Slug)
+		if worst != c.WorstCase || fits != c.Fits {
+			t.Errorf("ComposedRepoNameFits(%q,%q) = (%d,%t), want (%d,%t)",
+				c.Classroom, c.Slug, worst, fits, c.WorstCase, c.Fits)
+		}
+		// The two budget views must agree: a slug fits exactly when it spends
+		// no more than the classroom's remaining budget.
+		if budgetFits := len(c.Slug) <= AssignmentSlugBudget(c.Classroom); budgetFits != c.Fits {
+			t.Errorf("AssignmentSlugBudget(%q) = %d disagrees with fits=%t for slug %q",
+				c.Classroom, AssignmentSlugBudget(c.Classroom), c.Fits, c.Slug)
+		}
+	}
+}
+
+// TestRepoNameBudgetConstants pins the budget derivation so a constant edit
+// that breaks the `<classroom>-<assignment>-<username>` arithmetic fails
+// loudly, and the classroom cap keeps a workable slug budget.
+func TestRepoNameBudgetConstants(t *testing.T) {
+	if RepoNameSlugBudget != GitHubRepoNameMaxLen-GitHubLoginMaxLen-2 {
+		t.Errorf("RepoNameSlugBudget = %d, want max-len minus worst-case login minus two hyphens (%d)",
+			RepoNameSlugBudget, GitHubRepoNameMaxLen-GitHubLoginMaxLen-2)
+	}
+	if ClassroomShortNameMaxLen >= RepoNameSlugBudget {
+		t.Errorf("ClassroomShortNameMaxLen = %d must leave slug room under the %d budget",
+			ClassroomShortNameMaxLen, RepoNameSlugBudget)
+	}
+	// A cap-length classroom must keep room for a real slug.
+	if got := AssignmentSlugBudget(strings.Repeat("a", ClassroomShortNameMaxLen)); got < 19 {
+		t.Errorf("cap-length classroom leaves %d slug chars, want >= 19", got)
+	}
+}
+
 // TestRequiredOAuthScopes pins the unified CLI scope set (issue #246): both
 // binaries request exactly these, and delete_repo stays out (opt-in for
 // teardown). This list is the behavior oracle for the login command and the
