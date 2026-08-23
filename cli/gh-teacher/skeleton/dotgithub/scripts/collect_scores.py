@@ -380,6 +380,11 @@ def main() -> int:
             bucket = scores["assignments"].setdefault(
                 slug, {"type": atype, "entries": []}
             )
+            # Keep the bucket type in sync with the manifest-derived mode even
+            # when no entry changed — apply_updates only syncs buckets it
+            # touches, so a detected-only or update-less bucket would otherwise
+            # keep a stale type across a mode flip.
+            bucket["type"] = atype
             bucket["collected_at"] = collected_at
         # Detected (ungraded) submissions are MERGED per owner, not replaced
         # wholesale: a repo whose read failed this run isn't in `visited`, so its
@@ -764,8 +769,6 @@ def collect_detected(
     team_usernames: list[str],
     repo_index: "RepoIndex | None",
     service_token: str,
-    emit_warning: Callable[[str], None],
-    classify: Callable[[urllib.error.HTTPError], Any],
 ) -> tuple[str, list[dict[str, Any]], set[str]]:
     """Detected submissions for one no_autograder assignment: walk its repos and
     record presence/count per submitter. Returns (mode, records, visited owners).
@@ -788,6 +791,13 @@ def collect_detected(
 
     due_raw = entry.get("due")
     due = parse_rfc3339(due_raw) if due_raw else None
+    if due_raw and due is None:
+        # Same advisory warning as the graded path — lateness silently absent
+        # would otherwise be indistinguishable from "no due date set".
+        emit_warning(
+            f"{classroom_short}/{slug}: due = {due_raw!r} is not an RFC 3339 "
+            f"timestamp with timezone; skipping late-marking for this assignment"
+        )
 
     records: list[dict[str, Any]] = []
     # Owners whose repo this run actually READ (successfully, or as a definite
@@ -796,10 +806,9 @@ def collect_detected(
     # recorded submitter over a transient 500 — the same warn-and-keep policy the
     # graded path applies to entries.
     visited: set[str] = set()
-    # team_usernames is the union across the student team and every staff team,
-    # so a login on more than one team appears more than once. Dedupe or the
-    # same repo is polled repeatedly and recorded once per membership.
-    for username in _dedupe_logins(list(team_usernames)):
+    # team_usernames arrives already case-insensitively deduped (the
+    # list_enrolled_logins union), so each repo is polled exactly once.
+    for username in team_usernames:
         repo_name = assignment_repo_name(classroom_short, slug, username)
         if repo_index is not None and not repo_index.contains(repo_name):
             # The index says the repo doesn't exist — a definite "not accepted",
@@ -968,8 +977,6 @@ def collect_classroom(
                 team_usernames=team_usernames,
                 repo_index=repo_index,
                 service_token=service_token,
-                emit_warning=emit_warning,
-                classify=classify,
             )
             detected[slug] = (detected_type, detected_records, detected_visited)
             collected[slug] = detected_type
@@ -1259,10 +1266,7 @@ def get_repo(api_url: str, owner: str, repo: str, token: str) -> dict[str, Any] 
     """GET /repos/{owner}/{repo} → the repo object, or None on 404. Used to read
     a template's `private` flag before granting a staff team access to it. A hard
     error (401/403/599) propagates so main() aborts."""
-    url = (
-        f"{api_url}/repos/{urllib.parse.quote(owner, safe='')}/"
-        f"{urllib.parse.quote(repo, safe='')}"
-    )
+    url = _repo_url(api_url, owner, repo)
     try:
         body = _http_get(url, token, accept="application/vnd.github+json")
     except urllib.error.HTTPError as exc:
@@ -2045,8 +2049,7 @@ TOOL_COMMIT_SUBJECTS = frozenset(
 ACCEPT_MARKER_PATH = ".classroom50.yaml"
 
 # The canonical submission-tag namespace the shim always triggers on, unioned
-# with any milestone patterns. Mirrors SUBMISSION_TAG_PREFIX.
-SUBMISSION_TAG_PREFIX = "submit/"
+# with any milestone patterns (see SUBMIT_TAG_PREFIX at the top of the file).
 
 _SUBMIT_TAG_TIME_RE = re.compile(
     r"^submit/(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3])-([0-5]\d)-([0-5]\d)Z-"
@@ -2072,6 +2075,12 @@ def submit_tag_datetime(tag_name: str) -> str | None:
     return f"{day}T{hour}:{minute}:{second}Z"
 
 
+# Compiled-pattern cache for _compile_tag_pattern: detect_tag_submissions
+# re-evaluates each pattern against every tag, and compilation is the pricey
+# half. Output-neutral, so the regrade/web matcher parity is untouched.
+_COMPILED_TAG_PATTERNS: dict[str, "re.Pattern[str] | None"] = {}
+
+
 def _compile_tag_pattern(pattern: str) -> "re.Pattern[str] | None":
     """One Actions tag-filter pattern -> an anchored regex, or None when it
     can't compile (fail closed: matches nothing). Character by character so
@@ -2079,6 +2088,8 @@ def _compile_tag_pattern(pattern: str) -> "re.Pattern[str] | None":
     subset: literal names, `*` (not crossing `/`), `**` (crossing), `?`/`+`
     (zero-or-one / one-or-more of the preceding element), `[abc]` classes.
     """
+    if pattern in _COMPILED_TAG_PATTERNS:
+        return _COMPILED_TAG_PATTERNS[pattern]
     out = ["^"]
     i = 0
     while i < len(pattern):
@@ -2103,9 +2114,11 @@ def _compile_tag_pattern(pattern: str) -> "re.Pattern[str] | None":
         i += 1
     out.append("$")
     try:
-        return re.compile("".join(out))
+        compiled = re.compile("".join(out))
     except re.error:
-        return None
+        compiled = None
+    _COMPILED_TAG_PATTERNS[pattern] = compiled
+    return compiled
 
 
 # The safe-pattern charset — literal-name characters plus the glob
@@ -2192,14 +2205,17 @@ def detect_tag_submissions(
         if any(ch in pattern for ch in "*?+[]"):
             # A group's time comes from its newest member by encoded submit/*
             # timestamp; a milestone glob has no parseable name, so it stays
-            # dateless rather than guessing.
+            # dateless rather than guessing. (Encoded times share one fixed
+            # `YYYY-MM-DDTHH:MM:SSZ` shape, so max() on the strings is
+            # chronological.)
             dated = [
-                (submit_tag_datetime(tag["name"]), tag)
+                encoded
                 for tag in matches
-                if submit_tag_datetime(tag["name"])
+                if (encoded := submit_tag_datetime(tag["name"])) is not None
             ]
-            newest = max(dated, key=lambda pair: pair[0])[0] if dated else None
-            detected.append({"count": len(matches), "datetime": newest})
+            detected.append(
+                {"count": len(matches), "datetime": max(dated) if dated else None}
+            )
         else:
             for tag in matches:
                 detected.append(
@@ -2209,9 +2225,13 @@ def detect_tag_submissions(
 
 
 def list_default_branch_commits(
-    api_url: str, owner: str, repo: str, branch: str, token: str
+    api_url: str, owner: str, repo: str, branch: str, token: str,
+    stop_at_sha: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Every commit on a repo's default branch, newest first."""
+    """A repo's default-branch commits, newest first. With `stop_at_sha` (the
+    accept baseline) the walk ends on the page that contains it — everything at
+    or past the baseline is accept-time setup the caller cuts anyway, so paging
+    through the rest of a long history would be pure waste."""
     return _paginate_objects(
         lambda page: (
             f"{_repo_url(api_url, owner, repo)}/commits"
@@ -2220,6 +2240,11 @@ def list_default_branch_commits(
         api_url,
         token,
         f"{owner}/{repo} commits",
+        stop_after=(
+            (lambda commit: commit.get("sha") == stop_at_sha)
+            if stop_at_sha
+            else None
+        ),
     )
 
 
@@ -2270,7 +2295,7 @@ def detect_repo_submissions(
     [] for a repo that isn't accepted or is commitless."""
     if mode == "tag":
         tags = list_repo_tags(api_url, org, repo_name, token)
-        patterns = [*submission_tags, f"{SUBMISSION_TAG_PREFIX}*"]
+        patterns = [*submission_tags, f"{SUBMIT_TAG_PREFIX}*"]
         return detect_tag_submissions(tags, patterns)
 
     info = get_repo(api_url, org, repo_name, token)
@@ -2280,7 +2305,9 @@ def detect_repo_submissions(
     baseline = oldest_commit_sha_for_path(
         api_url, org, repo_name, ACCEPT_MARKER_PATH, token
     )
-    commits = list_default_branch_commits(api_url, org, repo_name, branch, token)
+    commits = list_default_branch_commits(
+        api_url, org, repo_name, branch, token, stop_at_sha=baseline
+    )
     return detect_branch_submissions(commits, baseline)
 
 
@@ -2305,18 +2332,22 @@ def detected_record(
     record: dict[str, Any] = {"owner": owner, "count": count}
     if not trust_times:
         return record
-    times = sorted(
-        (d["datetime"] for d in detections if isinstance(d.get("datetime"), str)),
-        reverse=True,
-    )
+    # Latest by PARSED time, not lexicographic max: a commit date carrying a
+    # non-Z offset would missort as a string, and an unparseable string must
+    # not shadow a parseable older one — mirrors the web's latestDetectedAt.
+    times = [
+        parsed
+        for d in detections
+        if isinstance(d.get("datetime"), str)
+        and (parsed := parse_rfc3339(d["datetime"])) is not None
+    ]
     if times:
-        latest = parse_rfc3339(times[0])
-        if latest is not None:
-            record["latest_datetime"] = latest.astimezone(
-                datetime.timezone.utc
-            ).strftime("%Y-%m-%dT%H:%M:%SZ")
-            if due is not None:
-                record["late"] = latest > due
+        latest = max(times)
+        record["latest_datetime"] = latest.astimezone(
+            datetime.timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if due is not None:
+            record["late"] = latest > due
     return record
 
 
@@ -2329,56 +2360,32 @@ def all_submit_releases(
     hand-created tag) are filtered out. A 404 (no releases, or repo not
     accepted) yields an empty list.
 
-    Pagination follows GitHub's `Link: rel="next"` header (host-pinned to
-    api_url so the token can't be pivoted off-host), falling back to the
-    short-page heuristic when no Link header is present — mirrors
-    list_repo_collaborator_logins.
+    Pagination is _paginate_objects', so an incompletable walk (looping Link
+    chain or the page cap) raises IncompleteListing rather than returning a
+    truncated history — a partial list would replace the student's prior entry
+    with fewer submissions, and the caller's warn-and-skip preserves it instead.
     """
-    per_page = 100
-    max_pages = 100
-    releases: list[dict[str, Any]] = []
-    url = f"{_repo_url(api_url, owner, repo)}/releases?per_page={per_page}&page=1"
-    seen_next: set[str] = set()
-    for page in range(1, max_pages + 1):
-        try:
-            body, headers = _http_get_with_headers(
-                url, token, accept="application/vnd.github+json"
-            )
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:
-                return []
-            raise
-        batch = json.loads(body.decode("utf-8"))
-        if not isinstance(batch, list):
-            raise ValueError(f"GET {url}: expected JSON array, got {type(batch).__name__}")
-        for i, release in enumerate(batch):
-            if not isinstance(release, dict):
-                raise ValueError(
-                    f"GET {url}: expected release object at index {i}, got {type(release).__name__}"
-                )
-            if (release.get("tag_name") or "").startswith(SUBMIT_TAG_PREFIX):
-                # A read-write token also lists draft releases. The runner
-                # never publishes drafts, so a draft submit/* tag is hand-made
-                # noise whose assets aren't downloadable anyway — skip it.
-                if release.get("draft") is True:
-                    continue
-                releases.append(release)
-        link_header = headers.get("Link") if headers else None
-        next_url = _next_page_link(link_header)
-        if next_url:
-            next_url = _assert_same_host(next_url, api_url)
-            if next_url in seen_next:
-                return releases
-            seen_next.add(next_url)
-            url = next_url
-            continue
-        if link_header or len(batch) < per_page:
-            return releases
-        url = f"{_repo_url(api_url, owner, repo)}/releases?per_page={per_page}&page={page + 1}"
-    raise ValueError(
-        f"repos/{owner}/{repo}/releases: too many releases to enumerate "
-        f"(hit the {max_pages}-page cap)"
-    )
+    base = f"{_repo_url(api_url, owner, repo)}/releases"
+    try:
+        releases = _paginate_objects(
+            lambda page: f"{base}?per_page=100&page={page}",
+            api_url,
+            token,
+            f"repos/{owner}/{repo}/releases",
+        )
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return []
+        raise
+    return [
+        release
+        for release in releases
+        if (release.get("tag_name") or "").startswith(SUBMIT_TAG_PREFIX)
+        # A read-write token also lists draft releases. The runner never
+        # publishes drafts, so a draft submit/* tag is hand-made noise whose
+        # assets aren't downloadable anyway — skip it.
+        and release.get("draft") is not True
+    ]
 
 
 class IncompleteListing(ValueError):
@@ -2424,6 +2431,7 @@ def _paginate_objects(
     api_url: str,
     token: str,
     resource_label: str,
+    stop_after: Callable[[dict[str, Any]], bool] | None = None,
 ) -> list[dict[str, Any]]:
     """Walk a paginated GitHub list endpoint, returning every object it yields.
 
@@ -2432,6 +2440,11 @@ def _paginate_objects(
     follow GitHub's `Link: rel="next"`, host-pinned via _assert_same_host so a
     crafted Link can't pivot the token. When no Link header is present, falls
     back to page+1 and stops on a short page (len < per_page).
+
+    `stop_after` (optional) ends the walk once any object on the current page
+    satisfies it — for callers that only need the prefix up to a sentinel (the
+    accept-baseline commit), sparing the rest of a long history. The whole page
+    is still returned, so the caller cuts precisely.
 
     Raises urllib.error.HTTPError on any non-2xx (including 404) so the caller
     can choose soft fallback vs. hard failure; raises ValueError on a non-array
@@ -2452,7 +2465,10 @@ def _paginate_objects(
             raise ValueError(
                 f"GET {url}: expected JSON array, got {type(batch).__name__}"
             )
-        items.extend(item for item in batch if isinstance(item, dict))
+        page_items = [item for item in batch if isinstance(item, dict)]
+        items.extend(page_items)
+        if stop_after is not None and any(stop_after(item) for item in page_items):
+            return items
         link_header = headers.get("Link") if headers else None
         next_url = _next_page_link(link_header)
         if next_url:
@@ -2775,30 +2791,65 @@ def _http_get(
 def _http_get_with_headers(
     url: str, token: str, *, accept: str, max_bytes: int | None = None, _retries: int = 3
 ) -> tuple[bytes, Any]:
-    """GET `url` with bearer auth; return (body, response headers). Retries
-    5xx/429 and throttled 403s with backoff (see retry_delay). The custom
-    redirect handler strips
-    Authorization before following GitHub's asset-download redirect to S3
-    (otherwise the signed URL rejects the forwarded token).
+    """GET `url` with bearer auth; return (body, response headers). Headers are
+    returned so paginated callers can follow GitHub's `Link: rel="next"` rather
+    than guessing the next page from page length. Retry/backoff and the
+    synthetic-599 contract live in _http_request."""
+    _status, body, headers = _http_request(
+        "GET", url, token, accept=accept, max_bytes=max_bytes, _retries=_retries
+    )
+    return body, headers
 
-    Headers are returned so paginated callers can follow GitHub's `Link:
-    rel="next"` rather than guessing the next page from page length.
-    """
+
+def _http_send(
+    method: str,
+    url: str,
+    token: str,
+    *,
+    accept: str,
+    body: bytes | None,
+    _retries: int = 3,
+) -> tuple[int, bytes]:
+    """Issue `method url` with bearer auth; return (status, body). The
+    write-side view of _http_request; used only for the team-repo grant
+    PUT/GET. Mirrors regrade_repos.py's transport."""
+    status, resp_body, _headers = _http_request(
+        method, url, token, accept=accept, body=body, _retries=_retries
+    )
+    return status, resp_body
+
+
+def _http_request(
+    method: str,
+    url: str,
+    token: str,
+    *,
+    accept: str,
+    body: bytes | None = None,
+    max_bytes: int | None = None,
+    _retries: int = 3,
+) -> tuple[int, bytes, Any]:
+    """The one transport: issue `method url` with bearer auth and return
+    (status, body, response headers). Retries 5xx/429 and throttled 403s with
+    backoff (see retry_delay). The custom redirect handler strips Authorization
+    before following GitHub's asset-download redirect to S3 (otherwise the
+    signed URL rejects the forwarded token)."""
+    headers = {
+        "Accept": accept,
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "classroom50-collect-scores",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if body is not None:
+        headers["Content-Type"] = "application/json"
     for attempt in range(_retries):
-        req = urllib.request.Request(
-            url,
-            method="GET",
-            headers={
-                "Accept": accept,
-                "Authorization": f"Bearer {token}",
-                "User-Agent": "classroom50-collect-scores",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
+        req = urllib.request.Request(url, method=method, data=body, headers=headers)
         try:
             with _OPENER.open(req, timeout=30) as resp:
-                body = resp.read(max_bytes) if max_bytes is not None else resp.read()
-                return body, resp.headers
+                resp_body = (
+                    resp.read(max_bytes) if max_bytes is not None else resp.read()
+                )
+                return resp.status, resp_body, resp.headers
         except urllib.error.HTTPError as exc:
             delay = retry_delay(exc, attempt)
             if delay is not None and attempt < _retries - 1:
@@ -2822,54 +2873,7 @@ def _http_get_with_headers(
                 hdrs=None,  # type: ignore[arg-type]
                 fp=None,
             ) from exc
-    raise RuntimeError(f"_http_get_with_headers called with _retries={_retries}")
-
-
-def _http_send(
-    method: str,
-    url: str,
-    token: str,
-    *,
-    accept: str,
-    body: bytes | None,
-    _retries: int = 3,
-) -> tuple[int, bytes]:
-    """Issue `method url` with bearer auth; return (status, body). Same
-    retry/backoff (including throttled 403s) and synthetic-599 contract as
-    _http_get_with_headers (and
-    _OPENER strips Authorization on a cross-host redirect). Mirrors
-    regrade_repos.py's transport; used only for the team-repo grant PUT/GET."""
-    headers = {
-        "Accept": accept,
-        "Authorization": f"Bearer {token}",
-        "User-Agent": "classroom50-collect-scores",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-    for attempt in range(_retries):
-        req = urllib.request.Request(url, method=method, data=body, headers=headers)
-        try:
-            with _OPENER.open(req, timeout=30) as resp:
-                return resp.status, resp.read()
-        except urllib.error.HTTPError as exc:
-            delay = retry_delay(exc, attempt)
-            if delay is not None and attempt < _retries - 1:
-                time.sleep(delay)
-                continue
-            raise
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            if attempt < _retries - 1:
-                time.sleep(2 ** attempt)
-                continue
-            raise urllib.error.HTTPError(
-                url=url,
-                code=599,
-                msg=f"network error: {exc}",
-                hdrs=None,  # type: ignore[arg-type]
-                fp=None,
-            ) from exc
-    raise RuntimeError(f"_http_send called with _retries={_retries}")
+    raise RuntimeError(f"_http_request called with _retries={_retries}")
 
 
 def team_has_repo_access(
