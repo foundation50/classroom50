@@ -211,7 +211,7 @@ function resolveOverrideCell(
   row: Pick<SubmissionRow, "pending" | "max-score">,
   capability: ScoreOverrideCapability | undefined,
   isGroup: boolean,
-  emptyRepo: boolean,
+  skipsGrading: boolean,
 ): { hasGrade: boolean; maxPoints?: number } | null {
   if (!capability) return null
   if (isGroup && row.pending) return null
@@ -222,7 +222,7 @@ function resolveOverrideCell(
   }
 
   // Autograded override. A never-graded empty repo can't produce a score.
-  if (emptyRepo) return null
+  if (skipsGrading) return null
   // A pending row has no collected max yet: the teacher enters it in the modal.
   if (row.pending) return { hasGrade: false, maxPoints: undefined }
   // A collected row uses its own max-score as the bound.
@@ -253,7 +253,8 @@ const SubmissionsTable = ({
   thresholdFraction,
   filtered = false,
   onClearFilters,
-  emptyRepo = false,
+  skipsGrading = false,
+  emptyRepoAssignment = false,
   submissionMode,
   submissionTags,
   assignmentMode = "every-push",
@@ -297,10 +298,12 @@ const SubmissionsTable = ({
   // Clears the active search + filters (wired to the controls' clearAll).
   onClearFilters?: () => void
   // The assignment skips built-in grading (empty_repo OR no_autograder): score
-  // badges and the regrade action are hidden. Fed skipsGrading by the page. Note
-  // no_autograder repos are templated and keep the Feedback PR — the wire flag
-  // this receives is skipsGrading, not empty_repo alone.
-  emptyRepo?: boolean
+  // badges and the grading actions (details/regrade) are hidden.
+  skipsGrading?: boolean
+  // The narrower bare-repo case (empty_repo alone): also hides the hub's repo
+  // actions (Review/Manage access). A no_autograder repo is templated and keeps
+  // the Feedback PR, so it must NOT set this — mirrors the page's bulk gates.
+  emptyRepoAssignment?: boolean
   // The assignment's submission_mode, enabling the per-repo "Update
   // autograding trigger" action in the manage hub. Omitted (action hidden)
   // for custom-autograder assignments and non-owners.
@@ -558,7 +561,7 @@ const SubmissionsTable = ({
               { usernames, score, ...rest } as SubmissionRow,
               overrideGrade,
               isGroup,
-              emptyRepo,
+              skipsGrading,
             )
             if (cell) {
               return (
@@ -588,7 +591,7 @@ const SubmissionsTable = ({
                 />
               )
             }
-            return emptyRepo ? (
+            return skipsGrading ? (
               <span
                 className="text-base-content/50"
                 title={t("submissions.table.noGradingTitle")}
@@ -638,7 +641,7 @@ const SubmissionsTable = ({
               <RepoRowActions
                 owner={rest.owner}
                 release={rest.release}
-                skipsGrading={emptyRepo}
+                skipsGrading={skipsGrading}
                 header={<GroupActionControls repo={repo} repoHref={repoHref} />}
                 onManage={openManage}
               />
@@ -646,7 +649,7 @@ const SubmissionsTable = ({
               <RepoRowActions
                 owner={rest.owner}
                 release={rest.release}
-                skipsGrading={emptyRepo}
+                skipsGrading={skipsGrading}
                 header={
                   <IndividualRowHeader
                     repo={repo}
@@ -852,7 +855,7 @@ const SubmissionsTable = ({
                 actions = (
                   <RepoRowActions
                     owner={student.username}
-                    skipsGrading={emptyRepo}
+                    skipsGrading={skipsGrading}
                     header={
                       <IndividualRowHeader
                         repo={repoName}
@@ -922,7 +925,7 @@ const SubmissionsTable = ({
                 actions={
                   <RepoRowActions
                     owner={owner}
-                    skipsGrading={emptyRepo}
+                    skipsGrading={skipsGrading}
                     header={
                       <GroupActionControls
                         repo={repoName}
@@ -1009,7 +1012,8 @@ const SubmissionsTable = ({
             hasRepo: manageSubmission.hasRepo,
             commit: manageSubmission.commit,
             release: manageSubmission.release,
-            emptyRepo,
+            skipsGrading,
+            emptyRepoAssignment,
             displayName: manageSubmission.displayName,
             onManageAccess: manageSubmission.isGroup
               ? undefined

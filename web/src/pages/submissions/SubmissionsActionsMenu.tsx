@@ -33,7 +33,7 @@ export function SubmissionsActionsMenu({
   regradeAllActive,
   canRegradeAll = true,
   emptyRoster,
-  emptyRepo = false,
+  skipsGrading = false,
   onMetrics,
   onCollect,
   onRegradeAll,
@@ -64,9 +64,10 @@ export function SubmissionsActionsMenu({
   // that don't gate (the item stays visible).
   canRegradeAll?: boolean
   emptyRoster: boolean
-  // empty_repo assignment: never autogrades, so the grading actions (Collect
-  // now / Regrade all / View workflow) are hidden — only the CSV export stays.
-  emptyRepo?: boolean
+  // The assignment never autogrades (empty_repo OR no_autograder), so the
+  // grading actions (Regrade all / View workflow) are hidden — Collect and the
+  // exports stay.
+  skipsGrading?: boolean
   // Opens the Metrics modal. Omitted (hidden) in live view, where the graded
   // snapshot stats don't apply.
   onMetrics?: () => void
@@ -182,9 +183,10 @@ export function SubmissionsActionsMenu({
             role="separator"
           />
         )}
-        {/* Open all Feedback PRs — the bulk PR action leads the menu. Its own
-            group (owner-only, non-empty_repo), above the grading actions. */}
-        {!emptyRepo && onOpenAllPrs && (
+        {/* Open all Feedback PRs — the bulk PR action leads the menu. The page
+            owns the gate (owner-only, non-empty_repo): a no_autograder repo is
+            templated and PERMITS the PR, so no skipsGrading re-gate here. */}
+        {onOpenAllPrs && (
           <>
             <li>
               <button
@@ -211,7 +213,7 @@ export function SubmissionsActionsMenu({
             />
           </>
         )}
-        {/* Collect stays for empty_repo assignments: it's org-wide and
+        {/* Collect stays for non-autograding assignments: it's org-wide and
             collect_scores.py skips this assignment server-side (see the
             SubmissionsPage comment). Only grading actions hide. */}
         <li>
@@ -231,7 +233,7 @@ export function SubmissionsActionsMenu({
               : t("submissions.collect.label")}
           </button>
         </li>
-        {!emptyRepo && (
+        {!skipsGrading && (
           <>
             {canRegradeAll && (
               <li>

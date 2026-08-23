@@ -69,16 +69,20 @@ describe("SubmissionsActionsMenu — Open all Feedback PRs item", () => {
     ).not.toBeNull()
   })
 
-  it("hides the item for an empty_repo assignment even if a handler is passed", () => {
+  it("keeps the item for a no_autograder (skipsGrading) assignment when a handler is passed", () => {
     render(
       <SubmissionsActionsMenu
         {...baseProps}
-        emptyRepo
+        skipsGrading
         onOpenAllPrs={() => {}}
       />,
     )
-    // The whole !emptyRepo block (incl. this item) is gone for empty_repo.
-    expect(screen.queryByText("submissions.openAllPrs.menuLabel")).toBeNull()
+    // The page owns the empty_repo gate (handler omitted there); a templated
+    // no_autograder repo permits the Feedback PR, so the item must survive
+    // skipsGrading.
+    expect(
+      screen.queryByText("submissions.openAllPrs.menuLabel"),
+    ).not.toBeNull()
   })
 })
 
@@ -96,8 +100,8 @@ describe("SubmissionsActionsMenu — Download all submissions item", () => {
     expect((item.closest("button") as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it("stays visible for an empty_repo assignment (unlike Open all PRs)", () => {
-    render(<SubmissionsActionsMenu {...baseProps} emptyRepo />)
+  it("stays visible for a non-autograding assignment", () => {
+    render(<SubmissionsActionsMenu {...baseProps} skipsGrading />)
     expect(
       screen.queryByText("submissions.downloadAll.menuLabel"),
     ).not.toBeNull()
