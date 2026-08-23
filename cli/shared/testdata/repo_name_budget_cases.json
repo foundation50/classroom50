@@ -1,0 +1,15 @@
+{
+  "_comment": "Shared golden fixture pinning the composed repo-name budget across every implementation: Go contract.ComposedRepoNameFits / AssignmentSlugBudget (cli/shared/contract) and the web mirror (web/src/util/repoNameBudget.ts). There is NO compile-time link across languages, so each side asserts these same constants and cases and a one-sided edit fails on the other side. worst_case is the composed `<classroom>-<slug>-<username>` length with a maximum-length (39-char) username; fits means it is within GitHub's 100-char repo-name limit.",
+  "github_repo_name_max_len": 100,
+  "github_login_max_len": 39,
+  "repo_name_slug_budget": 59,
+  "classroom_short_name_max_len": 40,
+  "cases": [
+    { "classroom": "cs101", "slug": "hw1", "worst_case": 49, "fits": true },
+    { "classroom": "CS101", "slug": "HW1", "worst_case": 49, "fits": true },
+    { "classroom": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "slug": "bbbbbbbbbbbbbbbbbbb", "worst_case": 100, "fits": true },
+    { "classroom": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "slug": "bbbbbbbbbbbbbbbbbbbb", "worst_case": 101, "fits": false },
+    { "classroom": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "slug": "bb", "worst_case": 100, "fits": true },
+    { "classroom": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "slug": "bb", "worst_case": 101, "fits": false }
+  ]
+}
