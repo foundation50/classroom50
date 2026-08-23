@@ -195,6 +195,8 @@ export const ReuseFromClassroomModal = ({
                   loading: destLoading,
                   error: destError,
                   slugTaken: reuse.slugTaken,
+                  slugOverBudget: reuse.slugOverBudget,
+                  slugBudget: reuse.slugBudget,
                   slugTouched: reuse.slugTouched,
                   normalizedSlug: reuse.normalizedSlug,
                   displayedSlug: reuse.displayedSlug,
@@ -208,7 +210,11 @@ export const ReuseFromClassroomModal = ({
                     label={t("components.modals.reuseFromClassroom.slugLabel", {
                       classroom,
                     })}
-                    error={reuse.slugTaken ? slugStatus : undefined}
+                    error={
+                      reuse.slugTaken || reuse.slugOverBudget
+                        ? slugStatus
+                        : undefined
+                    }
                     hint={slugStatus}
                   >
                     {({ id, describedById, invalid }) => (

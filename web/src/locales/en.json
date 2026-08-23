@@ -321,6 +321,7 @@
     },
     "reason": {
       "invalidSlug": "The assignment slug \"{{slug}}\" isn't a valid repo name.",
+      "slugOverBudget": "The slug \"{{slug}}\" is too long for this classroom — student repository names would exceed GitHub's {{limit}}-character limit (at most {{budget}} characters here).",
       "invalidMode": "Unsupported assignment type \"{{type}}\".",
       "badStarter": "The starter repository \"{{fullName}}\" has an unexpected name.",
       "sourceNotAccessible": "The starter repository \"{{fullName}}\" isn't accessible to your account.",
@@ -341,6 +342,7 @@
       "assignmentInaccessible": "Assignment {{id}} isn't accessible — you must administer its GitHub Classroom.",
       "classroomNameEmpty": "The classroom name is empty — enter a short name explicitly.",
       "shortNameInvalid": "\"{{shortName}}\" isn't a valid short name — it must be {{description}}. Enter one explicitly.",
+      "shortNameTooLong": "The short name \"{{shortName}}\" is {{length}} characters; new classrooms are capped at {{max}} so student repository names keep room for assignment slugs. Enter a shorter one explicitly.",
       "shortNameInvalidFrom": "Couldn't derive a valid short name from \"{{rawName}}\" (got \"{{shortName}}\") — it must be {{description}}. Enter one explicitly.",
       "shortNameNotCanonical": "The short name \"{{shortName}}\" can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants).",
       "templateSourceAccess": "Can't read the starter repository \"{{fullName}}\" — approve the Classroom 50 app for the \"{{org}}\" organization, then retry. {{detail}}",
@@ -897,6 +899,7 @@
     "classroomSlugRequired": "Classroom slug is required.",
     "classroomSlugTaken": "Classroom slug is already taken.",
     "classroomSlugInvalid": "Classroom slug must be {{description}}.",
+    "classroomSlugTooLong": "Classroom slug is {{length}} characters; new classrooms are capped at {{max}} — it prefixes every student repository name, which GitHub limits to {{limit}} characters.",
     "assignmentSlugTaken": "An assignment \"{{slug}}\" already exists in this classroom.",
     "groupSizeRange": "Group size must be a whole number between {{min}} and {{max}}."
   },
@@ -1371,6 +1374,7 @@
         "nameRequired": "Assignment name is required.",
         "slugRequired": "Assignment slug is required.",
         "slugInvalid": "Assignment slug must be {{description}}.",
+        "slugOverBudget": "Student repositories are named \"{{classroom}}-<slug>-<username>\", which GitHub caps at {{limit}} characters — this slug can be at most {{budget}} characters (currently {{length}}).",
         "maxGroupSizeInvalid": "Max group size must be a valid number.",
         "setupTimeoutRange": "Setup timeout must be 0 or a whole number of seconds from 1 through {{max}}.",
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
@@ -3261,6 +3265,7 @@
           "checking": "Checking existing assignments…",
           "checkError": "Couldn’t check existing slugs — you can still try; we’ll re-check on save.",
           "taken": "“{{slug}}” is already used in {{classroom}} — pick another.",
+          "overBudget": "This slug is {{length}} characters; {{classroom}} leaves room for at most {{budget}} so student repository names stay under GitHub's limit.",
           "willBeSaved": "Will be saved as “{{slug}}”."
         }
       },

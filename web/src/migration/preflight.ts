@@ -12,6 +12,8 @@ import { classifyAssignment } from "./classify"
 import { fetchAssignmentsForClassroom, resolveSource } from "./classroomApi"
 import { deriveShortName } from "./translate"
 import { assertValidShortName } from "@/util/shortName"
+import { CLASSROOM_SHORT_NAME_MAX_LEN } from "@/util/repoNameBudget"
+import { localizedError } from "@/types/localizedMessage"
 import type {
   MigrationBlocker,
   MigrationItem,
@@ -98,6 +100,18 @@ export async function buildPreflight(
     : deriveShortName(classroom.name)
   // A user-supplied short-name still has to pass the pattern + team-slug guard.
   assertValidShortName(shortName)
+  // Creation-time cap (#691): migration mints the classroom, so an explicit
+  // over-cap short-name fails preflight. Derived names are already truncated.
+  if (shortName.length > CLASSROOM_SHORT_NAME_MAX_LEN) {
+    throw localizedError({
+      key: "migration.error.shortNameTooLong",
+      params: {
+        shortName,
+        length: shortName.length,
+        max: CLASSROOM_SHORT_NAME_MAX_LEN,
+      },
+    })
+  }
 
   const term = (input.term ?? "").trim()
   const name = input.name?.trim() ? input.name.trim() : classroom.name
@@ -106,7 +120,13 @@ export async function buildPreflight(
   const items: MigrationItem[] = []
   for (const a of assignments) {
     items.push(
-      await classifyAssignment(client, input.targetOrg, templateSuffix, a),
+      await classifyAssignment(
+        client,
+        input.targetOrg,
+        templateSuffix,
+        shortName,
+        a,
+      ),
     )
   }
 

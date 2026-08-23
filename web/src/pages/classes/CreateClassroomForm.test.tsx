@@ -61,6 +61,27 @@ describe("CreateClassroomForm slug validation", () => {
     ).not.toBeNull()
   })
 
+  // Creation-time budget cap (#691): a pattern-valid slug past 40 chars is
+  // rejected — it prefixes every student repo name in the classroom.
+  it("rejects a slug over the 40-char creation cap and does not submit", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    const { container } = render(<CreateClassroomForm onSubmit={onSubmit} />)
+
+    await user.type(
+      container.querySelector<HTMLInputElement>("#name")!,
+      "Class",
+    )
+    await user.clear(slugInput(container))
+    await user.type(slugInput(container), "a".repeat(41))
+    await user.click(submit())
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(
+      await screen.findByText("validation.classroomSlugTooLong"),
+    ).not.toBeNull()
+  })
+
   // Regression guard: the collision check must compare the SLUGIFIED value, not
   // the raw input. A raw "CS 50" slugifies to "cs-50"; if the check compared the
   // raw string it would miss an existing "cs-50" and overwrite its roster/scores.
@@ -99,5 +120,32 @@ describe("CreateClassroomForm slug validation", () => {
 
     await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     expect(onSubmit.mock.calls[0][0].slug).toBe("intro-cs")
+  })
+
+  // The auto-derived slug is pre-fixed rather than left to fail at submit:
+  // trimmed to the 40-char creation cap and suffixed past existing classrooms.
+  it("auto-derives a slug trimmed to the creation cap", async () => {
+    const user = userEvent.setup()
+    const { container } = render(<CreateClassroomForm onSubmit={vi.fn()} />)
+
+    await user.type(
+      container.querySelector<HTMLInputElement>("#name")!,
+      "Introduction to Computer Science and Programming",
+    )
+    const derived = slugInput(container).value
+    expect(derived.length).toBeLessThanOrEqual(40)
+    expect(derived).toBe("introduction-to-computer-science-and-pro")
+  })
+
+  it("auto-derives a suffixed slug when the name collides with an existing classroom", async () => {
+    mockClasses = [{ name: "intro-cs", path: "intro-cs", type: "dir" }]
+    const user = userEvent.setup()
+    const { container } = render(<CreateClassroomForm onSubmit={vi.fn()} />)
+
+    await user.type(
+      container.querySelector<HTMLInputElement>("#name")!,
+      "Intro CS",
+    )
+    expect(slugInput(container).value).toBe("intro-cs-2")
   })
 })

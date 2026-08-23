@@ -132,6 +132,8 @@ export const ReuseAssignmentModal = ({
                   loading: targetLoading,
                   error: targetError,
                   slugTaken: reuse.slugTaken,
+                  slugOverBudget: reuse.slugOverBudget,
+                  slugBudget: reuse.slugBudget,
                   slugTouched: reuse.slugTouched,
                   normalizedSlug: reuse.normalizedSlug,
                   displayedSlug: reuse.displayedSlug,
@@ -141,7 +143,11 @@ export const ReuseAssignmentModal = ({
             return (
               <FormField
                 label={t("components.modals.reuseAssignment.slugLabel")}
-                error={reuse.slugTaken ? slugStatus : undefined}
+                error={
+                  reuse.slugTaken || reuse.slugOverBudget
+                    ? slugStatus
+                    : undefined
+                }
                 hint={slugStatus}
               >
                 {({ id, describedById, invalid }) => (

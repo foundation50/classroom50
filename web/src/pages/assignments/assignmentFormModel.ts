@@ -5,6 +5,11 @@ import {
   SHORT_NAME_PATTERN_DESCRIPTION,
   isValidShortName,
 } from "@/util/shortName"
+import {
+  GITHUB_REPO_NAME_MAX_LEN,
+  assignmentSlugBudget,
+  composedRepoNameFits,
+} from "@/util/repoNameBudget"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
   DEFAULT_SETUP_TIMEOUT_SECONDS,
@@ -244,7 +249,12 @@ export function formValuesToRepoFeatures(
 }
 
 // Create-only: slug uniqueness is not validated in edit mode (no rename).
-export type SlugContext = { takenSlugs?: string[]; edit?: boolean }
+// `classroom` (the short-name) enables the composed repo-name budget check.
+export type SlugContext = {
+  takenSlugs?: string[]
+  edit?: boolean
+  classroom?: string
+}
 
 // Pure submit-time validation, mirroring gh-teacher's write-time rules so a bad
 // value is caught in the form rather than by a failed commit or an unparseable
@@ -269,6 +279,18 @@ export function validateAssignmentForm(
       // repo path segments); the write path historically skipped it.
       errors.slug = t("assignments.form.validation.slugInvalid", {
         description: SHORT_NAME_PATTERN_DESCRIPTION,
+      })
+    } else if (
+      slugContext?.classroom &&
+      !composedRepoNameFits(slugContext.classroom, slug).fits
+    ) {
+      // #691: a NEW slug must fit the composed `<classroom>-<slug>-<username>`
+      // budget, or long-username accepts fail with GitHub's 100-char 422.
+      errors.slug = t("assignments.form.validation.slugOverBudget", {
+        classroom: slugContext.classroom,
+        budget: assignmentSlugBudget(slugContext.classroom),
+        length: slug.length,
+        limit: GITHUB_REPO_NAME_MAX_LEN,
       })
     } else if (
       (slugContext?.takenSlugs ?? []).some(

@@ -7,6 +7,11 @@
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import { SHORT_NAME_PATTERN } from "@/util/shortName"
+import {
+  GITHUB_REPO_NAME_MAX_LEN,
+  assignmentSlugBudget,
+  composedRepoNameFits,
+} from "@/util/repoNameBudget"
 import { splitFullName } from "@/util/repoFullName"
 import type {
   ClassroomAssignmentDetail,
@@ -67,10 +72,13 @@ async function sourceIsTemplate(
 
 // Classify one source assignment, read-only. Returns import/reuse/skip with a
 // translatable reason for reuse/skip and the resolved target name/branch.
+// `shortName` is the TARGET classroom directory, for the composed repo-name
+// budget check.
 export async function classifyAssignment(
   client: GitHubClient,
   targetOrg: string,
   templateSuffix: string,
+  shortName: string,
   assignment: ClassroomAssignmentDetail,
 ): Promise<MigrationItem> {
   const targetName = targetTemplateName(assignment.slug, templateSuffix)
@@ -86,6 +94,19 @@ export async function classifyAssignment(
     return skip({
       key: "migration.reason.invalidSlug",
       params: { slug: assignment.slug },
+    })
+  }
+  // #691: a slug that composes past GitHub's repo-name limit with the target
+  // short-name would fail every long-username accept — skip it (the rest of
+  // the migration proceeds). Mirrors the CLI's copyOneTemplate guard.
+  if (!composedRepoNameFits(shortName, assignment.slug).fits) {
+    return skip({
+      key: "migration.reason.slugOverBudget",
+      params: {
+        slug: assignment.slug,
+        budget: String(assignmentSlugBudget(shortName)),
+        limit: String(GITHUB_REPO_NAME_MAX_LEN),
+      },
     })
   }
   if (assignment.type !== "individual" && assignment.type !== "group") {

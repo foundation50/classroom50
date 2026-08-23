@@ -408,6 +408,21 @@ describe("nextAvailableSlug", () => {
     // "hw-1-2" -> stem "hw-1", n=3 (not "hw" / "hw-1-2-2").
     expect(nextAvailableSlug("hw-1-2", ["hw-1-2"])).toBe("hw-1-3")
   })
+
+  // maxLen carries a classroom's composed repo-name budget (#691).
+  it("trims the base to maxLen, dropping an exposed trailing hyphen", () => {
+    expect(nextAvailableSlug("hello-world", [], 7)).toBe("hello-w")
+    expect(nextAvailableSlug("hello-world", [], 6)).toBe("hello")
+  })
+
+  it("keeps a suffixed candidate within maxLen by trimming the stem", () => {
+    // "hello-w" is taken; "-2" needs room, so the stem trims to "hello".
+    expect(nextAvailableSlug("hello-world", ["hello-w"], 7)).toBe("hello-2")
+  })
+
+  it("yields an empty slug on a non-positive budget (caller validates)", () => {
+    expect(nextAvailableSlug("hw1", [], 0)).toBe("")
+  })
 })
 
 describe("editAssignment (preserved-entry integration)", () => {

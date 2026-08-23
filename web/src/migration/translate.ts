@@ -11,6 +11,7 @@ import {
   SHORT_NAME_PATTERN_DESCRIPTION,
   assertValidShortName,
 } from "@/util/shortName"
+import { CLASSROOM_SHORT_NAME_MAX_LEN } from "@/util/repoNameBudget"
 import type { ClassroomAssignmentDetail, ClassroomDetail } from "./types"
 
 // The only migrated_from.source value today.
@@ -68,8 +69,11 @@ export function deriveShortName(rawName: string): string {
     throw localizedError({ key: "migration.error.classroomNameEmpty" })
   }
   let slug = lowered.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-  if (slug.length > 100) {
-    slug = slug.slice(0, 100).replace(/-+$/g, "")
+  // Truncate to the creation cap (not the pattern's 100) so a migrated
+  // classroom keeps a workable assignment-slug budget (#691). Mirrors the
+  // CLI's deriveShortName.
+  if (slug.length > CLASSROOM_SHORT_NAME_MAX_LEN) {
+    slug = slug.slice(0, CLASSROOM_SHORT_NAME_MAX_LEN).replace(/-+$/g, "")
   }
   assertValidShortName(slug, rawName)
   return slug
