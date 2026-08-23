@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next"
 import { nextAvailableSlug, slugify } from "@/util/slug"
-import { assignmentSlugBudget } from "@/util/repoNameBudget"
+import {
+  GITHUB_REPO_NAME_MAX_LEN,
+  assignmentSlugBudget,
+} from "@/util/repoNameBudget"
 import { Alert, FormField, Input, Textarea } from "@/components/ui"
 import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
 import { FieldLabel } from "../AdvancedRuntimeFields"
@@ -88,10 +91,28 @@ export function DetailsSection({
 
         <form.Field name="slug">
           {(field) => {
-            const slugError =
+            const submitError =
               !edit && field.state.meta.errors.length > 0
                 ? String(field.state.meta.errors[0])
                 : undefined
+            // Live budget check (#691) so a manual override warns as-you-type
+            // rather than only at submit (which stays authoritative). The
+            // auto-fill is already budget-bounded, so this fires only on a
+            // deliberate over-long slug.
+            const liveSlug = slugify(field.state.value)
+            const liveError =
+              !edit &&
+              classroom &&
+              slugBudget !== undefined &&
+              liveSlug.length > slugBudget
+                ? t("assignments.form.validation.slugOverBudget", {
+                    classroom,
+                    budget: slugBudget,
+                    length: liveSlug.length,
+                    limit: GITHUB_REPO_NAME_MAX_LEN,
+                  })
+                : undefined
+            const slugError = submitError ?? liveError
             return (
               <FormField
                 htmlFor={field.name}
