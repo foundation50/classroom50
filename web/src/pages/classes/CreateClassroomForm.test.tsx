@@ -82,6 +82,20 @@ describe("CreateClassroomForm slug validation", () => {
     ).not.toBeNull()
   })
 
+  // The cap warning is live: it shows while typing a manual override, before
+  // any submit, and clears once the slug is back within the cap.
+  it("warns live when a manual slug exceeds the creation cap", async () => {
+    const user = userEvent.setup()
+    const { container } = render(<CreateClassroomForm onSubmit={vi.fn()} />)
+
+    await user.click(slugInput(container))
+    await user.paste("a".repeat(41))
+    expect(screen.getByText("validation.classroomSlugTooLong")).not.toBeNull()
+
+    await user.type(slugInput(container), "{backspace}")
+    expect(screen.queryByText("validation.classroomSlugTooLong")).toBeNull()
+  })
+
   // Regression guard: the collision check must compare the SLUGIFIED value, not
   // the raw input. A raw "CS 50" slugifies to "cs-50"; if the check compared the
   // raw string it would miss an existing "cs-50" and overwrite its roster/scores.

@@ -207,6 +207,25 @@ describe("assignment slug field", () => {
     expect(slugInput(container).value).toBe("loops-2")
   })
 
+  // #691: a manual slug over the classroom's composed repo-name budget warns
+  // as-you-type, before any submit; shrinking back within budget clears it.
+  it("create: warns live when a manual slug exceeds the classroom's budget", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm(
+      <CreateAssignmentForm classroom="cs" onSubmit={() => {}} />,
+    )
+    // "cs" leaves a 57-char budget (59 - 2); 58 exceeds it.
+    await user.click(slugInput(container))
+    await user.paste("s".repeat(58))
+    expect(
+      screen.getByText("assignments.form.validation.slugOverBudget"),
+    ).not.toBeNull()
+    await user.type(slugInput(container), "{backspace}")
+    expect(
+      screen.queryByText("assignments.form.validation.slugOverBudget"),
+    ).toBeNull()
+  })
+
   it("create: blurring an emptied slug restores a unique name-derived default", async () => {
     const user = userEvent.setup()
     const { container } = renderForm(

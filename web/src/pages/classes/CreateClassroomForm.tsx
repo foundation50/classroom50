@@ -184,34 +184,48 @@ const CreateClassroomForm = ({
         </form.Field>
 
         <form.Field name="slug">
-          {(field) => (
-            <FormField
-              label={t("classes.form.slug")}
-              htmlFor={field.name}
-              required
-              error={
-                field.state.meta.errors.length > 0
-                  ? field.state.meta.errors[0]
-                  : undefined
-              }
-              className="mb-4"
-            >
-              {({ id, describedById, invalid }) => (
-                <Input
-                  id={id}
-                  name={field.name}
-                  required
-                  aria-required="true"
-                  aria-describedby={describedById}
-                  invalid={invalid}
-                  placeholder={t("classes.form.slugPlaceholder")}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-              )}
-            </FormField>
-          )}
+          {(field) => {
+            const submitError =
+              field.state.meta.errors.length > 0
+                ? field.state.meta.errors[0]
+                : undefined
+            // Live cap check (#691) so a manual override warns as-you-type
+            // rather than only at submit. The submit validator stays
+            // authoritative (pattern, collision, cap).
+            const liveSlug = slugify(field.state.value)
+            const liveError =
+              liveSlug.length > CLASSROOM_SHORT_NAME_MAX_LEN
+                ? t("validation.classroomSlugTooLong", {
+                    length: liveSlug.length,
+                    max: CLASSROOM_SHORT_NAME_MAX_LEN,
+                    limit: GITHUB_REPO_NAME_MAX_LEN,
+                  })
+                : undefined
+            return (
+              <FormField
+                label={t("classes.form.slug")}
+                htmlFor={field.name}
+                required
+                error={submitError ?? liveError}
+                className="mb-4"
+              >
+                {({ id, describedById, invalid }) => (
+                  <Input
+                    id={id}
+                    name={field.name}
+                    required
+                    aria-required="true"
+                    aria-describedby={describedById}
+                    invalid={invalid}
+                    placeholder={t("classes.form.slugPlaceholder")}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                )}
+              </FormField>
+            )
+          }}
         </form.Field>
 
         <form.Field name="term">
