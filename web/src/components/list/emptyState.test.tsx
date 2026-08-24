@@ -7,10 +7,10 @@ import { EmptyState, NoSearchResults } from "./index"
 
 afterEach(cleanup)
 
-// EmptyState is the single dashed-card implementation every empty state now
-// renders through, so these lock the slot contract: title is always present,
-// body/action wrappers appear only when passed, and className fully overrides
-// the default shell.
+// EmptyState is the single Blankslate implementation every empty state now
+// renders through, so these lock the slot contract: title/body/action/icon
+// wrappers appear only when passed, className merges onto the variant shell,
+// and the bare variant drops the dashed card.
 describe("EmptyState", () => {
   it("renders the title and omits body/action when not passed", () => {
     render(<EmptyState title="Nothing here" />)
@@ -30,12 +30,34 @@ describe("EmptyState", () => {
     expect(screen.getByRole("button", { name: "Do it" })).toBeDefined()
   })
 
-  it("replaces the default shell class when className is provided", () => {
-    const { container } = render(
-      <EmptyState title="Custom" className="my-shell" />,
-    )
+  it("merges className onto the card shell", () => {
+    const { container } = render(<EmptyState title="Custom" className="mt-4" />)
     const root = container.firstElementChild
-    expect(root?.className).toBe("my-shell")
+    expect(root?.className).toContain("mt-4")
+    expect(root?.className).toContain("border-dashed")
+  })
+
+  it("drops the card shell in the bare variant", () => {
+    const { container } = render(<EmptyState title="Bare" variant="bare" />)
+    expect(container.firstElementChild?.className).not.toContain(
+      "border-dashed",
+    )
+  })
+
+  it("renders the icon in the standard muted circle, hidden from AT", () => {
+    const Probe = (props: { className?: string }) => (
+      <svg data-testid="probe" {...props} />
+    )
+    render(<EmptyState title="With icon" icon={Probe} />)
+    const icon = screen.getByTestId("probe")
+    expect(icon.getAttribute("aria-hidden")).toBe("true")
+    expect(icon.parentElement?.className).toContain("rounded-full")
+  })
+
+  it("supports a body-only empty state without a heading", () => {
+    render(<EmptyState body="Nothing matched" />)
+    expect(screen.queryByRole("heading")).toBeNull()
+    expect(screen.getByText("Nothing matched")).toBeDefined()
   })
 })
 

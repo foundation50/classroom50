@@ -1,4 +1,5 @@
 import { useNavigate } from "@tanstack/react-router"
+import { EmptyState } from "@/components/list"
 import { Trans, useTranslation } from "react-i18next"
 import {
   AlertIcon,
@@ -490,8 +491,8 @@ const AssignmentsTable = ({
         {loading && <SkeletonRows bars={SKELETON_BARS} />}
         {!loading && !assignments?.length && (
           <tr>
-            <td colSpan={7} className="text-center">
-              {t("assignments.table.empty")}
+            <td colSpan={7}>
+              <EmptyState variant="bare" body={t("assignments.table.empty")} />
             </td>
           </tr>
         )}

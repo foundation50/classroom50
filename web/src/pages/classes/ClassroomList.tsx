@@ -10,7 +10,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { NoSearchResults, ViewToggle } from "@/components/list"
+import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import { Button, cx, Input, LabeledControl, Select } from "@/components/ui"
 import useClassroomSummaries, {
   classroomDisplayName,
@@ -296,11 +296,7 @@ const ClassroomList = ({
           onClear={() => setSearch("")}
         />
       ) : emptyFilter ? (
-        <div className="rounded-box border border-dashed border-base-300 bg-base-100 p-8 text-center">
-          <p className="text-sm text-base-content/70">
-            {t(`classes.emptyFilter.${filter}`)}
-          </p>
-        </div>
+        <EmptyState body={t(`classes.emptyFilter.${filter}`)} />
       ) : (
         <div className="grid grid-cols-12 gap-4">
           {displayList.map((summary) =>

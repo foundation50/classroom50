@@ -13,6 +13,7 @@ import {
   RepoLockedIcon,
 } from "@/components/ui/icons"
 
+import { EmptyState } from "@/components/list"
 import { Button, Card, Markdown, Modal, Heading } from "@/components/ui"
 import type { GitHubRepo } from "@/github-core/types"
 import { assignmentDescription } from "@/types/classroom"
@@ -220,20 +221,11 @@ export const OrgRepos = ({
 
   if (writableRepos.length === 0) {
     return (
-      <div className="rounded-box border border-dashed border-base-300 bg-base-100 p-8 text-center">
-        <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-base-200">
-          <BookIcon
-            aria-hidden="true"
-            className="size-6 text-base-content/70"
-          />
-        </div>
-
-        <Heading as="h2">{t("classes.repo.emptyTitle")}</Heading>
-
-        <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
-          {t("classes.repo.emptyBody")}
-        </p>
-      </div>
+      <EmptyState
+        icon={BookIcon}
+        title={t("classes.repo.emptyTitle")}
+        body={t("classes.repo.emptyBody")}
+      />
     )
   }
 

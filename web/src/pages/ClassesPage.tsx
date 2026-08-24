@@ -11,6 +11,7 @@ import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
+import { EmptyState } from "@/components/list"
 import { Alert, Button, Card, EmphasisLtr } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import MissingParams from "@/components/MissingParams"
@@ -74,23 +75,13 @@ const NewClassroomButton = ({ org }: { org: string }) => {
 const CreateClassroomPane = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   return (
-    <Card dashed>
-      <Card.Body className="items-center py-12 text-center">
-        <div className="mb-2 flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <PlusIcon aria-hidden="true" className="size-6" />
-        </div>
-
-        <Card.Title className="text-xl">{t("classes.empty.title")}</Card.Title>
-
-        <p className="max-w-md text-base-content/70">
-          {t("classes.empty.body")}
-        </p>
-
-        <Card.Actions className="mt-4">
-          <NewClassroomButton org={org} />
-        </Card.Actions>
-      </Card.Body>
-    </Card>
+    <EmptyState
+      className="py-12"
+      icon={PlusIcon}
+      title={t("classes.empty.title")}
+      body={t("classes.empty.body")}
+      action={<NewClassroomButton org={org} />}
+    />
   )
 }
 

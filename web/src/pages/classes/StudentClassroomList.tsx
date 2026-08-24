@@ -249,14 +249,7 @@ export function StudentClassroomList({
         />
       ) : empty ? (
         <EmptyState
-          icon={
-            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-base-200">
-              <MortarBoardIcon
-                aria-hidden="true"
-                className="size-6 text-base-content/70"
-              />
-            </div>
-          }
+          icon={MortarBoardIcon}
           title={t("classes.student.emptyTitle")}
           body={t("classes.student.emptyBody")}
         />

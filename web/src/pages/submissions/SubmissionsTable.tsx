@@ -1,4 +1,5 @@
 import { FilterRemoveIcon, InboxIcon } from "@/components/ui/icons"
+import { EmptyState } from "@/components/list"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -755,50 +756,43 @@ const SubmissionsTable = ({
             !unsubmittedGroupRepos.length &&
             !nonSubmittersLoading && (
               <tr>
-                <td colSpan={5} className="py-10 text-center">
-                  <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
-                    {filtered ? (
-                      <>
-                        <FilterRemoveIcon
-                          aria-hidden="true"
-                          className="size-8 text-base-content/40"
-                        />
-                        <p className="font-medium">
-                          {t("submissions.table.emptyFilteredTitle")}
-                        </p>
-                        <p className="text-sm text-base-content/70">
-                          {t("submissions.table.emptyFilteredBody")}
-                        </p>
-                        {onClearFilters && (
+                <td colSpan={5}>
+                  {filtered ? (
+                    <EmptyState
+                      variant="bare"
+                      icon={FilterRemoveIcon}
+                      titleAs="h3"
+                      title={t("submissions.table.emptyFilteredTitle")}
+                      body={t("submissions.table.emptyFilteredBody")}
+                      action={
+                        onClearFilters && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="mt-1"
                             onClick={onClearFilters}
                           >
                             {t("submissions.table.emptyClearFilters")}
                           </Button>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <InboxIcon
-                          aria-hidden="true"
-                          className="size-8 text-base-content/40"
-                        />
-                        <p className="font-medium">
-                          {isGroup
-                            ? t("submissions.table.emptyNoGroupsTitle")
-                            : t("submissions.table.emptyNoDataTitle")}
-                        </p>
-                        <p className="text-sm text-base-content/70">
-                          {isGroup
-                            ? t("submissions.table.emptyNoGroupsBody")
-                            : t("submissions.table.emptyNoDataBody")}
-                        </p>
-                      </>
-                    )}
-                  </div>
+                        )
+                      }
+                    />
+                  ) : (
+                    <EmptyState
+                      variant="bare"
+                      icon={InboxIcon}
+                      titleAs="h3"
+                      title={
+                        isGroup
+                          ? t("submissions.table.emptyNoGroupsTitle")
+                          : t("submissions.table.emptyNoDataTitle")
+                      }
+                      body={
+                        isGroup
+                          ? t("submissions.table.emptyNoGroupsBody")
+                          : t("submissions.table.emptyNoDataBody")
+                      }
+                    />
+                  )}
                 </td>
               </tr>
             )}

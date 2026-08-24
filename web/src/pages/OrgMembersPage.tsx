@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { EmptyState } from "@/components/list"
 import { Trans, useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
@@ -463,18 +464,21 @@ const OrgMembersPage = () => {
                 {t("orgMembers.loadError")}
               </div>
             ) : filtered.length === 0 ? (
-              <div className="px-6 py-10 text-center text-sm text-base-content/70">
-                {classroomFilter === NO_CLASSROOM_FILTER
-                  ? t("orgMembers.noMembersNoClassroom")
-                  : classroomFilter
-                    ? t("orgMembers.noMembersInClassroom", {
-                        classroom:
-                          classroomOptions.find(
-                            (c) => c.path === classroomFilter,
-                          )?.name ?? classroomFilter,
-                      })
-                    : t("orgMembers.noMatch")}
-              </div>
+              <EmptyState
+                variant="bare"
+                body={
+                  classroomFilter === NO_CLASSROOM_FILTER
+                    ? t("orgMembers.noMembersNoClassroom")
+                    : classroomFilter
+                      ? t("orgMembers.noMembersInClassroom", {
+                          classroom:
+                            classroomOptions.find(
+                              (c) => c.path === classroomFilter,
+                            )?.name ?? classroomFilter,
+                        })
+                      : t("orgMembers.noMatch")
+                }
+              />
             ) : (
               <>
                 {org ? (

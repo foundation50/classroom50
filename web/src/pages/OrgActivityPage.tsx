@@ -159,13 +159,8 @@ const OrgActivityPage = () => {
             </Card>
           ) : (
             <EmptyState
-              className="mt-4 rounded-box border border-dashed border-base-300 bg-base-100 p-8 text-center"
-              icon={
-                <PulseIcon
-                  aria-hidden="true"
-                  className="mx-auto mb-3 size-8 text-base-content/40"
-                />
-              }
+              className="mt-4"
+              icon={PulseIcon}
               title={
                 hasActiveFilter
                   ? t("orgActivity.noMatch.title")
