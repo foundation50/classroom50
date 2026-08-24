@@ -8,7 +8,12 @@ import {
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
+import {
+  CardGridSkeleton,
+  EmptyState,
+  NoSearchResults,
+  ViewToggle,
+} from "@/components/list"
 import {
   Badge,
   Card,
@@ -136,16 +141,7 @@ function StudentClassroomRow({
 }
 
 function ClassroomsSkeleton() {
-  return (
-    <div className="grid grid-cols-12 gap-4">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div
-          key={i}
-          className="skeleton skeleton-shimmer col-span-12 h-40 rounded-box md:col-span-6 xl:col-span-4"
-        />
-      ))}
-    </div>
-  )
+  return <CardGridSkeleton />
 }
 
 // The student "My Classrooms" list: a search + sort + grid/list toolbar over the

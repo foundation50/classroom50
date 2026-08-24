@@ -202,8 +202,8 @@ describe("RosterPreviewTable change highlighting", () => {
         onRoleChange={vi.fn()}
       />,
     )
-    expect(container.querySelector("table")?.getAttribute("aria-busy")).toBe(
-      "false",
-    )
+    expect(
+      container.querySelector("table")?.getAttribute("aria-busy"),
+    ).toBeNull()
   })
 })

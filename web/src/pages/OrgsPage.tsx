@@ -49,9 +49,13 @@ import {
   cx,
   Heading,
 } from "@/components/ui"
-import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
+import {
+  CardGridSkeleton,
+  EmptyState,
+  NoSearchResults,
+  ViewToggle,
+} from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
-import Spinner from "@/components/Spinner"
 import { EnterDiv, PresenceCardDiv } from "@/lib/motionComponents"
 import { listStagger } from "@/lib/motion"
 import { orgListPrefs, type OrgSortKey } from "@/lib/orgListPrefs"
@@ -589,17 +593,11 @@ const OrgsPage = () => {
     <>
       <PageShell>
         {isLoading ? (
-          <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
-            <Spinner size="lg" className="text-primary" />
-            <div>
-              <p className="text-base font-semibold">
-                {t("orgs.loadingTitle")}
-              </p>
-              <p className="mt-1 text-sm text-base-content/70">
-                {t("orgs.loadingSubtitle")}
-              </p>
-            </div>
-          </div>
+          <CardGridSkeleton
+            cards={4}
+            cardClassName="col-span-12 h-36 md:col-span-6"
+            label={t("orgs.loadingTitle")}
+          />
         ) : (
           <>
             <PageHeader title={t("orgs.headingCl50")} />

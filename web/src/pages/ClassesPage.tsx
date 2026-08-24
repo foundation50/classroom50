@@ -11,7 +11,7 @@ import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
-import { EmptyState } from "@/components/list"
+import { CardGridSkeleton, EmptyState } from "@/components/list"
 import { Alert, Button, Card, EmphasisLtr } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import MissingParams from "@/components/MissingParams"
@@ -195,14 +195,7 @@ const ClassesPage = () => {
           resolve — otherwise a staff view flashes the "no classrooms" empty
           state on the empty-while-loading array before the classes arrive. */}
       {roleLoading || (isStaff && classesLoading) ? (
-        <div className="grid grid-cols-12 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div
-              key={i}
-              className="skeleton skeleton-shimmer col-span-6 h-32 rounded-box xl:col-span-4"
-            />
-          ))}
-        </div>
+        <CardGridSkeleton cardClassName="col-span-6 h-32 xl:col-span-4" />
       ) : (
         <>
           {classes.length === 0 && isStaff && <CreateClassroomPane org={org} />}

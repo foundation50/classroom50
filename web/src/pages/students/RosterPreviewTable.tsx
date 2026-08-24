@@ -178,7 +178,7 @@ export const RosterPreviewTable = ({
   })
   return (
     <div className="max-h-80 overflow-auto rounded-box border border-base-300">
-      <table className="table table-sm" aria-busy={loading}>
+      <table className="table table-sm" aria-busy={loading || undefined}>
         <thead>
           <tr>
             <th scope="col">#</th>

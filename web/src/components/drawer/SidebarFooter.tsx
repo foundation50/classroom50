@@ -498,7 +498,10 @@ const AuthedSidebarFooter = () => {
                 <div className="mt-1 flex items-center gap-1.5">
                   <span className="text-xs text-neutral-content/60">
                     {labelPending ? (
-                      <span className="skeleton inline-block h-3 w-16 align-middle bg-neutral-content/10" />
+                      <span
+                        aria-hidden="true"
+                        className="skeleton skeleton-shimmer inline-block h-3 w-16 align-middle bg-neutral-content/10"
+                      />
                     ) : (
                       roleLabelText
                     )}

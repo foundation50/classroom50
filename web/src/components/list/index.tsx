@@ -4,6 +4,7 @@
 
 import { AppsIcon, ListUnorderedIcon } from "@/components/ui/icons"
 import type { ComponentType, ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Button, Heading, cx } from "@/components/ui"
 
@@ -128,6 +129,57 @@ export function NoSearchResults({
         </Button>
       }
     />
+  )
+}
+
+// Announced wrapper for ad-hoc skeleton blocks: one `role="status"` + sr-only
+// label for the whole region (Primer: a single announcement per collection),
+// visuals hidden from AT. Layout classes go on the inner wrapper.
+export function SkeletonRegion({
+  label,
+  className,
+  children,
+}: {
+  label?: string
+  className?: string
+  children?: ReactNode
+}) {
+  const { t } = useTranslation()
+  return (
+    <div role="status">
+      <span className="sr-only">{label ?? t("common.loading")}</span>
+      <div aria-hidden="true" className={className}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// Placeholder card grid while a card-collection page loads. One `role="status"`
+// announcement for the whole collection (Primer: don't announce every
+// skeleton); tiles are decorative. Card shape/height is per page via
+// `cardClassName` (12-col grid spans).
+export function CardGridSkeleton({
+  cards = 3,
+  cardClassName = "col-span-12 h-40 md:col-span-6 xl:col-span-4",
+  label,
+}: {
+  cards?: number
+  cardClassName?: string
+  label?: string
+}) {
+  const { t } = useTranslation()
+  return (
+    <div role="status" className="grid grid-cols-12 gap-4">
+      <span className="sr-only">{label ?? t("common.loading")}</span>
+      {Array.from({ length: cards }, (_, i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          className={cx("skeleton skeleton-shimmer rounded-box", cardClassName)}
+        />
+      ))}
+    </div>
   )
 }
 

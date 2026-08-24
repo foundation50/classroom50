@@ -659,7 +659,7 @@ export const RepoFeatureControls = ({
           because it always stacks the label above the control. */}
       <div
         className={cx("flex flex-col gap-3", isRefreshing && "opacity-60")}
-        aria-busy={isRefreshing}
+        aria-busy={isRefreshing || undefined}
       >
         {REPO_FEATURE_KEYS.map(({ field: fieldName, key }) => (
           <form.Field key={fieldName} name={fieldName}>

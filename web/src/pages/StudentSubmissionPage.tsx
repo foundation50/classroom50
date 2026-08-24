@@ -1,4 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router"
+import { SkeletonRegion } from "@/components/list"
 import { useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { CalendarIcon, PeopleIcon, PersonIcon } from "@/components/ui/icons"
@@ -233,10 +234,10 @@ const SubmissionBody = ({
   // when the list lands a beat later.
   if (releasesLoading || repoLoading || submissionListLoading) {
     return (
-      <div className="space-y-4">
+      <SkeletonRegion className="space-y-4">
         <div className="skeleton skeleton-shimmer h-24 w-full rounded-box" />
         <div className="skeleton skeleton-shimmer h-40 w-full rounded-box" />
-      </div>
+      </SkeletonRegion>
     )
   }
 
@@ -503,10 +504,10 @@ const StudentSubmissionPage = () => {
           // the assignment metadata (mode, tags, locked) resolves — mounting
           // SubmissionBody with a default mode would fetch the wrong list and
           // flash the wrong guidance before flipping.
-          <div className="space-y-4">
+          <SkeletonRegion className="space-y-4">
             <div className="skeleton skeleton-shimmer h-24 w-full rounded-box" />
             <div className="skeleton skeleton-shimmer h-40 w-full rounded-box" />
-          </div>
+          </SkeletonRegion>
         ) : assignmentError ? (
           // A failed Pages metadata read must surface, not silently degrade to
           // the raw slug title + default (push) mode — which would render the

@@ -14,7 +14,7 @@ import {
   type AssignmentSort,
 } from "@/pages/assignments/assignmentList"
 import { Badge, Button, EmphasisLtr } from "@/components/ui"
-import { NoSearchResults } from "@/components/list"
+import { SkeletonRegion, NoSearchResults } from "@/components/list"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
@@ -313,11 +313,11 @@ const AssignmentsPage = () => {
         <ClaimTeacherNotice org={org} classroom={classroom} />
       )}
       {!roleResolved && (
-        <div className="space-y-4">
+        <SkeletonRegion className="space-y-4">
           <div className="skeleton skeleton-shimmer h-6 w-48" />
           <div className="skeleton skeleton-shimmer h-4 w-32" />
           <div className="skeleton skeleton-shimmer h-64 w-full rounded-box" />
-        </div>
+        </SkeletonRegion>
       )}
       {roleResolved && isStaff && org && classroom && (
         <TeacherAssignmentsView org={org} classroom={classroom} />

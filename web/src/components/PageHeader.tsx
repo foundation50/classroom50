@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { SkeletonRegion } from "@/components/list"
 import { Heading } from "@/components/ui"
 
 // The dashboard page heading: a title, an optional subtitle line, and an
@@ -22,7 +23,9 @@ export default function PageHeader({
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
         {loading ? (
-          <div className="skeleton skeleton-shimmer h-8 w-48" />
+          <SkeletonRegion>
+            <div className="skeleton skeleton-shimmer h-8 w-48" />
+          </SkeletonRegion>
         ) : (
           <Heading as="h1" variant="title-medium">
             {title}

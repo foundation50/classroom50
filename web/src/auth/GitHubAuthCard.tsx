@@ -14,15 +14,18 @@ import { GitHubPatPrompt } from "./GitHubPatPrompt"
 import { LoginLanguageMenu } from "./LoginLanguageMenu"
 import { AppVersionBadge } from "@/components/AppVersionBadge"
 import { WIKI_URL } from "@/version"
-import { Alert, Button, Card, Spinner, Heading } from "@/components/ui"
+import { Alert, Button, Card, InlineSpinner, Heading } from "@/components/ui"
 
 function LoadingScreen({ label }: { label: string }) {
   return (
+    // One status region: the visible label is the announcement; the spinner
+    // itself is decorative (InlineSpinner, not Spinner, to avoid a nested
+    // role="status" announcing a second generic "loading").
     <div
       className="flex flex-col items-center gap-4 py-10 text-center text-base-content/70"
       role="status"
     >
-      <Spinner size="lg" />
+      <InlineSpinner size="lg" />
       <p className="text-sm">{label}</p>
     </div>
   )

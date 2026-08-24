@@ -652,7 +652,10 @@ const EnrolledStudents = ({
       ) : null}
 
       {/* The list card. */}
-      <Card className="w-full overflow-hidden" aria-busy={isLoading}>
+      <Card
+        className="w-full overflow-hidden"
+        aria-busy={isLoading || undefined}
+      >
         {isLoading ? (
           // Skeleton rows shaped like the roster rows, so content fades into
           // place instead of jumping in to replace a centered spinner.
