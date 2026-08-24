@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/icons"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { EmptyState } from "@/components/list"
 import { Alert, Badge, Button, Card, rtlFlip } from "@/components/ui"
 import { listClassroomsWithOrg } from "@/migration/classroomApi"
 import type { ClassroomWithOrg } from "@/migration/types"
@@ -144,14 +145,11 @@ export const SelectSourceStep = ({
         )}
 
         {data && data.length === 0 && (
-          <div className="mt-4 rounded-box border border-dashed border-base-300 p-8 text-center">
-            <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-base-200 text-base-content/50">
-              <InboxIcon aria-hidden="true" className="size-6" />
-            </div>
-            <p className="text-sm text-base-content/70">
-              {t("migration.select.empty")}
-            </p>
-          </div>
+          <EmptyState
+            className="mt-4"
+            icon={InboxIcon}
+            body={t("migration.select.empty")}
+          />
         )}
 
         {data && data.length > 0 && (

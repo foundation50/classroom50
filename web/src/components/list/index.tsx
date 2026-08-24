@@ -3,9 +3,15 @@
 // own i18n namespace while sharing the markup and behavior.
 
 import { AppsIcon, ListUnorderedIcon } from "@/components/ui/icons"
-import type { ReactNode } from "react"
+import type { ComponentType, ReactNode } from "react"
 
-import { Button, Heading } from "@/components/ui"
+import { Button, Heading, cx } from "@/components/ui"
+
+// Anything icon-shaped: octicons satisfy this, and tests can pass probes.
+type EmptyStateIcon = ComponentType<{
+  className?: string
+  "aria-hidden"?: boolean | "true" | "false"
+}>
 
 export type ListViewMode = "grid" | "list"
 
@@ -48,29 +54,51 @@ export function ViewToggle({
   )
 }
 
-// The single dashed-border empty-state card. `className` overrides the default
-// shell so the non-uniform call sites keep their own padding (e.g.
-// PublishedResourcesPage's p-6). NoSearchResults and the zero-data
-// states across the list pages all render through this.
+// Primer Blankslate-style empty state (primer.style/product/ui-patterns/
+// empty-states): optional muted icon in a circle, optional title, body,
+// one action slot. `variant="card"` is the dashed-border shell for page-level
+// blankslates; `variant="bare"` is shell-less for table rows and quiet
+// blocks. `className` merges onto the shell (layout-only additions like mt-4).
 export function EmptyState({
-  icon,
+  icon: Icon,
   title,
+  titleAs = "h2",
   body,
   action,
-  className = "rounded-box border border-dashed border-base-300 bg-base-100 p-8 text-center",
+  variant = "card",
+  className,
 }: {
-  icon?: ReactNode
-  title: ReactNode
+  icon?: EmptyStateIcon
+  title?: ReactNode
+  titleAs?: "h1" | "h2" | "h3" | "h4"
   body?: ReactNode
   action?: ReactNode
+  variant?: "card" | "bare"
   className?: string
 }) {
   return (
-    <div className={className}>
-      {icon}
-      <Heading as="h2">{title}</Heading>
+    <div
+      className={cx(
+        "text-center",
+        variant === "card"
+          ? "rounded-box border border-dashed border-base-300 bg-base-100 p-8"
+          : "px-6 py-10",
+        className,
+      )}
+    >
+      {Icon && (
+        <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-base-200 text-base-content/70">
+          <Icon aria-hidden="true" className="size-6" />
+        </div>
+      )}
+      {title != null && <Heading as={titleAs}>{title}</Heading>}
       {body && (
-        <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
+        <p
+          className={cx(
+            "mx-auto max-w-md text-sm text-base-content/70",
+            title != null && "mt-1",
+          )}
+        >
           {body}
         </p>
       )}

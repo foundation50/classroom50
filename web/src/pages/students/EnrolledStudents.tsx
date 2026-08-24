@@ -1,6 +1,7 @@
 import {
   AlertIcon,
   PaperAirplaneIcon,
+  PeopleIcon,
   PlusIcon,
   SyncIcon,
   UploadIcon,
@@ -14,9 +15,8 @@ import {
   Button,
   Card,
   Toolbar,
-  Heading,
 } from "@/components/ui"
-import { ListSkeletonRows } from "@/components/list"
+import { EmptyState, ListSkeletonRows } from "@/components/list"
 import type { Student } from "@/types/classroom"
 import { useQueryClient } from "@tanstack/react-query"
 import type { RosterCsvProblem } from "@/domain/students"
@@ -671,32 +671,36 @@ const EnrolledStudents = ({
             </Button>
           </div>
         ) : isEmpty ? (
-          <div className="px-6 py-12 text-center">
-            <Heading as="h3">{t("students.emptyTitle")}</Heading>
-            <p className="mt-2 text-sm text-base-content/70">
-              {t("students.emptyBody")}
-            </p>
-            {addActions ? (
-              <div className="mt-4 flex justify-center gap-2">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={addActions.onAddStudent}
-                >
-                  <PlusIcon aria-hidden="true" className="size-4" />
-                  {t("students.addTitle")}
-                </Button>
-                <Button size="sm" onClick={addActions.onUploadRoster}>
-                  <UploadIcon aria-hidden="true" className="size-4" />
-                  {t("students.uploadTitle")}
-                </Button>
-                <Button size="sm" onClick={addActions.onInviteLinks}>
-                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
-                  {t("students.inviteStudents")}
-                </Button>
-              </div>
-            ) : null}
-          </div>
+          <EmptyState
+            variant="bare"
+            className="py-12"
+            icon={PeopleIcon}
+            titleAs="h3"
+            title={t("students.emptyTitle")}
+            body={t("students.emptyBody")}
+            action={
+              addActions ? (
+                <div className="flex justify-center gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={addActions.onAddStudent}
+                  >
+                    <PlusIcon aria-hidden="true" className="size-4" />
+                    {t("students.addTitle")}
+                  </Button>
+                  <Button size="sm" onClick={addActions.onUploadRoster}>
+                    <UploadIcon aria-hidden="true" className="size-4" />
+                    {t("students.uploadTitle")}
+                  </Button>
+                  <Button size="sm" onClick={addActions.onInviteLinks}>
+                    <PaperAirplaneIcon aria-hidden="true" className="size-4" />
+                    {t("students.inviteStudents")}
+                  </Button>
+                </div>
+              ) : null
+            }
+          />
         ) : (
           <>
             <RosterBulkActionsBar
@@ -716,22 +720,25 @@ const EnrolledStudents = ({
               canGroupBySection={hasSectionsInFiltered}
             />
             {filtered.length === 0 ? (
-              <div className="px-6 py-10 text-center text-sm text-base-content/70">
-                {query.trim()
-                  ? t("students.noMatch")
-                  : effectiveSection !== "all" && statusFilter === "all"
-                    ? t("students.noneInSection", {
-                        section:
-                          effectiveSection === NO_SECTION
-                            ? t("students.noSection")
-                            : effectiveSection,
-                      })
-                    : t("students.noneWithStatus", {
-                        status:
-                          statusOptions.find((o) => o.value === statusFilter)
-                            ?.label ?? statusFilter,
-                      })}
-              </div>
+              <EmptyState
+                variant="bare"
+                body={
+                  query.trim()
+                    ? t("students.noMatch")
+                    : effectiveSection !== "all" && statusFilter === "all"
+                      ? t("students.noneInSection", {
+                          section:
+                            effectiveSection === NO_SECTION
+                              ? t("students.noSection")
+                              : effectiveSection,
+                        })
+                      : t("students.noneWithStatus", {
+                          status:
+                            statusOptions.find((o) => o.value === statusFilter)
+                              ?.label ?? statusFilter,
+                        })
+                }
+              />
             ) : groupBySection && hasSectionsInFiltered ? (
               <div className="divide-y divide-base-300">
                 {filteredBySection.map(({ section, students: group }) => (

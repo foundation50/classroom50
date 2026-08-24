@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { EmptyState } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import { InfoIcon } from "@/components/ui/icons"
 
@@ -75,8 +76,11 @@ const CsvRosterView = ({
               <SkeletonRows rows={3} bars={["w-40", "w-16", "w-20"]} />
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={3} className="text-center">
-                  {t("students.csvRoster.empty")}
+                <td colSpan={3}>
+                  <EmptyState
+                    variant="bare"
+                    body={t("students.csvRoster.empty")}
+                  />
                 </td>
               </tr>
             ) : (
