@@ -17,6 +17,37 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.33.0](https://github.com/foundation50/classroom50/compare/web-v1.32.0...web-v1.33.0) (2026-08-24)
+
+
+### Features
+
+* **cli:** record one-shot slug renames with renamed_from ([#713](https://github.com/foundation50/classroom50/issues/713)) ([1ad7959](https://github.com/foundation50/classroom50/commit/1ad7959064d33195d0d0accfd2d60402ec0570f0))
+* **web:** align the color palette with GitHub Primer ([#717](https://github.com/foundation50/classroom50/issues/717)) ([02de575](https://github.com/foundation50/classroom50/commit/02de5756b5c9f5994e3607fd2c400504d74a0467))
+* **web:** overhaul assignment list and submission dashboards ([#696](https://github.com/foundation50/classroom50/issues/696)) ([b41c2d0](https://github.com/foundation50/classroom50/commit/b41c2d0f6b5877087110c91c4fccbc4776478e7d))
+* **web:** redesign UI with Primer-neutral palette and softer radii ([#698](https://github.com/foundation50/classroom50/issues/698)) ([36c596d](https://github.com/foundation50/classroom50/commit/36c596db65157805dd71eb9d5e6ec95b07e5ea6f))
+* **web:** rename an over-budget assignment slug from the GUI ([#716](https://github.com/foundation50/classroom50/issues/716)) ([e982d11](https://github.com/foundation50/classroom50/commit/e982d1180b22a34c5275ee54327b90382081ee5b))
+* **web:** search org templates when creating an assignment ([#685](https://github.com/foundation50/classroom50/issues/685)) ([7593797](https://github.com/foundation50/classroom50/commit/7593797d0a9a87a22b6e100ae716a2fb9d850ea6))
+
+
+### Bug Fixes
+
+* ignore a custom template branch, warning it won't take effect ([#673](https://github.com/foundation50/classroom50/issues/673)) ([#686](https://github.com/foundation50/classroom50/issues/686)) ([e2a7949](https://github.com/foundation50/classroom50/commit/e2a794977bc009ec2a2912a00cc715473d1a3227))
+* point no-room slug budgets at a shorter classroom, not negative counts ([#710](https://github.com/foundation50/classroom50/issues/710)) ([dd4894a](https://github.com/foundation50/classroom50/commit/dd4894a8e7aa25927b642c6ee20bb052e40fec01))
+* raise the classroom and assignment slug cap to 100 characters ([#693](https://github.com/foundation50/classroom50/issues/693)) ([37f0a19](https://github.com/foundation50/classroom50/commit/37f0a1915c8f68db0383513d1d851ab3f8512b12))
+* show submissions for assignments that skip autograding ([#694](https://github.com/foundation50/classroom50/issues/694)) ([7e444e8](https://github.com/foundation50/classroom50/commit/7e444e8606dca591aa4edd72435a77f7c6b9342e))
+* **web:** auto-trim over-budget migrated slugs and allow per-item overrides ([#712](https://github.com/foundation50/classroom50/issues/712)) ([f3b445f](https://github.com/foundation50/classroom50/commit/f3b445f5e4060ebc24c2965cd40d32ca3939cff7))
+* **web:** block classroom/assignment names that overflow GitHub's repo-name limit ([#706](https://github.com/foundation50/classroom50/issues/706)) ([cce751d](https://github.com/foundation50/classroom50/commit/cce751da95bfb1458021fe2a6c1d4b835e936476))
+* **web:** eliminate loading flashes and redundant entrance animations ([#697](https://github.com/foundation50/classroom50/issues/697)) ([3287b85](https://github.com/foundation50/classroom50/commit/3287b8520067e0400e50907af15a9fade42f3534))
+* **web:** keep custom template branch in the edit form ([#673](https://github.com/foundation50/classroom50/issues/673)) ([#679](https://github.com/foundation50/classroom50/issues/679)) ([9489db8](https://github.com/foundation50/classroom50/commit/9489db85e0c9dcbc6aa6f74085bdb0bc8f786bc7))
+* **web:** keep repo actions for no_autograder assignments in manage hub ([#699](https://github.com/foundation50/classroom50/issues/699)) ([7a558f2](https://github.com/foundation50/classroom50/commit/7a558f22a9740303016c1c4b9f06fc5cf4333159))
+* **web:** make import skip reasons visible and selection reversible ([#700](https://github.com/foundation50/classroom50/issues/700)) ([d049856](https://github.com/foundation50/classroom50/commit/d049856709788b3a0e72356d4731e934e602886c))
+* **web:** stop counting the tool's own commits as submissions ([#688](https://github.com/foundation50/classroom50/issues/688)) ([7c8725e](https://github.com/foundation50/classroom50/commit/7c8725e29a997efc0905b0fcb95226dd875ad5e7))
+* **web:** stop treating an absent submission_mode as an unmigrated file ([#683](https://github.com/foundation50/classroom50/issues/683)) ([00f0779](https://github.com/foundation50/classroom50/commit/00f0779ea44b3867c03fdd80e3f7a1b38f01c066))
+* **web:** transliterate diacritics in generated slugs ([#703](https://github.com/foundation50/classroom50/issues/703)) ([7f50034](https://github.com/foundation50/classroom50/commit/7f50034153ddb101ad5ab61d029b922f6da99240))
+* **web:** warn live when a manual slug collides with an existing one ([#709](https://github.com/foundation50/classroom50/issues/709)) ([d0c524d](https://github.com/foundation50/classroom50/commit/d0c524d9f47d5c5475327d1d1f72e2fcea8b61a2))
+* **web:** warn live when a manual slug exceeds the repo-name budget ([#708](https://github.com/foundation50/classroom50/issues/708)) ([3d2d83e](https://github.com/foundation50/classroom50/commit/3d2d83ecdebad92101e8f1451de62be2bcae4791))
+
 ## [1.32.0](https://github.com/foundation50/classroom50/compare/web-v1.31.0...web-v1.32.0) (2026-08-20)
 
 
