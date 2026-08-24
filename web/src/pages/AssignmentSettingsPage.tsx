@@ -186,8 +186,16 @@ const AssignmentSettingsPage = () => {
   const [editWarning, setEditWarning] = useState("")
   const [editError, setEditError] = useState("")
 
+  // Match by renamed_from too: after a slug rename the route still carries
+  // the OLD slug, and without the fallback the refetched manifest resolves
+  // undefined here — unmounting the rename section and its open modal
+  // mid-report. The reservation rule guarantees no entry's slug equals
+  // another's renamed_from, so the fallback can't shadow an exact match.
   const assignmentData = assignments?.assignments.find(
-    (a) => a.slug === assignment,
+    (a) =>
+      a.slug === assignment ||
+      (Boolean(a.renamed_from) &&
+        a.renamed_from?.toLowerCase() === assignment?.toLowerCase()),
   )
 
   return (

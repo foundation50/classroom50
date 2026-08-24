@@ -119,9 +119,7 @@ describe("RenameAssignmentModal (fresh)", () => {
     expect(apply.disabled).toBe(true)
 
     fireEvent.change(slugInput(), { target: { value: "taken" } })
-    expect(
-      screen.getByText("components.modals.reuseShell.slug.taken"),
-    ).toBeTruthy()
+    expect(screen.getByText("assignments.rename.error.slugTaken")).toBeTruthy()
 
     fireEvent.change(slugInput(), { target: { value: "reserved-old" } })
     expect(
@@ -208,6 +206,28 @@ describe("RenameAssignmentModal (fresh)", () => {
       oldSlug: OLD,
       newSlug: "ps3",
     })
+  })
+
+  it("surfaces a failed lock release as a warning after an otherwise clean run", async () => {
+    mutateAsync.mockResolvedValue({
+      ...summaryOk,
+      lockReleased: false,
+      lockRestoreFailed: true,
+    })
+    renderModal()
+    fireEvent.change(slugInput(), { target: { value: "ps3" } })
+    fireEvent.click(
+      screen.getByRole("button", { name: "assignments.rename.apply" }),
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByText("assignments.rename.lockRestoreFailed"),
+      ).toBeTruthy(),
+    )
+    // Nothing failed, so no finish affordance — the fix is a manual unlock.
+    expect(
+      screen.queryByRole("button", { name: "assignments.rename.finishApply" }),
+    ).toBeNull()
   })
 
   it("surfaces a preflight error without a result report", async () => {

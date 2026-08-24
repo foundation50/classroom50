@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react"
+import { useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PenLine } from "lucide-react"
 
@@ -10,6 +10,7 @@ import useRenameAssignment from "@/hooks/mutations/useRenameAssignment"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import {
   assignmentRepoPrefix,
+  type RenameAssignmentInput,
   type RenameAssignmentSummary,
   type RepoRenameOutcome,
 } from "@/domain/assignments"
@@ -85,7 +86,7 @@ export function RenameAssignmentModal({
     if (
       assignments.some((a) => a.slug.toLowerCase() === newSlug.toLowerCase())
     ) {
-      return t("components.modals.reuseShell.slug.taken", {
+      return t("assignments.rename.error.slugTaken", {
         slug: newSlug,
         classroom,
       })
@@ -102,16 +103,35 @@ export function RenameAssignmentModal({
 
   const busy = rename.isPending
   const done = summary !== null || runError !== ""
-  const canRun = finish || (newSlug !== "" && slugError === "")
+  // The first run pins its input so a "finish rename" re-run heals the SAME
+  // rename even after the invalidation refetch swaps the assignment prop to
+  // the new slug (which would both re-derive oldSlug wrongly and turn the
+  // now-taken new slug into a live validation error).
+  const [pinnedInput, setPinnedInput] = useState<RenameAssignmentInput | null>(
+    null,
+  )
+  const canRun =
+    finish || pinnedInput !== null || (newSlug !== "" && slugError === "")
+  // Synchronous re-entrancy guard (CloseSubmissionModal's runningRef
+  // convention): isPending is a render-time snapshot, so a fast double-click
+  // could start two overlapping fan-outs before React re-renders.
+  const runningRef = useRef(false)
 
   const run = async () => {
-    if (busy || !canRun) return
+    if (runningRef.current || busy || !canRun) return
+    runningRef.current = true
     setRunError("")
+    // Clear the previous report so a re-run doesn't render it under the
+    // progress bar.
+    setSummary(null)
+    const input = pinnedInput ?? { org, classroom, oldSlug, newSlug }
+    setPinnedInput(input)
     try {
-      setSummary(await rename.mutateAsync({ org, classroom, oldSlug, newSlug }))
+      setSummary(await rename.mutateAsync(input))
     } catch (err) {
-      setSummary(null)
       setRunError(errorText(t, err as Error))
+    } finally {
+      runningRef.current = false
     }
   }
 
@@ -221,9 +241,7 @@ export function RenameAssignmentModal({
         </div>
       )}
 
-      {summary && (
-        <RenameResult summary={summary} newSlug={newSlug} finish={finish} />
-      )}
+      {summary && <RenameResult summary={summary} newSlug={newSlug} />}
 
       <div className="modal-action">
         <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
@@ -255,11 +273,9 @@ export function RenameAssignmentModal({
 const RenameResult = ({
   summary,
   newSlug,
-  finish,
 }: {
   summary: RenameAssignmentSummary
   newSlug: string
-  finish: boolean
 }) => {
   const { t } = useTranslation()
   const rows = (outcomes: RepoRenameOutcome[]) =>
@@ -282,7 +298,9 @@ const RenameResult = ({
         tone={summary.failed > 0 ? "warning" : "success"}
         className="text-sm"
       >
-        {finish && renamed === 0
+        {/* Keyed off the summary's own mode, not the modal's finish prop: a
+            heal re-run launched from the fresh modal is still a resume. */}
+        {summary.mode === "resume" && renamed === 0
           ? t("assignments.rename.finishHeadline", {
               healed: healed.length,
               current,

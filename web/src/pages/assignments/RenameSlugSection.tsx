@@ -29,7 +29,10 @@ export function RenameSlugSection({
   const [open, setOpen] = useState(false)
   const eligible = isRenameEligible(classroom, assignment)
   const finish = needsRenameFinish(assignment)
-  if (!eligible && !finish) return null
+  // Keep rendering while the modal is open: a successful rename flips both
+  // gates false on the invalidation refetch, and unmounting then would
+  // destroy the modal's results report mid-display.
+  if (!eligible && !finish && !open) return null
   const mode = finish ? "finish" : "fresh"
 
   return (

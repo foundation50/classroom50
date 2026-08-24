@@ -104,6 +104,9 @@ export type RepoRenameResult = {
   outcome: RepoRenameOutcome
   // Set for skipped/failed rows; resolved with t() at the view layer.
   reason?: LocalizedMessage
+  // A secondary-rate-limit failure: the fan-out stops issuing writes and
+  // defers the remaining repos (a "finish rename" re-run heals them).
+  rateLimited?: boolean
 }
 
 export type RenameProgress = { processed: number; total: number; repo: string }
@@ -185,14 +188,17 @@ export function rekeyScoresBucket(
     buckets === null ||
     Array.isArray(buckets)
   ) {
-    throw new Error("scores.json: assignments must be an object")
+    throw renameError("assignments.rename.error.scoresMalformed")
   }
   const map = buckets as Record<string, unknown>
   if (!(oldSlug in map)) return null
   if (newSlug in map) {
-    throw new Error(
-      `scores.json: bucket "${newSlug}" already exists — refusing to overwrite it`,
-    )
+    // Reachable outside a race: a DELETED assignment's bucket survives in
+    // scores.json, so its slug can collide with the rename target. Keyed so
+    // the modal shows a translated, actionable message.
+    throw renameError("assignments.rename.error.scoresBucketExists", {
+      slug: newSlug,
+    })
   }
   top.assignments = Object.fromEntries(
     Object.entries(map).map(([key, value]) => [
@@ -536,6 +542,11 @@ async function renameOneRepo(params: {
       result.reason = reason("assignments.rename.reason.repoGone")
       return result
     }
+    if (err instanceof GitHubAPIError && err.isRateLimited) {
+      result.reason = reason("assignments.rename.reason.rateLimited")
+      result.rateLimited = true
+      return result
+    }
     result.reason = reason("assignments.rename.reason.markerRewriteFailed", {
       message: getErrorMessage(err),
     })
@@ -557,7 +568,13 @@ async function renameOneRepo(params: {
   try {
     await renameRepo(client, { owner: org, repo, newName })
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.isForbidden) {
+    // isRateLimited before isForbidden: a secondary rate limit is a 403 too,
+    // and "needs admin" advice for a throttle would send the teacher down the
+    // wrong recovery path.
+    if (err instanceof GitHubAPIError && err.isRateLimited) {
+      result.reason = reason("assignments.rename.reason.rateLimited")
+      result.rateLimited = true
+    } else if (err instanceof GitHubAPIError && err.isForbidden) {
       result.reason = reason("assignments.rename.reason.renameForbidden", {
         newName,
       })
@@ -699,37 +716,52 @@ export async function renameAssignment(
 
   const total = toRename.length + toHeal.length
   const results: RepoRenameResult[] = []
+  // Once one repo hits a secondary rate limit, keep issuing writes and the
+  // throttle only deepens — defer every remaining repo instead (the
+  // bulk-modal convention); the idempotent "finish rename" re-run heals them.
+  let rateLimitHit = false
   const report = (repo: string) =>
     opts?.onProgress?.({ processed: results.length, total, repo })
-  for (const { repo, branch: repoBranch } of toRename) {
+  const processOne = async (
+    repo: string,
+    repoBranch: string,
+    newName: string,
+    healing: boolean,
+  ) => {
     report(repo)
-    results.push(
-      await renameOneRepo({
-        client,
-        org,
+    if (rateLimitHit) {
+      results.push({
         repo,
-        newName: newPrefix + repo.slice(oldPrefix.length),
-        branch: repoBranch,
-        oldSlug,
-        newSlug,
-        healing: false,
-      }),
+        newName,
+        outcome: "failed",
+        reason: reason("assignments.rename.reason.rateLimitedDeferred"),
+        rateLimited: true,
+      })
+      return
+    }
+    const result = await renameOneRepo({
+      client,
+      org,
+      repo,
+      newName,
+      branch: repoBranch,
+      oldSlug,
+      newSlug,
+      healing,
+    })
+    if (result.rateLimited) rateLimitHit = true
+    results.push(result)
+  }
+  for (const { repo, branch: repoBranch } of toRename) {
+    await processOne(
+      repo,
+      repoBranch,
+      newPrefix + repo.slice(oldPrefix.length),
+      false,
     )
   }
   for (const { repo, branch: repoBranch } of toHeal) {
-    report(repo)
-    results.push(
-      await renameOneRepo({
-        client,
-        org,
-        repo,
-        newName: repo,
-        branch: repoBranch,
-        oldSlug,
-        newSlug,
-        healing: true,
-      }),
-    )
+    await processOne(repo, repoBranch, repo, true)
   }
   const failed = results.filter((r) => r.outcome === "failed").length
 

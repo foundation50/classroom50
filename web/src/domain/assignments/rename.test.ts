@@ -19,7 +19,11 @@ const NEW = "ps3"
 
 const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
 
-function apiError(status: number, url: string): GitHubAPIError {
+function apiError(
+  status: number,
+  url: string,
+  retryAfter: number | null = null,
+): GitHubAPIError {
   return new GitHubAPIError({
     status,
     url,
@@ -31,7 +35,7 @@ function apiError(status: number, url: string): GitHubAPIError {
       used: null,
       reset: null,
       resource: null,
-      retryAfter: null,
+      retryAfter,
     },
   })
 }
@@ -75,14 +79,18 @@ type Fixture = {
 // A stateful mock GitHub mirroring the CLI test's newRenameServer: config-repo
 // reads/writes (tree posts apply to state on the ref PATCH, so the second
 // commit observes the first), org repo listing, and per-student-repo marker
-// read/rewrite + PATCH rename. `failRename` 422s the PATCH for those repos.
+// read/rewrite + PATCH rename. `failRename` fails the PATCH per repo with the
+// given status (`retryAfter` makes a 403 a secondary rate limit);
+// `failLockRestore` 500s the config ref PATCH of the SECOND config commit
+// (the lock restore).
 function makeFixture(opts: {
   assignments: string
   scores?: string
   repos: string[]
   markers: Record<string, string>
   configTreePaths?: { path: string; sha: string }[]
-  failRename?: string[]
+  failRename?: Record<string, { status: number; retryAfter?: number }>
+  failLockRestore?: boolean
 }): Fixture {
   const state = {
     assignments: opts.assignments,
@@ -98,6 +106,7 @@ function makeFixture(opts: {
   // Config-repo tree upserts land in state only when the ref PATCH commits.
   let pendingConfig: Record<string, string> = {}
   const pendingRepoTree: Record<string, string> = {}
+  let configCommits = 0
 
   const request = vi.fn(
     async (
@@ -167,12 +176,16 @@ function makeFixture(opts: {
         return { sha: "cfg-newtree" }
       }
       if (method === "POST" && url === "/repos/o/classroom50/git/commits") {
+        configCommits += 1
         return { sha: "cfg-newcommit" }
       }
       if (
         method === "PATCH" &&
         url.includes("/repos/o/classroom50/git/refs/heads/main")
       ) {
+        if (opts.failLockRestore && configCommits >= 2) {
+          throw apiError(500, url)
+        }
         if (pendingConfig["cs/assignments.json"]) {
           state.assignments = pendingConfig["cs/assignments.json"]
         }
@@ -226,7 +239,10 @@ function makeFixture(opts: {
         }
         if (method === "PATCH" && rest === "") {
           const body = init?.body as { name: string }
-          if (opts.failRename?.includes(repo)) throw apiError(422, url)
+          const failure = opts.failRename?.[repo]
+          if (failure) {
+            throw apiError(failure.status, url, failure.retryAfter ?? null)
+          }
           captured.renames[repo] = body.name
           return {}
         }
@@ -337,7 +353,7 @@ describe("renameAssignment (fresh)", () => {
       assignments: assignmentsBody([baseEntry()]),
       repos: [aliceRepo],
       markers: { [aliceRepo]: marker(OLD) },
-      failRename: [aliceRepo],
+      failRename: { [aliceRepo]: { status: 422 } },
     })
     const summary = await renameAssignment(fix.client, {
       org: ORG,
@@ -375,6 +391,103 @@ describe("renameAssignment (fresh)", () => {
     // re-accept heals it — so the lock is not held hostage.
     expect(summary.failed).toBe(0)
     expect(summary.lockReleased).toBe(true)
+  })
+
+  it("preserves a pre-existing teacher lock instead of releasing it", async () => {
+    const fix = makeFixture({
+      assignments: assignmentsBody([baseEntry({ locked: true })]),
+      repos: [aliceRepo],
+      markers: { [aliceRepo]: marker(OLD) },
+    })
+    const summary = await renameAssignment(fix.client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      oldSlug: OLD,
+      newSlug: NEW,
+    })
+    expect(summary.failed).toBe(0)
+    expect(summary.prevLocked).toBe(true)
+    // The teacher locked it before the rename; this run must not unlock it.
+    expect(summary.lockReleased).toBe(false)
+    expect(writtenAssignments(fix).assignments[0].locked).toBe(true)
+  })
+
+  it("degrades to lockRestoreFailed when the release commit fails, without failing the run", async () => {
+    const fix = makeFixture({
+      assignments: assignmentsBody([baseEntry()]),
+      repos: [aliceRepo],
+      markers: { [aliceRepo]: marker(OLD) },
+      failLockRestore: true,
+    })
+    const summary = await renameAssignment(fix.client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      oldSlug: OLD,
+      newSlug: NEW,
+    })
+    expect(summary.failed).toBe(0)
+    expect(summary.lockReleased).toBe(false)
+    expect(summary.lockRestoreFailed).toBe(true)
+    // The rename itself landed even though the unlock didn't.
+    expect(fix.captured.renames[aliceRepo]).toBe(aliceNewRepo)
+    expect(writtenAssignments(fix).assignments[0].locked).toBe(true)
+  })
+
+  it("classifies a rate-limited rename and defers the remaining repos without API calls", async () => {
+    const bobRepo = `${CLASSROOM}-${OLD}-bob`
+    const fix = makeFixture({
+      assignments: assignmentsBody([baseEntry()]),
+      repos: [aliceRepo, bobRepo],
+      markers: { [aliceRepo]: marker(OLD), [bobRepo]: marker(OLD) },
+      // 403 + Retry-After = a secondary rate limit, NOT a permission failure.
+      failRename: { [aliceRepo]: { status: 403, retryAfter: 60 } },
+    })
+    const summary = await renameAssignment(fix.client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      oldSlug: OLD,
+      newSlug: NEW,
+    })
+    const byRepo = Object.fromEntries(summary.results.map((r) => [r.repo, r]))
+    expect(byRepo[aliceRepo].outcome).toBe("failed")
+    expect(byRepo[aliceRepo].reason?.key).toBe(
+      "assignments.rename.reason.rateLimited",
+    )
+    // Bob was deferred without touching the API: no marker rewrite, no rename.
+    expect(byRepo[bobRepo].outcome).toBe("failed")
+    expect(byRepo[bobRepo].reason?.key).toBe(
+      "assignments.rename.reason.rateLimitedDeferred",
+    )
+    expect(fix.state.markers[bobRepo]).toBe(marker(OLD))
+    expect(fix.captured.renames[bobRepo]).toBeUndefined()
+    // Both count as failed, so the lock holds for the finish re-run.
+    expect(summary.failed).toBe(2)
+    expect(summary.lockReleased).toBe(false)
+  })
+
+  it("classifies a plain 403 as needs-admin and a 500 as a generic failure", async () => {
+    const bobRepo = `${CLASSROOM}-${OLD}-bob`
+    const fix = makeFixture({
+      assignments: assignmentsBody([baseEntry()]),
+      repos: [aliceRepo, bobRepo],
+      markers: { [aliceRepo]: marker(OLD), [bobRepo]: marker(OLD) },
+      // A plain 403 (no Retry-After) is a permission failure — it must NOT
+      // trip the rate-limit short-circuit, so bob still gets his attempt.
+      failRename: { [aliceRepo]: { status: 403 }, [bobRepo]: { status: 500 } },
+    })
+    const summary = await renameAssignment(fix.client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      oldSlug: OLD,
+      newSlug: NEW,
+    })
+    const byRepo = Object.fromEntries(summary.results.map((r) => [r.repo, r]))
+    expect(byRepo[aliceRepo].reason?.key).toBe(
+      "assignments.rename.reason.renameForbidden",
+    )
+    expect(byRepo[bobRepo].reason?.key).toBe(
+      "assignments.rename.reason.renameFailed",
+    )
   })
 })
 
@@ -532,14 +645,14 @@ describe("rekeyScoresBucket", () => {
     ).toBeNull()
   })
 
-  it("refuses to overwrite an existing new bucket", () => {
+  it("refuses to overwrite an existing new bucket with a keyed error", () => {
     expect(() =>
       rekeyScoresBucket(
         JSON.stringify({ assignments: { [OLD]: 1, [NEW]: 2 } }),
         OLD,
         NEW,
       ),
-    ).toThrow(/refusing/)
+    ).toThrow(/scoresBucketExists/)
   })
 })
 

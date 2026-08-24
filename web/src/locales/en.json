@@ -1637,6 +1637,8 @@
         "fitsBudget": "“{{slug}}” fits the repository-name budget — renaming is offered only to fix a slug whose student repository names can exceed GitHub’s limit.",
         "slugTaken": "“{{slug}}” already exists in {{classroom}} — choose a different slug.",
         "slugReserved": "“{{slug}}” is reserved: it is the pre-rename slug of “{{current}}” — choose a different slug.",
+        "scoresBucketExists": "scores.json already has a grade bucket named “{{slug}}” (left behind by a deleted assignment) — choose a different slug, or remove the stale bucket first.",
+        "scoresMalformed": "scores.json could not be parsed, so the grade bucket can’t be moved safely — fix the file and retry.",
         "notFound": "Assignment “{{slug}}” was not found in {{classroom}}.",
         "repoListFailed": "The repository list for {{org}} could not be read — try again.",
         "treeTruncated": "The classroom configuration repository is too large to list completely, so the autograder folder can’t be moved safely — rename with the CLI instead."
@@ -1649,7 +1651,9 @@
         "repoGone": "the repository disappeared during the rename — re-run to re-check",
         "renameForbidden": "renaming to “{{newName}}” needs admin access on the repository — retry as an organization owner",
         "renameConflict": "renaming to “{{newName}}” was rejected — a repository may already exist at that name in {{org}}; resolve it and finish the rename",
-        "renameFailed": "renaming failed: {{message}}"
+        "renameFailed": "renaming failed: {{message}}",
+        "rateLimited": "GitHub’s rate limit was hit — wait a few minutes, then finish the rename",
+        "rateLimitedDeferred": "deferred after an earlier repository hit GitHub’s rate limit — wait a few minutes, then finish the rename"
       }
     }
   },
