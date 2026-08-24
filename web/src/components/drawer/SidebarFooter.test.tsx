@@ -62,7 +62,6 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     useNavigate: () => () => {},
   }
 })
-vi.mock("@/assets/github.svg?react", () => ({ default: () => null }))
 vi.mock("@/assets/duck.png", () => ({ default: "" }))
 
 afterEach(cleanup)

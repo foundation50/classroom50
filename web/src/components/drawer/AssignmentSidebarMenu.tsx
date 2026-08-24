@@ -1,10 +1,10 @@
 import {
-  UsersRound,
-  Settings,
-  ArrowLeft,
-  FileCheck2,
-  FilePlus2,
-} from "lucide-react"
+  ArrowLeftIcon,
+  FileAddedIcon,
+  FileCheckIcon,
+  GearIcon,
+  PeopleIcon,
+} from "@primer/octicons-react"
 import { Link, useMatchRoute } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { useGithubAuth } from "@/auth/useGithubAuth"
@@ -121,7 +121,7 @@ export const AssignmentSidebarMenu = ({
             data-tip={t("nav.allAssignments")}
             aria-label={t("nav.allAssignments")}
           >
-            <ArrowLeft aria-hidden="true" className={`size-5 ${rtlFlip}`} />
+            <ArrowLeftIcon aria-hidden="true" className={`size-5 ${rtlFlip}`} />
           </Link>
         </div>
       ) : (
@@ -131,7 +131,7 @@ export const AssignmentSidebarMenu = ({
             params={{ org, classroom }}
             className="inline-flex items-center gap-1"
           >
-            <ArrowLeft
+            <ArrowLeftIcon
               aria-hidden="true"
               className={`size-3.5 shrink-0 ${rtlFlip}`}
             />
@@ -166,7 +166,7 @@ export const AssignmentSidebarMenu = ({
                 >
                   <SidebarItemBody
                     label={t("nav.submissions")}
-                    icon={<UsersRound aria-hidden="true" />}
+                    icon={<PeopleIcon aria-hidden="true" />}
                     active={onSubmissions}
                     groupId="assignment"
                   />
@@ -179,7 +179,7 @@ export const AssignmentSidebarMenu = ({
                 >
                   <SidebarItemBody
                     label={t("nav.settings")}
-                    icon={<Settings aria-hidden="true" />}
+                    icon={<GearIcon aria-hidden="true" />}
                     active={onSettings}
                     groupId="assignment"
                   />
@@ -197,7 +197,7 @@ export const AssignmentSidebarMenu = ({
                   >
                     <SidebarItemBody
                       label={t("nav.acceptAssignment")}
-                      icon={<FilePlus2 aria-hidden="true" />}
+                      icon={<FileAddedIcon aria-hidden="true" />}
                       active={onAccept}
                       groupId="assignment"
                     />
@@ -211,7 +211,7 @@ export const AssignmentSidebarMenu = ({
                 >
                   <SidebarItemBody
                     label={t("nav.mySubmission")}
-                    icon={<FileCheck2 aria-hidden="true" />}
+                    icon={<FileCheckIcon aria-hidden="true" />}
                     active={onSubmission}
                     groupId="assignment"
                   />
@@ -225,7 +225,7 @@ export const AssignmentSidebarMenu = ({
                   >
                     <SidebarItemBody
                       label={t("nav.manageGroup")}
-                      icon={<UsersRound aria-hidden="true" />}
+                      icon={<PeopleIcon aria-hidden="true" />}
                       active={onSettings}
                       groupId="assignment"
                     />

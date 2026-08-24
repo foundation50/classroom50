@@ -2,15 +2,15 @@ import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  BookOpen,
-  ExternalLink,
-  FolderGit2,
-  GraduationCap,
-  Link2,
-  Pencil,
-  UserRound,
-  UsersRound,
-} from "lucide-react"
+  BookIcon,
+  LinkExternalIcon,
+  LinkIcon,
+  MortarBoardIcon,
+  PencilIcon,
+  PeopleIcon,
+  PersonIcon,
+  RepoIcon,
+} from "@primer/octicons-react"
 
 import { Button, Card, Markdown, Modal } from "@/components/ui"
 import type { GitHubRepo } from "@/github-core/types"
@@ -57,14 +57,14 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           aria-label={t("classes.repo.manageGroupAria", { assignment })}
           title={t("classes.repo.manageGroupTitle")}
         >
-          <Pencil aria-hidden="true" className="size-4" />
+          <PencilIcon aria-hidden="true" className="size-4" />
         </Link>
       )}
 
       <Card.Body className="gap-4">
         <div className="flex items-center gap-3 pe-8">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-            <BookOpen aria-hidden="true" className="size-5" />
+            <BookIcon aria-hidden="true" className="size-5" />
           </div>
           <div className="min-w-0">
             {classroom && assignment ? (
@@ -76,7 +76,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
                 <h3 className="truncate text-base font-semibold leading-tight underline decoration-base-content/30 underline-offset-2 group-hover:decoration-primary">
                   {title}
                 </h3>
-                <Link2
+                <LinkIcon
                   aria-hidden="true"
                   className="size-3.5 shrink-0 text-base-content/40 group-hover:text-primary"
                 />
@@ -89,7 +89,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
             <div className="mt-1 flex flex-col gap-0.5 text-xs text-base-content/70">
               {classroom ? (
                 <span className="inline-flex max-w-full items-center gap-1.5">
-                  <GraduationCap
+                  <MortarBoardIcon
                     aria-hidden="true"
                     className="size-3.5 shrink-0 text-base-content/50"
                   />
@@ -102,7 +102,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
                 </span>
               ) : null}
               <span className="inline-flex max-w-full items-center gap-1.5">
-                <FolderGit2
+                <RepoIcon
                   aria-hidden="true"
                   className="size-3.5 shrink-0 text-base-content/50"
                 />
@@ -116,13 +116,13 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           <div className="flex items-center gap-2">
             {assignmentData?.mode === "individual" && (
               <div className="badge badge-ghost badge-sm py-3">
-                <UserRound aria-hidden="true" className="size-4" />{" "}
+                <PersonIcon aria-hidden="true" className="size-4" />{" "}
                 {t("classes.repo.individual")}
               </div>
             )}
             {assignmentData?.mode === "group" && (
               <div className="badge badge-ghost badge-sm py-3">
-                <UsersRound aria-hidden="true" className="size-4" />{" "}
+                <PeopleIcon aria-hidden="true" className="size-4" />{" "}
                 {t("classes.repo.group")}
               </div>
             )}
@@ -147,7 +147,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
               rel="noreferrer"
             >
               {t("classes.repo.openRepo")}
-              <ExternalLink aria-hidden="true" className="size-4" />
+              <LinkExternalIcon aria-hidden="true" className="size-4" />
             </Button>
           </div>
         </Card.Actions>
@@ -209,7 +209,7 @@ export const OrgRepos = ({
     return (
       <div className="rounded-box border border-dashed border-base-300 bg-base-100 p-8 text-center">
         <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-base-200">
-          <BookOpen
+          <BookIcon
             aria-hidden="true"
             className="size-6 text-base-content/70"
           />

@@ -1,6 +1,6 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { FileCheck2, Upload } from "lucide-react"
+import { FileCheckIcon, UploadIcon, XIcon } from "@primer/octicons-react"
 
 import {
   Alert,
@@ -131,7 +131,7 @@ export function SubmitUpload({
   return (
     <>
       <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
-        <Upload aria-hidden="true" className="size-4" />
+        <UploadIcon aria-hidden="true" className="size-4" />
         {t("submissions.student.upload.open")}
       </Button>
 
@@ -143,7 +143,7 @@ export function SubmitUpload({
         aria-labelledby={titleId}
       >
         <div className="flex items-center gap-2">
-          <FileCheck2 aria-hidden="true" className="size-5 text-primary" />
+          <FileCheckIcon aria-hidden="true" className="size-5 text-primary" />
           <h3 id={titleId} className="text-lg font-bold">
             {t("submissions.student.upload.title")}
           </h3>
@@ -216,7 +216,7 @@ export function SubmitUpload({
                             disabled={submitting}
                             onClick={() => removeAt(p.key)}
                           >
-                            <span aria-hidden="true">✕</span>
+                            <XIcon aria-hidden="true" className="size-4" />
                           </Button>
                         </td>
                       </tr>
@@ -267,7 +267,9 @@ export function SubmitUpload({
             disabled={submitting || !hasFiles}
             onClick={() => void submit()}
           >
-            {!submitting && <Upload aria-hidden="true" className="size-4" />}
+            {!submitting && (
+              <UploadIcon aria-hidden="true" className="size-4" />
+            )}
             {t("submissions.student.upload.confirmSubmit")}
           </Button>
         </div>

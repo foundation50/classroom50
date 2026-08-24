@@ -1,4 +1,4 @@
-import { Search } from "lucide-react"
+import { SearchIcon } from "@primer/octicons-react"
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -93,7 +93,10 @@ function ToolbarSearch({
       inputSize={inputSize}
       className={className}
       leadingIcon={
-        <Search aria-hidden="true" className={cx("size-4", iconClassName)} />
+        <SearchIcon
+          aria-hidden="true"
+          className={cx("size-4", iconClassName)}
+        />
       }
       trailing={trailing ?? clear}
       placeholder={placeholder}

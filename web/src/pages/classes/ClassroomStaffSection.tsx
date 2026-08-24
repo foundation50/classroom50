@@ -1,15 +1,15 @@
 import { useMemo, useState } from "react"
+import { InlineSpinner } from "@/components/Spinner"
 import { useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 import {
-  ExternalLink,
-  Loader2,
-  Send,
-  ShieldCheck,
-  UserPlus,
-  X,
-  XCircle,
-} from "lucide-react"
+  LinkExternalIcon,
+  PaperAirplaneIcon,
+  PersonAddIcon,
+  ShieldCheckIcon,
+  XCircleIcon,
+  XIcon,
+} from "@primer/octicons-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -64,7 +64,7 @@ const ClassroomStaffSection = ({
       <Card.Body>
         <div className="flex items-center gap-3 pb-1">
           <div className="flex items-center gap-2">
-            <ShieldCheck
+            <ShieldCheckIcon
               aria-hidden="true"
               className="size-5 text-base-content/70"
             />
@@ -198,9 +198,9 @@ const AddStaff = ({
         disabled={disabled || addMutation.isPending || !username.trim()}
       >
         {addMutation.isPending ? (
-          <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+          <InlineSpinner />
         ) : (
-          <UserPlus aria-hidden="true" className="size-4" />
+          <PersonAddIcon aria-hidden="true" className="size-4" />
         )}
         {t("classes.staff.add")}
       </Button>
@@ -255,7 +255,10 @@ const StaffRoleList = ({
               className="gap-1 hover:brightness-95"
             >
               {rolePlural}
-              <ExternalLink aria-hidden="true" className="size-3 opacity-70" />
+              <LinkExternalIcon
+                aria-hidden="true"
+                className="size-3 opacity-70"
+              />
             </Badge>
           </a>
           <Badge ghost size="sm">
@@ -276,7 +279,7 @@ const StaffRoleList = ({
       <div className="p-2">
         {isLoading ? (
           <div className="flex items-center gap-2 px-1 py-1 text-sm text-base-content/70">
-            <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+            <InlineSpinner />
             {t("common.loading")}
           </div>
         ) : members.length === 0 && pendingInvites.length === 0 ? (
@@ -380,9 +383,9 @@ const StaffMemberRow = ({
             onClick={() => setConfirmingRemove(true)}
           >
             {removeMutation.isPending ? (
-              <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+              <InlineSpinner />
             ) : (
-              <X aria-hidden="true" className="size-3.5" />
+              <XIcon aria-hidden="true" className="size-3.5" />
             )}
           </Button>
         )}
@@ -473,7 +476,7 @@ const PendingStaffRow = ({
     <li className="flex items-center gap-2 rounded-selector px-2 py-1.5 transition-colors hover:bg-base-300/40">
       <span className="flex min-w-0 grow items-center gap-2 text-sm">
         <span className="grid size-6 shrink-0 place-items-center rounded-full bg-base-200 text-base-content/50">
-          <Send aria-hidden="true" className="size-3" />
+          <PaperAirplaneIcon aria-hidden="true" className="size-3" />
         </span>
         <span className="truncate">
           {invite.login ? `@${invite.login}` : invite.email}
@@ -522,9 +525,9 @@ const PendingStaffRow = ({
             }
           >
             {resendMutation.isPending ? (
-              <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+              <InlineSpinner />
             ) : (
-              <Send aria-hidden="true" className="size-3.5" />
+              <PaperAirplaneIcon aria-hidden="true" className="size-3.5" />
             )}
           </Button>
         ) : null}
@@ -567,9 +570,9 @@ const PendingStaffRow = ({
           }
         >
           {cancelMutation.isPending ? (
-            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+            <InlineSpinner />
           ) : (
-            <XCircle aria-hidden="true" className="size-3.5" />
+            <XCircleIcon aria-hidden="true" className="size-3.5" />
           )}
         </Button>
       </div>

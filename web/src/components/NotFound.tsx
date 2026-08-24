@@ -1,4 +1,4 @@
-import { FileQuestion } from "lucide-react"
+import { TelescopeIcon } from "@primer/octicons-react"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -26,7 +26,7 @@ const NotFound = ({ title, message }: { title?: string; message?: string }) => {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-10 text-center">
       <div className="flex size-16 items-center justify-center rounded-box bg-base-200 text-base-content/70">
-        <FileQuestion className="size-8" aria-hidden="true" />
+        <TelescopeIcon className="size-8" aria-hidden="true" />
       </div>
       <div>
         <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold">

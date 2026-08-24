@@ -2,7 +2,12 @@ import { Link, useNavigate } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { motion } from "motion/react"
-import { ArrowUpDown, CircleAlert, FilePlus2, ListFilter } from "lucide-react"
+import {
+  AlertIcon,
+  ArrowSwitchIcon,
+  FileAddedIcon,
+  FilterIcon,
+} from "@primer/octicons-react"
 
 import {
   Alert,
@@ -71,7 +76,7 @@ function AssignmentCta({
       search={secret ? { k: secret } : undefined}
       className="btn btn-primary btn-sm"
     >
-      <FilePlus2 aria-hidden="true" className="size-4" />
+      <FileAddedIcon aria-hidden="true" className="size-4" />
       {t("assignments.discover.accept")}
     </Link>
   )
@@ -144,7 +149,7 @@ function AssignmentRow({
           </Badge>
         ) : (
           <Badge tone="error" className="shrink-0 gap-1 whitespace-nowrap">
-            <CircleAlert aria-hidden="true" className="size-3.5" />
+            <AlertIcon aria-hidden="true" className="size-3.5" />
             {t("assignments.discover.notAccepted")}
           </Badge>
         )}
@@ -255,7 +260,7 @@ function StudentAssignmentsToolbar({
       />
 
       <Toolbar.FilterSelect
-        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        icon={<FilterIcon aria-hidden="true" className="size-4" />}
         active={filters.status !== "all"}
         value={filters.status}
         onChange={(e) =>
@@ -278,7 +283,7 @@ function StudentAssignmentsToolbar({
       </Toolbar.FilterSelect>
 
       <Toolbar.FilterSelect
-        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        icon={<FilterIcon aria-hidden="true" className="size-4" />}
         active={filters.type !== "all"}
         value={filters.type}
         onChange={(e) =>
@@ -299,7 +304,7 @@ function StudentAssignmentsToolbar({
       </Toolbar.FilterSelect>
 
       <Toolbar.FilterSelect
-        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        icon={<FilterIcon aria-hidden="true" className="size-4" />}
         active={filters.due !== "all"}
         value={filters.due}
         onChange={(e) =>
@@ -318,7 +323,9 @@ function StudentAssignmentsToolbar({
 
       <Toolbar.Trailing>
         <Toolbar.FilterSelect
-          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
+          icon={
+            <ArrowSwitchIcon aria-hidden="true" className="size-4 rotate-90" />
+          }
           value={sort}
           onChange={(e) =>
             onSortChange(e.target.value as StudentAssignmentSort)

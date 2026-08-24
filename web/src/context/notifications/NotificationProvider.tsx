@@ -8,7 +8,7 @@ import {
   useState,
   type PropsWithChildren,
 } from "react"
-import { X } from "lucide-react"
+import { XIcon } from "@primer/octicons-react"
 import { useTranslation } from "react-i18next"
 import { AnimatePresence, motion } from "motion/react"
 import { toastVariants } from "@/lib/motion"
@@ -199,7 +199,7 @@ const ToastViewport = ({
               aria-label={t("common.dismissNotification")}
               onClick={() => onDismiss(toast.id)}
             >
-              <X aria-hidden="true" className="size-4" />
+              <XIcon aria-hidden="true" className="size-4" />
             </Button>
           </motion.div>
         ))}

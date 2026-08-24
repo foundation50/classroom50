@@ -1,14 +1,14 @@
 import { useQuery } from "@tanstack/react-query"
+import { InlineSpinner } from "@/components/Spinner"
 import { Trans, useTranslation } from "react-i18next"
 import {
-  AlertTriangle,
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  HelpCircle,
-  Loader2,
-  ServerCog,
-} from "lucide-react"
+  AlertIcon,
+  CheckCircleIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  QuestionIcon,
+  ServerIcon,
+} from "@primer/octicons-react"
 import { orgRunnersQuery } from "@/github-core/queries"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { Button, HelpTooltip, Input } from "@/components/ui"
@@ -157,7 +157,7 @@ export const LanguageVersionField = ({
                     language: meta.label,
                   })}
                 >
-                  <ChevronDown aria-hidden="true" className="size-4" />
+                  <ChevronDownIcon aria-hidden="true" className="size-4" />
                 </Button>
               </div>
               {!disabled && (
@@ -184,7 +184,7 @@ export const LanguageVersionField = ({
                           e.currentTarget.blur()
                         }}
                       >
-                        <Check
+                        <CheckIcon
                           aria-hidden="true"
                           className={`size-4 ${
                             version === current ? "" : "invisible"
@@ -202,7 +202,7 @@ export const LanguageVersionField = ({
                 role="alert"
                 className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
               >
-                <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+                <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
                 {error}
               </p>
             ) : null}
@@ -386,7 +386,7 @@ export const AptField = ({
                 role="alert"
                 className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
               >
-                <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+                <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
                 {error}
               </p>
             ) : (
@@ -418,7 +418,7 @@ const RunnerVerificationNote = ({
   if (pending && hasValue) {
     return (
       <p className="mt-1.5 flex items-center gap-1.5 text-sm text-base-content/70">
-        <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin" />
+        <InlineSpinner className="shrink-0" />
         {t("assignments.form.runner.checking")}
       </p>
     )
@@ -438,7 +438,7 @@ const RunnerVerificationNote = ({
     case "hosted":
       return (
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-success">
-          <CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />
+          <CheckCircleIcon aria-hidden="true" className="size-4 shrink-0" />
           {t("assignments.form.runner.hosted")}
         </p>
       )
@@ -453,7 +453,7 @@ const RunnerVerificationNote = ({
       const uniqueNames = Array.from(new Set(matchNames))
       return (
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-success">
-          <ServerCog aria-hidden="true" className="size-4 shrink-0" />
+          <ServerIcon aria-hidden="true" className="size-4 shrink-0" />
           {verification.confirmed && uniqueNames.length > 0
             ? t("assignments.form.runner.selfHostedMatch", {
                 count: uniqueNames.length,
@@ -490,7 +490,7 @@ const RunnerVerificationNote = ({
       }
       return (
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-error">
-          <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+          <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
           {parts.join(" ")}
         </p>
       )
@@ -499,7 +499,7 @@ const RunnerVerificationNote = ({
     case "too-many":
       return (
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-error">
-          <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+          <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
           {t("assignments.form.runner.tooMany", {
             count: verification.count,
           })}
@@ -509,7 +509,7 @@ const RunnerVerificationNote = ({
     case "unknown":
       return (
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-base-content/70">
-          <HelpCircle aria-hidden="true" className="size-4 shrink-0" />
+          <QuestionIcon aria-hidden="true" className="size-4 shrink-0" />
           {t("assignments.form.runner.cannotVerify")}
         </p>
       )

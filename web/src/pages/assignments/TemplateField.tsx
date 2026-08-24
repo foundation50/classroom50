@@ -1,17 +1,17 @@
 import { useQuery } from "@tanstack/react-query"
+import { InlineSpinner } from "@/components/Spinner"
 import type { ReactNode } from "react"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import {
-  AlertTriangle,
-  CheckCircle2,
-  ExternalLink,
-  HelpCircle,
-  Info,
-  Loader2,
-  RefreshCw,
-} from "lucide-react"
-import GitHub from "@/assets/github.svg?react"
+  AlertIcon,
+  CheckCircleIcon,
+  InfoIcon,
+  LinkExternalIcon,
+  MarkGithubIcon,
+  QuestionIcon,
+  SyncIcon,
+} from "@primer/octicons-react"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { useGithubAuth } from "@/auth/useGithubAuth"
@@ -158,7 +158,7 @@ export const TemplateField = ({
         help={t("assignments.template.help")}
         label={
           <>
-            <GitHub
+            <MarkGithubIcon
               aria-hidden="true"
               className="size-4 text-base-content/30 opacity-70"
             />
@@ -288,7 +288,7 @@ const TemplateVerificationNote = ({
   if (pending) {
     return (
       <p className="mt-1.5 flex items-center gap-1.5 text-sm text-base-content/70">
-        <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin" />
+        <InlineSpinner className="shrink-0" />
         {t("assignments.template.checking")}
       </p>
     )
@@ -301,7 +301,7 @@ const TemplateVerificationNote = ({
   // A typed `@branch` is tolerated but ignored (#673): warn it won't take
   // effect and the template's default branch is used. Non-blocking.
   const ignoredBranchNote = ignoredBranch ? (
-    <Note tone="warning" icon={Info}>
+    <Note tone="warning" icon={InfoIcon}>
       <Trans
         i18nKey="assignments.template.branchIgnored"
         values={{ branch: ignoredBranch }}
@@ -317,7 +317,7 @@ const TemplateVerificationNote = ({
     "branch" in verification ? verification.branch : undefined
   const nonMainNote =
     resolvedBranch && resolvedBranch !== "main" ? (
-      <Note tone="warning" icon={Info}>
+      <Note tone="warning" icon={InfoIcon}>
         <Trans
           i18nKey="assignments.template.nonMainBranch"
           values={{ branch: resolvedBranch }}
@@ -393,12 +393,9 @@ function renderTemplateVerdict({
       className="mt-1 flex cursor-pointer items-center gap-1 font-semibold underline disabled:cursor-default disabled:opacity-60"
     >
       {isRechecking ? (
-        <Loader2
-          aria-hidden="true"
-          className="size-3.5 shrink-0 animate-spin"
-        />
+        <InlineSpinner className="shrink-0" />
       ) : (
-        <RefreshCw aria-hidden="true" className="size-3.5 shrink-0" />
+        <SyncIcon aria-hidden="true" className="size-3.5 shrink-0" />
       )}
       {t(
         isRechecking
@@ -416,7 +413,7 @@ function renderTemplateVerdict({
       if (verification.inOrg && verification.visibility === "private") {
         if (teamHasAccess === true) {
           return (
-            <Note tone="success" icon={CheckCircle2}>
+            <Note tone="success" icon={CheckCircleIcon}>
               <Trans
                 i18nKey="assignments.template.privateHasAccess"
                 values={{
@@ -429,7 +426,7 @@ function renderTemplateVerdict({
           )
         }
         return (
-          <Note tone="success" icon={CheckCircle2}>
+          <Note tone="success" icon={CheckCircleIcon}>
             <Trans
               i18nKey="assignments.template.privateWillGrant"
               values={{
@@ -450,7 +447,7 @@ function renderTemplateVerdict({
           ? "assignments.template.okPublic"
           : "assignments.template.okPrivate"
       return (
-        <Note tone="success" icon={CheckCircle2}>
+        <Note tone="success" icon={CheckCircleIcon}>
           <Trans
             i18nKey={okKey}
             values={{ owner: verification.owner, branch: verification.branch }}
@@ -464,7 +461,7 @@ function renderTemplateVerdict({
       return (
         <Note
           tone="warning"
-          icon={Info}
+          icon={InfoIcon}
           policy={{ owner: verification.owner, href: verification.policyUrl }}
         >
           <Trans
@@ -481,7 +478,7 @@ function renderTemplateVerdict({
       // distinct from `parent` (the full upstream repo name, for "fork of X").
       const parentOrg = verification.parent?.split("/")[0]
       return (
-        <Note tone="warning" icon={Info}>
+        <Note tone="warning" icon={InfoIcon}>
           <Trans
             i18nKey={view.messageKey}
             values={{
@@ -503,7 +500,10 @@ function renderTemplateVerdict({
               owner: verification.owner,
               repo: verification.repo,
             })}
-            <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
+            <LinkExternalIcon
+              aria-hidden="true"
+              className="size-3.5 shrink-0"
+            />
           </a>
         </Note>
       )
@@ -511,14 +511,14 @@ function renderTemplateVerdict({
 
     case "invalid":
       return (
-        <Note tone="error" icon={AlertTriangle}>
+        <Note tone="error" icon={AlertIcon}>
           {resolveLocalizedMessage(t, verification.message)}
         </Note>
       )
 
     case "not-visible":
       return (
-        <Note tone="error" icon={AlertTriangle}>
+        <Note tone="error" icon={AlertIcon}>
           {t("assignments.template.notVisible", {
             owner: verification.owner,
             repo: verification.repo,
@@ -529,7 +529,7 @@ function renderTemplateVerdict({
 
     case "not-template":
       return (
-        <Note tone="error" icon={AlertTriangle}>
+        <Note tone="error" icon={AlertIcon}>
           {t("assignments.template.notTemplate", {
             owner: verification.owner,
             repo: verification.repo,
@@ -539,7 +539,7 @@ function renderTemplateVerdict({
 
     case "empty-template":
       return (
-        <Note tone="error" icon={AlertTriangle}>
+        <Note tone="error" icon={AlertIcon}>
           {t("assignments.template.emptyTemplate", {
             owner: verification.owner,
             repo: verification.repo,
@@ -551,7 +551,7 @@ function renderTemplateVerdict({
       return (
         <Note
           tone="error"
-          icon={AlertTriangle}
+          icon={AlertIcon}
           policy={{ owner: verification.owner, href: verification.policyUrl }}
         >
           {verification.scopeGap ? (
@@ -588,7 +588,7 @@ function renderTemplateVerdict({
                   owner: verification.owner,
                   repo: verification.repo,
                 })}
-                <ExternalLink
+                <LinkExternalIcon
                   aria-hidden="true"
                   className="size-3.5 shrink-0"
                 />
@@ -610,7 +610,7 @@ function renderTemplateVerdict({
 
     case "unknown":
       return (
-        <Note tone="neutral" icon={HelpCircle}>
+        <Note tone="neutral" icon={QuestionIcon}>
           {t("assignments.template.unknown", {
             owner: verification.owner,
             repo: verification.repo,
@@ -621,7 +621,7 @@ function renderTemplateVerdict({
 
     case "private-out-of-org":
       return (
-        <Note tone="error" icon={AlertTriangle}>
+        <Note tone="error" icon={AlertIcon}>
           {t("assignments.template.privateOutOfOrg", {
             owner: verification.owner,
             repo: verification.repo,
@@ -632,7 +632,7 @@ function renderTemplateVerdict({
 
     case "no-branch":
       return (
-        <Note tone="error" icon={AlertTriangle}>
+        <Note tone="error" icon={AlertIcon}>
           {t("assignments.template.noBranch", {
             owner: verification.owner,
             repo: verification.repo,
@@ -642,7 +642,7 @@ function renderTemplateVerdict({
 
     case "rate-limited":
       return (
-        <Note tone="neutral" icon={HelpCircle}>
+        <Note tone="neutral" icon={QuestionIcon}>
           {t("assignments.template.rateLimited")}
           {outageHintNote(verification.outage)}
         </Note>
@@ -665,7 +665,7 @@ const Note = ({
   children,
 }: {
   tone: "success" | "warning" | "error" | "neutral"
-  icon: typeof Info
+  icon: typeof InfoIcon
   policy?: { owner: string; href: string }
   children: ReactNode
 }) => {
@@ -681,7 +681,7 @@ const Note = ({
           className="mt-1 flex items-center gap-1 font-semibold underline"
         >
           {t("assignments.template.policyLink", { owner: policy.owner })}
-          <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
+          <LinkExternalIcon aria-hidden="true" className="size-3.5 shrink-0" />
         </a>
       )}
     </InlineNote>

@@ -1,4 +1,4 @@
-import { Pencil } from "lucide-react"
+import { PencilIcon } from "@primer/octicons-react"
 import { useId, useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useTranslation } from "react-i18next"
@@ -148,7 +148,7 @@ function OrgDetailsModal({
               aria-label={t("orgs.detailsModal.editOnGitHub")}
               className="absolute -bottom-1.5 -start-1.5 flex size-5 items-center justify-center rounded-full border border-base-300 bg-base-100 text-base-content/70 shadow-sm hover:text-primary"
             >
-              <Pencil aria-hidden="true" className="size-3" />
+              <PencilIcon aria-hidden="true" className="size-3" />
             </a>
           )}
         </div>
@@ -410,7 +410,7 @@ function OrgDetailsModal({
               </Button>
               {isOwner && (
                 <Button variant="primary" size="sm" onClick={startEditing}>
-                  <Pencil aria-hidden="true" className="size-4" />
+                  <PencilIcon aria-hidden="true" className="size-4" />
                   {t("orgs.detailsModal.edit")}
                 </Button>
               )}

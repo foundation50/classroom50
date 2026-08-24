@@ -1,14 +1,14 @@
 import { createElement } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  AlertTriangle,
-  ExternalLink,
-  FileCog,
-  GitCommitHorizontal,
-  Loader,
-  PlayCircle,
-  Zap,
-} from "lucide-react"
+  AlertIcon,
+  GearIcon,
+  GitCommitIcon,
+  LinkExternalIcon,
+  PlayIcon,
+  SyncIcon,
+  ZapIcon,
+} from "@primer/octicons-react"
 
 import { Badge, type BadgeTone, cx } from "@/components/ui"
 import type { TimelineItem, TimelineStatus } from "@/lib/activity/timeline"
@@ -50,13 +50,13 @@ const CHIP_TONE_CLASS: Record<BadgeTone, string> = {
 }
 
 // Icon per status/source, independent of tone.
-function itemIcon(item: TimelineItem): typeof AlertTriangle {
-  if (item.status === "error") return AlertTriangle
-  if (item.status === "running") return Loader
+function itemIcon(item: TimelineItem): typeof AlertIcon {
+  if (item.status === "error") return AlertIcon
+  if (item.status === "running") return SyncIcon
   if (item.source === "commit")
-    return item.type === "config" ? FileCog : GitCommitHorizontal
-  if (item.source === "run") return PlayCircle
-  return Zap
+    return item.type === "config" ? GearIcon : GitCommitIcon
+  if (item.source === "run") return PlayIcon
+  return ZapIcon
 }
 
 const STATUS_LABEL_KEY: Record<TimelineStatus, string> = {
@@ -82,7 +82,10 @@ export function TimelineRow({ item }: { item: TimelineItem }) {
           CHIP_TONE_CLASS[tone],
         )}
       >
-        {createElement(icon, { "aria-hidden": "true", className: "size-4" })}
+        {createElement(icon, {
+          className:
+            item.status === "running" ? "size-4 animate-spin" : "size-4",
+        })}
       </span>
 
       <div className="min-w-0 flex-1">
@@ -95,7 +98,10 @@ export function TimelineRow({ item }: { item: TimelineItem }) {
               className="inline-flex items-center gap-1 hover:underline"
             >
               {item.label}
-              <ExternalLink aria-hidden="true" className="size-3 opacity-60" />
+              <LinkExternalIcon
+                aria-hidden="true"
+                className="size-3 opacity-60"
+              />
             </a>
           ) : (
             item.label

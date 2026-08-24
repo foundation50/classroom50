@@ -1,6 +1,11 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Plus, Send, Upload, X } from "lucide-react"
+import {
+  PaperAirplaneIcon,
+  PlusIcon,
+  UploadIcon,
+  XIcon,
+} from "@primer/octicons-react"
 
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
@@ -428,7 +433,7 @@ const RosterBulkActionsBar = ({
                   title={t("students.addTitle")}
                   onClick={addActions.onAddStudent}
                 >
-                  <Plus aria-hidden="true" className="size-4" />
+                  <PlusIcon aria-hidden="true" className="size-4" />
                 </Button>
                 <Button
                   size="sm"
@@ -437,7 +442,7 @@ const RosterBulkActionsBar = ({
                   title={t("students.uploadTitle")}
                   onClick={addActions.onUploadRoster}
                 >
-                  <Upload aria-hidden="true" className="size-4" />
+                  <UploadIcon aria-hidden="true" className="size-4" />
                 </Button>
                 <Button
                   size="sm"
@@ -446,7 +451,7 @@ const RosterBulkActionsBar = ({
                   title={t("students.inviteStudents")}
                   onClick={addActions.onInviteLinks}
                 >
-                  <Send aria-hidden="true" className="size-4" />
+                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
                 </Button>
               </div>
             ) : null
@@ -468,7 +473,7 @@ const RosterBulkActionsBar = ({
                   }
                   onClick={() => setConfirmingInvite(true)}
                 >
-                  <Send aria-hidden="true" className="size-4" />
+                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
                   {t("students.bulk.invite")}
                 </Button>
                 <Button
@@ -511,7 +516,7 @@ const RosterBulkActionsBar = ({
                 title={t("students.bulk.clearSelection")}
                 onClick={onClearSelection}
               >
-                <X aria-hidden="true" className="size-4" />
+                <XIcon aria-hidden="true" className="size-4" />
               </Button>
             </>
           ) : null}

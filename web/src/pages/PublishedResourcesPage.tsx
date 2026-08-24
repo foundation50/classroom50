@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
+import { InlineSpinner } from "@/components/Spinner"
 import { useParams } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import {
-  Check,
-  ChevronDown,
-  Copy,
-  ExternalLink,
-  Globe,
-  Info,
-  Loader2,
-  ShieldAlert,
-} from "lucide-react"
+  CheckIcon,
+  ChevronDownIcon,
+  CopyIcon,
+  GlobeIcon,
+  InfoIcon,
+  LinkExternalIcon,
+  ShieldXIcon,
+} from "@primer/octicons-react"
 import { motion } from "motion/react"
 import { Trans, useTranslation } from "react-i18next"
 import { enterExit, staggerTransition } from "@/lib/motion"
@@ -130,9 +130,9 @@ function CopyButton({ value }: { value: string }) {
       onClick={copy}
     >
       {copied ? (
-        <Check aria-hidden="true" className="size-3.5 text-success" />
+        <CheckIcon aria-hidden="true" className="size-3.5 text-success" />
       ) : (
-        <Copy aria-hidden="true" className="size-3.5" />
+        <CopyIcon aria-hidden="true" className="size-3.5" />
       )}
     </Button>
   )
@@ -152,7 +152,7 @@ function StatusBadge({ url }: { url: string }) {
         ref={ref}
         className="inline-flex items-center gap-1 text-xs text-base-content/70"
       >
-        <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+        <InlineSpinner />
         {t("published.status.checking")}
       </span>
     )
@@ -161,7 +161,7 @@ function StatusBadge({ url }: { url: string }) {
   if (status === "public") {
     return (
       <Badge tone="success" className="gap-1">
-        <Globe aria-hidden="true" className="size-3" />
+        <GlobeIcon aria-hidden="true" className="size-3" />
         {t("published.status.public")}
       </Badge>
     )
@@ -218,7 +218,7 @@ function ResourceRow({ resource }: { resource: Resource }) {
             aria-label={t("published.openUrl")}
             title={t("published.openUrl")}
           >
-            <ExternalLink aria-hidden="true" className="size-3.5" />
+            <LinkExternalIcon aria-hidden="true" className="size-3.5" />
           </Button>
         </div>
       </div>
@@ -329,7 +329,7 @@ function ClassroomResources({
               />
             ) : secret ? (
               <Badge tone="warning" className="gap-1">
-                <ShieldAlert aria-hidden="true" className="size-3" />
+                <ShieldXIcon aria-hidden="true" className="size-3" />
                 {t("published.unlisted")}
               </Badge>
             ) : (
@@ -350,7 +350,7 @@ function ClassroomResources({
             )}
           </p>
         </div>
-        <ChevronDown
+        <ChevronDownIcon
           aria-hidden="true"
           className={`size-5 shrink-0 text-base-content/70 transition-transform ${
             open ? "rotate-180" : ""
@@ -371,7 +371,7 @@ function ClassroomResources({
             <>
               {secret && (
                 <div className="flex items-start gap-2 rounded-field border border-warning/30 bg-warning/10 p-3 text-xs text-base-content/70">
-                  <ShieldAlert
+                  <ShieldXIcon
                     aria-hidden="true"
                     className="mt-0.5 size-4 shrink-0 text-warning"
                   />
@@ -420,7 +420,10 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
   return (
     <div className="mt-8 flex flex-col gap-8">
       <div className="flex items-start gap-3 rounded-box border border-info/30 bg-info/10 p-4 text-sm">
-        <Info aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-info" />
+        <InfoIcon
+          aria-hidden="true"
+          className="mt-0.5 size-5 shrink-0 text-info"
+        />
         <div>
           <p className="font-semibold text-base-content">
             {t("published.banner.title")}
@@ -433,7 +436,10 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
 
       <section>
         <div className="flex items-center gap-2">
-          <Globe aria-hidden="true" className="size-5 text-base-content/70" />
+          <GlobeIcon
+            aria-hidden="true"
+            className="size-5 text-base-content/70"
+          />
           <h2 className="text-lg font-bold">{t("published.orgLevel")}</h2>
         </div>
         <p className="mt-1 text-sm text-base-content/70">
@@ -452,7 +458,7 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
 
       <section>
         <div className="flex items-center gap-2">
-          <ShieldAlert
+          <ShieldXIcon
             aria-hidden="true"
             className="size-5 text-base-content/70"
           />

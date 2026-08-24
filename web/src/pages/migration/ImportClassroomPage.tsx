@@ -11,7 +11,7 @@ import {
   useParams,
 } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
-import { Check } from "lucide-react"
+import { CheckIcon } from "@primer/octicons-react"
 
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
@@ -56,7 +56,11 @@ const MigrationSteps = ({
                 !done && !active && "bg-base-300 text-base-content/50",
               )}
             >
-              {done ? <Check aria-hidden="true" className="size-3.5" /> : i + 1}
+              {done ? (
+                <CheckIcon aria-hidden="true" className="size-3.5" />
+              ) : (
+                i + 1
+              )}
             </span>
             <span
               className={cx(

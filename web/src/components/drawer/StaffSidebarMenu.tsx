@@ -1,4 +1,4 @@
-import { BookText, UsersRound, Settings } from "lucide-react"
+import { BookIcon, GearIcon, PeopleIcon } from "@primer/octicons-react"
 import { Link } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
@@ -43,7 +43,7 @@ export const StaffSidebarMenu = ({
               <Link to="/$org/$classroom/roster" params={{ org, classroom }}>
                 <SidebarItemBody
                   label={t("nav.roster")}
-                  icon={<UsersRound aria-hidden="true" />}
+                  icon={<PeopleIcon aria-hidden="true" />}
                   active={selected === "roster"}
                   groupId="staff"
                 />
@@ -55,7 +55,7 @@ export const StaffSidebarMenu = ({
           <Link to="/$org/$classroom/assignments" params={{ org, classroom }}>
             <SidebarItemBody
               label={t("nav.assignments")}
-              icon={<BookText aria-hidden="true" />}
+              icon={<BookIcon aria-hidden="true" />}
               active={selected === "assignments"}
               groupId="staff"
             />
@@ -72,7 +72,7 @@ export const StaffSidebarMenu = ({
               <Link to="/$org/$classroom/settings" params={{ org, classroom }}>
                 <SidebarItemBody
                   label={t("nav.settings")}
-                  icon={<Settings aria-hidden="true" />}
+                  icon={<GearIcon aria-hidden="true" />}
                   active={selected === "settings"}
                   groupId="staff"
                 />

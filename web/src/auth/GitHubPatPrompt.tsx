@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, ExternalLink } from "lucide-react"
+import { AlertIcon, LinkExternalIcon } from "@primer/octicons-react"
 
 import { REQUIRED_SCOPES } from "./scopes"
 import {
@@ -75,7 +75,7 @@ export function GitHubPatPrompt({
     >
       {error ? (
         <Alert tone="error" className="items-start text-sm">
-          <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+          <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
           <span>{error}</span>
         </Alert>
       ) : null}
@@ -120,7 +120,7 @@ export function GitHubPatPrompt({
               />
             </label>
             <Alert tone="warning" className="items-start text-xs">
-              <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+              <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
               <span>{t("auth.patFineGrainedWarning")}</span>
             </Alert>
 
@@ -135,7 +135,7 @@ export function GitHubPatPrompt({
               target="_blank"
               rel="noopener noreferrer"
             >
-              <ExternalLink aria-hidden="true" className="size-4" />
+              <LinkExternalIcon aria-hidden="true" className="size-4" />
               {t("auth.patFineGrainedLink")}
             </Button>
             {trimmedOrg ? null : (
@@ -157,7 +157,7 @@ export function GitHubPatPrompt({
               target="_blank"
               rel="noopener noreferrer"
             >
-              <ExternalLink aria-hidden="true" className="size-4" />
+              <LinkExternalIcon aria-hidden="true" className="size-4" />
               {t("auth.patCreateTokenLink")}
             </Button>
           </>

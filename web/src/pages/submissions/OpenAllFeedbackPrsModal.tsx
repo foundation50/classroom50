@@ -1,6 +1,6 @@
 import { useId } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { GitPullRequest } from "lucide-react"
+import { GitPullRequestIcon } from "@primer/octicons-react"
 
 import { Alert, Button, Modal, Spinner } from "@/components/ui"
 import useOpenAllFeedbackPrs from "@/hooks/mutations/useOpenAllFeedbackPrs"
@@ -93,7 +93,7 @@ export function OpenAllFeedbackPrsModal({
       aria-labelledby={titleId}
     >
       <h3 id={titleId} className="flex items-center gap-2 text-lg font-bold">
-        <GitPullRequest aria-hidden="true" className="size-5" />
+        <GitPullRequestIcon aria-hidden="true" className="size-5" />
         {t("submissions.openAllPrs.title")}
       </h3>
 

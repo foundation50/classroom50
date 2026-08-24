@@ -1,4 +1,4 @@
-import { Pencil } from "lucide-react"
+import { PencilIcon } from "@primer/octicons-react"
 import { useTranslation } from "react-i18next"
 
 import { Badge, Button } from "@/components/ui"
@@ -75,7 +75,7 @@ export function ScoreCell({
         }
         onClick={onEdit}
       >
-        <Pencil className="size-3.5" aria-hidden="true" />
+        <PencilIcon className="size-3.5" aria-hidden="true" />
       </Button>
     </div>
   )

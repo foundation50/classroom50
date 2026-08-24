@@ -1,6 +1,10 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowUpDown, ListFilter, Share2 } from "lucide-react"
+import {
+  ArrowSwitchIcon,
+  FilterIcon,
+  ShareAndroidIcon,
+} from "@primer/octicons-react"
 
 import { Button, Toolbar } from "@/components/ui"
 import type {
@@ -109,7 +113,7 @@ const SubmissionsControls = ({
 
         {sections.length > 0 && (
           <Toolbar.FilterSelect
-            icon={<ListFilter aria-hidden="true" className="size-4" />}
+            icon={<FilterIcon aria-hidden="true" className="size-4" />}
             active={filters.section !== "all"}
             className="max-w-[10rem]"
             value={filters.section}
@@ -128,7 +132,7 @@ const SubmissionsControls = ({
         )}
 
         <Toolbar.FilterSelect
-          icon={<ListFilter aria-hidden="true" className="size-4" />}
+          icon={<FilterIcon aria-hidden="true" className="size-4" />}
           active={statusValue !== "all"}
           value={statusValue}
           onChange={(e) => onStatusChange(e.target.value as StatusSelectValue)}
@@ -162,7 +166,7 @@ const SubmissionsControls = ({
 
         {passingAvailable && (
           <Toolbar.FilterSelect
-            icon={<ListFilter aria-hidden="true" className="size-4" />}
+            icon={<FilterIcon aria-hidden="true" className="size-4" />}
             active={filters.passing !== "all"}
             value={filters.passing}
             // Disabled when filtering to non-submitters: they have no grade, so
@@ -183,7 +187,9 @@ const SubmissionsControls = ({
         )}
 
         <Toolbar.FilterSelect
-          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
+          icon={
+            <ArrowSwitchIcon aria-hidden="true" className="size-4 rotate-90" />
+          }
           value={sort}
           onChange={(e) => onSortChange(e.target.value as SubmissionSort)}
           aria-label={t("submissions.filters.sortAria")}
@@ -202,7 +208,7 @@ const SubmissionsControls = ({
 
         {onShare && (
           <Button variant="outline" size="sm" onClick={onShare}>
-            <Share2 aria-hidden="true" className="size-4" />
+            <ShareAndroidIcon aria-hidden="true" className="size-4" />
             {t("submissions.menu.share")}
           </Button>
         )}

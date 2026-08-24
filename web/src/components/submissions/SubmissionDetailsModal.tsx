@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { GitCommitHorizontal, Tag } from "lucide-react"
+import { GitCommitIcon, MarkGithubIcon, TagIcon } from "@primer/octicons-react"
 
-import GitHub from "@/assets/github.svg?react"
 import { Button, Modal, MonoLtr } from "@/components/ui"
 
 // One row in the submission-details list. `kind` picks the icon and action
@@ -97,12 +96,12 @@ export function SubmissionDetailsModal({
           rel="noreferrer"
           title={t("submissions.details.viewRepository")}
         >
-          <GitHub aria-hidden="true" className="size-4 shrink-0" />
+          <MarkGithubIcon aria-hidden="true" className="size-4 shrink-0" />
           <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
         </a>
       ) : (
         <p className="mt-2 inline-flex w-fit max-w-full items-center gap-1.5 text-base-content/50">
-          <GitHub aria-hidden="true" className="size-4 shrink-0" />
+          <MarkGithubIcon aria-hidden="true" className="size-4 shrink-0" />
           <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
         </p>
       )}
@@ -124,7 +123,7 @@ export function SubmissionDetailsModal({
               rel="noreferrer"
               className="mt-3 w-fit"
             >
-              <GitHub aria-hidden="true" className="size-4" />
+              <MarkGithubIcon aria-hidden="true" className="size-4" />
               {emptyLinkLabel}
             </Button>
           ) : null}
@@ -132,7 +131,7 @@ export function SubmissionDetailsModal({
       ) : (
         <ul className="mt-2 flex flex-col gap-2">
           {items.map((item) => {
-            const Icon = item.kind === "tag" ? Tag : GitCommitHorizontal
+            const Icon = item.kind === "tag" ? TagIcon : GitCommitIcon
             const actionLabel =
               item.kind === "tag"
                 ? t("submissions.details.viewTag")

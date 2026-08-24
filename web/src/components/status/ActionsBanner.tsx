@@ -1,14 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { InlineSpinner } from "@/components/Spinner"
 import { AnimatePresence, motion } from "motion/react"
 import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronDown,
-  ExternalLink,
-  Loader2,
-  RotateCw,
-  X,
-} from "lucide-react"
+  AlertIcon,
+  CheckCircleIcon,
+  ChevronDownIcon,
+  LinkExternalIcon,
+  SyncIcon,
+  XIcon,
+} from "@primer/octicons-react"
 import { useTranslation } from "react-i18next"
 
 import { useActionActivity, type Tracker } from "@/hooks/useActionActivity"
@@ -55,24 +55,19 @@ const StatusIcon = ({
 }) => {
   if (phase === "failed")
     return (
-      <AlertTriangle
+      <AlertIcon
         aria-hidden="true"
         className={`size-4 shrink-0 ${tinted ? "text-error" : ""}`}
       />
     )
   if (phase === "success")
     return (
-      <CheckCircle2
+      <CheckCircleIcon
         aria-hidden="true"
         className={`size-4 shrink-0 ${tinted ? "text-success" : ""}`}
       />
     )
-  return (
-    <Loader2
-      aria-hidden="true"
-      className={`size-4 shrink-0 animate-spin ${tinted ? "text-info" : ""}`}
-    />
-  )
+  return <InlineSpinner className={`shrink-0 ${tinted ? "text-info" : ""}`} />
 }
 
 // Per-phase tone for an expanded row, so rows stay distinguishable in the
@@ -121,7 +116,7 @@ const TrackerRow = ({
           className="flex shrink-0 cursor-pointer items-center gap-1 text-xs font-medium opacity-80 hover:opacity-100"
         >
           {t("actionsBanner.viewRun")}
-          <ExternalLink aria-hidden="true" className="size-3.5" />
+          <LinkExternalIcon aria-hidden="true" className="size-3.5" />
         </a>
       )}
       {tracker.retriable && (
@@ -133,9 +128,9 @@ const TrackerRow = ({
           className="flex shrink-0 cursor-pointer items-center gap-1 text-xs font-semibold underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
         >
           {retrying ? (
-            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+            <InlineSpinner />
           ) : (
-            <RotateCw aria-hidden="true" className="size-3.5" />
+            <SyncIcon aria-hidden="true" className="size-3.5" />
           )}
           {t("actionsBanner.retry")}
         </button>
@@ -147,7 +142,7 @@ const TrackerRow = ({
           aria-label={t("actionsBanner.dismiss")}
           className="flex shrink-0 cursor-pointer items-center opacity-70 hover:opacity-100"
         >
-          <X aria-hidden="true" className="size-4" />
+          <XIcon aria-hidden="true" className="size-4" />
         </button>
       )}
     </div>
@@ -218,7 +213,7 @@ const BannerBody = ({
               count: attentionCount,
             })}
           >
-            <AlertTriangle aria-hidden="true" className="size-3.5" />
+            <AlertIcon aria-hidden="true" className="size-3.5" />
             {attentionCount}
           </span>
         )}
@@ -230,7 +225,7 @@ const BannerBody = ({
         >
           {trackers.length}
         </span>
-        <ChevronDown
+        <ChevronDownIcon
           aria-hidden="true"
           className={`size-4 shrink-0 opacity-70 transition-transform ${
             showList ? "rotate-180" : ""
@@ -397,7 +392,7 @@ export function ActionsBanner() {
       />
       {pollError && (
         <div className="flex items-center gap-2 border-t border-current/20 px-4 py-1.5 text-xs opacity-80">
-          <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+          <InlineSpinner />
           <span>{t("actionsBanner.pollError")}</span>
         </div>
       )}

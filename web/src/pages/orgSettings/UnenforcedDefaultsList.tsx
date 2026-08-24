@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { TriangleAlert } from "lucide-react"
+import { AlertIcon } from "@primer/octicons-react"
 
 import { Badge } from "@/components/ui"
 import type { UnenforcedDefaultItem } from "./orgDefaultsStepData"
@@ -17,7 +17,7 @@ export const UnenforcedDefaultsList = ({
     <ul className="mt-1 space-y-1">
       {items.map((d) => (
         <li key={d.field} className="flex items-start gap-2 text-xs">
-          <TriangleAlert
+          <AlertIcon
             aria-hidden="true"
             className="mt-0.5 size-3.5 shrink-0 text-error"
           />

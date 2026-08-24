@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react"
-import { Upload } from "lucide-react"
+import { UploadIcon } from "@primer/octicons-react"
 
 import { Button } from "./Button"
 import { cx } from "./cx"
@@ -199,7 +199,7 @@ export function FileDropzone({
             disabled={disabled}
             onClick={openPicker}
           >
-            <Upload aria-hidden="true" className="size-4" />
+            <UploadIcon aria-hidden="true" className="size-4" />
             {buttonLabel}
           </Button>
           {hint && <span className="text-base-content/60">{hint}</span>}
@@ -235,7 +235,7 @@ export function FileDropzone({
           className,
         )}
       >
-        <Upload aria-hidden="true" className="size-8 opacity-50" />
+        <UploadIcon aria-hidden="true" className="size-8 opacity-50" />
         <p className="font-medium">{prompt}</p>
         {hint && <p className="text-sm opacity-70">{hint}</p>}
         <Button

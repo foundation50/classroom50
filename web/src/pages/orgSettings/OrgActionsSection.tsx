@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink } from "lucide-react"
+import { LinkExternalIcon } from "@primer/octicons-react"
 
 import { Badge, Spinner } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
@@ -107,7 +107,7 @@ const ActionsUsagePanel = ({ org }: { org: string }) => {
             className="inline-flex items-center gap-0.5 text-base-content/60 hover:text-primary"
           >
             {t("orgSettings.actions.budgetManage")}
-            <ExternalLink aria-hidden="true" className="size-3" />
+            <LinkExternalIcon aria-hidden="true" className="size-3" />
           </a>
         </p>
       )}
@@ -188,7 +188,7 @@ const OrgActionsSection = ({
           className="inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
         >
           {t("orgSettings.actions.openSettings")}
-          <ExternalLink aria-hidden="true" className="size-3" />
+          <LinkExternalIcon aria-hidden="true" className="size-3" />
         </a>
       }
     >

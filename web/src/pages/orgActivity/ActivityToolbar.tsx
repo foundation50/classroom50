@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Download, ListFilter } from "lucide-react"
+import { DownloadIcon, FilterIcon } from "@primer/octicons-react"
 
 import { Button, Toolbar } from "@/components/ui"
 import type { TimelineSource, TimelineType } from "@/lib/activity/timeline"
@@ -76,7 +76,7 @@ export function ActivityToolbar({
       />
 
       <Toolbar.FilterSelect
-        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        icon={<FilterIcon aria-hidden="true" className="size-4" />}
         active={filters.sources.size > 0}
         value={selectValue(filters.sources)}
         aria-label={t("orgActivity.filters.source")}
@@ -93,7 +93,7 @@ export function ActivityToolbar({
       </Toolbar.FilterSelect>
 
       <Toolbar.FilterSelect
-        icon={<ListFilter aria-hidden="true" className="size-4" />}
+        icon={<FilterIcon aria-hidden="true" className="size-4" />}
         active={filters.types.size > 0}
         value={selectValue(filters.types)}
         aria-label={t("orgActivity.filters.type")}
@@ -116,7 +116,7 @@ export function ActivityToolbar({
           disabled={resultCount === 0}
           onClick={onExportCsv}
         >
-          <Download aria-hidden="true" className="size-4" />
+          <DownloadIcon aria-hidden="true" className="size-4" />
           {t("orgActivity.exportCsv")}
         </Button>
         <Button variant="outline" size="sm" onClick={onShowDiagnostics}>

@@ -1,14 +1,15 @@
 import {
-  LogOut,
-  Eye,
-  Check,
-  Sun,
-  Moon,
-  Languages,
-  Info,
-  BookOpen,
-  Accessibility,
-} from "lucide-react"
+  AccessibilityIcon,
+  BookIcon,
+  CheckIcon,
+  EyeIcon,
+  GlobeIcon,
+  InfoIcon,
+  MarkGithubIcon,
+  MoonIcon,
+  SignOutIcon,
+  SunIcon,
+} from "@primer/octicons-react"
 import {
   useParams,
   useMatchRoute,
@@ -21,7 +22,6 @@ import { createPortal } from "react-dom"
 import { type MouseEvent, useId, useRef, useState } from "react"
 import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import GitHub from "@/assets/github.svg?react"
 import duck from "@/assets/duck.png"
 import { useOrgStaff } from "@/hooks/useOrgStaff"
 import { useClassroomRoleContextOptional } from "@/context/classroomRole/ClassroomRoleProvider"
@@ -130,9 +130,9 @@ function SidebarInfoControls({
           }
         >
           {isDark ? (
-            <Moon aria-hidden="true" className="size-4" />
+            <MoonIcon aria-hidden="true" className="size-4" />
           ) : (
-            <Sun aria-hidden="true" className="size-4" />
+            <SunIcon aria-hidden="true" className="size-4" />
           )}
           {!collapsed && (
             <>
@@ -150,7 +150,7 @@ function SidebarInfoControls({
           onClick={activate(onOpenLanguage)}
           title={collapsed ? t("nav.language") : undefined}
         >
-          <Languages aria-hidden="true" className="size-4" />
+          <GlobeIcon aria-hidden="true" className="size-4" />
           {!collapsed && (
             <span className="flex-1 text-start">{t("nav.language")}</span>
           )}
@@ -159,7 +159,7 @@ function SidebarInfoControls({
       {showAccessibility && (
         <li>
           <Link to="/accessibility" onClick={activate(() => {})}>
-            <Accessibility aria-hidden="true" className="size-4" />
+            <AccessibilityIcon aria-hidden="true" className="size-4" />
             {!collapsed && (
               <span className="flex-1 text-start">
                 {t("nav.accessibility")}
@@ -176,7 +176,7 @@ function SidebarInfoControls({
           onClick={activate(() => {})}
           title={collapsed ? t("nav.docs") : undefined}
         >
-          <BookOpen aria-hidden="true" className="size-4" />
+          <BookIcon aria-hidden="true" className="size-4" />
           {!collapsed && (
             <span className="flex-1 text-start">{t("nav.docs")}</span>
           )}
@@ -188,7 +188,7 @@ function SidebarInfoControls({
           onClick={activate(onOpenAbout)}
           title={collapsed ? t("nav.about") : undefined}
         >
-          <Info aria-hidden="true" className="size-4" />
+          <InfoIcon aria-hidden="true" className="size-4" />
           {!collapsed && (
             <span className="flex-1 text-start">{t("nav.about")}</span>
           )}
@@ -350,7 +350,10 @@ const AuthedSidebarFooter = () => {
           className={`mt-auto block border-t border-neutral-content/20 py-2 text-neutral-content/70 transition-colors hover:text-neutral-content ${collapsed ? "flex justify-center px-2" : "px-6"}`}
         >
           {collapsed ? (
-            <GitHub aria-hidden="true" className="size-4 shrink-0 opacity-80" />
+            <MarkGithubIcon
+              aria-hidden="true"
+              className="size-4 shrink-0 opacity-80"
+            />
           ) : (
             <>
               <span className="block text-[0.625rem] font-medium uppercase tracking-wide text-neutral-content/50">
@@ -387,7 +390,7 @@ const AuthedSidebarFooter = () => {
                 <li>
                   <details key={menuOpen ? "open" : "closed"}>
                     <summary>
-                      <Eye aria-hidden="true" className="size-4" />
+                      <EyeIcon aria-hidden="true" className="size-4" />
                       <span className="flex-1">{t("nav.viewAs")}</span>
                     </summary>
                     <ul>
@@ -426,7 +429,7 @@ const AuthedSidebarFooter = () => {
                                 }}
                               >
                                 {active ? (
-                                  <Check
+                                  <CheckIcon
                                     aria-hidden="true"
                                     className="size-4"
                                   />
@@ -455,7 +458,7 @@ const AuthedSidebarFooter = () => {
             <MenuSeparator />
             <li>
               <button type="button" className="text-error" onClick={signOut}>
-                <LogOut aria-hidden="true" className="size-4" />
+                <SignOutIcon aria-hidden="true" className="size-4" />
                 {t("nav.signOut")}
               </button>
             </li>
@@ -505,7 +508,7 @@ const AuthedSidebarFooter = () => {
                       className="badge badge-warning badge-xs gap-1"
                       title={t("nav.rolePreviewTooltip")}
                     >
-                      <Eye aria-hidden="true" className="size-3" />
+                      <EyeIcon aria-hidden="true" className="size-3" />
                       {t("nav.preview")}
                     </span>
                   ) : null}

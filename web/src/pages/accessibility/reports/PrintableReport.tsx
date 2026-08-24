@@ -10,7 +10,7 @@ import {
   type Criterion,
   type WcagPrinciple,
 } from "@/util/a11y/vpatModel"
-import { Download, Printer } from "lucide-react"
+import { DownloadIcon, FileIcon } from "@primer/octicons-react"
 
 import { useContrastAudit, useVpatReport, type Audit, type Vpat } from "../data"
 
@@ -42,11 +42,11 @@ function DownloadRow({
       </div>
       <div className="flex shrink-0 gap-2">
         <Button as="a" href={href} download variant="outline" size="sm">
-          <Download aria-hidden="true" className="size-4" />
+          <DownloadIcon aria-hidden="true" className="size-4" />
           {t("accessibility.downloads.markdownAction")}
         </Button>
         <Button onClick={onPrint} variant="outline" size="sm">
-          <Printer aria-hidden="true" className="size-4" />
+          <FileIcon aria-hidden="true" className="size-4" />
           {t("accessibility.downloads.pdfAction")}
         </Button>
       </div>

@@ -1,5 +1,10 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
-import { AlertCircle, AlertTriangle, Info, MinusCircle } from "lucide-react"
+import {
+  AlertIcon,
+  InfoIcon,
+  NoEntryIcon,
+  XCircleIcon,
+} from "@primer/octicons-react"
 
 import { cx } from "./cx"
 
@@ -18,11 +23,11 @@ const TONE_TEXT_CLASS: Record<InlineMessageTone, string> = {
   neutral: "text-base-content/70",
 }
 
-const TONE_ICON: Record<InlineMessageTone, typeof Info> = {
-  info: Info,
-  warning: AlertTriangle,
-  error: AlertCircle,
-  neutral: MinusCircle,
+const TONE_ICON: Record<InlineMessageTone, typeof InfoIcon> = {
+  info: InfoIcon,
+  warning: AlertIcon,
+  error: XCircleIcon,
+  neutral: NoEntryIcon,
 }
 
 export type InlineMessageProps = {

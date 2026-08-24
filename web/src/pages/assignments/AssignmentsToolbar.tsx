@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowUpDown, ListFilter } from "lucide-react"
+import { ArrowSwitchIcon, FilterIcon } from "@primer/octicons-react"
 
 import { Toolbar } from "@/components/ui"
 import {
@@ -76,7 +76,7 @@ const AssignmentsToolbar = ({
         />
 
         <Toolbar.FilterSelect
-          icon={<ListFilter aria-hidden="true" className="size-4" />}
+          icon={<FilterIcon aria-hidden="true" className="size-4" />}
           active={filters.type !== "all"}
           value={filters.type}
           onChange={(e) =>
@@ -95,7 +95,7 @@ const AssignmentsToolbar = ({
         </Toolbar.FilterSelect>
 
         <Toolbar.FilterSelect
-          icon={<ListFilter aria-hidden="true" className="size-4" />}
+          icon={<FilterIcon aria-hidden="true" className="size-4" />}
           active={filters.due !== "all"}
           value={filters.due}
           onChange={(e) =>
@@ -113,7 +113,9 @@ const AssignmentsToolbar = ({
         </Toolbar.FilterSelect>
 
         <Toolbar.FilterSelect
-          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
+          icon={
+            <ArrowSwitchIcon aria-hidden="true" className="size-4 rotate-90" />
+          }
           value={sort}
           onChange={(e) => onSortChange(e.target.value as AssignmentSort)}
           aria-label={t("assignments.toolbar.sortAria")}

@@ -25,6 +25,7 @@
     "missing": "tsc -p tsconfig.app.json --pretty false 2>&1 | grep -E \"TS(2304|2305|2307|2503|2552)\""
   },
   "dependencies": {
+    "@primer/octicons-react": "^19.33.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-form": "^1.33.3",
     "@tanstack/react-query": "^5.101.4",
@@ -33,7 +34,6 @@
     "i18next": "^26.3.6",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.4",
-    "lucide-react": "^1.28.0",
     "motion": "^12.43.0",
     "papaparse": "^5.5.4",
     "react": "^19.2.8",

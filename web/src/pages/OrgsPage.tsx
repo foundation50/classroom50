@@ -24,18 +24,18 @@ import {
 import { useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
-  ChevronDown,
-  EllipsisVertical,
-  EyeOff,
-  Info,
-  KeyRound,
-  Lock,
-  MailOpen,
-  Plus,
-  ShieldCheck,
-  TriangleAlert,
-  User,
-} from "lucide-react"
+  AlertIcon,
+  ChevronDownIcon,
+  EyeClosedIcon,
+  InfoIcon,
+  KebabHorizontalIcon,
+  KeyIcon,
+  LockIcon,
+  PersonIcon,
+  PlusIcon,
+  ReadIcon,
+  ShieldCheckIcon,
+} from "@primer/octicons-react"
 import OrgDetailsModal from "@/components/modals/OrgDetailsModal"
 import { AnimatePresence, motion } from "motion/react"
 import { useMemo, useState } from "react"
@@ -85,12 +85,12 @@ function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
               </Badge>
               {isOwner ? (
                 <Badge tone="primary" size="sm" className="gap-1">
-                  <ShieldCheck aria-hidden="true" className="size-3" />
+                  <ShieldCheckIcon aria-hidden="true" className="size-3" />
                   {t("orgs.invites.roleAdmin")}
                 </Badge>
               ) : (
                 <Badge tone="neutral" size="sm" className="gap-1">
-                  <User aria-hidden="true" className="size-3" />
+                  <PersonIcon aria-hidden="true" className="size-3" />
                   {t("orgs.invites.roleMember")}
                 </Badge>
               )}
@@ -155,11 +155,11 @@ function PendingInvites({ invites }: { invites: GitHubOrgMembership[] }) {
   return (
     <details className="group rounded-box border border-warning/40 bg-warning/5">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm">
-        <MailOpen aria-hidden="true" className="size-4 shrink-0 text-warning" />
+        <ReadIcon aria-hidden="true" className="size-4 shrink-0 text-warning" />
         <span className="min-w-0 flex-1 truncate font-medium text-base-content">
           {t("orgs.invites.summary", { count: invites.length })}
         </span>
-        <ChevronDown
+        <ChevronDownIcon
           aria-hidden="true"
           className="size-4 shrink-0 text-base-content/50 transition-transform group-open:rotate-180"
         />
@@ -244,7 +244,7 @@ function HideOrgMenu({
           shape="square"
           aria-label={t("orgs.card.moreActions", { org: org.login })}
         >
-          <EllipsisVertical aria-hidden="true" className="size-4" />
+          <KebabHorizontalIcon aria-hidden="true" className="size-4" />
         </Button>
         <ul
           tabIndex={0}
@@ -259,7 +259,7 @@ function HideOrgMenu({
                 hash="service-token"
                 onClick={closeMenu}
               >
-                <KeyRound aria-hidden="true" className="size-4" />
+                <KeyIcon aria-hidden="true" className="size-4" />
                 {t("orgs.card.manageToken")}
               </Link>
             </li>
@@ -272,13 +272,13 @@ function HideOrgMenu({
                 setDetailsOpen(true)
               }}
             >
-              <Info aria-hidden="true" className="size-4" />
+              <InfoIcon aria-hidden="true" className="size-4" />
               {t("orgs.card.details")}
             </button>
           </li>
           <li>
             <button type="button" onClick={handleHide}>
-              <EyeOff aria-hidden="true" className="size-4" />
+              <EyeClosedIcon aria-hidden="true" className="size-4" />
               {t("orgs.card.hide")}
             </button>
           </li>
@@ -314,7 +314,7 @@ function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
 function NoAccessBadge() {
   return (
     <span className="badge badge-neutral gap-1">
-      <Lock aria-hidden="true" className="size-3" />
+      <LockIcon aria-hidden="true" className="size-3" />
       <Trans
         i18nKey="orgs.card.noAccessBadge"
         components={{ code: <code dir="ltr" /> }}
@@ -642,7 +642,7 @@ const OrgsPage = () => {
 
             {attentionCount > 0 && (
               <Alert tone="warning" role="status" className="text-sm">
-                <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+                <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
                 <span>
                   {t("serviceTokenHealth.summary", {
                     count: attentionCount,
@@ -699,7 +699,7 @@ const OrgsPage = () => {
                     size="sm"
                     onClick={() => setModalOpen(true)}
                   >
-                    <Plus aria-hidden="true" className="size-4" />
+                    <PlusIcon aria-hidden="true" className="size-4" />
                     {t("orgs.setUpFirst.cta")}
                   </Button>
                 }
@@ -714,7 +714,7 @@ const OrgsPage = () => {
                     size="sm"
                     onClick={() => setModalOpen(true)}
                   >
-                    <Plus aria-hidden="true" className="size-4" />
+                    <PlusIcon aria-hidden="true" className="size-4" />
                     {t("orgs.setUpFirst.cta")}
                   </Button>
                 }

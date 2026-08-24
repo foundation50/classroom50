@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query"
-import { RefreshCw, TriangleAlert } from "lucide-react"
+import { AlertIcon, SyncIcon } from "@primer/octicons-react"
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -149,7 +149,7 @@ export function ClassroomCollectButton({
           t("submissions.collect.active")
         ) : (
           <>
-            <RefreshCw aria-hidden="true" className="size-4" />
+            <SyncIcon aria-hidden="true" className="size-4" />
             {t("assignments.collect.label")}
           </>
         )}
@@ -163,7 +163,7 @@ export function ClassroomCollectButton({
       >
         <div className="flex items-start gap-4">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-warning/10 text-warning">
-            <TriangleAlert className="size-5" aria-hidden="true" />
+            <AlertIcon className="size-5" aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
             <h3 id={confirmTitleId} className="text-lg font-bold">

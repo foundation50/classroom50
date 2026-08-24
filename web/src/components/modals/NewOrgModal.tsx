@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router"
-import { ExternalLink, RefreshCw } from "lucide-react"
+import { LinkExternalIcon, SyncIcon } from "@primer/octicons-react"
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -66,7 +66,7 @@ function OrgPicker({
         >
           {/* Spin the icon rather than Button's `loading` spinner: at btn-xs
               daisyUI's loading-xs outsizes this 14px icon. */}
-          <RefreshCw
+          <SyncIcon
             aria-hidden="true"
             className={cx("size-3.5", refreshing && "animate-spin")}
           />
@@ -225,7 +225,7 @@ function NewOrgModal({
             size="sm"
           >
             {t("orgs.newOrg.createOnGitHub")}
-            <ExternalLink aria-hidden="true" className="size-4" />
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
           </Button>
         </div>
       </Modal>

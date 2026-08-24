@@ -1,4 +1,4 @@
-import { Inbox, SearchX } from "lucide-react"
+import { FilterRemoveIcon, InboxIcon } from "@primer/octicons-react"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -759,7 +759,7 @@ const SubmissionsTable = ({
                   <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
                     {filtered ? (
                       <>
-                        <SearchX
+                        <FilterRemoveIcon
                           aria-hidden="true"
                           className="size-8 text-base-content/40"
                         />
@@ -782,7 +782,7 @@ const SubmissionsTable = ({
                       </>
                     ) : (
                       <>
-                        <Inbox
+                        <InboxIcon
                           aria-hidden="true"
                           className="size-8 text-base-content/40"
                         />

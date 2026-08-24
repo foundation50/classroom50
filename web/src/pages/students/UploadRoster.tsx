@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Upload } from "lucide-react"
+import { UploadIcon } from "@primer/octicons-react"
 
 import { resolveRosterUploadContext } from "@/domain/students"
 import type {
@@ -729,7 +729,7 @@ const UploadRoster = ({
                   : "border-base-300 hover:border-primary/50 hover:bg-base-200"
               }`}
             >
-              <Upload aria-hidden="true" className="size-8 opacity-50" />
+              <UploadIcon aria-hidden="true" className="size-8 opacity-50" />
               <p className="font-medium">{t("students.uploadDropPrompt")}</p>
               <p className="text-sm opacity-70">
                 {t("students.uploadHintAll")}

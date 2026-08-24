@@ -1,4 +1,4 @@
-import { Info, UserPlus } from "lucide-react"
+import { InfoIcon, PersonAddIcon } from "@primer/octicons-react"
 import { Trans, useTranslation } from "react-i18next"
 
 import { EmphasisLtr, RouterButton } from "@/components/ui"
@@ -26,7 +26,7 @@ export const EmptyRosterNotice = ({
       className={`alert alert-info alert-soft flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between ${className}`}
     >
       <div className="flex items-start gap-2">
-        <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        <InfoIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span className="text-sm">
           <Trans
             i18nKey={
@@ -46,7 +46,7 @@ export const EmptyRosterNotice = ({
         size="sm"
         className="whitespace-nowrap sm:shrink-0"
       >
-        <UserPlus className="size-4" aria-hidden="true" />
+        <PersonAddIcon className="size-4" aria-hidden="true" />
         {hasRosterRows
           ? t("components.notices.emptyRoster.manageRoster")
           : t("components.notices.emptyRoster.addStudents")}

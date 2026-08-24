@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react"
+import { ChevronRightIcon } from "@primer/octicons-react"
 import { useTranslation } from "react-i18next"
 import Avatar from "@/components/avatar"
 import { Badge, rtlFlip } from "@/components/ui"
@@ -94,7 +94,7 @@ export const RosterRow = ({
             {t(STATE_LABEL_KEY[row.state])}
           </Badge>
         ) : null}
-        <ChevronRight
+        <ChevronRightIcon
           aria-hidden="true"
           className={`size-4 text-base-content/30 transition-transform duration-150 ltr:group-hover/row:translate-x-0.5 rtl:group-hover/row:-translate-x-0.5 group-hover/row:text-base-content/70 ${rtlFlip}`}
         />

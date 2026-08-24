@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { GitBranch } from "lucide-react"
+import { GitBranchIcon } from "@primer/octicons-react"
 
 import { Alert, Button, Modal } from "@/components/ui"
 import { Spinner } from "@/components/Spinner"
@@ -255,7 +255,7 @@ export function BulkSubmissionTriggerModal({
     >
       <div className="flex items-start gap-4">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-          <GitBranch className="size-5" aria-hidden="true" />
+          <GitBranchIcon className="size-5" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className="text-lg font-bold">

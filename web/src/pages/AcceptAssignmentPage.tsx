@@ -1,15 +1,15 @@
 import {
-  AlertTriangle,
-  CalendarX,
-  CheckCircle2,
-  ChevronDown,
-  GraduationCap,
-  Languages,
-  Lock,
-  UserRound,
-} from "lucide-react"
+  AlertIcon,
+  CalendarIcon,
+  CheckCircleIcon,
+  ChevronDownIcon,
+  GlobeIcon,
+  LockIcon,
+  MarkGithubIcon,
+  MortarBoardIcon,
+  PersonIcon,
+} from "@primer/octicons-react"
 
-import GitHub from "@/assets/github.svg?react"
 import { Spinner } from "@/components/Spinner"
 import { Alert, Button, Card, Markdown, MonoLtr } from "@/components/ui"
 import { assignmentDescription } from "@/types/classroom"
@@ -69,7 +69,7 @@ const AcceptNavbar = () => {
       <div className="flex-1">
         <Link to="/">
           <div className="flex p-6 text-lg font-bold">
-            <GraduationCap aria-hidden="true" className="size-8 me-2" />{" "}
+            <MortarBoardIcon aria-hidden="true" className="size-8 me-2" />{" "}
             {t("nav.appName")}
           </div>
         </Link>
@@ -81,7 +81,7 @@ const AcceptNavbar = () => {
           className="gap-2"
           onClick={() => langDialogRef.current?.showModal()}
         >
-          <Languages aria-hidden="true" className="size-5" />
+          <GlobeIcon aria-hidden="true" className="size-5" />
           <span className="hidden sm:inline">{t("nav.language")}</span>
         </Button>
       </div>
@@ -137,7 +137,7 @@ const UserInfo = ({ user }: { user: GitHubUser | null }) => {
         <div className="font-medium text-base-content">{displayName}</div>
 
         <div className="flex items-center gap-1 text-sm text-base-content/70">
-          <GitHub aria-hidden="true" className="size-4" />
+          <MarkGithubIcon aria-hidden="true" className="size-4" />
           <span>{username ?? t("accept.checkingUser")}</span>
         </div>
       </div>
@@ -159,7 +159,7 @@ const AssignmentNotFound = ({
         <Card.Body className="gap-8">
           <div>
             <span className="badge badge-error badge-soft gap-2">
-              <AlertTriangle aria-hidden="true" className="size-4" />
+              <AlertIcon aria-hidden="true" className="size-4" />
               {t("accept.notFound.badge")}
             </span>
 
@@ -183,7 +183,7 @@ const AssignmentNotFound = ({
           <div className="rounded-box border border-error/20 bg-error/5 p-5">
             <div className="flex items-start gap-4">
               <div className="rounded-full bg-error/10 p-3 text-error">
-                <AlertTriangle aria-hidden="true" className="size-6" />
+                <AlertIcon aria-hidden="true" className="size-6" />
               </div>
 
               <div className="min-w-0">
@@ -243,7 +243,7 @@ const AssignmentLocked = ({
         <Card.Body className="gap-8">
           <div>
             <span className="badge badge-warning badge-soft gap-2">
-              <Lock aria-hidden="true" className="size-4" />
+              <LockIcon aria-hidden="true" className="size-4" />
               {t("accept.locked.badge")}
             </span>
 
@@ -297,7 +297,7 @@ const AssignmentClosed = ({
         <Card.Body className="gap-8">
           <div>
             <span className="badge badge-warning badge-soft gap-2">
-              <CalendarX aria-hidden="true" className="size-4" />
+              <CalendarIcon aria-hidden="true" className="size-4" />
               {t("accept.closed.badge")}
             </span>
 
@@ -349,7 +349,7 @@ const NotEnrolled = ({ user }: { user: GitHubUser | null }) => {
         <Card.Body className="gap-8">
           <div>
             <span className="badge badge-warning badge-soft gap-2">
-              <Lock aria-hidden="true" className="size-4" />
+              <LockIcon aria-hidden="true" className="size-4" />
               {t("accept.notEnrolled.badge")}
             </span>
 
@@ -412,7 +412,7 @@ const initialStepState: StepState = Object.fromEntries(
 const StatusIcon = ({ status }: { status: AcceptStepStatus }) => {
   if (status === "complete")
     return (
-      <CheckCircle2
+      <CheckCircleIcon
         aria-hidden="true"
         className="size-5 shrink-0 text-success"
       />
@@ -426,10 +426,7 @@ const StatusIcon = ({ status }: { status: AcceptStepStatus }) => {
     )
   if (status === "error")
     return (
-      <AlertTriangle
-        aria-hidden="true"
-        className="size-5 shrink-0 text-error"
-      />
+      <AlertIcon aria-hidden="true" className="size-5 shrink-0 text-error" />
     )
   return (
     <span className="flex size-5 shrink-0 items-center justify-center">
@@ -598,7 +595,7 @@ const AcceptProgress = ({ steps }: { steps: StepState }) => {
           <span className="font-medium">{summary}</span>
         </span>
 
-        <ChevronDown
+        <ChevronDownIcon
           aria-hidden="true"
           className={`size-4 shrink-0 text-base-content/70 transition-transform ${
             expanded ? "rotate-180" : ""
@@ -658,7 +655,7 @@ const RepairToggle = ({
         className="flex w-full cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-medium"
       >
         <span>{t("accept.repair.havingTrouble")}</span>
-        <ChevronDown
+        <ChevronDownIcon
           aria-hidden="true"
           className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
         />
@@ -910,7 +907,7 @@ const AcceptAssignmentPage = () => {
         <EnterDiv className="card-body gap-4">
           <div className="flex justify-between">
             <span className="badge badge-primary badge-soft">
-              <UserRound aria-hidden="true" className="size-4" />
+              <PersonIcon aria-hidden="true" className="size-4" />
               {assignmentData?.mode && modeLabelKey[assignmentData.mode]
                 ? t(modeLabelKey[assignmentData.mode])
                 : ""}
@@ -972,7 +969,7 @@ const AcceptAssignmentPage = () => {
 
             {acceptMutation.isError && (
               <Alert tone="error" className="items-start">
-                <AlertTriangle aria-hidden="true" className="size-5 shrink-0" />
+                <AlertIcon aria-hidden="true" className="size-5 shrink-0" />
                 <div>
                   <div className="font-bold">{t("accept.errorTitle")}</div>
                   <div className="mt-1 whitespace-pre-wrap text-sm">

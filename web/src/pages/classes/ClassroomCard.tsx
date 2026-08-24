@@ -14,15 +14,14 @@ import { EnterDiv } from "@/lib/motionComponents"
 import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { Link } from "@tanstack/react-router"
 import {
-  Archive,
-  ArchiveRestore,
-  BookText,
-  ExternalLink,
-  MoreVertical,
-  Pencil,
-  Trash2,
-  UsersRound,
-} from "lucide-react"
+  ArchiveIcon,
+  BookIcon,
+  KebabHorizontalIcon,
+  LinkExternalIcon,
+  PencilIcon,
+  PeopleIcon,
+  TrashIcon,
+} from "@primer/octicons-react"
 import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
@@ -225,7 +224,7 @@ function ClassroomMenu({
           }
         }}
       >
-        <MoreVertical aria-hidden="true" className="size-4" />
+        <KebabHorizontalIcon aria-hidden="true" className="size-4" />
       </Button>
 
       {open && (
@@ -245,7 +244,7 @@ function ClassroomMenu({
               className={menuItem}
               onClick={() => closeMenu()}
             >
-              <Pencil aria-hidden="true" className="size-4" />
+              <PencilIcon aria-hidden="true" className="size-4" />
               {t("classes.card.edit")}
             </Link>
           </li>
@@ -261,9 +260,9 @@ function ClassroomMenu({
               }}
             >
               {archived ? (
-                <ArchiveRestore aria-hidden="true" className="size-4" />
+                <ArchiveIcon aria-hidden="true" className="size-4" />
               ) : (
-                <Archive aria-hidden="true" className="size-4" />
+                <ArchiveIcon aria-hidden="true" className="size-4" />
               )}
               {archived ? t("classes.unarchive") : t("classes.archive")}
             </button>
@@ -278,7 +277,7 @@ function ClassroomMenu({
               className={menuItem}
               onClick={() => closeMenu()}
             >
-              <ExternalLink aria-hidden="true" className="size-4" />
+              <LinkExternalIcon aria-hidden="true" className="size-4" />
               {t("classes.card.viewOnGitHub")}
             </a>
           </li>
@@ -293,7 +292,7 @@ function ClassroomMenu({
                 setDeleteOpen(true)
               }}
             >
-              <Trash2 aria-hidden="true" className="size-4" />
+              <TrashIcon aria-hidden="true" className="size-4" />
               {t("classes.card.delete")}
             </button>
           </li>
@@ -446,7 +445,7 @@ export function ClassroomStats({ org, slug }: { org: string; slug: string }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
       <CountStat
-        icon={<UsersRound aria-hidden="true" className="size-4" />}
+        icon={<PeopleIcon aria-hidden="true" className="size-4" />}
         loading={studentCount === undefined && !studentsError}
         loadingLabel={t("classes.card.loadingStudents")}
         label={
@@ -458,7 +457,7 @@ export function ClassroomStats({ org, slug }: { org: string; slug: string }) {
         }
       />
       <CountStat
-        icon={<BookText aria-hidden="true" className="size-4" />}
+        icon={<BookIcon aria-hidden="true" className="size-4" />}
         loading={assignmentCount === undefined && !assignmentsError}
         loadingLabel={t("classes.card.loadingAssignments")}
         label={

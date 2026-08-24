@@ -6,7 +6,7 @@ import { useDeleteClassroom } from "@/hooks/mutations/useDeleteClassroom"
 import { usePurgeInviteTeams } from "@/hooks/mutations/usePurgeInviteTeams"
 import { useForm } from "@tanstack/react-form"
 import { useNavigate, useParams } from "@tanstack/react-router"
-import { Trash2 } from "lucide-react"
+import { TrashIcon } from "@primer/octicons-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useState } from "react"
@@ -52,7 +52,7 @@ export const DeleteClassroomButton = ({
         className="text-error"
         aria-label={t("classes.deleteClassroomAria")}
       >
-        <Trash2 className="size-4" aria-hidden="true" />
+        <TrashIcon className="size-4" aria-hidden="true" />
       </Button>
 
       <ConfirmModal

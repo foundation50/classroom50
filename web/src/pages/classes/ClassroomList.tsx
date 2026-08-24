@@ -1,12 +1,12 @@
 import { Link } from "@tanstack/react-router"
 import {
-  ArrowUpDown,
-  ChevronDown,
-  ListFilter,
-  Plus,
-  Search,
-} from "lucide-react"
-import GitHub from "@/assets/github.svg?react"
+  ArrowSwitchIcon,
+  ChevronDownIcon,
+  FilterIcon,
+  MarkGithubIcon,
+  PlusIcon,
+  SearchIcon,
+} from "@primer/octicons-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -163,7 +163,7 @@ const ClassroomList = ({
         <Input
           inputSize="sm"
           leadingIcon={
-            <Search
+            <SearchIcon
               aria-hidden="true"
               className="size-4 text-base-content/50"
             />
@@ -197,7 +197,7 @@ const ClassroomList = ({
 
         {showTermFilter && (
           <LabeledControl
-            icon={<ListFilter aria-hidden="true" className="size-4" />}
+            icon={<FilterIcon aria-hidden="true" className="size-4" />}
             active={activeTerm !== "all"}
           >
             <Select
@@ -221,7 +221,9 @@ const ClassroomList = ({
         )}
 
         <LabeledControl
-          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
+          icon={
+            <ArrowSwitchIcon aria-hidden="true" className="size-4 rotate-90" />
+          }
         >
           <Select
             selectSize="sm"
@@ -255,7 +257,7 @@ const ClassroomList = ({
             type="button"
             className="btn btn-primary btn-sm join-item"
           >
-            <Plus aria-hidden="true" className="size-4" />
+            <PlusIcon aria-hidden="true" className="size-4" />
             {t("classes.newClass")}
           </Link>
           {/* Not a join-item: see NewClassroomButton in ClassesPage.tsx. */}
@@ -267,7 +269,7 @@ const ClassroomList = ({
               className="join-item h-full border-s border-primary-content/20 px-1.5"
               aria-label={t("classes.newButton.moreOptions")}
             >
-              <ChevronDown aria-hidden="true" className="size-4" />
+              <ChevronDownIcon aria-hidden="true" className="size-4" />
             </Button>
             <ul
               tabIndex={0}
@@ -277,7 +279,7 @@ const ClassroomList = ({
               {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
               <li>
                 <Link to="/$org/import" params={{ org }}>
-                  <GitHub aria-hidden="true" className="size-4" />
+                  <MarkGithubIcon aria-hidden="true" className="size-4" />
                   {t("migration.entryButton")}
                 </Link>
               </li>

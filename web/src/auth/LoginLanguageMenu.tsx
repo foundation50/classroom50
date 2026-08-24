@@ -1,5 +1,6 @@
 import { useRef, useState } from "react"
-import { Check, Globe, Loader2 } from "lucide-react"
+import { InlineSpinner } from "@/components/Spinner"
+import { CheckIcon, GlobeIcon } from "@primer/octicons-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui"
@@ -84,7 +85,7 @@ export function LoginLanguageMenu() {
         title={t("language.switcherLabel")}
         onClick={() => void loadRegistry()}
       >
-        <Globe aria-hidden="true" className="size-5" />
+        <GlobeIcon aria-hidden="true" className="size-5" />
       </Button>{" "}
       <ul
         tabIndex={0}
@@ -104,15 +105,12 @@ export function LoginLanguageMenu() {
             >
               <span className="truncate">{label(code)}</span>
               {code === lang ? (
-                <Check
+                <CheckIcon
                   className="size-4 shrink-0 text-primary"
                   aria-hidden="true"
                 />
               ) : switchingCode === code ? (
-                <Loader2
-                  className="size-4 shrink-0 animate-spin"
-                  aria-hidden="true"
-                />
+                <InlineSpinner className="shrink-0" />
               ) : null}
             </button>
           </li>
@@ -121,7 +119,7 @@ export function LoginLanguageMenu() {
         {loadingRegistry && (
           <li className="px-3 py-2 text-xs text-base-content/60">
             <span className="flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              <InlineSpinner />
               {t("language.browseLoading")}
             </span>
           </li>
@@ -146,10 +144,7 @@ export function LoginLanguageMenu() {
                 >
                   <span className="truncate">{label(l.code)}</span>
                   {switchingCode === l.code && (
-                    <Loader2
-                      className="size-4 shrink-0 animate-spin"
-                      aria-hidden="true"
-                    />
+                    <InlineSpinner className="shrink-0" />
                   )}
                 </button>
               </li>

@@ -1,6 +1,6 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Plus, X } from "lucide-react"
+import { PlusIcon, XIcon } from "@primer/octicons-react"
 
 import { Alert, Button, Modal, Select, Toolbar } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"
@@ -333,7 +333,7 @@ const BulkActionsBar = ({
                   })}
                   onClick={() => setConfirmingAdd(true)}
                 >
-                  <Plus aria-hidden="true" className="size-4" />
+                  <PlusIcon aria-hidden="true" className="size-4" />
                   {t("orgMembers.bulk.add")}
                 </Button>
                 <Button
@@ -361,7 +361,7 @@ const BulkActionsBar = ({
                 title={t("orgMembers.bulk.clearSelection")}
                 onClick={onClearSelection}
               >
-                <X aria-hidden="true" className="size-4" />
+                <XIcon aria-hidden="true" className="size-4" />
               </Button>
             </>
           ) : null}

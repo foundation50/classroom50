@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeftIcon, ChevronRightIcon } from "@primer/octicons-react"
 
 import { cx } from "./cx"
 import { rtlFlip } from "./icons"
@@ -78,7 +78,10 @@ export function TablePagination({
           onClick={() => onPageChange(page - 1)}
           aria-label={t("common.pagination.previous")}
         >
-          <ChevronLeft aria-hidden="true" className={cx("size-4", rtlFlip)} />
+          <ChevronLeftIcon
+            aria-hidden="true"
+            className={cx("size-4", rtlFlip)}
+          />
         </button>
         {pages.map((p, i) =>
           p === null ? (
@@ -110,7 +113,10 @@ export function TablePagination({
           onClick={() => onPageChange(page + 1)}
           aria-label={t("common.pagination.next")}
         >
-          <ChevronRight aria-hidden="true" className={cx("size-4", rtlFlip)} />
+          <ChevronRightIcon
+            aria-hidden="true"
+            className={cx("size-4", rtlFlip)}
+          />
         </button>
       </nav>
     </div>

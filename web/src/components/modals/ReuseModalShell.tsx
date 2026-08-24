@@ -1,4 +1,4 @@
-import { Copy, TriangleAlert } from "lucide-react"
+import { AlertIcon, CopyIcon } from "@primer/octicons-react"
 import { useEffect, useId, type ReactNode, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
@@ -54,7 +54,7 @@ export const ReuseModalShell = ({
     >
       <div className="flex items-start gap-4">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-          <Copy className="size-5" aria-hidden="true" />
+          <CopyIcon className="size-5" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className="text-lg font-bold">
@@ -79,7 +79,7 @@ export const ReuseModalShell = ({
         show={!!warning}
         className="mt-4 items-start text-sm"
       >
-        <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+        <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
         <span>{warning}</span>
       </AnimatedAlert>
 
@@ -99,7 +99,7 @@ export const ReuseModalShell = ({
               t("components.modals.reuseShell.copying")
             ) : (
               <>
-                <Copy aria-hidden="true" className="size-4" />{" "}
+                <CopyIcon aria-hidden="true" className="size-4" />{" "}
                 {t("components.modals.reuseShell.reuseAssignment")}
               </>
             )}

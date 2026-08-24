@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { History, ScrollText } from "lucide-react"
+import { HistoryIcon, LogIcon } from "@primer/octicons-react"
 
 import { Button } from "@/components/ui"
 import { ActionIconLink } from "@/pages/submissions/SubmissionsRows"
@@ -31,7 +31,7 @@ export const StudentRowActions = ({
       {latestReleaseHref ? (
         <ActionIconLink
           href={latestReleaseHref}
-          icon={ScrollText}
+          icon={LogIcon}
           label={t("submissions.table.viewDetails")}
           title={t("submissions.table.viewDetails")}
           emptyLabel={t("submissions.table.viewDetails")}
@@ -47,7 +47,7 @@ export const StudentRowActions = ({
         aria-label={t("submissions.details.viewSubmissions")}
         title={t("submissions.details.viewSubmissions")}
       >
-        <History aria-hidden="true" className="size-4" />
+        <HistoryIcon aria-hidden="true" className="size-4" />
       </Button>
     </div>
   )

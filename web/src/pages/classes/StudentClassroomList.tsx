@@ -1,5 +1,10 @@
 import { Link } from "@tanstack/react-router"
-import { ArrowUpDown, BookOpen, GraduationCap, Search } from "lucide-react"
+import {
+  ArrowSwitchIcon,
+  BookIcon,
+  MortarBoardIcon,
+  SearchIcon,
+} from "@primer/octicons-react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -24,7 +29,7 @@ function AcceptedStat({ count }: { count: number }) {
   const { t } = useTranslation()
   return (
     <span className="flex items-center gap-1.5 text-sm text-base-content/70">
-      <BookOpen aria-hidden="true" className="size-4" />
+      <BookIcon aria-hidden="true" className="size-4" />
       {count === 0
         ? t("classes.student.card.noneAccepted")
         : t("classes.student.card.acceptedCount", { count })}
@@ -184,7 +189,7 @@ export function StudentClassroomList({
         <Input
           inputSize="sm"
           leadingIcon={
-            <Search
+            <SearchIcon
               aria-hidden="true"
               className="size-4 text-base-content/50"
             />
@@ -198,7 +203,9 @@ export function StudentClassroomList({
         />
 
         <LabeledControl
-          icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
+          icon={
+            <ArrowSwitchIcon aria-hidden="true" className="size-4 rotate-90" />
+          }
         >
           <Select
             selectSize="sm"
@@ -237,7 +244,7 @@ export function StudentClassroomList({
         <EmptyState
           icon={
             <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-base-200">
-              <GraduationCap
+              <MortarBoardIcon
                 aria-hidden="true"
                 className="size-6 text-base-content/70"
               />

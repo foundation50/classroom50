@@ -1,6 +1,11 @@
 import { Fragment, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { Bot, CircleOff, GitCommitHorizontal, Tag } from "lucide-react"
+import {
+  CircleSlashIcon,
+  GitCommitIcon,
+  HubotIcon,
+  TagIcon,
+} from "@primer/octicons-react"
 
 import { Badge } from "@/components/ui"
 import { LoadingSwap } from "@/lib/LoadingSwap"
@@ -22,9 +27,9 @@ const SubmissionModeIcon = ({
   className?: string
 }) =>
   mode === "tag" ? (
-    <Tag aria-hidden="true" className={className} />
+    <TagIcon aria-hidden="true" className={className} />
   ) : (
-    <GitCommitHorizontal aria-hidden="true" className={className} />
+    <GitCommitIcon aria-hidden="true" className={className} />
   )
 
 // ── Assignment-property meta strip ──────────────────────────────────────────
@@ -116,7 +121,7 @@ const autogradingMetaContent: Record<
 export const AutogradingMeta = ({ state }: { state: AutogradingState }) => {
   const { t } = useTranslation()
   const { label, title } = autogradingMetaContent[state]
-  const Icon = state === "built-in" ? Bot : CircleOff
+  const Icon = state === "built-in" ? HubotIcon : CircleSlashIcon
   return (
     <MetaItem title={title ? t(title) : undefined}>
       <Icon aria-hidden="true" className="size-3.5" />

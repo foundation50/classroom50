@@ -1,4 +1,8 @@
-import { ChevronDown, ExternalLink, Info } from "lucide-react"
+import {
+  ChevronDownIcon,
+  InfoIcon,
+  LinkExternalIcon,
+} from "@primer/octicons-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -36,11 +40,11 @@ function MissingOrgNotice({
         }}
         className="flex cursor-pointer list-none items-center gap-2 rounded-box px-4 py-2.5 text-sm hover:bg-info/10"
       >
-        <Info aria-hidden="true" className="size-4 shrink-0 text-info" />
+        <InfoIcon aria-hidden="true" className="size-4 shrink-0 text-info" />
         <span className="min-w-0 flex-1 truncate font-medium text-base-content">
           {t("orgs.missingNotice.title")}
         </span>
-        <ChevronDown
+        <ChevronDownIcon
           aria-hidden="true"
           className="size-4 shrink-0 text-base-content/50 transition-transform group-open:rotate-180"
         />
@@ -68,7 +72,7 @@ function MissingOrgNotice({
             onClick={armRefreshOnReturn}
           >
             {t("orgs.missingNotice.manageOauth")}
-            <ExternalLink aria-hidden="true" className="size-4" />
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
           </Button>
           <Button
             variant="outline"

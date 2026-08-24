@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { ShieldAlert } from "lucide-react"
+import { ShieldXIcon } from "@primer/octicons-react"
 import { GitHubAPIError } from "@/github-core/errors"
 import { Alert, RouterButton } from "@/components/ui"
 import { logger } from "@/lib/logger"
@@ -25,7 +25,7 @@ function PermissionDeniedMessage() {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-10 text-center">
       <div className="flex size-16 items-center justify-center rounded-box bg-warning/10 text-warning">
-        <ShieldAlert aria-hidden="true" className="size-8" />
+        <ShieldXIcon aria-hidden="true" className="size-8" />
       </div>
       <Alert tone="warning" className="max-w-md flex-col text-center">
         <h1 className="text-lg font-bold">{t("permissionDenied.title")}</h1>

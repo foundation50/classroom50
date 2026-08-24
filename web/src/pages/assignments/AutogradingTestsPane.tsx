@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { Pencil, Trash, ChevronRight } from "lucide-react"
+import { ChevronRightIcon, PencilIcon, TrashIcon } from "@primer/octicons-react"
 import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
 import type { AssignmentForm } from "./assignmentFormModel"
 
@@ -479,7 +479,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                 aria-expanded={expanded}
                 className="group flex cursor-pointer items-start gap-1.5 text-start"
               >
-                <ChevronRight
+                <ChevronRightIcon
                   aria-hidden="true"
                   className={cx(
                     "mt-1 size-4 shrink-0 transition-transform duration-200",
@@ -585,7 +585,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                                   },
                                 )}
                               >
-                                <Pencil aria-hidden="true" size={16} />
+                                <PencilIcon aria-hidden="true" size={16} />
                               </Button>
 
                               <Button
@@ -598,7 +598,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                                   { number: index + 1 },
                                 )}
                               >
-                                <Trash aria-hidden="true" size={16} />
+                                <TrashIcon aria-hidden="true" size={16} />
                               </Button>
                             </div>
                           </td>

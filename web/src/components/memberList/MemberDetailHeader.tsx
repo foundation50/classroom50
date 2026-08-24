@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react"
+import { LinkExternalIcon } from "@primer/octicons-react"
 import { useTranslation } from "react-i18next"
 
 import Avatar from "@/components/avatar"
@@ -40,7 +40,7 @@ const MemberDetailHeader = ({
         rel="noreferrer"
         className="inline-flex w-fit items-center gap-1 text-sm text-primary hover:underline"
       >
-        <ExternalLink aria-hidden="true" className="size-3.5" />
+        <LinkExternalIcon aria-hidden="true" className="size-3.5" />
         {t("orgMembers.manageOnGitHub")}
       </a>
     </div>

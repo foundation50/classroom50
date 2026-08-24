@@ -1,9 +1,9 @@
 import {
-  GraduationCap,
-  ChevronLeft,
-  ChevronRight,
-  ArrowLeft,
-} from "lucide-react"
+  ArrowLeftIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  MortarBoardIcon,
+} from "@primer/octicons-react"
 import { Link, useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { type ReactNode } from "react"
@@ -103,7 +103,7 @@ export const ClassroomLogo = () => {
           data-tip={t("nav.expandSidebar")}
           aria-label={t("nav.expandSidebar")}
         >
-          <GraduationCap
+          <MortarBoardIcon
             aria-hidden="true"
             className="size-8 text-[var(--sidebar-accent)]"
           />
@@ -119,7 +119,7 @@ export const ClassroomLogo = () => {
         className="flex flex-1 min-w-0 items-center text-lg text-neutral-content font-bold"
         title={t("nav.appName")}
       >
-        <GraduationCap
+        <MortarBoardIcon
           aria-hidden="true"
           className="size-8 text-[var(--sidebar-accent)] shrink-0 me-2"
         />
@@ -132,7 +132,7 @@ export const ClassroomLogo = () => {
         aria-label={t("nav.collapseSidebar")}
         title={t("nav.collapseSidebar")}
       >
-        <ChevronLeft aria-hidden="true" className={`size-5 ${rtlFlip}`} />
+        <ChevronLeftIcon aria-hidden="true" className={`size-5 ${rtlFlip}`} />
       </button>
     </div>
   )
@@ -152,7 +152,7 @@ export const ExpandSidebarButton = () => {
         data-tip={t("nav.expandSidebar")}
         aria-label={t("nav.expandSidebar")}
       >
-        <ChevronRight aria-hidden="true" className={`size-5 ${rtlFlip}`} />
+        <ChevronRightIcon aria-hidden="true" className={`size-5 ${rtlFlip}`} />
       </button>
     </div>
   )
@@ -172,7 +172,7 @@ export const AllClasses = ({ org }: { org: string }) => {
           data-tip={t("nav.allClasses")}
           aria-label={t("nav.allClasses")}
         >
-          <ArrowLeft aria-hidden="true" className={`size-5 ${rtlFlip}`} />
+          <ArrowLeftIcon aria-hidden="true" className={`size-5 ${rtlFlip}`} />
         </Link>
       </div>
     )
@@ -185,7 +185,7 @@ export const AllClasses = ({ org }: { org: string }) => {
         params={{ org }}
         className="inline-flex items-center gap-1"
       >
-        <ArrowLeft
+        <ArrowLeftIcon
           aria-hidden="true"
           className={`size-3.5 shrink-0 ${rtlFlip}`}
         />

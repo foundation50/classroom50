@@ -1,8 +1,12 @@
-import { Mail, UserRound, Users } from "lucide-react"
+import {
+  MailIcon,
+  MarkGithubIcon,
+  PeopleIcon,
+  PersonIcon,
+} from "@primer/octicons-react"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useCallback, useEffect, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import GitHub from "@/assets/github.svg?react"
 import { useUpdateStudent } from "@/hooks/mutations/useUpdateStudent"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -156,7 +160,7 @@ const EditStudentForm = ({
         <form.Field name="first_name">
           {(field) => (
             <div className="flex items-center">
-              <UserRound
+              <PersonIcon
                 className="me-2 text-base-content/70"
                 aria-hidden="true"
               />
@@ -176,7 +180,7 @@ const EditStudentForm = ({
         <form.Field name="last_name">
           {(field) => (
             <div className="flex items-center">
-              <UserRound
+              <PersonIcon
                 className="me-2 text-base-content/70"
                 aria-hidden="true"
               />
@@ -198,7 +202,7 @@ const EditStudentForm = ({
             return (
               <div>
                 <div className="flex items-center">
-                  <Mail
+                  <MailIcon
                     className="size-6 me-2 text-base-content/70"
                     aria-hidden="true"
                   />
@@ -251,7 +255,10 @@ const EditStudentForm = ({
         <form.Field name="section">
           {(field) => (
             <div className="flex items-center">
-              <Users className="me-2 text-base-content/70" aria-hidden="true" />
+              <PeopleIcon
+                className="me-2 text-base-content/70"
+                aria-hidden="true"
+              />
               <Input
                 id={field.name}
                 name={field.name}
@@ -267,7 +274,7 @@ const EditStudentForm = ({
 
         {showGitHubPanel && student.username ? (
           <div className="flex items-center gap-2 rounded-box border border-base-300 bg-base-200/50 px-3 py-2 text-sm text-base-content/70">
-            <GitHub aria-hidden="true" className="size-5 opacity-40" />
+            <MarkGithubIcon aria-hidden="true" className="size-5 opacity-40" />
             <span>
               <Trans
                 i18nKey={

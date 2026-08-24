@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router"
-import { ChevronDown, Copy, Plus } from "lucide-react"
+import { ChevronDownIcon, CopyIcon, PlusIcon } from "@primer/octicons-react"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
@@ -53,7 +53,7 @@ const NewAssignmentButton = ({
           params={{ org, classroom }}
           className="btn btn-primary btn-sm join-item"
         >
-          <Plus aria-hidden="true" className="size-4" />{" "}
+          <PlusIcon aria-hidden="true" className="size-4" />{" "}
           {t("assignments.newButton.assignment")}
         </Link>
         {/* Not a join-item: see NewClassroomButton in ClassesPage.tsx. */}
@@ -65,7 +65,7 @@ const NewAssignmentButton = ({
             className="join-item h-full border-s border-primary-content/20 px-2"
             aria-label={t("assignments.newButton.moreOptions")}
           >
-            <ChevronDown aria-hidden="true" className="size-4" />
+            <ChevronDownIcon aria-hidden="true" className="size-4" />
           </Button>
           <ul
             tabIndex={0}
@@ -82,7 +82,7 @@ const NewAssignmentButton = ({
                   setReuseOpen(true)
                 }}
               >
-                <Copy aria-hidden="true" className="size-4" />{" "}
+                <CopyIcon aria-hidden="true" className="size-4" />{" "}
                 {t("assignments.newButton.reuse")}
               </button>
             </li>

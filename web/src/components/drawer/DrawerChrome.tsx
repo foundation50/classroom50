@@ -1,4 +1,4 @@
-import { Menu } from "lucide-react"
+import { ThreeBarsIcon } from "@primer/octicons-react"
 import { useTranslation } from "react-i18next"
 import { type ReactNode } from "react"
 import { Outlet, useRouterState } from "@tanstack/react-router"
@@ -87,7 +87,7 @@ export const DrawerContent = ({ children }: { children: ReactNode }) => {
         aria-label={t("nav.openMenu")}
         className="btn btn-ghost btn-square fixed top-3 start-3 z-30 lg:hidden"
       >
-        <Menu className="size-6" aria-hidden="true" />
+        <ThreeBarsIcon className="size-6" aria-hidden="true" />
       </label>
       <main id="main-content">{children}</main>
     </div>

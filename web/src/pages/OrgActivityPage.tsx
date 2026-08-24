@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import Papa from "papaparse"
-import { Activity } from "lucide-react"
+import { PulseIcon } from "@primer/octicons-react"
 
 import { AnimatedAlert, Card, Button } from "@/components/ui"
 import PageShell from "@/components/PageShell"
@@ -161,7 +161,7 @@ const OrgActivityPage = () => {
             <EmptyState
               className="mt-4 rounded-box border border-dashed border-base-300 bg-base-100 p-8 text-center"
               icon={
-                <Activity
+                <PulseIcon
                   aria-hidden="true"
                   className="mx-auto mb-3 size-8 text-base-content/40"
                 />

@@ -1,4 +1,9 @@
-import { AlertTriangle, ChevronRight, LinkIcon, UserPlus } from "lucide-react"
+import {
+  AlertIcon,
+  ChevronRightIcon,
+  LinkIcon,
+  PersonAddIcon,
+} from "@primer/octicons-react"
 import { Trans, useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 
@@ -95,7 +100,7 @@ export function AcceptLinkModal({
 
         <details className="group/cli">
           <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-sm text-base-content/70 hover:text-base-content">
-            <ChevronRight
+            <ChevronRightIcon
               aria-hidden="true"
               className={`size-4 transition-transform ${rtlFlip} group-open/cli:rotate-90`}
             />
@@ -142,10 +147,7 @@ function AcceptShareSummaryNotice({
         className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="flex items-start gap-2">
-          <AlertTriangle
-            aria-hidden="true"
-            className="mt-0.5 size-4 shrink-0"
-          />
+          <AlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span className="text-sm">
             <Trans
               i18nKey="submissions.accept.warnNoStudents"
@@ -161,7 +163,7 @@ function AcceptShareSummaryNotice({
           size="sm"
           className="whitespace-nowrap sm:shrink-0"
         >
-          <UserPlus aria-hidden="true" className="size-4" />
+          <PersonAddIcon aria-hidden="true" className="size-4" />
           {t("submissions.accept.manageRoster")}
         </RouterButton>
       </Alert>

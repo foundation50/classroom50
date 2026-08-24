@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
-import { AlertTriangle, XCircle } from "lucide-react"
+import { AlertIcon, XCircleIcon } from "@primer/octicons-react"
 
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
 import useGetOrgAudit from "@/hooks/useGetOrgAudit"
@@ -42,7 +42,7 @@ const OrgPreflightNotice = ({ org }: { org: string }) => {
     const categories = failing.join(", ")
     return (
       <CalloutDiv role="alert" className="alert alert-error alert-soft mb-6">
-        <XCircle aria-hidden="true" className="size-5" />
+        <XCircleIcon aria-hidden="true" className="size-5" />
         <div className="text-sm">
           <p className="font-semibold">{t("orgSettings.preflight.title")}</p>
           <p className="mt-0.5 text-base-content/70">
@@ -75,7 +75,7 @@ const OrgPreflightNotice = ({ org }: { org: string }) => {
   if (budgetUnverified) {
     return (
       <CalloutDiv role="status" className="alert alert-warning alert-soft mb-6">
-        <AlertTriangle aria-hidden="true" className="size-5" />
+        <AlertIcon aria-hidden="true" className="size-5" />
         <div className="text-sm">
           <p className="font-semibold">
             {t("orgSettings.preflight.unverifiedTitle")}

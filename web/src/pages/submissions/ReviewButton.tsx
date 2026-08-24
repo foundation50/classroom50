@@ -1,4 +1,4 @@
-import { MessageCircle } from "lucide-react"
+import { CommentIcon } from "@primer/octicons-react"
 import { useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
@@ -113,7 +113,7 @@ export const ReviewButton = ({
   return (
     <>
       <ActionListRow
-        icon={MessageCircle}
+        icon={CommentIcon}
         title={t("submissions.table.review")}
         description={t("submissions.manageModal.reviewDescription")}
         onClick={handleReview}
