@@ -1,18 +1,18 @@
 import {
-  Download,
-  GitBranch,
-  GitCommitHorizontal,
-  Pause,
-  Play,
-  RefreshCw,
-  ScrollText,
-  Settings2,
-  ShieldCheck,
-} from "lucide-react"
+  DownloadIcon,
+  GitBranchIcon,
+  GitCommitIcon,
+  LogIcon,
+  MarkGithubIcon,
+  PauseIcon,
+  PlayIcon,
+  ShieldCheckIcon,
+  SlidersIcon,
+  SyncIcon,
+} from "@/components/ui/icons"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
-import GitHub from "@/assets/github.svg?react"
 import { safeHttpUrl } from "@/util/url"
 import { Button, EmphasisLtr } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
@@ -55,7 +55,7 @@ export const RegradeButton = ({
   if (noRepo) {
     return (
       <ActionListRow
-        icon={RefreshCw}
+        icon={SyncIcon}
         title={t("submissions.rowRegrade.title")}
         description={t("submissions.manageModal.regradeDescription")}
         onClick={() => {}}
@@ -112,7 +112,7 @@ const ActiveRegradeButton = ({
   return (
     <>
       <ActionListRow
-        icon={RefreshCw}
+        icon={SyncIcon}
         title={t("submissions.rowRegrade.title")}
         description={
           // Surface live phase (in progress / blocked / completed / failed) so
@@ -214,7 +214,7 @@ export const DownloadButton = ({
 
   return (
     <ActionListRow
-      icon={Download}
+      icon={DownloadIcon}
       title={t("submissions.rowDownload.title")}
       description={t("submissions.manageModal.downloadDescription")}
       onClick={start}
@@ -265,7 +265,7 @@ export const RepoRowActions = ({
       {releaseHref && (
         <ActionIconLink
           href={releaseHref}
-          icon={ScrollText}
+          icon={LogIcon}
           label={t("submissions.table.viewDetails")}
           title={t("submissions.table.viewDetails")}
           emptyLabel={t("submissions.table.viewDetails")}
@@ -284,7 +284,7 @@ export const RepoRowActions = ({
         aria-label={t("submissions.manageModal.openAria", { owner })}
         title={t("submissions.manageModal.open")}
       >
-        <Settings2 aria-hidden="true" className="size-4" />
+        <SlidersIcon aria-hidden="true" className="size-4" />
       </Button>
     </>
   )
@@ -364,7 +364,7 @@ export const SubmissionActionList = ({
   return (
     <div className="flex flex-col">
       <ActionListRow
-        icon={GitCommitHorizontal}
+        icon={GitCommitIcon}
         title={t("submissions.table.viewCommit")}
         description={
           commitHref
@@ -383,7 +383,7 @@ export const SubmissionActionList = ({
           <ReviewButton org={org} repo={repo} mode={mode} noRepo={!hasRepo} />
           {onManageAccess && (
             <ActionListRow
-              icon={ShieldCheck}
+              icon={ShieldCheckIcon}
               title={t("submissions.table.manageAccess")}
               description={t("submissions.manageModal.accessDescription")}
               onClick={onManageAccess}
@@ -398,7 +398,7 @@ export const SubmissionActionList = ({
       {!skipsGrading && (
         <>
           <ActionListRow
-            icon={ScrollText}
+            icon={LogIcon}
             title={t("submissions.table.viewDetails")}
             description={
               releaseHref
@@ -503,7 +503,7 @@ const UpdateTriggerButton = ({
 
   return (
     <ActionListRow
-      icon={GitBranch}
+      icon={GitBranchIcon}
       title={t("submissions.rowTrigger.title")}
       description={t("submissions.rowTrigger.description")}
       onClick={() => void run(handleClick)}
@@ -579,7 +579,7 @@ const PauseAutogradingButton = ({
 
   return (
     <ActionListRow
-      icon={isPaused ? Play : Pause}
+      icon={isPaused ? PlayIcon : PauseIcon}
       title={t(
         isPaused
           ? "submissions.rowAutograde.resumeTitle"
@@ -619,7 +619,7 @@ export const IndividualRowHeader = ({
   return (
     <ActionIconLink
       href={hasRepo ? repoHref : null}
-      icon={GitHub}
+      icon={MarkGithubIcon}
       label={t("submissions.table.openRepoLabel", { repo })}
       title={t("submissions.table.viewRepo")}
       emptyLabel={t("submissions.table.openRepoLabel", { repo })}

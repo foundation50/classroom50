@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowUpDown, CircleDashed, ListFilter } from "lucide-react"
+import {
+  ArrowSwitchIcon,
+  FilterIcon,
+  IssueDraftIcon,
+} from "@/components/ui/icons"
 
 import { Alert, Badge, Card, Toolbar, cx } from "@/components/ui"
 import {
@@ -86,7 +90,7 @@ function VpatConformanceTable({
 
         {rows.length === 0 ? (
           <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-base-content/60">
-            <CircleDashed aria-hidden="true" className="size-5" />
+            <IssueDraftIcon aria-hidden="true" className="size-4" />
             {t("accessibility.vpat.empty")}
           </div>
         ) : (
@@ -266,7 +270,7 @@ export function VpatSection() {
               hasFilterActive={hasFilterActive}
             />
             <Toolbar.FilterSelect
-              icon={<ListFilter aria-hidden="true" className="size-4" />}
+              icon={<FilterIcon aria-hidden="true" className="size-4" />}
               active={filter !== "all"}
               value={filter}
               onChange={(e) => setFilter(e.target.value as VpatFilter)}
@@ -281,7 +285,12 @@ export function VpatSection() {
             </Toolbar.FilterSelect>
             <Toolbar.Trailing>
               <Toolbar.FilterSelect
-                icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
+                icon={
+                  <ArrowSwitchIcon
+                    aria-hidden="true"
+                    className="size-4 rotate-90"
+                  />
+                }
                 value={sort}
                 onChange={(e) => setSort(e.target.value as VpatSort)}
                 aria-label={t("accessibility.vpat.sortBy")}

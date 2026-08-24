@@ -1,10 +1,13 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery } from "@tanstack/react-query"
-import { ExternalLink, ShieldCheck } from "lucide-react"
+import {
+  LinkExternalIcon,
+  MarkGithubIcon,
+  ShieldCheckIcon,
+} from "@/components/ui/icons"
 
 import { Badge, Button, Modal, Spinner } from "@/components/ui"
-import GitHub from "@/assets/github.svg?react"
 import type { Assignment } from "@/types/classroom"
 import type { GitHubRepoTeam } from "@/github-core/types"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -122,7 +125,7 @@ export const TemplateAccessModal = ({
     <Modal open onClose={onClose} size="lg" aria-labelledby={titleId}>
       <div className="flex items-start gap-4">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-          <ShieldCheck className="size-5" aria-hidden="true" />
+          <ShieldCheckIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className="text-lg font-bold">
@@ -149,9 +152,9 @@ export const TemplateAccessModal = ({
             rel="noreferrer"
             className="btn btn-xs btn-ghost shrink-0"
           >
-            <GitHub aria-hidden="true" className="size-4" />
+            <MarkGithubIcon aria-hidden="true" className="size-4" />
             {t("assignments.template.accessModal.openOnGitHub")}
-            <ExternalLink aria-hidden="true" className="size-3.5" />
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
           </a>
         </div>
         <div className="mt-2 rounded-box border border-base-content/10 bg-base-200/40 px-3 py-2">

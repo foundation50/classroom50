@@ -1,13 +1,13 @@
 import { useMemo, useRef, useState } from "react"
+import { InlineSpinner } from "@/components/Spinner"
 import {
-  Check,
-  ChevronRight,
-  Copy,
-  Loader2,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react"
+  CheckIcon,
+  ChevronRightIcon,
+  CopyIcon,
+  TrashIcon,
+  UploadIcon,
+  XIcon,
+} from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { AnimatedAlert, Button, rtlFlip } from "@/components/ui"
@@ -241,7 +241,7 @@ export const LanguageSwitcher = ({
         </select>
         {installingSelected ? (
           <p className="flex items-center gap-2 text-xs text-base-content/70">
-            <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+            <InlineSpinner />
             {t("language.browseLoading")}
           </p>
         ) : (
@@ -306,9 +306,9 @@ export const LanguageSwitcher = ({
               disabled={!shareUrl}
             >
               {shareCopied ? (
-                <Check className="size-4" aria-hidden="true" />
+                <CheckIcon className="size-4" aria-hidden="true" />
               ) : (
-                <Copy className="size-4" aria-hidden="true" />
+                <CopyIcon className="size-4" aria-hidden="true" />
               )}
               {shareCopied
                 ? t("language.shareCopied")
@@ -350,9 +350,9 @@ export const LanguageSwitcher = ({
 
           <label className="btn btn-sm btn-outline w-full">
             {busy && !preview ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              <InlineSpinner />
             ) : (
-              <Upload className="size-4" aria-hidden="true" />
+              <UploadIcon className="size-4" aria-hidden="true" />
             )}
             {t("language.uploadFile")}
             <input
@@ -427,7 +427,7 @@ export const LanguageSwitcher = ({
                       aria-label={t("language.removePack", { code: c })}
                       onClick={() => removePack(c)}
                     >
-                      <Trash2 className="size-4" aria-hidden="true" />
+                      <TrashIcon className="size-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </li>
@@ -471,7 +471,7 @@ export const LanguageSwitcher = ({
               onClick={handleCancel}
               disabled={busy}
             >
-              <X className="size-4" aria-hidden="true" />
+              <XIcon className="size-4" aria-hidden="true" />
               {t("language.previewCancel")}
             </Button>
             <Button
@@ -481,9 +481,9 @@ export const LanguageSwitcher = ({
               disabled={busy}
             >
               {busy ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                <InlineSpinner />
               ) : (
-                <Check className="size-4" aria-hidden="true" />
+                <CheckIcon className="size-4" aria-hidden="true" />
               )}
               {t("language.previewConfirm", { code: preview.code })}
             </Button>
@@ -524,7 +524,7 @@ const AccordionSection = ({
       className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden"
       onClick={(e) => onToggle(e, section)}
     >
-      <ChevronRight
+      <ChevronRightIcon
         className={`size-4 transition-transform ${rtlFlip} ${open ? "rotate-90" : ""}`}
         aria-hidden="true"
       />

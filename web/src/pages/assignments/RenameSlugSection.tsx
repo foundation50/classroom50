@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { TriangleAlert } from "lucide-react"
+import { AlertIcon } from "@/components/ui/icons"
 
 import { Alert, Button, Card, EmphasisLtr } from "@/components/ui"
 import { RenameAssignmentModal } from "@/components/modals/RenameAssignmentModal"
@@ -39,7 +39,7 @@ export function RenameSlugSection({
     <Card bordered={false} className="mb-6 w-full border border-warning/40">
       <Card.Body className="gap-4">
         <h2 className="card-title flex items-center gap-2 text-lg">
-          <TriangleAlert aria-hidden="true" className="size-5 text-warning" />
+          <AlertIcon aria-hidden="true" className="size-4 text-warning" />
           {finish
             ? t("assignments.rename.sectionFinishTitle")
             : t("assignments.rename.sectionTitle")}

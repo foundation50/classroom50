@@ -1,7 +1,12 @@
 import { useId, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
-import { AlertTriangle, ChevronRight, UserPlus, X } from "lucide-react"
+import {
+  AlertIcon,
+  ChevronRightIcon,
+  PersonAddIcon,
+  XIcon,
+} from "@/components/ui/icons"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -146,7 +151,7 @@ const MemberDetailModal = ({
           disabled={working}
           aria-label={t("common.close")}
         >
-          <X aria-hidden="true" className="size-4" />
+          <XIcon aria-hidden="true" className="size-4" />
         </Button>
       </div>
 
@@ -192,10 +197,7 @@ const MemberDetailModal = ({
                         className="ms-2 gap-1"
                         title={t("orgMembers.unprovisionedAccessTitle")}
                       >
-                        <AlertTriangle
-                          aria-hidden="true"
-                          className="size-2.5"
-                        />
+                        <AlertIcon aria-hidden="true" className="size-2.5" />
                         {t("orgMembers.unprovisionedAccessBadge")}
                       </Badge>
                     ) : null}
@@ -206,7 +208,7 @@ const MemberDetailModal = ({
                         {access.section}
                       </Badge>
                     ) : null}
-                    <ChevronRight
+                    <ChevronRightIcon
                       aria-hidden="true"
                       className={`size-4 text-base-content/30 transition-transform duration-150 ltr:group-hover/cls:translate-x-0.5 rtl:group-hover/cls:-translate-x-0.5 group-hover/cls:text-base-content/70 ${rtlFlip}`}
                     />
@@ -239,7 +241,7 @@ const MemberDetailModal = ({
                 hidden={confirmingInvite}
                 onClick={() => setConfirmingInvite(true)}
               >
-                <UserPlus aria-hidden="true" className="size-4" />
+                <PersonAddIcon aria-hidden="true" className="size-4" />
                 {t("orgMembers.inviteToOrg")}
               </Button>
               {confirmingInvite ? (
@@ -268,7 +270,10 @@ const MemberDetailModal = ({
                         t("orgMembers.inviting")
                       ) : (
                         <>
-                          <UserPlus aria-hidden="true" className="size-4" />
+                          <PersonAddIcon
+                            aria-hidden="true"
+                            className="size-4"
+                          />
                           {t("orgMembers.inviteToOrg")}
                         </>
                       )}

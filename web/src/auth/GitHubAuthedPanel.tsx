@@ -1,4 +1,4 @@
-import { CheckCircle } from "lucide-react"
+import { CheckCircleIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import type { GitHubUser } from "@/github-core/types"
@@ -20,7 +20,7 @@ export function GitHubAuthedPanel({
           sees a resolved user or a genuine failure. */}
       {user ? (
         <Alert tone="success" className="items-start text-sm">
-          <CheckCircle aria-hidden="true" className="size-4 shrink-0" />
+          <CheckCircleIcon aria-hidden="true" className="size-4 shrink-0" />
           <span>{t("auth.signedInConfirmed")}</span>
         </Alert>
       ) : null}

@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink } from "lucide-react"
+import { LinkExternalIcon, MarkGithubIcon } from "@/components/ui/icons"
 
-import GitHub from "@/assets/github.svg?react"
 import { Badge, Button, Modal } from "@/components/ui"
 import type { Student } from "@/types/classroom"
 import { getName, getInitials, firstGrapheme } from "@/util/students"
@@ -52,7 +51,8 @@ export const StudentProfileModal = ({
           target="_blank"
           rel="noreferrer"
         >
-          <GitHub aria-hidden="true" className="size-4" />@{student.username}
+          <MarkGithubIcon aria-hidden="true" className="size-4" />@
+          {student.username}
         </a>
       ) : (
         <span className="text-base-content/70">
@@ -118,9 +118,9 @@ export const StudentProfileModal = ({
           rel="noreferrer"
           title={repoName}
         >
-          <GitHub aria-hidden="true" className="size-4" />{" "}
+          <MarkGithubIcon aria-hidden="true" className="size-4" />{" "}
           {t("components.modals.studentProfile.openRepo")}
-          <ExternalLink aria-hidden="true" className="size-3.5" />
+          <LinkExternalIcon aria-hidden="true" className="size-4" />
         </Button>
       ) : null}
     </Modal>

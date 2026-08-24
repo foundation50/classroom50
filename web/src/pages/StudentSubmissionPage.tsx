@@ -1,7 +1,7 @@
 import { Link, useParams } from "@tanstack/react-router"
 import { useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { UserRound, UsersRound, CalendarClock } from "lucide-react"
+import { CalendarIcon, PeopleIcon, PersonIcon } from "@/components/ui/icons"
 
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
@@ -106,12 +106,12 @@ const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
         items={[
           assignment.mode === "group" ? (
             <MetaItem>
-              <UsersRound aria-hidden="true" className="size-3.5" />
+              <PeopleIcon aria-hidden="true" className="size-4" />
               {t("submissions.student.modeGroup")}
             </MetaItem>
           ) : assignment.mode === "individual" ? (
             <MetaItem>
-              <UserRound aria-hidden="true" className="size-3.5" />
+              <PersonIcon aria-hidden="true" className="size-4" />
               {t("submissions.student.modeIndividual")}
             </MetaItem>
           ) : null,
@@ -119,14 +119,14 @@ const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
           // absent due date is a quiet property like the rest of the strip.
           overdue ? (
             <Badge tone="error" className="gap-1">
-              <CalendarClock aria-hidden="true" className="size-3.5" />
+              <CalendarIcon aria-hidden="true" className="size-4" />
               {due
                 ? t("submissions.dueDate", { date: formatDueDateTime(due) })
                 : t("submissions.noDueDate")}
             </Badge>
           ) : (
             <MetaItem title={due ? formatDueDateTime(due) : undefined}>
-              <CalendarClock aria-hidden="true" className="size-3.5" />
+              <CalendarIcon aria-hidden="true" className="size-4" />
               {due
                 ? t("submissions.dueDate", { date: formatDueDateTime(due) })
                 : t("submissions.noDueDate")}

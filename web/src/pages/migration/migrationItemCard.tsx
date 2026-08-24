@@ -7,13 +7,13 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  AlertCircle,
-  ArrowRight,
-  CheckCircle,
-  ChevronDown,
-  ExternalLink,
-  MinusCircle,
-} from "lucide-react"
+  AlertIcon,
+  ArrowRightIcon,
+  CheckCircleIcon,
+  ChevronDownIcon,
+  LinkExternalIcon,
+  NoEntryIcon,
+} from "@/components/ui/icons"
 
 import {
   Badge,
@@ -92,12 +92,12 @@ const STATUS_BADGE: Record<
 const StatusIcon = ({ icon }: { icon: string }) => {
   if (icon === "running") return <Spinner size="xs" className="size-4" />
   if (icon === "done")
-    return <CheckCircle aria-hidden="true" className="size-4" />
+    return <CheckCircleIcon aria-hidden="true" className="size-4" />
   if (icon === "skip")
-    return <AlertCircle aria-hidden="true" className="size-4" />
+    return <AlertIcon aria-hidden="true" className="size-4" />
   if (icon === "import")
-    return <ArrowRight aria-hidden="true" className="size-4" />
-  return <MinusCircle aria-hidden="true" className="size-4" />
+    return <ArrowRightIcon aria-hidden="true" className="size-4" />
+  return <NoEntryIcon aria-hidden="true" className="size-4" />
 }
 
 // One aligned row in both metadata panels. `value` is already localized text.
@@ -367,7 +367,7 @@ export const MigrationItemCard = ({
 
       <div className="mt-2 flex min-w-0 items-center gap-1.5 text-sm text-base-content/70">
         <span className="truncate">{sourceRepoText}</span>
-        <ArrowRight
+        <ArrowRightIcon
           aria-hidden="true"
           className={`size-3.5 shrink-0 text-base-content/40 ${rtlFlip}`}
         />
@@ -429,7 +429,7 @@ export const MigrationItemCard = ({
                 className="link inline-flex items-center gap-1 align-baseline"
               >
                 {t(action.labelKey)}
-                <ExternalLink aria-hidden="true" className="size-3.5" />
+                <LinkExternalIcon aria-hidden="true" className="size-4" />
               </a>
             </>
           )}
@@ -442,7 +442,7 @@ export const MigrationItemCard = ({
         onClick={() => setDetailsOpen((o) => !o)}
         className="mt-2 flex cursor-pointer items-center gap-1 text-sm text-base-content/60 hover:text-base-content"
       >
-        <ChevronDown
+        <ChevronDownIcon
           aria-hidden="true"
           className={cx(
             "size-4 transition-transform",
@@ -464,7 +464,7 @@ export const MigrationItemCard = ({
             side="source"
           />
           <div className="flex items-center justify-center">
-            <ArrowRight
+            <ArrowRightIcon
               aria-hidden="true"
               className={`hidden size-4 text-base-content/40 sm:block ${rtlFlip}`}
             />

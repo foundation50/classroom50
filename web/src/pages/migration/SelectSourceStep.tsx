@@ -5,11 +5,14 @@
 import { useEffect, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
-import { ChevronRight, Inbox } from "lucide-react"
+import {
+  ChevronRightIcon,
+  InboxIcon,
+  MarkGithubIcon,
+} from "@/components/ui/icons"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { Alert, Badge, Button, Card, rtlFlip } from "@/components/ui"
-import GitHub from "@/assets/github.svg?react"
 import { listClassroomsWithOrg } from "@/migration/classroomApi"
 import type { ClassroomWithOrg } from "@/migration/types"
 
@@ -35,7 +38,10 @@ const ClassroomRowButton = ({
         />
       ) : (
         <span className="flex size-9 shrink-0 items-center justify-center rounded-field border border-base-300 bg-base-200">
-          <GitHub aria-hidden="true" className="size-5 text-base-content/70" />
+          <MarkGithubIcon
+            aria-hidden="true"
+            className="size-4 text-base-content/70"
+          />
         </span>
       )}
 
@@ -53,7 +59,7 @@ const ClassroomRowButton = ({
         </span>
       </span>
 
-      <ChevronRight
+      <ChevronRightIcon
         aria-hidden="true"
         className={`size-5 shrink-0 text-base-content/30 transition group-hover:text-primary ${rtlFlip}`}
       />
@@ -140,7 +146,7 @@ export const SelectSourceStep = ({
         {data && data.length === 0 && (
           <div className="mt-4 rounded-box border border-dashed border-base-300 p-8 text-center">
             <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-base-200 text-base-content/50">
-              <Inbox aria-hidden="true" className="size-6" />
+              <InboxIcon aria-hidden="true" className="size-6" />
             </div>
             <p className="text-sm text-base-content/70">
               {t("migration.select.empty")}

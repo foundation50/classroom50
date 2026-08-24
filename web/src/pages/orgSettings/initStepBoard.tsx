@@ -1,11 +1,11 @@
 import {
-  AlertCircle,
-  AlertTriangle,
-  CheckCircle,
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
-} from "lucide-react"
+  AlertFillIcon,
+  CheckCircleFillIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  LinkExternalIcon,
+  XCircleFillIcon,
+} from "@/components/ui/icons"
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -213,9 +213,9 @@ const STATUS_BADGE_PROPS: Record<
 }
 
 const STATUS_ICON: Record<InitStepStatus, ReactNode> = {
-  complete: <CheckCircle aria-hidden="true" className="size-4" />,
-  warning: <AlertCircle aria-hidden="true" className="size-4" />,
-  error: <AlertTriangle aria-hidden="true" className="size-4" />,
+  complete: <CheckCircleFillIcon aria-hidden="true" className="size-4" />,
+  warning: <AlertFillIcon aria-hidden="true" className="size-4" />,
+  error: <XCircleFillIcon aria-hidden="true" className="size-4" />,
   running: <Spinner size="xs" className="size-4" />,
   pending: null,
   skipped: null,
@@ -266,12 +266,12 @@ export const InitStep = ({
       >
         <div className="flex min-w-0 items-start gap-2">
           {open ? (
-            <ChevronDown
+            <ChevronDownIcon
               aria-hidden="true"
               className="mt-0.5 size-4 shrink-0 text-base-content/70"
             />
           ) : (
-            <ChevronRight
+            <ChevronRightIcon
               aria-hidden="true"
               className={`mt-0.5 size-4 shrink-0 text-base-content/70 ${rtlFlip}`}
             />
@@ -325,7 +325,7 @@ export const InitStep = ({
                   className="mt-2 inline-flex items-center gap-1 text-base-content/70 hover:text-primary"
                 >
                   {t("orgSettings.steps.openGitHubSettings")}
-                  <ExternalLink aria-hidden="true" className="size-3.5" />
+                  <LinkExternalIcon aria-hidden="true" className="size-4" />
                 </a>
               )}
               {id === "orgDefaults" && isOrgDefaultsStepData(data) && (

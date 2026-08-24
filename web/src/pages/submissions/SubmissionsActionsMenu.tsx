@@ -1,22 +1,20 @@
 import {
-  BarChart3,
-  CalendarCheck,
-  CalendarX,
-  ChevronDown,
-  DownloadCloud,
-  ExternalLink,
-  FileArchive,
-  FileDown,
-  GitBranch,
-  GitPullRequest,
-  Lock,
-  LockOpen,
-  Pause,
-  Play,
-  RefreshCw,
-  ShieldCheck,
-  SlidersHorizontal,
-} from "lucide-react"
+  CalendarIcon,
+  ChevronDownIcon,
+  DownloadIcon,
+  FileZipIcon,
+  GitBranchIcon,
+  GitPullRequestIcon,
+  GraphIcon,
+  LinkExternalIcon,
+  LockIcon,
+  PauseIcon,
+  PlayIcon,
+  ShieldCheckIcon,
+  SlidersIcon,
+  SyncIcon,
+  UnlockIcon,
+} from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui"
@@ -154,7 +152,7 @@ export function SubmissionsActionsMenu({
             ? t("submissions.collect.active")
             : t("submissions.regradeAll.active")
           : t("submissions.menu.actions")}
-        {!busy && <ChevronDown aria-hidden="true" className="size-4" />}
+        {!busy && <ChevronDownIcon aria-hidden="true" className="size-4" />}
       </Button>
       <ul
         tabIndex={0}
@@ -172,7 +170,7 @@ export function SubmissionsActionsMenu({
                 onMetrics()
               }}
             >
-              <BarChart3 aria-hidden="true" className="size-4" />
+              <GraphIcon aria-hidden="true" className="size-4" />
               {t("submissions.menu.metrics")}
             </button>
           </li>
@@ -203,7 +201,7 @@ export function SubmissionsActionsMenu({
                   onOpenAllPrs()
                 }}
               >
-                <GitPullRequest aria-hidden="true" className="size-4" />
+                <GitPullRequestIcon aria-hidden="true" className="size-4" />
                 {t("submissions.openAllPrs.menuLabel")}
               </button>
             </li>
@@ -227,7 +225,7 @@ export function SubmissionsActionsMenu({
               onCollect()
             }}
           >
-            <DownloadCloud aria-hidden="true" className="size-4" />
+            <DownloadIcon aria-hidden="true" className="size-4" />
             {collecting
               ? t("submissions.collect.active")
               : t("submissions.collect.label")}
@@ -247,7 +245,7 @@ export function SubmissionsActionsMenu({
                     onRegradeAll()
                   }}
                 >
-                  <RefreshCw
+                  <SyncIcon
                     aria-hidden="true"
                     className={`size-4 ${regradeAllActive ? "animate-spin" : ""}`}
                   />
@@ -259,7 +257,7 @@ export function SubmissionsActionsMenu({
             )}
             <li>
               <a href={viewHref} target="_blank" rel="noreferrer">
-                <ExternalLink aria-hidden="true" className="size-4" />
+                <LinkExternalIcon aria-hidden="true" className="size-4" />
                 {viewLabel}
               </a>
             </li>
@@ -288,7 +286,7 @@ export function SubmissionsActionsMenu({
                   onBulkAccess()
                 }}
               >
-                <ShieldCheck aria-hidden="true" className="size-4" />
+                <ShieldCheckIcon aria-hidden="true" className="size-4" />
                 {t("submissions.bulkAccess.menuLabel")}
               </button>
             </li>
@@ -308,7 +306,7 @@ export function SubmissionsActionsMenu({
                     onBulkFeatures()
                   }}
                 >
-                  <SlidersHorizontal aria-hidden="true" className="size-4" />
+                  <SlidersIcon aria-hidden="true" className="size-4" />
                   {t("submissions.bulkFeatures.menuLabel")}
                 </button>
               </li>
@@ -339,7 +337,7 @@ export function SubmissionsActionsMenu({
                   onBulkTrigger()
                 }}
               >
-                <GitBranch aria-hidden="true" className="size-4" />
+                <GitBranchIcon aria-hidden="true" className="size-4" />
                 {t("submissions.bulkTrigger.menuLabel")}
               </button>
             </li>
@@ -370,7 +368,7 @@ export function SubmissionsActionsMenu({
                     onBulkPause()
                   }}
                 >
-                  <Pause aria-hidden="true" className="size-4" />
+                  <PauseIcon aria-hidden="true" className="size-4" />
                   {t("submissions.bulkAutograde.pauseMenuLabel")}
                 </button>
               </li>
@@ -391,7 +389,7 @@ export function SubmissionsActionsMenu({
                     onBulkResume()
                   }}
                 >
-                  <Play aria-hidden="true" className="size-4" />
+                  <PlayIcon aria-hidden="true" className="size-4" />
                   {t("submissions.bulkAutograde.resumeMenuLabel")}
                 </button>
               </li>
@@ -422,11 +420,7 @@ export function SubmissionsActionsMenu({
                   onCloseToggle()
                 }}
               >
-                {closed ? (
-                  <CalendarCheck aria-hidden="true" className="size-4" />
-                ) : (
-                  <CalendarX aria-hidden="true" className="size-4" />
-                )}
+                <CalendarIcon aria-hidden="true" className="size-4" />
                 {closed
                   ? t("submissions.closeSubmission.reopenLabel")
                   : t("submissions.closeSubmission.menuLabel")}
@@ -459,9 +453,9 @@ export function SubmissionsActionsMenu({
                 }}
               >
                 {locked ? (
-                  <LockOpen aria-hidden="true" className="size-4" />
+                  <UnlockIcon aria-hidden="true" className="size-4" />
                 ) : (
-                  <Lock aria-hidden="true" className="size-4" />
+                  <LockIcon aria-hidden="true" className="size-4" />
                 )}
                 {locked
                   ? t("submissions.lock.unlockLabel")
@@ -484,7 +478,7 @@ export function SubmissionsActionsMenu({
               onDownloadCsv()
             }}
           >
-            <FileDown aria-hidden="true" className="size-4" />
+            <DownloadIcon aria-hidden="true" className="size-4" />
             {t("submissions.downloadCsv")}
           </button>
         </li>
@@ -503,7 +497,7 @@ export function SubmissionsActionsMenu({
               onDownloadAll()
             }}
           >
-            <FileArchive aria-hidden="true" className="size-4" />
+            <FileZipIcon aria-hidden="true" className="size-4" />
             {t("submissions.downloadAll.menuLabel")}
           </button>
         </li>

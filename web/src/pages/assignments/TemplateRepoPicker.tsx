@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Lock, Search } from "lucide-react"
+import { LockIcon, SearchIcon } from "@/components/ui/icons"
 
 import { Combobox, MonoLtr } from "@/components/ui"
 import type { TemplateRepoItem } from "@/github-core/queries"
@@ -99,7 +99,7 @@ export const TemplateRepoPicker = ({
       placeholder={placeholder}
       spellCheck={false}
       leadingIcon={
-        <Search aria-hidden="true" className="size-4 shrink-0 opacity-60" />
+        <SearchIcon aria-hidden="true" className="size-4 shrink-0 opacity-60" />
       }
       value={field.state.value}
       onInputChange={(value) => {
@@ -133,9 +133,9 @@ export const TemplateRepoPicker = ({
           <span className="flex items-center gap-1.5">
             <MonoLtr className="text-sm">{item.fullName}</MonoLtr>
             {item.private ? (
-              <Lock
+              <LockIcon
                 aria-label={t("assignments.template.search.privateRepo")}
-                className="size-3.5 shrink-0 text-base-content/50"
+                className="size-4 shrink-0 text-base-content/50"
               />
             ) : null}
           </span>

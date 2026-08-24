@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react"
+import { LinkExternalIcon } from "@/components/ui/icons"
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -52,7 +52,7 @@ function FreePlanInfoModal({
           className="mt-3"
         >
           {t("orgs.newOrg.freePlanInfo.educationCta")}
-          <ExternalLink aria-hidden="true" className="size-4" />
+          <LinkExternalIcon aria-hidden="true" className="size-4" />
         </Button>
       </div>
 

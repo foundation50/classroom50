@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CloudOff } from "lucide-react"
+import { CloudOfflineIcon } from "@/components/ui/icons"
 import { AnimatePresence } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -30,7 +30,7 @@ export function GitHubStatusBanner() {
         <AppBanner
           key="github-status"
           tone="warning"
-          icon={<CloudOff className="size-5" aria-hidden="true" />}
+          icon={<CloudOfflineIcon className="size-4" aria-hidden="true" />}
           title={t("githubStatus.title")}
           onDismiss={() => setDismissed(true)}
         >

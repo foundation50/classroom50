@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
-import { Loader2, ShieldPlus } from "lucide-react"
+import { InlineSpinner } from "@/components/Spinner"
+import { ShieldIcon } from "@/components/ui/icons"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
@@ -66,7 +67,7 @@ export function ClaimTeacherNotice({
       tone="info"
       className="mb-4 flex-col items-start gap-2 sm:flex-row sm:items-center"
     >
-      <ShieldPlus aria-hidden="true" className="size-5 shrink-0" />
+      <ShieldIcon aria-hidden="true" className="size-4 shrink-0" />
       <span className="flex-1 text-sm">
         {t("classes.claimTeacher.message")}
       </span>
@@ -77,9 +78,9 @@ export function ClaimTeacherNotice({
         onClick={() => claim()}
       >
         {claimMutation.isPending ? (
-          <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+          <InlineSpinner />
         ) : (
-          <ShieldPlus aria-hidden="true" className="size-4" />
+          <ShieldIcon aria-hidden="true" className="size-4" />
         )}
         {t("classes.claimTeacher.action")}
       </Button>

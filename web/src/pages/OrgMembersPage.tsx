@@ -3,12 +3,12 @@ import { Trans, useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import {
-  AlertTriangle,
-  ChevronRight,
-  ExternalLink,
-  Search,
-  UserPlus,
-} from "lucide-react"
+  AlertIcon,
+  ChevronRightIcon,
+  LinkExternalIcon,
+  PersonAddIcon,
+  SearchIcon,
+} from "@/components/ui/icons"
 
 import {
   AnimatedAlert,
@@ -396,7 +396,7 @@ const OrgMembersPage = () => {
                     rel="noreferrer"
                     className="mt-2 flex w-fit items-center gap-1 text-sm text-primary hover:underline"
                   >
-                    <ExternalLink aria-hidden="true" className="size-3.5" />
+                    <LinkExternalIcon aria-hidden="true" className="size-4" />
                     {t("orgMembers.manageMembersOnGitHub")}
                   </a>
                 )}
@@ -419,7 +419,7 @@ const OrgMembersPage = () => {
             className="mt-6 text-sm"
             role="status"
           >
-            <AlertTriangle className="size-4" aria-hidden="true" />
+            <AlertIcon className="size-4" aria-hidden="true" />
             <span>
               {t("orgMembers.discrepancy", { count: discrepancyCount })}
             </span>
@@ -428,7 +428,7 @@ const OrgMembersPage = () => {
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Input
               leadingIcon={
-                <Search aria-hidden="true" className="size-4 opacity-50" />
+                <SearchIcon aria-hidden="true" className="size-4 opacity-50" />
               }
               className="min-w-0 flex-1"
               type="search"
@@ -551,9 +551,9 @@ const OrgMembersPage = () => {
                           >
                             {invitingKey === row.key ? null : (
                               <>
-                                <UserPlus
+                                <PersonAddIcon
                                   aria-hidden="true"
-                                  className="size-3.5"
+                                  className="size-4"
                                 />
                                 {t("orgMembers.invite")}
                               </>
@@ -574,15 +574,12 @@ const OrgMembersPage = () => {
                                 row.unprovisionedClassrooms.join(", "),
                             })}
                           >
-                            <AlertTriangle
-                              aria-hidden="true"
-                              className="size-3"
-                            />
+                            <AlertIcon aria-hidden="true" className="size-3" />
                             {t("orgMembers.unprovisionedBadge")}
                           </Badge>
                         ) : null}
                         <ClassificationBadge row={row} isOwner={isOwner(row)} />
-                        <ChevronRight
+                        <ChevronRightIcon
                           aria-hidden="true"
                           className={`size-4 text-base-content/30 transition-transform duration-150 ltr:group-hover/row:translate-x-0.5 rtl:group-hover/row:-translate-x-0.5 group-hover/row:text-base-content/70 ${rtlFlip}`}
                         />

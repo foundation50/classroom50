@@ -1,4 +1,4 @@
-import { AlertTriangle, Settings } from "lucide-react"
+import { AlertIcon, GearIcon } from "@/components/ui/icons"
 import { Trans, useTranslation } from "react-i18next"
 
 import { Alert, cx, EmphasisLtr, RouterButton } from "@/components/ui"
@@ -37,7 +37,7 @@ export const OrgRepoCreationNotice = ({
       )}
     >
       <div className="flex items-start gap-2">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        <AlertIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span className="text-sm">
           <Trans
             i18nKey={
@@ -70,7 +70,7 @@ export const OrgRepoCreationNotice = ({
         size="sm"
         className="whitespace-nowrap sm:shrink-0"
       >
-        <Settings className="size-4" aria-hidden="true" />
+        <GearIcon className="size-4" aria-hidden="true" />
         {t("components.notices.orgRepoCreation.action")}
       </RouterButton>
     </Alert>

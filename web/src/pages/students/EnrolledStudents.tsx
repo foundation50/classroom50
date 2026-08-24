@@ -1,4 +1,11 @@
-import { AlertTriangle, Plus, RefreshCw, Send, Upload, X } from "lucide-react"
+import {
+  AlertIcon,
+  PaperAirplaneIcon,
+  PlusIcon,
+  SyncIcon,
+  UploadIcon,
+  XIcon,
+} from "@/components/ui/icons"
 
 import {
   Alert,
@@ -496,7 +503,7 @@ const EnrolledStudents = ({
         className="flex items-center justify-between gap-3"
       >
         <span className="flex items-center gap-2 text-sm">
-          <Send aria-hidden="true" className="size-4 shrink-0" />
+          <PaperAirplaneIcon aria-hidden="true" className="size-4 shrink-0" />
           {t("students.pendingBanner", { count: counts.pending })}
         </span>
         <div className="flex shrink-0 items-center gap-1">
@@ -515,7 +522,7 @@ const EnrolledStudents = ({
             title={t("students.dismiss")}
             onClick={() => setPendingDismissed(true)}
           >
-            <X aria-hidden="true" className="size-4" />
+            <XIcon aria-hidden="true" className="size-4" />
           </Button>
         </div>
       </AnimatedAlert>
@@ -634,7 +641,7 @@ const EnrolledStudents = ({
               aria-label={t("students.syncRosterTitle")}
               title={t("students.syncRosterTitle")}
             >
-              <RefreshCw
+              <SyncIcon
                 aria-hidden="true"
                 className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
               />
@@ -655,7 +662,7 @@ const EnrolledStudents = ({
             className="flex flex-col items-center gap-3 px-6 py-10 text-center"
           >
             <span className="flex items-center gap-2 text-sm text-error">
-              <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+              <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
               {t("students.rosterLoadError")}
             </span>
             <Button variant="ghost" size="sm" onClick={() => refetchRoster()}>
@@ -677,15 +684,15 @@ const EnrolledStudents = ({
                   size="sm"
                   onClick={addActions.onAddStudent}
                 >
-                  <Plus aria-hidden="true" className="size-4" />
+                  <PlusIcon aria-hidden="true" className="size-4" />
                   {t("students.addTitle")}
                 </Button>
                 <Button size="sm" onClick={addActions.onUploadRoster}>
-                  <Upload aria-hidden="true" className="size-4" />
+                  <UploadIcon aria-hidden="true" className="size-4" />
                   {t("students.uploadTitle")}
                 </Button>
                 <Button size="sm" onClick={addActions.onInviteLinks}>
-                  <Send aria-hidden="true" className="size-4" />
+                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
                   {t("students.inviteStudents")}
                 </Button>
               </div>

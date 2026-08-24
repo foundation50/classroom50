@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useParams } from "@tanstack/react-router"
-import { PiggyBank } from "lucide-react"
+import { CreditCardIcon } from "@/components/ui/icons"
 import { AnimatePresence } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -80,7 +80,7 @@ export function BudgetCreatedBanner() {
         <AppBanner
           key="budget-created"
           tone="success"
-          icon={<PiggyBank className="size-5" aria-hidden="true" />}
+          icon={<CreditCardIcon className="size-4" aria-hidden="true" />}
           title={t("budgetCreated.title")}
           onDismiss={dismiss}
         >

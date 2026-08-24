@@ -1,11 +1,11 @@
 import {
-  ArrowLeft,
-  ClipboardCheck,
-  Contrast,
-  Download,
-  FileText,
-  LogIn,
-} from "lucide-react"
+  ArrowLeftIcon,
+  ChecklistIcon,
+  DownloadIcon,
+  FileIcon,
+  PaintbrushIcon,
+  SignInIcon,
+} from "@/components/ui/icons"
 import { Link, useRouterState } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import type { ReactNode } from "react"
@@ -22,10 +22,10 @@ import { SidebarItemBody, SidebarNavItem } from "./primitives"
 // section -> icon here. Keyed by id so a new section fails to type-check until
 // it gets an icon.
 const SECTION_ICON: Record<AccessibilitySection, ReactNode> = {
-  conformance: <ClipboardCheck aria-hidden="true" />,
-  "color-contrast": <Contrast aria-hidden="true" />,
-  statement: <FileText aria-hidden="true" />,
-  downloads: <Download aria-hidden="true" />,
+  conformance: <ChecklistIcon aria-hidden="true" />,
+  "color-contrast": <PaintbrushIcon aria-hidden="true" />,
+  statement: <FileIcon aria-hidden="true" />,
+  downloads: <DownloadIcon aria-hidden="true" />,
 }
 
 // The sidebar BODY shown on the /accessibility page (public route), for both
@@ -50,7 +50,7 @@ export function AccessibilitySidebarNav() {
             <Link to="/">
               <SidebarItemBody
                 label={t("nav.backToApp")}
-                icon={<ArrowLeft aria-hidden="true" />}
+                icon={<ArrowLeftIcon aria-hidden="true" />}
                 active={false}
                 groupId="accessibility"
               />
@@ -61,7 +61,7 @@ export function AccessibilitySidebarNav() {
             <Link to="/login">
               <SidebarItemBody
                 label={t("nav.signIn")}
-                icon={<LogIn aria-hidden="true" />}
+                icon={<SignInIcon aria-hidden="true" />}
                 active={false}
                 groupId="accessibility"
               />

@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
+import { InlineSpinner } from "@/components/Spinner"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink, Loader2, RefreshCw } from "lucide-react"
+import { LinkExternalIcon, SyncIcon } from "@/components/ui/icons"
 import { Alert, Button, cx, FormField, Select } from "@/components/ui"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { getRepo } from "@/github-core/repoReads"
@@ -345,7 +346,7 @@ function StudentPermissionField({ form }: { form: AssignmentForm }) {
                     rel="noreferrer"
                   >
                     {t("assignments.form.studentPermission.learnMore")}
-                    <ExternalLink aria-hidden="true" className="size-3.5" />
+                    <LinkExternalIcon aria-hidden="true" className="size-4" />
                   </a>
                 }
               >
@@ -520,7 +521,7 @@ export const FeedbackPrTemplateToggle = ({
           />
           {checking ? (
             <p className="mt-1 flex items-center gap-1 text-xs opacity-70">
-              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              <InlineSpinner />
               {t("assignments.form.feedbackPrTemplate.checking")}
             </p>
           ) : detected && field.state.value ? (
@@ -630,7 +631,7 @@ export const RepoFeatureControls = ({
           title={t("assignments.form.repoFeatures.refresh")}
           className="text-base-content/60 hover:text-base-content disabled:opacity-40"
         >
-          <RefreshCw
+          <SyncIcon
             aria-hidden="true"
             className={cx(
               "size-4",

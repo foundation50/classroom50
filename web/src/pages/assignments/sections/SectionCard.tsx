@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { RotateCcw } from "lucide-react"
+import { UndoIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { Button, Card } from "@/components/ui"
 
@@ -36,7 +36,7 @@ export function SectionCard({
               title={t("assignments.form.resetSection")}
               className="shrink-0 gap-1.5 text-base-content/60 hover:text-base-content"
             >
-              <RotateCcw aria-hidden="true" className="size-4" />
+              <UndoIcon aria-hidden="true" className="size-4" />
               {t("assignments.form.reset")}
             </Button>
           ) : null}

@@ -1,7 +1,7 @@
 import { forwardRef } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
-import { ExternalLink } from "lucide-react"
+import { LinkExternalIcon } from "@/components/ui/icons"
 
 import { CopyableDetails, Modal } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
@@ -38,9 +38,9 @@ function SupportLink({
         <span className="block text-sm font-medium">{title}</span>
         <span className="block text-xs text-base-content/60">{hint}</span>
       </span>
-      <ExternalLink
+      <LinkExternalIcon
         aria-hidden="true"
-        className="size-3.5 shrink-0 text-base-content/40"
+        className="size-4 shrink-0 text-base-content/40"
       />
     </a>
   )
@@ -109,7 +109,7 @@ export const AboutDialog = forwardRef<
               rel="noreferrer"
             >
               v{appVersion.version}
-              <ExternalLink aria-hidden="true" className="size-3" />
+              <LinkExternalIcon aria-hidden="true" className="size-3" />
             </a>
           ) : (
             <>v{appVersion.version}</>
@@ -125,7 +125,7 @@ export const AboutDialog = forwardRef<
             rel="noreferrer"
           >
             {shortCommit()}
-            <ExternalLink aria-hidden="true" className="size-3" />
+            <LinkExternalIcon aria-hidden="true" className="size-3" />
           </a>
           <span className="ms-1 text-base-content/60">
             ({formatBuildDate()})

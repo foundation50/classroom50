@@ -1,5 +1,9 @@
-import { Mail, UserRound, Users } from "lucide-react"
-import GitHub from "@/assets/github.svg?react"
+import {
+  MailIcon,
+  MarkGithubIcon,
+  PeopleIcon,
+  PersonIcon,
+} from "@/components/ui/icons"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -251,7 +255,7 @@ const AddStudent = ({
               {(field) => (
                 <Input
                   leadingIcon={
-                    <UserRound
+                    <PersonIcon
                       className="size-4 text-base-content/50"
                       aria-hidden="true"
                     />
@@ -274,7 +278,10 @@ const AddStudent = ({
               <div>
                 <Input
                   leadingIcon={
-                    <GitHub className="size-4 opacity-40" aria-hidden="true" />
+                    <MarkGithubIcon
+                      className="size-4 opacity-40"
+                      aria-hidden="true"
+                    />
                   }
                   id={field.name}
                   name={field.name}
@@ -310,7 +317,7 @@ const AddStudent = ({
                 <div>
                   <Input
                     leadingIcon={
-                      <Mail
+                      <MailIcon
                         className="size-4 text-base-content/50"
                         aria-hidden="true"
                       />
@@ -352,7 +359,7 @@ const AddStudent = ({
               {(field) => (
                 <Input
                   leadingIcon={
-                    <Users
+                    <PeopleIcon
                       className="size-4 text-base-content/50"
                       aria-hidden="true"
                     />

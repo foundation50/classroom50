@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { AlertTriangle } from "lucide-react"
+import { AlertIcon } from "@/components/ui/icons"
 import { Input, Textarea } from "@/components/ui"
 import { parseAllowedFiles } from "@/util/allowedFiles"
 import { parseReleaseAssets } from "@/util/releaseAssets"
@@ -220,7 +220,7 @@ export const AdvancedSection = ({
                                     role="alert"
                                     className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
                                   >
-                                    <AlertTriangle
+                                    <AlertIcon
                                       aria-hidden="true"
                                       className="size-4 shrink-0"
                                     />
@@ -270,7 +270,7 @@ export const AdvancedSection = ({
                           role="alert"
                           className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
                         >
-                          <AlertTriangle
+                          <AlertIcon
                             aria-hidden="true"
                             className="size-4 shrink-0"
                           />
@@ -321,7 +321,7 @@ export const AdvancedSection = ({
                           role="alert"
                           className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
                         >
-                          <AlertTriangle
+                          <AlertIcon
                             aria-hidden="true"
                             className="size-4 shrink-0"
                           />
@@ -393,7 +393,7 @@ export const AdvancedSection = ({
                                   role="alert"
                                   className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
                                 >
-                                  <AlertTriangle
+                                  <AlertIcon
                                     aria-hidden="true"
                                     className="size-4 shrink-0"
                                   />

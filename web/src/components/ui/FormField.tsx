@@ -1,4 +1,8 @@
-import { HelpCircle, TriangleAlert, type LucideIcon } from "lucide-react"
+import {
+  AlertFillIcon,
+  QuestionIcon,
+  type Icon as OcticonComponent,
+} from "./icons"
 import { useId, type ReactNode } from "react"
 
 import { Button } from "./Button"
@@ -13,16 +17,16 @@ export type HelpTooltipPosition = "top" | "bottom" | "left" | "right"
 // source for the tooltip-icon markup + a11y contract. `position` controls which
 // side the bubble opens on (default bottom); use `right`/`top` inside a narrow
 // container like a modal so the bubble isn't clipped. `icon` defaults to a
-// question mark (HelpCircle); pass another lucide icon (e.g. CircleAlert) when
+// question mark (QuestionIcon); pass another octicon (e.g. AlertIcon) when
 // the tone is a caveat/heads-up rather than help.
 export function HelpTooltip({
   help,
   position = "bottom",
-  icon: Icon = HelpCircle,
+  icon: Icon = QuestionIcon,
 }: {
   help: string
   position?: HelpTooltipPosition
-  icon?: LucideIcon
+  icon?: OcticonComponent
 }) {
   return (
     <span
@@ -115,7 +119,7 @@ export function FormField({
             error is visible at a glance; the role="alert" message below carries
             the accessible announcement, so the icon is decorative. */}
         {invalid ? (
-          <TriangleAlert aria-hidden="true" className="size-4 text-error" />
+          <AlertFillIcon aria-hidden="true" className="size-4 text-error" />
         ) : null}
         {help ? <HelpTooltip help={help} /> : null}
         {labelExtra}

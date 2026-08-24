@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Info } from "lucide-react"
+import { InfoIcon } from "@/components/ui/icons"
 
 import { Alert, Badge, Card, Modal } from "@/components/ui"
 
@@ -67,7 +67,7 @@ function StatusCell({ row }: { row: Row }) {
             margin: row.margin,
           })}
         >
-          <Info aria-hidden="true" className="size-4" />
+          <InfoIcon aria-hidden="true" className="size-4" />
         </span>
       )}
     </div>
@@ -324,7 +324,7 @@ export function ContrastSection() {
                     {t("accessibility.legend.pass")}
                   </span>
                   <span className="flex items-center gap-2">
-                    <Info aria-hidden="true" className="size-4" />
+                    <InfoIcon aria-hidden="true" className="size-4" />
                     {t("accessibility.legend.passMargin")}
                   </span>
                   <span className="flex items-center gap-2">

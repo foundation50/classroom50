@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link, useParams, useRouter } from "@tanstack/react-router"
-import { UsersRound } from "lucide-react"
+import { MarkGithubIcon, PeopleIcon } from "@/components/ui/icons"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
@@ -15,7 +15,6 @@ import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 
-import GitHub from "@/assets/github.svg?react"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import EditAssignmentForm from "./assignments/EditAssignmentForm"
@@ -114,7 +113,7 @@ const EditAssignmentFormStudent = ({
         <Card.Body className="gap-6">
           <div className="flex items-start gap-4">
             <div className="flex size-12 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-              <UsersRound aria-hidden="true" className="size-6" />
+              <PeopleIcon aria-hidden="true" className="size-6" />
             </div>
 
             <div>
@@ -128,7 +127,7 @@ const EditAssignmentFormStudent = ({
                 target="_blank"
                 rel="noreferrer"
               >
-                <GitHub aria-hidden="true" className="size-4" />
+                <MarkGithubIcon aria-hidden="true" className="size-4" />
                 {t("assignmentSettings.viewRepository")}
               </a>
               <p className="mt-2 text-sm text-base-content/70">

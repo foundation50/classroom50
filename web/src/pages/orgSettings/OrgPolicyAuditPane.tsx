@@ -2,13 +2,13 @@ import { useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  CheckCircle2,
-  ChevronRight,
-  ChevronUp,
-  ExternalLink,
-  TriangleAlert,
-  XCircle,
-} from "lucide-react"
+  AlertIcon,
+  CheckCircleIcon,
+  ChevronRightIcon,
+  ChevronUpIcon,
+  LinkExternalIcon,
+  XCircleIcon,
+} from "@/components/ui/icons"
 
 import { githubKeys } from "@/github-core/queries"
 import useRenameConfigRepoToMain from "@/hooks/mutations/useRenameConfigRepoToMain"
@@ -58,20 +58,20 @@ const VERDICT_BANNER: Record<
   AuditVerdict,
   {
     className: string
-    Icon: typeof CheckCircle2
+    Icon: typeof CheckCircleIcon
     iconClassName: string
     titleKey: string
   }
 > = {
   ok: {
     className: "border-success/30 bg-success/10",
-    Icon: CheckCircle2,
+    Icon: CheckCircleIcon,
     iconClassName: "text-success",
     titleKey: "orgSettings.audit.verdictOk",
   },
   fail: {
     className: "border-error/30 bg-error/10",
-    Icon: XCircle,
+    Icon: XCircleIcon,
     iconClassName: "text-error",
     titleKey: "orgSettings.audit.verdictFail",
   },
@@ -177,7 +177,7 @@ export function ConcernRow({
             className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
           >
             {t("orgSettings.audit.viewOnGitHub")}
-            <ExternalLink aria-hidden="true" className="size-3" />
+            <LinkExternalIcon aria-hidden="true" className="size-3" />
           </a>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -223,7 +223,7 @@ export function ConcernRow({
               className="link inline-flex items-center gap-0.5"
             >
               {t("orgSettings.audit.gitHub")}
-              <ExternalLink aria-hidden="true" className="size-3" />
+              <LinkExternalIcon aria-hidden="true" className="size-3" />
             </a>
             {showFix ? t("orgSettings.audit.orUseFixIt") : ""}:
           </p>
@@ -251,7 +251,7 @@ function RecommendationRow({
     <div className="flex items-start justify-between gap-4 rounded-field border border-warning/40 bg-warning/5 p-3">
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 text-sm font-semibold text-base-content/80">
-          <TriangleAlert
+          <AlertIcon
             aria-hidden="true"
             className="size-4 shrink-0 text-warning"
           />
@@ -269,7 +269,7 @@ function RecommendationRow({
           className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
         >
           {t("orgSettings.audit.viewOnGitHub")}
-          <ExternalLink aria-hidden="true" className="size-3" />
+          <LinkExternalIcon aria-hidden="true" className="size-3" />
         </a>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -401,7 +401,7 @@ function AuditBody({
                     className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
                   >
                     {t("orgSettings.audit.viewOnGitHub")}
-                    <ExternalLink aria-hidden="true" className="size-3" />
+                    <LinkExternalIcon aria-hidden="true" className="size-3" />
                   </a>
                 </div>
                 <Badge tone="warning" className="shrink-0">
@@ -422,9 +422,9 @@ function AuditBody({
             onClick={() => setShowPermissions((open) => !open)}
           >
             {showPermissions ? (
-              <ChevronUp aria-hidden="true" className="size-4" />
+              <ChevronUpIcon aria-hidden="true" className="size-4" />
             ) : (
-              <ChevronRight
+              <ChevronRightIcon
                 aria-hidden="true"
                 className={`size-4 ${rtlFlip}`}
               />
@@ -452,12 +452,12 @@ function AuditBody({
                       )}
                     </span>
                     {v.enforced ? (
-                      <CheckCircle2
+                      <CheckCircleIcon
                         aria-hidden="true"
                         className="mt-0.5 size-4 shrink-0 text-success"
                       />
                     ) : (
-                      <TriangleAlert
+                      <AlertIcon
                         aria-hidden="true"
                         className="mt-0.5 size-4 shrink-0 text-warning"
                       />
@@ -600,40 +600,28 @@ const OrgPolicyAuditPane = ({
 
       {isError && (
         <div className="flex items-start gap-2 rounded-field border border-error/30 bg-error/10 p-3 text-sm text-error">
-          <TriangleAlert
-            aria-hidden="true"
-            className="mt-0.5 size-4 shrink-0"
-          />
+          <AlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span>{t("orgSettings.audit.auditError")}</span>
         </div>
       )}
 
       {fixMutation.isError && (
         <div className="mt-4 flex items-start gap-2 rounded-field border border-error/30 bg-error/10 p-3 text-sm text-error">
-          <TriangleAlert
-            aria-hidden="true"
-            className="mt-0.5 size-4 shrink-0"
-          />
+          <AlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span>{t("orgSettings.audit.fixError")}</span>
         </div>
       )}
 
       {renameMutation.isError && (
         <div className="mt-4 flex items-start gap-2 rounded-field border border-error/30 bg-error/10 p-3 text-sm text-error">
-          <TriangleAlert
-            aria-hidden="true"
-            className="mt-0.5 size-4 shrink-0"
-          />
+          <AlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span>{t("orgSettings.audit.renameError")}</span>
         </div>
       )}
 
       {transientNotice && (
         <div className="mt-4 flex items-start gap-2 rounded-field border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
-          <TriangleAlert
-            aria-hidden="true"
-            className="mt-0.5 size-4 shrink-0"
-          />
+          <AlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span>{t("orgSettings.audit.fixTransient")}</span>
         </div>
       )}

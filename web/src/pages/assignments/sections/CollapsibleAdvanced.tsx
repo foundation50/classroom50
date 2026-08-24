@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronRightIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { Collapse, cx } from "@/components/ui"
 import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
@@ -37,7 +37,7 @@ export function CollapsibleAdvanced({
         {/* Nudges toward the reading direction while closed and down once open,
             so the hover hints at where the panel will go. RTL-paired: a bare
             translate-x wouldn't mirror. */}
-        <ChevronRight
+        <ChevronRightIcon
           aria-hidden="true"
           className={cx(
             "size-4 transition-transform duration-200",

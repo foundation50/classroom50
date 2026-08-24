@@ -2,7 +2,7 @@
 // list. Labels are passed in (already run through t()) so each page keeps its
 // own i18n namespace while sharing the markup and behavior.
 
-import { LayoutGrid, List as ListIcon } from "lucide-react"
+import { AppsIcon, ListUnorderedIcon } from "@/components/ui/icons"
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui"
@@ -32,7 +32,7 @@ export function ViewToggle({
         aria-pressed={viewMode === "grid"}
         onClick={() => onChange("grid")}
       >
-        <LayoutGrid aria-hidden="true" className="size-4" />
+        <AppsIcon aria-hidden="true" className="size-4" />
       </Button>
       <Button
         size="sm"
@@ -42,7 +42,7 @@ export function ViewToggle({
         aria-pressed={viewMode === "list"}
         onClick={() => onChange("list")}
       >
-        <ListIcon aria-hidden="true" className="size-4" />
+        <ListUnorderedIcon aria-hidden="true" className="size-4" />
       </Button>
     </div>
   )

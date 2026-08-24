@@ -1,8 +1,7 @@
 import { useEffect, useId, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { UsersRound } from "lucide-react"
+import { MarkGithubIcon, PeopleIcon } from "@/components/ui/icons"
 
-import GitHub from "@/assets/github.svg?react"
 import { Badge, Modal, MonoLtr } from "@/components/ui"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
@@ -332,12 +331,12 @@ export const ManageSubmissionModal = ({
           rel="noreferrer"
           title={t("submissions.table.viewRepo")}
         >
-          <GitHub aria-hidden="true" className="size-4 shrink-0" />
+          <MarkGithubIcon aria-hidden="true" className="size-4 shrink-0" />
           <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
         </a>
       ) : (
         <p className="mt-2 inline-flex w-fit max-w-full items-center gap-1.5 text-base-content/50">
-          <GitHub aria-hidden="true" className="size-4 shrink-0" />
+          <MarkGithubIcon aria-hidden="true" className="size-4 shrink-0" />
           <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
         </p>
       )}
@@ -365,7 +364,7 @@ export const ManageSubmissionModal = ({
         />
         {isGroup && onManageMembers ? (
           <ActionListRow
-            icon={UsersRound}
+            icon={PeopleIcon}
             title={t("submissions.table.members")}
             description={t("submissions.manageModal.membersDescription")}
             onClick={handleManageMembers}

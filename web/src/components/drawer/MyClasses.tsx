@@ -1,4 +1,10 @@
-import { BookText, UsersRound, Settings, Globe, Activity } from "lucide-react"
+import {
+  BookIcon,
+  GearIcon,
+  GlobeIcon,
+  PeopleIcon,
+  PulseIcon,
+} from "@/components/ui/icons"
 import { Link, useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { useOrgStaff } from "@/hooks/useOrgStaff"
@@ -41,7 +47,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
             <Link to="/$org" params={{ org }}>
               <SidebarItemBody
                 label={classesLabel}
-                icon={<BookText aria-hidden="true" />}
+                icon={<BookIcon aria-hidden="true" />}
                 active={
                   !onSettings && !onPublished && !onMembers && !onActivity
                 }
@@ -55,7 +61,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
             <Link to="/$org/published" params={{ org }}>
               <SidebarItemBody
                 label={t("nav.published")}
-                icon={<Globe aria-hidden="true" />}
+                icon={<GlobeIcon aria-hidden="true" />}
                 active={onPublished}
                 groupId="org"
               />
@@ -67,7 +73,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
             <Link to="/$org/members" params={{ org }}>
               <SidebarItemBody
                 label={t("nav.members")}
-                icon={<UsersRound aria-hidden="true" />}
+                icon={<PeopleIcon aria-hidden="true" />}
                 active={onMembers}
                 groupId="org"
               />
@@ -79,7 +85,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
             <Link to="/$org/activity" params={{ org }}>
               <SidebarItemBody
                 label={t("nav.activity")}
-                icon={<Activity aria-hidden="true" />}
+                icon={<PulseIcon aria-hidden="true" />}
                 active={onActivity}
                 groupId="org"
               />
@@ -91,7 +97,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
             <Link to="/$org/settings" params={{ org }}>
               <SidebarItemBody
                 label={t("nav.settings")}
-                icon={<Settings aria-hidden="true" />}
+                icon={<GearIcon aria-hidden="true" />}
                 active={onSettings}
                 groupId="org"
               />

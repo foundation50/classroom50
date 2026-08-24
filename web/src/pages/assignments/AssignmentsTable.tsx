@@ -1,15 +1,15 @@
 import { useNavigate } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
 import {
-  Copy,
-  Eye,
-  Lock,
-  LockOpen,
-  Pencil,
-  ShieldCheck,
-  Trash2,
-  TriangleAlert,
-} from "lucide-react"
+  AlertIcon,
+  CopyIcon,
+  EyeIcon,
+  LockIcon,
+  PencilIcon,
+  ShieldCheckIcon,
+  TrashIcon,
+  UnlockIcon,
+} from "@/components/ui/icons"
 
 import useGetScores from "@/hooks/useGetScores"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
@@ -78,7 +78,7 @@ const DeleteAssignmentButton = ({
           name: assignment.name || assignment.slug,
         })}
       >
-        <Trash2 className="size-4" aria-hidden="true" />
+        <TrashIcon className="size-4" aria-hidden="true" />
       </Button>
 
       <ConfirmModal
@@ -140,7 +140,7 @@ const ReuseAssignmentButton = ({
         title={t("assignments.table.reuseTitle")}
         aria-label={t("assignments.table.reuseAria")}
       >
-        <Copy aria-hidden="true" className="size-4" />
+        <CopyIcon aria-hidden="true" className="size-4" />
       </Button>
 
       {open ? (
@@ -187,7 +187,7 @@ const TemplateAccessButton = ({
           setOpen(true)
         }}
       >
-        <ShieldCheck aria-hidden="true" className="size-4" />
+        <ShieldCheckIcon aria-hidden="true" className="size-4" />
       </Button>
       {open ? (
         <TemplateAccessModal
@@ -265,9 +265,9 @@ const LockAssignmentButton = ({
         }}
       >
         {locked ? (
-          <LockOpen aria-hidden="true" className="size-4" />
+          <UnlockIcon aria-hidden="true" className="size-4" />
         ) : (
-          <Lock aria-hidden="true" className="size-4" />
+          <LockIcon aria-hidden="true" className="size-4" />
         )}
       </Button>
 
@@ -531,7 +531,7 @@ const AssignmentsTable = ({
                     className="mt-1 gap-1 whitespace-nowrap"
                     title={t("assignments.table.lockedBadgeTitle")}
                   >
-                    <Lock aria-hidden="true" className="size-3" />
+                    <LockIcon aria-hidden="true" className="size-3" />
                     {t("assignments.table.lockedBadge")}
                   </Badge>
                 )}
@@ -551,7 +551,7 @@ const AssignmentsTable = ({
                       size="sm"
                       className="gap-1 whitespace-nowrap"
                     >
-                      <TriangleAlert aria-hidden="true" className="size-3" />
+                      <AlertIcon aria-hidden="true" className="size-3" />
                       {t("assignments.table.overBudgetBadge")}
                     </Badge>
                   </Link>
@@ -755,9 +755,9 @@ const AssignmentsTable = ({
                   }}
                 >
                   {canMutate ? (
-                    <Pencil aria-hidden="true" className="size-4" />
+                    <PencilIcon aria-hidden="true" className="size-4" />
                   ) : (
-                    <Eye aria-hidden="true" className="size-4" />
+                    <EyeIcon aria-hidden="true" className="size-4" />
                   )}
                 </Link>
                 {!canMutate ? (

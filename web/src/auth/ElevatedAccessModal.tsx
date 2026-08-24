@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import { useRouterState } from "@tanstack/react-router"
-import { AlertTriangle, ShieldCheck } from "lucide-react"
+import { AlertIcon, ShieldCheckIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { useGithubAuth } from "./useGithubAuth"
@@ -140,7 +140,7 @@ export function ElevatedAccessModal({
         <div className="space-y-5">
           <div className="flex gap-4 border-b border-base-200 pb-5">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-              <ShieldCheck aria-hidden="true" className="size-6" />
+              <ShieldCheckIcon aria-hidden="true" className="size-6" />
             </div>
             <div className="min-w-0">
               <h2 className="text-lg font-semibold">{title}</h2>
@@ -150,7 +150,7 @@ export function ElevatedAccessModal({
 
           {error ? (
             <Alert tone="error" className="items-start text-sm">
-              <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+              <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
               <span>{error}</span>
             </Alert>
           ) : null}

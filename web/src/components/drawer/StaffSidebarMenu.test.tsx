@@ -39,7 +39,6 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   }
 })
 // Asset imports the drawer module pulls in at load time.
-vi.mock("@/assets/github.svg?react", () => ({ default: () => null }))
 vi.mock("@/assets/duck.png", () => ({ default: "" }))
 
 import { StaffSidebarMenu } from "./index"

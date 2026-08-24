@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Info } from "lucide-react"
+import { InfoIcon } from "@/components/ui/icons"
 
 import { Alert, SkeletonRows, Toolbar } from "@/components/ui"
 import { RoleBadges } from "./RoleBadges"
@@ -48,7 +48,7 @@ const CsvRosterView = ({
   return (
     <div className="flex flex-col gap-4">
       <Alert tone="info">
-        <Info aria-hidden="true" className="size-5" />
+        <InfoIcon aria-hidden="true" className="size-4" />
         <span>{t("students.csvRoster.notice")}</span>
       </Alert>
 

@@ -1,4 +1,4 @@
-import { ChevronRight, ExternalLink } from "lucide-react"
+import { ChevronRightIcon, LinkExternalIcon } from "@/components/ui/icons"
 
 import { Button } from "@/components/ui"
 import { rtlFlip } from "@/components/ui"
@@ -35,9 +35,12 @@ export const ActionListRow = ({
   external?: boolean
 }) => {
   const trailing = external ? (
-    <ExternalLink aria-hidden="true" className="size-4 shrink-0 opacity-60" />
+    <LinkExternalIcon
+      aria-hidden="true"
+      className="size-4 shrink-0 opacity-60"
+    />
   ) : (
-    <ChevronRight
+    <ChevronRightIcon
       aria-hidden="true"
       className={`size-4 shrink-0 opacity-40 ${rtlFlip}`}
     />

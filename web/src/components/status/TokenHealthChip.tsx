@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
-import { CircleHelp, Clock, TriangleAlert } from "lucide-react"
+import { AlertIcon, ClockIcon, QuestionIcon } from "@/components/ui/icons"
 import type { ComponentType } from "react"
 
 import { Badge, cx } from "@/components/ui"
@@ -21,27 +21,27 @@ const HEALTH_CHIP: Record<
 > = {
   expiringSoon: {
     tone: "warning",
-    Icon: Clock,
+    Icon: ClockIcon,
     labelKey: "serviceTokenHealth.chip.expiringSoon",
   },
   expired: {
     tone: "error",
-    Icon: TriangleAlert,
+    Icon: AlertIcon,
     labelKey: "serviceTokenHealth.chip.expired",
   },
   missing: {
     tone: "error",
-    Icon: TriangleAlert,
+    Icon: AlertIcon,
     labelKey: "serviceTokenHealth.chip.missing",
   },
   expiryUntracked: {
     tone: "warning",
-    Icon: Clock,
+    Icon: ClockIcon,
     labelKey: "serviceTokenHealth.chip.expiryUntracked",
   },
   unknown: {
     tone: "neutral",
-    Icon: CircleHelp,
+    Icon: QuestionIcon,
     labelKey: "serviceTokenHealth.chip.unknown",
   },
 }

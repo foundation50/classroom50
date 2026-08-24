@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 import { Button, Modal } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
-import { Check, ClipboardCopy } from "lucide-react"
+import { CheckIcon, CopyIcon } from "@/components/ui/icons"
 
 // Modal presenting the allow-listed diagnostics snapshot with a copy-to-clipboard
 // action. Nothing is sent anywhere — copy only. The snapshot is rebuilt each open
@@ -47,9 +47,9 @@ export function DiagnosticsDialog({
       <div className="mt-4 flex justify-end">
         <Button variant="outline" size="sm" onClick={() => void copy()}>
           {copied ? (
-            <Check aria-hidden="true" className="size-4" />
+            <CheckIcon aria-hidden="true" className="size-4" />
           ) : (
-            <ClipboardCopy aria-hidden="true" className="size-4" />
+            <CopyIcon aria-hidden="true" className="size-4" />
           )}
           {copied
             ? t("orgActivity.diagnostics.copied")

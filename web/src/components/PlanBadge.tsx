@@ -1,4 +1,4 @@
-import GitHub from "@/assets/github.svg?react"
+import { MarkGithubIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Badge, cx } from "@/components/ui"
@@ -21,7 +21,7 @@ const PlanBadge = ({
 
   return (
     <Badge ghost className={cx("gap-1 capitalize", className)} title={title}>
-      <GitHub className="size-3" aria-hidden="true" />
+      <MarkGithubIcon className="size-3" aria-hidden="true" />
       {t("components.planBadge.label", { name })}
     </Badge>
   )

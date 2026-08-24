@@ -1,5 +1,5 @@
 import type { MouseEvent, ReactNode } from "react"
-import { Check, Copy } from "lucide-react"
+import { CheckIcon, CopyIcon } from "./icons"
 
 import { Button } from "./Button"
 import { cx } from "./cx"
@@ -55,9 +55,9 @@ export function CopyableCode({
         title={label}
       >
         {copied ? (
-          <Check aria-hidden="true" className="size-4" />
+          <CheckIcon aria-hidden="true" className="size-4" />
         ) : (
-          <Copy aria-hidden="true" className="size-4" />
+          <CopyIcon aria-hidden="true" className="size-4" />
         )}
         {withText ? (copied ? copiedLabel : label) : null}
       </Button>

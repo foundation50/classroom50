@@ -1,7 +1,10 @@
 import { useParams, Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
-import { ChevronDown, Plus } from "lucide-react"
-import GitHub from "@/assets/github.svg?react"
+import {
+  ChevronDownIcon,
+  MarkGithubIcon,
+  PlusIcon,
+} from "@/components/ui/icons"
 
 import useGetClasses from "@/hooks/useGetClasses"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -34,7 +37,7 @@ const NewClassroomButton = ({ org }: { org: string }) => {
         params={{ org }}
         className="btn btn-primary join-item"
       >
-        <Plus aria-hidden="true" className="size-4" />
+        <PlusIcon aria-hidden="true" className="size-4" />
         {t("classes.empty.createButton")}
       </Link>
       {/* Not a join-item itself: daisyUI resets the join radius vars for a
@@ -48,7 +51,7 @@ const NewClassroomButton = ({ org }: { org: string }) => {
           className="join-item h-full border-s border-primary-content/20 px-2"
           aria-label={t("classes.newButton.moreOptions")}
         >
-          <ChevronDown aria-hidden="true" className="size-4" />
+          <ChevronDownIcon aria-hidden="true" className="size-4" />
         </Button>
         <ul
           tabIndex={0}
@@ -58,7 +61,7 @@ const NewClassroomButton = ({ org }: { org: string }) => {
           {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
           <li>
             <Link to="/$org/import" params={{ org }}>
-              <GitHub aria-hidden="true" className="size-4" />
+              <MarkGithubIcon aria-hidden="true" className="size-4" />
               {t("migration.entryButton")}
             </Link>
           </li>
@@ -74,7 +77,7 @@ const CreateClassroomPane = ({ org }: { org: string }) => {
     <Card dashed>
       <Card.Body className="items-center py-12 text-center">
         <div className="mb-2 flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <Plus aria-hidden="true" className="size-7" />
+          <PlusIcon aria-hidden="true" className="size-6" />
         </div>
 
         <Card.Title className="text-xl">{t("classes.empty.title")}</Card.Title>
@@ -101,7 +104,7 @@ const JoinOrgCard = ({ org }: { org: string }) => {
     <Card dashed>
       <Card.Body className="items-center py-12 text-center">
         <div className="mb-2 flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <Plus aria-hidden="true" className="size-7" />
+          <PlusIcon aria-hidden="true" className="size-6" />
         </div>
 
         <Card.Title className="text-xl">{t("classes.join.title")}</Card.Title>
@@ -131,7 +134,7 @@ const JoinOrgCard = ({ org }: { org: string }) => {
             onClick={() => void run(() => mutation.mutateAsync())}
           >
             {mutation.isPending ? null : (
-              <Plus aria-hidden="true" className="size-4" />
+              <PlusIcon aria-hidden="true" className="size-4" />
             )}
             {mutation.isPending
               ? t("classes.join.joining")

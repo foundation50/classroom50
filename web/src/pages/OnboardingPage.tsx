@@ -1,12 +1,11 @@
 import {
-  ArrowRight,
-  CheckCircle2,
-  GraduationCap,
-  Loader2,
-  Mail,
-  UserPlus,
-} from "lucide-react"
-import { Spinner } from "@/components/Spinner"
+  ArrowRightIcon,
+  CheckCircleIcon,
+  MailIcon,
+  MortarBoardIcon,
+  PersonAddIcon,
+} from "@/components/ui/icons"
+import { InlineSpinner, Spinner } from "@/components/Spinner"
 import {
   Badge,
   Button,
@@ -36,7 +35,7 @@ const OnboardNavbar = () => {
     <div className="navbar bg-base-100 shadow-sm">
       <Link to="/">
         <div className="flex p-6 text-lg font-bold">
-          <GraduationCap aria-hidden="true" className="size-8 me-2" />{" "}
+          <MortarBoardIcon aria-hidden="true" className="size-8 me-2" />{" "}
           {t("nav.appName")}
         </div>
       </Link>
@@ -75,7 +74,7 @@ const NotInvited = ({
       <EnterDiv className="card-body gap-6">
         <div>
           <Badge ghost size="md" className="gap-2">
-            <Mail aria-hidden="true" className="size-4" />
+            <MailIcon aria-hidden="true" className="size-4" />
             {t("getStarted.badge")}
           </Badge>
           <h1 className="mt-6 text-2xl font-bold">
@@ -95,7 +94,7 @@ const NotInvited = ({
         <div className="rounded-box border border-base-300 bg-base-100 p-5">
           <div className="flex gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-box bg-base-300/40 text-base-content/70">
-              <UserPlus aria-hidden="true" className="size-5" />
+              <PersonAddIcon aria-hidden="true" className="size-4" />
             </div>
             <div className="min-w-0">
               <h2 className="font-semibold text-base-content">
@@ -137,7 +136,7 @@ const AllSet = ({
       <EnterDiv className="card-body gap-6">
         <div>
           <Badge tone="primary" size="md" className="gap-2">
-            <Mail aria-hidden="true" className="size-4" />
+            <MailIcon aria-hidden="true" className="size-4" />
             {t("getStarted.badge")}
           </Badge>
           <h1 className="mt-6 text-2xl font-bold">
@@ -149,7 +148,7 @@ const AllSet = ({
         </div>
         <div className="rounded-box border border-success/20 bg-success/5 p-5">
           <div className="flex gap-3">
-            <CheckCircle2
+            <CheckCircleIcon
               aria-hidden="true"
               className="size-6 shrink-0 text-success"
             />
@@ -174,7 +173,10 @@ const AllSet = ({
               className="w-full"
             >
               {t("getStarted.active.goToClassroom")}
-              <ArrowRight aria-hidden="true" className={`size-4 ${rtlFlip}`} />
+              <ArrowRightIcon
+                aria-hidden="true"
+                className={`size-4 ${rtlFlip}`}
+              />
             </RouterButton>
           )
         )}
@@ -283,7 +285,7 @@ const OnboardingPage = () => {
                 {t("getStarted.checking.stillChecking")}
               </p>
               <Button variant="outline" className="w-full" onClick={retry}>
-                <Loader2 aria-hidden="true" className="size-4" />
+                <InlineSpinner />
                 {t("getStarted.checking.retry")}
               </Button>
             </div>

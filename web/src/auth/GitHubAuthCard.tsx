@@ -1,7 +1,11 @@
-import { AlertTriangle, GraduationCap, Info } from "lucide-react"
+import {
+  AlertIcon,
+  InfoIcon,
+  MarkGithubIcon,
+  MortarBoardIcon,
+} from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
-import GitHub from "@/assets/github.svg?react"
 
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useGithubAuth } from "./useGithubAuth"
@@ -55,7 +59,7 @@ export function GitHubAuthCard() {
         </div>
         <header className="flex items-center gap-4 border-b border-base-200 px-7 py-6">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <GraduationCap aria-hidden="true" className="size-6" />
+            <MortarBoardIcon aria-hidden="true" className="size-6" />
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
@@ -121,7 +125,7 @@ export function GitHubAuthCard() {
                 // "expired" is an informational "please sign in again" prompt,
                 // not a fault; the warning triangle overstates it, so only the
                 // offline/error tones carry the alert icon.
-                const Icon = alert === "expired" ? Info : AlertTriangle
+                const Icon = alert === "expired" ? InfoIcon : AlertIcon
                 return (
                   <Alert tone={tone} className="items-start text-sm">
                     <Icon aria-hidden="true" className="size-4 shrink-0" />
@@ -139,7 +143,7 @@ export function GitHubAuthCard() {
                   disabled={auth.isStartingWebFlow}
                 >
                   {auth.isStartingWebFlow ? null : (
-                    <GitHub aria-hidden="true" className="size-4" />
+                    <MarkGithubIcon aria-hidden="true" className="size-4" />
                   )}
                   {t("auth.signInWithGitHub")}
                 </Button>

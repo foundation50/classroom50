@@ -4,7 +4,7 @@ import {
   useParams,
 } from "@tanstack/react-router"
 import type { RouterContext } from "@/types/router"
-import { TriangleAlert } from "lucide-react"
+import { AlertIcon } from "@/components/ui/icons"
 import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { RoleViewProvider } from "@/context/roleView/RoleViewProvider"
@@ -42,7 +42,7 @@ const RootErrorComponent = ({ error }: { error: Error }) => {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-10 text-center">
       <div className="flex size-16 items-center justify-center rounded-box bg-error/10 text-error">
-        <TriangleAlert aria-hidden="true" className="size-8" />
+        <AlertIcon aria-hidden="true" className="size-8" />
       </div>
       <div>
         <h1 className="text-2xl font-bold">{t("error.title")}</h1>

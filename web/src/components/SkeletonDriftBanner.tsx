@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "@tanstack/react-router"
-import { CheckCircle2, FileWarning } from "lucide-react"
+import { CheckCircleIcon, FileDiffIcon } from "@/components/ui/icons"
 import { AnimatePresence } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -123,9 +123,9 @@ export function SkeletonDriftBanner() {
             tone={view}
             icon={
               isSuccess ? (
-                <CheckCircle2 className="size-5" aria-hidden="true" />
+                <CheckCircleIcon className="size-4" aria-hidden="true" />
               ) : (
-                <FileWarning className="size-5" aria-hidden="true" />
+                <FileDiffIcon className="size-4" aria-hidden="true" />
               )
             }
             title={t(

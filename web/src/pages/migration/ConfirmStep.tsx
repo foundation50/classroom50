@@ -10,11 +10,11 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
 import {
-  AlertTriangle,
-  CheckCircle,
-  ExternalLink,
-  RefreshCw,
-} from "lucide-react"
+  AlertIcon,
+  CheckCircleIcon,
+  LinkExternalIcon,
+  SyncIcon,
+} from "@/components/ui/icons"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { githubOAuthGrantUrl, githubOrgOAuthPolicyUrl } from "@/auth/constants"
@@ -363,7 +363,7 @@ export const ConfirmStep = ({
           </div>
 
           <Alert tone="error" className="mt-3 items-start">
-            <AlertTriangle aria-hidden="true" className="size-5 shrink-0" />
+            <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
             <div>
               <p className="font-medium">
                 {t("migration.access.headline", { org: accessOrg })}
@@ -394,7 +394,7 @@ export const ConfirmStep = ({
                     className="btn btn-primary btn-sm mt-3"
                   >
                     {t("migration.access.step1Button")}
-                    <ExternalLink aria-hidden="true" className="size-4" />
+                    <LinkExternalIcon aria-hidden="true" className="size-4" />
                   </a>
                 </div>
               </div>
@@ -419,7 +419,7 @@ export const ConfirmStep = ({
                     className="btn btn-ghost btn-sm mt-3"
                   >
                     {t("migration.access.step2Button", { org: accessOrg })}
-                    <ExternalLink aria-hidden="true" className="size-4" />
+                    <LinkExternalIcon aria-hidden="true" className="size-4" />
                   </a>
                 </div>
               </div>
@@ -632,7 +632,7 @@ export const ConfirmStep = ({
                     onClick={() => refetch()}
                     disabled={isFetching || pendingEdit}
                   >
-                    <RefreshCw aria-hidden="true" className="size-4" />
+                    <SyncIcon aria-hidden="true" className="size-4" />
                     {t("migration.confirm.recheck")}
                   </Button>
                 </Toolbar.Trailing>
@@ -705,7 +705,10 @@ export const ConfirmStep = ({
                 className="mt-6 items-start"
               >
                 {!hadSkips && (
-                  <CheckCircle aria-hidden="true" className="size-5 shrink-0" />
+                  <CheckCircleIcon
+                    aria-hidden="true"
+                    className="size-4 shrink-0"
+                  />
                 )}
                 <div>
                   <p className="font-medium">
@@ -776,7 +779,7 @@ export const ConfirmStep = ({
         aria-label={t("migration.confirm.modalTitle")}
       >
         <h3 className="flex items-center gap-2 text-lg font-bold">
-          <AlertTriangle aria-hidden="true" className="size-5 text-warning" />
+          <AlertIcon aria-hidden="true" className="size-4 text-warning" />
           {t("migration.confirm.modalTitle")}
         </h3>
         <p className="mt-2 text-sm text-base-content/80">

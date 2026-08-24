@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ShieldAlert } from "lucide-react"
+import { ShieldXIcon } from "@/components/ui/icons"
 import { AnimatePresence } from "motion/react"
 import { Trans, useTranslation } from "react-i18next"
 
@@ -27,7 +27,7 @@ export function ScopeWarningBanner() {
         <AppBanner
           key="missing-scopes"
           tone="warning"
-          icon={<ShieldAlert className="size-5" aria-hidden="true" />}
+          icon={<ShieldXIcon className="size-4" aria-hidden="true" />}
           title={t("auth.missingScopesTitle")}
           onDismiss={() => setDismissed(true)}
         >

@@ -1,5 +1,10 @@
 import { useParams } from "@tanstack/react-router"
-import { ArrowLeft, ArrowRight, Check, CheckCircle2 } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  CheckCircleIcon,
+  CheckIcon,
+} from "@/components/ui/icons"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useTranslation } from "react-i18next"
 
@@ -98,7 +103,7 @@ const SetupStepper = ({ stage }: { stage: number }) => {
               )}
             >
               {state === "done" ? (
-                <Check aria-hidden="true" className="size-4" />
+                <CheckIcon aria-hidden="true" className="size-4" />
               ) : (
                 <span aria-hidden="true">{step}</span>
               )}
@@ -169,7 +174,7 @@ const OrgSteps = ({
                   onClick={onGoToServiceToken}
                 >
                   {t("setup.nextServiceToken")}
-                  <ArrowRight
+                  <ArrowRightIcon
                     aria-hidden="true"
                     className={`size-4 ${rtlFlip}`}
                   />
@@ -177,7 +182,10 @@ const OrgSteps = ({
               ))}
             {stage === 2 && (
               <Button variant="ghost" onClick={onLeaveServiceToken}>
-                <ArrowLeft aria-hidden="true" className={`size-4 ${rtlFlip}`} />
+                <ArrowLeftIcon
+                  aria-hidden="true"
+                  className={`size-4 ${rtlFlip}`}
+                />
                 {t("setup.back")}
               </Button>
             )}
@@ -188,7 +196,10 @@ const OrgSteps = ({
           <div className="grid gap-4">
             {configReady && (
               <EnterDiv className="alert alert-success">
-                <CheckCircle2 aria-hidden="true" className="size-5 shrink-0" />
+                <CheckCircleIcon
+                  aria-hidden="true"
+                  className="size-4 shrink-0"
+                />
                 <div>{t("setup.setupComplete")}</div>
               </EnterDiv>
             )}
@@ -201,7 +212,7 @@ const OrgSteps = ({
         ) : (
           <EnterDiv className="flex flex-col items-center gap-4 py-8 text-center">
             <div className="flex size-16 items-center justify-center rounded-full bg-success/10 text-success">
-              <CheckCircle2 aria-hidden="true" className="size-9" />
+              <CheckCircleIcon aria-hidden="true" className="size-9" />
             </div>
             <div>
               <h2 className="text-xl font-bold">{t("setup.allSetTitle")}</h2>

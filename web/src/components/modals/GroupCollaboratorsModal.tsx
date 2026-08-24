@@ -1,9 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { Plus, Trash2, UsersRound } from "lucide-react"
+import {
+  MarkGithubIcon,
+  PeopleIcon,
+  PlusIcon,
+  TrashIcon,
+} from "@/components/ui/icons"
 
-import GitHub from "@/assets/github.svg?react"
 import { Spinner } from "@/components/Spinner"
 import {
   Alert,
@@ -357,7 +361,7 @@ export function GroupCollaboratorsModal({
     >
       <div className="flex items-start gap-4">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-          <UsersRound className="size-5" aria-hidden="true" />
+          <PeopleIcon className="size-4" aria-hidden="true" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -371,7 +375,7 @@ export function GroupCollaboratorsModal({
               target="_blank"
               rel="noreferrer"
             >
-              <GitHub aria-hidden="true" className="size-4" />
+              <MarkGithubIcon aria-hidden="true" className="size-4" />
               {t("components.modals.groupCollaborators.viewRepository")}
             </a>
           )}
@@ -430,9 +434,9 @@ export function GroupCollaboratorsModal({
             <ul className="divide-y divide-base-200 rounded-box border border-base-200">
               {ownerDisplayLogin && (
                 <li className="flex items-center gap-3 px-4 py-2.5">
-                  <GitHub
+                  <MarkGithubIcon
                     aria-hidden="true"
-                    className="size-5 shrink-0 text-base-content/70"
+                    className="size-4 shrink-0 text-base-content/70"
                   />
                   <span className="min-w-0 flex-1 leading-tight">
                     <CollaboratorIdentity
@@ -458,7 +462,7 @@ export function GroupCollaboratorsModal({
                       isInvalid ? "bg-error/5" : "",
                     ].join(" ")}
                   >
-                    <GitHub
+                    <MarkGithubIcon
                       aria-hidden="true"
                       className={[
                         "size-5 shrink-0",
@@ -488,7 +492,7 @@ export function GroupCollaboratorsModal({
                         )}
                         onClick={() => removeFromDraft(username)}
                       >
-                        <Trash2 aria-hidden="true" className="size-4" />
+                        <TrashIcon aria-hidden="true" className="size-4" />
                       </Button>
                     )}
                   </li>
@@ -504,9 +508,9 @@ export function GroupCollaboratorsModal({
                     key={`remove-${username}`}
                     className="flex items-center gap-3 bg-error/5 px-4 py-2.5"
                   >
-                    <GitHub
+                    <MarkGithubIcon
                       aria-hidden="true"
-                      className="size-5 shrink-0 text-error/50"
+                      className="size-4 shrink-0 text-error/50"
                     />
                     <span className="min-w-0 flex-1 leading-tight text-error line-through opacity-70">
                       <CollaboratorIdentity
@@ -576,7 +580,7 @@ export function GroupCollaboratorsModal({
                   }}
                 />
                 <Button variant="outline" onClick={addPendingUsername}>
-                  <Plus aria-hidden="true" className="size-4" />
+                  <PlusIcon aria-hidden="true" className="size-4" />
                   {t("components.modals.groupCollaborators.add")}
                 </Button>
               </div>

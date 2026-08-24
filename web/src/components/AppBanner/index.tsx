@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { X } from "lucide-react"
+import { XIcon } from "@/components/ui/icons"
 import { motion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -74,7 +74,7 @@ export const AppBanner = ({
             className="-me-1 shrink-0"
             onClick={onDismiss}
           >
-            <X aria-hidden="true" className="size-4" />
+            <XIcon aria-hidden="true" className="size-4" />
           </Button>
         ) : null}
       </div>

@@ -38,3 +38,23 @@ export function Spinner({
 }
 
 export default Spinner
+
+/**
+ * Decorative in-button/inline spinner: a bare `aria-hidden` span for busy
+ * states that are already announced elsewhere (a labeled disabled button,
+ * adjacent text). Use `<Spinner>` when the spinner is the only indicator.
+ */
+export function InlineSpinner({
+  size = "xs",
+  className,
+}: {
+  size?: SpinnerSize
+  className?: string
+}) {
+  return (
+    <span
+      className={`loading loading-spinner loading-${size}${className ? ` ${className}` : ""}`}
+      aria-hidden="true"
+    />
+  )
+}

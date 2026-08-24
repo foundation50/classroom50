@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
-import { TriangleAlert } from "lucide-react"
+import { AlertIcon } from "@/components/ui/icons"
 
 import { ConfirmModal } from "@/components/modals"
 import { Button, HelpTooltip, MonoLtr, cx } from "@/components/ui"
@@ -90,7 +90,7 @@ const TeardownSection = ({
       className={sectionHighlightClass(highlighted ?? false)}
       title={t("orgSettings.teardown.title")}
       titleAdornment={
-        <TriangleAlert aria-hidden="true" className="size-5 text-error" />
+        <AlertIcon aria-hidden="true" className="size-4 text-error" />
       }
       description={
         <Trans

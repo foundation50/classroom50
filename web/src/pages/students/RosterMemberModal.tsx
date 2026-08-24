@@ -1,9 +1,14 @@
 import { useEffect, useId, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { ExternalLink, Send, UserPlus, X } from "lucide-react"
+import {
+  LinkExternalIcon,
+  MarkGithubIcon,
+  PaperAirplaneIcon,
+  PersonAddIcon,
+  XIcon,
+} from "@/components/ui/icons"
 
 import Avatar from "@/components/avatar"
-import GitHub from "@/assets/github.svg?react"
 import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useUnenrollStudent } from "@/hooks/mutations/useUnenrollStudent"
@@ -523,7 +528,7 @@ const RosterMemberModal = ({
           disabled={busy}
           aria-label={t("common.close")}
         >
-          <X aria-hidden="true" className="size-4" />
+          <XIcon aria-hidden="true" className="size-4" />
         </Button>
       </div>
 
@@ -543,9 +548,12 @@ const RosterMemberModal = ({
                   rel="noreferrer"
                   className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
                 >
-                  <GitHub aria-hidden="true" className="size-3.5 opacity-70" />
+                  <MarkGithubIcon
+                    aria-hidden="true"
+                    className="size-4 opacity-70"
+                  />
                   <span className="font-mono">@{row.username}</span>
-                  <ExternalLink aria-hidden="true" className="size-3" />
+                  <LinkExternalIcon aria-hidden="true" className="size-3" />
                 </a>
               ) : row.email ? (
                 <span className="text-sm text-base-content/70">
@@ -564,7 +572,7 @@ const RosterMemberModal = ({
                 disabled={busy}
                 onClick={() => void handleInvite()}
               >
-                <UserPlus aria-hidden="true" className="size-4" />
+                <PersonAddIcon aria-hidden="true" className="size-4" />
                 {t("students.inviteToOrg")}
               </Button>
             ) : null}
@@ -648,7 +656,10 @@ const RosterMemberModal = ({
                       t("common.working")
                     ) : (
                       <>
-                        <Send aria-hidden="true" className="size-4" />
+                        <PaperAirplaneIcon
+                          aria-hidden="true"
+                          className="size-4"
+                        />
                         {t("students.resend")}
                       </>
                     )}
@@ -746,7 +757,7 @@ const RosterMemberModal = ({
                 disabled={busy}
                 onClick={() => void handleAssignRole()}
               >
-                <UserPlus aria-hidden="true" className="size-4" />
+                <PersonAddIcon aria-hidden="true" className="size-4" />
                 {t("students.assignRoleAction")}
               </Button>
             </div>
@@ -789,7 +800,7 @@ const RosterMemberModal = ({
                       className="inline-flex items-center gap-1 font-mono text-sm text-primary hover:underline"
                     >
                       {teamSlugByRole[r]}
-                      <ExternalLink aria-hidden="true" className="size-3.5" />
+                      <LinkExternalIcon aria-hidden="true" className="size-4" />
                     </a>
                   ))}
                 </div>

@@ -1,4 +1,4 @@
-import { X } from "lucide-react"
+import { XIcon } from "./icons"
 import {
   useEffect,
   useId,
@@ -121,7 +121,7 @@ export function Modal({
               disabled={closeDisabled}
               key={closeId}
             >
-              <X className="size-4" aria-hidden="true" />
+              <XIcon className="size-4" aria-hidden="true" />
             </Button>
           </form>
         )}

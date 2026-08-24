@@ -1,4 +1,4 @@
-import { RefreshCw } from "lucide-react"
+import { SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Alert, Button, cx } from "@/components/ui"
@@ -72,7 +72,7 @@ export function DataFreshness({
                 : t("submissions.freshness.refreshHelp")
             }
           >
-            <RefreshCw
+            <SyncIcon
               aria-hidden="true"
               className={cx("size-4", collecting && "animate-spin")}
             />

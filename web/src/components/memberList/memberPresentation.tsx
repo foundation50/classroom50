@@ -1,6 +1,6 @@
+import { MarkGithubIcon } from "@/components/ui/icons"
 import { Trans, useTranslation } from "react-i18next"
 
-import GitHub from "@/assets/github.svg?react"
 import { MonoLtr } from "@/components/ui"
 import type { MemberListRow } from "@/util/memberRow"
 import { firstGrapheme } from "@/util/students"
@@ -50,7 +50,7 @@ export const GitHubIdentity = ({ row }: { row: MemberListRow }) => {
   )
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-base-content/70">
-      <GitHub aria-hidden="true" className="size-3.5 opacity-50" />
+      <MarkGithubIcon aria-hidden="true" className="size-4 opacity-50" />
       {identity}
     </span>
   )

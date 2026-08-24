@@ -25,14 +25,14 @@ import SettingsSection from "@/pages/orgSettings/SettingsSection"
 import { githubOrgSettingsUrl } from "@/util/orgUrl"
 import { WIKI_URL } from "@/version"
 import {
-  CalendarClock,
-  Check,
-  CheckCircle2,
-  ExternalLink,
-  Pencil,
-  TriangleAlert,
-  X,
-} from "lucide-react"
+  AlertIcon,
+  CalendarIcon,
+  CheckCircleIcon,
+  CheckIcon,
+  LinkExternalIcon,
+  PencilIcon,
+  XIcon,
+} from "@/components/ui/icons"
 
 // Default token lifetime (days) prefilled into GitHub's form. The user can edit
 // it in the modal within GitHub's allowed range; we record the chosen value so
@@ -114,7 +114,7 @@ function TokenNameRow({
           aria-label={t("orgSettings.serviceToken.rename")}
           onClick={beginEdit}
         >
-          <Pencil aria-hidden="true" className="size-3.5" />
+          <PencilIcon aria-hidden="true" className="size-4" />
         </Button>
       </div>
     )
@@ -146,7 +146,7 @@ function TokenNameRow({
         loading={renameMutation.isPending}
         disabled={renameMutation.isPending || !draft.trim()}
       >
-        <Check aria-hidden="true" className="size-4" />
+        <CheckIcon aria-hidden="true" className="size-4" />
       </Button>
       <Button
         variant="ghost"
@@ -156,7 +156,7 @@ function TokenNameRow({
         aria-label={t("orgSettings.serviceToken.cancelRename")}
         onClick={() => setEditing(false)}
       >
-        <X aria-hidden="true" className="size-4" />
+        <XIcon aria-hidden="true" className="size-4" />
       </Button>
       {renameMutation.isError && (
         <span className="text-xs text-error">
@@ -356,7 +356,7 @@ function SetTokenModal({
                   if (!expiryValid) e.preventDefault()
                 }}
               >
-                <ExternalLink aria-hidden="true" className="size-4" />
+                <LinkExternalIcon aria-hidden="true" className="size-4" />
                 {t("orgSettings.serviceToken.generateOnGitHub")}
               </a>
               <HelpTooltip
@@ -388,7 +388,7 @@ function SetTokenModal({
 
             {saveMutation.isError && (
               <p className="flex items-start gap-2 text-sm text-error">
-                <TriangleAlert
+                <AlertIcon
                   aria-hidden="true"
                   className="mt-0.5 size-4 shrink-0"
                 />
@@ -410,7 +410,7 @@ function SetTokenModal({
             rel="noreferrer"
           >
             {t("orgSettings.serviceToken.learnMore")}
-            <ExternalLink aria-hidden="true" className="size-3.5" />
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
           </a>
           <div className="flex gap-2">
             <Button variant="ghost" type="button" onClick={onClose}>
@@ -515,7 +515,7 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
       ) : !present ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="inline-flex items-center gap-2 text-sm text-error">
-            <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+            <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
             {t("orgSettings.serviceToken.statusMissing")}
           </span>
           <Button variant="primary" size="sm" onClick={openModal}>
@@ -527,14 +527,17 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
               <span className="inline-flex items-center gap-2 text-success">
-                <CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />
+                <CheckCircleIcon
+                  aria-hidden="true"
+                  className="size-4 shrink-0"
+                />
                 {t("orgSettings.serviceToken.statusPresent")}
               </span>
               {expiresDate && (
                 <span className="inline-flex items-center gap-1.5 text-base-content/60">
-                  <CalendarClock
+                  <CalendarIcon
                     aria-hidden="true"
-                    className="size-3.5 shrink-0"
+                    className="size-4 shrink-0"
                   />
                   {t("orgSettings.serviceToken.expiresOn", {
                     date: expiresDate.toLocaleDateString(),
@@ -549,7 +552,7 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
 
           {!expiresDate && (
             <span className="inline-flex items-center gap-2 text-sm text-warning">
-              <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+              <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
               {t("orgSettings.serviceToken.expiryUntrackedHint")}
             </span>
           )}

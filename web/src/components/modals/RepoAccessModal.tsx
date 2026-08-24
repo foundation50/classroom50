@@ -1,9 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { Plus, Trash2, ShieldCheck } from "lucide-react"
+import {
+  MarkGithubIcon,
+  PlusIcon,
+  ShieldCheckIcon,
+  TrashIcon,
+} from "@/components/ui/icons"
 
-import GitHub from "@/assets/github.svg?react"
 import { Spinner } from "@/components/Spinner"
 import {
   Alert,
@@ -393,7 +397,7 @@ export function RepoAccessModal({
     >
       <div className="flex items-start gap-4">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-          <ShieldCheck className="size-5" aria-hidden="true" />
+          <ShieldCheckIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className="text-lg font-bold">
@@ -406,7 +410,7 @@ export function RepoAccessModal({
               target="_blank"
               rel="noreferrer"
             >
-              <GitHub aria-hidden="true" className="size-4" />
+              <MarkGithubIcon aria-hidden="true" className="size-4" />
               {assignmentName
                 ? t("components.modals.repoAccess.viewRepoNamed", {
                     name: assignmentName,
@@ -463,7 +467,7 @@ export function RepoAccessModal({
                     entry.markedForRemoval ? "bg-error/5" : "",
                   ].join(" ")}
                 >
-                  <GitHub
+                  <MarkGithubIcon
                     aria-hidden="true"
                     className={[
                       "size-5 shrink-0",
@@ -524,7 +528,7 @@ export function RepoAccessModal({
                       })}
                       onClick={() => markRemoval(entry.login, true)}
                     >
-                      <Trash2 aria-hidden="true" className="size-4" />
+                      <TrashIcon aria-hidden="true" className="size-4" />
                     </Button>
                   )}
                   {canManage && entry.markedForRemoval && (
@@ -583,7 +587,7 @@ export function RepoAccessModal({
                 ))}
               </Select>
               <Button variant="outline" onClick={addPending}>
-                <Plus aria-hidden="true" className="size-4" />
+                <PlusIcon aria-hidden="true" className="size-4" />
                 {t("components.modals.groupCollaborators.add")}
               </Button>
             </div>

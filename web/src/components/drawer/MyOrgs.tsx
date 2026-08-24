@@ -1,4 +1,4 @@
-import { BookText, Settings } from "lucide-react"
+import { BookIcon, GearIcon } from "@/components/ui/icons"
 import { Link } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { SidebarItemBody, SidebarNavItem } from "./primitives"
@@ -12,7 +12,7 @@ export const MyOrgs = ({ settings = false }) => {
           <Link to="/">
             <SidebarItemBody
               label={t("nav.organizations")}
-              icon={<BookText aria-hidden="true" />}
+              icon={<BookIcon aria-hidden="true" />}
               active={!settings}
               groupId="orgs"
             />
@@ -22,7 +22,7 @@ export const MyOrgs = ({ settings = false }) => {
           <Link to="/settings">
             <SidebarItemBody
               label={t("nav.settings")}
-              icon={<Settings aria-hidden="true" />}
+              icon={<GearIcon aria-hidden="true" />}
               active={settings}
               groupId="orgs"
             />

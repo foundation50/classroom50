@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Check, Copy, ExternalLink } from "lucide-react"
+import { CheckIcon, CopyIcon, LinkExternalIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import type { DeviceAuthState } from "./types"
@@ -13,7 +13,7 @@ function StepNumber({ value, done }: { value: number; done: boolean }) {
         done ? "bg-success/10 text-success" : "bg-primary/10 text-primary",
       ].join(" ")}
     >
-      {done ? <Check aria-hidden="true" className="size-4" /> : value}
+      {done ? <CheckIcon aria-hidden="true" className="size-4" /> : value}
     </div>
   )
 }
@@ -86,12 +86,12 @@ export function GitHubDevicePrompt({
           >
             {copied ? (
               <>
-                <Check aria-hidden="true" className="size-4" />
+                <CheckIcon aria-hidden="true" className="size-4" />
                 {t("auth.deviceCopied")}
               </>
             ) : (
               <>
-                <Copy aria-hidden="true" className="size-4" />
+                <CopyIcon aria-hidden="true" className="size-4" />
                 {t("auth.deviceCopyCode")}
               </>
             )}
@@ -119,7 +119,7 @@ export function GitHubDevicePrompt({
               window.setTimeout(onVerificationOpened, 0)
             }}
           >
-            <ExternalLink aria-hidden="true" className="size-4" />
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
             {t("auth.deviceOpenUri", { uri: device.verificationUri })}
           </Button>
 

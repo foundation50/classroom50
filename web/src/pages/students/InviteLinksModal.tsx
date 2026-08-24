@@ -1,6 +1,6 @@
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, Copy } from "lucide-react"
+import { CheckIcon, CopyIcon } from "@/components/ui/icons"
 
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { Button, Input, Modal } from "@/components/ui"
@@ -44,12 +44,12 @@ const CopyLinkField = ({
         >
           {copied ? (
             <>
-              <Check aria-hidden="true" className="size-4 text-success" />
+              <CheckIcon aria-hidden="true" className="size-4 text-success" />
               {t("students.copied")}
             </>
           ) : (
             <>
-              <Copy aria-hidden="true" className="size-4" />
+              <CopyIcon aria-hidden="true" className="size-4" />
               {t("students.copy")}
             </>
           )}

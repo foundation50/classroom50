@@ -1,6 +1,11 @@
 import type { TFunction } from "i18next"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, Info, MailCheck, ShieldCheck } from "lucide-react"
+import {
+  AlertIcon,
+  InfoIcon,
+  ReadIcon,
+  ShieldCheckIcon,
+} from "@/components/ui/icons"
 
 import { Badge } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"
@@ -30,7 +35,7 @@ export const ClassificationBadge = ({
   if (row.classification === "on-roster-not-member") {
     return (
       <Badge tone="error" className="gap-1">
-        <AlertTriangle aria-hidden="true" className="size-3" />{" "}
+        <AlertIcon aria-hidden="true" className="size-3" />{" "}
         {t("orgMembers.badgeNotMember")}
       </Badge>
     )
@@ -40,7 +45,7 @@ export const ClassificationBadge = ({
   if (row.classification === "invitation-pending") {
     return (
       <Badge tone="info" className="gap-1">
-        <MailCheck aria-hidden="true" className="size-3" />{" "}
+        <ReadIcon aria-hidden="true" className="size-3" />{" "}
         {t("orgMembers.badgeInvitePending")}
       </Badge>
     )
@@ -50,7 +55,7 @@ export const ClassificationBadge = ({
   if (isOwner) {
     return (
       <Badge tone="info" className="gap-1">
-        <ShieldCheck aria-hidden="true" className="size-3" />{" "}
+        <ShieldCheckIcon aria-hidden="true" className="size-3" />{" "}
         {t("orgMembers.badgeOwner")}
       </Badge>
     )
@@ -58,7 +63,7 @@ export const ClassificationBadge = ({
   if (row.classification === "member-no-roster") {
     return (
       <Badge ghost className="gap-1">
-        <Info aria-hidden="true" className="size-3" />{" "}
+        <InfoIcon aria-hidden="true" className="size-3" />{" "}
         {t("orgMembers.badgeNoClassroom")}
       </Badge>
     )
