@@ -63,6 +63,16 @@ export {
 } from "./assignments/permissions"
 export { acceptAssignment } from "./assignments/accept"
 export {
+  renameAssignment,
+  isRenameEligible,
+  needsRenameFinish,
+  assignmentRepoPrefix,
+  type RenameAssignmentInput,
+  type RenameAssignmentSummary,
+  type RenameProgress,
+  type RepoRenameOutcome,
+} from "./assignments/rename"
+export {
   provisioningSettingsChanged,
   provisioningFieldsFromAssignment,
   type ProvisioningFields,

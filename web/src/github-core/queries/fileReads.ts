@@ -215,3 +215,31 @@ export async function getClassroom50Yaml(
 
   return decodeBase64Utf8(file.content)
 }
+
+// A single file from an arbitrary repo at a PINNED ref (commit SHA or branch),
+// or null when the path is absent at that ref. The ref pin is what makes a
+// read-modify-write build rebase-safe: the content is read at the same parent
+// the commit will be built on. Non-404 errors propagate so a transient failure
+// isn't misread as "missing".
+export async function getRepoFileAtRef(
+  client: GitHubClient,
+  input: { owner: string; repo: string; path: string; ref: string },
+): Promise<string | null> {
+  const { owner, repo, path, ref } = input
+  const file = await tolerateGitHubError(
+    () =>
+      client.request<{
+        type: "file"
+        encoding: "base64"
+        content: string
+      }>(
+        `/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`,
+      ),
+    null,
+  )
+  if (file === null) return null
+  if (file.type !== "file") {
+    throw new Error(`${path} is not a file in ${owner}/${repo}`)
+  }
+  return decodeBase64Utf8(file.content)
+}

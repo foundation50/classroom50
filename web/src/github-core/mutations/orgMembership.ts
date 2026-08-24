@@ -119,6 +119,23 @@ export async function archiveRepo(
   )
 }
 
+// PATCH /repos/{owner}/{repo} { name }. GitHub leaves permanent redirects at
+// the old name (git, web, and API traffic all follow), so existing clones keep
+// working. Unlike archiveRepo, errors PROPAGATE: the assignment-rename fan-out
+// classifies them per repo (403 = needs repo admin; 422 = a repo already
+// occupies the new name).
+export async function renameRepo(
+  client: GitHubClient,
+  input: { owner: string; repo: string; newName: string },
+): Promise<void> {
+  const { owner, repo, newName } = input
+
+  await client.request(`/repos/${owner}/${repo}`, {
+    method: "PATCH",
+    body: { name: newName },
+  })
+}
+
 // DELETE /repos/{owner}/{repo}. Needs the delete_repo OAuth scope, which normal
 // sign-in does not request (#655) — so a base-scope session 403s here and only
 // an elevated one succeeds. Callers wanting "delete if possible, else archive"
