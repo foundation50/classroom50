@@ -102,14 +102,20 @@ const slugInput = () =>
   }) as HTMLInputElement
 
 describe("RenameAssignmentModal (fresh)", () => {
-  it("shows the repo count and validates the new slug live", () => {
+  it("prefills a budget-trimmed slug and validates edits live", () => {
     renderModal()
     // Two repos share the old-slug prefix; the sibling-classroom repo doesn't.
     expect(screen.getByText("assignments.rename.repoCount")).toBeTruthy()
 
+    // Prefilled: the old slug trimmed to the classroom's budget (59 - 2 for
+    // "cs" = 57), so the teacher can accept a valid default.
+    expect(slugInput().value).toBe("x".repeat(57))
     const apply = screen.getByRole("button", {
       name: "assignments.rename.apply",
     }) as HTMLButtonElement
+    expect(apply.disabled).toBe(false)
+
+    fireEvent.change(slugInput(), { target: { value: "" } })
     expect(apply.disabled).toBe(true)
 
     fireEvent.change(slugInput(), { target: { value: "y".repeat(58) } })

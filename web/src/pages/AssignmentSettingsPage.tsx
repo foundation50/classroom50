@@ -230,6 +230,18 @@ const AssignmentSettingsPage = () => {
       {isStaff && org && classroom && assignment && (
         <>
           <OrgRepoCreationNotice org={org} />
+          {/* One-shot slug-update remediation (#691), above the form so the
+              teacher sees it before editing: renders only when the slug is
+              over the repo-name budget (or a prior update left stragglers),
+              and only for authors on an active classroom. */}
+          {canAuthor && !archived && assignmentData && (
+            <RenameSlugSection
+              org={org}
+              classroom={classroom}
+              assignment={assignmentData}
+              assignments={assignments?.assignments ?? []}
+            />
+          )}
           <EditAssignmentForm
             org={org}
             classroom={classroom}
@@ -261,17 +273,6 @@ const AssignmentSettingsPage = () => {
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
           />
-          {/* One-shot slug-rename remediation (#691): renders only when the
-              slug is over the repo-name budget (or a prior rename left
-              stragglers), and only for authors on an active classroom. */}
-          {canAuthor && !archived && assignmentData && (
-            <RenameSlugSection
-              org={org}
-              classroom={classroom}
-              assignment={assignmentData}
-              assignments={assignments?.assignments ?? []}
-            />
-          )}
         </>
       )}
       {isStudent && org && classroom && assignment && (

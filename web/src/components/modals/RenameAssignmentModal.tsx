@@ -10,6 +10,7 @@ import useRenameAssignment from "@/hooks/mutations/useRenameAssignment"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import {
   assignmentRepoPrefix,
+  nextAvailableSlug,
   type RenameAssignmentInput,
   type RenameAssignmentSummary,
   type RepoRenameOutcome,
@@ -54,7 +55,19 @@ export function RenameAssignmentModal({
   const { t } = useTranslation()
   const finish = mode === "finish"
   const oldSlug = finish ? (assignment.renamed_from ?? "") : assignment.slug
-  const [slugInput, setSlugInput] = useState("")
+  // Prefill the new slug: the old slug trimmed to this classroom's budget and
+  // suffixed past existing and reserved slugs, so the teacher can accept a
+  // valid default instead of composing one. "" (no room at all) leaves the
+  // field empty and the live validation explains why.
+  const [slugInput, setSlugInput] = useState(() =>
+    finish
+      ? ""
+      : nextAvailableSlug(
+          assignment.slug,
+          [...assignments.map((a) => a.slug), ...renamedFromSlugs(assignments)],
+          assignmentSlugBudget(classroom),
+        ),
+  )
   const newSlug = finish ? assignment.slug : slugInput.trim()
   const rename = useRenameAssignment()
   const [summary, setSummary] = useState<RenameAssignmentSummary | null>(null)
