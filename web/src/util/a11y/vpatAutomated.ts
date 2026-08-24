@@ -67,12 +67,12 @@ export const AUTOMATED_CRITERIA: Record<string, AutomatedBinding> = {
   },
   "4.1.3": {
     check:
-      "the toast viewport exposes role=alert with tone-mapped aria-live " +
-      "(assertive for errors, polite otherwise) (a11yStructural.test.tsx)",
+      "the toast viewport exposes assertive role=alert for errors and polite " +
+      "role=status otherwise (a11yStructural.test.tsx)",
     remark:
-      "Status changes are announced through a live region: toasts render as " +
-      "role=alert with aria-live tone-mapped (assertive for errors, polite " +
-      "otherwise), so assistive tech announces them without moving focus. " +
+      "Status changes are announced through a live region: error toasts render " +
+      "as assertive role=alert and all other tones as polite role=status, so " +
+      "assistive tech announces them without moving focus. " +
       "Verified automatically on the toast surface (structure only; timing and " +
       "visibility are not machine-checked).",
   },

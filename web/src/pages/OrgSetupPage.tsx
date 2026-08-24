@@ -203,12 +203,10 @@ const OrgSteps = ({
         {stage === 1 ? (
           <div className="grid gap-4">
             {configReady && (
-              <EnterDiv className="alert alert-success">
-                <CheckCircleIcon
-                  aria-hidden="true"
-                  className="size-4 shrink-0"
-                />
-                <div>{t("setup.setupComplete")}</div>
+              <EnterDiv>
+                <Alert tone="success" soft={false}>
+                  <div>{t("setup.setupComplete")}</div>
+                </Alert>
               </EnterDiv>
             )}
             <InitStepBoard steps={steps} org={org} />

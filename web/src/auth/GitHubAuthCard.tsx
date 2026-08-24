@@ -1,5 +1,4 @@
 import {
-  AlertIcon,
   InfoIcon,
   MarkGithubIcon,
   MortarBoardIcon,
@@ -123,12 +122,21 @@ export function GitHubAuthCard() {
                       ? auth.error
                       : t("auth.sessionExpired")
                 // "expired" is an informational "please sign in again" prompt,
-                // not a fault; the warning triangle overstates it, so only the
-                // offline/error tones carry the alert icon.
-                const Icon = alert === "expired" ? InfoIcon : AlertIcon
+                // not a fault; the warning triangle overstates it, so it
+                // overrides the tone icon with the info glyph.
                 return (
-                  <Alert tone={tone} className="items-start text-sm">
-                    <Icon aria-hidden="true" className="size-4 shrink-0" />
+                  <Alert
+                    tone={tone}
+                    icon={
+                      alert === "expired" ? (
+                        <InfoIcon
+                          aria-hidden="true"
+                          className="size-4 shrink-0"
+                        />
+                      ) : undefined
+                    }
+                    className="items-start text-sm"
+                  >
                     <span>{message}</span>
                   </Alert>
                 )

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertIcon, LinkExternalIcon } from "@/components/ui/icons"
+import { LinkExternalIcon } from "@/components/ui/icons"
 
 import { REQUIRED_SCOPES } from "./scopes"
 import {
@@ -75,7 +75,6 @@ export function GitHubPatPrompt({
     >
       {error ? (
         <Alert tone="error" className="items-start text-sm">
-          <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
           <span>{error}</span>
         </Alert>
       ) : null}
@@ -120,7 +119,6 @@ export function GitHubPatPrompt({
               />
             </label>
             <Alert tone="warning" className="items-start text-xs">
-              <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
               <span>{t("auth.patFineGrainedWarning")}</span>
             </Alert>
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import { useRouterState } from "@tanstack/react-router"
-import { AlertIcon, ShieldCheckIcon } from "@/components/ui/icons"
+import { ShieldCheckIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { useGithubAuth } from "./useGithubAuth"
@@ -150,7 +150,6 @@ export function ElevatedAccessModal({
 
           {error ? (
             <Alert tone="error" className="items-start text-sm">
-              <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
               <span>{error}</span>
             </Alert>
           ) : null}

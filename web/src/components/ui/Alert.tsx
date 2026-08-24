@@ -1,13 +1,26 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 
+import {
+  AlertIcon,
+  CheckCircleIcon,
+  InfoIcon,
+  StopIcon,
+  XIcon,
+} from "@/components/ui/icons"
+
+import { Button } from "./Button"
 import { cx } from "./cx"
 
-// The canonical inline alert. Wraps daisyUI `alert` with the house `alert-soft`
-// style; the tone->class recipe is exported as `alertToneClass` so the toast
+// The canonical inline alert, following Primer's Banner anatomy
+// (primer.style/product/ui-patterns/notification-messaging): a designated
+// tone icon (opt out with `icon={null}`, replace with `icon={...}`), an
+// optional semibold `title`, and an optional dismiss button via `onDismiss`.
+// The tone->class recipe is exported as `alertToneClass` so the toast
 // provider (which needs a motion wrapper, not <Alert>) shares one source and
 // can't drift. `soft` defaults on; pass `soft={false}` for a solid fill.
-// `role` defaults to "alert" (assertive); pass `role="status"` for passive
-// updates.
+// `role` defaults by tone — "alert" (assertive) only for errors, "status"
+// (polite) otherwise — matching the app-wide messaging ARIA convention.
 
 export type AlertTone = "info" | "success" | "warning" | "error"
 
@@ -25,27 +38,74 @@ export function alertToneClass(tone: AlertTone, soft = true): string {
   return cx("alert", TONE_CLASS[tone], soft && "alert-soft")
 }
 
+// Primer Banner's designated state icons (critical -> stop octagon). Shared
+// with the toast provider for the same one-source reason as alertToneClass.
+export const ALERT_TONE_ICON: Record<AlertTone, typeof InfoIcon> = {
+  info: InfoIcon,
+  success: CheckCircleIcon,
+  warning: AlertIcon,
+  error: StopIcon,
+}
+
+export function alertToneRole(tone: AlertTone): "alert" | "status" {
+  return tone === "error" ? "alert" : "status"
+}
+
 export type AlertProps = {
   tone: AlertTone
   soft?: boolean
+  // Default: the designated tone icon. Pass null to omit, or a ReactNode to
+  // replace (contextual icons like a cloud for offline warnings).
+  icon?: ReactNode | null
+  title?: ReactNode
+  onDismiss?: () => void
   children?: ReactNode
 } & ComponentPropsWithoutRef<"div">
 
 export function Alert({
   tone,
   soft = true,
-  role = "alert",
+  icon,
+  title,
+  onDismiss,
+  role,
   className,
   children,
   ...props
 }: AlertProps) {
+  const { t } = useTranslation()
+  const ToneIcon = ALERT_TONE_ICON[tone]
+  const resolvedIcon =
+    icon === null
+      ? null
+      : (icon ?? <ToneIcon aria-hidden="true" className="size-4 shrink-0" />)
   return (
     <div
-      role={role}
+      role={role ?? alertToneRole(tone)}
       className={cx(alertToneClass(tone, soft), className)}
       {...props}
     >
-      {children}
+      {resolvedIcon}
+      {title != null ? (
+        <div className="min-w-0">
+          <p className="font-semibold">{title}</p>
+          {children}
+        </div>
+      ) : (
+        children
+      )}
+      {onDismiss && (
+        <Button
+          variant="ghost"
+          size="xs"
+          shape="circle"
+          className="ms-auto shrink-0"
+          aria-label={t("components.banner.dismiss")}
+          onClick={onDismiss}
+        >
+          <XIcon aria-hidden="true" className="size-4" />
+        </Button>
+      )}
     </div>
   )
 }

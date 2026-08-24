@@ -1,5 +1,11 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
-import { AlertFillIcon, InfoIcon, NoEntryIcon, XCircleFillIcon } from "./icons"
+import {
+  AlertFillIcon,
+  CheckCircleFillIcon,
+  InfoIcon,
+  NoEntryIcon,
+  XCircleFillIcon,
+} from "./icons"
 
 import { cx } from "./cx"
 
@@ -9,12 +15,14 @@ import { cx } from "./cx"
 // body text on base surfaces — NOT the `*-content` on-fill tokens, which are
 // only readable on their own solid fill (on a card they can render invisible).
 
-export type InlineMessageTone = "info" | "warning" | "error" | "neutral"
+export type InlineMessageTone =
+  "info" | "warning" | "error" | "success" | "neutral"
 
 const TONE_TEXT_CLASS: Record<InlineMessageTone, string> = {
   info: "text-info",
   warning: "text-warning",
   error: "text-error",
+  success: "text-success",
   neutral: "text-base-content/70",
 }
 
@@ -22,6 +30,7 @@ const TONE_ICON: Record<InlineMessageTone, typeof InfoIcon> = {
   info: InfoIcon,
   warning: AlertFillIcon,
   error: XCircleFillIcon,
+  success: CheckCircleFillIcon,
   neutral: NoEntryIcon,
 }
 

@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui"
 import type { PropsWithChildren } from "react"
 
 // The "this classroom is archived" info banner. Owns the daisyUI alert shell +
@@ -8,9 +9,9 @@ export const ArchivedClassroomNotice = ({
   className = "mb-4",
   children,
 }: PropsWithChildren<{ className?: string }>) => (
-  <div role="alert" className={`alert alert-info alert-soft ${className}`}>
+  <Alert tone="info" className={className}>
     <span className="text-sm">{children}</span>
-  </div>
+  </Alert>
 )
 
 export default ArchivedClassroomNotice

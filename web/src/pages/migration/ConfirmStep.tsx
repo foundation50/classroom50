@@ -364,7 +364,6 @@ export const ConfirmStep = ({
           </div>
 
           <Alert tone="error" className="mt-3 items-start">
-            <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
             <div>
               <p className="font-medium">
                 {t("migration.access.headline", { org: accessOrg })}
