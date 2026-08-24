@@ -58,6 +58,7 @@ export {
   getPendingOrgInvite,
   archiveRepo,
   deleteRepo,
+  renameRepo,
   type OrgMembershipState,
 } from "./mutations/orgMembership"
 export {

@@ -72,6 +72,7 @@ export {
   rosterRawFileQuery,
   getRawFile,
   getClassroom50Yaml,
+  getRepoFileAtRef,
 } from "./queries/fileReads"
 export {
   getTeam,

@@ -19,6 +19,7 @@ import GitHub from "@/assets/github.svg?react"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import EditAssignmentForm from "./assignments/EditAssignmentForm"
+import RenameSlugSection from "./assignments/RenameSlugSection"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import { isClassroomArchived } from "@/types/classroom"
@@ -185,8 +186,16 @@ const AssignmentSettingsPage = () => {
   const [editWarning, setEditWarning] = useState("")
   const [editError, setEditError] = useState("")
 
+  // Match by renamed_from too: after a slug rename the route still carries
+  // the OLD slug, and without the fallback the refetched manifest resolves
+  // undefined here — unmounting the rename section and its open modal
+  // mid-report. The reservation rule guarantees no entry's slug equals
+  // another's renamed_from, so the fallback can't shadow an exact match.
   const assignmentData = assignments?.assignments.find(
-    (a) => a.slug === assignment,
+    (a) =>
+      a.slug === assignment ||
+      (Boolean(a.renamed_from) &&
+        a.renamed_from?.toLowerCase() === assignment?.toLowerCase()),
   )
 
   return (
@@ -221,6 +230,18 @@ const AssignmentSettingsPage = () => {
       {isStaff && org && classroom && assignment && (
         <>
           <OrgRepoCreationNotice org={org} />
+          {/* One-shot slug-update remediation (#691), above the form so the
+              teacher sees it before editing: renders only when the slug is
+              over the repo-name budget (or a prior update left stragglers),
+              and only for authors on an active classroom. */}
+          {canAuthor && !archived && assignmentData && (
+            <RenameSlugSection
+              org={org}
+              classroom={classroom}
+              assignment={assignmentData}
+              assignments={assignments?.assignments ?? []}
+            />
+          )}
           <EditAssignmentForm
             org={org}
             classroom={classroom}
