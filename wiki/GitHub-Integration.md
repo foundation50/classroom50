@@ -162,8 +162,9 @@ gh api -X PUT /repos/<org>/classroom50/actions/permissions/access \
 ### 6. Score collection
 
 Trigger the `collect-scores.yaml` workflow from the Actions tab, optionally
-scoped to one classroom or a single assignment (the same scoped run the web
-app's per-assignment **Sync now** button dispatches):
+scoped to one classroom or a single assignment (the same scoped runs the web
+app dispatches: **Collect all** on a classroom's assignments list sends the
+classroom-only scope, and the per-assignment **Sync now** sends both inputs):
 
 ```sh
 gh workflow run collect-scores.yaml --repo <org>/classroom50
@@ -171,9 +172,10 @@ gh workflow run collect-scores.yaml --repo <org>/classroom50 -f classroom=<short
 gh workflow run collect-scores.yaml --repo <org>/classroom50 -f classroom=<short-name> -f assignment=<slug>
 ```
 
-A scoped run walks only the matching assignment's repos (faster and cheaper on
-API rate limits for a large classroom) and stamps that assignment's
-`collected_at` in `scores.json`; sibling assignments' buckets are untouched.
+A scoped run walks only the matching repos — one classroom's, or a single
+assignment's (faster and cheaper on API rate limits for a large classroom) —
+and stamps each walked assignment's
+`collected_at` in `scores.json`; buckets outside the scope are untouched.
 The staff-team read grant that rides along with collection is scoped the same
 way, so a per-assignment run touches only that assignment's repositories and
 template.

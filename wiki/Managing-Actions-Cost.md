@@ -19,6 +19,11 @@ when minutes run out.
   `every-push` mode grades each push to the default branch: five pushes in
   ten minutes are five graded runs. Multiply by roster size to estimate an
   assignment's cost.
+- **Score collection bills too, by scope.** A collection run is one job in
+  your `classroom50` repository that walks every repository in its scope. A
+  per-assignment **Sync now** stays cheap; **Collect all** on a classroom's
+  assignments list walks every assignment in the classroom in one run
+  (capped at 30 minutes), which is why it asks you to confirm first.
 
 ## The levers, by impact
 
