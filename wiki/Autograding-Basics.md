@@ -67,7 +67,7 @@ Two related, optional settings:
   score, and leaving it unset turns the passing concept off.
 - **Built-in autograder off** (`no_autograder`) — accept installs no
   autograding workflow at all; a templated assignment's own CI runs instead,
-  and score collection skips the assignment. See
+  and score collection records who submitted but no scores. See
   [Turning autograding off or pausing it](Managing-Actions-Cost#turning-autograding-off-or-pausing-it).
 
 ### Declarative tests

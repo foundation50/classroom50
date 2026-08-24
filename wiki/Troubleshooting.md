@@ -554,6 +554,7 @@ which misreported freshly pushed repositories.
 | "autograder `<name>` not published yet" / "is malformed YAML" | The autograder's YAML is missing or broken; see [below](#autograder-name-not-published-yet-on-gh-student-accept). |
 | "template `<owner>/<repo>` is not accessible to you" | The template is private and not shared with you; see ["Template not found"](#template-not-found--404-on-gh-student-accept). |
 | "assignment `<X>` has unsupported mode `<mode>`" | The manifest's `mode` is neither `individual` nor `group` (likely hand-edited). Ask your teacher. |
+| "the repository name … is over GitHub's 100-character limit" | The classroom and assignment slugs are too long for your username; see [below](#the-repository-name-is-over-githubs-100-character-limit). |
 | "Assignment already accepted" | Not an error — your repository already exists and your work is untouched. |
 
 ### "Assignment already accepted" on `gh student accept`
@@ -562,6 +563,22 @@ You've already accepted; the repo is at
 `<org>/<classroom>-<assignment>-<username>`. The CLI short-circuits to protect
 your work. Clone it with the URL from `gh repo view <org>/<repo>` if you don't
 have it locally.
+
+### The repository name is over GitHub's 100-character limit
+
+Both `gh student accept` and the web accept page can fail with "the repository
+name `<name>` is … characters, over GitHub's 100-character limit, so it
+couldn't be created."
+
+Student repositories are named `<classroom>-<assignment>-<username>`, and
+GitHub caps repository names at 100 characters. New classrooms and assignments
+can't exceed it, but an assignment created before the limit was enforced (for
+example, one imported from GitHub Classroom with a long name) can, and then
+students with long usernames can't accept. The student can't fix this; the
+teacher renames the assignment slug once — see
+[Updating an over-budget assignment slug](Web-Teacher-Guide#updating-an-over-budget-assignment-slug)
+or [`assignment rename`](gh-teacher#assignment-rename) — and the student
+accepts again.
 
 ### The accept page loads forever, or reports "not published yet"
 
@@ -729,7 +746,19 @@ out-of-scope repos, indistinguishable from "no release yet".)
   Members: Read**.
 - Re-scope and rotate with `gh teacher rotate-service-token <org>`.
 - A `401`/`403` (rather than the `0 submissions` warning) means a bad/expired
-  token or a missing `Members: Read` scope.
+  token or a missing `Members: Read` scope — unless the log names a throttle
+  (see below).
+
+A 403 that is actually GitHub's rate limiter is reported as one, not as a
+token problem, so don't rotate the token for it:
+
+- A throttled staff-team access grant doesn't fail the run. The log says
+  "GitHub is throttling, not refusing" and counts the targets "deferred to
+  the next run"; the next collection picks them up.
+- A throttled collection is fatal (incomplete collected scores must not
+  report success) and the log says "collection was throttled by GitHub
+  (HTTP `<code>`, `<reason>`)". Wait for the window to reset and run
+  collection again.
 
 Also check the assignment itself: with autograding paused or a tag-mode
 assignment no one has submitted to, there are no results to collect.
@@ -743,7 +772,8 @@ failed outright. Open the failing run under the **Actions** tab of
 `<org>/classroom50` (the `collect-scores.yaml` workflow); the log names the
 cause. The most common one is an expired or under-scoped service token; see
 [`collect-scores` warns "collected 0 submissions"](#collect-scores-warns-collected-0-submissions)
-for the token requirements and how to rotate it.
+for the token requirements, how to rotate it, and how to tell a GitHub
+throttle apart (wait and rerun instead of rotating).
 
 ### `gh teacher download` clones nothing
 

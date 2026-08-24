@@ -36,7 +36,11 @@ Two rules apply across all of them:
 - **A template brings only its default branch** unless the assignment turns
   on **Include all branches** (`include_all_branches: true`), which copies
   every branch into each generated repository. Template-only; it has no
-  effect on the other shapes.
+  effect on the other shapes. A specific source branch can't be chosen:
+  GitHub's create-from-template API has no branch parameter, so a `@branch`
+  suffix on the CLI's `--template` is ignored with a warning. To start
+  students from a different branch, change the template repository's default
+  branch.
 
 For the flag-level details (mutual exclusions and `assignments.json` fields),
 see [`gh teacher assignment add`](gh-teacher#assignment-add).

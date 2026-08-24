@@ -365,6 +365,16 @@ For a group assignment, `<username>` is the founder who created the shared repo.
 These are normal GitHub repositories — scripts that automate git operations
 against them generally work the same as they did with GitHub Classroom.
 
+GitHub caps a repository name at 100 characters, and a username can be up to
+39, so the classroom slug and the assignment slug together can spend at most
+59 characters. Classroom 50 enforces this budget wherever a slug is minted:
+new classrooms are capped at 40 characters, new assignment slugs must fit the
+classroom's remaining budget, and imported slugs that don't fit are shortened
+automatically. An older assignment that predates the budget can be fixed once
+with a slug rename — see
+[Updating an over-budget assignment slug](Web-Teacher-Guide#updating-an-over-budget-assignment-slug)
+or [`assignment rename`](gh-teacher#assignment-rename).
+
 > [!NOTE]
 > **Adding a template after the fact is a gotcha.** Classroom 50 grants the
 > classroom team read access to a private in-org template when you *create* the

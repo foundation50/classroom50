@@ -174,6 +174,9 @@ gh workflow run collect-scores.yaml --repo <org>/classroom50 -f classroom=<short
 A scoped run walks only the matching assignment's repos (faster and cheaper on
 API rate limits for a large classroom) and stamps that assignment's
 `collected_at` in `scores.json`; sibling assignments' buckets are untouched.
+The staff-team read grant that rides along with collection is scoped the same
+way, so a per-assignment run touches only that assignment's repositories and
+template.
 
 ### 7. Verify the service token
 

@@ -73,7 +73,11 @@ exception, re-fetched on every submit. See
 **Renaming a repository breaks tracking.** Classroom 50 finds student work
 by the repository name (`<classroom>-<assignment>-<username>`). A renamed
 repository disappears from the submissions view. Tell students not to rename
-their repositories; if one already did, rename it back.
+their repositories; if one already did, rename it back. The one supported
+rename is the slug update for an assignment whose repository names can exceed
+GitHub's 100-character limit — it renames every student repository
+consistently, and only once per assignment. See
+[Updating an over-budget assignment slug](Web-Teacher-Guide#updating-an-over-budget-assignment-slug).
 
 **Students can re-enable paused workflows.** Students have write access to
 their repositories, which includes the Actions tab, so **Pause autograding**

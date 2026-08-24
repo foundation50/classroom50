@@ -176,8 +176,8 @@ adopt the built-in autograder:
 
 - **Grade entirely outside Classroom 50.** Create the assignment with **Do
   not use the built-in autograder**; each accept then installs no grading
-  workflow, your template's own CI runs instead, and score collection skips
-  the assignment. See
+  workflow and your template's own CI runs instead. Score collection records
+  who submitted, but no scores. See
   [Turning autograding off or pausing it](Managing-Actions-Cost#turning-autograding-off-or-pausing-it).
 - **Keep a GitHub Classroom `autograding.json`.** A custom runner workflow
   lets your existing grading action keep reading `autograding.json` from
