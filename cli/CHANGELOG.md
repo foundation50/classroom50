@@ -17,6 +17,30 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.33.0](https://github.com/foundation50/classroom50/compare/cli-v1.32.0...cli-v1.33.0) (2026-08-24)
+
+
+### Features
+
+* **cli:** record one-shot slug renames with renamed_from ([#713](https://github.com/foundation50/classroom50/issues/713)) ([1ad7959](https://github.com/foundation50/classroom50/commit/1ad7959064d33195d0d0accfd2d60402ec0570f0))
+* **cli:** rename an over-budget assignment slug and its student repos ([#714](https://github.com/foundation50/classroom50/issues/714)) ([55fe3d0](https://github.com/foundation50/classroom50/commit/55fe3d00d221990fda2829f5fc36dc77552da767))
+
+
+### Bug Fixes
+
+* **cli:** auto-trim over-budget migrated slugs and add --rename ([#711](https://github.com/foundation50/classroom50/issues/711)) ([46008f4](https://github.com/foundation50/classroom50/commit/46008f4c21df4806b3979d5b3988d83c649747f6))
+* **cli:** block classroom/assignment names that overflow GitHub's repo-name limit ([#705](https://github.com/foundation50/classroom50/issues/705)) ([be99bb2](https://github.com/foundation50/classroom50/commit/be99bb22db0c60a47971dd56d4d54c357d314a67))
+* **cli:** scope collect-scores staff-team grant to who needs it ([#695](https://github.com/foundation50/classroom50/issues/695)) ([0e92deb](https://github.com/foundation50/classroom50/commit/0e92deb3533c73dcf0ae53ae1919d945482c5062))
+* **cli:** stop collect persisting truncated submission histories ([#702](https://github.com/foundation50/classroom50/issues/702)) ([bfd4b27](https://github.com/foundation50/classroom50/commit/bfd4b279c82476d77ff4154041f2c198c536e138))
+* **cli:** trim auto-derived reuse slugs to the repo-name budget ([#707](https://github.com/foundation50/classroom50/issues/707)) ([ff5234f](https://github.com/foundation50/classroom50/commit/ff5234fedabd5e30a68769ecf2b2315bef6bb43d))
+* **gh-teacher:** tell GitHub throttles apart from an under-scoped token ([#665](https://github.com/foundation50/classroom50/issues/665)) ([8b13b51](https://github.com/foundation50/classroom50/commit/8b13b51a78b03e0e478815c7c60c4da3c9fe7226))
+* ignore a custom template branch, warning it won't take effect ([#673](https://github.com/foundation50/classroom50/issues/673)) ([#686](https://github.com/foundation50/classroom50/issues/686)) ([e2a7949](https://github.com/foundation50/classroom50/commit/e2a794977bc009ec2a2912a00cc715473d1a3227))
+* point no-room slug budgets at a shorter classroom, not negative counts ([#710](https://github.com/foundation50/classroom50/issues/710)) ([dd4894a](https://github.com/foundation50/classroom50/commit/dd4894a8e7aa25927b642c6ee20bb052e40fec01))
+* raise the classroom and assignment slug cap to 100 characters ([#693](https://github.com/foundation50/classroom50/issues/693)) ([37f0a19](https://github.com/foundation50/classroom50/commit/37f0a1915c8f68db0383513d1d851ab3f8512b12))
+* show submissions for assignments that skip autograding ([#694](https://github.com/foundation50/classroom50/issues/694)) ([7e444e8](https://github.com/foundation50/classroom50/commit/7e444e8606dca591aa4edd72435a77f7c6b9342e))
+* **web:** stop counting the tool's own commits as submissions ([#688](https://github.com/foundation50/classroom50/issues/688)) ([7c8725e](https://github.com/foundation50/classroom50/commit/7c8725e29a997efc0905b0fcb95226dd875ad5e7))
+* **web:** stop treating an absent submission_mode as an unmigrated file ([#683](https://github.com/foundation50/classroom50/issues/683)) ([00f0779](https://github.com/foundation50/classroom50/commit/00f0779ea44b3867c03fdd80e3f7a1b38f01c066))
+
 ## [1.32.0](https://github.com/foundation50/classroom50/compare/cli-v1.31.0...cli-v1.32.0) (2026-08-20)
 
 
