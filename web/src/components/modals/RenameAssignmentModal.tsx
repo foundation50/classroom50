@@ -159,7 +159,7 @@ export function RenameAssignmentModal({
       open={open}
       onClose={onClose}
       closeDisabled={busy}
-      size="lg"
+      size="2xl"
       aria-labelledby={titleId}
     >
       <div className="flex items-start gap-4">
