@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { Button, HelpTooltip, Input, Modal, cx, Heading } from "@/components/ui"
+import {
+  Button,
+  FormField,
+  HelpTooltip,
+  Input,
+  Modal,
+  cx,
+  Heading,
+} from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -366,38 +374,35 @@ function SetTokenModal({
         </Step>
 
         <Step index={2} label={t("orgSettings.serviceToken.step2Label")}>
-          <div className="flex flex-col gap-1.5">
-            <Input
-              id="service-token"
-              ref={inputRef}
-              type="password"
-              placeholder={t("orgSettings.serviceToken.placeholder")}
-              autoComplete="off"
-              aria-label={t("orgSettings.serviceToken.pasteLabel")}
-              value={token}
-              onChange={(e) => {
-                setToken(e.target.value)
-                if (saveMutation.isError) saveMutation.reset()
-              }}
-            />
-            <p className="text-sm text-base-content/70">
-              {t("orgSettings.serviceToken.pasteHelp")}
-            </p>
-
-            {saveMutation.isError && (
-              <p className="flex items-start gap-2 text-sm text-error">
-                <AlertIcon
-                  aria-hidden="true"
-                  className="mt-0.5 size-4 shrink-0"
-                />
-                <span>
-                  {saveMutation.error instanceof Error
-                    ? saveMutation.error.message
-                    : t("orgSettings.serviceToken.saveError")}
-                </span>
-              </p>
+          <FormField
+            htmlFor="service-token"
+            label={t("orgSettings.serviceToken.pasteLabel")}
+            hint={t("orgSettings.serviceToken.pasteHelp")}
+            error={
+              saveMutation.isError
+                ? saveMutation.error instanceof Error
+                  ? saveMutation.error.message
+                  : t("orgSettings.serviceToken.saveError")
+                : undefined
+            }
+          >
+            {({ id, describedById, invalid }) => (
+              <Input
+                id={id}
+                ref={inputRef}
+                type="password"
+                placeholder={t("orgSettings.serviceToken.placeholder")}
+                autoComplete="off"
+                aria-describedby={describedById}
+                invalid={invalid}
+                value={token}
+                onChange={(e) => {
+                  setToken(e.target.value)
+                  if (saveMutation.isError) saveMutation.reset()
+                }}
+              />
             )}
-          </div>
+          </FormField>
         </Step>
 
         <div className="flex items-center justify-between gap-2 border-t border-base-content/10 pt-4">

@@ -308,50 +308,50 @@ const CreateClassroomForm = ({
                   protect ? (
                     <form.Field name="secret">
                       {(secretField) => (
-                        <div className="mt-4">
-                          <label
-                            htmlFor={secretField.name}
-                            className="label font-bold"
-                          >
-                            {t("classes.form.accessKey")}
-                          </label>
-                          <div className="flex gap-2">
-                            <Input
-                              id={secretField.name}
-                              name={secretField.name}
-                              className="font-mono"
-                              placeholder={t(
-                                "classes.form.accessKeyPlaceholder",
-                              )}
-                              value={secretField.state.value}
-                              onBlur={secretField.handleBlur}
-                              onChange={(e) =>
-                                secretField.handleChange(e.target.value)
-                              }
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() =>
-                                secretField.handleChange(
-                                  generateSecret(DEFAULT_SECRET_LENGTH),
-                                )
-                              }
-                            >
-                              {t("classes.form.regenerate")}
-                            </Button>
-                          </div>
-                          <p className="mt-1 text-xs text-base-content/70">
-                            {t("classes.form.accessKeyHelp", {
-                              description: SECRET_PATTERN_DESCRIPTION,
-                            })}
-                          </p>
-                          {secretField.state.meta.errors.length > 0 && (
-                            <p className="text-error text-sm mt-1" role="alert">
-                              {secretField.state.meta.errors[0]}
-                            </p>
+                        <FormField
+                          className="mt-4"
+                          htmlFor={secretField.name}
+                          label={t("classes.form.accessKey")}
+                          hint={t("classes.form.accessKeyHelp", {
+                            description: SECRET_PATTERN_DESCRIPTION,
+                          })}
+                          error={
+                            secretField.state.meta.errors.length > 0
+                              ? secretField.state.meta.errors[0]
+                              : undefined
+                          }
+                        >
+                          {({ id, describedById, invalid }) => (
+                            <div className="flex gap-2">
+                              <Input
+                                id={id}
+                                name={secretField.name}
+                                className="font-mono"
+                                placeholder={t(
+                                  "classes.form.accessKeyPlaceholder",
+                                )}
+                                aria-describedby={describedById}
+                                invalid={invalid}
+                                value={secretField.state.value}
+                                onBlur={secretField.handleBlur}
+                                onChange={(e) =>
+                                  secretField.handleChange(e.target.value)
+                                }
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() =>
+                                  secretField.handleChange(
+                                    generateSecret(DEFAULT_SECRET_LENGTH),
+                                  )
+                                }
+                              >
+                                {t("classes.form.regenerate")}
+                              </Button>
+                            </div>
                           )}
-                        </div>
+                        </FormField>
                       )}
                     </form.Field>
                   ) : null

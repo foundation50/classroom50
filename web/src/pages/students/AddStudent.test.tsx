@@ -98,7 +98,7 @@ describe("AddStudent — role routing", () => {
     render(renderModal())
 
     await userEvent.type(
-      screen.getByLabelText("students.usernameAria"),
+      screen.getByLabelText("students.usernameLabel"),
       "octocat",
     )
     await userEvent.click(
@@ -120,7 +120,10 @@ describe("AddStudent — role routing", () => {
       screen.getByLabelText("students.addRoleLabel"),
       "teacher",
     )
-    await userEvent.type(screen.getByLabelText("students.usernameAria"), "prof")
+    await userEvent.type(
+      screen.getByLabelText("students.usernameLabel"),
+      "prof",
+    )
     await userEvent.click(
       screen.getByRole("button", { name: "students.addButton" }),
     )
@@ -145,7 +148,7 @@ describe("AddStudent — role routing", () => {
       "ta",
     )
     await userEvent.type(
-      screen.getByLabelText("students.usernameAria"),
+      screen.getByLabelText("students.usernameLabel"),
       "grader",
     )
     await userEvent.click(
@@ -163,18 +166,18 @@ describe("AddStudent — role routing", () => {
     render(renderModal())
 
     // Student default shows the email + section fields.
-    expect(screen.getByLabelText("students.emailAria")).toBeTruthy()
-    expect(screen.getByLabelText("students.sectionAria")).toBeTruthy()
+    expect(screen.getByLabelText("students.emailLabel")).toBeTruthy()
+    expect(screen.getByLabelText("students.sectionLabel")).toBeTruthy()
 
     await userEvent.selectOptions(
       screen.getByLabelText("students.addRoleLabel"),
       "teacher",
     )
 
-    expect(screen.queryByLabelText("students.emailAria")).toBeNull()
-    expect(screen.queryByLabelText("students.sectionAria")).toBeNull()
+    expect(screen.queryByLabelText("students.emailLabel")).toBeNull()
+    expect(screen.queryByLabelText("students.sectionLabel")).toBeNull()
     // Username stays.
-    expect(screen.getByLabelText("students.usernameAria")).toBeTruthy()
+    expect(screen.getByLabelText("students.usernameLabel")).toBeTruthy()
   })
 })
 
@@ -224,7 +227,7 @@ describe("AddStudent — staff error path", () => {
       "teacher",
     )
     await userEvent.type(
-      screen.getByLabelText("students.usernameAria"),
+      screen.getByLabelText("students.usernameLabel"),
       "ghost",
     )
     await userEvent.click(
@@ -237,7 +240,7 @@ describe("AddStudent — staff error path", () => {
     // No success toast on failure; the username is preserved for a retry.
     expect(notify).not.toHaveBeenCalled()
     expect(
-      screen.getByLabelText<HTMLInputElement>("students.usernameAria").value,
+      screen.getByLabelText<HTMLInputElement>("students.usernameLabel").value,
     ).toBe("ghost")
   })
 
@@ -250,7 +253,7 @@ describe("AddStudent — staff error path", () => {
       "ta",
     )
     await userEvent.type(
-      screen.getByLabelText("students.usernameAria"),
+      screen.getByLabelText("students.usernameLabel"),
       "grader",
     )
     await userEvent.click(

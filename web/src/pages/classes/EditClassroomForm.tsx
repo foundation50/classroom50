@@ -397,7 +397,6 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
           <FormField
             label={t("classes.form.slug")}
             htmlFor="classroom-slug-display"
-            required
             className="mb-4"
           >
             {({ id }) => (

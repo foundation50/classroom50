@@ -141,8 +141,9 @@ function SubmissionTagsField({
               htmlFor={field.name}
               label={t("assignments.form.submissionTags.label")}
               help={t("assignments.form.submissionTags.help")}
+              error={error}
             >
-              {({ id, describedById }) => (
+              {({ id, describedById, invalid }) => (
                 <Textarea
                   id={id}
                   name={field.name}
@@ -151,17 +152,13 @@ function SubmissionTagsField({
                   spellCheck={false}
                   placeholder={"phase1\nphase2\ncomplete"}
                   aria-describedby={describedById}
+                  invalid={invalid}
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
               )}
             </FormField>
-            {error ? (
-              <p role="alert" className="mt-1.5 text-sm text-error">
-                {error}
-              </p>
-            ) : null}
             <form.Subscribe selector={(state) => state.values.submission_tags}>
               {(tags) => {
                 // Surface the same problems the save-time validator catches,

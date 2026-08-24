@@ -62,6 +62,10 @@ type FieldRenderArgs = {
   id: string
   describedById: string | undefined
   invalid: boolean
+  // Mirrors the field's `required` prop so the control can set the HTML
+  // `required`/`aria-required` pair — Primer: a visually required field must
+  // also be required in code.
+  required: boolean
 }
 
 // The canonical form field: a bold label (optional required marker + help
@@ -76,6 +80,7 @@ export function FormField({
   htmlFor,
   required = false,
   help,
+  helpPosition,
   labelExtra,
   error,
   hint,
@@ -88,6 +93,7 @@ export function FormField({
   htmlFor?: string
   required?: boolean
   help?: string
+  helpPosition?: HelpTooltipPosition
   // Rendered in the label row immediately after the help tooltip — e.g. a
   // "Learn more" link to external docs that the tooltip's plain-text bubble
   // can't carry as a clickable element.
@@ -121,11 +127,11 @@ export function FormField({
         {invalid ? (
           <AlertFillIcon aria-hidden="true" className="size-4 text-error" />
         ) : null}
-        {help ? <HelpTooltip help={help} /> : null}
+        {help ? <HelpTooltip help={help} position={helpPosition} /> : null}
         {labelExtra}
       </div>
 
-      {children({ id, describedById, invalid })}
+      {children({ id, describedById, invalid, required })}
 
       {invalid ? (
         <p id={errorId} role="alert" className="text-sm text-error">

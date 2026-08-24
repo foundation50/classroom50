@@ -21,6 +21,7 @@ import type { ClassroomRole } from "@/authz"
 import {
   AnimatedAlert,
   Button,
+  FormField,
   Input,
   Modal,
   Select,
@@ -260,103 +261,98 @@ const AddStudent = ({
           {!isStaffRole && (
             <form.Field name="name">
               {(field) => (
-                <Input
-                  leadingIcon={
-                    <PersonIcon
-                      className="size-4 text-base-content/50"
-                      aria-hidden="true"
+                <FormField htmlFor={field.name} label={t("students.nameLabel")}>
+                  {({ id, describedById, invalid }) => (
+                    <Input
+                      leadingIcon={
+                        <PersonIcon
+                          className="size-4 text-base-content/50"
+                          aria-hidden="true"
+                        />
+                      }
+                      id={id}
+                      name={field.name}
+                      type="text"
+                      placeholder={t("students.namePlaceholder")}
+                      aria-describedby={describedById}
+                      invalid={invalid}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
                     />
-                  }
-                  id={field.name}
-                  name={field.name}
-                  type="text"
-                  placeholder={t("students.namePlaceholder")}
-                  aria-label={t("students.namePlaceholder")}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
+                  )}
+                </FormField>
               )}
             </form.Field>
           )}
 
           <form.Field name="username">
             {(field) => (
-              <div>
-                <Input
-                  leadingIcon={
-                    <MarkGithubIcon
-                      className="size-4 opacity-40"
-                      aria-hidden="true"
-                    />
-                  }
-                  id={field.name}
-                  name={field.name}
-                  type="text"
-                  placeholder={t("students.usernamePlaceholder")}
-                  aria-label={t("students.usernameAria")}
-                  aria-invalid={field.state.meta.errors.length > 0}
-                  aria-describedby={
-                    field.state.meta.errors.length > 0
-                      ? `${field.name}-error`
-                      : undefined
-                  }
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p
-                    id={`${field.name}-error`}
-                    className="text-error text-sm mt-1"
-                    role="alert"
-                  >
-                    {String(field.state.meta.errors[0] ?? "")}
-                  </p>
+              <FormField
+                htmlFor={field.name}
+                label={t("students.usernameLabel")}
+                error={
+                  field.state.meta.errors.length > 0
+                    ? String(field.state.meta.errors[0] ?? "")
+                    : undefined
+                }
+              >
+                {({ id, describedById, invalid }) => (
+                  <Input
+                    leadingIcon={
+                      <MarkGithubIcon
+                        className="size-4 opacity-40"
+                        aria-hidden="true"
+                      />
+                    }
+                    id={id}
+                    name={field.name}
+                    type="text"
+                    placeholder={t("students.usernamePlaceholder")}
+                    aria-describedby={describedById}
+                    invalid={invalid}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
                 )}
-              </div>
+              </FormField>
             )}
           </form.Field>
 
           {!isStaffRole && (
             <form.Field name="email">
               {(field) => (
-                <div>
-                  <Input
-                    leadingIcon={
-                      <MailIcon
-                        className="size-4 text-base-content/50"
-                        aria-hidden="true"
-                      />
-                    }
-                    id={field.name}
-                    name={field.name}
-                    type="email"
-                    placeholder={t("students.emailPlaceholder")}
-                    aria-label={t("students.emailAria")}
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    aria-describedby={
-                      field.state.meta.errors.length > 0
-                        ? `${field.name}-error`
-                        : undefined
-                    }
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                  {field.state.meta.errors.length > 0 && (
-                    <p
-                      id={`${field.name}-error`}
-                      className="text-error text-sm mt-1"
-                      role="alert"
-                    >
-                      {String(field.state.meta.errors[0] ?? "")}
-                    </p>
+                <FormField
+                  htmlFor={field.name}
+                  label={t("students.emailLabel")}
+                  error={
+                    field.state.meta.errors.length > 0
+                      ? String(field.state.meta.errors[0] ?? "")
+                      : undefined
+                  }
+                  hint={t("students.emailInviteHint")}
+                >
+                  {({ id, describedById, invalid }) => (
+                    <Input
+                      leadingIcon={
+                        <MailIcon
+                          className="size-4 text-base-content/50"
+                          aria-hidden="true"
+                        />
+                      }
+                      id={id}
+                      name={field.name}
+                      type="email"
+                      placeholder={t("students.emailPlaceholder")}
+                      aria-describedby={describedById}
+                      invalid={invalid}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
                   )}
-                  <p className="text-base-content/60 text-xs mt-1">
-                    {t("students.emailInviteHint")}
-                  </p>
-                </div>
+                </FormField>
               )}
             </form.Field>
           )}
@@ -364,22 +360,30 @@ const AddStudent = ({
           {!isStaffRole && (
             <form.Field name="section">
               {(field) => (
-                <Input
-                  leadingIcon={
-                    <PeopleIcon
-                      className="size-4 text-base-content/50"
-                      aria-hidden="true"
+                <FormField
+                  htmlFor={field.name}
+                  label={t("students.sectionLabel")}
+                >
+                  {({ id, describedById, invalid }) => (
+                    <Input
+                      leadingIcon={
+                        <PeopleIcon
+                          className="size-4 text-base-content/50"
+                          aria-hidden="true"
+                        />
+                      }
+                      id={id}
+                      name={field.name}
+                      type="text"
+                      placeholder={t("students.sectionPlaceholder")}
+                      aria-describedby={describedById}
+                      invalid={invalid}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
                     />
-                  }
-                  id={field.name}
-                  name={field.name}
-                  type="text"
-                  placeholder={t("students.sectionPlaceholder")}
-                  aria-label={t("students.sectionAria")}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
+                  )}
+                </FormField>
               )}
             </form.Field>
           )}

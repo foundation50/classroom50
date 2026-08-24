@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Button } from "@/components/ui"
+import { Alert, Button } from "@/components/ui"
 import { DetailsSection } from "./sections/DetailsSection"
 import { RepositorySetupSection } from "./sections/RepositorySetupSection"
 import { SubmissionGradingSection } from "./sections/SubmissionGradingSection"
@@ -25,18 +25,21 @@ export { assignmentToFormValues } from "./assignmentFormModel"
 export { formValuesToRepoFeatures } from "./assignmentFormModel"
 
 // The whole-form error list (submit-time validation errors that aren't bound to
-// a single field). Rendered once below the sections.
+// a single field). Rendered once below the sections, as an error Alert so the
+// failure is announced (role="alert" via the tone default).
 const FormErrors = ({ form }: { form: AssignmentForm }) => (
   <form.Subscribe selector={(state) => [state.errors]}>
-    {([errors]) => (
-      <div>
-        {errors.map((err) => (
-          <p className="text-error" key={String(err)}>
-            {String(err)}
-          </p>
-        ))}
-      </div>
-    )}
+    {([errors]) =>
+      errors.length > 0 ? (
+        <Alert tone="error">
+          <div>
+            {errors.map((err) => (
+              <p key={String(err)}>{String(err)}</p>
+            ))}
+          </div>
+        </Alert>
+      ) : null
+    }
   </form.Subscribe>
 )
 
@@ -140,7 +143,11 @@ const CreateAssignmentForm = ({
   }
 
   return (
+    // noValidate: Primer forms guidance — browser-native validation UI is
+    // inaccessible and clashes with our submit-time validation; `required`
+    // stays on controls for AT parity.
     <form
+      noValidate
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
