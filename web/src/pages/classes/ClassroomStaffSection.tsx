@@ -255,7 +255,7 @@ const StaffRoleList = ({
             target="_blank"
             rel="noreferrer"
             title={t("classes.staff.viewTeamTitle", { role: rolePlural })}
-            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            className="shrink-0 rounded-full"
           >
             <Badge
               size="sm"
