@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { SkeletonRegion } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import { InfoIcon } from "@/components/ui/icons"
 
@@ -226,7 +227,9 @@ export function ContrastSection() {
       {error && <Alert tone="error">{t("accessibility.loadError")}</Alert>}
 
       {!error && !audit && (
-        <div className="skeleton skeleton-shimmer h-40 w-full rounded-box" />
+        <SkeletonRegion>
+          <div className="skeleton skeleton-shimmer h-40 w-full rounded-box" />
+        </SkeletonRegion>
       )}
 
       {audit && (

@@ -35,7 +35,10 @@ export const StaffSidebarMenu = ({
             never flash in then out. */}
         {!roleResolved ? (
           <li className="flex px-2 py-2">
-            <span className="skeleton h-4 w-24 bg-neutral-content/10" />
+            <span
+              aria-hidden="true"
+              className="skeleton skeleton-shimmer h-4 w-24 bg-neutral-content/10"
+            />
           </li>
         ) : (
           showStaffItems && (
@@ -63,7 +66,10 @@ export const StaffSidebarMenu = ({
         </SidebarNavItem>
         {!roleResolved ? (
           <li className="flex px-2 py-2">
-            <span className="skeleton h-4 w-24 bg-neutral-content/10" />
+            <span
+              aria-hidden="true"
+              className="skeleton skeleton-shimmer h-4 w-24 bg-neutral-content/10"
+            />
           </li>
         ) : (
           showStaffItems &&

@@ -925,7 +925,6 @@
   "orgs": {
     "headingCl50": "Classroom 50 organizations",
     "loadingTitle": "Loading your organizations…",
-    "loadingSubtitle": "This may take a moment.",
     "emptyTitle": "No Classroom 50 organizations yet",
     "emptyBody": "Organizations you belong to that use Classroom 50 will appear here. If you expect one, ask your teacher to confirm you've been added, then refresh.",
     "toolbar": {

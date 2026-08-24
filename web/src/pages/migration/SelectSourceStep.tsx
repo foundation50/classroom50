@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/icons"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { EmptyState } from "@/components/list"
+import { SkeletonRegion, EmptyState } from "@/components/list"
 import { Alert, Badge, Button, Card, rtlFlip } from "@/components/ui"
 import { listClassroomsWithOrg } from "@/migration/classroomApi"
 import type { ClassroomWithOrg } from "@/migration/types"
@@ -119,20 +119,22 @@ export const SelectSourceStep = ({
         </label>
 
         {isLoading && (
-          <ul className="mt-4 grid gap-2" aria-hidden="true">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <li
-                key={i}
-                className="flex items-center gap-3 rounded-box border border-base-300 bg-base-100 p-4"
-              >
-                <div className="skeleton skeleton-shimmer size-9 rounded-field" />
-                <div className="flex-1 space-y-2">
-                  <div className="skeleton skeleton-shimmer h-4 w-40 rounded" />
-                  <div className="skeleton skeleton-shimmer h-3 w-56 rounded" />
-                </div>
-              </li>
-            ))}
-          </ul>
+          <SkeletonRegion>
+            <ul className="mt-4 grid gap-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <li
+                  key={i}
+                  className="flex items-center gap-3 rounded-box border border-base-300 bg-base-100 p-4"
+                >
+                  <div className="skeleton skeleton-shimmer size-9 rounded-field" />
+                  <div className="flex-1 space-y-2">
+                    <div className="skeleton skeleton-shimmer h-4 w-40 rounded" />
+                    <div className="skeleton skeleton-shimmer h-3 w-56 rounded" />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </SkeletonRegion>
         )}
 
         {isError && (

@@ -456,7 +456,10 @@ const OrgMembersPage = () => {
             </Select>
           </div>
 
-          <Card className="mt-4 w-full overflow-hidden" aria-busy={isLoading}>
+          <Card
+            className="mt-4 w-full overflow-hidden"
+            aria-busy={isLoading || undefined}
+          >
             {isLoading ? (
               <ListSkeletonRows rows={6} />
             ) : isError ? (

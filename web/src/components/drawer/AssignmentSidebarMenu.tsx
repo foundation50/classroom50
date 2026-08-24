@@ -153,7 +153,10 @@ export const AssignmentSidebarMenu = ({
             <>
               {[0, 1].map((i) => (
                 <li key={i} className="flex px-2 py-2">
-                  <span className="skeleton h-4 w-24 bg-neutral-content/10" />
+                  <span
+                    aria-hidden="true"
+                    className="skeleton skeleton-shimmer h-4 w-24 bg-neutral-content/10"
+                  />
                 </li>
               ))}
             </>

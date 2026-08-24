@@ -154,7 +154,7 @@ const OrgActivityPage = () => {
 
         {items.length === 0 ? (
           loading ? (
-            <Card className="mt-4 w-full overflow-hidden" aria-busy>
+            <Card className="mt-4 w-full overflow-hidden" aria-busy="true">
               <ListSkeletonRows rows={6} />
             </Card>
           ) : (

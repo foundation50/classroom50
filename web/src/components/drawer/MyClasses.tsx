@@ -40,7 +40,10 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
       <ul className="flex flex-col gap-1">
         {!roleResolved ? (
           <li className="flex px-2 py-2">
-            <span className="skeleton inline-block h-4 w-24 align-middle bg-neutral-content/10" />
+            <span
+              aria-hidden="true"
+              className="skeleton skeleton-shimmer inline-block h-4 w-24 align-middle bg-neutral-content/10"
+            />
           </li>
         ) : (
           <SidebarNavItem label={classesLabel}>

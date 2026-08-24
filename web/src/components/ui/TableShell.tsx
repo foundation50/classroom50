@@ -39,7 +39,7 @@ export function TableShell({
         padded && "[&_tbody_td]:py-4",
         className,
       )}
-      aria-busy={ariaBusy}
+      aria-busy={ariaBusy || undefined}
     >
       {children}
     </table>

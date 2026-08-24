@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { SkeletonRegion } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import {
   ArrowSwitchIcon,
@@ -254,7 +255,9 @@ export function VpatSection() {
       {error && <Alert tone="error">{t("accessibility.vpat.loadError")}</Alert>}
 
       {!error && !vpat && (
-        <div className="skeleton skeleton-shimmer h-40 w-full rounded-box" />
+        <SkeletonRegion>
+          <div className="skeleton skeleton-shimmer h-40 w-full rounded-box" />
+        </SkeletonRegion>
       )}
 
       {vpat && (

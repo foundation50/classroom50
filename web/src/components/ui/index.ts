@@ -102,7 +102,7 @@ export type {
   ToolbarSelectionProps,
 } from "./Toolbar"
 
-export { Spinner } from "@/components/Spinner"
+export { InlineSpinner, Spinner } from "@/components/Spinner"
 
 export { cx } from "./cx"
 export { hasUtility } from "./cx"

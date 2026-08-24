@@ -285,6 +285,21 @@ body {
   }
 }
 
+/* Loading-indicator anti-flash (Primer loading pattern: don't show an
+   indicator for sub-second waits). The element mounts invisible and a
+   zero-duration, delayed animation reveals it, so a fast load unmounts it
+   before it ever paints — no JS timers, no layout shift. */
+@utility indicator-appear {
+  opacity: 0;
+  animation: indicator-appear 0s 250ms forwards;
+}
+
+@keyframes indicator-appear {
+  to {
+    opacity: 1;
+  }
+}
+
 /* Scroll affordance for capped-height lists. `scroll-fade-y` marks the
    container; a small hook (useScrollFade) sets data-fade-top / data-fade-bottom
    to the edge(s) that have more content, and the mask softens only that edge.

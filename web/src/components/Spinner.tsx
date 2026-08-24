@@ -10,6 +10,10 @@ type SpinnerSize = "xs" | "sm" | "md" | "lg" | "xl"
  * state is already announced (adjacent text, an in-button spinner on a labeled
  * disabled button), keep a bare `aria-hidden` span — the resolution the
  * `no-restricted-syntax` lint nudge expects.
+ *
+ * The visual is anti-flash guarded (`indicator-appear`): it stays invisible
+ * for the first ~250ms so sub-second loads never flash an indicator (Primer
+ * loading guidance). The sr-only label is not delayed.
  */
 export function Spinner({
   size = "md",
@@ -29,7 +33,7 @@ export function Spinner({
       {...props}
     >
       <span
-        className={`loading loading-spinner loading-${size}`}
+        className={`loading loading-spinner loading-${size} indicator-appear`}
         aria-hidden="true"
       />
       <span className="sr-only">{resolvedLabel}</span>
@@ -43,6 +47,7 @@ export default Spinner
  * Decorative in-button/inline spinner: a bare `aria-hidden` span for busy
  * states that are already announced elsewhere (a labeled disabled button,
  * adjacent text). Use `<Spinner>` when the spinner is the only indicator.
+ * Anti-flash guarded like `<Spinner>`.
  */
 export function InlineSpinner({
   size = "xs",
@@ -53,7 +58,7 @@ export function InlineSpinner({
 }) {
   return (
     <span
-      className={`loading loading-spinner loading-${size}${className ? ` ${className}` : ""}`}
+      className={`loading loading-spinner loading-${size} indicator-appear${className ? ` ${className}` : ""}`}
       aria-hidden="true"
     />
   )
