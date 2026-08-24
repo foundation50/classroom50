@@ -7,7 +7,7 @@ import {
   ArrowSwitchIcon,
   FileAddedIcon,
   FilterIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import {
   Alert,
@@ -149,7 +149,7 @@ function AssignmentRow({
           </Badge>
         ) : (
           <Badge tone="error" className="shrink-0 gap-1 whitespace-nowrap">
-            <AlertIcon aria-hidden="true" className="size-3.5" />
+            <AlertIcon aria-hidden="true" className="size-4" />
             {t("assignments.discover.notAccepted")}
           </Badge>
         )}

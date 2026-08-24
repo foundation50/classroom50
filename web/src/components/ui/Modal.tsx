@@ -1,4 +1,4 @@
-import { XIcon } from "@primer/octicons-react"
+import { XIcon } from "./icons"
 import {
   useEffect,
   useId,

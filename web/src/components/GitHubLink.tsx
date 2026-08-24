@@ -1,4 +1,4 @@
-import { LinkExternalIcon, MarkGithubIcon } from "@primer/octicons-react"
+import { LinkExternalIcon, MarkGithubIcon } from "@/components/ui/icons"
 
 // Shared "open on GitHub" deep-link, so the section headers that use it can't
 // drift in markup. `className` tunes layout per call site (e.g., `shrink-0`).

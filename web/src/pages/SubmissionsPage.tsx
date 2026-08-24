@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { AlertIcon, CalendarIcon } from "@primer/octicons-react"
+import { AlertIcon, CalendarIcon } from "@/components/ui/icons"
 import Papa from "papaparse"
 
 import { useQueryClient } from "@tanstack/react-query"
@@ -1060,7 +1060,7 @@ const SubmissionsPageContent = () => {
                     </Badge>
                   ) : (
                     <MetaItem title={formatDueDateTime(dueDate)}>
-                      <CalendarIcon aria-hidden="true" className="size-3.5" />
+                      <CalendarIcon aria-hidden="true" className="size-4" />
                       {t("submissions.dueDate", {
                         date: formatDueDateTime(dueDate),
                       })}

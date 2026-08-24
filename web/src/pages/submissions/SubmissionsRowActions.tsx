@@ -9,7 +9,7 @@ import {
   ShieldCheckIcon,
   SlidersIcon,
   SyncIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 

@@ -1,4 +1,4 @@
-import { InfoIcon, PersonAddIcon } from "@primer/octicons-react"
+import { InfoIcon, PersonAddIcon } from "@/components/ui/icons"
 import { Trans, useTranslation } from "react-i18next"
 
 import { EmphasisLtr, RouterButton } from "@/components/ui"

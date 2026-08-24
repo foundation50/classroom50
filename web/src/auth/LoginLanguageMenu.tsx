@@ -1,6 +1,6 @@
 import { useRef, useState } from "react"
 import { InlineSpinner } from "@/components/Spinner"
-import { CheckIcon, GlobeIcon } from "@primer/octicons-react"
+import { CheckIcon, GlobeIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui"
@@ -85,7 +85,7 @@ export function LoginLanguageMenu() {
         title={t("language.switcherLabel")}
         onClick={() => void loadRegistry()}
       >
-        <GlobeIcon aria-hidden="true" className="size-5" />
+        <GlobeIcon aria-hidden="true" className="size-4" />
       </Button>{" "}
       <ul
         tabIndex={0}

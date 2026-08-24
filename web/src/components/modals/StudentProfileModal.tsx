@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { LinkExternalIcon, MarkGithubIcon } from "@primer/octicons-react"
+import { LinkExternalIcon, MarkGithubIcon } from "@/components/ui/icons"
 
 import { Badge, Button, Modal } from "@/components/ui"
 import type { Student } from "@/types/classroom"
@@ -120,7 +120,7 @@ export const StudentProfileModal = ({
         >
           <MarkGithubIcon aria-hidden="true" className="size-4" />{" "}
           {t("components.modals.studentProfile.openRepo")}
-          <LinkExternalIcon aria-hidden="true" className="size-3.5" />
+          <LinkExternalIcon aria-hidden="true" className="size-4" />
         </Button>
       ) : null}
     </Modal>

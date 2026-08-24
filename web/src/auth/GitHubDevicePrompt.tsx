@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { CheckIcon, CopyIcon, LinkExternalIcon } from "@primer/octicons-react"
+import { CheckIcon, CopyIcon, LinkExternalIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import type { DeviceAuthState } from "./types"

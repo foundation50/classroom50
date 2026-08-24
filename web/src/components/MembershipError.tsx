@@ -1,4 +1,4 @@
-import { AlertIcon, PersonAddIcon } from "@primer/octicons-react"
+import { AlertIcon, PersonAddIcon } from "@/components/ui/icons"
 import { Trans, useTranslation } from "react-i18next"
 import { GitHubAPIError } from "@/github-core/errors"
 import { isDefiniteOutageError } from "@/lib/githubHealth"
@@ -197,7 +197,7 @@ export const MembershipError = ({
       <div className="rounded-box border border-info/20 bg-info/5 p-5">
         <div className="flex gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-box bg-info/10 text-info">
-            <PersonAddIcon aria-hidden="true" className="size-5" />
+            <PersonAddIcon aria-hidden="true" className="size-4" />
           </div>
           <div className="min-w-0 space-y-3">
             <p className="text-sm leading-5 text-base-content/70">

@@ -4,7 +4,7 @@ import {
   ArrowRightIcon,
   CheckCircleIcon,
   CheckIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useTranslation } from "react-i18next"
 
@@ -198,7 +198,7 @@ const OrgSteps = ({
               <EnterDiv className="alert alert-success">
                 <CheckCircleIcon
                   aria-hidden="true"
-                  className="size-5 shrink-0"
+                  className="size-4 shrink-0"
                 />
                 <div>{t("setup.setupComplete")}</div>
               </EnterDiv>

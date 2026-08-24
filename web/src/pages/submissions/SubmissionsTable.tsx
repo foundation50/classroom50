@@ -1,4 +1,4 @@
-import { FilterRemoveIcon, InboxIcon } from "@primer/octicons-react"
+import { FilterRemoveIcon, InboxIcon } from "@/components/ui/icons"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"

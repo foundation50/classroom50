@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 import { Button, Modal } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
-import { CheckIcon, CopyIcon } from "@primer/octicons-react"
+import { CheckIcon, CopyIcon } from "@/components/ui/icons"
 
 // Modal presenting the allow-listed diagnostics snapshot with a copy-to-clipboard
 // action. Nothing is sent anywhere — copy only. The snapshot is rebuilt each open

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { ChevronLeftIcon, ChevronRightIcon } from "@primer/octicons-react"
+import { ChevronLeftIcon, ChevronRightIcon } from "./icons"
 
 import { cx } from "./cx"
 import { rtlFlip } from "./icons"

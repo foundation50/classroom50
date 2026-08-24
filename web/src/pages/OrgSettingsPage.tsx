@@ -32,7 +32,7 @@ import {
   LinkExternalIcon,
   PencilIcon,
   XIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 // Default token lifetime (days) prefilled into GitHub's form. The user can edit
 // it in the modal within GitHub's allowed range; we record the chosen value so
@@ -114,7 +114,7 @@ function TokenNameRow({
           aria-label={t("orgSettings.serviceToken.rename")}
           onClick={beginEdit}
         >
-          <PencilIcon aria-hidden="true" className="size-3.5" />
+          <PencilIcon aria-hidden="true" className="size-4" />
         </Button>
       </div>
     )
@@ -410,7 +410,7 @@ function SetTokenModal({
             rel="noreferrer"
           >
             {t("orgSettings.serviceToken.learnMore")}
-            <LinkExternalIcon aria-hidden="true" className="size-3.5" />
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
           </a>
           <div className="flex gap-2">
             <Button variant="ghost" type="button" onClick={onClose}>
@@ -537,7 +537,7 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
                 <span className="inline-flex items-center gap-1.5 text-base-content/60">
                   <CalendarIcon
                     aria-hidden="true"
-                    className="size-3.5 shrink-0"
+                    className="size-4 shrink-0"
                   />
                   {t("orgSettings.serviceToken.expiresOn", {
                     date: expiresDate.toLocaleDateString(),

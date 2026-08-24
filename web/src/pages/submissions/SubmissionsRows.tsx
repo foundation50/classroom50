@@ -1,4 +1,4 @@
-import { MarkGithubIcon } from "@primer/octicons-react"
+import { MarkGithubIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { getName, getDisplayName, getInitials } from "@/util/students"

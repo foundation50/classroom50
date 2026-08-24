@@ -1,8 +1,8 @@
 import {
-  AlertIcon,
+  AlertFillIcon,
   QuestionIcon,
   type Icon as OcticonComponent,
-} from "@primer/octicons-react"
+} from "./icons"
 import { useId, type ReactNode } from "react"
 
 import { Button } from "./Button"
@@ -119,7 +119,7 @@ export function FormField({
             error is visible at a glance; the role="alert" message below carries
             the accessible announcement, so the icon is decorative. */}
         {invalid ? (
-          <AlertIcon aria-hidden="true" className="size-4 text-error" />
+          <AlertFillIcon aria-hidden="true" className="size-4 text-error" />
         ) : null}
         {help ? <HelpTooltip help={help} /> : null}
         {labelExtra}

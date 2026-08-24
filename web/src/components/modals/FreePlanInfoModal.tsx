@@ -1,4 +1,4 @@
-import { LinkExternalIcon } from "@primer/octicons-react"
+import { LinkExternalIcon } from "@/components/ui/icons"
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 

@@ -1,6 +1,6 @@
 import { useEffect, useId } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { FileZipIcon } from "@primer/octicons-react"
+import { FileZipIcon } from "@/components/ui/icons"
 
 import { Alert, Button, Modal, Spinner } from "@/components/ui"
 import useDownloadAllSubmissions from "@/hooks/mutations/useDownloadAllSubmissions"
@@ -109,7 +109,7 @@ export function DownloadAllSubmissionsModal({
       aria-labelledby={titleId}
     >
       <h3 id={titleId} className="flex items-center gap-2 text-lg font-bold">
-        <FileZipIcon aria-hidden="true" className="size-5" />
+        <FileZipIcon aria-hidden="true" className="size-4" />
         {t("submissions.downloadAll.title")}
       </h3>
 

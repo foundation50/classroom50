@@ -8,7 +8,7 @@ import {
   LinkExternalIcon,
   PersonAddIcon,
   SearchIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import {
   AnimatedAlert,
@@ -396,7 +396,7 @@ const OrgMembersPage = () => {
                     rel="noreferrer"
                     className="mt-2 flex w-fit items-center gap-1 text-sm text-primary hover:underline"
                   >
-                    <LinkExternalIcon aria-hidden="true" className="size-3.5" />
+                    <LinkExternalIcon aria-hidden="true" className="size-4" />
                     {t("orgMembers.manageMembersOnGitHub")}
                   </a>
                 )}
@@ -553,7 +553,7 @@ const OrgMembersPage = () => {
                               <>
                                 <PersonAddIcon
                                   aria-hidden="true"
-                                  className="size-3.5"
+                                  className="size-4"
                                 />
                                 {t("orgMembers.invite")}
                               </>

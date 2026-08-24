@@ -4,7 +4,7 @@ import {
   MailIcon,
   MortarBoardIcon,
   PersonAddIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { InlineSpinner, Spinner } from "@/components/Spinner"
 import {
   Badge,
@@ -94,7 +94,7 @@ const NotInvited = ({
         <div className="rounded-box border border-base-300 bg-base-100 p-5">
           <div className="flex gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-box bg-base-300/40 text-base-content/70">
-              <PersonAddIcon aria-hidden="true" className="size-5" />
+              <PersonAddIcon aria-hidden="true" className="size-4" />
             </div>
             <div className="min-w-0">
               <h2 className="font-semibold text-base-content">

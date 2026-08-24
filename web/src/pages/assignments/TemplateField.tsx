@@ -11,7 +11,7 @@ import {
   MarkGithubIcon,
   QuestionIcon,
   SyncIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { useGithubAuth } from "@/auth/useGithubAuth"
@@ -395,7 +395,7 @@ function renderTemplateVerdict({
       {isRechecking ? (
         <InlineSpinner className="shrink-0" />
       ) : (
-        <SyncIcon aria-hidden="true" className="size-3.5 shrink-0" />
+        <SyncIcon aria-hidden="true" className="size-4 shrink-0" />
       )}
       {t(
         isRechecking
@@ -500,10 +500,7 @@ function renderTemplateVerdict({
               owner: verification.owner,
               repo: verification.repo,
             })}
-            <LinkExternalIcon
-              aria-hidden="true"
-              className="size-3.5 shrink-0"
-            />
+            <LinkExternalIcon aria-hidden="true" className="size-4 shrink-0" />
           </a>
         </Note>
       )
@@ -590,7 +587,7 @@ function renderTemplateVerdict({
                 })}
                 <LinkExternalIcon
                   aria-hidden="true"
-                  className="size-3.5 shrink-0"
+                  className="size-4 shrink-0"
                 />
               </a>
             </>
@@ -681,7 +678,7 @@ const Note = ({
           className="mt-1 flex items-center gap-1 font-semibold underline"
         >
           {t("assignments.template.policyLink", { owner: policy.owner })}
-          <LinkExternalIcon aria-hidden="true" className="size-3.5 shrink-0" />
+          <LinkExternalIcon aria-hidden="true" className="size-4 shrink-0" />
         </a>
       )}
     </InlineNote>

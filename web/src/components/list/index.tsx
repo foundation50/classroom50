@@ -2,7 +2,7 @@
 // list. Labels are passed in (already run through t()) so each page keeps its
 // own i18n namespace while sharing the markup and behavior.
 
-import { AppsIcon, ListUnorderedIcon } from "@primer/octicons-react"
+import { AppsIcon, ListUnorderedIcon } from "@/components/ui/icons"
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui"

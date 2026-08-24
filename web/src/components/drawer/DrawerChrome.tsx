@@ -1,4 +1,4 @@
-import { ThreeBarsIcon } from "@primer/octicons-react"
+import { ThreeBarsIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { type ReactNode } from "react"
 import { Outlet, useRouterState } from "@tanstack/react-router"

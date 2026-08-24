@@ -1,10 +1,5 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
-import {
-  AlertIcon,
-  InfoIcon,
-  NoEntryIcon,
-  XCircleIcon,
-} from "@primer/octicons-react"
+import { AlertFillIcon, InfoIcon, NoEntryIcon, XCircleFillIcon } from "./icons"
 
 import { cx } from "./cx"
 
@@ -25,8 +20,8 @@ const TONE_TEXT_CLASS: Record<InlineMessageTone, string> = {
 
 const TONE_ICON: Record<InlineMessageTone, typeof InfoIcon> = {
   info: InfoIcon,
-  warning: AlertIcon,
-  error: XCircleIcon,
+  warning: AlertFillIcon,
+  error: XCircleFillIcon,
   neutral: NoEntryIcon,
 }
 

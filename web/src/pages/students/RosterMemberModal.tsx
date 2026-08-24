@@ -6,7 +6,7 @@ import {
   PaperAirplaneIcon,
   PersonAddIcon,
   XIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import Avatar from "@/components/avatar"
 import EditStudentForm from "@/pages/students/EditStudentForm"
@@ -550,7 +550,7 @@ const RosterMemberModal = ({
                 >
                   <MarkGithubIcon
                     aria-hidden="true"
-                    className="size-3.5 opacity-70"
+                    className="size-4 opacity-70"
                   />
                   <span className="font-mono">@{row.username}</span>
                   <LinkExternalIcon aria-hidden="true" className="size-3" />
@@ -800,10 +800,7 @@ const RosterMemberModal = ({
                       className="inline-flex items-center gap-1 font-mono text-sm text-primary hover:underline"
                     >
                       {teamSlugByRole[r]}
-                      <LinkExternalIcon
-                        aria-hidden="true"
-                        className="size-3.5"
-                      />
+                      <LinkExternalIcon aria-hidden="true" className="size-4" />
                     </a>
                   ))}
                 </div>

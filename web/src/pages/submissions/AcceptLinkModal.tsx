@@ -3,7 +3,7 @@ import {
   ChevronRightIcon,
   LinkIcon,
   PersonAddIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { Trans, useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 
@@ -58,7 +58,7 @@ export function AcceptLinkModal({
     <Modal open={open} onClose={onClose} size="2xl">
       <div className="flex items-start gap-3">
         <div className="rounded-box bg-primary/10 p-2.5 text-primary">
-          <LinkIcon aria-hidden="true" className="size-5" />
+          <LinkIcon aria-hidden="true" className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="text-lg font-bold">

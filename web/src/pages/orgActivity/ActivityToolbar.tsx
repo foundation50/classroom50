@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { DownloadIcon, FilterIcon } from "@primer/octicons-react"
+import { DownloadIcon, FilterIcon } from "@/components/ui/icons"
 
 import { Button, Toolbar } from "@/components/ui"
 import type { TimelineSource, TimelineType } from "@/lib/activity/timeline"

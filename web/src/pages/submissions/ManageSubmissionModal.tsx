@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { MarkGithubIcon, PeopleIcon } from "@primer/octicons-react"
+import { MarkGithubIcon, PeopleIcon } from "@/components/ui/icons"
 
 import { Badge, Modal, MonoLtr } from "@/components/ui"
 import useGetRepo from "@/hooks/useGetRepo"

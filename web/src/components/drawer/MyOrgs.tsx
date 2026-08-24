@@ -1,4 +1,4 @@
-import { BookIcon, GearIcon } from "@primer/octicons-react"
+import { BookIcon, GearIcon } from "@/components/ui/icons"
 import { Link } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { SidebarItemBody, SidebarNavItem } from "./primitives"

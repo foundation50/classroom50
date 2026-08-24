@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { UndoIcon } from "@primer/octicons-react"
+import { UndoIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { Button, Card } from "@/components/ui"
 

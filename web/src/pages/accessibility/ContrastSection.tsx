@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { InfoIcon } from "@primer/octicons-react"
+import { InfoIcon } from "@/components/ui/icons"
 
 import { Alert, Badge, Card, Modal } from "@/components/ui"
 

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { ChevronRightIcon, PencilIcon, TrashIcon } from "@primer/octicons-react"
+import { ChevronRightIcon, PencilIcon, TrashIcon } from "@/components/ui/icons"
 import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
 import type { AssignmentForm } from "./assignmentFormModel"
 
@@ -585,7 +585,10 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                                   },
                                 )}
                               >
-                                <PencilIcon aria-hidden="true" size={16} />
+                                <PencilIcon
+                                  aria-hidden="true"
+                                  className="size-4"
+                                />
                               </Button>
 
                               <Button
@@ -598,7 +601,10 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                                   { number: index + 1 },
                                 )}
                               >
-                                <TrashIcon aria-hidden="true" size={16} />
+                                <TrashIcon
+                                  aria-hidden="true"
+                                  className="size-4"
+                                />
                               </Button>
                             </div>
                           </td>

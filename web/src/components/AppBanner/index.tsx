@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { XIcon } from "@primer/octicons-react"
+import { XIcon } from "@/components/ui/icons"
 import { motion } from "motion/react"
 import { useTranslation } from "react-i18next"
 

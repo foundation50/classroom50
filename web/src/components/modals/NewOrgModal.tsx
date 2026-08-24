@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router"
-import { LinkExternalIcon, SyncIcon } from "@primer/octicons-react"
+import { LinkExternalIcon, SyncIcon } from "@/components/ui/icons"
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 

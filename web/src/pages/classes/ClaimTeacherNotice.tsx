@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { InlineSpinner } from "@/components/Spinner"
-import { ShieldIcon } from "@primer/octicons-react"
+import { ShieldIcon } from "@/components/ui/icons"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
@@ -67,7 +67,7 @@ export function ClaimTeacherNotice({
       tone="info"
       className="mb-4 flex-col items-start gap-2 sm:flex-row sm:items-center"
     >
-      <ShieldIcon aria-hidden="true" className="size-5 shrink-0" />
+      <ShieldIcon aria-hidden="true" className="size-4 shrink-0" />
       <span className="flex-1 text-sm">
         {t("classes.claimTeacher.message")}
       </span>

@@ -1,4 +1,4 @@
-import { PencilIcon } from "@primer/octicons-react"
+import { PencilIcon } from "@/components/ui/icons"
 import { useId, useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useTranslation } from "react-i18next"

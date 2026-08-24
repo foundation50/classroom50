@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { GitCommitIcon, MarkGithubIcon, TagIcon } from "@primer/octicons-react"
+import { GitCommitIcon, MarkGithubIcon, TagIcon } from "@/components/ui/icons"
 
 import { Button, Modal, MonoLtr } from "@/components/ui"
 

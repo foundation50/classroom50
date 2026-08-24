@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { HistoryIcon, LogIcon } from "@primer/octicons-react"
+import { HistoryIcon, LogIcon } from "@/components/ui/icons"
 
 import { Button } from "@/components/ui"
 import { ActionIconLink } from "@/pages/submissions/SubmissionsRows"

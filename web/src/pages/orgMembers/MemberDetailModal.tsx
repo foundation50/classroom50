@@ -6,7 +6,7 @@ import {
   ChevronRightIcon,
   PersonAddIcon,
   XIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"

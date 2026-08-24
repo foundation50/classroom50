@@ -8,7 +8,7 @@ import {
   MarkGithubIcon,
   MortarBoardIcon,
   PersonIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import { Spinner } from "@/components/Spinner"
 import { Alert, Button, Card, Markdown, MonoLtr } from "@/components/ui"
@@ -81,7 +81,7 @@ const AcceptNavbar = () => {
           className="gap-2"
           onClick={() => langDialogRef.current?.showModal()}
         >
-          <GlobeIcon aria-hidden="true" className="size-5" />
+          <GlobeIcon aria-hidden="true" className="size-4" />
           <span className="hidden sm:inline">{t("nav.language")}</span>
         </Button>
       </div>
@@ -414,7 +414,7 @@ const StatusIcon = ({ status }: { status: AcceptStepStatus }) => {
     return (
       <CheckCircleIcon
         aria-hidden="true"
-        className="size-5 shrink-0 text-success"
+        className="size-4 shrink-0 text-success"
       />
     )
   if (status === "running")
@@ -426,7 +426,7 @@ const StatusIcon = ({ status }: { status: AcceptStepStatus }) => {
     )
   if (status === "error")
     return (
-      <AlertIcon aria-hidden="true" className="size-5 shrink-0 text-error" />
+      <AlertIcon aria-hidden="true" className="size-4 shrink-0 text-error" />
     )
   return (
     <span className="flex size-5 shrink-0 items-center justify-center">
@@ -969,7 +969,7 @@ const AcceptAssignmentPage = () => {
 
             {acceptMutation.isError && (
               <Alert tone="error" className="items-start">
-                <AlertIcon aria-hidden="true" className="size-5 shrink-0" />
+                <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
                 <div>
                   <div className="font-bold">{t("accept.errorTitle")}</div>
                   <div className="mt-1 whitespace-pre-wrap text-sm">

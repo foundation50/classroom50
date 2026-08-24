@@ -4,7 +4,7 @@ import {
   useParams,
 } from "@tanstack/react-router"
 import type { RouterContext } from "@/types/router"
-import { AlertIcon } from "@primer/octicons-react"
+import { AlertIcon } from "@/components/ui/icons"
 import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { RoleViewProvider } from "@/context/roleView/RoleViewProvider"

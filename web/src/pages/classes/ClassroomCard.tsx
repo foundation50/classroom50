@@ -21,7 +21,7 @@ import {
   PencilIcon,
   PeopleIcon,
   TrashIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 

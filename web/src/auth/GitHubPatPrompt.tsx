@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertIcon, LinkExternalIcon } from "@primer/octicons-react"
+import { AlertIcon, LinkExternalIcon } from "@/components/ui/icons"
 
 import { REQUIRED_SCOPES } from "./scopes"
 import {

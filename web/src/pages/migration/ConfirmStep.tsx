@@ -14,7 +14,7 @@ import {
   CheckCircleIcon,
   LinkExternalIcon,
   SyncIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { githubOAuthGrantUrl, githubOrgOAuthPolicyUrl } from "@/auth/constants"
@@ -363,7 +363,7 @@ export const ConfirmStep = ({
           </div>
 
           <Alert tone="error" className="mt-3 items-start">
-            <AlertIcon aria-hidden="true" className="size-5 shrink-0" />
+            <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
             <div>
               <p className="font-medium">
                 {t("migration.access.headline", { org: accessOrg })}
@@ -707,7 +707,7 @@ export const ConfirmStep = ({
                 {!hadSkips && (
                   <CheckCircleIcon
                     aria-hidden="true"
-                    className="size-5 shrink-0"
+                    className="size-4 shrink-0"
                   />
                 )}
                 <div>
@@ -779,7 +779,7 @@ export const ConfirmStep = ({
         aria-label={t("migration.confirm.modalTitle")}
       >
         <h3 className="flex items-center gap-2 text-lg font-bold">
-          <AlertIcon aria-hidden="true" className="size-5 text-warning" />
+          <AlertIcon aria-hidden="true" className="size-4 text-warning" />
           {t("migration.confirm.modalTitle")}
         </h3>
         <p className="mt-2 text-sm text-base-content/80">

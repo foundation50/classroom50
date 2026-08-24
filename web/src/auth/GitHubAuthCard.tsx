@@ -3,7 +3,7 @@ import {
   InfoIcon,
   MarkGithubIcon,
   MortarBoardIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 

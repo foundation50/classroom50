@@ -1,4 +1,4 @@
-import { SearchIcon } from "@primer/octicons-react"
+import { SearchIcon } from "./icons"
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 

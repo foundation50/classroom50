@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import Papa from "papaparse"
-import { PulseIcon } from "@primer/octicons-react"
+import { PulseIcon } from "@/components/ui/icons"
 
 import { AnimatedAlert, Card, Button } from "@/components/ui"
 import PageShell from "@/components/PageShell"

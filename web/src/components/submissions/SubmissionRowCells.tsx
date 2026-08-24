@@ -5,7 +5,7 @@ import {
   GitCommitIcon,
   HubotIcon,
   TagIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import { Badge } from "@/components/ui"
 import { LoadingSwap } from "@/lib/LoadingSwap"

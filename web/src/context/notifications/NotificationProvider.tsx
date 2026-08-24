@@ -8,7 +8,7 @@ import {
   useState,
   type PropsWithChildren,
 } from "react"
-import { XIcon } from "@primer/octicons-react"
+import { XIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { AnimatePresence, motion } from "motion/react"
 import { toastVariants } from "@/lib/motion"

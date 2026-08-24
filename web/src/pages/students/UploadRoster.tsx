@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { UploadIcon } from "@primer/octicons-react"
+import { UploadIcon } from "@/components/ui/icons"
 
 import { resolveRosterUploadContext } from "@/domain/students"
 import type {

@@ -5,7 +5,7 @@ import {
   InfoIcon,
   ReadIcon,
   ShieldCheckIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import { Badge } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"

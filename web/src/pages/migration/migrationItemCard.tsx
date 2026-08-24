@@ -13,7 +13,7 @@ import {
   ChevronDownIcon,
   LinkExternalIcon,
   NoEntryIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import {
   Badge,
@@ -429,7 +429,7 @@ export const MigrationItemCard = ({
                 className="link inline-flex items-center gap-1 align-baseline"
               >
                 {t(action.labelKey)}
-                <LinkExternalIcon aria-hidden="true" className="size-3.5" />
+                <LinkExternalIcon aria-hidden="true" className="size-4" />
               </a>
             </>
           )}

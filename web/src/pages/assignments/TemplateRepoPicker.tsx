@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { LockIcon, SearchIcon } from "@primer/octicons-react"
+import { LockIcon, SearchIcon } from "@/components/ui/icons"
 
 import { Combobox, MonoLtr } from "@/components/ui"
 import type { TemplateRepoItem } from "@/github-core/queries"
@@ -135,7 +135,7 @@ export const TemplateRepoPicker = ({
             {item.private ? (
               <LockIcon
                 aria-label={t("assignments.template.search.privateRepo")}
-                className="size-3.5 shrink-0 text-base-content/50"
+                className="size-4 shrink-0 text-base-content/50"
               />
             ) : null}
           </span>

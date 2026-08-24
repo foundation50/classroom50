@@ -8,7 +8,7 @@ import {
   PlayIcon,
   SyncIcon,
   ZapIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import { Badge, type BadgeTone, cx } from "@/components/ui"
 import type { TimelineItem, TimelineStatus } from "@/lib/activity/timeline"

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { LinkExternalIcon } from "@primer/octicons-react"
+import { LinkExternalIcon } from "@/components/ui/icons"
 
 import { Badge, Spinner } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"

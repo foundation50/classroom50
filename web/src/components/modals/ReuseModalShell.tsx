@@ -1,4 +1,4 @@
-import { AlertIcon, CopyIcon } from "@primer/octicons-react"
+import { AlertIcon, CopyIcon } from "@/components/ui/icons"
 import { useEffect, useId, type ReactNode, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
@@ -54,7 +54,7 @@ export const ReuseModalShell = ({
     >
       <div className="flex items-start gap-4">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-          <CopyIcon className="size-5" aria-hidden="true" />
+          <CopyIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className="text-lg font-bold">

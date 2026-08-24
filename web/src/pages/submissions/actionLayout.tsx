@@ -1,4 +1,4 @@
-import { ChevronRightIcon, LinkExternalIcon } from "@primer/octicons-react"
+import { ChevronRightIcon, LinkExternalIcon } from "@/components/ui/icons"
 
 import { Button } from "@/components/ui"
 import { rtlFlip } from "@/components/ui"

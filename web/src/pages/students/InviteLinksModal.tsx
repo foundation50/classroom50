@@ -1,6 +1,6 @@
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, CopyIcon } from "@primer/octicons-react"
+import { CheckIcon, CopyIcon } from "@/components/ui/icons"
 
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { Button, Input, Modal } from "@/components/ui"

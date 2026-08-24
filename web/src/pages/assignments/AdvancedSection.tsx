@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { AlertIcon } from "@primer/octicons-react"
+import { AlertIcon } from "@/components/ui/icons"
 import { Input, Textarea } from "@/components/ui"
 import { parseAllowedFiles } from "@/util/allowedFiles"
 import { parseReleaseAssets } from "@/util/releaseAssets"

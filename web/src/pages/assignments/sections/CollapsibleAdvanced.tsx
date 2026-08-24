@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { ChevronRightIcon } from "@primer/octicons-react"
+import { ChevronRightIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { Collapse, cx } from "@/components/ui"
 import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"

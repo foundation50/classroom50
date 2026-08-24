@@ -4,7 +4,7 @@ import {
   GlobeIcon,
   PeopleIcon,
   PulseIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { Link, useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { useOrgStaff } from "@/hooks/useOrgStaff"

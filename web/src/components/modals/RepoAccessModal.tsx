@@ -6,7 +6,7 @@ import {
   PlusIcon,
   ShieldCheckIcon,
   TrashIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import { Spinner } from "@/components/Spinner"
 import {
@@ -397,7 +397,7 @@ export function RepoAccessModal({
     >
       <div className="flex items-start gap-4">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-          <ShieldCheckIcon className="size-5" aria-hidden="true" />
+          <ShieldCheckIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className="text-lg font-bold">

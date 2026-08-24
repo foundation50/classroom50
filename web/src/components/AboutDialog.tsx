@@ -1,7 +1,7 @@
 import { forwardRef } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
-import { LinkExternalIcon } from "@primer/octicons-react"
+import { LinkExternalIcon } from "@/components/ui/icons"
 
 import { CopyableDetails, Modal } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
@@ -40,7 +40,7 @@ function SupportLink({
       </span>
       <LinkExternalIcon
         aria-hidden="true"
-        className="size-3.5 shrink-0 text-base-content/40"
+        className="size-4 shrink-0 text-base-content/40"
       />
     </a>
   )

@@ -8,7 +8,7 @@ import {
   ChevronUpIcon,
   LinkExternalIcon,
   XCircleIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import { githubKeys } from "@/github-core/queries"
 import useRenameConfigRepoToMain from "@/hooks/mutations/useRenameConfigRepoToMain"

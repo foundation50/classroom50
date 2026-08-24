@@ -3,7 +3,7 @@ import {
   MarkGithubIcon,
   PeopleIcon,
   PersonIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"

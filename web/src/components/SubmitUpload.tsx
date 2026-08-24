@@ -1,6 +1,6 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { FileCheckIcon, UploadIcon, XIcon } from "@primer/octicons-react"
+import { FileCheckIcon, UploadIcon, XIcon } from "@/components/ui/icons"
 
 import {
   Alert,
@@ -143,7 +143,7 @@ export function SubmitUpload({
         aria-labelledby={titleId}
       >
         <div className="flex items-center gap-2">
-          <FileCheckIcon aria-hidden="true" className="size-5 text-primary" />
+          <FileCheckIcon aria-hidden="true" className="size-4 text-primary" />
           <h3 id={titleId} className="text-lg font-bold">
             {t("submissions.student.upload.title")}
           </h3>

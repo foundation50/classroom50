@@ -1,4 +1,4 @@
-import { CheckCircleIcon } from "@primer/octicons-react"
+import { CheckCircleIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import type { GitHubUser } from "@/github-core/types"

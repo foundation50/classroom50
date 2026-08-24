@@ -8,7 +8,7 @@ import {
   LinkExternalIcon,
   SyncIcon,
   XIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { useActionActivity, type Tracker } from "@/hooks/useActionActivity"
@@ -116,7 +116,7 @@ const TrackerRow = ({
           className="flex shrink-0 cursor-pointer items-center gap-1 text-xs font-medium opacity-80 hover:opacity-100"
         >
           {t("actionsBanner.viewRun")}
-          <LinkExternalIcon aria-hidden="true" className="size-3.5" />
+          <LinkExternalIcon aria-hidden="true" className="size-4" />
         </a>
       )}
       {tracker.retriable && (
@@ -130,7 +130,7 @@ const TrackerRow = ({
           {retrying ? (
             <InlineSpinner />
           ) : (
-            <SyncIcon aria-hidden="true" className="size-3.5" />
+            <SyncIcon aria-hidden="true" className="size-4" />
           )}
           {t("actionsBanner.retry")}
         </button>
@@ -213,7 +213,7 @@ const BannerBody = ({
               count: attentionCount,
             })}
           >
-            <AlertIcon aria-hidden="true" className="size-3.5" />
+            <AlertIcon aria-hidden="true" className="size-4" />
             {attentionCount}
           </span>
         )}

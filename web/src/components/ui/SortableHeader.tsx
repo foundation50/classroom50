@@ -1,9 +1,5 @@
 import type { ReactNode } from "react"
-import {
-  ArrowDownIcon,
-  ArrowSwitchIcon,
-  ArrowUpIcon,
-} from "@primer/octicons-react"
+import { ArrowDownIcon, ArrowSwitchIcon, ArrowUpIcon } from "./icons"
 
 // Clickable column-header sort control for tables whose sort state lives in a
 // toolbar/page. Renders the header label plus a direction arrow (a faded
@@ -43,13 +39,13 @@ export function SortableHeader({
     >
       {label}
       {direction === "asc" ? (
-        <ArrowUpIcon aria-hidden="true" className="size-3.5" />
+        <ArrowUpIcon aria-hidden="true" className="size-4" />
       ) : direction === "desc" ? (
-        <ArrowDownIcon aria-hidden="true" className="size-3.5" />
+        <ArrowDownIcon aria-hidden="true" className="size-4" />
       ) : (
         <ArrowSwitchIcon
           aria-hidden="true"
-          className="size-3.5 opacity-40 rotate-90"
+          className="size-4 opacity-40 rotate-90"
         />
       )}
     </button>

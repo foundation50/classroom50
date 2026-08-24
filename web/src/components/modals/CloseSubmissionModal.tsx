@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CalendarIcon } from "@primer/octicons-react"
+import { CalendarIcon } from "@/components/ui/icons"
 
 import { Alert, Button, Modal } from "@/components/ui"
 import { Spinner } from "@/components/Spinner"
@@ -223,7 +223,7 @@ export function CloseSubmissionModal({
     >
       <div className="flex items-start gap-4">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-warning/10 text-warning">
-          <CalendarIcon className="size-5" aria-hidden="true" />
+          <CalendarIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className="text-lg font-bold">

@@ -1,4 +1,4 @@
-import { AlertIcon, GearIcon } from "@primer/octicons-react"
+import { AlertIcon, GearIcon } from "@/components/ui/icons"
 import { Trans, useTranslation } from "react-i18next"
 
 import { Alert, cx, EmphasisLtr, RouterButton } from "@/components/ui"

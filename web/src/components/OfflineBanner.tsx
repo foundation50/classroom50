@@ -1,4 +1,4 @@
-import { CloudOfflineIcon } from "@primer/octicons-react"
+import { CloudOfflineIcon } from "@/components/ui/icons"
 import { AnimatePresence } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -18,7 +18,7 @@ export function OfflineBanner() {
         <AppBanner
           key="offline"
           tone="warning"
-          icon={<CloudOfflineIcon className="size-5" aria-hidden="true" />}
+          icon={<CloudOfflineIcon className="size-4" aria-hidden="true" />}
           title={t("offline.title")}
         >
           <p className="text-base-content/70">{t("offline.body")}</p>

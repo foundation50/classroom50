@@ -9,7 +9,7 @@ import {
   MoonIcon,
   SignOutIcon,
   SunIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import {
   useParams,
   useMatchRoute,

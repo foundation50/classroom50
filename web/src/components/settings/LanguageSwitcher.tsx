@@ -7,7 +7,7 @@ import {
   TrashIcon,
   UploadIcon,
   XIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { AnimatedAlert, Button, rtlFlip } from "@/components/ui"

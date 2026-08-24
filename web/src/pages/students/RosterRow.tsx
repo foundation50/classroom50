@@ -1,4 +1,4 @@
-import { ChevronRightIcon } from "@primer/octicons-react"
+import { ChevronRightIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import Avatar from "@/components/avatar"
 import { Badge, rtlFlip } from "@/components/ui"

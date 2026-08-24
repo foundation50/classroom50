@@ -2,7 +2,7 @@ import {
   ChevronDownIcon,
   InfoIcon,
   LinkExternalIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { AlertIcon } from "@primer/octicons-react"
+import { AlertIcon } from "@/components/ui/icons"
 
 import { Badge } from "@/components/ui"
 import type { UnenforcedDefaultItem } from "./orgDefaultsStepData"
@@ -19,7 +19,7 @@ export const UnenforcedDefaultsList = ({
         <li key={d.field} className="flex items-start gap-2 text-xs">
           <AlertIcon
             aria-hidden="true"
-            className="mt-0.5 size-3.5 shrink-0 text-error"
+            className="mt-0.5 size-4 shrink-0 text-error"
           />
           <span className="text-base-content/70">
             {d.desc}

@@ -9,7 +9,7 @@ import {
   ChevronRightIcon,
   InboxIcon,
   MarkGithubIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { Alert, Badge, Button, Card, rtlFlip } from "@/components/ui"
@@ -40,7 +40,7 @@ const ClassroomRowButton = ({
         <span className="flex size-9 shrink-0 items-center justify-center rounded-field border border-base-300 bg-base-200">
           <MarkGithubIcon
             aria-hidden="true"
-            className="size-5 text-base-content/70"
+            className="size-4 text-base-content/70"
           />
         </span>
       )}

@@ -1,4 +1,4 @@
-import { CommentIcon } from "@primer/octicons-react"
+import { CommentIcon } from "@/components/ui/icons"
 import { useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 

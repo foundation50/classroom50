@@ -4,7 +4,7 @@ import {
   ArrowSwitchIcon,
   FilterIcon,
   IssueDraftIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import { Alert, Badge, Card, Toolbar, cx } from "@/components/ui"
 import {
@@ -90,7 +90,7 @@ function VpatConformanceTable({
 
         {rows.length === 0 ? (
           <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-base-content/60">
-            <IssueDraftIcon aria-hidden="true" className="size-5" />
+            <IssueDraftIcon aria-hidden="true" className="size-4" />
             {t("accessibility.vpat.empty")}
           </div>
         ) : (

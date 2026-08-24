@@ -10,7 +10,7 @@ import {
   InfoIcon,
   LinkExternalIcon,
   ShieldXIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { motion } from "motion/react"
 import { Trans, useTranslation } from "react-i18next"
 import { enterExit, staggerTransition } from "@/lib/motion"
@@ -130,9 +130,9 @@ function CopyButton({ value }: { value: string }) {
       onClick={copy}
     >
       {copied ? (
-        <CheckIcon aria-hidden="true" className="size-3.5 text-success" />
+        <CheckIcon aria-hidden="true" className="size-4 text-success" />
       ) : (
-        <CopyIcon aria-hidden="true" className="size-3.5" />
+        <CopyIcon aria-hidden="true" className="size-4" />
       )}
     </Button>
   )
@@ -218,7 +218,7 @@ function ResourceRow({ resource }: { resource: Resource }) {
             aria-label={t("published.openUrl")}
             title={t("published.openUrl")}
           >
-            <LinkExternalIcon aria-hidden="true" className="size-3.5" />
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
           </Button>
         </div>
       </div>
@@ -422,7 +422,7 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
       <div className="flex items-start gap-3 rounded-box border border-info/30 bg-info/10 p-4 text-sm">
         <InfoIcon
           aria-hidden="true"
-          className="mt-0.5 size-5 shrink-0 text-info"
+          className="mt-0.5 size-4 shrink-0 text-info"
         />
         <div>
           <p className="font-semibold text-base-content">
@@ -438,7 +438,7 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
         <div className="flex items-center gap-2">
           <GlobeIcon
             aria-hidden="true"
-            className="size-5 text-base-content/70"
+            className="size-4 text-base-content/70"
           />
           <h2 className="text-lg font-bold">{t("published.orgLevel")}</h2>
         </div>
@@ -460,7 +460,7 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
         <div className="flex items-center gap-2">
           <ShieldXIcon
             aria-hidden="true"
-            className="size-5 text-base-content/70"
+            className="size-4 text-base-content/70"
           />
           <h2 className="text-lg font-bold">{t("published.perClassroom")}</h2>
         </div>

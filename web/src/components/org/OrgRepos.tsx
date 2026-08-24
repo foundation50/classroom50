@@ -10,7 +10,8 @@ import {
   PeopleIcon,
   PersonIcon,
   RepoIcon,
-} from "@primer/octicons-react"
+  RepoLockedIcon,
+} from "@/components/ui/icons"
 
 import { Button, Card, Markdown, Modal } from "@/components/ui"
 import type { GitHubRepo } from "@/github-core/types"
@@ -64,7 +65,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
       <Card.Body className="gap-4">
         <div className="flex items-center gap-3 pe-8">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-            <BookIcon aria-hidden="true" className="size-5" />
+            <BookIcon aria-hidden="true" className="size-4" />
           </div>
           <div className="min-w-0">
             {classroom && assignment ? (
@@ -78,7 +79,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
                 </h3>
                 <LinkIcon
                   aria-hidden="true"
-                  className="size-3.5 shrink-0 text-base-content/40 group-hover:text-primary"
+                  className="size-4 shrink-0 text-base-content/40 group-hover:text-primary"
                 />
               </Link>
             ) : (
@@ -91,7 +92,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
                 <span className="inline-flex max-w-full items-center gap-1.5">
                   <MortarBoardIcon
                     aria-hidden="true"
-                    className="size-3.5 shrink-0 text-base-content/50"
+                    className="size-4 shrink-0 text-base-content/50"
                   />
                   <span className="truncate">
                     {t("classes.repo.classroomLabel")}{" "}
@@ -102,10 +103,19 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
                 </span>
               ) : null}
               <span className="inline-flex max-w-full items-center gap-1.5">
-                <RepoIcon
-                  aria-hidden="true"
-                  className="size-3.5 shrink-0 text-base-content/50"
-                />
+                {/* Octicons specific-use pair: repo (muted) for public,
+                    repo-locked (attention) for private. */}
+                {repo.private ? (
+                  <RepoLockedIcon
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-warning"
+                  />
+                ) : (
+                  <RepoIcon
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-base-content/50"
+                  />
+                )}
                 <span className="truncate font-mono">{repo.name}</span>
               </span>
             </div>

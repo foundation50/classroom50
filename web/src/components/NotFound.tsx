@@ -1,4 +1,4 @@
-import { TelescopeIcon } from "@primer/octicons-react"
+import { TelescopeIcon } from "@/components/ui/icons"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 

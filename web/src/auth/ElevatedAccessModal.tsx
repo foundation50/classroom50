@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import { useRouterState } from "@tanstack/react-router"
-import { AlertIcon, ShieldCheckIcon } from "@primer/octicons-react"
+import { AlertIcon, ShieldCheckIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { useGithubAuth } from "./useGithubAuth"

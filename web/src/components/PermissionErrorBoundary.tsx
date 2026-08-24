@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { ShieldXIcon } from "@primer/octicons-react"
+import { ShieldXIcon } from "@/components/ui/icons"
 import { GitHubAPIError } from "@/github-core/errors"
 import { Alert, RouterButton } from "@/components/ui"
 import { logger } from "@/lib/logger"

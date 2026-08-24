@@ -8,7 +8,7 @@ import {
   ChevronDownIcon,
   QuestionIcon,
   ServerIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { orgRunnersQuery } from "@/github-core/queries"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { Button, HelpTooltip, Input } from "@/components/ui"

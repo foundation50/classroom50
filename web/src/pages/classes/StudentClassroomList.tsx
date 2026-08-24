@@ -4,7 +4,7 @@ import {
   BookIcon,
   MortarBoardIcon,
   SearchIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 

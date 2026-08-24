@@ -5,7 +5,7 @@ import {
   SyncIcon,
   UploadIcon,
   XIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import {
   Alert,

@@ -3,7 +3,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MortarBoardIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { Link, useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { type ReactNode } from "react"

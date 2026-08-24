@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { PencilIcon } from "@primer/octicons-react"
+import { PencilIcon } from "@/components/ui/icons"
 
 import {
   Alert,
@@ -171,7 +171,7 @@ export function RenameAssignmentModal({
     >
       <div className="flex items-start gap-4">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-warning/10 text-warning">
-          <PencilIcon className="size-5" aria-hidden="true" />
+          <PencilIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className="text-lg font-bold">

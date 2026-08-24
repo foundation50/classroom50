@@ -1,4 +1,4 @@
-import { MarkGithubIcon } from "@primer/octicons-react"
+import { MarkGithubIcon } from "@/components/ui/icons"
 import { Trans, useTranslation } from "react-i18next"
 
 import { MonoLtr } from "@/components/ui"
@@ -50,7 +50,7 @@ export const GitHubIdentity = ({ row }: { row: MemberListRow }) => {
   )
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-base-content/70">
-      <MarkGithubIcon aria-hidden="true" className="size-3.5 opacity-50" />
+      <MarkGithubIcon aria-hidden="true" className="size-4 opacity-50" />
       {identity}
     </span>
   )

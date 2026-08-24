@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router"
-import { ChevronDownIcon, CopyIcon, PlusIcon } from "@primer/octicons-react"
+import { ChevronDownIcon, CopyIcon, PlusIcon } from "@/components/ui/icons"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 

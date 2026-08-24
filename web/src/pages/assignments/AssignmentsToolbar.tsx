@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowSwitchIcon, FilterIcon } from "@primer/octicons-react"
+import { ArrowSwitchIcon, FilterIcon } from "@/components/ui/icons"
 
 import { Toolbar } from "@/components/ui"
 import {

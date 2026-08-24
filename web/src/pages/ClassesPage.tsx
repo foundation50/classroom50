@@ -4,7 +4,7 @@ import {
   ChevronDownIcon,
   MarkGithubIcon,
   PlusIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import useGetClasses from "@/hooks/useGetClasses"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -77,7 +77,7 @@ const CreateClassroomPane = ({ org }: { org: string }) => {
     <Card dashed>
       <Card.Body className="items-center py-12 text-center">
         <div className="mb-2 flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <PlusIcon aria-hidden="true" className="size-7" />
+          <PlusIcon aria-hidden="true" className="size-6" />
         </div>
 
         <Card.Title className="text-xl">{t("classes.empty.title")}</Card.Title>
@@ -104,7 +104,7 @@ const JoinOrgCard = ({ org }: { org: string }) => {
     <Card dashed>
       <Card.Body className="items-center py-12 text-center">
         <div className="mb-2 flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <PlusIcon aria-hidden="true" className="size-7" />
+          <PlusIcon aria-hidden="true" className="size-6" />
         </div>
 
         <Card.Title className="text-xl">{t("classes.join.title")}</Card.Title>

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
-import { AlertIcon, ClockIcon, QuestionIcon } from "@primer/octicons-react"
+import { AlertIcon, ClockIcon, QuestionIcon } from "@/components/ui/icons"
 import type { ComponentType } from "react"
 
 import { Badge, cx } from "@/components/ui"

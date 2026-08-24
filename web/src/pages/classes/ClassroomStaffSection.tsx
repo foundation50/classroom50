@@ -9,7 +9,7 @@ import {
   ShieldCheckIcon,
   XCircleIcon,
   XIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -66,7 +66,7 @@ const ClassroomStaffSection = ({
           <div className="flex items-center gap-2">
             <ShieldCheckIcon
               aria-hidden="true"
-              className="size-5 text-base-content/70"
+              className="size-4 text-base-content/70"
             />
             <h3 className="text-lg font-bold">{t("classes.staff.heading")}</h3>
           </div>
@@ -385,7 +385,7 @@ const StaffMemberRow = ({
             {removeMutation.isPending ? (
               <InlineSpinner />
             ) : (
-              <XIcon aria-hidden="true" className="size-3.5" />
+              <XIcon aria-hidden="true" className="size-4" />
             )}
           </Button>
         )}
@@ -527,7 +527,7 @@ const PendingStaffRow = ({
             {resendMutation.isPending ? (
               <InlineSpinner />
             ) : (
-              <PaperAirplaneIcon aria-hidden="true" className="size-3.5" />
+              <PaperAirplaneIcon aria-hidden="true" className="size-4" />
             )}
           </Button>
         ) : null}
@@ -572,7 +572,7 @@ const PendingStaffRow = ({
           {cancelMutation.isPending ? (
             <InlineSpinner />
           ) : (
-            <XCircleIcon aria-hidden="true" className="size-3.5" />
+            <XCircleIcon aria-hidden="true" className="size-4" />
           )}
         </Button>
       </div>

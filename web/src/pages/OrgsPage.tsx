@@ -35,7 +35,7 @@ import {
   PlusIcon,
   ReadIcon,
   ShieldCheckIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import OrgDetailsModal from "@/components/modals/OrgDetailsModal"
 import { AnimatePresence, motion } from "motion/react"
 import { useMemo, useState } from "react"

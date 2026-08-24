@@ -11,7 +11,7 @@ import {
   useParams,
 } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
-import { CheckIcon } from "@primer/octicons-react"
+import { CheckIcon } from "@/components/ui/icons"
 
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
@@ -57,7 +57,7 @@ const MigrationSteps = ({
               )}
             >
               {done ? (
-                <CheckIcon aria-hidden="true" className="size-3.5" />
+                <CheckIcon aria-hidden="true" className="size-4" />
               ) : (
                 i + 1
               )}

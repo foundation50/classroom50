@@ -3,7 +3,7 @@ import {
   MarkGithubIcon,
   PeopleIcon,
   PersonIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useCallback, useEffect, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
@@ -274,7 +274,7 @@ const EditStudentForm = ({
 
         {showGitHubPanel && student.username ? (
           <div className="flex items-center gap-2 rounded-box border border-base-300 bg-base-200/50 px-3 py-2 text-sm text-base-content/70">
-            <MarkGithubIcon aria-hidden="true" className="size-5 opacity-40" />
+            <MarkGithubIcon aria-hidden="true" className="size-4 opacity-40" />
             <span>
               <Trans
                 i18nKey={

@@ -1,6 +1,6 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { PlusIcon, XIcon } from "@primer/octicons-react"
+import { PlusIcon, XIcon } from "@/components/ui/icons"
 
 import { Alert, Button, Modal, Select, Toolbar } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"

@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react"
-import { CheckIcon, CopyIcon } from "@primer/octicons-react"
+import { CheckIcon, CopyIcon } from "./icons"
 
 import { Button } from "./Button"
 import { cx } from "./cx"

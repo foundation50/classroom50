@@ -14,7 +14,7 @@ import {
   SlidersIcon,
   SyncIcon,
   UnlockIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui"

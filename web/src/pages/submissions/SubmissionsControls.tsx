@@ -4,7 +4,7 @@ import {
   ArrowSwitchIcon,
   FilterIcon,
   ShareAndroidIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import { Button, Toolbar } from "@/components/ui"
 import type {

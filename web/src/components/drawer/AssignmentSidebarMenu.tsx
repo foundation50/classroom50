@@ -4,7 +4,7 @@ import {
   FileCheckIcon,
   GearIcon,
   PeopleIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 import { Link, useMatchRoute } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { useGithubAuth } from "@/auth/useGithubAuth"

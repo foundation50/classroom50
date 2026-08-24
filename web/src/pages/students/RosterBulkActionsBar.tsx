@@ -5,7 +5,7 @@ import {
   PlusIcon,
   UploadIcon,
   XIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"

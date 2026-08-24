@@ -254,9 +254,27 @@ export default defineConfig([
               message:
                 "Import authz through the public barrel `@/authz`, not its internal files by relative path. The barrel is the module's only public API (see src/authz/index.ts).",
             },
+            {
+              group: ["@primer/octicons-react"],
+              message:
+                "Import icons from `@/components/ui/icons` (the app's single icon seam), not the icon package directly.",
+            },
+            {
+              group: ["lucide-react"],
+              message:
+                "lucide-react was removed — the app's icons are Primer Octicons, imported from `@/components/ui/icons`.",
+            },
           ],
         },
       ],
+    },
+  },
+  // The icon seam is the one file allowed to import the icon package it
+  // re-exports.
+  {
+    files: ["src/components/ui/icons.ts"],
+    rules: {
+      "no-restricted-imports": "off",
     },
   },
   // The only files allowed to touch `console` directly: the logger wrapper

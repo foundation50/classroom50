@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link, useParams, useRouter } from "@tanstack/react-router"
-import { MarkGithubIcon, PeopleIcon } from "@primer/octicons-react"
+import { MarkGithubIcon, PeopleIcon } from "@/components/ui/icons"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"

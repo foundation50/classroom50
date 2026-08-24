@@ -1,4 +1,4 @@
-import { AlertIcon } from "@primer/octicons-react"
+import { AlertIcon } from "@/components/ui/icons"
 import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
@@ -151,7 +151,7 @@ export function ConfirmModal({
                 : "bg-warning/10 text-warning",
             ].join(" ")}
           >
-            <AlertIcon className="size-5" aria-hidden="true" />
+            <AlertIcon className="size-4" aria-hidden="true" />
           </div>
 
           <div className="min-w-0 flex-1">

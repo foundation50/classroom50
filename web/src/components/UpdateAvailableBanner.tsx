@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { SyncIcon } from "@primer/octicons-react"
+import { SyncIcon } from "@/components/ui/icons"
 import { AnimatePresence } from "motion/react"
 import { useTranslation } from "react-i18next"
 
@@ -46,7 +46,7 @@ export function UpdateAvailableBanner() {
         <AppBanner
           key="app-update"
           tone="success"
-          icon={<SyncIcon className="size-5" aria-hidden="true" />}
+          icon={<SyncIcon className="size-4" aria-hidden="true" />}
           title={t("appUpdate.title")}
           onDismiss={() => setDismissedCommit(data?.commit)}
         >

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { InlineSpinner } from "@/components/Spinner"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { LinkExternalIcon, SyncIcon } from "@primer/octicons-react"
+import { LinkExternalIcon, SyncIcon } from "@/components/ui/icons"
 import { Alert, Button, cx, FormField, Select } from "@/components/ui"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { getRepo } from "@/github-core/repoReads"
@@ -346,7 +346,7 @@ function StudentPermissionField({ form }: { form: AssignmentForm }) {
                     rel="noreferrer"
                   >
                     {t("assignments.form.studentPermission.learnMore")}
-                    <LinkExternalIcon aria-hidden="true" className="size-3.5" />
+                    <LinkExternalIcon aria-hidden="true" className="size-4" />
                   </a>
                 }
               >

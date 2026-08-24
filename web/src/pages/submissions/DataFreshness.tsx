@@ -1,4 +1,4 @@
-import { SyncIcon } from "@primer/octicons-react"
+import { SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Alert, Button, cx } from "@/components/ui"

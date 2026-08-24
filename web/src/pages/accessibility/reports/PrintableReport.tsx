@@ -10,7 +10,7 @@ import {
   type Criterion,
   type WcagPrinciple,
 } from "@/util/a11y/vpatModel"
-import { DownloadIcon, FileIcon } from "@primer/octicons-react"
+import { DownloadIcon, FileIcon } from "@/components/ui/icons"
 
 import { useContrastAudit, useVpatReport, type Audit, type Vpat } from "../data"
 

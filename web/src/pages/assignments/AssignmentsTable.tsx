@@ -9,7 +9,7 @@ import {
   ShieldCheckIcon,
   TrashIcon,
   UnlockIcon,
-} from "@primer/octicons-react"
+} from "@/components/ui/icons"
 
 import useGetScores from "@/hooks/useGetScores"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"

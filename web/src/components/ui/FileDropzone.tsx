@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react"
-import { UploadIcon } from "@primer/octicons-react"
+import { UploadIcon } from "./icons"
 
 import { Button } from "./Button"
 import { cx } from "./cx"
