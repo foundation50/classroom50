@@ -5,12 +5,7 @@ import {
   SHORT_NAME_PATTERN_DESCRIPTION,
   isValidShortName,
 } from "@/util/shortName"
-import {
-  CLASSROOM_SHORT_NAME_MAX_LEN,
-  GITHUB_REPO_NAME_MAX_LEN,
-  assignmentSlugBudget,
-  composedRepoNameFits,
-} from "@/util/repoNameBudget"
+import { slugBudgetError } from "@/components/assignments/slugBudget"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
   DEFAULT_SETUP_TIMEOUT_SECONDS,
@@ -260,32 +255,10 @@ export type SlugContext = {
   reservedSlugs?: string[]
 }
 
-// The composed repo-name budget error for `slug` in `classroom`, or undefined
-// when it fits (#691). The single recipe shared by the submit validator and
-// the live as-you-type check (DetailsSection). A classroom leaving no room for
-// any slug (a legacy over-long short-name) points at a new classroom instead
-// of an impossible shorter slug, mirroring the CLI's ComposedRepoNameBudget.
-export function slugBudgetError(
-  t: TFunction,
-  classroom: string,
-  slug: string,
-): string | undefined {
-  if (composedRepoNameFits(classroom, slug).fits) return undefined
-  const budget = assignmentSlugBudget(classroom)
-  if (budget < 2) {
-    return t("assignments.form.validation.slugNoRoom", {
-      classroom,
-      max: CLASSROOM_SHORT_NAME_MAX_LEN,
-      limit: GITHUB_REPO_NAME_MAX_LEN,
-    })
-  }
-  return t("assignments.form.validation.slugOverBudget", {
-    classroom,
-    budget,
-    length: slug.length,
-    limit: GITHUB_REPO_NAME_MAX_LEN,
-  })
-}
+// The composed repo-name budget recipe moved to components/ (so the rename
+// modal can share it without crossing the pages/ boundary); re-exported here
+// for the form-model consumers.
+export { slugBudgetError }
 
 // Pure submit-time validation, mirroring gh-teacher's write-time rules so a bad
 // value is caught in the form rather than by a failed commit or an unparseable

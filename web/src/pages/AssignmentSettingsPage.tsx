@@ -19,6 +19,7 @@ import GitHub from "@/assets/github.svg?react"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import EditAssignmentForm from "./assignments/EditAssignmentForm"
+import RenameSlugSection from "./assignments/RenameSlugSection"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import { isClassroomArchived } from "@/types/classroom"
@@ -252,6 +253,17 @@ const AssignmentSettingsPage = () => {
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
           />
+          {/* One-shot slug-rename remediation (#691): renders only when the
+              slug is over the repo-name budget (or a prior rename left
+              stragglers), and only for authors on an active classroom. */}
+          {canAuthor && !archived && assignmentData && (
+            <RenameSlugSection
+              org={org}
+              classroom={classroom}
+              assignment={assignmentData}
+              assignments={assignments?.assignments ?? []}
+            />
+          )}
         </>
       )}
       {isStudent && org && classroom && assignment && (

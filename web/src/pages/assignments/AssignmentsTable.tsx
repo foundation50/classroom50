@@ -8,6 +8,7 @@ import {
   Pencil,
   ShieldCheck,
   Trash2,
+  TriangleAlert,
 } from "lucide-react"
 
 import useGetScores from "@/hooks/useGetScores"
@@ -15,6 +16,7 @@ import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import { existingGroupRepos } from "@/pages/submissions/dashboard"
 import { isNoAutograderAssignment } from "@/domain/assignments/autogradingState"
 import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
+import { composedRepoNameFits } from "@/util/repoNameBudget"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { ConfirmModal } from "@/components/modals"
@@ -532,6 +534,27 @@ const AssignmentsTable = ({
                     <Lock aria-hidden="true" className="size-3" />
                     {t("assignments.table.lockedBadge")}
                   </Badge>
+                )}
+                {!composedRepoNameFits(classroom, assignment.slug).fits && (
+                  // Over the composed repo-name budget (#691): some usernames
+                  // can't accept. Links to the settings page, where the
+                  // eligibility-gated rename remediation lives.
+                  <Link
+                    to="/$org/$classroom/assignments/$assignment/settings"
+                    params={{ org, classroom, assignment: assignment.slug }}
+                    onClick={(event) => event.stopPropagation()}
+                    className="mt-1 block w-fit"
+                    title={t("assignments.table.overBudgetBadgeTitle")}
+                  >
+                    <Badge
+                      tone="error"
+                      size="sm"
+                      className="gap-1 whitespace-nowrap"
+                    >
+                      <TriangleAlert aria-hidden="true" className="size-3" />
+                      {t("assignments.table.overBudgetBadge")}
+                    </Badge>
+                  </Link>
                 )}
               </td>
               <td
