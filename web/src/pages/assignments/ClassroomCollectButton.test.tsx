@@ -17,11 +17,12 @@ vi.mock("@/context/notifications/NotificationProvider", () => ({
 const collect = vi.fn()
 const hookArgs: unknown[][] = []
 let phase = "idle"
+let failure: "dispatch" | "run" | null = null
 let error: unknown = null
 vi.mock("@/hooks/useTriggerScoreCollection", () => ({
   default: (...args: unknown[]) => {
     hookArgs.push(args)
-    return { collect, phase, run: null, error }
+    return { collect, phase, failure, run: null, error }
   },
 }))
 
@@ -67,6 +68,7 @@ beforeEach(() => {
   notify.mockReset()
   hookArgs.length = 0
   phase = "idle"
+  failure = null
   error = null
   scoresResult = { data: undefined, isLoading: false }
   lastRunResult = { data: undefined }
@@ -172,12 +174,30 @@ describe("ClassroomCollectButton", () => {
     )
 
     phase = "failed"
+    failure = "dispatch"
     error = new Error("Resource not accessible by personal access token")
     rerender(<ClassroomCollectButton org="acme" classroom="cs50" />)
 
     expect(notify).toHaveBeenCalledWith(
       expect.objectContaining({ tone: "error", key: "collect-scores:cs50" }),
     )
+  })
+
+  // A run that concluded non-success is "failed" on the hook too, but it has a
+  // banner row of its own — toasting it would report the one failure twice.
+  it("leaves a failed run to the Actions banner", () => {
+    phase = "running"
+    const { wrapper } = setup()
+    const { rerender } = render(
+      <ClassroomCollectButton org="acme" classroom="cs50" />,
+      { wrapper },
+    )
+
+    phase = "failed"
+    failure = "run"
+    rerender(<ClassroomCollectButton org="acme" classroom="cs50" />)
+
+    expect(notify).not.toHaveBeenCalled()
   })
 
   // The i18n mock returns bare keys, so the assertions match keys, not copy.

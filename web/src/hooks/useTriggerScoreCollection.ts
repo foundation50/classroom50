@@ -8,12 +8,16 @@ import { useGitHubOperation, type OperationPhase } from "./useGitHubOperation"
 
 export type CollectScoresPhase = OperationPhase
 
-// A classroom sweep walks every assignment, so it runs far longer than the
+// A classroom sweep walks every assignment, so it executes far longer than the
 // single-assignment collect the 10-minute default was tuned for. Track it
 // against the workflow's own job cap instead (collect-scores.yaml,
 // `timeout-minutes: 30`) — otherwise a healthy sweep trips the client timeout,
 // which drops the tracked dispatch and re-enables the button while the run is
-// still going, inviting a duplicate queued behind it.
+// still going, inviting a duplicate queued behind it. That cap measures
+// execution; the sweep shares the `collect-${classroom}` concurrency group with
+// every per-assignment collect in the same classroom (and the group does not
+// cancel in progress), so it can sit queued first — useGitHubOperation waits
+// that out on its own window before this one starts counting.
 const SWEEP_TIMEOUT_MS = 30 * 60 * 1000
 
 // Narrows a dispatched collection: `classroom` alone sweeps every assignment in
@@ -41,7 +45,7 @@ const useTriggerScoreCollection = (
   const scopeSuffix = scope
     ? `:${scope.classroom}${scope.assignment ? `:${scope.assignment}` : ""}`
     : ""
-  const { trigger, phase, run, error } = useGitHubOperation({
+  const { trigger, phase, failure, run, error } = useGitHubOperation({
     timeoutMs: scope && !scope.assignment ? SWEEP_TIMEOUT_MS : undefined,
     storageKey: org ? `cl50:collect-scores:${org}${scopeSuffix}` : null,
     queryKey: (sinceRunId) =>
@@ -64,7 +68,7 @@ const useTriggerScoreCollection = (
     },
   })
 
-  return { collect: trigger, phase, run, error }
+  return { collect: trigger, phase, failure, run, error }
 }
 
 export default useTriggerScoreCollection

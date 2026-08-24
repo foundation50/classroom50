@@ -33,7 +33,8 @@ import { formatRelativeToNow } from "@/util/formatDate"
 // happens on the mutation's success, so a rejected POST (no config-repo write,
 // no classroom50 repo) has no banner row and would otherwise just un-spin the
 // button silently. That one case gets a toast, reusing the submissions page's
-// wording for the same failure.
+// wording for the same failure — keyed off `failure`, since the hook reports a
+// run that concluded non-success as "failed" too and the banner already has it.
 export function ClassroomCollectButton({
   org,
   classroom,
@@ -103,7 +104,7 @@ export function ClassroomCollectButton({
   }, [collect.phase, classroom, org, queryClient])
 
   useEffect(() => {
-    if (collect.phase !== "failed") return
+    if (collect.phase !== "failed" || collect.failure !== "dispatch") return
     notify({
       tone: "error",
       key: `collect-scores:${classroom}`,
@@ -116,7 +117,7 @@ export function ClassroomCollectButton({
               "submissions.collect.statusFailedHint",
             )}`,
     })
-  }, [collect.phase, collect.error, classroom, notify, t])
+  }, [collect.phase, collect.failure, collect.error, classroom, notify, t])
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
