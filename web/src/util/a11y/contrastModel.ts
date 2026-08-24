@@ -20,10 +20,18 @@ import {
 export type SizeClass = "body" | "large"
 export type Theme = "sumi" | "sumi-dark"
 
-/** WCAG 1.4.6 (AAA text) / 1.4.11 (non-text) spec floors. */
-export const SPEC_FLOOR = { body: 7, large: 4.5, nonText: 3 } as const
+/** WCAG 1.4.3 (AA text) / 1.4.11 (non-text) spec floors — what the guard enforces. */
+export const SPEC_FLOOR = { body: 4.5, large: 3, nonText: 3 } as const
 /** Design-target margins (reported, non-blocking per the guard-strictness decision). */
-export const MARGIN_TARGET = { body: 7.5, large: 5, nonText: 3.5 } as const
+export const MARGIN_TARGET = { body: 5, large: 3.5, nonText: 3.5 } as const
+/**
+ * WCAG 1.4.6 (Enhanced, AAA) text floors. Measured but NOT enforced: the palette
+ * is GitHub Primer verbatim, and Primer's primitives are tuned to AA. Scoring it
+ * anyway keeps the VPAT's 1.4.6 row derived from the live audit (KTD4) instead of
+ * hand-set, so the claim can't drift from the palette. Non-text has no AAA tier,
+ * so those pairs reuse the AA floor.
+ */
+export const ENHANCED_FLOOR = { body: 7, large: 4.5, nonText: 3 } as const
 
 export type Kind = "text" | "nonText"
 
@@ -73,77 +81,77 @@ export type Pair = {
 // Raw theme token values. These duplicate the index.css tokens (node has no CSS
 // engine to read them); the drift guard in contrastSource.test.ts asserts they
 // stay in sync, so the copy can't silently diverge.
-// Light theme "sumi" (base-content and warning darkened per the AAA overrides).
-// Neutral grays follow Primer's light scale; text-role tokens are
-// hue-preserved deeper shades of the Primer role hues to clear the AAA floors.
+// Light theme "sumi" — GitHub Primer's light primitives, verbatim. Each role
+// token is Primer's `fgColor-<role>` (not the `bgColor-*-emphasis` fill), since
+// one daisyUI token serves both text and fill; see the index.css rationale.
 export const SUMI = {
   base100: "#ffffff",
   base200: "#f6f8fa",
   base300: "#d1d9e0",
   baseContent: "#1f2328",
-  primary: "#065c25",
+  primary: "#1a7f37",
   primaryContent: "#ffffff",
-  secondary: "#424a53",
+  secondary: "#59636e",
   secondaryContent: "#ffffff",
-  accent: "#5c1fb8",
+  accent: "#8250df",
   accentContent: "#ffffff",
-  neutral: "#24292f",
-  neutralContent: "#f6f8fa",
-  info: "#0d43ab",
+  neutral: "#25292e",
+  neutralContent: "#ffffff",
+  info: "#0969da",
   infoContent: "#ffffff",
-  success: "#065c25",
+  success: "#1a7f37",
   successContent: "#ffffff",
-  // AAA override: warning darkened for text use AND fill (white label >=4.5).
-  warningText: "#6f4300",
-  warningFill: "#6f4300",
+  warning: "#9a6700",
   warningContent: "#ffffff",
-  error: "#9a1b25",
+  error: "#d1242f",
   errorContent: "#ffffff",
-  // Sidebar: opaque slate panel over the light canvas.
-  sidebarSurface: "#39424e",
+  // Sidebar: opaque Primer neutral panel over the light canvas.
+  sidebarSurface: "#3d444d",
   // Per-theme link color and muted-tier opacity floors (index.css overrides).
-  link: "#0d43ab",
-  muted: { 30: 84, 40: 84, 50: 84, 60: 86, 70: 88, 80: 91, 90: 93 } as Record<
+  link: "#0969da",
+  muted: { 30: 68, 40: 68, 50: 70, 60: 74, 70: 78, 80: 86, 90: 93 } as Record<
     number,
     number
   >,
-  badgeNudge: 65,
-  sidebarMuted: 85,
+  badgeNudge: 82,
+  sidebarMuted: 72,
 } as const
 
-// Dark theme "sumi-dark". Exported for the drift guard (see SUMI).
+// Dark theme "sumi-dark" — Primer's dark primitives. Exported for the drift
+// guard (see SUMI).
 export const DARK = {
   base100: "#0d1117",
   base200: "#151b23",
-  base300: "#30363d",
+  base300: "#3d444d",
   baseContent: "#f0f6fc",
-  primary: "#57cb70",
+  primary: "#3fb950",
   primaryContent: "#0d1117",
-  secondary: "#aab6c2",
+  secondary: "#9198a1",
   secondaryContent: "#0d1117",
-  accent: "#c9a2ff",
+  accent: "#ab7df8",
   accentContent: "#0d1117",
   neutral: "#212830",
   neutralContent: "#f0f6fc",
-  info: "#82c2ff",
+  info: "#4493f8",
   infoContent: "#0d1117",
-  success: "#57cb70",
+  success: "#3fb950",
   successContent: "#0d1117",
-  warning: "#d3a637",
+  warning: "#d29922",
   warningContent: "#0d1117",
-  error: "#ffa198",
+  error: "#f85149",
   errorContent: "#0d1117",
   // Per-theme link color and muted-tier opacity floors (index.css overrides).
-  link: "#82c2ff",
-  muted: { 30: 68, 40: 68, 50: 68, 60: 74, 70: 80, 80: 86, 90: 92 } as Record<
+  link: "#4493f8",
+  muted: { 30: 52, 40: 52, 50: 58, 60: 66, 70: 74, 80: 84, 90: 92 } as Record<
     number,
     number
   >,
-  badgeNudge: 60,
-  sidebarMuted: 85,
+  badgeNudge: 88,
+  sidebarMuted: 72,
 } as const
 
-// The dark sidebar surface is a translucent sheet over base-100, NOT #39424e.
+// The dark sidebar surface is a translucent sheet over base-100, NOT the light
+// theme's opaque panel.
 // --sidebar-surface: color-mix(in oklch, neutral-content 10%, transparent)
 function darkSidebarSurface(): LinearRgb {
   const sheet = mixColor("oklch", DARK.neutralContent, 10, "transparent")
@@ -214,7 +222,7 @@ function buildTheme(theme: Theme): Pair[] {
     "body",
   )
 
-  // Muted tiers at their AAA-remapped opacities (index.css), audited against the
+  // Muted tiers at their AA-remapped opacities (index.css), audited against the
   // worst-case surface for the ink polarity: darkest surface (base-300) in light,
   // lightest (base-100) in dark.
   const tierWorstBg = theme === "sumi" ? opaque(T.base300) : opaque(T.base100)
@@ -236,11 +244,7 @@ function buildTheme(theme: Theme): Pair[] {
     ["info", T.info, T.infoContent],
     ["success", T.success, T.successContent],
     ["error", T.error, T.errorContent],
-    [
-      "warning",
-      theme === "sumi" ? SUMI.warningFill : DARK.warning,
-      theme === "sumi" ? SUMI.warningContent : DARK.warningContent,
-    ],
+    ["warning", T.warning, T.warningContent],
   ]
   for (const [name, fill, content] of fills) {
     add(
@@ -258,8 +262,7 @@ function buildTheme(theme: Theme): Pair[] {
     ["secondary", T.secondary],
     ["info", T.info],
     ["success", T.success],
-    // warning soft text uses the darkened warningText (light) / warning (dark).
-    ["warning", theme === "sumi" ? SUMI.warningText : DARK.warning],
+    ["warning", T.warning],
     ["error", T.error],
   ]
   for (const [name, token] of semantics) {
@@ -294,8 +297,7 @@ function buildTheme(theme: Theme): Pair[] {
     info: T.info,
     success: T.success,
     error: T.error,
-    // warning text uses the AAA-darkened warningText (light) / warning (dark).
-    warning: theme === "sumi" ? SUMI.warningText : DARK.warning,
+    warning: T.warning,
   }
   for (const name of MODELED_TEXT_SEMANTICS) {
     add(
@@ -319,7 +321,7 @@ function buildTheme(theme: Theme): Pair[] {
   )
 
   // Sidebar (dark rail in both themes). The index.css override remaps every
-  // resting muted tier used on the rail (/50, /60, /70) to the same 85% floor,
+  // resting muted tier used on the rail (/50, /60, /70) to the same 72% floor,
   // so one pair represents them all; hover lifts to full neutral-content.
   const sidebarSurface =
     theme === "sumi" ? opaque(SUMI.sidebarSurface) : darkSidebarSurface()
@@ -340,7 +342,7 @@ function buildTheme(theme: Theme): Pair[] {
 
   // Rest-dimmed rail (index.css .sidebar-rail): on hover-capable pointers the
   // rail background darkens to SIDEBAR_REST_DIM% of `neutral` toward black
-  // until hovered or focused. Text stays at the resting 85% tier, so audit
+  // until hovered or focused. Text stays at the resting 72% tier, so audit
   // that text over the dimmed surface — the darkest ground rail text ever
   // sits on.
   add(
@@ -394,18 +396,23 @@ export type Evaluated = Pair & {
   margin: number
   passesFloor: boolean
   passesMargin: boolean
+  /** The AAA (1.4.6) floor for this pair; reported, never enforced. */
+  enhancedFloor: number
+  passesEnhanced: boolean
   /** The bg as an opaque sRGB hex (the surface behind the text). */
   bgHex: string
   /** The fg as actually displayed: flattened over the opaque bg, as sRGB hex. */
   fgHex: string
 }
 
-/** Evaluate one pair against its spec floor and design margin. */
+/** Evaluate one pair against its spec floor, design margin, and the AAA floor. */
 export function evaluate(p: Pair): Evaluated {
   const ratio = ratioOver(p.fg, p.bg)
   const floor = p.kind === "nonText" ? SPEC_FLOOR.nonText : SPEC_FLOOR[p.size]
   const margin =
     p.kind === "nonText" ? MARGIN_TARGET.nonText : MARGIN_TARGET[p.size]
+  const enhancedFloor =
+    p.kind === "nonText" ? ENHANCED_FLOOR.nonText : ENHANCED_FLOOR[p.size]
   // Resolve the displayed colors: the bg is flattened to opaque (over white if
   // itself translucent), and the fg is composited over that bg — matching what
   // ratioOver scores and what a viewer actually sees.
@@ -417,6 +424,8 @@ export function evaluate(p: Pair): Evaluated {
     margin,
     passesFloor: p.exempt || ratio >= floor,
     passesMargin: p.exempt || ratio >= margin,
+    enhancedFloor,
+    passesEnhanced: p.exempt || ratio >= enhancedFloor,
     bgHex: toHex(opaqueBg),
     fgHex: toHex(flattenOver(p.fg, opaqueBg)),
   }

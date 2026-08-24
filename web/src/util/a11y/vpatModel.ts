@@ -91,16 +91,21 @@ export function hasGenericRemark(c: Pick<Criterion, "status" | "evidence">) {
 // reader sees they are intentionally derived, not hand-set.
 export const CONTRAST_CRITERION_IDS = ["1.4.3", "1.4.6", "1.4.11"] as const
 
+// Of those, the AAA tier. vpatReport.ts derives it from the audit's stricter
+// (7:1 / 4.5:1) tally rather than the AA one, so the two rows can differ.
+export const ENHANCED_CRITERION_ID = "1.4.6" as const
+
 const NOT_EVALUATED_REMARK =
   "Not yet formally assessed. Automated checks establish a floor; a manual " +
   "keyboard and screen-reader pass on the primary flows will set the final " +
   "conformance level."
 
-// The applicable WCAG 2.2 Level A/AA criteria for the app (plus the three
-// AAA contrast criteria already achieved). Grouped by principle. Contrast rows
-// carry a placeholder status/evidence that vpatReport.ts replaces from the live
-// audit; client-side-only rows are notApplicable with an architectural remark;
-// the rest start notEvaluated until the manual assessment sets them.
+// The applicable WCAG 2.2 Level A/AA criteria for the app, plus 1.4.6 (AAA
+// contrast) reported for transparency beyond the AA target. Grouped by
+// principle. Contrast rows carry a placeholder status/evidence that
+// vpatReport.ts replaces from the live audit; client-side-only rows are
+// notApplicable with an architectural remark; the rest start notEvaluated until
+// the manual assessment sets them.
 const BASE_CRITERIA: Criterion[] = [
   // ── Perceivable ────────────────────────────────────────────────────────────
   {
@@ -150,7 +155,9 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Contrast (Enhanced)",
     level: "AAA",
     principle: "Perceivable",
-    status: "supports",
+    // Placeholder — resolved from the audit's AAA tally in vpatReport.ts. Beyond
+    // the AA target: reported so the gap to AAA is visible, not claimed.
+    status: "partially",
     evidence: "contrast",
     remark: "Resolved from the automated contrast audit.",
   },

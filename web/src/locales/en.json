@@ -48,13 +48,15 @@
     "summaryFail": "{{failures}} color pair(s) are below the WCAG contrast floor.",
     "criteria": {
       "aboutHeading": "About this audit",
-      "standardText": "WCAG 2.2 — 1.4.6 Contrast (Enhanced, AAA) for text, 1.4.11 Non-text Contrast for UI components.",
+      "standardText": "WCAG 2.2 — 1.4.3 Contrast (Minimum, AA) for text, 1.4.11 Non-text Contrast for UI components. The palette follows GitHub's Primer primitives, which target Level AA.",
       "thresholdsHeading": "Required minimums (WCAG floor):",
       "bodyText": "Body text ≥ {{body}}:1",
       "largeText": "Large text ≥ {{large}}:1",
       "nonText": "Non-text (UI components) ≥ {{nonText}}:1",
       "marginHeading": "Recommended safety margin",
       "marginWhy": "We hold each pair a little above the WCAG minimum — headroom that absorbs anti-aliasing, sub-pixel rendering, and future palette tweaks. It's a recommendation, not required for conformance.",
+      "enhancedHeading": "Enhanced (AAA)",
+      "enhancedWhy": "Each pair is also scored against the stricter 1.4.6 Enhanced floors (body ≥ {{body}}:1, large ≥ {{large}}:1). This is reported for transparency, not required — AA is the conformance target.",
       "generated": "Generated {{generated}}"
     },
     "col": {

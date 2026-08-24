@@ -26,7 +26,7 @@ const repoWeb = path.resolve(here, "..", "..", "..")
 const cssText = readFileSync(path.join(repoWeb, "src/index.css"), "utf8")
 
 // Read a CSS custom property for a theme. A token can appear twice (daisyUI
-// `@plugin "daisyui/theme"` base value + a `[data-theme=...]` AAA override), so
+// `@plugin "daisyui/theme"` base value + a `[data-theme=...]` AA override), so
 // return the LAST match — the effective, override-wins value.
 function cssVar(theme: "sumi" | "sumi-dark", token: string): string | null {
   // Match either `name: "<theme>"` plugin blocks or `[data-theme="<theme>"]`
@@ -68,8 +68,7 @@ describe("model tokens stay in sync with index.css (drift guard)", () => {
     ["sumi", "color-info", SUMI.info],
     ["sumi", "color-success", SUMI.success],
     ["sumi", "color-error", SUMI.error],
-    ["sumi", "color-warning", SUMI.warningText],
-    ["sumi", "color-warning-fill", SUMI.warningFill],
+    ["sumi", "color-warning", SUMI.warning],
     ["sumi", "color-link", SUMI.link],
     ["sumi", "sidebar-surface", SUMI.sidebarSurface],
     ["sumi-dark", "color-base-100", DARK.base100],

@@ -11,8 +11,8 @@ describe("renderContrastReport", () => {
 
   it("states the WCAG 2.2 standard and thresholds", () => {
     expect(md).toContain("WCAG 2.2")
-    expect(md).toContain("body text ≥ 7:1")
-    expect(md).toContain("large text ≥ 4.5:1")
+    expect(md).toContain("body text ≥ 4.5:1")
+    expect(md).toContain("large text ≥ 3:1")
     expect(md).toContain("non-text ≥ 3:1")
   })
 
